@@ -31,6 +31,7 @@ export interface Any extends Schema.Top {
   readonly middleware: Middleware.List;
   readonly rpc: Rpc.Any;
   readonly expose?: Api.Expose | undefined;
+  readonly needsApproval?: Approval<never>;
   new (...args: any[]): { readonly _tag: string };
 }
 
@@ -52,6 +53,21 @@ export type PayloadFields<Target extends TargetSchema, F extends Fields> = F & {
   readonly target: Target;
   readonly commandId: Schema.optional<typeof Schema.String>;
 };
+
+/**
+ * One call of a command, decoded: the target, the input and the optional
+ * `commandId`, as the Api's RPC decodes them (a branded id is branded, a date
+ * is a `DateTime`).
+ */
+export type Call<Target extends TargetSchema, F extends Fields> = Schema.Struct<
+  PayloadFields<Target, F>
+>["Type"];
+
+/**
+ * Whether a person must confirm a call before it runs, when an agent makes it:
+ * always (`true`), never (`false`), or a pure rule over the decoded call.
+ */
+export type Approval<C> = boolean | ((call: C) => boolean);
 
 /** What a client receives: the reply and the position of the committed events. */
 export type SuccessFields<Reply extends Schema.Top | undefined> = {
@@ -101,6 +117,8 @@ export interface CommandClass<
   readonly attributes: Telemetry.Attributes<Instance<Tag, F>> | undefined;
   /** The surfaces that may publish the command, as declared. Read it with `Domain.exposureOf`. */
   readonly expose: Api.Expose | undefined;
+  /** Whether an agent's call needs a person's approval, as declared (`false` if not). */
+  readonly needsApproval: Approval<Call<Target, F>>;
 }
 
 interface Options {
@@ -112,6 +130,7 @@ interface Options {
   readonly reply?: Fields;
   readonly attributes?: Telemetry.Attributes<any>;
   readonly expose?: Api.Expose;
+  readonly needsApproval?: Approval<never>;
 }
 
 const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
@@ -131,6 +150,7 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
     static readonly rpc = rpc;
     static readonly attributes = options.attributes;
     static readonly expose = options.expose;
+    static readonly needsApproval = options.needsApproval ?? false;
   };
 };
 
@@ -187,6 +207,24 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
  * }) {}
  * ```
  *
+ * ### Publishing it beyond the Api
+ * `expose` says which surfaces built from an Api may publish the command:
+ * `mcp` and `cli` default to `true`, a public `http` API to `false`.
+ * `needsApproval` marks a write a person must confirm when an agent calls it:
+ * `true`, or a pure rule over the decoded call. Surfaces read them with
+ * `Domain.exposureOf` and `Domain.needsApproval`; the Api's own clients run
+ * the command as before.
+ *
+ * **Example:** A door unlock an agent may ask for, but not run alone
+ * ```typescript
+ * export class UnlockDoor extends Domain.Command("UnlockDoor", {
+ *   target: DoorId,
+ *   input: { minutes: Schema.Int },
+ *   expose: { cli: false },
+ *   needsApproval: (call) => call.minutes > 60,
+ * }) {}
+ * ```
+ *
  * ### Sending it once
  * Pass a `commandId`, and a resend with the same id returns the first
  * receipt instead of applying the command again.
@@ -236,6 +274,14 @@ export const make = <
      * Read it back with `Domain.exposureOf`.
      */
     readonly expose?: Api.Expose;
+    /**
+     * Whether a person must confirm the call before it runs, when an agent
+     * makes it (a door unlock, a payment): `true`, or a pure rule over the
+     * decoded call. A surface that serves agents asks the person; the Api's
+     * own clients run the command as before. Read it with
+     * `Domain.needsApproval`.
+     */
+    readonly needsApproval?: Approval<Call<NoInfer<Target>, NoInfer<F>>>;
   },
 ): CommandClass<
   Tag,

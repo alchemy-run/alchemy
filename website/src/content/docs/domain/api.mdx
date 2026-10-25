@@ -136,6 +136,54 @@ export class SupportApi extends Domain.Api(
 
 Being on an Api doesn't mean anyone may use an entry for anything. Each entry still guards itself. A command's middleware establishes who's calling and its `decide` checks whether they may; a view's middleware and `validate` decide what they may see. So `AccountSummary` can sit on both Apis, and a customer still reads only their own accounts.
 
+## Choose where an entry is published
+
+An Api's own clients reach every entry it lists. Other surfaces can be built from the same Api: tools on an MCP server, commands of a CLI, paths of a public HTTP API. `expose` says which of them may publish an entry.
+
+```typescript title="packages/domain/src/Account/FreezeAccount.command.ts"
+export class FreezeAccount extends Domain.Command("FreezeAccount", {
+  target: AccountId,
+  middleware: [Session],
+  events: [AccountFrozen],
+  expose: { cli: false }, // on MCP, not in the CLI, not on public HTTP
+}) {}
+```
+
+A view, a stream and an aggregate's `read` contract take `expose` too, next to their `middleware`.
+
+| Surface | Flag | Default |
+| --- | --- | --- |
+| MCP server | `mcp` | `true` |
+| CLI | `cli` | `true` |
+| Public HTTP API and its OpenAPI document | `http` | `false` |
+
+A public HTTP path is a contract: once a client calls it, it has to stay. So an entry is published there only when it sets `http: true`. Read the result with `Domain.exposureOf`:
+
+```typescript
+Domain.exposureOf(FreezeAccount); // { mcp: true, cli: false, http: false }
+```
+
+Exposure is not permission. An entry on a surface still runs its middleware on every call.
+
+## Ask a person before a dangerous write
+
+Some writes must not run only because an agent asked for them: unlocking a door, sending money. Give such a command `needsApproval`: `true`, or a pure rule over the decoded call.
+
+```typescript title="packages/domain/src/Account/WithdrawMoney.command.ts"
+export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
+  target: AccountId,
+  input: { amount: Schema.Int },
+  events: [MoneyWithdrawn],
+  needsApproval: (call) => call.amount > 100_000,
+}) {}
+```
+
+```typescript
+Domain.needsApproval(WithdrawMoney, { target: accountId, amount: 250_000 }); // true
+```
+
+A surface that serves agents, such as an MCP server, asks the person before it sends the command. The Api's own clients run it as before: in an app, the person who clicks is the one who approves. Only commands take `needsApproval`; a read changes nothing, so a view, a stream or an aggregate `read` that sets it does not type-check.
+
 ## Serve it
 
 An Api is served from a Worker. The Api class is an Effect: `yield* BankApi` gives you its `fetch`, and the Worker returns it as its own. This is the tutorial's bank:

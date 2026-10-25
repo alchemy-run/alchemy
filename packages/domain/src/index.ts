@@ -52,6 +52,8 @@ export declare namespace Command {
   >;
   /** The services a command's middleware provides to `decide`. */
   export type ContextOf<C extends CommandModule.Any> = CommandModule.ContextOf<C>;
+  /** Whether an agent's call needs a person's approval: a flag, or a rule over the decoded call. */
+  export type Approval<C> = CommandModule.Approval<C>;
 }
 /** A request to change one aggregate. See {@link CommandModule.make}. */
 export const Command = CommandModule.make;
@@ -173,6 +175,8 @@ export declare namespace Api {
   export type Expose = ApiModule.Expose;
   /** The surfaces that may publish an entry, with every default filled in. */
   export type Exposure = ApiModule.Exposure;
+  /** The decoded call `Domain.needsApproval` judges: a command's payload. */
+  export type CallOf<E extends ApiModule.Entry> = ApiModule.CallOf<E>;
 }
 /** The public surface of a domain for one client. See {@link ApiModule.make}. */
 export const Api = ApiModule.make;
@@ -182,6 +186,8 @@ export const protocolHttp = ApiModule.protocolHttp;
 export const protocolWebSocket = ApiModule.protocolWebSocket;
 /** The surfaces (MCP, CLI, public HTTP) that may publish an Api entry. See {@link ApiModule.exposureOf}. */
 export const exposureOf = ApiModule.exposureOf;
+/** Whether an agent's call of an Api entry needs a person's approval. See {@link ApiModule.needsApproval}. */
+export const needsApproval = ApiModule.needsApproval;
 
 export declare namespace Model {
   /** Any Model class. */

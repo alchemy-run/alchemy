@@ -1010,3 +1010,36 @@ export const exposureOf = (entry: Entry): Exposure => {
     http: expose?.http ?? false,
   };
 };
+
+/**
+ * The call {@link needsApproval} judges for an entry: a command's decoded
+ * payload (target, input and optional `commandId`). A read takes any value: it
+ * never needs approval.
+ */
+export type CallOf<E extends Entry> = E extends Command.Any ? Rpc.Payload<E["rpc"]> : unknown;
+
+/**
+ * Whether a person must confirm this call of an Api entry before it runs, when
+ * an agent makes it: what the command's `needsApproval` says for the decoded
+ * call. `false` for a command that declares nothing, and for every read.
+ *
+ * A surface that serves agents (an MCP server) asks the person before it
+ * sends the command. Nothing in the Api itself asks: its own clients run the
+ * command as before.
+ *
+ * **Example:** A long unlock needs a person's yes
+ * ```typescript
+ * export class UnlockDoor extends Domain.Command("UnlockDoor", {
+ *   target: DoorId,
+ *   input: { minutes: Schema.Int },
+ *   needsApproval: (call) => call.minutes > 60,
+ * }) {}
+ *
+ * Domain.needsApproval(UnlockDoor, { target: doorId, minutes: 90 }); // true
+ * ```
+ */
+export const needsApproval = <E extends Entry>(entry: E, call: CallOf<E>): boolean => {
+  if (entry.kind !== "Command") return false;
+  const rule = entry.needsApproval as Command.Approval<unknown> | undefined;
+  return typeof rule === "function" ? rule(call) : rule === true;
+};

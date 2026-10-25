@@ -288,6 +288,17 @@ export class CustomerApi extends Domain.Api(
 
 Clients call commands as methods (`bank.WithdrawMoney({ target, amount }, { headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A stream has `peek`, `watch`, `events` and `list`. Each Api entry authorizes itself.
 
+Surfaces built from an Api (MCP tools, a CLI, a public HTTP API) publish an entry only where its `expose` lets them. `mcp` and `cli` default to `true`; `http` defaults to `false`, because a public path has to stay once a client calls it. A command an agent must not run alone takes `needsApproval`: `true`, or a pure rule over the decoded call. Reads never take it. Surfaces read both with `Domain.exposureOf(entry)` and `Domain.needsApproval(entry, call)`; the Api's own clients ignore them.
+
+```ts
+export class UnlockDoor extends Domain.Command("UnlockDoor", {
+  target: DoorId,
+  input: { minutes: Schema.Int },
+  expose: { http: true },                       // also on the public HTTP API
+  needsApproval: (call) => call.minutes > 60,   // a person confirms a long unlock
+}) {}
+```
+
 ## Model
 
 ```ts

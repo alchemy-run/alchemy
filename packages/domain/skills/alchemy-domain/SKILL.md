@@ -58,6 +58,7 @@ A rule that spans aggregates never becomes a cross-aggregate transaction. Give t
 - Never `throw`. Fail with tagged errors (`Domain.Rejection`, `Schema.TaggedError`).
 - Tracing is automatic. Record payload values only through a declaration's `attributes`, or with `Effect.annotateCurrentSpan` in an effectful handler. Make secrets `Schema.Redacted`, so they never reach a trace or a log.
 - Test what the model does, through stories: events, replies, rejections, views and saga outcomes. Don't test a saga's internal steps.
+- A write an agent must not run alone (a door unlock, a payment) sets `needsApproval`. Publish an entry on a public HTTP API only with `expose: { http: true }`: a public path has to stay.
 
 ## Checklist for a change
 
