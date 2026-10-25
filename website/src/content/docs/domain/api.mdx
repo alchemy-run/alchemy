@@ -231,4 +231,27 @@ const bank = yield* CustomerApi.Client;
 
 See [Integrate with foldkit](/domain/foldkit) for a full browser app.
 
+## Call it in process
+
+Code in the same process as the model, like a webhook route, a scheduled job or a script, calls the Api with `localClient`. It's the same typed client, wired straight to the handlers: nothing is serialized and nothing goes over the network. Every entry's middleware still runs, from the middleware Layers in scope.
+
+Often that code has already checked who is calling, for example by verifying a webhook signature. Then it provides a middleware Layer that trusts that caller, to this client only. The Api the Worker serves keeps its real middleware.
+
+```typescript title="src/PaymentsWebhook.ts"
+const asSystem = Layer.succeed(Session, (effect) =>
+  Effect.provideService(effect, CurrentActor, system("payments-webhook")),
+);
+
+export const depositFromWebhook = Effect.fn(function* (accountId: AccountId, amount: number) {
+  const bank = yield* CustomerApi.localClient.pipe(Effect.provide(asSystem));
+  return yield* bank.DepositMoney({ target: accountId, amount });
+}, Effect.scoped);
+```
+
+The caller's `decide` and `validate` read the `CurrentActor` the trusted Layer provides, exactly as they read the one `SessionLive` provides.
+
+`localClient` needs a `Scope`. In a Worker, build it per request, like the served Api: Workers forbid sharing I/O across requests. In a long-lived process, `CustomerApi.layerLocal` provides `CustomerApi.Client` in process for the life of the Layer, so code that asks for the client runs the same in process or over `layerClient`.
+
+`testClient` is the same client as `localClient`, under the name tests use.
+
 To test an Api end to end, including its middleware and every rejection, see [Testing an Api](/domain/testing-apis).

@@ -49,6 +49,21 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 - Webhooks and event sources, like a Stripe webhook, are yielded in the Worker's init and send commands into the model.
 - `alchemy dev` runs everything locally in workerd: Durable Objects, sagas and the foldkit app.
 
+## Calling the Api in process
+
+Code in the Worker that is not a client of the Api (a webhook route, a scheduled job) calls it with `CustomerApi.localClient`: the same typed client, wired to the handlers in process, with every entry's middleware. When that code has already checked its caller (a webhook signature), it provides a middleware Layer that trusts the caller, to that client only:
+
+```ts
+const asSystem = Layer.succeed(Session, (effect) =>
+  Effect.provideService(effect, CurrentActor, system("payments-webhook")),
+);
+const bank = yield* CustomerApi.localClient.pipe(Effect.provide(asSystem));   // per request, in Effect.scoped
+yield* bank.DepositMoney({ target: accountId, amount });
+```
+
+- Build `localClient` per request in a Worker. `layerLocal` provides `CustomerApi.Client` in process, for long-lived processes and scripts.
+- Do not send a request to the Worker's own URL, and do not pass a verified secret through a header to `localClient` to be checked again.
+
 ## Live reads
 
 Clients that `watch` or read `events` open a WebSocket per read, with `Domain.protocolWebSocket`. The Worker runs the read's middleware, then hands the socket to the Durable Object that owns the key. That object pushes each committed change, judged by `validate` again, and hibernates in between. Commands go over HTTP.

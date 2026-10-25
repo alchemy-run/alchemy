@@ -254,9 +254,29 @@ export interface ApiClass<
     RpcClient.Protocol | MiddlewareClients<Entries>
   >;
   /**
-   * An in-process client wired straight to the handlers, for tests. Server
-   * middleware runs, so principals are provided by swapping middleware Layers.
+   * A client wired straight to the handlers, for code in the same process as
+   * the model: a route that already authenticated its caller, a webhook, a
+   * script. Nothing is serialized and nothing goes over the network, but
+   * every entry's server middleware runs, from the middleware Layers in
+   * scope. To call as a caller you already trust, provide a middleware Layer
+   * that provides its context without checking a header, to this client
+   * only. In a Worker, build it per request.
    */
+  readonly localClient: Effect.Effect<
+    ApiClient<Entries[number]>,
+    never,
+    Scope.Scope | Model.Internals | MiddlewareServices<Entries> | MiddlewareClients<Entries>
+  >;
+  /**
+   * Build {@link Client} in process, like {@link localClient}, for the life of
+   * the Layer. Code that uses `Client` runs the same over {@link layerClient}.
+   */
+  readonly layerLocal: Layer.Layer<
+    ClientKey<Name>,
+    never,
+    Model.Internals | MiddlewareServices<Entries> | MiddlewareClients<Entries>
+  >;
+  /** The same client as {@link localClient}, under the name tests use. */
   readonly testClient: Effect.Effect<
     ApiClient<Entries[number]>,
     never,
@@ -707,6 +727,14 @@ const build = (
     }) as unknown as HttpEffect;
     return { fetch };
   });
+  // The client and server in one process, with no serialization between them.
+  const localClient = Effect.gen(function* () {
+    const handlers = yield* handlersOf(entries);
+    const flat = yield* RpcTest.makeClient(group).pipe(
+      Effect.provide(group.toLayer(handlers as never)),
+    );
+    return nest(entries, flat as unknown as Flat);
+  });
   return Object.assign(
     class {},
     // The class is an Effect: `yield* MyApi` serves it.
@@ -721,13 +749,9 @@ const build = (
       client,
       Client,
       layerClient: Layer.effect(Client, client),
-      testClient: Effect.gen(function* () {
-        const handlers = yield* handlersOf(entries);
-        const flat = yield* RpcTest.makeClient(group).pipe(
-          Effect.provide(group.toLayer(handlers as never)),
-        );
-        return nest(entries, flat as unknown as Flat);
-      }),
+      localClient,
+      layerLocal: Layer.effect(Client, localClient),
+      testClient: localClient,
     },
   );
 };
@@ -794,6 +818,20 @@ const build = (
  * yield* bank.AccountSummary.watch(accountId).pipe(
  *   Stream.runForEach((s) => Effect.log(s?.balance)),
  * );
+ * ```
+ *
+ * ### Calling it in process
+ * `localClient` calls the Api in the same process as the model, through every
+ * entry's middleware, with nothing serialized. Code that has already
+ * authenticated its caller provides a middleware Layer that trusts it.
+ *
+ * **Example:** A webhook that deposits as the system
+ * ```typescript
+ * const asSystem = Layer.succeed(Session, (effect) =>
+ *   Effect.provideService(effect, CurrentActor, system("payments-webhook")),
+ * );
+ * const bank = yield* CustomerApi.localClient.pipe(Effect.provide(asSystem));
+ * yield* bank.DepositMoney({ target: accountId, amount: 1_000 });
  * ```
  *
  * @primitive

@@ -137,7 +137,7 @@ it.live("only the owner may withdraw", () =>
 );
 ```
 
-`testClient` talks to the in-memory host directly. Use `Domain.protocolHttp` with a local HTTP server to cover the wire too.
+`testClient` (the same client as `localClient`) talks to the in-memory host directly. Use `Domain.protocolHttp` with a local HTTP server to cover the wire too.
 
 ## Integration: the deployed stack
 
