@@ -12,7 +12,7 @@ import { spawnSync } from "node:child_process";
  *   - persisted state rows are stamped `providerMode: "local"`;
  *   - out-of-band raw HTTP against the emulator gateway runs the deployed
  *     task definition (RunTask) and observes it RUNNING as a real docker
- *     container (`docker ps` shows `floci-ecs-<taskId>-…`);
+ *     container (`docker ps` shows `floci-aws-ecs-<taskId>-…`);
  *   - the container round-trips HTTP: floci publishes the LITERAL host
  *     port for bridge-mode port mappings (awsvpc tasks are expose-only
  *     when floci itself runs in a container), so the fixture uses
@@ -168,8 +168,8 @@ const runTaskRoundTrip = Effect.fn(function* (options: {
   expect(tasks.tasks?.[0]?.lastStatus).toBe("RUNNING");
 
   // …and the task is a REAL container on the host docker daemon
-  // (`floci-ecs-<taskId>-<containerName>`).
-  expect(yield* runningContainerNames).toContain(`floci-ecs-${taskId}`);
+  // (`floci-aws-ecs-<taskId>-<containerName>`).
+  expect(yield* runningContainerNames).toContain(`floci-aws-ecs-${taskId}`);
 
   // Round-trip HTTP to the served marker. Bridge-mode port mappings are
   // published literally on the docker host, so the container is reachable
@@ -214,7 +214,7 @@ const pollMarker = Effect.fn(function* (options: {
 /**
  * Post-destroy (hot-reload variants, where the swap replaced the original
  * task): observe until no running container belongs to the family's primary
- * container (`floci-ecs-<taskId>-<containerName>`), then assert the cluster
+ * container (`floci-aws-ecs-<taskId>-<containerName>`), then assert the cluster
  * and task definition are gone from the emulator.
  */
 const assertFamilyTornDown = Effect.fn(function* (options: {
@@ -226,7 +226,9 @@ const assertFamilyTornDown = Effect.fn(function* (options: {
     Effect.flatMap((names) =>
       names
         .split("\n")
-        .some((name) => name.startsWith("floci-ecs-") && name.endsWith(`-${options.containerName}`))
+        .some(
+          (name) => name.startsWith("floci-aws-ecs-") && name.endsWith(`-${options.containerName}`),
+        )
         ? Effect.fail(new Error("family container still running"))
         : Effect.void,
     ),
@@ -251,7 +253,7 @@ const assertTornDown = Effect.fn(function* (options: {
   // delete (observe until the daemon agrees — stop is asynchronous).
   yield* runningContainerNames.pipe(
     Effect.flatMap((names) =>
-      names.includes(`floci-ecs-${options.taskId}`)
+      names.includes(`floci-aws-ecs-${options.taskId}`)
         ? Effect.fail(new Error("task container still running"))
         : Effect.void,
     ),

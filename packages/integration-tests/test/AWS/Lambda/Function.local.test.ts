@@ -422,9 +422,9 @@ test.provider.skipIf(!dockerAvailable)(
   { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 300_000 },
 );
 
-// Regression #1651: floci rejects StartLiveTail as UnsupportedOperation, and
-// `alchemy logs --tail` retried it forever without printing a line. The tail
-// now falls back to polling FilterLogEvents.
+// Regression #1651: floci rejected StartLiveTail as UnsupportedOperation, and
+// `alchemy logs --tail` retried it forever without printing a line. Floci now
+// streams StartLiveTail, so the tail delivers a dev Function's logs.
 test.skipIf(!dockerAvailable)(
   "alchemy logs --tail streams a dev Function's logs from floci",
   Effect.gen(function* () {
