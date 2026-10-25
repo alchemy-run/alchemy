@@ -239,11 +239,12 @@ test.provider(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Queues.Queue("SettingsQueue", {
-            settings: { messageRetentionPeriod: 1209600, deliveryDelay: 5 },
+            messageRetentionPeriod: 1209600,
+            deliveryDelay: 5,
           });
         }),
       );
-      expect(created.settings).toEqual({
+      expect(created).toMatchObject({
         messageRetentionPeriod: 1209600,
         deliveryDelay: 5,
         deliveryPaused: false,
@@ -255,13 +256,14 @@ test.provider(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Queues.Queue("SettingsQueue", {
-            settings: { deliveryDelay: 10, deliveryPaused: true },
+            deliveryDelay: 10,
+            deliveryPaused: true,
           });
         }),
       );
       // Settings update in place.
       expect(updated.queueId).toEqual(created.queueId);
-      expect(updated.settings).toEqual({
+      expect(updated).toMatchObject({
         messageRetentionPeriod: 345600,
         deliveryDelay: 10,
         deliveryPaused: true,
@@ -294,7 +296,7 @@ test.provider(
           return yield* Cloudflare.Queues.Queue("JurisdictionQueue", {
             name,
             jurisdiction: "eu",
-            settings: { deliveryDelay: 3 },
+            deliveryDelay: 3,
           });
         }),
       );
@@ -307,7 +309,7 @@ test.provider(
         Effect.gen(function* () {
           return yield* Cloudflare.Queues.Queue("JurisdictionQueue", {
             name,
-            settings: { deliveryDelay: 3 },
+            deliveryDelay: 3,
           });
         }),
       );

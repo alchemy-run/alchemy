@@ -35,25 +35,6 @@ export const isQueue = (value: unknown): value is Queue =>
  */
 export type QueueJurisdiction = "eu" | "us" | "fedramp";
 
-export interface QueueSettings {
-  /**
-   * Seconds an unconsumed message is kept before it is deleted. Cloudflare
-   * allows 60 seconds to 14 days (1209600). Workers Free plans can't change it.
-   * @default 345600 (4 days)
-   */
-  messageRetentionPeriod?: number;
-  /**
-   * Seconds to delay delivery of every message to consumers (max 43200).
-   * @default 0
-   */
-  deliveryDelay?: number;
-  /**
-   * Pause delivery of messages to consumers. Producers can still send.
-   * @default false
-   */
-  deliveryPaused?: boolean;
-}
-
 export type QueueProps = {
   /**
    * Name of the queue. If omitted, a unique name will be generated.
@@ -61,12 +42,6 @@ export type QueueProps = {
    * @default ${app}-${stage}-${id}
    */
   name?: string;
-  /**
-   * Queue settings. Only the settings you declare are managed: a setting
-   * you never declared keeps its current value, and a setting you remove
-   * goes back to the Cloudflare default.
-   */
-  settings?: QueueSettings;
   /**
    * Restrict where Cloudflare stores and processes the queue's messages.
    * Workers can still produce to and consume from it from any location.
@@ -76,7 +51,31 @@ export type QueueProps = {
    * @default undefined (global)
    */
   jurisdiction?: QueueJurisdiction;
+  /**
+   * Seconds an unconsumed message is kept before it is deleted. Cloudflare
+   * allows 60 seconds to 14 days (1209600). Workers Free plans can't change it.
+   * Removing it resets it to the default.
+   * @default 345600 (4 days)
+   */
+  messageRetentionPeriod?: number;
+  /**
+   * Seconds to delay delivery of every message to consumers (max 43200).
+   * Removing it resets it to the default.
+   * @default 0
+   */
+  deliveryDelay?: number;
+  /**
+   * Pause delivery of messages to consumers. Producers can still send.
+   * Removing it resets it to the default.
+   * @default false
+   */
+  deliveryPaused?: boolean;
 };
+
+type QueueSettings = Pick<
+  QueueProps,
+  "messageRetentionPeriod" | "deliveryDelay" | "deliveryPaused"
+>;
 
 /**
  * The queue found by name is in a different jurisdiction than the one
@@ -99,8 +98,12 @@ export type Queue = Resource<
     accountId: string;
     /** The queue's jurisdiction, or `undefined` for a global queue. */
     jurisdiction: QueueJurisdiction | undefined;
-    /** The queue's current settings. */
-    settings: Required<QueueSettings>;
+    /** Seconds an unconsumed message is kept before it is deleted. */
+    messageRetentionPeriod: number;
+    /** Seconds delivery of every message to consumers is delayed. */
+    deliveryDelay: number;
+    /** Whether delivery of messages to consumers is paused. */
+    deliveryPaused: boolean;
   },
   never,
   Providers
@@ -126,19 +129,21 @@ export type Queue = Resource<
  * ```
  *
  * ### Configuring Settings
- * Settings are in seconds, matching the Cloudflare API.
+ * Durations are in seconds, matching the Cloudflare API. A setting you
+ * never declare keeps whatever value the queue already has.
  *
  * **Example:** Dead-letter queue that keeps messages for 14 days
  * ```typescript
  * const deadLetters = yield* Cloudflare.Queues.Queue("DeadLetters", {
- *   settings: { messageRetentionPeriod: 14 * 24 * 60 * 60 },
+ *   messageRetentionPeriod: 14 * 24 * 60 * 60,
  * });
  * ```
  *
  * **Example:** Delay and pause delivery
  * ```typescript
  * const queue = yield* Cloudflare.Queues.Queue("MyQueue", {
- *   settings: { deliveryDelay: 30, deliveryPaused: true },
+ *   deliveryDelay: 30,
+ *   deliveryPaused: true,
  * });
  * ```
  *
@@ -294,7 +299,7 @@ export const ProviderLive = () =>
       // Sync settings — diff the observed settings against the declared
       // ones and patch only the delta.
       const current = toSettings(observed.settings);
-      const desired = desiredSettings(news.settings, olds?.settings);
+      const desired = desiredSettings(news, olds);
       const delta: QueueSettings = {};
       for (const key of Object.keys(desired) as (keyof QueueSettings)[]) {
         if (desired[key] !== undefined && desired[key] !== current[key]) {
@@ -316,7 +321,7 @@ export const ProviderLive = () =>
         queueName: observed.queueName!,
         accountId: acct,
         jurisdiction,
-        settings,
+        ...settings,
       };
     }),
     delete: Effect.fn(function* ({ output }) {
@@ -461,7 +466,7 @@ const toAttributes = (
   queueName: queue.queueName!,
   accountId,
   jurisdiction: toJurisdiction(queue.jurisdiction),
-  settings: toSettings(queue.settings),
+  ...toSettings(queue.settings),
 });
 
 const createQueueName = (id: string, name: string | undefined) =>
@@ -575,10 +580,10 @@ export const ProviderLocal = () =>
           ) {
             return { action: "replace" };
           }
-          const settings = toSettings(news.settings);
+          const settings = toSettings(news);
           if (
             (Object.keys(settings) as (keyof QueueSettings)[]).some(
-              (key) => settings[key] !== output.settings?.[key],
+              (key) => settings[key] !== output[key],
             )
           ) {
             return { action: "update" };
@@ -605,7 +610,7 @@ export const ProviderLocal = () =>
             queueName: yield* createQueueName(id, news.name),
             accountId: output?.accountId ?? accountId,
             jurisdiction: news.jurisdiction,
-            settings: toSettings(news.settings),
+            ...toSettings(news),
           };
           MutableHashMap.set(localRuntimeState.queues, queue.queueId, queue);
           return queue;
