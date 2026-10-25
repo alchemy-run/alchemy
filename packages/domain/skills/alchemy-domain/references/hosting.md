@@ -53,6 +53,37 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 
 Clients that `watch` or read `events` open a WebSocket per read, with `Domain.protocolWebSocket`. The Worker runs the read's middleware, then hands the socket to the Durable Object that owns the key. That object pushes each committed change, judged by `validate` again, and hibernates in between. Commands go over HTTP.
 
+## Plain HTTP and OpenAPI
+
+For clients that are not Effect (a partner, a script, a public API), `toHttpApi` from `@alchemy.run/domain/Http` publishes chosen request/response calls as an Effect `HttpApi` group, with its handlers Layer and an OpenAPI document from the same Api.
+
+```ts
+import * as DomainHttp from "@alchemy.run/domain/Http";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
+import * as Etag from "effect/http/Etag";
+import * as HttpPlatform from "effect/http/HttpPlatform";
+import * as HttpRouter from "effect/http/HttpRouter";
+
+const BankHttp = DomainHttp.toHttpApi(CustomerApi, {
+  include: ["DepositMoney", "AccountSummary.get"],   // nothing else is served
+  status: { NotOwner: 403 },                           // other typed failures: their httpApiStatus, else 422
+});
+
+// in the Worker's init, inside `.pipe(Effect.provide(BankLive))`
+return {
+  fetch: HttpApiBuilder.layer(BankHttp.api, { openapiPath: "/openapi.json" }).pipe(
+    Layer.provide(BankHttp.layer),
+    Layer.provide([HttpPlatform.layer, Etag.layer]),
+    HttpRouter.toHttpEffect,
+  ),
+};
+```
+
+- Paths: a command is `POST /<Command>` with the RPC payload as its JSON body (`target`, `commandId`, input). A `get` or `peek` is `GET /<Entry>/{key}`, with `?stream=&version=` from a receipt to read your own write. A `list` is `GET /<Entry>/{key}/list?order=&take=&after=`.
+- Every call runs through the Api's own handlers in process, with the request's headers: middleware, `validate` and rejections run as for any client, and input is decoded once.
+- `include` is required: a public path has to stay once a client calls it. `watch` and `events` are streams and are not published; neither is a read's `where`.
+- To serve the group with other groups, or under a prefix, add `BankHttp.group` to your own `HttpApi` and provide `BankHttp.layerFor(MyHttpApi)`.
+
 ## Deploying
 
 The root `alchemy.run.ts` yields the server Worker and the foldkit website (see [layout.md](layout.md)). Deploy with `alchemy deploy`, develop with `alchemy dev`, and tear down with `alchemy destroy`.
