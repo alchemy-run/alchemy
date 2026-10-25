@@ -206,6 +206,35 @@ Confirm from the stream rather than the command's reply: the event can arrive be
 
 A typed rejection, like `InsufficientFunds`, marks the line `rejected` with its reason. The balance shown is the confirmed balance plus pending lines, so a rejected line simply stops counting. Nothing was committed early, so there's nothing to roll back.
 
+## Predict the outcome locally
+
+A pending line shows what the customer asked for. To show what the bank will do, run the aggregate's own rules in the browser. `Account.predict` runs `decide` and `evolve` for one command, with the state the page holds: it gives the events and the next state, or the same rejection the bank would return. A view's `evolveLocal` folds those events the way the server's view will:
+
+```typescript
+const outcome = Account.predict(account, new WithdrawMoney({ amount: 30 }), { id, now });
+switch (outcome._tag) {
+  case "Rejected": // InsufficientFunds: show it, send nothing
+    return showRefused(outcome.rejection);
+  case "Accepted": {
+    const summary = outcome.events.reduce(
+      (state, event, i) =>
+        AccountSummary.evolveLocal(state, {
+          name: "Account",
+          event,
+          source: Account.ref(id),
+          envelope: outcome.envelopes[i],
+        }),
+      shown,
+    );
+    return showPending(summary);
+  }
+  case "NeedsContext": // decide reads what middleware provides: wait for the bank
+    return showPending(shown);
+}
+```
+
+Mark a command `predictable: true` when its `decide` reads nothing its middleware provides. Its `decide` may then require nothing, so the type checker keeps it predictable. A `decide` that reads the session gives `NeedsContext`, unless you pass what the middleware would provide as `context`. The server stays the authority: confirm from the stream as before, and a prediction never commits anything.
+
 ## Test it
 
 ```typescript

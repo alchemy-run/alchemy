@@ -84,6 +84,15 @@ export declare namespace Aggregate {
   export type ScheduleOptions = AggregateModule.ScheduleOptions;
   /** The instance type of a class. */
   export type Inst<C> = AggregateModule.Inst<C>;
+  /** Options for `MyAggregate.predict`. */
+  export type PredictOptions<Id = string> = AggregateModule.PredictOptions<Id>;
+  /** What `MyAggregate.predict` gives: accepted with events and state, rejected, or needs context. */
+  export type Prediction<State, Ev, Rej, Id = string> = AggregateModule.Prediction<
+    State,
+    Ev,
+    Rej,
+    Id
+  >;
 }
 /** A consistency boundary that decides commands. See {@link AggregateModule.make}. */
 export const Aggregate = AggregateModule.make;
@@ -97,6 +106,8 @@ export declare namespace View {
   /** An event a view emitted, with its state after it. */
   export type Entry<S, E, Id = string> = ViewModule.Entry<S, E, Id>;
   export type Page<E> = ViewModule.Page<E>;
+  /** What `MyView.evolveLocal` applies. */
+  export type LocalInput<Def, Key extends AggregateModule.Any> = ViewModule.LocalInput<Def, Key>;
 }
 /** A read model folded from events, per key. See {@link ViewModule.make}. */
 export const View = ViewModule.make;

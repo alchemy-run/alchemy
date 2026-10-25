@@ -29,6 +29,7 @@ export interface Any extends Schema.Top {
   readonly reply: Schema.Top | undefined;
   readonly middleware: Middleware.List;
   readonly rpc: Rpc.Any;
+  readonly predictable: boolean;
   new (...args: any[]): { readonly _tag: string };
 }
 
@@ -84,6 +85,7 @@ export interface CommandClass<
   Reply extends Schema.Top | undefined,
   Ms extends Middleware.List,
   R extends Rpc.Any,
+  P extends boolean = false,
 > extends Schema.Class<Instance<Tag, F>, Schema.TaggedStruct<Tag, F>, {}> {
   readonly kind: "Command";
   readonly tag: Tag;
@@ -95,6 +97,11 @@ export interface CommandClass<
   readonly middleware: Ms;
   /** The command as an Effect RPC, for exposing it in an Api. */
   readonly rpc: R;
+  /**
+   * `true` when `decide` reads nothing its middleware provides, so a client
+   * that holds the state can run it with `Aggregate.predict`.
+   */
+  readonly predictable: P;
   /** Span attributes the command adds for its input, if it declares any. */
   readonly attributes: Telemetry.Attributes<Instance<Tag, F>> | undefined;
 }
@@ -107,6 +114,7 @@ interface Options {
   readonly rejects?: ReadonlyArray<Rejection.Any>;
   readonly reply?: Fields;
   readonly attributes?: Telemetry.Attributes<any>;
+  readonly predictable?: boolean;
 }
 
 const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
@@ -125,6 +133,7 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
     static readonly middleware = options.middleware ?? [];
     static readonly rpc = rpc;
     static readonly attributes = options.attributes;
+    static readonly predictable = options.predictable ?? false;
   };
 };
 
@@ -200,6 +209,7 @@ export const make = <
   const Events extends ReadonlyArray<Event.Any> = readonly [],
   const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
   const Reply extends Fields | undefined = undefined,
+  const P extends boolean = false,
 >(
   tag: Tag,
   options: {
@@ -224,6 +234,12 @@ export const make = <
      * here, and a `Redacted` value is recorded as `<redacted>`.
      */
     readonly attributes?: Telemetry.Attributes<Instance<Tag, F>>;
+    /**
+     * Mark a command whose `decide` reads nothing its middleware provides.
+     * The type of `decide` then requires nothing, so a client that holds the
+     * aggregate's state can decide it locally with `Aggregate.predict`.
+     */
+    readonly predictable?: P;
   },
 ): CommandClass<
   Tag,
@@ -233,7 +249,8 @@ export const make = <
   Rejects,
   ReplySchema<Reply>,
   Ms,
-  Middleware.Apply<CommandRpc<Tag, Target, F, Rejects, ReplySchema<Reply>>, Ms>
+  Middleware.Apply<CommandRpc<Tag, Target, F, Rejects, ReplySchema<Reply>>, Ms>,
+  P
 > => {
   const rejects = options.rejects ?? [];
   const rpc = Rpc.make(tag, {
@@ -257,6 +274,7 @@ export const make = <
     Rejects,
     ReplySchema<Reply>,
     Ms,
-    Middleware.Apply<CommandRpc<Tag, Target, F, Rejects, ReplySchema<Reply>>, Ms>
+    Middleware.Apply<CommandRpc<Tag, Target, F, Rejects, ReplySchema<Reply>>, Ms>,
+    P
   >;
 };
