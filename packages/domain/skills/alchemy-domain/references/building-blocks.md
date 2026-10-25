@@ -102,6 +102,21 @@ export const SessionLive = Layer.succeed(Session, (effect, { headers }) =>
 
 A `RequestContext` has a schema, so its value travels with the command to the aggregate's Durable Object. A `decide` that reads `CurrentActor` won't type-check for a command without the middleware that provides it.
 
+Another service calls the Api through middleware too, never through hand-written routes. Declare it `requiredForClient: true`; the client middleware signs each request and the server middleware checks it and provides the caller:
+
+```ts
+// what both sides sign: one request, not the HTTP body (an NDJSON body may carry several)
+const signedText = (rpc: Rpc.AnyWithProps, payload: unknown, timestamp: string, nonce: string) =>
+  Schema.encodeUnknownEffect(Schema.toCodecJson(rpc.payloadSchema as Schema.Codec<unknown>))(payload).pipe(
+    Effect.map((json) => [rpc._tag, timestamp, nonce, JSON.stringify(json)].join("\n")),
+    Effect.orDie,
+  );
+// client: RpcMiddleware.layerClient(ServiceAuth, ({ rpc, request, next }) => sign signedText(rpc, request.payload, ...) into headers)
+// server: (effect, { rpc, payload, headers }) => check age, HMAC (crypto.subtle.verify), unseen nonce; provideService(effect, Caller, ...)
+```
+
+Full recipe: website `domain/sessions` ("Authenticate another service").
+
 ## View
 
 ```ts

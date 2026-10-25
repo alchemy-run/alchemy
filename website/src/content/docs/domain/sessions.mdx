@@ -194,6 +194,144 @@ export class MfaChallenge extends RpcMiddleware.Service<MfaChallenge>()("Bank/Mf
 }) {}
 ```
 
+## Authenticate another service
+
+A backend service that calls the Api has no session. It signs each request with a secret it shares with the Api, and middleware checks the signature. That keeps service calls on the Api, typed and guarded like every other call, with no hand-written routes.
+
+Declare who is calling, and the middleware. `requiredForClient: true` makes every client provide the signing half, so an unsigned client doesn't type-check.
+
+```typescript
+// packages/domain/src/ServiceAuth.middleware.ts
+import * as Domain from "@alchemy.run/domain";
+import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
+import * as Schema from "effect/Schema";
+
+/** Which service sent the request, and the nonce it signed. */
+export class Caller extends Domain.RequestContext<Caller>()(
+  "Bank/Caller",
+  Schema.Struct({ service: Schema.String, nonce: Schema.String }),
+) {}
+
+export class BadSignature extends Domain.Rejection("BadSignature") {}
+
+/** Authenticates a request another service signed. Its client signs every call. */
+export class ServiceAuth extends RpcMiddleware.Service<ServiceAuth, { provides: Caller }>()(
+  "Bank/ServiceAuth",
+  { error: BadSignature, requiredForClient: true },
+) {}
+```
+
+Both halves sign the same text: the RPC's tag, a timestamp, a nonce, and the payload as the RPC's own schema encodes it. Middleware sees each request's payload on both sides, so the signature covers one request. Don't sign the HTTP body: one NDJSON body can carry several requests.
+
+```typescript
+// packages/domain/src/ServiceAuth.signature.ts
+import * as Effect from "effect/Effect";
+import type * as Rpc from "effect/rpc/Rpc";
+import * as Schema from "effect/Schema";
+
+const bytes = (text: string) => new TextEncoder().encode(text);
+const hmacKey = (secret: string) =>
+  crypto.subtle.importKey("raw", bytes(secret), { name: "HMAC", hash: "SHA-256" }, false, [
+    "sign",
+    "verify",
+  ]);
+
+export const signedText = (
+  rpc: Rpc.AnyWithProps,
+  payload: unknown,
+  timestamp: string,
+  nonce: string,
+) =>
+  Schema.encodeUnknownEffect(Schema.toCodecJson(rpc.payloadSchema as Schema.Codec<unknown>))(payload).pipe(
+    Effect.map((json) => [rpc._tag, timestamp, nonce, JSON.stringify(json)].join("\n")),
+    Effect.orDie,
+  );
+
+export const sign = (secret: string, text: string) =>
+  Effect.promise(async () => {
+    const mac = await crypto.subtle.sign("HMAC", await hmacKey(secret), bytes(text));
+    return Array.from(new Uint8Array(mac), (b) => b.toString(16).padStart(2, "0")).join("");
+  });
+
+/** `crypto.subtle.verify` compares in constant time. */
+export const verify = (secret: string, text: string, signature: string) =>
+  Effect.promise(async () => {
+    if (!/^[0-9a-f]{64}$/.test(signature)) return false;
+    const mac = new Uint8Array(signature.match(/../g)!.map((pair) => parseInt(pair, 16)));
+    return crypto.subtle.verify("HMAC", await hmacKey(secret), mac, bytes(text));
+  });
+```
+
+The calling service signs every request:
+
+```typescript
+// packages/domain/src/ServiceAuth.middleware.ts
+export const serviceAuthClient = (service: string, secret: string) =>
+  RpcMiddleware.layerClient(ServiceAuth, ({ rpc, request, next }) =>
+    Effect.gen(function* () {
+      const timestamp = String(yield* Clock.currentTimeMillis);
+      const nonce = crypto.randomUUID();
+      const signature = yield* sign(secret, yield* signedText(rpc, request.payload, timestamp, nonce));
+      return yield* next({
+        ...request,
+        headers: Headers.setAll(request.headers, {
+          "x-service": service,
+          "x-timestamp": timestamp,
+          "x-nonce": nonce,
+          "x-signature": signature,
+        }),
+      });
+    }),
+  );
+```
+
+The Worker checks it. It refuses an unknown service, an old timestamp, a wrong signature and a nonce it has seen, and provides the `Caller`:
+
+```typescript
+// packages/server/src/ServiceAuth.ts
+const MAX_AGE_MS = 5 * 60_000;
+
+export const ServiceAuthLive = (secrets: Readonly<Record<string, string>>) =>
+  Layer.effect(
+    ServiceAuth,
+    Effect.gen(function* () {
+      const nonces = yield* NonceStore;
+      return (effect, { rpc, payload, headers }) =>
+        Effect.gen(function* () {
+          const header = (name: string) => Option.getOrUndefined(Headers.get(headers, name));
+          const service = header("x-service");
+          const timestamp = header("x-timestamp");
+          const nonce = header("x-nonce");
+          const signature = header("x-signature");
+          const secret = service === undefined ? undefined : secrets[service];
+          if (!service || !secret || !timestamp || !nonce || !signature) {
+            return yield* new BadSignature();
+          }
+          const now = yield* Clock.currentTimeMillis;
+          if (!(Math.abs(now - Number(timestamp)) <= MAX_AGE_MS)) return yield* new BadSignature();
+          const text = yield* signedText(rpc, payload, timestamp, nonce);
+          if (!(yield* verify(secret, text, signature))) return yield* new BadSignature();
+          if (!(yield* nonces.claim(nonce, MAX_AGE_MS))) return yield* new BadSignature();
+          return yield* Effect.provideService(effect, Caller, { service, nonce });
+        });
+    }),
+  );
+```
+
+`NonceStore` is yours: `claim` records a nonce for `MAX_AGE_MS` and returns `false` if it was already there. Keep it where every Worker instance sees it, like a KV namespace or a Durable Object. Read each service's secret from a secret binding or `Config.redacted`, not from code.
+
+List `ServiceAuth` on the commands and reads other services may use, and the calling service connects with its client half:
+
+```typescript
+// the billing service
+const LedgerConnection = LedgerApi.layerClient.pipe(
+  Layer.provide(Domain.protocolHttp("https://bank.example.com/internal")),
+  Layer.provide(Layer.mergeAll(FetchHttpClient.layer, serviceAuthClient("billing", secret))),
+);
+```
+
+Use `Domain.protocolHttp`: `Domain.protocolWebSocket` opens live reads without the headers client middleware sets, so a signed `watch` must stream over HTTP.
+
 ## Act without a session
 
 A policy has no request, so it provides `CurrentActor` itself before sending a command that needs one, usually as the system. See [Policy](/domain/policy#react-to-a-view).
