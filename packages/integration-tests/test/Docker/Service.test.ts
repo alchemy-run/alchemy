@@ -81,6 +81,16 @@ describe(
           expect(second.id).toBe(first.id);
           expect(second.replicas).toBe(2);
 
+          const third = yield* stack.deploy(
+            Docker.Service("scaled-service", {
+              name: serviceName,
+              image: "nginx:alpine",
+              replicas: 0,
+            }),
+          );
+          expect(third.id).toBe(first.id);
+          expect(third.replicas).toBe(0);
+
           yield* stack.destroy();
         }),
       { timeout: 240_000 },
@@ -98,7 +108,8 @@ describe(
               image,
               labels: { tier: "web" },
               environment: { MODE: "test" },
-              updateConfig: { order: "start-first", failureAction: "rollback" },
+              constraints: ["node.role==manager"],
+              updateConfig: { order: "start-first", failureAction: "rollback", parallelism: 0 },
             });
 
           const first = yield* stack.deploy(service("nginx:1.27-alpine"));
@@ -127,6 +138,23 @@ describe(
             .run(["service", "inspect", second.id, "--format", "{{.Spec.UpdateConfig.Order}}"])
             .pipe(Effect.map((output) => output.stdout.trim()));
           expect(order).toBe("start-first");
+
+          // `--constraint-add` appends, so re-adding an existing constraint
+          // would duplicate it; `0` (update every task at once) must reach
+          // the CLI rather than being dropped as falsy.
+          const spec = yield* docker
+            .run(["service", "inspect", second.id, "--format", "{{json .Spec}}"])
+            .pipe(
+              Effect.map(
+                (output) =>
+                  JSON.parse(output.stdout) as {
+                    TaskTemplate: { Placement?: { Constraints?: string[] } };
+                    UpdateConfig?: { Parallelism?: number };
+                  },
+              ),
+            );
+          expect(spec.TaskTemplate.Placement?.Constraints).toEqual(["node.role==manager"]);
+          expect(spec.UpdateConfig?.Parallelism).toBe(0);
 
           yield* stack.destroy();
         }),

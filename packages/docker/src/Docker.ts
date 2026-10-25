@@ -1069,7 +1069,9 @@ const formatArgs = (
 ) => {
   const args: Array<string> = [];
   for (const [key, value] of Object.entries(options)) {
-    if (!value) continue;
+    // `0` is meaningful (`--replicas 0`, `--update-parallelism 0`), so only
+    // absent, `false` and empty values are omitted.
+    if (value === undefined || value === false || value === "") continue;
     const prefix = key.length > 1 ? `--${key}` : `-${key}`;
     if (value === true) {
       args.push(prefix);

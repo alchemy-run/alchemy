@@ -711,9 +711,14 @@ export const ServiceProvider = () =>
               const envToRemove = (spec?.Env ?? [])
                 .map((entry) => entry.split("=", 1)[0]!)
                 .filter((key) => !(key in environment));
-              const constraintsToRemove = (
-                current.Spec.TaskTemplate?.Placement?.Constraints ?? []
-              ).filter((c) => !desired.constraints.includes(c));
+              const currentConstraints = current.Spec.TaskTemplate?.Placement?.Constraints ?? [];
+              const constraintsToRemove = currentConstraints.filter(
+                (c) => !desired.constraints.includes(c),
+              );
+              // `--constraint-add` appends without de-duplicating.
+              const constraintsToAdd = desired.constraints.filter(
+                (c) => !currentConstraints.includes(c),
+              );
               const desiredTargets = new Set(desired.volumes.map((v) => v.containerPath));
               const mountsToRemove = (spec?.Mounts ?? []).flatMap((m) =>
                 m.Target && !desiredTargets.has(m.Target) ? [m.Target] : [],
@@ -748,7 +753,7 @@ export const ServiceProvider = () =>
                 ),
                 "network-add": desired.networks.map(formatNetwork),
                 "constraint-rm": constraintsToRemove,
-                "constraint-add": desired.constraints,
+                "constraint-add": constraintsToAdd,
                 "replicas-max-per-node": desired.maxReplicasPerNode,
                 "update-parallelism": desired.updateConfig?.parallelism,
                 "update-delay": desired.updateConfig?.delay,
