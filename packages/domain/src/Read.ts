@@ -61,7 +61,19 @@ export interface Contract<
   St,
   Ms extends Middleware.List,
   Rejects extends ReadonlyArray<Rejection.Any>,
+  Key = string,
 > {
+  /**
+   * What the read answers, for the people and agents who call it. Surfaces
+   * built from an Api (tool lists, CLI help, API docs) show it. Read it back
+   * with `Domain.descriptionOf`.
+   */
+  readonly description?: string;
+  /**
+   * Example reads, in wire form: the key as a client sends it. Read them back
+   * with `Domain.examplesOf`.
+   */
+  readonly examples?: ReadonlyArray<Example<Key>>;
   /**
    * Middleware that guards reads when an Api exposes them, in order. What it
    * provides is what `validate` may read.
@@ -81,8 +93,15 @@ export interface Contract<
   ) => Effect.Effect<void, Aggregate.InstanceOf<Rejects[number]>, Middleware.Provides<Ms>>;
 }
 
+/** An example read: the key, in wire form. */
+export interface Example<Key = string> {
+  readonly key: Key;
+}
+
 /** The read contract a View or aggregate declares, widened. @internal */
 export interface AnyContract {
+  readonly description?: string;
+  readonly examples?: ReadonlyArray<Example<unknown>>;
   readonly middleware?: Middleware.List;
   readonly rejects?: ReadonlyArray<Rejection.Any>;
   readonly validate?: (request: never, state: never) => Effect.Effect<void, unknown, unknown>;

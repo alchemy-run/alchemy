@@ -43,6 +43,8 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
   rejects: [NotOpen, DailyLimitExceeded],  // every way it can be refused
   reply: { balance: Cents },               // optional typed reply
   attributes: (cmd) => ({ "bank.amount": cmd.amount }),  // optional: what its spans record
+  description: "Take money out of an account, within the balance and the daily limit.",  // optional
+  examples: [{ target: "a-1", input: { amount: 2_000 } }],  // optional: example calls, in wire form
 }) {}
 ```
 
@@ -349,6 +351,8 @@ More: [Api](https://alchemy.run/domain/api).
 `toMcp(CustomerApi)` from `@alchemy.run/domain/Ai` gives an agent each call that returns once as an MCP tool; `toToolkit` gives the same tools to an in-app agent. See [hosting.md](hosting.md#mcp).
 
 `toCli(CustomerApi)` from `@alchemy.run/domain/Cli` runs each call that returns once from a terminal, over the deployed Api's HTTP protocol. See [hosting.md](hosting.md#cli).
+
+Give every entry a `description` (and optional `examples`, in wire form) on its declaration: a command in its options, a view or stream next to its `middleware`, an aggregate in its `read` contract. A read's example names a key: `examples: [{ key: "a-1" }]`. Tools, CLIs and API docs built from an Api read them with `Domain.descriptionOf(entry)` and `Domain.examplesOf(entry)`; write the text for the person or agent who calls the entry.
 
 ## Model
 
