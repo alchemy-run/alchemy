@@ -21,6 +21,7 @@ export const EnvelopeSchema = Schema.Struct({
   seq: Schema.Number,
   at: Schema.DateTimeUtc,
   commandId: Schema.String,
+  correlationId: Schema.String,
 });
 
 /** Something an Api can expose for reading. */
