@@ -1203,6 +1203,7 @@ export const LiveContainerProvider = () =>
 
       return ContainerPlatform.Provider.of({
         stables: ["accountId", "applicationId"],
+        identityFields: ["accountId", "applicationId"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output, newBindings, oldBindings }) {
           if (!isResolved(news)) return;
           yield* validateContainerConfiguration(news, output?.schedulingPolicy);

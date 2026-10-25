@@ -174,23 +174,33 @@ const instrumentLifecycle =
     );
 
 /**
- * Whether `observed` is this resource's previous generation: it matches that
- * generation's attributes on every stable property it reports. A provider
+ * Whether `observed` proves this resource's previous physical generation.
+ * Every declared identity field must be present and match. A provider
  * that cannot prove who owns a name it does not tag — an explicitly named
  * Container application — reports even our own resource as `Unowned`.
  */
 const isPreviousGeneration = (
   observed: { readonly [key: string]: any },
-  stables: readonly string[] | undefined,
+  identityFields: readonly string[] | undefined,
   previous: { attr?: any; admissionPending?: true } | undefined,
 ): boolean => {
-  const keys = (stables ?? []).filter((key) => observed[key] !== undefined);
   const attr = previous?.attr;
   return (
     !previous?.admissionPending &&
-    keys.length > 0 &&
+    identityFields !== undefined &&
+    identityFields.length > 0 &&
     attr !== undefined &&
-    keys.every((key) => attr[key] === observed[key])
+    identityFields.every((key) => {
+      const value = observed[key];
+      return (
+        Object.hasOwn(observed, key) &&
+        Object.hasOwn(attr, key) &&
+        ((typeof value === "string" && value !== "") ||
+          (typeof value === "number" && Number.isFinite(value)) ||
+          typeof value === "boolean") &&
+        attr[key] === value
+      );
+    })
   );
 };
 
@@ -201,7 +211,7 @@ const isPreviousGeneration = (
  */
 const observeForAdmission = Effect.fn(function* (
   node: {
-    provider: Pick<ProviderService<any>, "observe" | "stables">;
+    provider: Pick<ProviderService<any>, "observe" | "identityFields">;
     props: any;
     deferredAdoption?: { adopt: boolean };
     resource: { Type: string };
@@ -220,7 +230,7 @@ const observeForAdmission = Effect.fn(function* (
     observed !== undefined &&
     Unowned.is(observed) &&
     !node.deferredAdoption.adopt &&
-    !isPreviousGeneration(observed, node.provider.stables, previous)
+    !isPreviousGeneration(observed, node.provider.identityFields, previous)
   ) {
     return yield* new OwnedBySomeoneElse({
       message:
@@ -1340,7 +1350,7 @@ const executeNode = (
         if (
           Unowned.is(observed) &&
           !node.deferredAdoption?.adopt &&
-          !isPreviousGeneration(observed, node.provider.stables, replState.old)
+          !isPreviousGeneration(observed, node.provider.identityFields, replState.old)
         ) {
           return yield* new OwnedBySomeoneElse({
             message:

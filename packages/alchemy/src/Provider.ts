@@ -276,6 +276,15 @@ export interface ProviderService<
    * Properties that are always stable across any update.
    */
   stables?: Extract<keyof Res["Attributes"], string>[];
+  /**
+   * Attributes that together prove the same physical generation, including
+   * its scope and immutable identifier. Every field must be observed and
+   * equal the previous generation's value before an `Unowned` predecessor
+   * can be admitted without adoption. Values must be nonempty strings,
+   * finite numbers, or booleans. Without this declaration, an `Unowned`
+   * result always requires adoption; `stables` alone do not prove identity.
+   */
+  identityFields?: readonly Extract<keyof Res["Attributes"], string>[];
   diff?(input: {
     id: string;
     /**
@@ -305,8 +314,8 @@ export interface ProviderService<
    * when nothing does, {@link PendingObservation} when its identity is not yet
    * known, its attributes when it belongs to this
    * stack/stage/logical-id, and `Unowned(attrs)` otherwise. The attributes
-   * may be partial, but should include the {@link stables} the provider can
-   * observe, so the engine recognizes a previous generation of this resource.
+   * may be partial. To recognize an untaggable previous generation, declare
+   * {@link identityFields} and include every declared field in the observation.
    * After a pending observation, `precreate` must return a synthetic output
    * without cloud writes, or fail before writing. The engine checks the
    * resolved identity before reconcile and never deletes a predecessor on

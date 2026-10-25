@@ -9971,8 +9971,8 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
     return owner === id && !cloud.unprovable ? { name } : Unowned({ name });
   };
   const providers = Provider.succeed(Watched, {
-    // `observe`/`read` report only `name`: partial attributes match on the stables they carry.
     stables: ["name", "tag"],
+    identityFields: ["name"],
     diff: Effect.fn(function* ({ olds, news }) {
       const cloud = yield* Cloud;
       // `tag` may be unresolved, but `name` is always literal.
@@ -10237,7 +10237,7 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
   );
 
   // A provider that cannot prove ownership of a name reports our own previous
-  // generation as `Unowned`. Matching its stables shows it is ours.
+  // generation as `Unowned`. Its declared identity proves it is ours.
   for (const [label, opts] of [
     ["observed in a cycle", {}],
     ["read once resolved", { resolved: true }],
@@ -10585,7 +10585,7 @@ describe("deferred physical identity admission", { tags: ["unit", "local"] }, ()
   interface Scoped extends Resource<
     "Test.DeferredScoped",
     { name: string; scope?: string; tag?: string; version?: number },
-    { name: string; scope?: string; physicalId: string },
+    { name: string; scope?: string; physicalId: string; generation?: number; retained?: boolean },
     { self: string }
   > {}
   const Scoped = Resource<Scoped>("Test.DeferredScoped");
@@ -10599,6 +10599,8 @@ describe("deferred physical identity admission", { tags: ["unit", "local"] }, ()
       partialObservation: boolean;
       alwaysPending: boolean;
       outputs: Array<Scoped["Attributes"] | undefined>;
+      unprovable: boolean;
+      observation: "full" | "missing" | "undefined" | "null" | "empty" | "inherited" | "recreated";
     }
   >()("DeferredIdentityCloud") {}
   const key = (value: { name: string; scope?: unknown }) =>
@@ -10607,10 +10609,31 @@ describe("deferred physical identity admission", { tags: ["unit", "local"] }, ()
     name: value.name,
     scope: value.scope,
     physicalId: key(value),
+    generation: 0,
+    retained: false,
   });
-  const providers = (withRead: boolean) =>
+  const observe = (cloud: Cloud["Service"], id: string, value: Scoped["Props"]) => {
+    const owner = cloud.owners.get(key(value));
+    if (owner === undefined) return undefined;
+    const observed: Partial<Scoped["Attributes"]> = cloud.partialObservation
+      ? { name: value.name }
+      : attrs(value);
+    if (cloud.observation === "missing") delete observed.physicalId;
+    if (cloud.observation === "undefined") observed.physicalId = undefined;
+    if (cloud.observation === "null")
+      Object.defineProperty(observed, "physicalId", { value: null, enumerable: true });
+    if (cloud.observation === "empty") observed.physicalId = "";
+    if (cloud.observation === "inherited") {
+      Object.setPrototypeOf(observed, { physicalId: observed.physicalId });
+      delete observed.physicalId;
+    }
+    if (cloud.observation === "recreated") observed.physicalId = "another-generation";
+    return owner === id && !cloud.unprovable ? observed : Unowned(observed);
+  };
+  const providers = (withRead: boolean, identityFields?: readonly (keyof Scoped["Attributes"])[]) =>
     Provider.succeed(Scoped, {
       stables: ["name", "physicalId"],
+      identityFields,
       diff: Effect.fn(function* ({ olds, news }) {
         if (
           "scope" in news &&
@@ -10630,10 +10653,7 @@ describe("deferred physical identity admission", { tags: ["unit", "local"] }, ()
         }
         const target = key(news);
         cloud.events.push(`observe ${target}`);
-        const owner = cloud.owners.get(target);
-        if (owner === undefined) return undefined;
-        const observed = cloud.partialObservation ? { name: news.name } : attrs(news);
-        return owner === id ? observed : Unowned(observed);
+        return observe(cloud, id, news);
       }),
       read: withRead
         ? Effect.fn(function* ({ id, olds, output }) {
@@ -10644,7 +10664,8 @@ describe("deferred physical identity admission", { tags: ["unit", "local"] }, ()
             const owner = cloud.owners.get(target);
             if (owner === undefined) return undefined;
             const observed = attrs(value);
-            return owner === id ? observed : Unowned(observed);
+            if (cloud.observation === "recreated") observed.physicalId = "another-generation";
+            return owner === id && !cloud.unprovable ? observed : Unowned(observed);
           })
         : undefined,
       precreate: Effect.fn(function* ({ id, news }) {
@@ -10685,12 +10706,28 @@ describe("deferred physical identity admission", { tags: ["unit", "local"] }, ()
           partialObservation: false,
           alwaysPending: false,
           outputs: [],
+          unprovable: false,
+          observation: "full" as const,
         })),
       ),
     );
-  const { test } = Test.make({ providers: Layer.mergeAll(providers(true), TestLayers()) });
+  const { test } = Test.make({
+    providers: Layer.mergeAll(providers(true, ["physicalId"]), TestLayers()),
+  });
   const { test: withoutRead } = Test.make({
-    providers: Layer.mergeAll(providers(false), TestLayers()),
+    providers: Layer.mergeAll(providers(false, ["physicalId"]), TestLayers()),
+  });
+  const { test: withoutIdentity } = Test.make({
+    providers: Layer.mergeAll(providers(true), TestLayers()),
+  });
+  const { test: emptyIdentity } = Test.make({
+    providers: Layer.mergeAll(providers(true, []), TestLayers()),
+  });
+  const { test: scalarIdentity } = Test.make({
+    providers: Layer.mergeAll(
+      providers(true, ["physicalId", "generation", "retained"]),
+      TestLayers(),
+    ),
   });
   const program = (
     scope: string,
@@ -10700,10 +10737,11 @@ describe("deferred physical identity admission", { tags: ["unit", "local"] }, ()
       cycle?: boolean;
       version?: number;
       adopt?: boolean;
+      tagSource?: string;
     } = {},
   ) =>
     Effect.gen(function* () {
-      const source = yield* TestResource("Scope", { string: scope });
+      const source = yield* TestResource("Scope", { string: options.tagSource ?? scope });
       const resource = yield* Scoped("Subject", {
         name: "api",
         scope: options.late === false ? scope : source.string,
@@ -10723,6 +10761,8 @@ describe("deferred physical identity admission", { tags: ["unit", "local"] }, ()
     cloud.partialObservation = false;
     cloud.alwaysPending = false;
     cloud.outputs.length = 0;
+    cloud.unprovable = false;
+    cloud.observation = "full";
     return cloud;
   });
   const report = (label: string, cloud: Cloud["Service"]) =>
@@ -10949,5 +10989,161 @@ describe("deferred physical identity admission", { tags: ["unit", "local"] }, ()
         yield* stack.destroy();
         expect(cloud.owners.get("tenant/api")).toBe("SomeoneElse");
       }),
+  );
+
+  for (const resolved of [false, true]) {
+    test.provider(
+      `a foreign replacement in another scope is refused before mutation (resolved=${resolved})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const cloud = yield* reset(stack);
+          yield* stack.deploy(program("old", { late: false, cycle: false }));
+          cloud.owners.set("new/api", "SomeoneElse");
+          cloud.partialObservation = true;
+          cloud.deleteFirst = true;
+          cloud.events.length = 0;
+          const error = yield* stack
+            .deploy(program("new", { late: false, lateTag: !resolved }))
+            .pipe(Effect.flip);
+          expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+          expect(cloud.owners.get("new/api")).toBe("SomeoneElse");
+          expect(cloud.owners.get("old/api")).toBe("Subject");
+          expect(cloud.events).toEqual([resolved ? "read new/api" : "observe new/api"]);
+          yield* stack.destroy();
+          expect(cloud.owners.get("new/api")).toBe("SomeoneElse");
+        }),
+    );
+
+    test.provider(
+      `a complete identity admits an untaggable predecessor (resolved=${resolved})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const cloud = yield* reset(stack);
+          yield* stack.deploy(program("old", { late: false, cycle: false }));
+          cloud.unprovable = true;
+          cloud.deleteFirst = true;
+          yield* stack.deploy(
+            program("old", { late: false, lateTag: !resolved, version: 1, tagSource: "next" }),
+          );
+          expect(cloud.owners.get("old/api")).toBe("Subject");
+          yield* stack.destroy();
+        }),
+    );
+
+    test.provider(
+      `same-address recreation cannot inherit predecessor admission (resolved=${resolved})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const cloud = yield* reset(stack);
+          yield* stack.deploy(program("old", { late: false, cycle: false }));
+          cloud.owners.set("old/api", "SomeoneElse");
+          cloud.observation = "recreated";
+          cloud.events.length = 0;
+          const error = yield* stack
+            .deploy(
+              program("old", { late: false, lateTag: !resolved, version: 1, tagSource: "next" }),
+            )
+            .pipe(Effect.flip);
+          expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+          expect(cloud.owners.get("old/api")).toBe("SomeoneElse");
+          expect(cloud.events).toEqual([resolved ? "read old/api" : "observe old/api"]);
+          // The fixture replaced the owned generation out of band; forget its stale state before teardown.
+          const state = yield* yield* State;
+          yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "Subject" });
+          yield* stack.destroy();
+          expect(cloud.owners.get("old/api")).toBe("SomeoneElse");
+        }),
+    );
+  }
+
+  for (const observation of ["missing", "undefined", "null", "empty", "inherited"] as const) {
+    test.provider(
+      `an observation with ${observation} identity evidence cannot admit a predecessor`,
+      (stack) =>
+        Effect.gen(function* () {
+          const cloud = yield* reset(stack);
+          yield* stack.deploy(program("old", { late: false, cycle: false }));
+          cloud.unprovable = true;
+          cloud.observation = observation;
+          cloud.events.length = 0;
+          const error = yield* stack
+            .deploy(program("old", { late: false, lateTag: true, version: 1, tagSource: "next" }))
+            .pipe(Effect.flip);
+          expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+          expect(cloud.events).toEqual(["observe old/api"]);
+          yield* stack.destroy();
+        }),
+    );
+  }
+
+  for (const [label, harness] of [
+    ["undeclared", withoutIdentity],
+    ["empty", emptyIdentity],
+  ] as const) {
+    harness.provider(`matching stables do not replace an ${label} identity declaration`, (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* reset(stack);
+        yield* stack.deploy(program("old", { late: false, cycle: false }));
+        cloud.unprovable = true;
+        cloud.events.length = 0;
+        const error = yield* stack
+          .deploy(program("old", { late: false, lateTag: true, version: 1, tagSource: "next" }))
+          .pipe(Effect.flip);
+        expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+        expect(cloud.events).toEqual(["observe old/api"]);
+        yield* stack.destroy();
+      }),
+    );
+  }
+
+  test.provider("explicit adoption permits a target without complete identity proof", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      yield* stack.deploy(program("old", { late: false, cycle: false }));
+      cloud.owners.set("new/api", "SomeoneElse");
+      cloud.partialObservation = true;
+      yield* stack.deploy(program("new", { late: false, lateTag: true, adopt: true }));
+      expect(cloud.owners.get("new/api")).toBe("Subject");
+      yield* stack.destroy();
+    }),
+  );
+
+  scalarIdentity.provider(
+    "zero and false identity fields still prove the physical generation",
+    (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* reset(stack);
+        yield* stack.deploy(program("old", { late: false, cycle: false }));
+        cloud.unprovable = true;
+        cloud.deleteFirst = true;
+        yield* stack.deploy(
+          program("old", { late: false, lateTag: true, version: 1, tagSource: "next" }),
+        );
+        expect(cloud.owners.get("old/api")).toBe("Subject");
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider("provisional predecessor attributes cannot prove identity", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      yield* stack.deploy(program("old", { late: false, cycle: false }));
+      const checkpoint = yield* getState("Subject");
+      const state = yield* yield* State;
+      yield* state.set({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn: "Subject",
+        value: { ...checkpoint, admissionPending: true },
+      });
+      cloud.unprovable = true;
+      const error = yield* stack
+        .deploy(program("old", { late: false, lateTag: true, version: 1, tagSource: "next" }))
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse" });
+      expect(cloud.owners.get("old/api")).toBe("Subject");
+      yield* stack.destroy();
+      expect(cloud.owners.get("old/api")).toBe("Subject");
+    }),
   );
 });

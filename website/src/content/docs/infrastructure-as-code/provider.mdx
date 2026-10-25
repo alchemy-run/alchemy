@@ -260,9 +260,21 @@ observe: Effect.fn(function* ({ id, news }) {
 
 The engine refuses an `Unowned` result before `precreate` runs, unless
 adoption is allowed. Implement it whenever `precreate` can write to a
-resource that already exists, and include your `stables` in the
-attributes so the engine recognizes the resource's own previous
-generation.
+resource that already exists.
+
+Providers that cannot tag their resources can declare `identityFields`.
+These fields must together prove the physical generation, including its
+scope and immutable identifier. Every field must appear in the observation
+and match the previous generation. Values must be nonempty strings,
+finite numbers, or booleans. A partial match on `stables` does not prove ownership.
+
+```typescript
+identityFields: ["accountId", "applicationId"],
+```
+
+Without `identityFields`, an `Unowned` result requires adoption even when
+its name matches the previous resource. An empty declaration also provides
+no proof.
 
 Return `undefined` only after confirming that the target does not exist.
 Return `Provider.PendingObservation` when its identity is still unresolved.
