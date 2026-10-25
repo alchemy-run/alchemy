@@ -13,7 +13,7 @@ import {
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
-import { createEventGridName, sameName } from "./common.ts";
+import { createEventGridName, namespaceTopicsHostname, sameName } from "./common.ts";
 import {
   destinationDiffers,
   toWireDestination,
@@ -108,6 +108,11 @@ export interface NamespaceTopicEventSubscription extends Resource<
     namespace: string;
     /** Name of the namespace topic. */
     topic: string;
+    /**
+     * Data-plane hostname of the namespace's topics, e.g.
+     * `ns.eastus-1.eventgrid.azure.net`; pull consumers receive from it.
+     */
+    topicsHostname: string;
     /** Delivery mode: `Queue` (pull) or `Push`. */
     deliveryMode: "Queue" | "Push";
   },
@@ -193,12 +198,14 @@ const toAttrs = (
   topic: string,
   name: string,
   observed: ObservedSubscription,
+  topicsHostname: string,
 ): NamespaceTopicEventSubscription["Attributes"] => ({
   eventSubscriptionName: name,
   eventSubscriptionId: observed.id ?? "",
   resourceGroup,
   namespace,
   topic,
+  topicsHostname,
   deliveryMode:
     observed.properties?.deliveryConfiguration?.deliveryMode === "Push" ? "Push" : "Queue",
 });
@@ -333,7 +340,8 @@ export const NamespaceTopicEventSubscriptionProvider = () =>
         name,
       );
       if (observed === undefined) return undefined;
-      return toAttrs(resourceGroup, namespace, topic, name, observed);
+      const hostname = yield* namespaceTopicsHostname(subscriptionId, resourceGroup, namespace);
+      return toAttrs(resourceGroup, namespace, topic, name, observed, hostname);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -406,7 +414,8 @@ export const NamespaceTopicEventSubscriptionProvider = () =>
         observed = yield* waitForProvisioned(label, get, stateOf, budget);
       }
 
-      return toAttrs(resourceGroup, namespace, topic, name, observed);
+      const hostname = yield* namespaceTopicsHostname(subscriptionId, resourceGroup, namespace);
+      return toAttrs(resourceGroup, namespace, topic, name, observed, hostname);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -7,3 +7,7 @@ export * from "./DataConnection.ts";
 export * from "./ManagedPrivateEndpoint.ts";
 export * from "./SandboxCustomImage.ts";
 export * from "./Script.ts";
+export * from "./StartCluster.ts";
+export * from "./StartClusterHttp.ts";
+export * from "./StopCluster.ts";
+export * from "./StopClusterHttp.ts";

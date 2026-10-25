@@ -45,6 +45,19 @@ export interface ListBlobsResult {
   nextMarker: string | undefined;
 }
 
+/**
+ * A distilled `storage-blob` request without the identifiers a bound
+ * container client supplies: `url`, `containerName`, and `blob` (passed as
+ * the method's `key`).
+ */
+export type BlobOperationRequest<R> = Omit<R, "url" | "containerName" | "blob">;
+
+/**
+ * A distilled `storage-blob` container request without the `url` and
+ * `containerName` the bound container supplies.
+ */
+export type BlobContainerRequest<R> = Omit<R, "url" | "containerName">;
+
 export interface PutBlobOptions {
   /** `Content-Type` stored with the blob. */
   contentType?: string;

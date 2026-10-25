@@ -5,3 +5,8 @@ export * from "./PrometheusRuleGroup.ts";
 export * from "./ScheduledQueryRule.ts";
 export * from "./SmartDetectorAlertRule.ts";
 export * from "./Workspace.ts";
+export * from "./MonitoredResource.ts";
+export * from "./UploadLogs.ts";
+export * from "./UploadLogsHttp.ts";
+export * from "./GetMetricsBatch.ts";
+export * from "./GetMetricsBatchHttp.ts";

@@ -1,7 +1,8 @@
-import type * as eventgrid from "@distilled.cloud/azure/eventgrid";
+import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { orUndefinedIfNotFound } from "../Arm.ts";
 import type { JsonInputSchemaMapping } from "./Topic.ts";
 
 /** Managed identity type of an Event Grid resource. */
@@ -115,3 +116,16 @@ export const setIfChanged = <T extends object, K extends keyof T>(
 /** Wire form of a JSON input schema mapping. */
 export const toInputSchemaMapping = (mapping: JsonInputSchemaMapping | undefined) =>
   mapping === undefined ? undefined : { inputSchemaMappingType: "Json", properties: mapping };
+
+/**
+ * Data-plane hostname of a namespace's topics, e.g.
+ * `ns.eastus-1.eventgrid.azure.net` (`""` while the namespace is missing).
+ */
+export const namespaceTopicsHostname = (
+  subscriptionId: string,
+  resourceGroupName: string,
+  namespaceName: string,
+) =>
+  orUndefinedIfNotFound(
+    eventgrid.GetNamespace({ subscriptionId, resourceGroupName, namespaceName }),
+  ).pipe(Effect.map((ns) => ns?.properties?.topicsConfiguration?.hostname ?? ""));

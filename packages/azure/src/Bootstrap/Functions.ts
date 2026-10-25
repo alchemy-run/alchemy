@@ -1,7 +1,7 @@
 /**
- * Process entry for an Effect-native `Azure.Functions.Function`. The
- * generated entry imports this module and the user's `main`, nothing else,
- * and awaits {@link bootstrap} at the top level.
+ * Process entry for an Effect-native `Azure.Functions.Function` or
+ * `Azure.Web.FunctionApp`. The generated entry imports this module and the
+ * user's `main`, nothing else, and awaits {@link bootstrap} at the top level.
  *
  * The Functions Node.js worker loads the entry file and then locks its
  * function index, so `bootstrap` resolves only after the program's init has

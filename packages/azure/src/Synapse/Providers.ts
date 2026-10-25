@@ -75,6 +75,10 @@ import {
 } from "./WorkspaceExtendedAuditingSetting.ts";
 import { WorkspaceKey, WorkspaceKeyProvider } from "./WorkspaceKey.ts";
 import {
+  WorkspaceRoleAssignment,
+  WorkspaceRoleAssignmentProvider,
+} from "./WorkspaceRoleAssignment.ts";
+import {
   WorkspaceSecurityAlertPolicy,
   WorkspaceSecurityAlertPolicyProvider,
 } from "./WorkspaceSecurityAlertPolicy.ts";
@@ -111,6 +115,7 @@ export const resources = [
   WorkspaceAuditingSetting,
   WorkspaceExtendedAuditingSetting,
   WorkspaceKey,
+  WorkspaceRoleAssignment,
   WorkspaceSecurityAlertPolicy,
   WorkspaceVulnerabilityAssessment,
 ];
@@ -143,6 +148,7 @@ export const layers = () =>
     WorkspaceAuditingSettingProvider(),
     WorkspaceExtendedAuditingSettingProvider(),
     WorkspaceKeyProvider(),
+    WorkspaceRoleAssignmentProvider(),
     WorkspaceSecurityAlertPolicyProvider(),
     WorkspaceVulnerabilityAssessmentProvider(),
   );

@@ -4,17 +4,11 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
+import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
-import {
-  accountIdOf,
-  deterministicGuid,
-  expandScope,
-  waitForChild,
-  whileAccountBusy,
-} from "./Shared.ts";
+import { accountIdOf, deleteChild, deterministicGuid, expandScope, putChild } from "./Shared.ts";
 
 /**
  * Built-in Cosmos DB for NoSQL data-plane roles present on every account.
@@ -280,8 +274,9 @@ export const SqlRoleAssignmentProvider = () =>
           accountId,
           scope,
         );
-        yield* cosmos
-          .SqlResourcesCreateUpdateSqlRoleAssignment({
+        observed = yield* putChild(
+          `Cosmos DB SQL role assignment ${name}`,
+          cosmos.SqlResourcesCreateUpdateSqlRoleAssignment({
             subscriptionId,
             resourceGroupName: resourceGroup,
             accountName: account,
@@ -291,9 +286,10 @@ export const SqlRoleAssignmentProvider = () =>
               principalId: news.principalId,
               scope,
             },
-          })
-          .pipe(Effect.retry(whileAccountBusy));
-        observed = yield* waitForChild(`Cosmos DB SQL role assignment ${name}`, get, () => true);
+          }),
+          get,
+          () => true,
+        );
       }
 
       return toAttrs(resourceGroup, account, name, observed, accountId);
@@ -301,25 +297,20 @@ export const SqlRoleAssignmentProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        cosmos
-          .DeleteSqlResourceSqlRoleAssignment({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-            accountName: output.account,
-            roleAssignmentId: output.roleAssignmentName,
-          })
-          .pipe(Effect.retry(whileAccountBusy)),
-      );
-      yield* waitUntilGone(
+      yield* deleteChild(
         `Cosmos DB SQL role assignment ${output.roleAssignmentName}`,
+        cosmos.DeleteSqlResourceSqlRoleAssignment({
+          subscriptionId,
+          resourceGroupName: output.resourceGroup,
+          accountName: output.account,
+          roleAssignmentId: output.roleAssignmentName,
+        }),
         getAssignment(
           subscriptionId,
           output.resourceGroup,
           output.account,
           output.roleAssignmentName,
         ),
-        { interval: "3 seconds", times: 60 },
       );
     }),
 

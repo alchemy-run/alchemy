@@ -7,6 +7,14 @@ import {
   ManagedHsmPrivateEndpointConnection,
   ManagedHsmPrivateEndpointConnectionProvider,
 } from "./ManagedHsmPrivateEndpointConnection.ts";
+import {
+  ManagedHsmRoleAssignment,
+  ManagedHsmRoleAssignmentProvider,
+} from "./ManagedHsmRoleAssignment.ts";
+import {
+  ManagedHsmRoleDefinition,
+  ManagedHsmRoleDefinitionProvider,
+} from "./ManagedHsmRoleDefinition.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
 import { Vault, VaultProvider } from "./Vault.ts";
 import {
@@ -20,6 +28,8 @@ export const resources = [
   ManagedHsm,
   ManagedHsmKey,
   ManagedHsmPrivateEndpointConnection,
+  ManagedHsmRoleAssignment,
+  ManagedHsmRoleDefinition,
   Secret,
   Vault,
   VaultPrivateEndpointConnection,
@@ -31,6 +41,8 @@ export const layers = () =>
     ManagedHsmProvider(),
     ManagedHsmKeyProvider(),
     ManagedHsmPrivateEndpointConnectionProvider(),
+    ManagedHsmRoleAssignmentProvider(),
+    ManagedHsmRoleDefinitionProvider(),
     SecretProvider(),
     VaultProvider(),
     VaultPrivateEndpointConnectionProvider(),

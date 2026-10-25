@@ -4,17 +4,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
+import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   accountIdOf,
   canonical,
+  deleteChild,
   deterministicGuid,
   expandScope,
-  waitForChild,
-  whileAccountBusy,
+  putChild,
 } from "./Shared.ts";
 
 export interface TableRolePermission {
@@ -232,8 +232,9 @@ export const TableRoleDefinitionProvider = () =>
 
       // Ensure + sync. The PUT is an upsert of the whole definition.
       if (observed === undefined || !converged(observed)) {
-        yield* cosmos
-          .TableResourcesCreateUpdateTableRoleDefinition({
+        observed = yield* putChild(
+          `Cosmos DB Table role definition ${roleName}`,
+          cosmos.TableResourcesCreateUpdateTableRoleDefinition({
             subscriptionId,
             resourceGroupName: resourceGroup,
             accountName: account,
@@ -244,10 +245,7 @@ export const TableRoleDefinitionProvider = () =>
               assignableScopes,
               permissions,
             },
-          })
-          .pipe(Effect.retry(whileAccountBusy));
-        observed = yield* waitForChild(
-          `Cosmos DB Table role definition ${roleName}`,
+          }),
           get,
           converged,
         );
@@ -258,25 +256,20 @@ export const TableRoleDefinitionProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        cosmos
-          .DeleteTableResourceTableRoleDefinition({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-            accountName: output.account,
-            roleDefinitionId: output.roleDefinitionName,
-          })
-          .pipe(Effect.retry(whileAccountBusy)),
-      );
-      yield* waitUntilGone(
+      yield* deleteChild(
         `Cosmos DB Table role definition ${output.roleName}`,
+        cosmos.DeleteTableResourceTableRoleDefinition({
+          subscriptionId,
+          resourceGroupName: output.resourceGroup,
+          accountName: output.account,
+          roleDefinitionId: output.roleDefinitionName,
+        }),
         getRoleDefinition(
           subscriptionId,
           output.resourceGroup,
           output.account,
           output.roleDefinitionName,
         ),
-        { interval: "3 seconds", times: 60 },
       );
     }),
 

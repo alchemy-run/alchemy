@@ -1,0 +1,68 @@
+/**
+ * A self-signed RSA-2048 certificate (`CN=Alchemy Key Vault Import Test`,
+ * valid until 2036) and its PKCS#8 private key, generated once with
+ * `openssl req -x509 -newkey rsa:2048 -nodes -days 3650` and checked in.
+ * `ImportCertificate` imports {@link IMPORT_PEM}; `MergeCertificate`'s test
+ * signs Key Vault's CSR with {@link CA_KEY_PEM} as the issuer.
+ * Test-only key material: it protects nothing.
+ */
+
+export const CA_SUBJECT_CN = "Alchemy Key Vault Import Test";
+
+export const CA_KEY_PEM = `-----BEGIN PRIVATE KEY-----
+MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCTetvPQSsdxoU5
+992+uCpSTaEwVvgUOVVWgN7vAb9jnE9cQlDZd/Zgy41yaraKfKRxqSV4XSGB48UH
+evaDziNj038Wpg3pdqUdJv0L6uCT9vjasOlha1X0YEP7JpvDwphAZSm5Q8fyTPvL
+M0eLeDxf8Sb60vo0k6Z5XFcN6dC59Y7pmTx+tYUWkB9cUaFgGezjcQSYJ2lr2Nr2
+JR4uOVcpc0M4mOe6++vpwIBKMpAIG3zCU1c+UTa9/Bp+FonOG5jeEJw/AoUoRFyR
+jsTENDsDm9j78fbhUm/U0xoI/vDa/Fvmr0uThPraYLXDcG6sFSRv7QpDWJxnXP+d
+TTczLyBnAgMBAAECggEAAQNNVhD1EkvWMi+dg0Rf39Cc5j3Cq/qqKQwLiiY/s3uM
+yxiknUm/vxxxc3pHCgICsx9duRI9V6yzzPIhJGphsWXv6Lzpq8UmDymH8dTl6xOS
+0/k9hm779LNiVevOErwCoiFBhHAc2VTXlIpAZlHSh3FFkArIBOtQBQ55MF4NSw02
+zapYeQuYRNW4QgKDY4YkKY78Iw+4R5OWo0FTW6g00SVb+8iiZyrwi8wsPq2na9lX
+xWQ1l4mjRlXPO8SkbAvXTAii4uKAt8OLUaQYkG8exsFCsTytWybIW0QxRInpoXyM
+Ch1V7vi5yuClRgySjtYk9DBsfYV6WtH6x9Qkjea5kQKBgQDPZhMf592suxUjy+i0
+97fsdMwT4n+sIEvf6I7QE8wdZb9SAFeM77TIDBL6IwNlvtfUZQnyUBAQdFjeg4ep
+QW1ypbuAa05sNPOybhcPMm86zaTPVgaiPdS347hW7XFQ1zo1b1l+yc65QCxGzkdt
+mhLAbDgt5R+QDBxkPE8gLGGMaQKBgQC2CjuG6ZbUQhUv6peGEzYiOOia3YyPwMm3
+BMLC1TlTiXbCgELkOk4QjTOpT38cyuIs6FNDE3i9pz5eaDUo1NMs7Tt/UHsBm0NI
+lm9QaO+Zt66NYMOfjt/Ch9OeGi/PwIuBBsMpchDSSkSGczGh64D2LsefSlWuuPgI
+wDTqEgTsTwKBgCldU20mopjDy2iTT7tgOMepV9aTcyFSY6+pw2oOuMQYOftR5CRQ
+3r6TYemPuCq/0G4lJMG2ZC3T9rGSjCkeyoR2N5paTI7aVMx+lozKY1LYFwnfP312
+VYnDmk2EF/impI5pwfC+sUNTYEFS/P4IH7tPGjlVHGFveO4o9SMWlvIZAoGAfJ4E
+ohbGagfS+TpfACmmpUbP9TQ1RTN04xUfPsE4vTcdVYj4QcSoLCx9cSo6mjtJGfTx
+CroJrcsPpxEvUwRejCLa2A0AJ9lh9g8FpMYxP8m+dIoJYPEtvL2+4DyM/muRFILM
+l1K+sTamMmQpVe8iGWVswl7gyPtW0KbDknlDZYECgYBhW91mUBs8y5FmJcqV3Lpo
+518ziPkR0X2XvO7b5aJ4U1IX9bW/5ChdDNcS9mOfg/z/Jvzzg1lP2Hjx+Ar8UeDJ
+OBzFr1byjA2Ni58TgeOkf4qbheeiuT39QG/m2rTVcEO/3/hs0wcGcTLsmKni8o9f
+E3t2ZjdPK71w3PzX8o7IgA==
+-----END PRIVATE KEY-----
+`;
+
+export const CA_CERT_PEM = `-----BEGIN CERTIFICATE-----
+MIIDMTCCAhmgAwIBAgIUWs7sXtWEDD7rXBKvGDr9QmKwfTAwDQYJKoZIhvcNAQEL
+BQAwKDEmMCQGA1UEAwwdQWxjaGVteSBLZXkgVmF1bHQgSW1wb3J0IFRlc3QwHhcN
+MjYxMDI1MDMyMTM1WhcNMzYxMDIyMDMyMTM1WjAoMSYwJAYDVQQDDB1BbGNoZW15
+IEtleSBWYXVsdCBJbXBvcnQgVGVzdDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCC
+AQoCggEBAJN6289BKx3GhTn33b64KlJNoTBW+BQ5VVaA3u8Bv2OcT1xCUNl39mDL
+jXJqtop8pHGpJXhdIYHjxQd69oPOI2PTfxamDel2pR0m/Qvq4JP2+Nqw6WFrVfRg
+Q/smm8PCmEBlKblDx/JM+8szR4t4PF/xJvrS+jSTpnlcVw3p0Ln1jumZPH61hRaQ
+H1xRoWAZ7ONxBJgnaWvY2vYlHi45VylzQziY57r76+nAgEoykAgbfMJTVz5RNr38
+Gn4Wic4bmN4QnD8ChShEXJGOxMQ0OwOb2Pvx9uFSb9TTGgj+8Nr8W+avS5OE+tpg
+tcNwbqwVJG/tCkNYnGdc/51NNzMvIGcCAwEAAaNTMFEwHQYDVR0OBBYEFP2aRfUY
+FqVRxUMPe2nhQFGi2wWnMB8GA1UdIwQYMBaAFP2aRfUYFqVRxUMPe2nhQFGi2wWn
+MA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBAIa0iK4AZF0AzBDo
+gBxwtYmXLQ0qLoQCxATjakkctO0qLGxixfGcIeLLW0JNRQgiTVsNjWxdhOzfdYYP
+7cL2+0vHPcqnWfQ3pGWEn/HWmD4Hef/y6IAJF5xe042EtE60zNzyyQLK12N7FAKj
+SjLjXgRlC/nqHulNCRsKinqTiVEF3nbajcR2BGQeU1YO45jX1IKItgW37walYUJn
+ktwjhDVl/sAM7lj0l3fsPiIWQv7xd2TmG5GqZPzixJMK53/7ErqpFT7VvVRroYfz
+aFWljymXrae6JO+xaKTpS6YkKgT0Intdo0wMZDnFsVStbtMSvR6XiDtVACQJQ5wA
+SwU+GBo=
+-----END CERTIFICATE-----
+`;
+
+/** Key and certificate in one PEM, as `ImportCertificate` takes it. */
+export const IMPORT_PEM = `${CA_KEY_PEM}${CA_CERT_PEM}`;
+
+/** SHA-1 thumbprint (base64url) of {@link CA_CERT_PEM}: Key Vault's `x5t`. */
+export const IMPORT_X5T = "wYcz98Eqgh10jT9Pvs3ndPK_aJo";

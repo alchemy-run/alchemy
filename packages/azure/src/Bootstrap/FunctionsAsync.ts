@@ -1,7 +1,8 @@
 /**
- * Process entry for an async (non-Effect) `Azure.Functions.Function`. The
- * generated entry imports this module and the user's handler file, nothing
- * else, so the deployed package carries no Effect runtime.
+ * Process entry for an async (non-Effect) `Azure.Functions.Function` or
+ * `Azure.Web.FunctionApp`. The generated entry imports this module and the
+ * user's handler file, nothing else, so the deployed package carries no
+ * Effect runtime.
  *
  * The handler file default-exports `{ fetch(request, env) }`. `env` holds the
  * values of the Function's `env` prop, decoded from app settings: strings

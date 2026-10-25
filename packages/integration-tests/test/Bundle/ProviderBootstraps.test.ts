@@ -18,7 +18,18 @@ const bareImports = (result: Bundle.BundleOutput) =>
 
 /** Each provider package's generated-entry bootstrap, and the package that ships it. */
 const BOOTSTRAPS = [
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/ContainerApp"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/ContainerAppAsync"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/ContainerAppsJob"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/ContainerAppsJobAsync"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/ContainerGroup"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/ContainerGroupAsync"],
   ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/Functions"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/FunctionsAsync"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/VirtualMachine"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/VirtualMachineAsync"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/WebApp"],
+  ["@alchemy.run/azure", "@alchemy.run/azure/Bootstrap/WebAppAsync"],
   ["@alchemy.run/fly", "@alchemy.run/fly/Bootstrap"],
   ["@alchemy.run/hetzner", "@alchemy.run/hetzner/Bootstrap"],
   ["@alchemy.run/prisma", "@alchemy.run/prisma/Bootstrap"],

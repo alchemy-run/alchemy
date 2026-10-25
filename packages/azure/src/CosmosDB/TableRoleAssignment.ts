@@ -4,17 +4,11 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
+import { ensureRegistered, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
-import {
-  accountIdOf,
-  deterministicGuid,
-  expandScope,
-  waitForChild,
-  whileAccountBusy,
-} from "./Shared.ts";
+import { accountIdOf, deleteChild, deterministicGuid, expandScope, putChild } from "./Shared.ts";
 
 export interface TableRoleAssignmentProps {
   /** Resource group of the account. Changing it replaces the assignment. */
@@ -244,10 +238,34 @@ export const TableRoleAssignmentProvider = () =>
       // Observe. Everything about an assignment is immutable (changes
       // replace it), so reconcile only ensures it exists.
       let observed = yield* get;
+      const scope = expandScope(accountId, news.scope ?? "/");
+
+      // An assignment whose role, principal, or scope was still an
+      // unresolved output at plan time reaches here as an update; one that
+      // no longer matches is deleted and created again.
+      if (
+        observed !== undefined &&
+        (lastSegment(observed.properties?.roleDefinitionId ?? "") !==
+          lastSegment(news.roleDefinitionId) ||
+          (observed.properties?.principalId ?? "").toLowerCase() !==
+            news.principalId.toLowerCase() ||
+          normalizeScope(observed.properties?.scope ?? "") !== normalizeScope(scope))
+      ) {
+        yield* deleteChild(
+          `Cosmos DB Table role assignment ${name}`,
+          cosmos.DeleteTableResourceTableRoleAssignment({
+            subscriptionId,
+            resourceGroupName: resourceGroup,
+            accountName: account,
+            roleAssignmentId: name,
+          }),
+          get,
+        );
+        observed = undefined;
+      }
 
       // Ensure.
       if (observed === undefined) {
-        const scope = expandScope(accountId, news.scope ?? "/");
         yield* ensureScopeExists(
           {
             subscriptionId,
@@ -257,8 +275,9 @@ export const TableRoleAssignmentProvider = () =>
           accountId,
           scope,
         );
-        yield* cosmos
-          .TableResourcesCreateUpdateTableRoleAssignment({
+        observed = yield* putChild(
+          `Cosmos DB Table role assignment ${name}`,
+          cosmos.TableResourcesCreateUpdateTableRoleAssignment({
             subscriptionId,
             resourceGroupName: resourceGroup,
             accountName: account,
@@ -268,9 +287,10 @@ export const TableRoleAssignmentProvider = () =>
               principalId: news.principalId,
               scope,
             },
-          })
-          .pipe(Effect.retry(whileAccountBusy));
-        observed = yield* waitForChild(`Cosmos DB Table role assignment ${name}`, get, () => true);
+          }),
+          get,
+          () => true,
+        );
       }
 
       return toAttrs(resourceGroup, account, name, observed, accountId);
@@ -278,25 +298,20 @@ export const TableRoleAssignmentProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        cosmos
-          .DeleteTableResourceTableRoleAssignment({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-            accountName: output.account,
-            roleAssignmentId: output.roleAssignmentName,
-          })
-          .pipe(Effect.retry(whileAccountBusy)),
-      );
-      yield* waitUntilGone(
+      yield* deleteChild(
         `Cosmos DB Table role assignment ${output.roleAssignmentName}`,
+        cosmos.DeleteTableResourceTableRoleAssignment({
+          subscriptionId,
+          resourceGroupName: output.resourceGroup,
+          accountName: output.account,
+          roleAssignmentId: output.roleAssignmentName,
+        }),
         getAssignment(
           subscriptionId,
           output.resourceGroup,
           output.account,
           output.roleAssignmentName,
         ),
-        { interval: "3 seconds", times: 60 },
       );
     }),
 

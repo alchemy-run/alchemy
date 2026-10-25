@@ -14,7 +14,7 @@ import {
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
-import { createEventGridName, redactKeys, sameName } from "./common.ts";
+import { createEventGridName, namespaceTopicsHostname, redactKeys, sameName } from "./common.ts";
 
 export interface NamespaceTopicProps {
   /** Resource group of the namespace. Changing it replaces the topic. */
@@ -46,6 +46,11 @@ export interface NamespaceTopic extends Resource<
     namespace: string;
     /** Resource group of the parent namespace. */
     resourceGroup: string;
+    /**
+     * Data-plane hostname of the namespace's topics, e.g.
+     * `ns.eastus-1.eventgrid.azure.net`; publishers send to it.
+     */
+    topicsHostname: string;
     /** Days events are retained. */
     eventRetentionInDays: number | undefined;
     /** Primary SAS key of the topic. */
@@ -116,11 +121,13 @@ const toAttrs = (
   name: string,
   topic: Pick<eventgrid.NamespaceTopic, "id" | "properties">,
   keys: { key1?: string; key2?: string } | undefined,
+  topicsHostname: string,
 ): NamespaceTopic["Attributes"] => ({
   namespaceTopicName: name,
   namespaceTopicId: topic.id ?? "",
   namespace,
   resourceGroup,
+  topicsHostname,
   eventRetentionInDays: topic.properties?.eventRetentionInDays,
   ...redactKeys(keys),
 });
@@ -158,7 +165,8 @@ export const NamespaceTopicProvider = () =>
       const observed = yield* getNamespaceTopic(subscriptionId, resourceGroup, namespace, name);
       if (observed === undefined) return undefined;
       const keys = yield* listKeys(subscriptionId, resourceGroup, namespace, name);
-      return toAttrs(resourceGroup, namespace, name, observed, keys);
+      const hostname = yield* namespaceTopicsHostname(subscriptionId, resourceGroup, namespace);
+      return toAttrs(resourceGroup, namespace, name, observed, keys, hostname);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -208,7 +216,8 @@ export const NamespaceTopicProvider = () =>
       }
 
       const keys = yield* listKeys(subscriptionId, resourceGroup, namespace, name);
-      return toAttrs(resourceGroup, namespace, name, observed, keys);
+      const hostname = yield* namespaceTopicsHostname(subscriptionId, resourceGroup, namespace);
+      return toAttrs(resourceGroup, namespace, name, observed, keys, hostname);
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -1,3 +1,5 @@
+export * from "./CancelWorkflowRun.ts";
+export * from "./CancelWorkflowRunHttp.ts";
 export * from "./IntegrationAccount.ts";
 export * from "./IntegrationAccountAgreement.ts";
 export * from "./IntegrationAccountAssembly.ts";
@@ -7,4 +9,8 @@ export * from "./IntegrationAccountMap.ts";
 export * from "./IntegrationAccountPartner.ts";
 export * from "./IntegrationAccountSchema.ts";
 export * from "./IntegrationAccountSession.ts";
+export * from "./ResetWorkflowTrigger.ts";
+export * from "./ResetWorkflowTriggerHttp.ts";
+export * from "./RunWorkflowTrigger.ts";
+export * from "./RunWorkflowTriggerHttp.ts";
 export * from "./Workflow.ts";

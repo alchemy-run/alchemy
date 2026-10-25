@@ -5,8 +5,8 @@ import type * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 
 /**
- * Typed `env` for an async (non-Effect) `Azure.Functions.Function`: the
- * object the handler receives as its second argument.
+ * Typed `env` for an async (non-Effect) `Azure.Functions.Function` or
+ * `Azure.Web.WebApp`: the object the handler receives as its second argument.
  *
  * Azure bindings are app settings, so each entry is the decoded setting:
  *
@@ -30,7 +30,14 @@ export type InferEnv<F> =
   F extends Effect.Effect<infer A, infer _E, infer _R>
     ? InferEnv<A>
     : F extends {
-          readonly Type: "Azure.Functions.Function";
+          readonly Type:
+            | "Azure.Functions.Function"
+            | "Azure.Web.FunctionApp"
+            | "Azure.Web.WebApp"
+            | "Azure.ContainerInstance.ContainerGroup"
+            | "Azure.ContainerApps.ContainerApp"
+            | "Azure.ContainerApps.Job"
+            | "Azure.Compute.VirtualMachine";
           readonly Props: { readonly env?: infer E };
         }
       ? InferEnvRecord<Exclude<E, undefined>>

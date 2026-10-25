@@ -21,8 +21,24 @@ export interface StorageQueueMessage {
   insertionTime: string | undefined;
 }
 
-/** Receive + delete client for one storage queue. */
-export interface ReceiveStorageQueueClient {
+/** A storage queue message read with `peek` (no pop receipt: it stays visible). */
+export interface StorageQueuePeekedMessage {
+  messageId: string;
+  text: string;
+  dequeueCount: number;
+  insertionTime: string | undefined;
+}
+
+/** Peek client for one storage queue. */
+export interface PeekStorageQueueClient {
+  /** Read up to `maxMessages` (1-32) visible messages without hiding them. @default 1 */
+  peek(
+    maxMessages?: number,
+  ): Effect.Effect<StorageQueuePeekedMessage[], AzureOpError, RuntimeContext>;
+}
+
+/** Receive + delete + peek client for one storage queue. */
+export interface ReceiveStorageQueueClient extends PeekStorageQueueClient {
   /** Dequeue up to `maxMessages` messages (possibly none). */
   receive(
     options?: StorageQueueReceiveOptions,
@@ -34,10 +50,10 @@ export interface ReceiveStorageQueueClient {
 }
 
 /**
- * Receive and delete messages from an Azure Storage queue on any host.
+ * Receive, delete, and peek messages of an Azure Storage queue on any host.
  *
- * Binding assigns **Storage Queue Data Message Processor** on the queue
- * only.
+ * Binding assigns **Storage Queue Data Message Processor** (`messages/read`
+ * and `messages/process/action`) on the queue only.
  * On a host with a managed identity (an Azure Function, Function App, Web
  * App, Container App, container group, VM, or AKS workload identity) the
  * role goes to that identity. On any other host (a Cloudflare Worker, an

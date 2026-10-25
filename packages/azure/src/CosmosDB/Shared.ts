@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { AzureOpError } from "@distilled.cloud/azure";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { stackAndStage, waitForProvisioned } from "../Arm.ts";
+import { ignoreNotFound, stackAndStage, waitForProvisioned, waitUntilGone } from "../Arm.ts";
 
 /**
  * Cosmos DB serializes control-plane operations per account: a child PUT or
@@ -36,6 +36,46 @@ export const waitForChild = <A, R>(
     interval: "3 seconds",
     times: 60,
   });
+
+/**
+ * PUT a Cosmos DB child and wait until `get` shows it converged. Cosmos
+ * accepts the PUT (`202`) and can drop it in the background when other
+ * operations hold the account (seen with a dozen SQL role definitions
+ * created at once: the GET stayed 404), so a PUT whose result never shows
+ * up is sent again, up to 6 times (about 6 minutes).
+ */
+export const putChild = <A, E1 extends { readonly _tag: string }, R1, R2>(
+  label: string,
+  put: Effect.Effect<unknown, E1, R1>,
+  get: Effect.Effect<A | undefined, AzureOpError, R2>,
+  converged: (value: A) => boolean,
+) =>
+  put.pipe(
+    Effect.retry(whileAccountBusy),
+    Effect.andThen(
+      waitForProvisioned(label, get, (value) => (converged(value) ? undefined : "Updating"), {
+        interval: "3 seconds",
+        times: 20,
+      }),
+    ),
+    Effect.retry({ while: (e) => e._tag === "Azure.ProvisioningTimedOut", times: 5 }),
+  );
+
+/**
+ * DELETE a Cosmos DB child and wait until `get` stops finding it. Like a
+ * PUT, Cosmos can drop an accepted DELETE when other operations hold the
+ * account, so a DELETE whose child is still there is sent again, up to 6
+ * times (about 6 minutes). A missing child is already deleted.
+ */
+export const deleteChild = <A, R1, R2>(
+  label: string,
+  remove: Effect.Effect<unknown, AzureOpError, R1>,
+  get: Effect.Effect<A | undefined, AzureOpError, R2>,
+) =>
+  ignoreNotFound(remove.pipe(Effect.retry(whileAccountBusy))).pipe(
+    Effect.andThen(waitUntilGone(label, get, { interval: "3 seconds", times: 20 })),
+    Effect.retry({ while: (e) => e._tag === "Azure.DeleteTimedOut", times: 5 }),
+  );
 
 /**
  * Expand a scope relative to the account (`/`, `/dbs/x`, `dbs/x/colls/y`)

@@ -1,7 +1,10 @@
 import * as Layer from "effect/Layer";
-import { BuiltInRole } from "../Authorization/RoleAssignment.ts";
 import { QueueReceive } from "./QueueReceive.ts";
-import { makeReceiveStorageQueueClient, makeStorageQueueBinding } from "./StorageQueueHttp.ts";
+import {
+  makeReceiveStorageQueueClient,
+  makeStorageQueueBinding,
+  QueueGrants,
+} from "./StorageQueueHttp.ts";
 
 /**
  * Implementation of {@link QueueReceive} over the distilled
@@ -15,7 +18,7 @@ export const QueueReceiveHttp = Layer.effect(
   QueueReceive,
   makeStorageQueueBinding({
     tag: "Azure.Storage.QueueReceive",
-    role: BuiltInRole.StorageQueueDataMessageProcessor,
+    grant: QueueGrants.receive,
     makeClient: makeReceiveStorageQueueClient,
   }),
 );

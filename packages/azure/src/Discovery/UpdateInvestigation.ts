@@ -1,0 +1,61 @@
+import type * as discovery from "@distilled.cloud/azure/discovery-workspace";
+import * as Binding from "alchemy/Binding";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
+import type * as Effect from "effect/Effect";
+import type { Workspace } from "./Workspace.ts";
+
+/**
+ * `UpdateInvestigation` request without `endpoint`, which the bound Discovery
+ * workspace (its `workspaceApiUri`) supplies.
+ */
+export interface UpdateInvestigationRequest extends Omit<
+  discovery.UpdateInvestigationRequest,
+  "endpoint"
+> {}
+
+/**
+ * Update an investigation.
+ *
+ * Binding assigns a custom role (`AzureDiscoveryInvestigationWriteRole`, one
+ * per stack) with exactly the data action
+ * `Microsoft.Discovery/workspaces/projects/investigations/write`, on the bound
+ * workspace only. The built-in **Microsoft Discovery Project Contributor** also
+ * manages projects and conversations.
+ * On a host with a managed identity (an Azure Function, Function App, Web
+ * App, Container App, container group, VM, or AKS workload identity) the
+ * role goes to that identity; any other host (a Cloudflare Worker, an AWS
+ * Lambda) gets an Entra service principal (see `AzureBindings`).
+ * Provide {@link UpdateInvestigationHttp}.
+ *
+ * ### Calling UpdateInvestigation
+ * **Example:** UpdateInvestigation from a Function
+ * ```typescript
+ * // init
+ * const workspace = yield* Azure.Discovery.Workspace("lab", { supercomputerIds: [supercomputer.supercomputerId] });
+ * const updateInvestigation = yield* Azure.Discovery.UpdateInvestigation(workspace);
+ *
+ * // runtime
+ * const result = yield* updateInvestigation({ projectName: "materials", investigationName: "electrolytes" });
+ *
+ * // layer
+ * Effect.provide(Azure.Discovery.UpdateInvestigationHttp)
+ * ```
+ *
+ * @binding
+ * @category Discovery
+ */
+export interface UpdateInvestigation extends Binding.Service<
+  UpdateInvestigation,
+  "Azure.Discovery.UpdateInvestigation",
+  (
+    workspace: Workspace,
+  ) => Effect.Effect<
+    (
+      request: UpdateInvestigationRequest,
+    ) => Effect.Effect<discovery.Investigation, discovery.UpdateInvestigationError, RuntimeContext>
+  >
+> {}
+
+export const UpdateInvestigation = Binding.Service<UpdateInvestigation>(
+  "Azure.Discovery.UpdateInvestigation",
+);

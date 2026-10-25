@@ -1,7 +1,10 @@
 import * as Layer from "effect/Layer";
-import { BuiltInRole } from "../Authorization/RoleAssignment.ts";
 import { QueueSend } from "./QueueSend.ts";
-import { makeSendStorageQueueClient, makeStorageQueueBinding } from "./StorageQueueHttp.ts";
+import {
+  makeSendStorageQueueClient,
+  makeStorageQueueBinding,
+  QueueGrants,
+} from "./StorageQueueHttp.ts";
 
 /**
  * Implementation of {@link QueueSend} over the distilled `storage-queue`
@@ -14,7 +17,7 @@ export const QueueSendHttp = Layer.effect(
   QueueSend,
   makeStorageQueueBinding({
     tag: "Azure.Storage.QueueSend",
-    role: BuiltInRole.StorageQueueDataMessageSender,
+    grant: QueueGrants.send,
     makeClient: makeSendStorageQueueClient,
   }),
 );

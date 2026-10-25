@@ -1,0 +1,18 @@
+import type { AsyncAppEnv } from "./async-app-stack.ts";
+
+/** A plain handler: no Effect, deployed by `async-app-stack.ts`. */
+export default {
+  async fetch(request: Request, env: AsyncAppEnv) {
+    const url = new URL(request.url);
+    const name = url.searchParams.get("name") ?? "world";
+    return Response.json({
+      message: `${env.GREETING} ${name}`,
+      secretLength: env.SECRET.length,
+      container: env.CONTAINER.containerName,
+      method: request.method,
+      path: url.pathname,
+      body: request.method === "POST" ? await request.text() : undefined,
+      node: process.versions.node,
+    });
+  },
+};

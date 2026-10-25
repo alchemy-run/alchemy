@@ -1,0 +1,66 @@
+import type * as inference from "@distilled.cloud/azure/cognitiveservices-openai-inference";
+import * as Binding from "alchemy/Binding";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
+import type * as Effect from "effect/Effect";
+import type { Account } from "./Account.ts";
+
+export interface OpenAICreateTranslationRequest extends Omit<
+  inference.CreateTranslationRequest,
+  "endpoint" | "file"
+> {
+  /** The file to send: a `File` (its name is sent as the filename) or a `Blob`. */
+  file: Blob;
+}
+
+/**
+ * Translate audio into English text with a speech model deployment (e.g.
+ * `whisper`) of an Azure OpenAI account. Pass the audio as a `File` whose
+ * name carries its format (`speech.wav`).
+ *
+ * Binding assigns a custom role (`AzureOpenAIAudioRole`, one per stack, shared with `OpenAICreateTranscription`)
+ * with exactly the data action `OpenAI/deployments/audio/action`, on the account only.
+ * The built-in **Cognitive Services OpenAI User** role also reads every
+ * Azure OpenAI object and runs every deployment kind. The account needs a
+ * custom subdomain (`Azure.CognitiveServices.Account` sets one by default):
+ * Entra ID tokens only work on `{subdomain}.openai.azure.com`.
+ * On a host with a managed identity (an Azure Function, Function App, Web
+ * App, Container App, container group, VM, or AKS workload identity) the
+ * role goes to that identity; any other host (a Cloudflare Worker, an AWS
+ * Lambda) gets an Entra service principal (see `AzureBindings`).
+ * Provide {@link OpenAICreateTranslationHttp}.
+ *
+ * ### Calling OpenAICreateTranslation
+ * **Example:** OpenAICreateTranslation from a Function
+ * ```typescript
+ * // init
+ * const translate = yield* Azure.CognitiveServices.OpenAICreateTranslation(account);
+ *
+ * // runtime
+ * const text = yield* translate({
+ *   deploymentId: "whisper",
+ *   file: new File([audio], "speech.wav"),
+ * });
+ * ```
+ *
+ * @binding
+ * @category CognitiveServices
+ */
+export interface OpenAICreateTranslation extends Binding.Service<
+  OpenAICreateTranslation,
+  "Azure.CognitiveServices.OpenAICreateTranslation",
+  (
+    account: Account,
+  ) => Effect.Effect<
+    (
+      request: OpenAICreateTranslationRequest,
+    ) => Effect.Effect<
+      inference.CreateTranslationResponse,
+      inference.CreateTranslationError,
+      RuntimeContext
+    >
+  >
+> {}
+
+export const OpenAICreateTranslation = Binding.Service<OpenAICreateTranslation>(
+  "Azure.CognitiveServices.OpenAICreateTranslation",
+);

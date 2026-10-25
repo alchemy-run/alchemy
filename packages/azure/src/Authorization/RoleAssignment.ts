@@ -99,12 +99,17 @@ export const BuiltInRole = {
   StorageBlobDataOwner: "b7e6dc6d-f1e8-4753-8033-0f276bb0955b",
   StorageQueueDataReader: "19e7f393-937e-4f77-808e-94535e297925",
   StorageQueueDataContributor: "974c5e8b-45b9-4653-ba55-5f855dd0fb88",
+  StorageTableDataReader: "76199698-9eea-4c19-bc75-cec21354c6b6",
+  StorageFileDataPrivilegedReader: "b8eda974-7b85-4f76-af95-65846b26df6d",
   KeyVaultSecretsUser: "4633458b-17de-408a-b874-0445c86b69e6",
   StorageQueueDataMessageSender: "c6a89b2d-59bc-44d0-9896-0f6e12d7b80a",
   StorageQueueDataMessageProcessor: "8a0f0c08-91a1-4084-bc3d-661d67233fed",
   ServiceBusDataSender: "69a216fc-b8fb-44d8-bc22-1f3c2cd27a39",
   ServiceBusDataReceiver: "4f6d3b9b-027b-4f4c-9142-0e5a2a2247e0",
   EventHubsDataSender: "2b629674-e913-4c01-ae53-ef4638d8f975",
+  EventGridDataSender: "d5a91429-5739-47e2-a06b-3470a27159e7",
+  SchemaRegistryReader: "2c56ea50-c6b3-40a6-83c0-9d98858bc7d2",
+  SchemaRegistryContributor: "5dffeca3-4936-4216-b2bc-10343a5abb25",
 } as const;
 
 /**
