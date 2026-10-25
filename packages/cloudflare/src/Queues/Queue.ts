@@ -59,7 +59,7 @@ export type QueueProps = {
    */
   messageRetentionPeriod?: number;
   /**
-   * Seconds to delay delivery of every message to consumers (max 43200).
+   * Seconds to delay delivery of every message to consumers, from 0 to 86400 (24 hours).
    * Removing it resets it to the default.
    * @default 0
    */
