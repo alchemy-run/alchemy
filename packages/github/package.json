@@ -53,8 +53,7 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
-    "@octokit/rest": "catalog:",
-    "@octokit/webhooks": "catalog:",
+    "@distilled.cloud/github": "workspace:*",
     "libsodium-wrappers": "catalog:"
   },
   "devDependencies": {

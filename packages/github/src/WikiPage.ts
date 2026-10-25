@@ -10,8 +10,8 @@ import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { effectiveGitHubBaseUrl, gitHubBaseUrlChanged } from "./Client.ts";
 import { GitHubCredentials } from "./Credentials.ts";
-import { effectiveGitHubBaseUrl, gitHubBaseUrlChanged } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface WikiPageProps {

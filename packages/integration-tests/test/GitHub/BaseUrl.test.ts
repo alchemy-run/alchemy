@@ -4,8 +4,8 @@ import {
   normalizeGitHubBaseUrl,
   resolveGitHubBaseUrlFromEnv,
 } from "@alchemy.run/github/BaseUrl";
-import { GitHubCredentials, fromToken } from "@alchemy.run/github/Credentials";
-import { gitHubBaseUrlChanged, octokitFor } from "@alchemy.run/github/Octokit";
+import { configFor, gitHubBaseUrlChanged, graphqlUrl } from "@alchemy.run/github/Client";
+import { fromToken } from "@alchemy.run/github/Credentials";
 import { describe, expect, test } from "@alchemy.run/test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -14,7 +14,7 @@ import * as Result from "effect/Result";
 const normalize = (input: string) => Effect.runSync(normalizeGitHubBaseUrl(input));
 
 describe("normalizeGitHubBaseUrl", { tags: ["unit", "provider:github", "local"] }, () => {
-  test("github.com hosts normalize to undefined (Octokit default)", () => {
+  test("github.com hosts normalize to undefined (the github.com default)", () => {
     expect(normalize("github.com")).toBeUndefined();
     expect(normalize("https://github.com")).toBeUndefined();
     expect(normalize("https://www.github.com/")).toBeUndefined();
@@ -197,10 +197,11 @@ describe("gitHubBaseUrlChanged", { tags: ["unit", "provider:github", "local"] },
   });
 });
 
-describe("octokitFor", { tags: ["unit", "provider:github", "local"] }, () => {
-  const octokitOf = (credsBaseUrl: string | undefined, resourceBaseUrl: string | undefined) =>
+describe("configFor", { tags: ["unit", "provider:github", "local"] }, () => {
+  const apiBaseUrlOf = (credsBaseUrl: string | undefined, resourceBaseUrl: string | undefined) =>
     Effect.runSync(
-      octokitFor(resourceBaseUrl).pipe(
+      configFor(resourceBaseUrl).pipe(
+        Effect.map((config) => config.apiBaseUrl),
         Effect.provide(
           fromToken(
             "test-token",
@@ -211,37 +212,36 @@ describe("octokitFor", { tags: ["unit", "provider:github", "local"] }, () => {
     );
 
   test("falls back to the credentials' host when no override is given", () => {
-    const octokit = octokitOf("github.example.com", undefined);
-    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe("https://github.example.com/api/v3");
+    expect(apiBaseUrlOf("github.example.com", undefined)).toBe("https://github.example.com/api/v3");
   });
 
   test("a per-resource baseUrl overrides the credentials' host", () => {
-    const octokit = octokitOf("github.example.com", "other.example.com");
-    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe("https://other.example.com/api/v3");
+    expect(apiBaseUrlOf("github.example.com", "other.example.com")).toBe(
+      "https://other.example.com/api/v3",
+    );
   });
 
   test("an explicit github.com override wins over an enterprise credential host", () => {
-    const octokit = octokitOf("github.example.com", "github.com");
-    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe("https://api.github.com");
+    expect(apiBaseUrlOf("github.example.com", "github.com")).toBe("https://api.github.com");
+  });
+
+  test("defaults to api.github.com", () => {
+    expect(apiBaseUrlOf(undefined, undefined)).toBe("https://api.github.com");
   });
 });
 
-describe("fromToken", { tags: ["unit", "provider:github", "local"] }, () => {
-  const octokitOf = (options?: { baseUrl?: string }) =>
-    Effect.runSync(
-      Effect.gen(function* () {
-        const creds = yield* yield* GitHubCredentials;
-        return creds.octokit();
-      }).pipe(Effect.provide(fromToken("test-token", options))),
-    );
-
-  test("defaults to api.github.com", () => {
-    const octokit = octokitOf();
-    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe("https://api.github.com");
+describe("graphqlUrl", { tags: ["unit", "provider:github", "local"] }, () => {
+  test("github.com serves GraphQL at api.github.com/graphql", () => {
+    expect(graphqlUrl("https://api.github.com")).toBe("https://api.github.com/graphql");
   });
 
-  test("passes the normalized enterprise base URL to Octokit", () => {
-    const octokit = octokitOf({ baseUrl: "github.example.com" });
-    expect(octokit.request.endpoint.DEFAULTS.baseUrl).toBe("https://github.example.com/api/v3");
+  test("GitHub Enterprise Server serves GraphQL at /api/graphql", () => {
+    expect(graphqlUrl("https://github.example.com/api/v3")).toBe(
+      "https://github.example.com/api/graphql",
+    );
+  });
+
+  test("data residency hosts serve GraphQL under the api. host", () => {
+    expect(graphqlUrl("https://api.acme.ghe.com")).toBe("https://api.acme.ghe.com/graphql");
   });
 });

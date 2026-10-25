@@ -22,7 +22,7 @@ export * from "./WikiPage.ts";
 export * from "./Milestone.ts";
 export * from "./Issue.ts";
 export * from "./RepositoryEventSourceLive.ts";
-export * from "./ApiError.ts";
+export * from "./Errors.ts";
 export * from "./PersonalAccessToken.ts";
 export * from "./CreateIssue.ts";
 export * from "./CreateIssueHttp.ts";

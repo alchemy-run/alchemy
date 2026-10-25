@@ -1,14 +1,13 @@
-import { Octokit as OctokitClient } from "@octokit/rest";
+import { Credentials } from "@distilled.cloud/github/Credentials";
+import * as Users from "@distilled.cloud/github/users";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
+import type * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
-import { githubCall } from "./ApiError.ts";
+import { githubConfig } from "./Client.ts";
 import { GitHubCredentials } from "./Credentials.ts";
 import type * as GitHub from "./Providers.ts";
-
-const DEFAULT_API_URL = "https://api.github.com";
 
 export interface PersonalAccessTokenProps {
   /**
@@ -28,8 +27,6 @@ export interface PersonalAccessToken extends Resource<
     apiUrl: string;
     /** The login the token authenticates as. */
     login: string;
-    /** OAuth scopes of a classic PAT; empty for fine-grained tokens. */
-    scopes: string[];
   },
   never,
   GitHub.Providers
@@ -63,18 +60,12 @@ export interface PersonalAccessToken extends Resource<
  */
 export const PersonalAccessToken = Resource<PersonalAccessToken>("GitHub.PersonalAccessToken");
 
-/** Read the token's identity: its login and classic scopes. */
-const validate = Effect.fn(function* (token: Redacted.Redacted<string>, apiUrl: string) {
-  const octokit = new OctokitClient({ auth: Redacted.value(token), baseUrl: apiUrl });
-  const response = yield* githubCall("users.getAuthenticated", () =>
-    octokit.rest.users.getAuthenticated(),
+/** Read the login the token authenticates as. */
+const validate = (token: Redacted.Redacted<string>, apiUrl: string) =>
+  Users.getAuthenticated({}).pipe(
+    Effect.map((user) => ({ login: user.login })),
+    Effect.provideService(Credentials, Effect.succeed(githubConfig(token, apiUrl))),
   );
-  const scopes = (response.headers["x-oauth-scopes"] ?? "")
-    .split(",")
-    .map((scope) => scope.trim())
-    .filter((scope) => scope.length > 0);
-  return { login: response.data.login, scopes };
-});
 
 export const PersonalAccessTokenProvider = () =>
   Provider.succeed(PersonalAccessToken, {
@@ -91,9 +82,9 @@ export const PersonalAccessTokenProvider = () =>
     reconcile: Effect.fn(function* ({ news }) {
       const credentials = yield* yield* GitHubCredentials;
       const token = news?.token ?? credentials.token;
-      const apiUrl = credentials.baseUrl ?? DEFAULT_API_URL;
-      const { login, scopes } = yield* validate(token, apiUrl);
-      return { value: token, apiUrl, login, scopes };
+      const { apiBaseUrl: apiUrl } = githubConfig(token, credentials.baseUrl);
+      const { login } = yield* validate(token, apiUrl);
+      return { value: token, apiUrl, login };
     }),
     delete: () => Effect.void,
   });

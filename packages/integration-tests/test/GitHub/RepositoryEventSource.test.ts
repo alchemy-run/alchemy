@@ -1,14 +1,17 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as GitHub from "@alchemy.run/github";
-import { Octokit } from "@alchemy.run/github/Octokit";
+import { listAll } from "@alchemy.run/github/Client";
 import { webhookPath } from "@alchemy.run/github/RepositoryEventSource";
 import { expect } from "@alchemy.run/test";
+import * as Repos from "@distilled.cloud/github/repos";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import GitHubEventSourceWorker, { owner, repository } from "./fixtures/event-source-worker.ts";
+import { gh } from "./scope.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
@@ -24,22 +27,18 @@ const Repository = GitHub.Repository("Repo", {
 });
 
 const listHooks = Effect.gen(function* () {
-  const octokit = yield* Octokit;
-  return yield* Effect.tryPromise(() =>
-    octokit.paginate(octokit.rest.repos.listWebhooks, { owner, repo: repository, per_page: 100 }),
+  return yield* listAll((page) =>
+    gh(Repos.listWebhooks({ owner, repo: repository, per_page: 100, page })),
   );
 });
 
 // Ping the webhook and return the status the Worker answered GitHub with.
 const pingStatus = Effect.fn(function* (hookId: number) {
-  const octokit = yield* Octokit;
-  const pings = Effect.tryPromise(() =>
-    octokit.rest.repos.listWebhookDeliveries({ owner, repo: repository, hook_id: hookId }),
-  ).pipe(Effect.map(({ data }) => data.filter((delivery) => delivery.event === "ping")));
-  const before = (yield* pings).length;
-  yield* Effect.tryPromise(() =>
-    octokit.rest.repos.pingWebhook({ owner, repo: repository, hook_id: hookId }),
+  const pings = gh(Repos.listWebhookDeliveries({ owner, repo: repository, hook_id: hookId })).pipe(
+    Effect.map((deliveries) => deliveries.filter((delivery) => delivery.event === "ping")),
   );
+  const before = (yield* pings).length;
+  yield* gh(Repos.pingWebhook({ owner, repo: repository, hook_id: hookId }));
   // Deliveries are listed newest first.
   const after = yield* pings.pipe(
     Effect.repeat({
@@ -72,7 +71,8 @@ test.provider(
 
       // GitHub masks a configured secret as "********" and omits it otherwise.
       const hook = (yield* listHooks).find((hook) => hook.config.url === deliveryUrl);
-      expect(hook?.config.secret).toBe("********");
+      const secret = hook?.config.secret;
+      expect(Redacted.isRedacted(secret) ? Redacted.value(secret) : secret).toBe("********");
 
       // An unsigned delivery is rejected.
       const forged = yield* executeWhenReady(

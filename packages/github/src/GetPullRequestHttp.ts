@@ -1,20 +1,26 @@
+import type { GithubOpContext } from "@distilled.cloud/github";
+import * as Pulls from "@distilled.cloud/github/pulls";
 import type { Self } from "alchemy/Self";
+import type * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as BindingHttp from "./BindingHttp.ts";
 import { GetPullRequest, type GetPullRequestRequest } from "./GetPullRequest.ts";
 
 export const getPullRequestOperation = BindingHttp.operation(
   "pulls.get",
-  (octokit, repo) =>
-    async ({ format, ...request }: GetPullRequestRequest) => {
-      const response = await octokit.rest.pulls.get({
-        owner: repo.owner,
-        repo: repo.repository,
-        ...request,
-        // the diff/patch media types return the raw text as the body
-        ...(format !== undefined ? { mediaType: { format } } : {}),
-      });
-      return { data: response.data };
+  (repo) =>
+    ({
+      format,
+      ...request
+    }: GetPullRequestRequest): Effect.Effect<
+      Pulls.PullRequest | string,
+      Pulls.GetError | Pulls.GetDiffError,
+      GithubOpContext
+    > => {
+      const scope = { owner: repo.owner, repo: repo.repository, ...request };
+      return format === undefined
+        ? Pulls.get(scope)
+        : Pulls.getDiff({ ...scope, accept: `application/vnd.github.${format}` });
     },
 );
 

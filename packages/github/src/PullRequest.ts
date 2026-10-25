@@ -1,10 +1,19 @@
-import type { Octokit as GitHubClient } from "@octokit/rest";
+import * as Issues from "@distilled.cloud/github/issues";
+import * as Pulls from "@distilled.cloud/github/pulls";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { dedent } from "alchemy/Util/dedent";
 import * as Effect from "effect/Effect";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import {
+  github,
+  gitHubBaseUrlChanged,
+  githubFor,
+  graphql,
+  listAll,
+  listRepositories,
+  PER_PAGE,
+} from "./Client.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface PullRequestProps {
@@ -276,26 +285,30 @@ export const PullRequestProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+      const github = yield* githubFor(news.baseUrl);
       const scope = { owner: news.owner, repo: news.repository };
       const body = news.body === undefined ? undefined : dedent(news.body);
+      const getPull = (number: number) =>
+        github(Pulls.get({ ...scope, pull_number: number })).pipe(
+          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        );
       const findOpen = () =>
-        request(() =>
-          octokit.rest.pulls.list({
+        github(
+          Pulls.list({
             ...scope,
             head: news.head.includes(":") ? news.head : `${news.owner}:${news.head}`,
             base: news.base,
             state: "open",
-            per_page: 100,
+            per_page: PER_PAGE,
           }),
-        ).pipe(Effect.map(({ data }) => data[0]?.number));
+        ).pipe(Effect.map((pulls) => pulls[0]?.number));
       let number = output?.prNumber;
-      let observed = number === undefined ? undefined : yield* getPull(octokit, news, number);
+      let observed = number === undefined ? undefined : yield* getPull(number);
       if (observed === undefined) {
         number = yield* findOpen();
         if (number === undefined) {
-          number = yield* request(() =>
-            octokit.rest.pulls.create({
+          number = yield* github(
+            Pulls.create({
               ...scope,
               title: news.title,
               body,
@@ -305,19 +318,18 @@ export const PullRequestProvider = () =>
               maintainer_can_modify: news.maintainerCanModify,
             }),
           ).pipe(
-            Effect.map(({ data }) => data.number),
-            Effect.catchIf(
-              (error) => error.status === 422,
-              (error) =>
-                findOpen().pipe(
-                  Effect.flatMap((existing) =>
-                    existing === undefined ? Effect.fail(error) : Effect.succeed(existing),
-                  ),
+            Effect.map((pull) => pull.number),
+            // A 422 is a create race (an open PR already joins head and base).
+            Effect.catchTag("UnprocessableEntity", (error) =>
+              findOpen().pipe(
+                Effect.flatMap((existing) =>
+                  existing === undefined ? Effect.fail(error) : Effect.succeed(existing),
                 ),
+              ),
             ),
           );
         }
-        observed = yield* getPull(octokit, news, number);
+        observed = yield* getPull(number);
       }
       if (observed === undefined) {
         return yield* Effect.fail(new Error("Pull request disappeared during reconciliation"));
@@ -333,8 +345,8 @@ export const PullRequestProvider = () =>
         (news.maintainerCanModify !== undefined &&
           observed.maintainer_can_modify !== news.maintainerCanModify)
       ) {
-        yield* request(() =>
-          octokit.rest.pulls.update({
+        yield* github(
+          Pulls.update({
             ...scope,
             pull_number: observed.number,
             title: news.title,
@@ -344,27 +356,21 @@ export const PullRequestProvider = () =>
           }),
         );
       }
-      // GitHub only permits draft transitions while a pull request is open.
+      // GitHub only permits draft transitions while a pull request is open,
+      // and only through GraphQL.
       if (draftChanged) {
         const mutation = draft ? "convertPullRequestToDraft" : "markPullRequestReadyForReview";
-        yield* request(() =>
-          octokit.graphql(
-            `mutation($id: ID!) { ${mutation}(input: {pullRequestId: $id}) { pullRequest { id } } }`,
-            { id: observed.node_id },
-          ),
+        yield* graphql(
+          news.baseUrl,
+          `mutation($id: ID!) { ${mutation}(input: {pullRequestId: $id}) { pullRequest { id } } }`,
+          { id: observed.node_id },
         );
       }
-      yield* syncPullRequestMeta(octokit, news, observed.number);
+      yield* syncPullRequestMeta(github, news, observed.number);
       if (draftChanged && state === "closed") {
-        yield* request(() =>
-          octokit.rest.pulls.update({
-            ...scope,
-            pull_number: observed.number,
-            state: "closed",
-          }),
-        );
+        yield* github(Pulls.update({ ...scope, pull_number: observed.number, state: "closed" }));
       }
-      const final = yield* getPull(octokit, news, observed.number);
+      const final = yield* getPull(observed.number);
       if (final === undefined) {
         return yield* Effect.fail(new Error("Pull request disappeared after reconciliation"));
       }
@@ -373,100 +379,57 @@ export const PullRequestProvider = () =>
 
     // Enumerate every pull request across the repositories the token can see.
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
-
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
-
+      const repos = yield* listRepositories;
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          Effect.tryPromise({
-            try: async () => {
-              try {
-                const pulls = await octokit.paginate(octokit.rest.pulls.list, {
-                  owner: repo.owner.login,
-                  repo: repo.name,
-                  state: "all",
-                  per_page: 100,
-                });
-                return pulls.map((pr) => ({
-                  prNumber: pr.number,
-                  nodeId: pr.node_id,
-                  htmlUrl: pr.html_url,
-                  state: pr.state as "open" | "closed",
-                  merged: pr.merged_at !== null,
-                  draft: pr.draft ?? false,
-                  createdAt: pr.created_at,
-                  updatedAt: pr.updated_at,
-                }));
-              } catch (error: any) {
-                if (error.status === 403 || error.status === 404) {
-                  return [];
-                }
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          }),
+          listAll((page) =>
+            github(
+              Pulls.list({
+                owner: repo.owner.login,
+                repo: repo.name,
+                state: "all",
+                per_page: PER_PAGE,
+                page,
+              }),
+            ),
+          ).pipe(
+            Effect.map((pulls) =>
+              pulls.map((pr) => ({
+                prNumber: pr.number,
+                nodeId: pr.node_id,
+                htmlUrl: pr.html_url,
+                state: pr.state as "open" | "closed",
+                merged: pr.merged_at !== null,
+                draft: pr.draft ?? false,
+                createdAt: pr.created_at,
+                updatedAt: pr.updated_at,
+              })),
+            ),
+            Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
+          ),
         { concurrency: 10 },
       );
-
       return perRepo.flat();
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
+      const github = yield* githubFor(olds.baseUrl);
+      const pull = { owner: olds.owner, repo: olds.repository, pull_number: output.prNumber };
 
       // GitHub preserves pull request history; destruction closes it.
-      const observed = yield* getPull(octokit, olds, output.prNumber);
+      const observed = yield* github(Pulls.get(pull)).pipe(
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
       if (observed?.state === "open") {
-        yield* request(() =>
-          octokit.rest.pulls.update({
-            owner: olds.owner,
-            repo: olds.repository,
-            pull_number: output.prNumber,
-            state: "closed",
-          }),
-        ).pipe(
-          Effect.catchIf(
-            (error) => error.status === 404,
-            () => Effect.void,
-          ),
+        yield* github(Pulls.update({ ...pull, state: "closed" })).pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
         );
       }
     }),
   });
 
-const request = <A>(run: () => Promise<A>) =>
-  Effect.tryPromise({
-    try: run,
-    catch: (error) => error as Error & { status?: number },
-  });
-
-type Pull = Awaited<ReturnType<GitHubClient["rest"]["pulls"]["get"]>>["data"];
-
-const getPull = (octokit: GitHubClient, props: PullRequestProps, number: number) =>
-  request(() =>
-    octokit.rest.pulls.get({
-      owner: props.owner,
-      repo: props.repository,
-      pull_number: number,
-    }),
-  ).pipe(
-    Effect.map(({ data }) => data),
-    Effect.catchIf(
-      (error) => error.status === 404,
-      () => Effect.succeed(undefined),
-    ),
-  );
-
-const attributes = (data: Pull) => ({
+const attributes = (data: Pulls.PullRequest) => ({
   prNumber: data.number,
   nodeId: data.node_id,
   htmlUrl: data.html_url,
@@ -481,29 +444,29 @@ const sameNames = (left: string[], right: string[]) =>
   JSON.stringify([...new Set(left)].sort()) === JSON.stringify([...new Set(right)].sort());
 
 const syncPullRequestMeta = Effect.fn(function* (
-  octokit: GitHubClient,
+  github: Effect.Success<ReturnType<typeof githubFor>>,
   props: PullRequestProps,
   prNumber: number,
 ) {
   const scope = { owner: props.owner, repo: props.repository };
   const issue = { ...scope, issue_number: prNumber };
-  const { data } = yield* request(() => octokit.rest.issues.get(issue));
+  const data = yield* github(Issues.get(issue));
   const labels = data.labels.map((label) =>
     typeof label === "string" ? label : (label.name ?? ""),
   );
   if (props.labels !== undefined && !sameNames(labels, props.labels)) {
-    yield* request(() => octokit.rest.issues.setLabels({ ...issue, labels: props.labels }));
+    yield* github(Issues.setLabels({ ...issue, body: { labels: props.labels } }));
   }
   const assignees = data.assignees?.map((user) => user.login) ?? [];
   if (props.assignees !== undefined && !sameNames(assignees, props.assignees)) {
-    yield* request(() => octokit.rest.issues.update({ ...issue, assignees: props.assignees }));
+    yield* github(Issues.update({ ...issue, assignees: props.assignees }));
   }
   if (props.milestone !== undefined && (data.milestone?.number ?? null) !== props.milestone) {
-    yield* request(() => octokit.rest.issues.update({ ...issue, milestone: props.milestone }));
+    yield* github(Issues.update({ ...issue, milestone: props.milestone }));
   }
   if (props.reviewers !== undefined || props.teamReviewers !== undefined) {
     const pull = { ...scope, pull_number: prNumber };
-    const { data: current } = yield* request(() => octokit.rest.pulls.listRequestedReviewers(pull));
+    const current = yield* github(Pulls.listRequestedReviewers(pull));
     const users = current.users.map((user) => user.login);
     const teams = current.teams.map((team) => team.slug);
     const removeUsers =
@@ -513,8 +476,8 @@ const syncPullRequestMeta = Effect.fn(function* (
         ? []
         : teams.filter((team) => !props.teamReviewers!.includes(team));
     if (removeUsers.length || removeTeams.length) {
-      yield* request(() =>
-        octokit.rest.pulls.removeRequestedReviewers({
+      yield* github(
+        Pulls.removeRequestedReviewers({
           ...pull,
           reviewers: removeUsers,
           team_reviewers: removeTeams,
@@ -524,8 +487,8 @@ const syncPullRequestMeta = Effect.fn(function* (
     const addUsers = (props.reviewers ?? []).filter((user) => !users.includes(user));
     const addTeams = (props.teamReviewers ?? []).filter((team) => !teams.includes(team));
     if (addUsers.length || addTeams.length) {
-      yield* request(() =>
-        octokit.rest.pulls.requestReviewers({
+      yield* github(
+        Pulls.requestReviewers({
           ...pull,
           reviewers: addUsers,
           team_reviewers: addTeams,

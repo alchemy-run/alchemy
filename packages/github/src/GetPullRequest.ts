@@ -1,19 +1,15 @@
-import type { RestEndpointMethodTypes } from "@octokit/rest";
+import type * as Pulls from "@distilled.cloud/github/pulls";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { GitHubApiError } from "./ApiError.ts";
-import type { EndpointParameters } from "./EndpointParameters.ts";
 import type { Repository } from "./Repository.ts";
 
-export interface GetPullRequestRequest extends EndpointParameters<
-  RestEndpointMethodTypes["pulls"]["get"]["parameters"]
-> {
+export interface GetPullRequestRequest extends Omit<Pulls.GetRequest, "owner" | "repo"> {
   /** Return the raw `diff` or `patch` text instead of the JSON object. */
   readonly format?: "diff" | "patch";
 }
 
-export type GetPullRequestResponse = RestEndpointMethodTypes["pulls"]["get"]["response"]["data"];
+export type GetPullRequestResponse = Pulls.PullRequest;
 
 /**
  * Get a pull request by number (`pulls.get`). Pass `format: "diff"` or
@@ -43,7 +39,7 @@ export interface GetPullRequest extends Binding.Service<
       request: GetPullRequestRequest & { readonly format?: Format },
     ) => Effect.Effect<
       Format extends "diff" | "patch" ? string : GetPullRequestResponse,
-      GitHubApiError,
+      Pulls.GetError | Pulls.GetDiffError,
       RuntimeContext
     >
   >

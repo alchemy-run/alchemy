@@ -1,9 +1,17 @@
+import * as Issues from "@distilled.cloud/github/issues";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { dedent } from "alchemy/Util/dedent";
 import * as Effect from "effect/Effect";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import {
+  github,
+  gitHubBaseUrlChanged,
+  githubFor,
+  listAll,
+  listRepositories,
+  PER_PAGE,
+} from "./Client.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface IssueProps {
@@ -214,7 +222,7 @@ export const IssueProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+      const github = yield* githubFor(news.baseUrl);
       const body = news.body ? dedent(news.body) : "";
       const state = news.state ?? "open";
       const labels = news.labels ?? [];
@@ -223,26 +231,18 @@ export const IssueProvider = () =>
 
       let data =
         output?.issueNumber !== undefined
-          ? yield* Effect.tryPromise({
-              try: () =>
-                octokit.rest.issues.get({
-                  owner: news.owner,
-                  repo: news.repository,
-                  issue_number: output.issueNumber,
-                }),
-              catch: (error) => error as Error & { status?: number },
-            }).pipe(
-              Effect.map((response) => response.data),
-              Effect.catchIf(
-                (error) => error.status === 404,
-                () => Effect.succeed(undefined),
-              ),
-            )
+          ? yield* github(
+              Issues.get({
+                owner: news.owner,
+                repo: news.repository,
+                issue_number: output.issueNumber,
+              }),
+            ).pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed(undefined)))
           : undefined;
 
       if (data === undefined) {
-        const created = yield* Effect.tryPromise(() =>
-          octokit.rest.issues.create({
+        data = yield* github(
+          Issues.create({
             owner: news.owner,
             repo: news.repository,
             title: news.title,
@@ -252,7 +252,6 @@ export const IssueProvider = () =>
             milestone: milestone ?? undefined,
           }),
         );
-        data = created.data;
       }
 
       const sameNames = (observed: string[], desired: string[]) =>
@@ -275,8 +274,8 @@ export const IssueProvider = () =>
         (data.milestone?.number ?? null) !== milestone
       ) {
         const issueNumber = data.number;
-        const updated = yield* Effect.tryPromise(() =>
-          octokit.rest.issues.update({
+        data = yield* github(
+          Issues.update({
             owner: news.owner,
             repo: news.repository,
             issue_number: issueNumber,
@@ -288,7 +287,6 @@ export const IssueProvider = () =>
             milestone,
           }),
         );
-        data = updated.data;
       }
       return {
         issueNumber: data.number,
@@ -302,48 +300,37 @@ export const IssueProvider = () =>
 
     // Enumerate every issue across the repositories the token can see.
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
-
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
-
+      const repos = yield* listRepositories;
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          Effect.tryPromise({
-            try: async () => {
-              try {
-                const issues = await octokit.paginate(octokit.rest.issues.listForRepo, {
-                  owner: repo.owner.login,
-                  repo: repo.name,
-                  state: "all",
-                  per_page: 100,
-                });
-                // Filter out pull requests (they appear in issues API)
-                return issues
-                  .filter((issue) => !issue.pull_request)
-                  .map((issue) => ({
-                    issueNumber: issue.number,
-                    nodeId: issue.node_id,
-                    htmlUrl: issue.html_url,
-                    state: issue.state as "open" | "closed",
-                    createdAt: issue.created_at,
-                    updatedAt: issue.updated_at,
-                  }));
-              } catch (error: any) {
-                if (error.status === 403 || error.status === 404) {
-                  return [];
-                }
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          }),
+          listAll((page) =>
+            github(
+              Issues.listForRepo({
+                owner: repo.owner.login,
+                repo: repo.name,
+                state: "all",
+                per_page: PER_PAGE,
+                page,
+              }),
+            ),
+          ).pipe(
+            // Filter out pull requests (they appear in issues API)
+            Effect.map((issues) =>
+              issues
+                .filter((issue) => !issue.pull_request)
+                .map((issue) => ({
+                  issueNumber: issue.number,
+                  nodeId: issue.node_id,
+                  htmlUrl: issue.html_url,
+                  state: issue.state as "open" | "closed",
+                  createdAt: issue.created_at,
+                  updatedAt: issue.updated_at,
+                })),
+            ),
+            // Repositories the token can list but not read, or with issues disabled.
+            Effect.catchTag(["Forbidden", "NotFound", "Gone"], () => Effect.succeed([])),
+          ),
         { concurrency: 10 },
       );
 
@@ -351,25 +338,18 @@ export const IssueProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
+      const github = yield* githubFor(olds.baseUrl);
 
       // Opted-in destruction closes the issue without deleting its discussion.
       if (output?.issueNumber !== undefined) {
-        yield* Effect.tryPromise({
-          try: () =>
-            octokit.rest.issues.update({
-              owner: olds.owner,
-              repo: olds.repository,
-              issue_number: output.issueNumber,
-              state: "closed",
-            }),
-          catch: (error) => error as Error & { status?: number },
-        }).pipe(
-          Effect.catchIf(
-            (error) => error.status === 404,
-            () => Effect.void,
-          ),
-        );
+        yield* github(
+          Issues.update({
+            owner: olds.owner,
+            repo: olds.repository,
+            issue_number: output.issueNumber,
+            state: "closed",
+          }),
+        ).pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.void));
       }
     }),
   });

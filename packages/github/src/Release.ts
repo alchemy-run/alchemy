@@ -1,9 +1,20 @@
+import * as Repos from "@distilled.cloud/github/repos";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { dedent } from "alchemy/Util/dedent";
 import * as Effect from "effect/Effect";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
+import {
+  github,
+  gitHubBaseUrlChanged,
+  githubFor,
+  listAll,
+  listRepositories,
+  paginate,
+  PER_PAGE,
+} from "./Client.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface ReleaseProps {
@@ -310,35 +321,31 @@ export const ReleaseProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+      const github = yield* githubFor(news.baseUrl);
       const body = news.body !== undefined ? dedent(news.body) : undefined;
       let observed = yield* findRelease(news, output?.releaseId);
 
       if (observed === undefined) {
-        observed = yield* Effect.tryPromise({
-          try: () =>
-            octokit.rest.repos.createRelease({
-              owner: news.owner,
-              repo: news.repository,
-              tag_name: news.tagName,
-              name: news.name,
-              body,
-              draft: news.draft,
-              prerelease: news.prerelease,
-              target_commitish: news.targetCommitish,
-              generate_release_notes: news.generateReleaseNotes,
-            }),
-          catch: (error) => error as Error & { status?: number },
-        }).pipe(
-          Effect.map(({ data }) => data),
-          Effect.catchIf(
-            (error) => error.status === 422,
-            (error) =>
-              findRelease(news).pipe(
-                Effect.flatMap((release) =>
-                  release === undefined ? Effect.fail(error) : Effect.succeed(release),
-                ),
+        observed = yield* github(
+          Repos.createRelease({
+            owner: news.owner,
+            repo: news.repository,
+            tag_name: news.tagName,
+            name: news.name,
+            body,
+            draft: news.draft,
+            prerelease: news.prerelease,
+            target_commitish: news.targetCommitish,
+            generate_release_notes: news.generateReleaseNotes,
+          }),
+        ).pipe(
+          // A 422 is a create race (the tag already has a release): re-observe.
+          Effect.catchTag("UnprocessableEntity", (error) =>
+            findRelease(news).pipe(
+              Effect.flatMap((release) =>
+                release === undefined ? Effect.fail(error) : Effect.succeed(release),
               ),
+            ),
           ),
         );
       }
@@ -358,129 +365,82 @@ export const ReleaseProvider = () =>
         return attrsOf(observed);
       }
 
-      const { data } = yield* Effect.tryPromise({
-        try: () =>
-          octokit.rest.repos.updateRelease({
+      return attrsOf(
+        yield* github(
+          Repos.updateRelease({
             owner: news.owner,
             repo: news.repository,
             release_id: observed.id,
             tag_name: news.tagName,
             ...desired,
           }),
-        catch: (e) => e as Error,
-      });
-
-      return attrsOf(data);
+        ),
+      );
     }),
 
     // Enumerate every release across the repositories the token can see —
     // releases are keyed by {owner, repository, tagName} with no account-wide
     // list endpoint, so walk the repos like the Variable provider does.
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
-
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
-
+      const repos = yield* listRepositories;
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          Effect.tryPromise({
-            try: async () => {
-              try {
-                const releases = await octokit.paginate(octokit.rest.repos.listReleases, {
-                  owner: repo.owner.login,
-                  repo: repo.name,
-                  per_page: 100,
-                });
-                return releases.map(attrsOf);
-              } catch (error: any) {
-                // Repos where the token lacks release access reject with
-                // 403/404 — skip them rather than failing the whole enumeration.
-                if (error.status === 403 || error.status === 404) {
-                  return [];
-                }
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          }),
+          listAll((page) =>
+            github(
+              Repos.listReleases({
+                owner: repo.owner.login,
+                repo: repo.name,
+                per_page: PER_PAGE,
+                page,
+              }),
+            ),
+          ).pipe(
+            Effect.map((releases) => releases.map(attrsOf)),
+            // Repos where the token lacks release access reject with 403/404 —
+            // skip them rather than failing the whole enumeration.
+            Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
+          ),
         { concurrency: 10 },
       );
-
       return perRepo.flat();
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
-
-      yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            await octokit.rest.repos.deleteRelease({
-              owner: olds.owner,
-              repo: olds.repository,
-              release_id: output.releaseId,
-            });
-          } catch (error: any) {
-            if (error.status !== 404) {
-              throw error;
-            }
-          }
-        },
-        catch: (e) => e as Error,
-      });
+      const github = yield* githubFor(olds.baseUrl);
+      yield* github(
+        Repos.deleteRelease({
+          owner: olds.owner,
+          repo: olds.repository,
+          release_id: output.releaseId,
+        }),
+      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
   });
 
 const findRelease = Effect.fn(function* (props: ReleaseProps, releaseId?: number) {
-  const octokit = yield* octokitFor(props.baseUrl);
+  const github = yield* githubFor(props.baseUrl);
   const request = { owner: props.owner, repo: props.repository };
   if (releaseId !== undefined) {
-    const existing = yield* Effect.tryPromise({
-      try: () => octokit.rest.repos.getRelease({ ...request, release_id: releaseId }),
-      catch: (error) => error as Error & { status?: number },
-    }).pipe(
-      Effect.map(({ data }) => data),
-      Effect.catchIf(
-        (error) => error.status === 404,
-        () => Effect.succeed(undefined),
-      ),
+    const existing = yield* github(Repos.getRelease({ ...request, release_id: releaseId })).pipe(
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
     if (existing !== undefined && existing.tag_name === props.tagName) return existing;
   }
-  const published = yield* Effect.tryPromise({
-    try: () => octokit.rest.repos.getReleaseByTag({ ...request, tag: props.tagName }),
-    catch: (error) => error as Error & { status?: number },
-  }).pipe(
-    Effect.map(({ data }) => data),
-    Effect.catchIf(
-      (error) => error.status === 404,
-      () => Effect.succeed(undefined),
-    ),
+  const published = yield* github(Repos.getReleaseByTag({ ...request, tag: props.tagName })).pipe(
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
   if (published !== undefined) return published;
 
   // The tag endpoint excludes drafts, including drafts recovered without state.
-  const releases = yield* Effect.tryPromise({
-    try: () =>
-      octokit.paginate(octokit.rest.repos.listReleases, {
-        ...request,
-        per_page: 100,
-      }),
-    catch: (error) => error as Error & { status?: number },
-  }).pipe(
-    Effect.catchIf(
-      (error) => error.status === 404,
-      () => Effect.succeed([]),
-    ),
+  return yield* paginate((page) =>
+    github(Repos.listReleases({ ...request, per_page: PER_PAGE, page })),
+  ).pipe(
+    Stream.filter((release) => release.tag_name === props.tagName),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
-  return releases.find((release) => release.tag_name === props.tagName);
 });
 
 const attrsOf = (data: {

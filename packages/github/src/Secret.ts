@@ -1,10 +1,11 @@
+import * as Actions from "@distilled.cloud/github/actions";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { gitHubBaseUrlChanged, githubFor } from "./Client.ts";
 import { type Environment, resolveEnvironmentName } from "./Environment.ts";
-import { gitHubBaseUrlChanged, octokitFor } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface SecretProps {
@@ -213,73 +214,44 @@ export const SecretProvider = () =>
   });
 
 const upsertSecret = Effect.fn(function* (props: SecretProps) {
-  const octokit = yield* octokitFor(props.baseUrl);
+  const github = yield* githubFor(props.baseUrl);
   const plaintext = Redacted.value(props.value);
   const environment = resolveEnvironmentName(props.environment);
+  const scope = { owner: props.owner, repo: props.repository };
 
-  const publicKey = yield* Effect.tryPromise(async () => {
-    if (environment !== undefined) {
-      const { data } = await octokit.rest.actions.getEnvironmentPublicKey({
-        owner: props.owner,
-        repo: props.repository,
-        environment_name: environment,
-      });
-      return data;
-    }
-    const { data } = await octokit.rest.actions.getRepoPublicKey({
-      owner: props.owner,
-      repo: props.repository,
-    });
-    return data;
-  });
+  const publicKey = yield* environment !== undefined
+    ? github(Actions.getEnvironmentPublicKey({ ...scope, environment_name: environment }))
+    : github(Actions.getRepoPublicKey(scope));
 
   const encrypted = yield* Effect.tryPromise(() => encryptValue(plaintext, publicKey.key));
 
-  yield* Effect.tryPromise(async () => {
-    if (environment !== undefined) {
-      await octokit.rest.actions.createOrUpdateEnvironmentSecret({
-        owner: props.owner,
-        repo: props.repository,
-        environment_name: environment,
-        secret_name: props.name,
-        encrypted_value: encrypted,
-        key_id: publicKey.key_id,
-      });
-    } else {
-      await octokit.rest.actions.createOrUpdateRepoSecret({
-        owner: props.owner,
-        repo: props.repository,
-        secret_name: props.name,
-        encrypted_value: encrypted,
-        key_id: publicKey.key_id,
-      });
-    }
-  });
+  yield* environment !== undefined
+    ? github(
+        Actions.createOrUpdateEnvironmentSecret({
+          ...scope,
+          environment_name: environment,
+          secret_name: props.name,
+          encrypted_value: encrypted,
+          key_id: publicKey.key_id,
+        }),
+      )
+    : github(
+        Actions.createOrUpdateRepoSecret({
+          ...scope,
+          secret_name: props.name,
+          encrypted_value: encrypted,
+          key_id: publicKey.key_id,
+        }),
+      );
 });
 
 const deleteSecret = Effect.fn(function* (props: SecretProps) {
-  const octokit = yield* octokitFor(props.baseUrl);
+  const github = yield* githubFor(props.baseUrl);
   const environment = resolveEnvironmentName(props.environment);
-  yield* Effect.tryPromise(async () => {
-    try {
-      if (environment !== undefined) {
-        await octokit.rest.actions.deleteEnvironmentSecret({
-          owner: props.owner,
-          repo: props.repository,
-          environment_name: environment,
-          secret_name: props.name,
-        });
-      } else {
-        await octokit.rest.actions.deleteRepoSecret({
-          owner: props.owner,
-          repo: props.repository,
-          secret_name: props.name,
-        });
-      }
-    } catch (error: any) {
-      if (error.status !== 404) {
-        throw error;
-      }
-    }
-  });
+  const scope = { owner: props.owner, repo: props.repository, secret_name: props.name };
+  yield* (
+    environment !== undefined
+      ? github(Actions.deleteEnvironmentSecret({ ...scope, environment_name: environment }))
+      : github(Actions.deleteRepoSecret(scope))
+  ).pipe(Effect.catchTag("NotFound", () => Effect.void));
 });

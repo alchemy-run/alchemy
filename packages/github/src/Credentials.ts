@@ -1,4 +1,3 @@
-import { Octokit } from "@octokit/rest";
 import { AuthError } from "alchemy/Auth/AuthProvider";
 import {
   deferUntilFirstUse,
@@ -26,14 +25,6 @@ export interface GitHubCredentialsService {
    * residency). `undefined` targets github.com.
    */
   readonly baseUrl?: string;
-  /**
-   * Construct an Octokit for these credentials. Pass `override` to target a
-   * different host than the credentials' own `baseUrl` — `override.baseUrl`
-   * is used verbatim, including `undefined` for github.com (which is why the
-   * override is an object rather than an optional string: it distinguishes
-   * "no override" from "override to the github.com default").
-   */
-  readonly octokit: (override?: { baseUrl: string | undefined }) => Octokit;
 }
 
 export class GitHubCredentials extends Context.Service<
@@ -47,13 +38,6 @@ export class GitHubCredentials extends Context.Service<
 const make = (token: Redacted.Redacted<string>, baseUrl?: string): GitHubCredentialsService => ({
   token,
   baseUrl,
-  octokit: (override) => {
-    const url = override !== undefined ? override.baseUrl : baseUrl;
-    return new Octokit({
-      auth: Redacted.value(token),
-      ...(url !== undefined ? { baseUrl: url } : {}),
-    });
-  },
 });
 
 /**

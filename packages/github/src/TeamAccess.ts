@@ -1,8 +1,17 @@
+import * as Repos from "@distilled.cloud/github/repos";
+import * as Teams from "@distilled.cloud/github/teams";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import {
+  github,
+  gitHubBaseUrlChanged,
+  githubFor,
+  listAll,
+  listRepositories,
+  PER_PAGE,
+} from "./Client.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface TeamAccessProps {
@@ -162,21 +171,18 @@ export const TeamAccessProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+      const github = yield* githubFor(news.baseUrl);
 
       // Ensure & Sync — PUT is idempotent; adds team or updates permission
-      yield* Effect.tryPromise({
-        try: async () => {
-          await octokit.rest.teams.addOrUpdateRepoPermissionsInOrg({
-            org: news.owner,
-            team_slug: news.teamSlug,
-            owner: news.owner,
-            repo: news.repository,
-            permission: news.permission ?? "push",
-          });
-        },
-        catch: (e) => e as Error,
-      });
+      yield* github(
+        Teams.addOrUpdateRepoPermissionsInOrg({
+          org: news.owner,
+          team_slug: news.teamSlug,
+          owner: news.owner,
+          repo: news.repository,
+          permission: news.permission ?? "push",
+        }),
+      );
 
       return {
         teamSlug: news.teamSlug,
@@ -185,65 +191,44 @@ export const TeamAccessProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
-
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
-
+      const repos = yield* listRepositories;
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          Effect.tryPromise({
-            try: async () => {
-              try {
-                const teams = await octokit.paginate(octokit.rest.repos.listTeams, {
-                  owner: repo.owner.login,
-                  repo: repo.name,
-                  per_page: 100,
-                });
-                return teams.map((team: any) => ({
-                  teamSlug: team.slug,
-                  permission: team.permission ?? "push",
-                }));
-              } catch (error: any) {
-                if (error.status === 403 || error.status === 404) {
-                  return [];
-                }
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          }),
+          listAll((page) =>
+            github(
+              Repos.listTeams({
+                owner: repo.owner.login,
+                repo: repo.name,
+                per_page: PER_PAGE,
+                page,
+              }),
+            ),
+          ).pipe(
+            Effect.map((teams) =>
+              teams.map((team) => ({
+                teamSlug: team.slug,
+                permission: (team.permission ?? "push") as NonNullable<
+                  TeamAccessProps["permission"]
+                >,
+              })),
+            ),
+            Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
+          ),
         { concurrency: 10 },
       );
-
       return perRepo.flat();
     }),
 
     delete: Effect.fn(function* ({ olds }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
-
-      yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            await octokit.rest.teams.removeRepoInOrg({
-              org: olds.owner,
-              team_slug: olds.teamSlug,
-              owner: olds.owner,
-              repo: olds.repository,
-            });
-          } catch (error: any) {
-            if (error.status !== 404) {
-              throw error;
-            }
-          }
-        },
-        catch: (e) => e as Error,
-      });
+      const github = yield* githubFor(olds.baseUrl);
+      yield* github(
+        Teams.removeRepoInOrg({
+          org: olds.owner,
+          team_slug: olds.teamSlug,
+          owner: olds.owner,
+          repo: olds.repository,
+        }),
+      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
   });

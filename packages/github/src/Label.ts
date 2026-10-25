@@ -1,8 +1,16 @@
+import * as Issues from "@distilled.cloud/github/issues";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import {
+  github,
+  gitHubBaseUrlChanged,
+  githubFor,
+  listAll,
+  listRepositories,
+  PER_PAGE,
+} from "./Client.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface LabelProps {
@@ -234,121 +242,64 @@ export const LabelProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+      const github = yield* githubFor(news.baseUrl);
+      const scope = { owner: news.owner, repo: news.repository, name: news.name };
 
       // Observe — probe for an existing label by name
-      const observed = yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            const { data } = await octokit.rest.issues.getLabel({
-              owner: news.owner,
-              repo: news.repository,
-              name: news.name,
-            });
-            return data;
-          } catch (error: any) {
-            if (error.status === 404) return undefined;
-            throw error;
-          }
-        },
-        catch: (e) => e as Error,
-      });
+      const observed = yield* github(Issues.getLabel(scope)).pipe(
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
 
       // Ensure — when no label exists, create one
       if (observed === undefined) {
-        const { data } = yield* Effect.tryPromise({
-          try: () =>
-            octokit.rest.issues.createLabel({
-              owner: news.owner,
-              repo: news.repository,
-              name: news.name,
-              color: news.color,
-              description: news.description,
-            }),
-          catch: (e) => e as Error,
-        });
-
-        return attrsOf(data);
+        return attrsOf(
+          yield* github(
+            Issues.createLabel({ ...scope, color: news.color, description: news.description }),
+          ),
+        );
       }
 
       // Sync — update the existing label if any properties differ
-      const { data } = yield* Effect.tryPromise({
-        try: () =>
-          octokit.rest.issues.updateLabel({
-            owner: news.owner,
-            repo: news.repository,
-            name: news.name,
-            color: news.color,
-            description: news.description,
-          }),
-        catch: (e) => e as Error,
-      });
-
-      return attrsOf(data);
+      return attrsOf(
+        yield* github(
+          Issues.updateLabel({ ...scope, color: news.color, description: news.description }),
+        ),
+      );
     }),
 
     // Enumerate every label across the repositories the token can see —
     // labels are keyed by {owner, repository, name} with no account-wide
     // list endpoint, so walk the repos like the Variable provider does.
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
-
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
-
+      const repos = yield* listRepositories;
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          Effect.tryPromise({
-            try: async () => {
-              try {
-                const labels = await octokit.paginate(octokit.rest.issues.listLabelsForRepo, {
-                  owner: repo.owner.login,
-                  repo: repo.name,
-                  per_page: 100,
-                });
-                return labels.map(attrsOf);
-              } catch (error: any) {
-                // Repos where the token lacks label access reject with
-                // 403/404 — skip them rather than failing the whole enumeration.
-                if (error.status === 403 || error.status === 404) {
-                  return [];
-                }
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          }),
+          listAll((page) =>
+            github(
+              Issues.listLabelsForRepo({
+                owner: repo.owner.login,
+                repo: repo.name,
+                per_page: PER_PAGE,
+                page,
+              }),
+            ),
+          ).pipe(
+            Effect.map((labels) => labels.map(attrsOf)),
+            // Repos where the token lacks label access reject with 403/404 —
+            // skip them rather than failing the whole enumeration.
+            Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
+          ),
         { concurrency: 10 },
       );
-
       return perRepo.flat();
     }),
 
     delete: Effect.fn(function* ({ olds }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
-
-      yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            await octokit.rest.issues.deleteLabel({
-              owner: olds.owner,
-              repo: olds.repository,
-              name: olds.name,
-            });
-          } catch (error: any) {
-            if (error.status !== 404) {
-              throw error;
-            }
-          }
-        },
-        catch: (e) => e as Error,
-      });
+      const github = yield* githubFor(olds.baseUrl);
+      yield* github(
+        Issues.deleteLabel({ owner: olds.owner, repo: olds.repository, name: olds.name }),
+      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
   });
 

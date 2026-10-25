@@ -4,10 +4,10 @@ import * as Effect from "effect/Effect";
 
 /**
  * Normalize a user-supplied GitHub host or URL into the REST API base URL
- * Octokit expects, following the same conventions as the `gh` CLI and the
+ * the GitHub SDK expects, following the same conventions as the `gh` CLI and the
  * Terraform GitHub provider:
  *
- * - `github.com` / `api.github.com` → `undefined` (Octokit's default)
+ * - `github.com` / `api.github.com` → `undefined` (the github.com default)
  * - GitHub Enterprise Cloud with data residency (`acme.ghe.com` or
  *   `api.acme.ghe.com`) → `https://api.acme.ghe.com`
  * - GitHub Enterprise Server (`github.example.com`) → `https://github.example.com/api/v3`;

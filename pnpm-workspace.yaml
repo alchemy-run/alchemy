@@ -94,8 +94,6 @@ catalog:
   "@neondatabase/serverless": "^1.0.1"
   "@octanejs/adapter-cloudflare": "0.0.12"
   "@octanejs/vite-plugin": "0.1.22"
-  "@octokit/rest": "^22.0.1"
-  "@octokit/webhooks": "^14.2.0"
   "@opennextjs/aws": "4.1.9"
   "@opennextjs/cloudflare": "1.20.1"
   "@opentui/core": "^0.6.6"
