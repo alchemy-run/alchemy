@@ -698,6 +698,24 @@ const getScriptSettings = (
   });
 
 /**
+ * Look up a dispatch-namespace script, or `undefined` when it or its
+ * namespace does not exist. The settings endpoint answers a missing
+ * namespace with an untyped 500, so check existence here first.
+ */
+const findDispatchNamespaceScript = (
+  accountId: string,
+  dispatchNamespace: string,
+  scriptName: string,
+) =>
+  wfp
+    .getDispatchNamespaceScript({ accountId, dispatchNamespace, scriptName })
+    .pipe(
+      Effect.catchTag(["DispatchNamespaceNotFound", "DispatchNamespaceScriptNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
+
+/**
  * Deploy-time binding validation rejects an upload whose bindings
  * reference a resource Cloudflare can't see (each resource type has
  * its own typed not-found error, verified against the live API).
@@ -4688,11 +4706,14 @@ export const LiveWorkerProvider = () =>
           if (!isResolved(news.name) || !isResolved(news.namespace)) return Unresolved;
           const { accountId } = yield* yield* CloudflareEnvironment;
           const name = yield* createWorkerName(id, news.name);
-          const settings = yield* getScriptSettings(
-            accountId,
-            name,
-            resolveNamespaceName(news.namespace),
-          ).pipe(
+          const namespace = resolveNamespaceName(news.namespace);
+          if (
+            namespace !== undefined &&
+            (yield* findDispatchNamespaceScript(accountId, namespace, name)) === undefined
+          ) {
+            return undefined;
+          }
+          const settings = yield* getScriptSettings(accountId, name, namespace).pipe(
             Effect.catchTags({
               WorkerNotFound: () => Effect.succeed(undefined),
               WorkerHasNoVersions: () => Effect.succeed(undefined),
@@ -5013,6 +5034,12 @@ export const LiveWorkerProvider = () =>
             // domains, or cron triggers — read only the script settings from
             // the dispatch-namespace endpoint.
             if (dispatchNamespace) {
+              const script = yield* findDispatchNamespaceScript(
+                accountId,
+                dispatchNamespace,
+                workerName,
+              );
+              if (script === undefined) return undefined;
               const settings = yield* getScriptSettings(accountId, workerName, dispatchNamespace);
               yield* Effect.logInfo(
                 `Cloudflare Worker read: found ${workerName} in dispatch namespace ${dispatchNamespace}`,
@@ -5024,24 +5051,12 @@ export const LiveWorkerProvider = () =>
                 // the dispatch-namespace script endpoint.
                 workerId:
                   cachedWorkerId(output?.workerId, workerName) ??
-                  (yield* wfp
-                    .getDispatchNamespaceScript({
-                      accountId,
-                      dispatchNamespace,
-                      scriptName: workerName,
-                    })
-                    .pipe(
-                      Effect.flatMap((r) =>
-                        r.script?.tag != null
-                          ? Effect.succeed(r.script.tag)
-                          : Effect.fail(
-                              new WorkerIdNotFound({
-                                scriptName: workerName,
-                                message: `Cloudflare Worker: dispatch-namespace script '${workerName}' has no immutable ID in its metadata`,
-                              }),
-                            ),
-                      ),
-                    )),
+                  (script.script?.tag != null
+                    ? script.script.tag
+                    : yield* new WorkerIdNotFound({
+                        scriptName: workerName,
+                        message: `Cloudflare Worker: dispatch-namespace script '${workerName}' has no immutable ID in its metadata`,
+                      })),
                 workerName,
                 namespace: dispatchNamespace,
                 logpush: settings.logpush ?? undefined,

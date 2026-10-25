@@ -1288,13 +1288,13 @@ describe.concurrent(
           const before = yield* wfp.getDispatchNamespaceScript(request);
 
           const program = Effect.gen(function* () {
-            yield* namespace;
+            const ns = yield* namespace;
             const kv = yield* Cloudflare.KV.Namespace("LateKv");
             const worker = yield* Cloudflare.Worker("LateDifferent", {
               main,
               name,
               // Resolves only once `LateKv` is created, after the cycle precreates.
-              namespace: kv.namespaceId.pipe(Output.map(() => namespaceName)),
+              namespace: Output.all(ns.name, kv.namespaceId).pipe(Output.map(([name]) => name)),
               workersDev: false,
               env: { KV: kv },
             });
@@ -1328,9 +1328,9 @@ describe.concurrent(
     );
 
     // #2533: a cyclic dispatch-namespace Worker precreates a stub that uploads
-    // nothing. Its namespace is still unresolved, so the stub records none.
-    // When the upload then fails, destroy must not read that as an
-    // account-level Worker and delete the same-name script there.
+    // nothing. Its namespace is still unresolved, so the checkpoint keeps no
+    // stub (#2540). When the upload then fails, destroy must not read that as
+    // an account-level Worker and delete the same-name script there.
     test.provider(
       "destroy preserves the account Worker after an interrupted dispatch precreate",
       (stack) =>
@@ -1374,8 +1374,7 @@ describe.concurrent(
             expect(checkpoint).toMatchObject({ status: "creating" });
             if (!isResourceState(checkpoint))
               return yield* Effect.die("Missing resource checkpoint");
-            expect(checkpoint.attr).toMatchObject({ workerId: "" });
-            expect(checkpoint.attr?.namespace).toBeUndefined();
+            expect(checkpoint.attr).toBeUndefined();
             expect(yield* deployments()).toEqual(before);
 
             yield* stack.destroy();
