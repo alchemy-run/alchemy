@@ -480,11 +480,17 @@ const waitForSecretActive = (
  * is not stable across pages, so a scan of every page can skip a secret
  * in a store with more than one page of them. The API's `search` filter
  * (a match over name and comment) narrows the listing to a handful of
- * candidates first; the exact-name filter then picks the one.
+ * candidates first, ordered by name so paging stays stable when the name
+ * is a substring of many others; the exact-name filter then picks the one.
  */
 const findSecretByName = (key: { accountId: string; storeId: string; name: string }) =>
   secretsStore.listStoreSecrets
-    .items({ accountId: key.accountId, storeId: key.storeId, search: key.name })
+    .items({
+      accountId: key.accountId,
+      storeId: key.storeId,
+      search: key.name,
+      order: "name",
+    })
     .pipe(
       Stream.filter((s) => s.name === key.name),
       Stream.runHead,

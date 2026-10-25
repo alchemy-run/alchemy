@@ -110,10 +110,11 @@ test.provider(
 );
 
 // A Secret with no state of its own is found by name. The store's listing
-// order is not stable across pages, so the lookup asks the API to search by
-// name rather than scanning every page. Deploy more than one page of secrets
-// (the API pages by 20), then adopt one of them by name under a second
-// logical id, which sends `read` through the lookup.
+// order is not stable across pages, so the lookup searches by name, ordered
+// by name. Deploy more than one page of secrets (the API pages by 20) whose
+// names contain the target's and sort before it, so the search itself spans
+// two pages, then adopt the target by name under a second logical id, which
+// sends `read` through the lookup.
 test.provider(
   "adopts a secret by name from a store with more than one page of secrets",
   (stack) =>
@@ -129,7 +130,7 @@ test.provider(
               (i) =>
                 Cloudflare.SecretsStore.Secret(`PagedFiller${i}`, {
                   store,
-                  name: `paged-secret-filler-${i}`,
+                  name: `filler-${i}-paged-secret-target`,
                   value: Redacted.make("filler"),
                 }),
               { concurrency: "unbounded", discard: true },
