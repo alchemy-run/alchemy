@@ -290,6 +290,16 @@ Clients call commands as methods (`bank.WithdrawMoney({ target, amount }, { head
 
 `Domain.Api.describe(CustomerApi)` lists every call the Api serves as plain JSON: entry, kind, operation (`send`, `get`, `peek`, `watch`, `events`, `list`), RPC tag, `mode` (`read` or `write`), whether it streams, and JSON Schemas for its input, success and typed errors. Build tool lists, CLI help or OpenAPI from it instead of a second hand-written list, and snapshot it in a test to catch a change to the public surface.
 
+`@alchemy.run/domain/Ai` gives an agent the Api as tools. `DomainAi.toToolkit(CustomerApi, { headers })` returns `{ toolkit, layer }`: an Effect AI `Toolkit` with one tool per call that returns once (`send`, `get`, `peek`, `list`; not `watch` or `events`), named `<api>_<entry>_<operation>`, and the Layer of its handlers. `DomainAi.toMcp(CustomerApi)` registers the same tools on Effect's `McpServer`; provide `McpServer.layerHttp` (or `layerHttpRequestScoped` on a Worker) and the model. Each call goes through the Api in process, so middleware, `validate` and rejections apply to the agent. By default a call sends the current HTTP request's headers to the middleware, so an MCP client signs in like any other client. Serve MCP from the server package.
+
+```ts
+// packages/server/src/BankMcp.ts
+const BankMcp = DomainAi.toMcp(CustomerApi).pipe(
+  Layer.provide(McpServer.layerHttp({ name: "bank", version: "1.0.0", path: "/mcp", protocols: [McpProtocol.v2025_11_25] })),
+  Layer.provide(BankLive),
+);
+```
+
 ## Model
 
 ```ts

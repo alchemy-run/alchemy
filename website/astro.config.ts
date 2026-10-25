@@ -1601,6 +1601,10 @@ export default defineConfig({
               ],
             },
             {
+              label: "Agents",
+              items: [{ label: "Agents and MCP", link: "/domain/agents" }],
+            },
+            {
               label: "Security",
               items: [
                 { label: "Sessions and middleware", link: "/domain/sessions" },

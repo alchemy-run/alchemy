@@ -97,8 +97,8 @@ const surfaceOf = (entry: Entry): Surface => {
   }
 };
 
-/** One schema for several failures, without repeats or `Never`. */
-const failures = (schemas: ReadonlyArray<Schema.Top>): Schema.Top => {
+/** One schema for several failures, without repeats or `Never`. @internal */
+export const failures = (schemas: ReadonlyArray<Schema.Top>): Schema.Top => {
   const members = new Set<Schema.Top>();
   for (const schema of schemas) {
     const union = schema as Schema.Top & { readonly members?: ReadonlyArray<Schema.Top> };
