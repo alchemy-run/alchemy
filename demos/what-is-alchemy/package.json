@@ -1,0 +1,31 @@
+{
+  "name": "alchemy-what-is-alchemy-demo",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "studio": "remotion studio src/index.ts",
+    "typecheck": "tsrs -b tsconfig.json snippets/tsconfig.json"
+  },
+  "dependencies": {
+    "@remotion/cli": "catalog:",
+    "@remotion/google-fonts": "catalog:",
+    "@remotion/player": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "remotion": "catalog:"
+  },
+  "devDependencies": {
+    "@alchemy.run/aws": "workspace:*",
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@cloudflare/workers-types": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "vite": "catalog:"
+  }
+}

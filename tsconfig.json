@@ -164,6 +164,12 @@
     //   "path": "./website/tsconfig.json"
     // },
     {
+      "path": "./demos/what-is-alchemy/tsconfig.json"
+    },
+    {
+      "path": "./demos/what-is-alchemy/snippets/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-git-service/tsconfig.json"
     },
     {

@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  // The talk itself. The code it shows lives in snippets/, checked separately
+  // (`pnpm typecheck`) against the real alchemy packages.
+  "include": ["src", "vite.config.ts", "remotion.config.ts"],
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["vite/client"]
+  }
+}

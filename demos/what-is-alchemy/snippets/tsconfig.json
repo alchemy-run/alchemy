@@ -1,0 +1,17 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  // Every file here is shown on a slide (between `// #region show` markers)
+  // and must type-check against the real alchemy packages.
+  "include": ["*.ts"],
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["@cloudflare/workers-types"],
+    "noUnusedLocals": false
+  },
+  "references": [
+    { "path": "../../../packages/alchemy/tsconfig.json" },
+    { "path": "../../../packages/aws/tsconfig.json" },
+    { "path": "../../../packages/cloudflare/tsconfig.json" }
+  ]
+}
