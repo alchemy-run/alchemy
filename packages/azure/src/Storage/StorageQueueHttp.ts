@@ -1,15 +1,7 @@
+import * as queues from "@distilled.cloud/azure/storage-queue";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import {
-  azureDataPlaneRequest,
-  bindAzureHost,
-  envSuffix,
-  xmlElements,
-  xmlEncode,
-  xmlField,
-} from "../Binding.ts";
+import * as AzureBindings from "../AzureBindings.ts";
 import type { Queue } from "./Queue.ts";
 import type {
   ReceiveStorageQueueClient,
@@ -19,129 +11,108 @@ import type {
 import type { SendStorageQueueClient, StorageQueueSendOptions } from "./QueueSend.ts";
 
 /**
- * Shared HTTP scaffolding for storage queue bindings. NOT exported from
- * `index.ts`.
+ * Shared scaffolding for the storage queue bindings: resolves the distilled
+ * `storage-queue` operations once when the layer is built and assigns
+ * `role` on the bound queue at deploy time.
+ *
+ * NOT exported from `index.ts`.
  */
 
-const STORAGE_SCOPE = "https://storage.azure.com/.default";
-const STORAGE_VERSION = "2023-11-03";
-
-export interface StorageQueueHttpContext {
+/** Where a queue lives, resolved per call at runtime. */
+interface QueueAddress {
   readonly tag: string;
-  readonly http: HttpClient.HttpClient;
-  /** `https://{account}.queue.core.windows.net/{queue}`, resolved per call. */
-  readonly queueUrl: Effect.Effect<string>;
+  /** `https://{account}.queue.core.windows.net` */
+  readonly url: Effect.Effect<string>;
+  readonly queueName: Effect.Effect<string>;
 }
 
-const send = (
-  ctx: StorageQueueHttpContext,
-  request: HttpClientRequest.HttpClientRequest,
-  allow?: readonly number[],
-) =>
-  azureDataPlaneRequest(
-    ctx.http,
-    STORAGE_SCOPE,
-    request.pipe(HttpClientRequest.setHeader("x-ms-version", STORAGE_VERSION)),
-    { allow },
-  );
+const GrantOnQueue = Effect.gen(function* () {
+  const bind = yield* AzureBindings.Bind;
+  return Effect.fn(function* (tag: string, queue: Queue, role: string) {
+    if (!globalThis.__ALCHEMY_RUNTIME__) {
+      yield* bind`${tag}(${queue})`({
+        roleAssignments: [{ roleDefinitionId: role, scope: queue.queueId }],
+      });
+    }
+  });
+});
 
-export const makeSendStorageQueueClient = (ctx: StorageQueueHttpContext) =>
-  ({
-    send: Effect.fn(`${ctx.tag}.send`)(function* (
+const at = (address: QueueAddress) =>
+  Effect.all({ url: address.url, queueName: address.queueName });
+
+export const makeSendStorageQueueClient = Effect.gen(function* () {
+  const enqueue = yield* AzureBindings.withCredentials(queues.MessagesEnqueue);
+  return (address: QueueAddress): SendStorageQueueClient => ({
+    send: Effect.fn(`${address.tag}.send`)(function* (
       message: string,
       options?: StorageQueueSendOptions,
     ) {
-      const base = yield* ctx.queueUrl;
-      const res = yield* send(
-        ctx,
-        HttpClientRequest.post(`${base}/messages`).pipe(
-          HttpClientRequest.setUrlParams({
-            ...(options?.visibilityTimeoutSeconds !== undefined
-              ? { visibilitytimeout: String(options.visibilityTimeoutSeconds) }
-              : {}),
-            ...(options?.timeToLiveSeconds !== undefined
-              ? { messagettl: String(options.timeToLiveSeconds) }
-              : {}),
-          }),
-          HttpClientRequest.bodyText(
-            `<QueueMessage><MessageText>${xmlEncode(message)}</MessageText></QueueMessage>`,
-            "application/xml",
-          ),
-        ),
-      );
+      const where = yield* at(address);
+      const [sent] = yield* enqueue({
+        ...where,
+        MessageText: message,
+        visibilitytimeout: options?.visibilityTimeoutSeconds,
+        messagettl: options?.timeToLiveSeconds,
+      });
       return {
-        messageId: xmlField(res.text, "MessageId"),
-        popReceipt: xmlField(res.text, "PopReceipt"),
-        insertionTime: xmlField(res.text, "InsertionTime"),
+        messageId: sent?.MessageId,
+        popReceipt: sent?.PopReceipt,
+        insertionTime: sent?.InsertionTime,
       };
     }),
-  }) satisfies SendStorageQueueClient;
+  });
+});
 
-export const makeReceiveStorageQueueClient = (ctx: StorageQueueHttpContext) =>
-  ({
-    receive: Effect.fn(`${ctx.tag}.receive`)(function* (options?: StorageQueueReceiveOptions) {
-      const base = yield* ctx.queueUrl;
-      const res = yield* send(
-        ctx,
-        HttpClientRequest.get(`${base}/messages`).pipe(
-          HttpClientRequest.setUrlParams({
-            numofmessages: String(options?.maxMessages ?? 1),
-            ...(options?.visibilityTimeoutSeconds !== undefined
-              ? { visibilitytimeout: String(options.visibilityTimeoutSeconds) }
-              : {}),
-          }),
-        ),
-      );
-      return xmlElements(res.text, "QueueMessage").map((xml): StorageQueueMessage => ({
-        messageId: xmlField(xml, "MessageId") ?? "",
-        popReceipt: xmlField(xml, "PopReceipt") ?? "",
-        text: xmlField(xml, "MessageText") ?? "",
-        dequeueCount: Number(xmlField(xml, "DequeueCount") ?? 0),
-        insertionTime: xmlField(xml, "InsertionTime"),
+export const makeReceiveStorageQueueClient = Effect.gen(function* () {
+  const dequeue = yield* AzureBindings.withCredentials(queues.MessagesDequeue);
+  const deleteMessage = yield* AzureBindings.withCredentials(queues.DeleteMessageId);
+  return (address: QueueAddress): ReceiveStorageQueueClient => ({
+    receive: Effect.fn(`${address.tag}.receive`)(function* (options?: StorageQueueReceiveOptions) {
+      const where = yield* at(address);
+      const messages = yield* dequeue({
+        ...where,
+        numofmessages: options?.maxMessages ?? 1,
+        visibilitytimeout: options?.visibilityTimeoutSeconds,
+      });
+      return messages.map((message): StorageQueueMessage => ({
+        messageId: message.MessageId,
+        popReceipt: message.PopReceipt,
+        text: message.MessageText,
+        dequeueCount: message.DequeueCount,
+        insertionTime: message.InsertionTime,
       }));
     }),
-    delete: Effect.fn(`${ctx.tag}.delete`)(function* (
+    delete: Effect.fn(`${address.tag}.delete`)(function* (
       message: Pick<StorageQueueMessage, "messageId" | "popReceipt">,
     ) {
-      const base = yield* ctx.queueUrl;
-      yield* send(
-        ctx,
-        HttpClientRequest.delete(`${base}/messages/${encodeURIComponent(message.messageId)}`).pipe(
-          HttpClientRequest.setUrlParams({ popreceipt: message.popReceipt }),
-        ),
-        [404],
-      );
+      const where = yield* at(address);
+      yield* deleteMessage({
+        ...where,
+        messageid: message.messageId,
+        popreceipt: message.popReceipt,
+      }).pipe(Effect.catchTag("MessageNotFound", () => Effect.void));
     }),
-  }) satisfies ReceiveStorageQueueClient;
+  });
+});
 
 /**
- * Build the impl Effect for a storage queue capability: grant `role` on
- * the queue to the host identity, register env vars, return the client.
+ * Build a storage queue binding that assigns `role` on the queue and
+ * returns the client `makeClient` builds.
  */
-export const makeStorageQueueHttpBinding = <Client>(options: {
+export const makeStorageQueueBinding = <Client>(options: {
+  /** Fully-qualified binding tag, e.g. `Azure.Storage.QueueSend`. */
   tag: string;
+  /** Built-in role GUID assigned on the queue. */
   role: string;
-  makeClient: (ctx: StorageQueueHttpContext) => Client;
+  makeClient: Effect.Effect<(address: QueueAddress) => Client>;
 }) =>
   Effect.gen(function* () {
-    const http = yield* HttpClient.HttpClient;
+    const grantOnQueue = yield* GrantOnQueue;
+    const makeClient = yield* options.makeClient;
     return Effect.fn(function* (queue: Queue) {
-      const suffix = envSuffix(queue.LogicalId);
-      yield* bindAzureHost({
-        tag: options.tag,
-        resource: queue,
-        env: {
-          [`AZURE_STORAGE_ACCOUNT_${suffix}`]: queue.storageAccount,
-          [`AZURE_STORAGE_QUEUE_${suffix}`]: queue.queueName,
-        },
-        roleAssignments: [{ roleDefinitionId: options.role, scope: queue.queueId }],
-      });
-      const url =
-        yield* Output.interpolate`https://${queue.storageAccount}.queue.core.windows.net/${queue.queueName}`;
-      return options.makeClient({
-        tag: `${options.tag}(${queue.LogicalId})`,
-        http,
-        queueUrl: url,
-      });
+      yield* grantOnQueue(options.tag, queue, options.role);
+      const url = yield* Output.interpolate`https://${queue.storageAccount}.queue.core.windows.net`;
+      const queueName = yield* queue.queueName;
+      return makeClient({ tag: `${options.tag}(${queue.LogicalId})`, url, queueName });
     });
   });

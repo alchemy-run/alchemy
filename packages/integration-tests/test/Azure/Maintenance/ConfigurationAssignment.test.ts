@@ -90,14 +90,10 @@ test.provider(
         assignment.configurationAssignmentId,
       );
       const reobserved = yield* get(assignment.configurationAssignmentName);
-      expect([...(reobserved.properties?.filter?.osTypes ?? [])].sort()).toEqual([
-        "Linux",
-        "Windows",
-      ]);
-      expect([...(reobserved.properties?.filter?.tagSettings?.tags?.patch ?? [])].sort()).toEqual([
-        "nightly",
-        "weekly",
-      ]);
+      const osTypes = [...(reobserved.properties?.filter?.osTypes ?? [])].sort();
+      expect(osTypes).toEqual(["Linux", "Windows"]);
+      const patchTags = [...(reobserved.properties?.filter?.tagSettings?.tags?.patch ?? [])].sort();
+      expect(patchTags).toEqual(["nightly", "weekly"]);
 
       // Replacement: the assigned configuration is immutable.
       const replaced = yield* stack.deploy(

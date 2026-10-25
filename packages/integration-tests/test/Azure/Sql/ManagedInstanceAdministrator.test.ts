@@ -1,12 +1,9 @@
 import * as Azure from "@alchemy.run/azure";
-import { resolveAzureCredentials } from "@alchemy.run/azure/Credentials";
-import { mintAccessToken } from "@alchemy.run/azure/Token";
 import * as sql from "@distilled.cloud/azure/sql";
+import * as roleManagement from "@distilled.cloud/microsoft-graph/roleManagement";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { runExpensive } from "../gates.ts";
@@ -25,17 +22,6 @@ const { test } = Test.make({ providers: Azure.providers() });
 /** Built-in Entra "Directory Readers" role template. */
 const DIRECTORY_READERS = "88d8e3e3-8f55-4a1e-953a-9b9898b8876b";
 
-const graphRequest = (request: HttpClientRequest.HttpClientRequest) =>
-  Effect.gen(function* () {
-    const creds = yield* yield* resolveAzureCredentials;
-    const token = yield* mintAccessToken(creds, "https://graph.microsoft.com/.default");
-    const http = yield* HttpClient.HttpClient;
-    const response = yield* http.execute(
-      request.pipe(HttpClientRequest.bearerToken(Redacted.value(token.accessToken))),
-    );
-    return { status: response.status, body: yield* response.json };
-  });
-
 /**
  * Azure resolves the administrator through the instance's identity, which
  * must hold the Entra "Directory Readers" role (otherwise the write fails
@@ -45,29 +31,17 @@ const graphRequest = (request: HttpClientRequest.HttpClientRequest) =>
  */
 const grantDirectoryReaders = (principalId: string) =>
   Effect.gen(function* () {
-    const existing = yield* graphRequest(
-      HttpClientRequest.get(
-        `https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments?$filter=principalId eq '${principalId}' and roleDefinitionId eq '${DIRECTORY_READERS}'`,
-      ),
-    );
-    expect(existing.status).toEqual(200);
-    const assigned = ((existing.body as { value?: unknown[] }).value ?? []).length > 0;
-    if (!assigned) {
-      const created = yield* graphRequest(
-        HttpClientRequest.post(
-          "https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments",
-        ).pipe(
-          HttpClientRequest.bodyJsonUnsafe({
-            principalId,
-            roleDefinitionId: DIRECTORY_READERS,
-            directoryScopeId: "/",
-          }),
-        ),
-      );
-      expect(created.status).toEqual(201);
-      yield* Effect.logInfo(
-        `granted Directory Readers to ${principalId}: ${JSON.stringify(created.body)}`,
-      );
+    const existing = yield* roleManagement.listRoleAssignments({
+      filter: `principalId eq '${principalId}' and roleDefinitionId eq '${DIRECTORY_READERS}'`,
+    });
+    if (existing.value.length === 0) {
+      const created = yield* roleManagement.createRoleAssignments({
+        principalId,
+        roleDefinitionId: DIRECTORY_READERS,
+        directoryScopeId: "/",
+      });
+      expect(created.principalId).toEqual(principalId);
+      yield* Effect.logInfo(`granted Directory Readers to ${principalId}: ${created.id}`);
     }
   });
 

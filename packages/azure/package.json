@@ -33,6 +33,7 @@
     "./AnalysisServices": "./src/AnalysisServices/index.ts",
     "./ApiCenter": "./src/ApiCenter/index.ts",
     "./ApiManagement": "./src/ApiManagement/index.ts",
+    "./AppComplianceAutomation": "./src/AppComplianceAutomation/index.ts",
     "./AppConfiguration": "./src/AppConfiguration/index.ts",
     "./ApplicationInsights": "./src/ApplicationInsights/index.ts",
     "./ArcData": "./src/ArcData/index.ts",
@@ -42,12 +43,14 @@
     "./Automation": "./src/Automation/index.ts",
     "./AzureActiveDirectory": "./src/AzureActiveDirectory/index.ts",
     "./AzureFleet": "./src/AzureFleet/index.ts",
+    "./AzureSphere": "./src/AzureSphere/index.ts",
     "./AzureStackHCI": "./src/AzureStackHCI/index.ts",
     "./Batch": "./src/Batch/index.ts",
     "./BotService": "./src/BotService/index.ts",
     "./Cdn": "./src/Cdn/index.ts",
     "./CertificateRegistration": "./src/CertificateRegistration/index.ts",
     "./Chaos": "./src/Chaos/index.ts",
+    "./CloudHealth": "./src/CloudHealth/index.ts",
     "./CodeSigning": "./src/CodeSigning/index.ts",
     "./CognitiveServices": "./src/CognitiveServices/index.ts",
     "./Communication": "./src/Communication/index.ts",
@@ -90,6 +93,7 @@
     "./Edge": "./src/Edge/index.ts",
     "./Elastic": "./src/Elastic/index.ts",
     "./ElasticSan": "./src/ElasticSan/index.ts",
+    "./Entra": "./src/Entra/index.ts",
     "./EventGrid": "./src/EventGrid/index.ts",
     "./EventHub": "./src/EventHub/index.ts",
     "./ExtendedLocation": "./src/ExtendedLocation/index.ts",
@@ -147,6 +151,7 @@
     "./PostgreSQL": "./src/PostgreSQL/index.ts",
     "./PowerBI": "./src/PowerBI/index.ts",
     "./PrivateDns": "./src/PrivateDns/index.ts",
+    "./Purview": "./src/Purview/index.ts",
     "./RecoveryServices": "./src/RecoveryServices/index.ts",
     "./RedHatOpenShift": "./src/RedHatOpenShift/index.ts",
     "./Redis": "./src/Redis/index.ts",
@@ -223,6 +228,11 @@
         "bun": "./src/ApiManagement/index.ts",
         "default": "./lib/ApiManagement/index.js"
       },
+      "./AppComplianceAutomation": {
+        "types": "./lib/AppComplianceAutomation/index.d.ts",
+        "bun": "./src/AppComplianceAutomation/index.ts",
+        "default": "./lib/AppComplianceAutomation/index.js"
+      },
       "./AppConfiguration": {
         "types": "./lib/AppConfiguration/index.d.ts",
         "bun": "./src/AppConfiguration/index.ts",
@@ -268,6 +278,11 @@
         "bun": "./src/AzureFleet/index.ts",
         "default": "./lib/AzureFleet/index.js"
       },
+      "./AzureSphere": {
+        "types": "./lib/AzureSphere/index.d.ts",
+        "bun": "./src/AzureSphere/index.ts",
+        "default": "./lib/AzureSphere/index.js"
+      },
       "./AzureStackHCI": {
         "types": "./lib/AzureStackHCI/index.d.ts",
         "bun": "./src/AzureStackHCI/index.ts",
@@ -297,6 +312,11 @@
         "types": "./lib/Chaos/index.d.ts",
         "bun": "./src/Chaos/index.ts",
         "default": "./lib/Chaos/index.js"
+      },
+      "./CloudHealth": {
+        "types": "./lib/CloudHealth/index.d.ts",
+        "bun": "./src/CloudHealth/index.ts",
+        "default": "./lib/CloudHealth/index.js"
       },
       "./CodeSigning": {
         "types": "./lib/CodeSigning/index.d.ts",
@@ -507,6 +527,11 @@
         "types": "./lib/ElasticSan/index.d.ts",
         "bun": "./src/ElasticSan/index.ts",
         "default": "./lib/ElasticSan/index.js"
+      },
+      "./Entra": {
+        "types": "./lib/Entra/index.d.ts",
+        "bun": "./src/Entra/index.ts",
+        "default": "./lib/Entra/index.js"
       },
       "./EventGrid": {
         "types": "./lib/EventGrid/index.d.ts",
@@ -793,6 +818,11 @@
         "bun": "./src/PrivateDns/index.ts",
         "default": "./lib/PrivateDns/index.js"
       },
+      "./Purview": {
+        "types": "./lib/Purview/index.d.ts",
+        "bun": "./src/Purview/index.ts",
+        "default": "./lib/Purview/index.js"
+      },
       "./RecoveryServices": {
         "types": "./lib/RecoveryServices/index.d.ts",
         "bun": "./src/RecoveryServices/index.ts",
@@ -1013,7 +1043,8 @@
   },
   "dependencies": {
     "@distilled.cloud/azure": "workspace:*",
-    "@distilled.cloud/core": "workspace:*"
+    "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/microsoft-graph": "workspace:*"
   },
   "devDependencies": {
     "@effect/platform-bun": "catalog:",

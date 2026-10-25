@@ -1,13 +1,9 @@
 import * as Azure from "@alchemy.run/azure";
-import { resolveAzureCredentials } from "@alchemy.run/azure/Credentials";
-import { mintAccessToken } from "@alchemy.run/azure/Token";
 import * as deviceupdate from "@distilled.cloud/azure/deviceupdate";
+import * as servicePrincipals from "@distilled.cloud/microsoft-graph/servicePrincipals";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as Redacted from "effect/Redacted";
 import { runExpensive } from "../gates.ts";
 import { logLevel, subscription, tags, waitGone } from "./util.ts";
 
@@ -30,17 +26,12 @@ const IOT_HUB_DATA_CONTRIBUTOR = "4fc6c259-987e-4a07-842e-c321cc9d413f";
 
 /** Object ID of the Device Update service principal in this tenant. */
 const deviceUpdatePrincipalId = Effect.gen(function* () {
-  const creds = yield* yield* resolveAzureCredentials;
-  const token = yield* mintAccessToken(creds, "https://graph.microsoft.com/.default");
-  const http = yield* HttpClient.HttpClient;
-  const response = yield* http.execute(
-    HttpClientRequest.get(
-      `https://graph.microsoft.com/v1.0/servicePrincipals(appId='${DEVICE_UPDATE_APP_ID}')?$select=id`,
-    ).pipe(HttpClientRequest.bearerToken(Redacted.value(token.accessToken))),
-  );
-  const body = (yield* response.json) as { id?: string };
-  expect(body.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
-  return body.id!;
+  const principal = yield* servicePrincipals.getServicePrincipalByAppId({
+    appId: DEVICE_UPDATE_APP_ID,
+    select: ["id"],
+  });
+  expect(principal.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  return principal.id!;
 });
 
 const program = (props: { principalId: string; tags: Record<string, string> }) =>

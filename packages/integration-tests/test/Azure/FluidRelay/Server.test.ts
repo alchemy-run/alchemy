@@ -56,9 +56,41 @@ const program = (props: {
     return { group, server };
   });
 
+// Azure Fluid Relay is retiring and no longer creates new servers (tenants)
+// on any subscription. The ungated probe pins the typed rejection.
+test.provider(
+  "creating a server is rejected because tenant creation is disabled",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const group = yield* stack.deploy(
+        Azure.Resources.ResourceGroup("Group", { location: "eastus" }),
+      );
+      const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+      const error = yield* fluidrelay
+        .FluidRelayServersCreateOrUpdate({
+          subscriptionId,
+          resourceGroup: group.resourceGroupName,
+          fluidRelayServerName: "alchemy-retired-probe",
+          location: "eastus",
+          properties: { storagesku: "standard" },
+        })
+        .pipe(Effect.flip);
+      expect(error._tag).toEqual("FluidRelayTenantCreationDisabled");
+      expect(yield* waitGone(getServer(group.resourceGroupName, "alchemy-retired-probe"))).toEqual(
+        "gone",
+      );
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags, timeout: 300_000 },
+);
+
 // Fluid Relay bills per operation / connection minute; an idle server
 // costs ~$0 and provisions in under a minute.
-test.provider(
+// Skipped: FluidRelayTenantCreationDisabled: New tenant creation is disabled
+// by Azure Fluid Relay. (HTTP 503 on FluidRelayServers_CreateOrUpdate, live
+// run 2026-10-24.) Kept in full should creation be re-enabled.
+test.provider.skip(
   "create, update tags and identity, replace via location, and delete a server",
   (stack) =>
     Effect.gen(function* () {

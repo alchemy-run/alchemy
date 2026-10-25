@@ -4,6 +4,7 @@ export * from "./CassandraKeyspace.ts";
 export * from "./CassandraRoleAssignment.ts";
 export * from "./CassandraRoleDefinition.ts";
 export * from "./CassandraTable.ts";
+export * from "./ChangeFeedEventSource.ts";
 export * from "./ClientEncryptionKey.ts";
 export * from "./DatabaseAccount.ts";
 export * from "./Fleet.ts";

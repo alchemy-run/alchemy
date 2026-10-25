@@ -1,7 +1,12 @@
-import type { AzureDataPlaneError, AzureManagedIdentityError } from "../Binding.ts";
+import type { AzureOpError } from "@distilled.cloud/azure";
 
-/** Errors a blob container client operation can fail with. */
-export type BlobContainerError = AzureDataPlaneError | AzureManagedIdentityError;
+/**
+ * Errors a blob container client operation can fail with: the typed
+ * `@distilled.cloud/azure/storage-blob` errors, e.g.
+ * `SchemaRegistryStorageAccessDenied` (`AuthorizationPermissionMismatch`)
+ * while a new role assignment propagates.
+ */
+export type BlobContainerError = AzureOpError;
 
 /** Properties of a blob, from `HEAD` or a list result. */
 export interface BlobProperties {

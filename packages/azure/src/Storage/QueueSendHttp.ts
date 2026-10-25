@@ -1,20 +1,20 @@
 import * as Layer from "effect/Layer";
-import { AzureDataRole } from "../Binding.ts";
+import { BuiltInRole } from "../Authorization/RoleAssignment.ts";
 import { QueueSend } from "./QueueSend.ts";
-import { makeSendStorageQueueClient, makeStorageQueueHttpBinding } from "./StorageQueueHttp.ts";
+import { makeSendStorageQueueClient, makeStorageQueueBinding } from "./StorageQueueHttp.ts";
 
 /**
- * HTTP implementation of {@link QueueSend}: Queue service REST calls
- * authenticated with the host's managed identity.
+ * Implementation of {@link QueueSend} over the distilled `storage-queue`
+ * data plane. Assigns **Storage Queue Data Message Sender** on the queue.
  *
  * @layer
  * @provides Azure.Storage.QueueSend
  */
 export const QueueSendHttp = Layer.effect(
   QueueSend,
-  makeStorageQueueHttpBinding({
+  makeStorageQueueBinding({
     tag: "Azure.Storage.QueueSend",
-    role: AzureDataRole.StorageQueueDataMessageSender,
+    role: BuiltInRole.StorageQueueDataMessageSender,
     makeClient: makeSendStorageQueueClient,
   }),
 );

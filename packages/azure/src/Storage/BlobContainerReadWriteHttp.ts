@@ -1,27 +1,24 @@
 import * as Layer from "effect/Layer";
-import { AzureDataRole } from "../Binding.ts";
-import {
-  makeReadBlobContainerClient,
-  makeWriteBlobContainerClient,
-  makeBlobContainerHttpBinding,
-} from "./BlobContainerHttp.ts";
+import { BuiltInRole } from "../Authorization/RoleAssignment.ts";
+import { makeBlobContainerBinding } from "./BlobContainerHttp.ts";
 import { BlobContainerReadWrite } from "./BlobContainerReadWrite.ts";
 
 /**
- * HTTP implementation of {@link BlobContainerReadWrite}: Blob service REST calls
- * authenticated with the host's managed identity.
+ * Implementation of {@link BlobContainerReadWrite} over the distilled
+ * `storage-blob` data plane. Assigns **Storage Blob Data Contributor** on
+ * the container.
  *
  * @layer
  * @provides Azure.Storage.BlobContainerReadWrite
  */
 export const BlobContainerReadWriteHttp = Layer.effect(
   BlobContainerReadWrite,
-  makeBlobContainerHttpBinding({
+  makeBlobContainerBinding({
     tag: "Azure.Storage.BlobContainerReadWrite",
-    role: AzureDataRole.StorageBlobDataContributor,
-    makeClient: (ctx) => ({
-      ...makeReadBlobContainerClient(ctx),
-      ...makeWriteBlobContainerClient(ctx),
+    role: BuiltInRole.StorageBlobDataContributor,
+    makeClient: (helpers, address) => ({
+      ...helpers.makeRead(address),
+      ...helpers.makeWrite(address),
     }),
   }),
 );

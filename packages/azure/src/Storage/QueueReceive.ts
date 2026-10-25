@@ -1,7 +1,7 @@
+import type { AzureOpError } from "@distilled.cloud/azure";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { AzureDataPlaneError, AzureManagedIdentityError } from "../Binding.ts";
 import type { Queue } from "./Queue.ts";
 
 export interface StorageQueueReceiveOptions {
@@ -26,24 +26,25 @@ export interface ReceiveStorageQueueClient {
   /** Dequeue up to `maxMessages` messages (possibly none). */
   receive(
     options?: StorageQueueReceiveOptions,
-  ): Effect.Effect<
-    StorageQueueMessage[],
-    AzureDataPlaneError | AzureManagedIdentityError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<StorageQueueMessage[], AzureOpError, RuntimeContext>;
   /** Delete a received message; succeeds when it is already gone. */
   delete(
     message: Pick<StorageQueueMessage, "messageId" | "popReceipt">,
-  ): Effect.Effect<void, AzureDataPlaneError | AzureManagedIdentityError, RuntimeContext>;
+  ): Effect.Effect<void, AzureOpError, RuntimeContext>;
 }
 
 /**
- * Receive and delete messages from an Azure Storage queue in a Container
- * App or Function App.
+ * Receive and delete messages from an Azure Storage queue on any host.
  *
- * Binding grants the host's system-assigned managed identity
- * **Storage Queue Data Message Processor** on the queue only. Provide
- * {@link QueueReceiveHttp}.
+ * Binding assigns **Storage Queue Data Message Processor** on the queue
+ * only.
+ * On a host with a managed identity (an Azure Function, Function App, Web
+ * App, Container App, container group, VM, or AKS workload identity) the
+ * role goes to that identity. On any other host (a Cloudflare Worker, an
+ * AWS Lambda) Alchemy creates an Entra service principal for the host,
+ * assigns the role to it, and binds its client secret into the host's env
+ * (see `AzureBindings`).
+ * Provide {@link QueueReceiveHttp}.
  *
  * ### Processing Messages
  * **Example:** Drain a batch

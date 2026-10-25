@@ -1,7 +1,7 @@
+import type { AzureOpError } from "@distilled.cloud/azure";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { AzureDataPlaneError, AzureManagedIdentityError } from "../Binding.ts";
 import type { Queue } from "./Queue.ts";
 
 export interface StorageQueueSendOptions {
@@ -23,20 +23,20 @@ export interface SendStorageQueueClient {
   send(
     message: string,
     options?: StorageQueueSendOptions,
-  ): Effect.Effect<
-    StorageQueueSendResult,
-    AzureDataPlaneError | AzureManagedIdentityError,
-    RuntimeContext
-  >;
+  ): Effect.Effect<StorageQueueSendResult, AzureOpError, RuntimeContext>;
 }
 
 /**
- * Send messages to an Azure Storage queue from a Container App or Function
- * App.
+ * Send messages to an Azure Storage queue from any host.
  *
- * Binding grants the host's system-assigned managed identity
- * **Storage Queue Data Message Sender** on the queue only. Provide
- * {@link QueueSendHttp}.
+ * Binding assigns **Storage Queue Data Message Sender** on the queue only.
+ * On a host with a managed identity (an Azure Function, Function App, Web
+ * App, Container App, container group, VM, or AKS workload identity) the
+ * role goes to that identity. On any other host (a Cloudflare Worker, an
+ * AWS Lambda) Alchemy creates an Entra service principal for the host,
+ * assigns the role to it, and binds its client secret into the host's env
+ * (see `AzureBindings`).
+ * Provide {@link QueueSendHttp}.
  *
  * ### Sending Messages
  * **Example:** Enqueue a job

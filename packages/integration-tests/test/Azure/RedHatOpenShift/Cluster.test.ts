@@ -1,13 +1,11 @@
 import * as Azure from "@alchemy.run/azure";
 import { resolveAzureCredentials } from "@alchemy.run/azure/Credentials";
-import { mintAccessToken } from "@alchemy.run/azure/Token";
 import * as aro from "@distilled.cloud/azure/redhatopenshift";
+import * as servicePrincipals from "@distilled.cloud/microsoft-graph/servicePrincipals";
 import { expect } from "alchemy-test";
 import type { Input } from "alchemy/Input";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -64,17 +62,12 @@ const clusterGone = (resourceGroupName: string, resourceName: string) =>
 /** Object ID of the service principal of `appId` in this tenant. */
 const servicePrincipalObjectId = (appId: string) =>
   Effect.gen(function* () {
-    const creds = yield* yield* resolveAzureCredentials;
-    const token = yield* mintAccessToken(creds, "https://graph.microsoft.com/.default");
-    const http = yield* HttpClient.HttpClient;
-    const response = yield* http.execute(
-      HttpClientRequest.get(
-        `https://graph.microsoft.com/v1.0/servicePrincipals(appId='${appId}')?$select=id`,
-      ).pipe(HttpClientRequest.bearerToken(Redacted.value(token.accessToken))),
-    );
-    const body = (yield* response.json) as { id?: string };
-    expect(body.id).toBeDefined();
-    return body.id!;
+    const principal = yield* servicePrincipals.getServicePrincipalByAppId({
+      appId,
+      select: ["id"],
+    });
+    expect(principal.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    return principal.id!;
   });
 
 const network = (location: string) =>
@@ -200,8 +193,15 @@ test.provider.skipIf(!runPaidOnly || !runExpensive)(
       expect(cluster.consoleUrl).toContain("console-openshift-console");
       expect(cluster.apiServerUrl).toContain(":6443");
       expect(cluster.kubeadminUsername).toEqual("kubeadmin");
-      expect(cluster.kubeadminPassword).toBeDefined();
-      expect(cluster.kubeconfig).toBeDefined();
+      // The installer generates the kubeadmin password as 4 dash-separated
+      // groups of 5 characters.
+      const password = cluster.kubeadminPassword && Redacted.value(cluster.kubeadminPassword);
+      expect(password).toMatch(/^[A-Za-z0-9]{5}(-[A-Za-z0-9]{5}){3}$/);
+      const encodedKubeconfig = cluster.kubeconfig && Redacted.value(cluster.kubeconfig);
+      const kubeconfig = yield* Effect.sync(() =>
+        Buffer.from(encodedKubeconfig ?? "", "base64").toString("utf8"),
+      );
+      expect(kubeconfig).toContain("kind: Config");
       const observed = yield* getCluster(group.resourceGroupName, cluster.clusterName);
       expect(observed.tags?.env).toEqual("test");
       expect(observed.properties?.workerProfiles?.[0]?.count).toEqual(3);

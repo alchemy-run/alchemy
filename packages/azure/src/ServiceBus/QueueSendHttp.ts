@@ -1,17 +1,15 @@
-import * as Output from "alchemy/Output";
+import * as messaging from "@distilled.cloud/azure/servicebus-messaging";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
-import { AzureDataRole, azureDataPlaneRequest, bindAzureHost, envSuffix } from "../Binding.ts";
+import { BuiltInRole } from "../Authorization/RoleAssignment.ts";
+import * as AzureBindings from "../AzureBindings.ts";
 import type { Queue } from "./Queue.ts";
 import { QueueSend, type ServiceBusSendOptions } from "./QueueSend.ts";
 
-const SERVICE_BUS_SCOPE = "https://servicebus.azure.net/.default";
-
 /**
- * HTTP implementation of {@link QueueSend}: the Service Bus REST send API
- * authenticated with the host's managed identity.
+ * Implementation of {@link QueueSend} over the distilled
+ * `servicebus-messaging` data plane. Assigns **Azure Service Bus Data
+ * Sender** on the queue.
  *
  * @layer
  * @provides Azure.ServiceBus.QueueSend
@@ -19,55 +17,41 @@ const SERVICE_BUS_SCOPE = "https://servicebus.azure.net/.default";
 export const QueueSendHttp = Layer.effect(
   QueueSend,
   Effect.gen(function* () {
-    const http = yield* HttpClient.HttpClient;
+    const bind = yield* AzureBindings.Bind;
+    const sendMessage = yield* AzureBindings.withCredentials(messaging.SendMessage);
     return Effect.fn(function* (queue: Queue) {
-      const suffix = envSuffix(queue.LogicalId);
-      yield* bindAzureHost({
-        tag: "Azure.ServiceBus.QueueSend",
-        resource: queue,
-        env: {
-          [`AZURE_SERVICEBUS_NAMESPACE_${suffix}`]: queue.namespaceName,
-          [`AZURE_SERVICEBUS_QUEUE_${suffix}`]: queue.queueName,
-        },
-        roleAssignments: [
-          {
-            roleDefinitionId: AzureDataRole.ServiceBusDataSender,
-            scope: queue.queueId,
-          },
-        ],
-      });
-      const url =
-        yield* Output.interpolate`https://${queue.namespaceName}.servicebus.windows.net/${queue.queueName}/messages`;
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`Azure.ServiceBus.QueueSend(${queue})`({
+          roleAssignments: [
+            { roleDefinitionId: BuiltInRole.ServiceBusDataSender, scope: queue.queueId },
+          ],
+        });
+      }
+      const namespaceName = yield* queue.namespaceName;
+      const queueName = yield* queue.queueName;
       return {
         send: Effect.fn(`Azure.ServiceBus.QueueSend(${queue.LogicalId}).send`)(function* (
           body: string | object,
           options?: ServiceBusSendOptions,
         ) {
-          const text = typeof body === "string" ? body : JSON.stringify(body);
-          const contentType =
-            options?.contentType ?? (typeof body === "string" ? "text/plain" : "application/json");
-          const broker = {
-            ...(options?.messageId ? { MessageId: options.messageId } : {}),
-            ...(options?.sessionId ? { SessionId: options.sessionId } : {}),
-            ...(options?.correlationId ? { CorrelationId: options.correlationId } : {}),
-            ...(options?.label ? { Label: options.label } : {}),
-            ...(options?.timeToLiveSeconds !== undefined
-              ? { TimeToLive: options.timeToLiveSeconds }
-              : {}),
-          };
-          yield* azureDataPlaneRequest(
-            http,
-            SERVICE_BUS_SCOPE,
-            HttpClientRequest.post(yield* url).pipe(
-              HttpClientRequest.setHeaders({
-                ...options?.properties,
-                ...(Object.keys(broker).length > 0
-                  ? { BrokerProperties: JSON.stringify(broker) }
-                  : {}),
-              }),
-              HttpClientRequest.bodyText(text, contentType),
-            ),
-          );
+          const namespace = yield* namespaceName;
+          const entityPath = yield* queueName;
+          yield* sendMessage({
+            namespaceName: namespace,
+            entityPath,
+            body: typeof body === "string" ? body : JSON.stringify(body),
+            contentType:
+              options?.contentType ??
+              (typeof body === "string" ? "text/plain" : "application/json"),
+            brokerProperties: {
+              messageId: options?.messageId,
+              sessionId: options?.sessionId,
+              correlationId: options?.correlationId,
+              label: options?.label,
+              timeToLive: options?.timeToLiveSeconds,
+            },
+            customProperties: options?.properties,
+          });
         }),
       };
     });

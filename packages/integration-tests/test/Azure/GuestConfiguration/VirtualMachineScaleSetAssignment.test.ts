@@ -71,9 +71,9 @@ const program = (props: {
 
 // A Flexible scale set with one 1-vCPU instance (~$0.04/hour) for ~10
 // minutes; assignments are free. Gated: the service currently answers every
-// scale set assignment with an embedded `VMSSNotSupported` error (see the
-// probe below), so the lifecycle cannot run on any subscription today. The
-// rejection persists on pay-as-you-go for Uniform (system identity) and
+// scale set assignment with an embedded error (`VMSSFlexNotSupported` for
+// Flexible sets; see the probe below), so the lifecycle cannot run on any
+// subscription today. The rejection persists on pay-as-you-go for Uniform (system identity) and
 // Flexible (user-assigned identity) sets with the ConfigurationforLinux
 // extension installed (verified 2026-10-05).
 // Skipped: failed in the last live run. Azure.GuestConfiguration.ScaleSetAssignmentRejected: Guest
@@ -146,7 +146,8 @@ test.provider(
         )
         .pipe(Effect.flip);
       expect(error._tag).toEqual("Azure.GuestConfiguration.ScaleSetAssignmentRejected");
-      expect(String((error as { code?: string }).code)).toEqual("VMSSNotSupported");
+      // The default Flexible scale set is rejected with this code (2026-10-24).
+      expect(String((error as { code?: string }).code)).toEqual("VMSSFlexNotSupported");
 
       yield* stack.destroy();
     }).pipe(withVcpus(1), logLevel),

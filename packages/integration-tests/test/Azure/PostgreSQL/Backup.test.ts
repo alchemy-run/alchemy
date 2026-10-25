@@ -3,6 +3,7 @@ import * as postgresql from "@distilled.cloud/azure/postgresql";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import { runExpensive } from "../gates.ts";
 import { logLevel, serverRef, tags, testServer, untilGone } from "./server.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
@@ -30,9 +31,10 @@ const getBackup = (resourceGroupName: string, serverName: string, backupName: st
     });
   });
 
-// One General Purpose D2ds_v5 server (≈ $0.18/h) for ~15 minutes ≈ $0.05;
-// on-demand backup storage of an empty server is negligible.
-test.provider(
+// ~$0.05/run, 16 min: one General Purpose D2ds_v5 server (≈ $0.18/h) takes
+// ~6 min to create and each on-demand backup 2-7 min. Backup storage of an
+// empty server is negligible.
+test.provider.skipIf(!runExpensive)(
   "take, replace, and delete an on-demand backup",
   (stack) =>
     Effect.gen(function* () {
@@ -56,5 +58,5 @@ test.provider(
         yield* untilGone(getBackup(group.resourceGroupName, server.serverName, "snapshot-2")),
       ).toEqual("gone");
     }).pipe(logLevel),
-  { tags, timeout: 1_200_000 },
+  { tags, timeout: 2_100_000 },
 );

@@ -100,6 +100,11 @@ export const BuiltInRole = {
   StorageQueueDataReader: "19e7f393-937e-4f77-808e-94535e297925",
   StorageQueueDataContributor: "974c5e8b-45b9-4653-ba55-5f855dd0fb88",
   KeyVaultSecretsUser: "4633458b-17de-408a-b874-0445c86b69e6",
+  StorageQueueDataMessageSender: "c6a89b2d-59bc-44d0-9896-0f6e12d7b80a",
+  StorageQueueDataMessageProcessor: "8a0f0c08-91a1-4084-bc3d-661d67233fed",
+  ServiceBusDataSender: "69a216fc-b8fb-44d8-bc22-1f3c2cd27a39",
+  ServiceBusDataReceiver: "4f6d3b9b-027b-4f4c-9142-0e5a2a2247e0",
+  EventHubsDataSender: "2b629674-e913-4c01-ae53-ef4638d8f975",
 } as const;
 
 /**

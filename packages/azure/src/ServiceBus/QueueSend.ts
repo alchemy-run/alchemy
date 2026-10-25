@@ -1,7 +1,7 @@
+import type { SendMessageError } from "@distilled.cloud/azure/servicebus-messaging";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { AzureDataPlaneError, AzureManagedIdentityError } from "../Binding.ts";
 import type { Queue } from "./Queue.ts";
 
 export interface ServiceBusSendOptions {
@@ -26,16 +26,19 @@ export interface SendServiceBusQueueClient {
   send(
     body: string | object,
     options?: ServiceBusSendOptions,
-  ): Effect.Effect<void, AzureDataPlaneError | AzureManagedIdentityError, RuntimeContext>;
+  ): Effect.Effect<void, SendMessageError, RuntimeContext>;
 }
 
 /**
- * Send messages to an Azure Service Bus queue from a Container App or
- * Function App.
+ * Send messages to an Azure Service Bus queue from any host.
  *
- * Binding grants the host's system-assigned managed identity
- * **Azure Service Bus Data Sender** on the queue only. Provide
- * {@link QueueSendHttp}.
+ * Binding assigns **Azure Service Bus Data Sender** on the queue only. On a
+ * host with a managed identity (an Azure Function, Function App, Web App,
+ * Container App, container group, VM, or AKS workload identity) the role
+ * goes to that identity. On any other host (a Cloudflare Worker, an AWS
+ * Lambda) Alchemy creates an Entra service principal for the host, assigns
+ * the role to it, and binds its client secret into the host's env (see
+ * `AzureBindings`). Provide {@link QueueSendHttp}.
  *
  * ### Sending Messages
  * **Example:** Send a JSON message

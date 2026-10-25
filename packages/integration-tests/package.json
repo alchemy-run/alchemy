@@ -45,6 +45,7 @@
     "@distilled.cloud/gcp": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/iceberg": "workspace:*",
+    "@distilled.cloud/microsoft-graph": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@distilled.cloud/prisma": "workspace:*",

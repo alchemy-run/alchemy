@@ -72,6 +72,7 @@ import * as DurableTaskProviders from "./DurableTask/Providers.ts";
 import * as EdgeProviders from "./Edge/Providers.ts";
 import * as ElasticProviders from "./Elastic/Providers.ts";
 import * as ElasticSanProviders from "./ElasticSan/Providers.ts";
+import * as EntraProviders from "./Entra/Providers.ts";
 import * as Environment from "./Environment.ts";
 import * as EventGridProviders from "./EventGrid/Providers.ts";
 import * as EventHubProviders from "./EventHub/Providers.ts";
@@ -130,6 +131,7 @@ import * as PortalProviders from "./Portal/Providers.ts";
 import * as PostgreSQLProviders from "./PostgreSQL/Providers.ts";
 import * as PowerBIProviders from "./PowerBI/Providers.ts";
 import * as PrivateDnsProviders from "./PrivateDns/Providers.ts";
+import * as PurviewProviders from "./Purview/Providers.ts";
 import * as RecoveryServicesProviders from "./RecoveryServices/Providers.ts";
 import * as RedHatOpenShiftProviders from "./RedHatOpenShift/Providers.ts";
 import * as RedisProviders from "./Redis/Providers.ts";
@@ -239,6 +241,7 @@ const services: ReadonlyArray<ServiceProviders> = [
   EdgeProviders,
   ElasticProviders,
   ElasticSanProviders,
+  EntraProviders,
   EventGridProviders,
   EventHubProviders,
   ExtendedLocationProviders,
@@ -295,6 +298,7 @@ const services: ReadonlyArray<ServiceProviders> = [
   PostgreSQLProviders,
   PowerBIProviders,
   PrivateDnsProviders,
+  PurviewProviders,
   RecoveryServicesProviders,
   RedHatOpenShiftProviders,
   RedisProviders,
@@ -346,6 +350,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 const azureLive = Layer.mergeAll(
   Environment.environmentFromAuthProvider(),
   Credentials.fromAuthProvider(),
+  Credentials.graphFromAuthProvider(),
 ).pipe(
   Layer.provideMerge(AzureAuth),
   Layer.provideMerge(ProfileStoreLive),

@@ -65,8 +65,9 @@ export interface VirtualMachineScaleSetAssignment extends Resource<
  * package on every instance and reports per-instance compliance.
  *
  * As of API version `2024-04-05` the service answers scale set
- * assignments with an embedded `VMSSNotSupported` error (for both Flexible
- * and Uniform orchestration); the deploy then fails with
+ * assignments with an embedded error (`VMSSFlexNotSupported` for Flexible
+ * orchestration, `VMSSNotSupported` seen earlier for Uniform); the deploy
+ * then fails with
  * `ScaleSetAssignmentRejected`. Assign configurations to the individual
  * VMs with `VirtualMachineAssignment`, or through Azure Policy, instead.
  *

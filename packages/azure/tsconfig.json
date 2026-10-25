@@ -21,6 +21,9 @@
     },
     {
       "path": "../../submodules/distilled/packages/azure/tsconfig.json"
+    },
+    {
+      "path": "../../submodules/distilled/packages/microsoft-graph/tsconfig.json"
     }
   ]
 }

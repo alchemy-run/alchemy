@@ -17,12 +17,17 @@ export interface WriteBlobContainerClient {
 }
 
 /**
- * Write access to an Azure Storage blob container from a Container App or
- * Function App.
+ * Write access to an Azure Storage blob container from any host.
  *
- * Binding grants the host's system-assigned managed identity
- * **Storage Blob Data Contributor** on the container only (Azure has no
- * write-only blob role). Provide {@link BlobContainerWriteHttp}.
+ * Binding assigns **Storage Blob Data Contributor** on the container only
+ * (Azure has no write-only blob role).
+ * On a host with a managed identity (an Azure Function, Function App, Web
+ * App, Container App, container group, VM, or AKS workload identity) the
+ * role goes to that identity. On any other host (a Cloudflare Worker, an
+ * AWS Lambda) Alchemy creates an Entra service principal for the host,
+ * assigns the role to it, and binds its client secret into the host's env
+ * (see `AzureBindings`).
+ * Provide {@link BlobContainerWriteHttp}.
  *
  * ### Writing Blobs
  * **Example:** Upload JSON

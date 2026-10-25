@@ -51,7 +51,9 @@ test.provider.skipIf(!runWithConfluentUser)(
           });
         });
       expect(topic.partitionsCount).toEqual(3);
-      expect((yield* getTopic(topic.topicName)).properties?.topicId).toBeDefined();
+      expect(topic.topicId).toMatch(/\S/);
+      const observed = yield* getTopic(topic.topicName);
+      expect(observed.properties?.topicId).toEqual(topic.topicId);
 
       // In-place: config overrides.
       const updated = yield* stack.deploy(program({ "retention.ms": "172800000" }, 3));

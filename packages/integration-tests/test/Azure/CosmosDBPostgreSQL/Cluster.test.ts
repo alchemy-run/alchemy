@@ -38,9 +38,7 @@ const program = (props: { startHour: number; env: string }) =>
 // rejection; the lifecycle (single-node Burstable 1 vCore + 32 GiB ≈
 // $0.05/h, 10-20 min to create) only runs with AZURE_TEST_PAID=1 should
 // provisioning ever be re-enabled.
-// Skipped: failed in the last live run. AssertionError: expected "Forbidden" to equal
-// "CosmosPostgresProvisioningRetired"
-test.provider.skip(
+test.provider(
   "creating a cluster is rejected as retired",
   (stack) =>
     Effect.gen(function* () {

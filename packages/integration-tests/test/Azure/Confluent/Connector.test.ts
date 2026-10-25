@@ -123,7 +123,7 @@ test.provider.skipIf(!runWithConfluentUser)(
       });
       const observed = yield* getConnector;
       expect(observed.properties.connectorBasicInfo?.connectorClass).toEqual("AZUREBLOBSINK");
-      expect(connector.connectorState).toBeDefined();
+      expect(connector.connectorState).toEqual("RUNNING");
 
       // In-place: partner settings.
       const updated = yield* stack.deploy(program(secrets, "2000"));

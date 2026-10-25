@@ -59,7 +59,7 @@ test.provider.skipIf(!runWithConfluentUser)(
         program("events", "SINGLE_ZONE"),
       );
       expect(cluster.phase).toEqual("PROVISIONED");
-      expect(cluster.kafkaBootstrapEndpoint).toBeDefined();
+      expect(cluster.kafkaBootstrapEndpoint).toMatch(/\.confluent\.cloud:9092$/);
       const observed = yield* getCluster(
         group.resourceGroupName,
         organization.organizationName,

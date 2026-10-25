@@ -104,7 +104,8 @@ test.provider.skipIf(!runExpensive)(
         workspace.workspaceName,
         fabric.integrationFabricName,
       );
-      expect([...(reobserved.properties?.scenarios ?? [])].sort()).toEqual(["aks", "istio"]);
+      const scenarios = [...(reobserved.properties?.scenarios ?? [])].sort();
+      expect(scenarios).toEqual(["aks", "istio"]);
       expect(reobserved.tags?.env).toEqual("prod");
 
       yield* stack.destroy();

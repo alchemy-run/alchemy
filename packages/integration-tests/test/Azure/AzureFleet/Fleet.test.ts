@@ -22,9 +22,9 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
  * westus2, westus3, centralus and northeurope with `SkuNotAvailable`, but
  * accepts the 1-vCPU F-series v7 sizes in swedencentral.
  */
-const LOCATION = process.env.AZURE_TEST_VM_LOCATION ?? "swedencentral";
-const SIZE = process.env.AZURE_TEST_VM_SIZE ?? "Standard_F1als_v7";
-const SIZE_ALT = process.env.AZURE_TEST_VM_SIZE_ALT ?? "Standard_F1as_v7";
+const LOCATION = "swedencentral";
+const SIZE = "Standard_F1als_v7";
+const SIZE_ALT = "Standard_F1as_v7";
 
 /** Checked-in OpenSSH public key (private half discarded). */
 const PUBLIC_KEY =

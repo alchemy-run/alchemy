@@ -3,6 +3,7 @@ export * from "./Cluster.ts";
 export * from "./ConsumerGroup.ts";
 export * from "./DisasterRecoveryConfig.ts";
 export * from "./EventHub.ts";
+export * from "./EventHubEventSource.ts";
 export * from "./EventHubAuthorizationRule.ts";
 export * from "./Namespace.ts";
 export * from "./NamespaceAuthorizationRule.ts";

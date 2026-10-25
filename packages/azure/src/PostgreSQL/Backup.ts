@@ -216,13 +216,20 @@ export const BackupProvider = () =>
         serverName: output.server,
         backupName: output.backupName,
       };
+      // The service accepts a DELETE (202) issued while another backup
+      // operation runs on the server, then drops it: the backup stays.
+      // Re-issue the DELETE until the backup is gone (bounded, ~10 min).
       yield* ignoreNotFound(
         postgresql.DeleteBackupsAutomaticAndOnDemand(ref).pipe(Effect.retry(whileServerBusy)),
+      ).pipe(
+        Effect.andThen(
+          waitUntilGone(`PostgreSQL backup ${output.backupName}`, getBackup(ref), {
+            interval: "10 seconds",
+            times: 6,
+          }),
+        ),
+        Effect.retry({ while: (e) => e._tag === "Azure.DeleteTimedOut", times: 9 }),
       );
-      yield* waitUntilGone(`PostgreSQL backup ${output.backupName}`, getBackup(ref), {
-        interval: "10 seconds",
-        times: 60,
-      });
     }),
 
     nuke: { dependsOn: ["Azure.PostgreSQL.FlexibleServer"] },

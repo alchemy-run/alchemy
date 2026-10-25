@@ -61,24 +61,16 @@ export * as DnsResolver from "./DnsResolver/index.ts";
 export * as DomainRegistration from "./DomainRegistration/index.ts";
 export * as DomainServices from "./DomainServices/index.ts";
 export * as DurableTask from "./DurableTask/index.ts";
-export {
-  AzureDataPlaneError,
-  AzureDataRole,
-  AzureHost,
-  AzureManagedIdentityError,
-  isAzureHost,
-  managedIdentityToken,
-  registerAzureHostType,
-  type AzureBindingContract,
-  type AzureHostShape,
-  type AzureRoleAssignmentBinding,
-} from "./Binding.ts";
+export * as AzureBindings from "./AzureBindings.ts";
+export type { AzureBindingContract, AzureRoleAssignmentBinding } from "./Binding.ts";
 export * from "./Credentials.ts";
 export * from "./Environment.ts";
+export type { EnvValue, InferEnv } from "./InferEnv.ts";
 export * from "./StackResourceGroup.ts";
 export * as Edge from "./Edge/index.ts";
 export * as Elastic from "./Elastic/index.ts";
 export * as ElasticSan from "./ElasticSan/index.ts";
+export * as Entra from "./Entra/index.ts";
 export * as EventGrid from "./EventGrid/index.ts";
 export * as EventHub from "./EventHub/index.ts";
 export * as ExtendedLocation from "./ExtendedLocation/index.ts";
@@ -136,6 +128,7 @@ export * as Portal from "./Portal/index.ts";
 export * as PostgreSQL from "./PostgreSQL/index.ts";
 export * as PowerBI from "./PowerBI/index.ts";
 export * as PrivateDns from "./PrivateDns/index.ts";
+export * as Purview from "./Purview/index.ts";
 export * as RecoveryServices from "./RecoveryServices/index.ts";
 export * as RedHatOpenShift from "./RedHatOpenShift/index.ts";
 export * as Redis from "./Redis/index.ts";

@@ -1,7 +1,10 @@
+import type {
+  SendEventBatchError,
+  SendEventError,
+} from "@distilled.cloud/azure/eventhubs-messaging";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { AzureDataPlaneError, AzureManagedIdentityError } from "../Binding.ts";
 import type { EventHub } from "./EventHub.ts";
 
 export interface EventHubSendOptions {
@@ -15,20 +18,24 @@ export interface SendEventHubClient {
   send(
     event: string | object,
     options?: EventHubSendOptions,
-  ): Effect.Effect<void, AzureDataPlaneError | AzureManagedIdentityError, RuntimeContext>;
+  ): Effect.Effect<void, SendEventError, RuntimeContext>;
   /** Send a batch of events in one request. */
   sendBatch(
     events: ReadonlyArray<string | object>,
     options?: EventHubSendOptions,
-  ): Effect.Effect<void, AzureDataPlaneError | AzureManagedIdentityError, RuntimeContext>;
+  ): Effect.Effect<void, SendEventBatchError, RuntimeContext>;
 }
 
 /**
- * Send events to an Azure Event Hub from a Container App or Function App.
+ * Send events to an Azure Event Hub from any host.
  *
- * Binding grants the host's system-assigned managed identity
- * **Azure Event Hubs Data Sender** on the event hub only. Provide
- * {@link SendHttp}.
+ * Binding assigns **Azure Event Hubs Data Sender** on the event hub only.
+ * On a host with a managed identity (an Azure Function, Function App, Web
+ * App, Container App, container group, VM, or AKS workload identity) the
+ * role goes to that identity. On any other host (a Cloudflare Worker, an
+ * AWS Lambda) Alchemy creates an Entra service principal for the host,
+ * assigns the role to it, and binds its client secret into the host's env
+ * (see `AzureBindings`). Provide {@link SendHttp}.
  *
  * ### Sending Events
  * **Example:** Send telemetry
