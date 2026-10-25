@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -72,6 +73,91 @@ const recordOps = (
       }),
     ]),
   );
+
+/**
+ * A call to an external system broke its declared schema: the model sent
+ * arguments the operation's `args` reject, or the adapter answered with a
+ * value or error the operation's `success` or `error` reject. It is a defect,
+ * not a business error, because the declaration and the implementation
+ * disagree.
+ */
+export class ExternalSystemSchemaError extends Data.TaggedError("ExternalSystemSchemaError")<{
+  readonly system: string;
+  readonly op: string;
+  /** The side of the call the schema rejected. */
+  readonly part: "args" | "success" | "error";
+  readonly message: string;
+}> {}
+
+const describePart = {
+  args: "was called with arguments its schema rejects",
+  success: "returned a value its success schema rejects",
+  error: "failed with an error its error schema rejects",
+} as const;
+
+/**
+ * Check every call against the operation's schemas: the arguments before the
+ * implementation runs, and its success value or typed error after. A value a
+ * schema rejects becomes an {@link ExternalSystemSchemaError} defect. Defects
+ * pass through. An operation without `args` or `success` skips that side.
+ *
+ * @internal
+ */
+export const validateOps = (
+  system: string,
+  ops: Readonly<Record<string, OpSpec>>,
+  impl: Readonly<Record<string, OpImpl>>,
+): Record<string, OpImpl> =>
+  Object.fromEntries(
+    Object.entries(impl).map(([op, call]) => {
+      const spec = ops[op] ?? {};
+      const check = (part: keyof typeof describePart, schema: Schema.Top) => {
+        const decode = Schema.decodeUnknownEffect(Schema.toType(schema)) as (
+          value: unknown,
+        ) => Effect.Effect<unknown, Schema.SchemaError>;
+        return (value: unknown) =>
+          decode(value).pipe(
+            Effect.mapError(
+              (error) =>
+                new ExternalSystemSchemaError({
+                  system,
+                  op,
+                  part,
+                  message: `${system}.${op} ${describePart[part]}\n${error.message}`,
+                }),
+            ),
+            Effect.orDie,
+          );
+      };
+      const args = spec.args === undefined ? undefined : check("args", Schema.Struct(spec.args));
+      const success =
+        spec.success === undefined ? undefined : check("success", successSchema(spec));
+      const error = check("error", spec.error ?? Schema.Never);
+      return [
+        op,
+        (input: unknown) =>
+          (args ? args(input) : Effect.succeed(input)).pipe(
+            Effect.flatMap(call),
+            Effect.matchEffect({
+              onSuccess: (value) => (success ? success(value) : Effect.succeed(value)),
+              onFailure: (failure) => Effect.flatMap(error(failure), Effect.fail),
+            }),
+          ),
+      ];
+    }),
+  );
+
+/**
+ * Options for {@link ExternalSystemClass.toLayer}.
+ */
+export interface ToLayerOptions {
+  /**
+   * Check every call against the operation's schemas. Defaults to `true`.
+   * Turn it off only when the check costs too much, for example on a large
+   * payload an adapter already validates.
+   */
+  readonly validate?: boolean;
+}
 
 /**
  * One operation of an external system: its arguments, success value and business errors.
@@ -182,13 +268,15 @@ export const make = <const Name extends string, const Ops extends Record<string,
     /** Implement the external system with an Effect that builds its service. */
     static toLayer<E, R>(
       build: Effect.Effect<Shape<Ops>, E, R>,
+      options?: ToLayerOptions,
     ): Layer.Layer<ExternalSystemKey<Name>, E, R> {
       return Layer.effect(
         Tag,
-        Effect.map(
-          build,
-          (impl) => observeOps(name, recordOps(name, impl as Record<string, OpImpl>)) as never,
-        ),
+        Effect.map(build, (built) => {
+          const impl = built as Record<string, OpImpl>;
+          const checked = options?.validate === false ? impl : validateOps(name, ops, impl);
+          return observeOps(name, recordOps(name, checked)) as never;
+        }),
       );
     }
   };
@@ -214,8 +302,15 @@ export type ExternalSystemClass<
   readonly kind: "ExternalSystem";
   readonly systemName: Name;
   readonly ops: Ops;
-  /** Implement the external system with an Effect that builds its service. */
-  toLayer<E, R>(build: Effect.Effect<Shape<Ops>, E, R>): Layer.Layer<ExternalSystemKey<Name>, E, R>;
+  /**
+   * Implement the external system with an Effect that builds its service.
+   * Every call is checked against the operation's schemas unless
+   * `validate: false`.
+   */
+  toLayer<E, R>(
+    build: Effect.Effect<Shape<Ops>, E, R>,
+    options?: ToLayerOptions,
+  ): Layer.Layer<ExternalSystemKey<Name>, E, R>;
 } & {
   readonly [K in keyof Ops]: Op<ArgsOf<Ops[K]>, SuccessOf<Ops[K]>, ErrorOf<Ops[K]>>;
 };

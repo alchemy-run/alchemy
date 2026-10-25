@@ -658,25 +658,30 @@ const make =
           system as Context.Key<unknown, unknown>,
           ExternalSystem.observeOps(
             system.systemName,
-            Object.fromEntries(
-              Object.keys(system.ops).map((op) => [
-                op,
-                (args: unknown) =>
-                  platform.control.suspended(
-                    Effect.gen(function* () {
-                      const deferred = yield* Deferred.make<unknown, unknown>();
-                      calls.push({
-                        system: system.systemName,
-                        op,
-                        args,
-                        deferred,
-                        tag: undefined,
-                        expected: false,
-                      });
-                      return yield* Deferred.await(deferred);
-                    }),
-                  ),
-              ]),
+            // The story's answers are checked like an adapter's.
+            ExternalSystem.validateOps(
+              system.systemName,
+              system.ops,
+              Object.fromEntries(
+                Object.keys(system.ops).map((op) => [
+                  op,
+                  (args: unknown) =>
+                    platform.control.suspended(
+                      Effect.gen(function* () {
+                        const deferred = yield* Deferred.make<unknown, unknown>();
+                        calls.push({
+                          system: system.systemName,
+                          op,
+                          args,
+                          deferred,
+                          tag: undefined,
+                          expected: false,
+                        });
+                        return yield* Deferred.await(deferred);
+                      }),
+                    ),
+                ]),
+              ),
             ),
           ) as never,
         ),
