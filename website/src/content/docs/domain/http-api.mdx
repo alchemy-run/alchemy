@@ -3,12 +3,12 @@ title: Plain HTTP and OpenAPI
 description: Publish chosen calls of an Api as a plain HTTP JSON API, with an OpenAPI document, from the same Api.
 ---
 
-An Api's typed client speaks Effect RPC. A partner, a script or a public API client often wants plain HTTP and JSON instead, with an OpenAPI document to generate its client from. `toHttpApi` from `@alchemy.run/domain/http` gives you both from the Api you already have: an Effect `HttpApi` group with one endpoint per call you publish, the Layer that serves it, and the OpenAPI document of it.
+An Api's typed client speaks Effect RPC. A partner, a script or a public API client often wants plain HTTP and JSON instead, with an OpenAPI document to generate its client from. `toHttpApi` from `@alchemy.run/domain/Http` gives you both from the Api you already have: an Effect `HttpApi` group with one endpoint per call you publish, the Layer that serves it, and the OpenAPI document of it.
 
 ## Publish chosen calls
 
 ```typescript title="packages/server/src/BankHttp.ts"
-import * as DomainHttp from "@alchemy.run/domain/http";
+import * as DomainHttp from "@alchemy.run/domain/Http";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 
 export const BankHttp = DomainHttp.toHttpApi(CustomerApi, {

@@ -290,7 +290,7 @@ Clients call commands as methods (`bank.WithdrawMoney({ target, amount }, { head
 
 `Domain.Api.describe(CustomerApi)` lists every call the Api serves as plain JSON: entry, kind, operation (`send`, `get`, `peek`, `watch`, `events`, `list`), RPC tag, `mode` (`read` or `write`), whether it streams, and JSON Schemas for its input, success and typed errors. Build tool lists, CLI help or OpenAPI from it instead of a second hand-written list, and snapshot it in a test to catch a change to the public surface.
 
-`toHttpApi(CustomerApi, { include })` from `@alchemy.run/domain/http` publishes the calls you list as a plain HTTP JSON API with an OpenAPI document. See [hosting.md](hosting.md#plain-http-and-openapi).
+`toHttpApi(CustomerApi, { include })` from `@alchemy.run/domain/Http` publishes the calls you list as a plain HTTP JSON API with an OpenAPI document. See [hosting.md](hosting.md#plain-http-and-openapi).
 
 ## Model
 

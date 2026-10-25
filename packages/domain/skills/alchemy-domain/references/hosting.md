@@ -55,10 +55,10 @@ Clients that `watch` or read `events` open a WebSocket per read, with `Domain.pr
 
 ## Plain HTTP and OpenAPI
 
-For clients that are not Effect (a partner, a script, a public API), `toHttpApi` from `@alchemy.run/domain/http` publishes chosen request/response calls as an Effect `HttpApi` group, with its handlers Layer and an OpenAPI document from the same Api.
+For clients that are not Effect (a partner, a script, a public API), `toHttpApi` from `@alchemy.run/domain/Http` publishes chosen request/response calls as an Effect `HttpApi` group, with its handlers Layer and an OpenAPI document from the same Api.
 
 ```ts
-import * as DomainHttp from "@alchemy.run/domain/http";
+import * as DomainHttp from "@alchemy.run/domain/Http";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as Etag from "effect/http/Etag";
 import * as HttpPlatform from "effect/http/HttpPlatform";

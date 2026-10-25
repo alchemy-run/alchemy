@@ -225,7 +225,7 @@ const endpointOf = (
  *
  * **Example:** Serve two calls, with their OpenAPI document
  * ```typescript
- * import * as DomainHttp from "@alchemy.run/domain/http";
+ * import * as DomainHttp from "@alchemy.run/domain/Http";
  * import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
  * import * as OpenApi from "effect/http-api/OpenApi";
  *

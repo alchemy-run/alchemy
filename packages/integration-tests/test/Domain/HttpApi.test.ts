@@ -1,5 +1,5 @@
 import * as Domain from "@alchemy.run/domain";
-import * as DomainHttp from "@alchemy.run/domain/http";
+import * as DomainHttp from "@alchemy.run/domain/Http";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
