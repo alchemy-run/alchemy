@@ -13,7 +13,6 @@ import { localAccountId } from "../LocalAccount.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
-import { abortMultipartUploads } from "./internal/MultipartUploads.ts";
 
 export const isBucket = (value: any): value is Bucket =>
   isResourceOfType(value, "Cloudflare.R2.Bucket");
@@ -266,9 +265,10 @@ export type BucketProps = {
    * to `true` for buckets whose contents are disposable (caches, previews,
    * test fixtures).
    *
-   * Incomplete multipart uploads also hold a bucket. If R2 still refuses
-   * the delete after the objects are gone, alchemy mints a temporary API
-   * token scoped to the bucket and aborts the uploads through R2's S3 API.
+   * Incomplete multipart uploads also hold a bucket, and alchemy cannot
+   * abort them: destroying a bucket that has them fails with
+   * `BucketNotEmpty`. Abort them, or add an `abortMultipartUploadsTransition`
+   * lifecycle rule, before destroying.
    *
    * `alchemy unsafe nuke` empties buckets regardless, since it is an
    * explicitly operator-confirmed account teardown.
@@ -1517,7 +1517,7 @@ export const ProviderLive = () =>
           // alarm finishing a job while the stack tears down) can land an
           // object between the sweep and the delete: re-empty and retry,
           // bounded.
-          const deleteEmptied = deleteBucket.pipe(
+          yield* deleteBucket.pipe(
             Effect.catchTag("BucketNotEmpty", (error) =>
               Effect.sleep("2 seconds").pipe(
                 Effect.andThen(emptyBucket(output.bucketName, output.jurisdiction)),
@@ -1528,41 +1528,20 @@ export const ProviderLive = () =>
               while: (error) => error._tag === "BucketNotEmpty",
               times: 5,
             }),
-          );
-          yield* deleteBucket.pipe(
-            // Incomplete multipart uploads also hold a bucket, and the
-            // object listing does not show them. Abort them once (this
-            // mints a temporary token, so only after R2 refuses), then
-            // fall back to the re-empty loop.
-            Effect.catchTag("BucketNotEmpty", () =>
-              abortMultipartUploads(output.accountId, output.bucketName, output.jurisdiction).pipe(
-                Effect.tap((aborted) =>
-                  aborted > 0
-                    ? Effect.logInfo(
-                        `Aborted ${aborted} incomplete multipart upload(s) in R2 bucket ${output.bucketName}`,
-                      )
-                    : Effect.void,
-                ),
-                Effect.catch((error) =>
-                  Effect.logWarning(
-                    `Could not abort incomplete multipart uploads in R2 bucket ${output.bucketName}`,
-                    error,
-                  ),
-                ),
-                Effect.andThen(emptyBucket(output.bucketName, output.jurisdiction)),
-                Effect.andThen(deleteEmptied),
-              ),
-            ),
+            // Every object is gone and R2 still refuses: incomplete
+            // multipart uploads hold the bucket. The object listing doesn't
+            // show them and the REST API can't abort them, so say so.
             Effect.catchTag("BucketNotEmpty", (error) =>
               Effect.fail(
                 new BucketNotEmpty({
                   bucketName: output.bucketName,
                   message:
-                    `${error.message} forceDestroy deleted its objects and tried to abort its ` +
-                    `incomplete multipart uploads, but R2 still refuses the delete. Incomplete ` +
-                    `multipart uploads are the likely cause: add a lifecycle rule ` +
-                    `{ abortMultipartUploadsTransition: { condition: { type: "Age", maxAge: 86400 } } } ` +
-                    `and retry once R2 has applied it, or wait for R2's default 7-day abort.`,
+                    `${error.message} forceDestroy deleted every object, so incomplete multipart ` +
+                    `uploads are likely holding it. Abort them (S3 API AbortMultipartUpload, or ` +
+                    `the R2 binding's resumeMultipartUpload(key, uploadId).abort()), or add a ` +
+                    `lifecycle rule { abortMultipartUploadsTransition: { condition: { type: "Age", ` +
+                    `maxAge: 86400 } } } and retry once R2 has applied it. R2 aborts them on its ` +
+                    `own after 7 days.`,
                 }),
               ),
             ),

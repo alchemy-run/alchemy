@@ -20,6 +20,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
+import type * as HttpClientError from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Redacted from "effect/Redacted";
@@ -194,43 +195,54 @@ test.provider(
 );
 
 // An incomplete multipart upload holds a bucket but is invisible to the
-// object listing, so emptying the objects alone can't get R2 to delete it.
+// object listing, and only the S3 API or a Worker binding can abort it, so
+// forceDestroy can't clear it. Destroy must fail and say why.
 // See https://github.com/alchemy-run/alchemy/issues/2478.
 test.provider(
-  "destroying a bucket with forceDestroy aborts its incomplete multipart uploads",
+  "forceDestroy names incomplete multipart uploads when they hold the bucket",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 
-      const { bucket, worker } = yield* stack.deploy(
-        Effect.gen(function* () {
-          const bucket = yield* MultipartBucket;
-          const worker = yield* MultipartWorker;
-          return { bucket, worker };
-        }),
-      );
+      const declaration = Effect.gen(function* () {
+        const bucket = yield* MultipartBucket;
+        const worker = yield* MultipartWorker;
+        return { bucket, worker };
+      });
+      const { bucket, worker } = yield* stack.deploy(declaration);
 
+      const key = "big/entry.bin";
       const client = yield* HttpClient.HttpClient;
-      yield* client
-        .post(`${worker.url}/start-upload?key=${encodeURIComponent("big/entry.bin")}`)
-        .pipe(
+      const post = (url: string) =>
+        client.post(url).pipe(
           Effect.flatMap((res) =>
             res.status === 200
-              ? Effect.void
-              : Effect.fail(new WorkerNotReady({ status: res.status })),
+              ? res.json
+              : Effect.fail<WorkerNotReady | HttpClientError.HttpClientError>(
+                  new WorkerNotReady({ status: res.status }),
+                ),
           ),
           Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
         );
+      const { uploadId } = (yield* post(
+        `${worker.url}/start-upload?key=${encodeURIComponent(key)}`,
+      )) as { uploadId: string };
 
       // The upload lists no objects, yet R2 refuses to delete the bucket.
       expect(yield* listKeysWhenReady(accountId, bucket.bucketName, 0)).toEqual([]);
-      const refused = yield* r2
-        .deleteBucket({ accountId, bucketName: bucket.bucketName })
-        .pipe(Effect.flip);
-      expect(refused._tag).toEqual("BucketNotEmpty");
 
+      const destroyed = yield* Effect.result(stack.destroy());
+      expect(Result.isFailure(destroyed)).toBe(true);
+      expect(String(destroyed)).toContain("BucketNotEmpty");
+      expect(String(destroyed)).toContain("incomplete multipart uploads");
+
+      // Following the advice — abort the upload — lets the destroy finish.
+      const redeployed = yield* stack.deploy(declaration);
+      yield* post(
+        `${redeployed.worker.url}/abort-upload?key=${encodeURIComponent(key)}&uploadId=${encodeURIComponent(uploadId)}`,
+      );
       yield* stack.destroy();
 
       yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
