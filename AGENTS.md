@@ -51,7 +51,7 @@ A Resource Provider implements the following Lifecycle Operations:
 
 First-class sibling repositories we maintain live in `submodules/`:
 
-- `submodules/distilled` — generated Effect SDKs (workspace packages). Initialized by `git submodule update --init`.
+- `submodules/distilled` — generated Effect SDKs (workspace packages). Initialized by `git submodule update --init`. In a linked Alchemy worktree, the `post-checkout` hook (`scripts/bootstrap-distilled.mjs`) adds it as a worktree of the primary checkout's distilled and clones unchanged files from there, so on APFS, btrfs or XFS it shares their disk blocks (about 1.1 GB saved per worktree). `ALCHEMY_DISTILLED_CLONE=0` writes a full copy instead.
 - `submodules/floci` — our fork of the local AWS emulator. Skipped by default; fetch with `git submodule update --init --checkout -- submodules/floci`.
 
 Each Service's Resources follow the same pattern. Resource contract and provider are co-located in the same file. Each Capability lives in its own file(s) named after the capability and access level (`Binding.Service` contract + the `*Binding` / `*Http` implementations).
