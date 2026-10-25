@@ -4,18 +4,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-
-export const owner = "alchemy-run-test";
-export const repository = "alchemy-pr-2519-notifications";
-
-// Public and retained across runs: the gh token lacks delete_repo.
-export const Repo = GitHub.Repository("Repo", {
-  owner,
-  name: repository,
-  visibility: "public",
-  description: "Retained deterministic fixture for alchemy PR #2519 (Cloudflare notifications)",
-  autoInit: true,
-});
+import { Repo } from "./repo.ts";
 
 // Declares no mechanisms: the Worker's event source adds its webhook.
 export const IssuePolicy = Cloudflare.Alerting.NotificationPolicy("IssuePolicy", {

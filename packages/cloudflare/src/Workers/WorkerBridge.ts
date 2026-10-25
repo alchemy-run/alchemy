@@ -22,6 +22,7 @@ import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironmentService.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import { isScopeEjected } from "./HttpServer.ts";
+import { WorkerLogger } from "./internal/WorkerLogger.ts";
 import {
   ErrorTag,
   type RpcErrorEnvelope,
@@ -237,7 +238,7 @@ const getSharedBuild = (entrypoint: any, stack: { name: string; stage: string })
     NodeServices.layer,
     FetchHttpClient.layer,
     // TODO(sam): wire this up to telemetry more directly
-    Logger.layer([Logger.consolePretty()]),
+    Logger.layer([WorkerLogger]),
   );
 
   // Private scope for the isolate-lifetime layer build. Never closed —

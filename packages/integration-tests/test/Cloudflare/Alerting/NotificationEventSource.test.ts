@@ -12,12 +12,10 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import NotificationWorker, {
-  IssuePolicy,
-  owner,
-  Repo,
-  repository,
-} from "./fixtures/notification-worker.ts";
+import * as Stream from "effect/Stream";
+import CheckoutWorker, { ISSUE_TITLE } from "./fixtures/checkout-worker.ts";
+import NotificationWorker, { IssuePolicy } from "./fixtures/notification-worker.ts";
+import { owner, Repo, repository } from "./fixtures/repo.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
@@ -45,17 +43,35 @@ const Stack = Effect.gen(function* () {
   };
 });
 
-// Open issues the Worker opened about itself since `since`. The Worker's name
-// is stable across runs, so the creation time singles out this run's issues.
-const issuesFor = (workerName: string, since: string) =>
+// Open issues created since `since` that match. Worker names are stable across
+// runs, so the creation time singles out this run's issues.
+const issuesSince = (since: string, match: (title: string) => boolean) =>
   Effect.gen(function* () {
     const octokit = yield* Octokit;
     const { data } = yield* Effect.tryPromise(() =>
       octokit.rest.issues.listForRepo({ owner, repo: repository, state: "open", since }),
     );
     return data.filter(
+      (issue) => !issue.pull_request && issue.created_at >= since && match(issue.title),
+    );
+  });
+
+// The fixture repository is retained across runs: close this run's issues.
+const closeIssues = (issues: ReadonlyArray<{ number: number }>) =>
+  Effect.gen(function* () {
+    const octokit = yield* Octokit;
+    yield* Effect.forEach(
+      issues,
       (issue) =>
-        !issue.pull_request && issue.created_at >= since && issue.title.includes(workerName),
+        Effect.tryPromise(() =>
+          octokit.rest.issues.update({
+            owner,
+            repo: repository,
+            issue_number: issue.number,
+            state: "closed",
+          }),
+        ),
+      { discard: true },
     );
   });
 
@@ -99,7 +115,7 @@ test.provider(
       const client = yield* HttpClient.HttpClient;
       yield* Effect.forEach([1, 2, 3], () => client.get(`${base}/boom`), { discard: true });
 
-      const issues = yield* issuesFor(workerName, since).pipe(
+      const issues = yield* issuesSince(since, (title) => title.includes(workerName)).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("5 seconds"),
           until: (issues) => issues.length > 0,
@@ -111,21 +127,7 @@ test.provider(
       expect(issues[0]!.title).toMatch(/^Real-Time Issue '.*' detected in /);
       expect(issues[0]!.body).toContain(`/workers/services/view/${workerName}/production/issues/`);
 
-      // The fixture repository is retained across runs: close this run's issues.
-      const octokit = yield* Octokit;
-      yield* Effect.forEach(
-        issues,
-        (issue) =>
-          Effect.tryPromise(() =>
-            octokit.rest.issues.update({
-              owner,
-              repo: repository,
-              issue_number: issue.number,
-              state: "closed",
-            }),
-          ),
-        { discard: true },
-      );
+      yield* closeIssues(issues);
 
       yield* stack.destroy();
       yield* alerting.getDestinationWebhook({ accountId, webhookId: webhookIds[0]! }).pipe(
@@ -137,9 +139,86 @@ test.provider(
           times: 10,
         }),
       );
+
+      // The webhook is gone, so no more deliveries: close any issue that
+      // arrived after the first poll.
+      yield* closeIssues(yield* issuesSince(since, (title) => title.includes(workerName)));
     }).pipe(logLevel),
   {
     timeout: 180_000,
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:alerting",
+      "provider:cloudflare:worker",
+      "provider:github",
+      "live",
+    ],
+  },
+);
+
+// Slow: Cloudflare delivers the alert about six minutes after the errors are
+// logged, and resolves it a minute or two later.
+test.provider.skipIf(!!process.env.FAST)(
+  "consumeNotifications opens a GitHub issue when a custom alert fires",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+
+      const since = new Date().toISOString();
+      const { url } = yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* Repo;
+          const worker = yield* CheckoutWorker;
+          return { url: worker.url.as<string>() };
+        }),
+      );
+      const base = url.replace(/\/+$/, "");
+      yield* getWhenReady(base);
+
+      // Five declined payments: the alert's query counts the error logs, and
+      // three or more within five minutes fire it.
+      const client = yield* HttpClient.HttpClient;
+      yield* Effect.forEach([1, 2, 3, 4, 5], () => client.get(`${base}/charge`), {
+        discard: true,
+      });
+
+      const issues = yield* issuesSince(since, (title) => title === ISSUE_TITLE).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("15 seconds"),
+          until: (issues) => issues.length > 0,
+          times: 40,
+        }),
+      );
+      expect(issues.length).toBeGreaterThan(0);
+      // The body is Cloudflare's report of the alert firing.
+      expect(issues[0]!.body).toContain("Trigger: Threshold");
+      expect(issues[0]!.body).toContain("Alert Started:");
+      yield* closeIssues(issues);
+
+      // Destroying the alert while it fires leaves its incident open, and
+      // Cloudflare then never starts a new one for the same query: wait for
+      // the resolution (the alert's second history entry) first.
+      const policyId = issues[0]!.body!.match(/notifications\/edit\/([0-9a-f]+)/)?.[1];
+      expect(policyId).toBeDefined();
+      const history = yield* alerting.listHistories.items({ accountId, since }).pipe(
+        // History has the id as a dashed UUID; the dashboard link drops the dashes.
+        Stream.filter((entry) => entry.policyId?.replaceAll("-", "") === policyId),
+        Stream.runCollect,
+        Effect.map((entries) => Array.from(entries).length),
+        Effect.repeat({
+          schedule: Schedule.spaced("15 seconds"),
+          until: (entries) => entries >= 2,
+          times: 20,
+        }),
+      );
+      expect(history).toBeGreaterThanOrEqual(2);
+
+      yield* stack.destroy();
+      yield* closeIssues(yield* issuesSince(since, (title) => title === ISSUE_TITLE));
+    }).pipe(logLevel),
+  {
+    timeout: 1_200_000,
     tags: [
       "provider:cloudflare",
       "provider:cloudflare:alerting",
