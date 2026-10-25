@@ -1,4 +1,4 @@
-import { isMember, memberPath, unwrap } from "../ast.ts";
+import { isMember, memberPath, unwrap, walk } from "../ast.ts";
 import { type DomainFile, domainFile, kindOfPath } from "../file.ts";
 import type { Node, Rule } from "../types.ts";
 
@@ -6,10 +6,13 @@ import type { Node, Rule } from "../types.ts";
  * SKILL.md: "Don't wait for a saga in a policy. `start` it, keyed by the
  * aggregate it's about, and react to the events its steps record."
  *
- * In a policy file: reading a saga run's `result` (it waits for the run to end)
- * and `DurableDeferred.await` (only a saga may wait) are reported. A saga client
- * is a variable bound with `yield* SomeSaga`; a run is `yield* client.start(...)`
- * or `client.get(...)`.
+ * In a policy's handler: reading a saga run's `result` (it waits for the run
+ * to end) and `DurableDeferred.await` (only a saga may wait) are reported. A
+ * saga client is a variable bound with `yield* SomeSaga`; a run is
+ * `yield* client.start(...)` or `client.get(...)`. The handler is the whole of
+ * a `.policy.ts` file, and elsewhere (a server file, or a test that declares a
+ * model inline) the arguments of `<Policy>.toLayer(...)`, so a saga or a test
+ * in the same file may wait.
  */
 export const policyNoSagaWait: Rule = {
   meta: {
@@ -24,7 +27,10 @@ export const policyNoSagaWait: Rule = {
   },
   create(context) {
     let file: DomainFile | undefined;
-    let active = false;
+    let wholeFile = false;
+    let handlers: Array<readonly [number, number]> = [];
+    const inPolicy = (node: Node) =>
+      wholeFile || handlers.some(([start, end]) => node.start >= start && node.end <= end);
     const clients = new Map<string, string>();
     const runs = new Map<string, string>();
 
@@ -42,13 +48,25 @@ export const policyNoSagaWait: Rule = {
 
     return {
       Program(program) {
-        file = domainFile(context, program);
-        active =
-          kindOfPath(context.filename) === "Policy" ||
-          file.blocks.some((block) => block.kind === "Policy");
+        const current = domainFile(context, program);
+        file = current;
+        wholeFile = kindOfPath(context.filename) === "Policy";
+        handlers = [];
+        if (wholeFile || !context.sourceCode.text.includes("toLayer")) return;
+        walk(program, (node) => {
+          if (node.type !== "CallExpression") return;
+          const path = memberPath(node.callee);
+          if (
+            path?.length === 2 &&
+            path[1] === "toLayer" &&
+            current.kindOf(path[0]!) === "Policy"
+          ) {
+            handlers.push([node.start, node.end]);
+          }
+        });
       },
       VariableDeclarator(node) {
-        if (!active || file === undefined || node.id.type !== "Identifier") return;
+        if (file === undefined || node.id.type !== "Identifier" || !inPolicy(node)) return;
         const init = unwrap(node.init);
         if (init?.type === "YieldExpression" && init.delegate) {
           const target = unwrap(init.argument);
@@ -61,7 +79,7 @@ export const policyNoSagaWait: Rule = {
         if (saga !== undefined) runs.set(node.id.name, saga);
       },
       MemberExpression(node) {
-        if (!active) return;
+        if (!inPolicy(node)) return;
         if (isMember(node, "DurableDeferred", "await")) {
           context.report({ node, messageId: "await" });
           return;
