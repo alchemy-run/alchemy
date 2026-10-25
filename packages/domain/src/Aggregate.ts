@@ -503,7 +503,7 @@ export const make = <
   const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 >(
   name: Name,
-  definition: Definition<Id, S, C, Ms, Rejects>,
+  definition: Definition<Id, S, C, Ms, Rejects> & TargetsMatch<Id, C>,
 ): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>> => {
   const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects>>>()(
     `alchemy/Domain/Aggregate/${name}`,
@@ -524,6 +524,28 @@ export const make = <
     }
   } as unknown as AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>>;
 };
+
+/** The tags of the commands whose `target` is not the aggregate's `id`. */
+type MismatchedTargets<Id extends IdSchema, C extends Command.Any> = C extends Command.Any
+  ? [Id["Type"]] extends [C["target"]["Type"]]
+    ? [C["target"]["Type"]] extends [Id["Type"]]
+      ? never
+      : C["tag"]
+    : C["tag"]
+  : never;
+
+/**
+ * Every command's `target` must be the aggregate's `id`: an Api decodes the
+ * target with the command's schema and the aggregate decodes it with its own.
+ * A mismatch asks for a property that names the commands.
+ */
+export type TargetsMatch<Id extends IdSchema, C extends ReadonlyArray<Command.Any>> = [
+  MismatchedTargets<Id, C[number]>,
+] extends [never]
+  ? unknown
+  : {
+      readonly "~targetNotThisAggregatesId": MismatchedTargets<Id, C[number]>;
+    };
 
 /** A definition with its events collected from its commands. */
 export type Resolved<

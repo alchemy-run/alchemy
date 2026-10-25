@@ -34,7 +34,7 @@ export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
 
 /** Take money out of an account, within the balance and the daily limit. */
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-  target: AccountId,                       // the aggregate id it targets
+  target: AccountId,                       // the id schema of its aggregate, exactly
   middleware: [Session, MfaChallenge],     // authenticate; provide context to decide
   input: { amount: Cents },
   events: [MoneyWithdrawn],                // every event it may record
