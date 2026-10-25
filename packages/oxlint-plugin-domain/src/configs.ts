@@ -1,10 +1,14 @@
 /**
  * Rule sets for `oxlint.config.ts`. Rule ids use the plugin name `alchemy-domain`.
  *
- * - `domainRules`: every rule, for the domain package's source (enable it with
- *   `overrides[].files`, e.g. `packages/domain/src/**`).
- * - `serverRules`: the rules that also hold where the model is hosted (the
- *   server package, tests): provide one Layer once, redact secrets.
+ * - `domainRules`: the rules that read the model exactly, for the domain
+ *   package's source (enable it with `overrides[].files`, e.g.
+ *   `packages/domain/src/**`).
+ * - `serverRules`: the rule that also holds where the model is hosted (the
+ *   server package, tests): provide one Layer once.
+ * - `strictRules`: rules that guess from names and text, so they can be wrong
+ *   (`deterministic-command-ids`, `redacted-secrets`, `story-coverage`). They
+ *   warn; add them to either set when the reports are worth the noise.
  */
 type Severity = "error" | "warn";
 
@@ -20,19 +24,21 @@ export const domainRules: Record<string, Severity> = prefix({
   "rejects-listed": "error",
   "no-throw": "error",
   "no-cross-aggregate-import": "error",
-  "deterministic-command-ids": "error",
   "policy-no-saga-wait": "error",
+  "no-chained-provide": "error",
   "block-file-name": "warn",
   "one-block-per-file": "warn",
   "aggregate-id-file": "warn",
   "relative-import-extension": "warn",
   "no-barrel-file": "warn",
-  "story-coverage": "warn",
-  "redacted-secrets": "error",
-  "no-chained-provide": "error",
 });
 
 export const serverRules: Record<string, Severity> = prefix({
-  "redacted-secrets": "error",
   "no-chained-provide": "error",
+});
+
+export const strictRules: Record<string, Severity> = prefix({
+  "deterministic-command-ids": "warn",
+  "redacted-secrets": "warn",
+  "story-coverage": "warn",
 });
