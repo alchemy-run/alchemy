@@ -5,13 +5,13 @@ description: How an Api publishes a model to one kind of client, how it's served
 
 import DAG from "../../../components/DAG.astro";
 
-An Api is the interface a model publishes. It lists what one kind of client may reach: the commands it may send, and the views, streams and aggregates it may read. Everything else in the model stays private.
+An Api is the interface a model publishes. It lists what one kind of client may reach: the commands it may send, the views, streams and aggregates it may read, and the queries it may ask. Everything else in the model stays private.
 
 An Api has no handlers of its own. Aggregates already decide commands and views already answer reads, so an Api only chooses which of them to expose. This page covers what it can expose, declaring one, serving it, and calling it.
 
 ## What an Api can expose
 
-An Api can expose four kinds of entry. Commands are what a client sends to change something. Views, streams and aggregates are what a client reads.
+An Api can expose five kinds of entry. Commands are what a client sends to change something. Views, streams and aggregates are what a client reads, one key at a time. Queries read across keys, from a store a projection wrote.
 
 Exposing an entry doesn't bypass its security. Each entry declares its own middleware and checks, and they run on every call that comes through the Api.
 
@@ -23,6 +23,7 @@ Exposing an entry doesn't bypass its security. Each entry declares its own middl
     { id: "view", label: "AccountSummary", type: "view · get, watch", kind: "view", col: 2, row: 1 },
     { id: "stream", label: "AccountCard", type: "stream · peek, watch", kind: "stream", col: 2, row: 2 },
     { id: "aggregate", label: "Account", type: "aggregate · get, events", kind: "aggregate", col: 2, row: 3 },
+    { id: "query", label: "AccountLedger", type: "query · ask", kind: "query", col: 2, row: 4 },
   ]}
   edges={[
     { from: "client", to: "api" },
@@ -30,11 +31,12 @@ Exposing an entry doesn't bypass its security. Each entry declares its own middl
     { from: "api", to: "view" },
     { from: "api", to: "stream" },
     { from: "api", to: "aggregate" },
+    { from: "api", to: "query" },
   ]}
-  caption="One Api, four kinds of entry. Each is guarded by its own middleware and rules."
+  caption="One Api, five kinds of entry. Each is guarded by its own middleware and rules."
 />
 
-Policies, projections and external systems are never on an Api. They run inside the model, and a client reaches what they produce through the entries above: a projection's [stream](/domain/stream), a view a policy feeds, or a store you serve yourself.
+Policies, projections and external systems are never on an Api. They run inside the model, and a client reaches what they produce through the entries above: a projection's [stream](/domain/stream), a view a policy feeds, or a [query](/domain/query) over a projection's store.
 
 ### Commands
 
@@ -83,6 +85,15 @@ const history = bank.Account.events(accountId, { after: 0 });
 ```
 
 Reading an aggregate directly is handy for an account's own screen. For anything shaped for a question, like a statement or a dashboard, prefer a view: it keeps the aggregate's state free to change with its rules.
+
+### Queries
+
+A query becomes a method that takes its input, and options to page (`take`, `after`) and to read your own write (`atLeast`). Its middleware runs first, then its `validate`, then its handler reads the store; for a paged query, `visible` judges every row. See [Query](/domain/query).
+
+```typescript title="packages/server/test/CustomerApi.test.ts"
+const first = yield* sam.AccountLedger({ account: accountId }, { atLeast: receipt, take: 1 });
+const rest = yield* sam.AccountLedger({ account: accountId }, { after: first.cursor! });
+```
 
 ## List what a client may reach
 
@@ -171,7 +182,7 @@ See [Cloudflare Durable Objects](/domain/cloudflare) for how the model is hosted
 
 ## Call it with a typed client
 
-`Api.client` builds a client typed from the Api's entries. Each command is a method that takes the target and the input together. Each view or aggregate is a namespace with its reads.
+`Api.client` builds a client typed from the Api's entries. Each command is a method that takes the target and the input together, and each query a method that takes its input. Each view or aggregate is a namespace with its reads.
 
 ```typescript
 // packages/domain/test/depositAndWatch.ts

@@ -229,6 +229,10 @@ export class SupportApi extends Domain.Api(
 
 A client's `where` filter narrows a read it's already allowed to make, and never grants one. `validate` doesn't look at filters, so a filter can't widen what someone sees.
 
+## Rows across keys
+
+A view's rule judges one key. A [query](/domain/query) reads many keys from a store a projection wrote, so it judges twice: `validate` decides, per request, whether the caller may ask at all, and `visible` decides, per row, whether the caller may see that row. Rows `visible` refuses are dropped, never rejected.
+
 :::note
 Authenticate the person asking with [Sessions and middleware](/domain/sessions).
 :::

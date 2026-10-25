@@ -1578,6 +1578,7 @@ export default defineConfig({
                 { label: "View", link: "/domain/view" },
                 { label: "Projection", link: "/domain/projection" },
                 { label: "Stream", link: "/domain/stream" },
+                { label: "Query", link: "/domain/query" },
                 { label: "Policy", link: "/domain/policy" },
                 { label: "Saga", link: "/domain/saga" },
                 { label: "External System", link: "/domain/external-system" },

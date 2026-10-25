@@ -68,7 +68,13 @@ Run stories with Vitest and `@effect/vitest`: each story is an Effect, so `it.ef
 
 The test above uses most of the checks. `then` checks the next events recorded on an instance; with no events, it checks that nothing new was recorded. `replied` checks the last command's reply, and `rejected` checks that it was refused with exactly this rejection. `state` checks an instance's current state directly.
 
-Views and streams are checked as a client would read them. `view` checks a view key's state, or part of it, and `emitted` checks every event a view key has emitted. `streamed` checks the next entries a projection appended to a stream key.
+Views and streams are checked as a client would read them. `view` checks a view key's state, or part of it, and `emitted` checks every event a view key has emitted. `streamed` checks the next entries a projection appended to a stream key. `query` asks a [query](/domain/query) and checks its rows, each a partial match; asked with no expectation, it must be rejected, and `rejected` checks how.
+
+```typescript title="packages/domain/test/Bank.story.test.ts"
+as(alex),
+query(AccountLedger, { account: a1.id }),
+rejected(new NotOwner()),
+```
 
 Commands run as whoever `provide` says, as their middleware would. Here `asSam` provides `CurrentActor`, so the account's ownership check passes.
 

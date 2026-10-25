@@ -273,6 +273,38 @@ export class AccountCard extends Domain.Stream("AccountCard", {
 
 A projection with `writes: [AccountCard]` appends entries with `yield* cards.append(input, new CardChanged({...}))`. Clients `peek`, `watch`, `list` and read `events`.
 
+## Query
+
+A question across keys, answered from a store a projection writes. Never serve such a store with a hand-written route.
+
+```ts
+// Ledger/AccountLedger.query.ts
+export class AccountLedger extends Domain.Query("AccountLedger", {
+  input: { account: AccountId },   // filters, sort orders and scopes are input fields
+  row: LedgerRow,                  // a Schema; paged result { entries, cursor }. Or `success:` for one result
+  from: [Ledger],                  // projections it reads: `atLeast` waits on them
+  middleware: [Session],
+  rejects: [NotOwner],
+  take: { default: 50, max: 200 },
+  // per request, before the store is read; may read middleware context and the model's views
+  validate: Effect.fn(function* ({ account }) {
+    const summary = yield* (yield* AccountSummary).query(Account.ref(account)).pipe(Effect.orDie);
+    yield* mustOwn(Option.getOrNull(summary)?.customerId ?? null);
+  }),
+  // optional, per row: rows it refuses are dropped, never rejected. Keep it cheap.
+  // visible: Effect.fn(function* (row) { return row.siteId === (yield* CurrentActor).siteId; }),
+}) {}
+
+export const AccountLedgerLive = AccountLedger.toLayer(
+  Effect.gen(function* () {
+    const store = yield* LedgerStore;                                  // resolved once
+    return ({ account }, page) => store.forAccount(account, page);    // page: { after, take }
+  }),
+);
+```
+
+List it in the model's `queries` and its Live Layer in the handlers. The port returns `{ entries, cursor }`, with `cursor: null` on the last page; page by keyset on the store's sort key (`"<at>:<id>"`), never by offset. Scope the store query by the caller in the handler, so pages are full; `visible` is the guarantee. Clients call it as a method: `bank.AccountLedger({ account }, { atLeast: receipt, take, after })`.
+
 ## Api
 
 ```ts
@@ -283,10 +315,11 @@ export class CustomerApi extends Domain.Api(
   Account,                                          // aggregates with `read`
   AccountSummary, Statement,                        // views
   AccountCard,                                      // streams
+  AccountLedger,                                    // queries: client methods
 ) {}
 ```
 
-Clients call commands as methods (`bank.WithdrawMoney({ target, amount }, { headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A stream has `peek`, `watch`, `events` and `list`. Each Api entry authorizes itself.
+Clients call commands and queries as methods (`bank.WithdrawMoney({ target, amount }, { headers })`, `bank.AccountLedger({ account }, { take })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A stream has `peek`, `watch`, `events` and `list`. Each Api entry authorizes itself.
 
 ## Model
 
@@ -299,12 +332,13 @@ export class Bank extends Domain.Model("Bank", {
   projections: [Ledger, AccountCards],
   streams: [AccountCard],
   sagas: [ExecuteTransfer],
+  queries: [AccountLedger],
 }) {}
 
-/** Every policy, saga and projection implementation, as one Layer. */
+/** Every policy, saga, projection and query implementation, as one Layer. */
 export const BankHandlers = Layer.mergeAll(
   UsernameReservationLive, MainAccountProvisioningLive, TransferExecutionLive,
-  ExecuteTransferLive, LedgerLive, AccountCardsLive,
+  ExecuteTransferLive, LedgerLive, AccountCardsLive, AccountLedgerLive,
 );
 ```
 

@@ -33,7 +33,7 @@ Every model has the same shape. Commands enter on the left and are decided by ag
   caption="Solid edges happen within one command. Dashed edges are delivered after it commits."
 />
 
-A model declares which aggregates, views, policies, projections and streams it contains. The commands and events come with them, since each aggregate declares the commands it handles and the events it records. The bank's model contains two aggregates, two views and one policy:
+A model declares which aggregates, views, policies, projections, streams and queries it contains. The commands and events come with them, since each aggregate declares the commands it handles and the events it records. The bank's model contains two aggregates, two views and one policy:
 
 ```typescript title="src/Bank.model.ts"
 export class Bank extends Domain.Model("Bank", {
@@ -146,6 +146,8 @@ A [view](/domain/view) folds events into state that the model stores and serves:
 A [projection](/domain/projection) writes events into a store you own, such as a database or a search index, or into a [stream](/domain/stream) the model serves. It never sends commands, so it can always be replayed.
 
 A [policy](/domain/policy) is a business rule. It acts on each new event once, through commands and external systems, and never replays.
+
+A [query](/domain/query) is not a consumer: it serves what a projection wrote to clients, across keys, with the same middleware, rejections and `validate` as the model's other reads.
 
 ## Declare the model
 
