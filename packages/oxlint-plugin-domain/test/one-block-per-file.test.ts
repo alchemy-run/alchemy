@@ -6,6 +6,13 @@ const head = `import * as Domain from "@alchemy.run/domain";\n`;
 tester.run("one-block-per-file", oneBlockPerFile, {
   valid: [
     {
+      // A test may declare a model inline.
+      filename: bank("test/Transfer.test.ts"),
+      code: `import * as Domain from "@alchemy.run/domain";
+class Transfer extends Domain.Aggregate("Transfer", {}) {}
+class Move extends Domain.Saga("Move", {}) {}`,
+    },
+    {
       filename: bank("src/Account/WithdrawMoney.command.ts"),
       code: `${head}export class DailyLimitExceeded extends Domain.Rejection("DailyLimitExceeded") {}
 export class Other extends Domain.Rejection("Other") {}

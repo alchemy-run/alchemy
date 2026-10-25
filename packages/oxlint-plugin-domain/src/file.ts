@@ -54,6 +54,12 @@ export const rejectsNames = (property: Node | undefined): ReadonlyArray<string> 
   return ids.length === value.elements.length ? ids.map((id) => id.name) : undefined;
 };
 
+/**
+ * A test file (`*.test.ts`, `*.spec.ts`). Tests declare models inline, so the
+ * file layout rules skip them.
+ */
+export const isTestFile = (file: string): boolean => /\.(?:test|spec)\.[cm]?tsx?$/.test(file);
+
 /** `./Account/Account.aggregate.ts` → `Aggregate`. */
 export const kindOfPath = (file: string): Kind | undefined => {
   const match = /\.([a-z]+)(?:\.[cm]?[jt]sx?)?$/.exec(file);

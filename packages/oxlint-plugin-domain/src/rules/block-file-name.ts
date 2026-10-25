@@ -1,10 +1,8 @@
 import * as path from "node:path";
 import { PRIMARY_SUFFIX } from "../ast.ts";
-import { domainFile, kindOfPath } from "../file.ts";
+import { domainFile, isTestFile, kindOfPath } from "../file.ts";
 import { fileNoun, isMessageKind, naming, namingSchema } from "../naming.ts";
 import type { Rule } from "../types.ts";
-
-const TEST_FILE = /\.(?:test|spec)\.[cm]?tsx?$/;
 
 /** `Account.aggregate.ts` → `{ noun: "Account", suffix: "aggregate" }`. */
 const parse = (file: string) => {
@@ -49,7 +47,7 @@ export const blockFileName: Rule = {
     const { fileCase, messagesFile } = naming(context);
     return {
       Program(program) {
-        if (TEST_FILE.test(context.filename)) return;
+        if (isTestFile(context.filename)) return;
         const file = domainFile(context, program);
         const actual = path.basename(context.filename);
         const extension = /\.([cm]?tsx?)$/.exec(actual)?.[1] ?? "ts";

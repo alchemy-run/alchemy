@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import { PRIMARY_SUFFIX } from "../ast.ts";
-import { domainFile, kindOfPath } from "../file.ts";
+import { domainFile, isTestFile, kindOfPath } from "../file.ts";
 import { fileNoun, naming, namingSchema } from "../naming.ts";
 import type { Rule } from "../types.ts";
 
@@ -12,7 +12,7 @@ import type { Rule } from "../types.ts";
  * A file declares at most one aggregate, command, view, policy, saga,
  * projection, stream, external system, Api, model, request context or
  * middleware. Events and rejections may join it. A `.rejection.ts` file holds
- * one rejection.
+ * one rejection. Test files are skipped: a test may declare a model inline.
  *
  * Options (shared with `block-file-name`): `fileCase` names the suggested
  * file; a `messagesFile` (`<noun>.messages.ts`) may hold several commands
@@ -32,6 +32,7 @@ export const oneBlockPerFile: Rule = {
     const { fileCase, messagesFile } = naming(context);
     return {
       Program(program) {
+        if (isTestFile(context.filename)) return;
         if (
           messagesFile !== undefined &&
           path

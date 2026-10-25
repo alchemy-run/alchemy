@@ -15,6 +15,23 @@ export class Account extends Domain.Aggregate("Account", { id: AccountId }) {}`,
       filename: bank("src/Customer/Customer.aggregate.ts"),
       code: `${head}export class Customer extends Domain.Aggregate("Customer", { id: Schema.String }) {}`,
     },
+    {
+      // Keyed by a value that already exists: no id file of its own.
+      filename: bank("src/Customer/UsernameClaim.aggregate.ts"),
+      code: `${head}import { Username } from "./Username.ts";
+export class UsernameClaim extends Domain.Aggregate("UsernameClaim", { id: Username }) {}`,
+    },
+    {
+      // Keyed by another aggregate's id.
+      filename: bank("src/Account/AccountLimits.aggregate.ts"),
+      code: `${head}import { AccountId } from "./Account.id.ts";
+export class AccountLimits extends Domain.Aggregate("AccountLimits", { id: AccountId }) {}`,
+    },
+    {
+      // A test may declare a model inline.
+      filename: bank("test/Transfer.test.ts"),
+      code: `${head}class Transfer extends Domain.Aggregate("Transfer", { id: Schema.String }) {}`,
+    },
   ],
   invalid: [
     {
