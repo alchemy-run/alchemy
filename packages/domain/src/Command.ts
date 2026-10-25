@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
+import type * as Aggregate from "./Aggregate.ts";
 import type * as Event from "./Event.ts";
 import type { Data, Fields } from "./Event.ts";
 import * as Middleware from "./Middleware.ts";
@@ -28,6 +29,7 @@ export interface Any extends Schema.Top {
   readonly rejects: ReadonlyArray<Rejection.Any>;
   readonly reply: Schema.Top | undefined;
   readonly middleware: Middleware.List;
+  readonly access?: Effect.Effect<void, unknown, unknown> | undefined;
   readonly rpc: Rpc.Any;
   new (...args: any[]): { readonly _tag: string };
 }
@@ -93,6 +95,10 @@ export interface CommandClass<
   readonly reply: Reply;
   /** The middleware that guards the command when an Api exposes it, in order. */
   readonly middleware: Ms;
+  /** Whether a caller may send the command at all, checked before its input reaches `decide`. */
+  readonly access:
+    | Effect.Effect<void, Aggregate.Inst<Rejects[number]>, Middleware.Provides<Ms>>
+    | undefined;
   /** The command as an Effect RPC, for exposing it in an Api. */
   readonly rpc: R;
   /** Span attributes the command adds for its input, if it declares any. */
@@ -103,6 +109,7 @@ interface Options {
   readonly target: TargetSchema;
   readonly input?: Fields;
   readonly middleware?: Middleware.List;
+  readonly access?: Effect.Effect<void, unknown, unknown>;
   readonly events?: ReadonlyArray<Event.Any>;
   readonly rejects?: ReadonlyArray<Rejection.Any>;
   readonly reply?: Fields;
@@ -123,6 +130,7 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
     static readonly rejects = options.rejects ?? [];
     static readonly reply = options.reply ? Schema.Struct(options.reply) : undefined;
     static readonly middleware = options.middleware ?? [];
+    static readonly access = options.access;
     static readonly rpc = rpc;
     static readonly attributes = options.attributes;
   };
@@ -181,6 +189,34 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
  * }) {}
  * ```
  *
+ * ### Checking access before the input
+ * `access` decides whether the caller may send the command at all, from what
+ * `middleware` provides and without the input. It runs before the command
+ * reaches its aggregate, and an Api's `visible` runs it to list the command only
+ * for callers who may send it. A rule that reads the input or the state
+ * stays in `decide`.
+ *
+ * **Example:** Only support agents may close an account
+ * ```typescript
+ * import * as Domain from "@alchemy.run/domain";
+ * import * as Effect from "effect/Effect";
+ * import { AccountClosed, AccountId } from "./Account.ts";
+ * import { CurrentActor } from "./CurrentActor.ts";
+ * import { Session } from "./Session.ts";
+ *
+ * export class AgentsOnly extends Domain.Rejection("AgentsOnly") {}
+ *
+ * export class CloseAccount extends Domain.Command("CloseAccount", {
+ *   target: AccountId,
+ *   middleware: [Session],
+ *   events: [AccountClosed],
+ *   rejects: [AgentsOnly],
+ *   access: Effect.gen(function* () {
+ *     if ((yield* CurrentActor)._tag !== "Agent") return yield* new AgentsOnly();
+ *   }),
+ * }) {}
+ * ```
+ *
  * ### Sending it once
  * Pass a `commandId`, and a resend with the same id returns the first
  * receipt instead of applying the command again.
@@ -212,6 +248,18 @@ export const make = <
      * What it provides is what `decide` may read.
      */
     readonly middleware?: Ms;
+    /**
+     * May this caller send the command at all? Runs with what `middleware`
+     * provides, before the command reaches its aggregate, and needs no input.
+     * Fail with one of `rejects` to deny. An Api runs it on every call, and
+     * `visible` runs it to list what a caller may use without calling it.
+     * A rule that reads the input or the state belongs in `decide`.
+     */
+    readonly access?: Effect.Effect<
+      void,
+      NoInfer<Aggregate.Inst<Rejects[number]>>,
+      NoInfer<Middleware.Provides<Ms>>
+    >;
     /** The events the command may record. */
     readonly events?: Events;
     /** The rejections the command's handler may return. */

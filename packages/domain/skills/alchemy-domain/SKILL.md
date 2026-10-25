@@ -33,7 +33,7 @@ Read the requirements as a story of facts, and name each kind of thing you find:
 - A process with steps, waits and undo (move money: debit, credit, refund on failure): a **Saga**, started by a policy.
 - Something outside the model you call (fraud scoring, payments): an **External System**.
 - Writes to a store outside the model (a ledger table): a **Projection**. An ordered, readable log per key (account cards): a **Stream** that a projection appends to.
-- Who can do and see what: an **Api** listing commands and reads, with **middleware** (sessions, MFA) and each block's `decide` or `validate` authorizing.
+- Who can do and see what: an **Api** listing commands and reads, with **middleware** (sessions, MFA), each block's `access` for rules about the caller alone (which also decides what an Api's `visible` lists), and `decide` or `validate` for rules about the input or the state.
 
 A rule that spans aggregates never becomes a cross-aggregate transaction. Give the invariant its own aggregate, keyed by what it protects (`UsernameClaim` keyed by username). Or reserve first and commit after, in a policy or saga, with a deadline for anything that waits.
 

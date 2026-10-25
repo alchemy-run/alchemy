@@ -402,6 +402,20 @@ export interface ViewKey<Name extends string> {
  * }),
  * ```
  *
+ * ### Checking access before any key
+ * `access` decides whether the caller may read the view at all, from what
+ * `middleware` provides and without a key. It runs before every read, and
+ * an Api's `visible` runs it to list the view only for callers who may read it.
+ *
+ * **Example:** Only support agents may read it
+ * ```typescript
+ * middleware: [Session],
+ * rejects: [AgentsOnly],
+ * access: Effect.gen(function* () {
+ *   if ((yield* CurrentActor)._tag !== "Agent") return yield* new AgentsOnly();
+ * }),
+ * ```
+ *
  * @primitive
  */
 export const make = <

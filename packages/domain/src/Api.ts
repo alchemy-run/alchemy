@@ -6,7 +6,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
 import * as Exit from "effect/Exit";
-import type * as Headers from "effect/http/Headers";
+import * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -239,6 +239,18 @@ export interface ApiClass<
       ? M
       : "Middleware that provides services is declared on each command, view or aggregate",
   ): ApiClass<Name, Entries>;
+  /**
+   * The entries this caller may use, in the order the Api lists them, for a
+   * surface that lists operations (MCP `tools/list`, CLI help, a menu)
+   * without calling any. Each entry's middleware runs against `headers`, as
+   * on a call; then its `access` runs with what that middleware provided. An
+   * entry is left out when its middleware or its `access` fails. A defect
+   * still fails the list. Middleware applied with {@link middleware} does not
+   * run, and neither does `validate`: it needs a key.
+   */
+  visible(options?: {
+    readonly headers?: Headers.Input;
+  }): Effect.Effect<ReadonlyArray<Entries[number]>, never, MiddlewareServices<Entries>>;
   /** A typed client. Provide a protocol: {@link protocolWebSocket} or {@link protocolHttp}. */
   readonly client: Effect.Effect<
     ApiClient<Entries[number]>,
@@ -292,6 +304,86 @@ type MiddlewareClients<Entries extends ReadonlyArray<Entry>> =
 
 const rpcsOf = (entry: Entry): ReadonlyArray<Rpc.Any> =>
   entry.kind === "Command" ? [entry.rpc] : Object.values(readRpcs(entry));
+
+/** The entry's `access` check, if it declares one. */
+const accessOf = (entry: Entry): Effect.Effect<void, unknown> | undefined =>
+  (entry.kind === "Command" ? entry.access : contractOf(entry).access) as
+    | Effect.Effect<void, unknown>
+    | undefined;
+
+/** Run `effect` after the entry's `access` check, if it declares one. */
+const guardedBy = <A, E, R>(
+  access: Effect.Effect<void, unknown> | undefined,
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, unknown, R> => (access ? Effect.andThen(access, effect) : effect);
+
+/** Run an RPC's own middleware around `effect`, as the RPC server does. */
+const runMiddleware = <A>(
+  rpc: Rpc.AnyWithProps,
+  middleware: Context.Context<never>,
+  effect: Effect.Effect<A, unknown>,
+  options: {
+    readonly requestId: string | number;
+    readonly headers: Headers.Headers;
+    readonly payload: unknown;
+  },
+): Effect.Effect<A, unknown, Scope.Scope> => {
+  let wrapped = effect;
+  for (const service of rpc.middlewares) {
+    const run = Context.getUnsafe(middleware, service) as unknown as (
+      effect: Effect.Effect<A, unknown>,
+      options: unknown,
+    ) => Effect.Effect<A, unknown>;
+    wrapped = run(wrapped, {
+      rpc,
+      client: new Rpc.ServerClient(0),
+      requestId: RpcMessage.RequestId(options.requestId),
+      headers: options.headers,
+      payload: options.payload,
+    });
+  }
+  return wrapped;
+};
+
+/**
+ * The entries a caller may use. Entries with the same middleware share one
+ * pass through it, so a session is resolved once per stack, not per entry.
+ */
+const visibleOf = (
+  entries: ReadonlyArray<Entry>,
+  headers: Headers.Headers,
+): Effect.Effect<ReadonlyArray<Entry>> =>
+  Effect.gen(function* () {
+    const middleware = yield* captureContext();
+    const stacks = new Map<string, { rpc: Rpc.AnyWithProps; entries: Array<Entry> }>();
+    for (const entry of entries) {
+      const rpc = (entry.kind === "Command" ? entry.rpc : readRpcs(entry).get) as Rpc.AnyWithProps;
+      const key = [...rpc.middlewares].map((service) => service.key).join("\n");
+      const stack = stacks.get(key) ?? { rpc, entries: [] };
+      stack.entries.push(entry);
+      stacks.set(key, stack);
+    }
+    const allowed = new Set<Entry>();
+    let requestId = 0;
+    for (const stack of stacks.values()) {
+      const judged = Effect.forEach(stack.entries, (entry) =>
+        guardedBy(accessOf(entry), Effect.void).pipe(
+          Effect.as(Option.some(entry)),
+          Effect.catch(() => Effect.succeed(Option.none<Entry>())),
+        ),
+      );
+      const passed = yield* runMiddleware(stack.rpc, middleware, judged, {
+        requestId: requestId++,
+        headers,
+        payload: undefined,
+      }).pipe(
+        Effect.scoped,
+        Effect.catch(() => Effect.succeed([] as ReadonlyArray<Option.Option<Entry>>)),
+      );
+      for (const entry of passed) if (Option.isSome(entry)) allowed.add(entry.value);
+    }
+    return entries.filter((entry) => allowed.has(entry));
+  });
 
 // ---------------------------------------------------------------- handlers
 
@@ -352,14 +444,18 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
         const declared = declaredOnly(entry.rpc);
         // Runs inside the command's middleware, so the context it provides
         // (the session's actor) travels with the command to its aggregate.
+        const access = accessOf(entry);
         handlers[entry.tag] = ({ target, commandId, ...input }: CommandPayload) =>
           declared.effect(
-            aggregate.send(target, new entry(input), { commandId }).pipe(
-              Effect.map((receipt) => ({
-                reply: receipt.reply,
-                stream: receipt.stream,
-                version: receipt.version,
-              })),
+            guardedBy(
+              access,
+              aggregate.send(target, new entry(input), { commandId }).pipe(
+                Effect.map((receipt) => ({
+                  reply: receipt.reply,
+                  stream: receipt.stream,
+                  version: receipt.version,
+                })),
+              ),
             ),
           );
         continue;
@@ -371,14 +467,30 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
         | undefined;
       const check = (mode: Read.Mode, key: unknown) => (state: unknown) =>
         validate ? validate({ mode, key }, state) : Effect.void;
+      // `access` runs first, before the read reaches any key.
+      const access = accessOf(entry);
       const effect =
         (rpc: Rpc.Any, handle: (payload: ReadPayload) => Effect.Effect<unknown, unknown>) =>
         (payload: ReadPayload) =>
-          declaredOnly(rpc).effect(handle(payload));
+          declaredOnly(rpc).effect(
+            guardedBy(
+              access,
+              Effect.suspend(() => handle(payload)),
+            ),
+          );
       const stream =
         (rpc: Rpc.Any, handle: (payload: ReadPayload) => Stream.Stream<unknown, unknown>) =>
         (payload: ReadPayload) =>
-          declaredOnly(rpc).stream(handle(payload));
+          declaredOnly(rpc).stream(
+            access
+              ? Stream.unwrap(
+                  Effect.as(
+                    access,
+                    Stream.suspend(() => handle(payload)),
+                  ),
+                )
+              : handle(payload),
+          );
 
       if (entry.kind === "Stream") {
         const host = internals.streamHosts.get(name)!;
@@ -560,6 +672,7 @@ const liveReads = (
       readonly rpc: Rpc.AnyWithProps;
       readonly mode: "watch" | "events";
       readonly store?: AggregateStore | ViewStore | StreamStore;
+      readonly access?: Effect.Effect<void, unknown>;
     }
   >();
   for (const entry of entries) {
@@ -572,8 +685,19 @@ const liveReads = (
           ? internals.streams.get(name)
           : internals.aggregates.get(name);
     const rpcs = readRpcs(entry);
-    reads.set(`${name}.watch`, { rpc: rpcs.watch as Rpc.AnyWithProps, mode: "watch", store });
-    reads.set(`${name}.events`, { rpc: rpcs.events as Rpc.AnyWithProps, mode: "events", store });
+    const access = accessOf(entry);
+    reads.set(`${name}.watch`, {
+      rpc: rpcs.watch as Rpc.AnyWithProps,
+      mode: "watch",
+      store,
+      access,
+    });
+    reads.set(`${name}.events`, {
+      rpc: rpcs.events as Rpc.AnyWithProps,
+      mode: "events",
+      store,
+      access,
+    });
   }
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest;
@@ -593,21 +717,14 @@ const liveReads = (
       return HttpServerResponse.text("Invalid live read", { status: 400 });
     const { key, where, after } = payload.value as ReadPayload;
     yield* Effect.annotateCurrentSpan({ "domain.read": live.tag, "domain.key": String(key) });
-    // Run the read's middleware, as the RPC server would, around capturing what it provides.
-    let authorized: Effect.Effect<RequestContext.Json, unknown> = RequestContext.capture;
-    for (const service of read.rpc.middlewares) {
-      const run = Context.getUnsafe(middleware, service) as unknown as (
-        effect: Effect.Effect<RequestContext.Json, unknown>,
-        options: unknown,
-      ) => Effect.Effect<RequestContext.Json, unknown>;
-      authorized = run(authorized, {
-        rpc: read.rpc,
-        client: new Rpc.ServerClient(0),
-        requestId: RpcMessage.RequestId(live.id),
-        headers: request.headers,
-        payload: payload.value,
-      });
-    }
+    // Run the read's middleware, as the RPC server would, then its `access`,
+    // around capturing what the middleware provides.
+    const authorized = runMiddleware(
+      read.rpc,
+      middleware,
+      guardedBy(read.access, RequestContext.capture),
+      { requestId: live.id, headers: request.headers, payload: payload.value },
+    );
     const subscription: Subscription = {
       requestId: live.id,
       mode: read.mode,
@@ -718,6 +835,8 @@ const build = (
       group,
       middleware: (middleware: RpcMiddleware.AnyService) =>
         build(name, entries, group.middleware(middleware) as unknown as RpcGroup.RpcGroup<Rpc.Any>),
+      visible: (options?: { readonly headers?: Headers.Input }) =>
+        visibleOf(entries, Headers.fromInput(options?.headers ?? {})),
       client,
       Client,
       layerClient: Layer.effect(Client, client),
@@ -794,6 +913,18 @@ const build = (
  * yield* bank.AccountSummary.watch(accountId).pipe(
  *   Stream.runForEach((s) => Effect.log(s?.balance)),
  * );
+ * ```
+ *
+ * ### Listing what a caller may use
+ * `visible` runs each entry's middleware against the request's headers, then
+ * its `access`, and returns the entries this caller may use. A surface that
+ * lists operations (an MCP `tools/list`, CLI help, a menu) shows only these,
+ * without calling any. The server runs the same checks on every call.
+ *
+ * **Example:** The entries the current request may use
+ * ```typescript
+ * const request = yield* HttpServerRequest;
+ * const entries = yield* CustomerApi.visible({ headers: request.headers });
  * ```
  *
  * @primitive

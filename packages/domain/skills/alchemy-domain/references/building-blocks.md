@@ -102,6 +102,22 @@ export const SessionLive = Layer.succeed(Session, (effect, { headers }) =>
 
 A `RequestContext` has a schema, so its value travels with the command to the aggregate's Durable Object. A `decide` that reads `CurrentActor` won't type-check for a command without the middleware that provides it.
 
+A rule that needs only the caller (agents only, admins only) goes in `access` on a command, a view, a stream or an aggregate's `read`. It runs with what the middleware provides, before the input or a key, and fails with one of `rejects`. Rules that read the input stay in `decide`; rules that read a key's state stay in `validate`.
+
+```ts
+export const agentsOnly = Effect.gen(function* () {
+  if ((yield* CurrentActor)._tag !== "Agent") return yield* new Forbidden({ reason: "agents only" });
+});
+
+export class FreezeAccount extends Domain.Command("FreezeAccount", {
+  target: AccountId,
+  middleware: [Session],
+  events: [AccountFrozen],
+  rejects: [Forbidden],
+  access: agentsOnly,                      // checked on every call, and by `visible`
+}) {}
+```
+
 ## View
 
 ```ts
@@ -287,6 +303,8 @@ export class CustomerApi extends Domain.Api(
 ```
 
 Clients call commands as methods (`bank.WithdrawMoney({ target, amount }, { headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A stream has `peek`, `watch`, `events` and `list`. Each Api entry authorizes itself.
+
+`yield* CustomerApi.visible({ headers })` returns the entries this caller may use: each entry's middleware runs against the headers, then its `access`. Use it for a tool list, CLI help or a menu; the server runs the same checks on every call.
 
 ## Model
 

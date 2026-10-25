@@ -136,6 +136,8 @@ export class SupportApi extends Domain.Api(
 
 Being on an Api doesn't mean anyone may use an entry for anything. Each entry still guards itself. A command's middleware establishes who's calling and its `decide` checks whether they may; a view's middleware and `validate` decide what they may see. So `AccountSummary` can sit on both Apis, and a customer still reads only their own accounts.
 
+An entry's `access` decides whether a caller may use it at all, and `SupportApi.visible({ headers })` lists the entries the current caller may use. See [Sessions and middleware](/domain/sessions#list-what-a-caller-may-use).
+
 ## Serve it
 
 An Api is served from a Worker. The Api class is an Effect: `yield* BankApi` gives you its `fetch`, and the Worker returns it as its own. This is the tutorial's bank:

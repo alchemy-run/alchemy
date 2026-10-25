@@ -114,6 +114,49 @@ export class SetNickname extends Domain.Command("SetNickname", {
 
 `decide` then checks the actor against the account. See [Aggregate](/domain/aggregate#decide).
 
+## Check who may call it at all
+
+Some rules need only the caller: support tools are for agents, whatever the account. Put such a rule in `access`. It runs with what the middleware provides, before the input reaches `decide`, and fails with one of the entry's `rejects`.
+
+```typescript
+// packages/domain/src/Account/FreezeAccount.command.ts
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import { CurrentActor } from "../CurrentActor.context.ts";
+import { Forbidden } from "../Forbidden.rejection.ts";
+import { Session } from "../Session.middleware.ts";
+import { AccountId } from "./Account.id.ts";
+
+export class AccountFrozen extends Domain.Event("AccountFrozen") {}
+
+export const agentsOnly = Effect.gen(function* () {
+  const actor = yield* CurrentActor;
+  if (actor._tag !== "Agent") return yield* new Forbidden({ reason: "for support agents" });
+});
+
+export class FreezeAccount extends Domain.Command("FreezeAccount", {
+  target: AccountId,
+  middleware: [Session],
+  events: [AccountFrozen],
+  rejects: [Forbidden],
+  access: agentsOnly,
+}) {}
+```
+
+A view, a stream and an aggregate's `read` take `access` too. It runs before the read reaches any key, so it suits a rule like "agents only". A rule that needs the key or the state stays in `validate`, and one that needs the input stays in `decide`. Without `access`, every caller the middleware lets through may call the entry, as before.
+
+## List what a caller may use
+
+A tool list, CLI help or a menu should show only what this caller may use. `visible` answers that without calling anything. It runs each entry's middleware against the request's headers, then its `access`, and returns the entries that pass.
+
+```typescript
+// packages/server/src/tools.ts
+const request = yield* HttpServerRequest;
+const entries = yield* SupportApi.visible({ headers: request.headers });
+```
+
+Entries with the same middleware share one pass through it, so a session is resolved once for the list. An entry whose middleware refuses the caller is left out; it does not fail the list. The Api runs the same checks again on every call, so a hidden entry stays closed to a caller who calls it anyway.
+
 ## Sign browsers in with a cookie
 
 `sessionRoute` sets the session cookie. `HttpOnly` keeps it from scripts, and `SameSite=Strict` keeps it off requests from other sites, WebSocket upgrades included. The Worker sends `/api/session` to it.

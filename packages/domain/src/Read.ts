@@ -37,6 +37,18 @@ export interface Contract<
   /** The rejections a read may fail with; they reach the client typed. */
   readonly rejects?: Rejects;
   /**
+   * May this caller read at all? Runs with what `middleware` provides, before
+   * the read reaches any key, and needs no input. Fail with one of `rejects`
+   * to deny. An Api runs it on every read, and `visible` runs it to list what
+   * a caller may use without calling it. `validate` still judges each key.
+   * Without it, every caller the middleware lets through may read.
+   */
+  readonly access?: Effect.Effect<
+    void,
+    NoInfer<Aggregate.Inst<Rejects[number]>>,
+    NoInfer<Middleware.Provides<Ms>>
+  >;
+  /**
    * Judge a read from who is asking (what `middleware` provides), the key and
    * that key's state. Runs on every `get` and `list`, and on every change
    * while a client watches: failing ends the watch with that rejection.
@@ -52,5 +64,6 @@ export interface Contract<
 export interface AnyContract {
   readonly middleware?: Middleware.List;
   readonly rejects?: ReadonlyArray<Rejection.Any>;
+  readonly access?: Effect.Effect<void, unknown, unknown>;
   readonly validate?: (request: never, state: never) => Effect.Effect<void, unknown, unknown>;
 }
