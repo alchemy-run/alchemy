@@ -179,6 +179,28 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * });
  * ```
  *
+ * ### Proxying to a Local Backend in Dev
+ * Under `alchemy dev`, Vite's `server.proxy` runs in front of the Worker.
+ * Paths it matches go to its target, WebSockets included with
+ * `ws: true`, and every other path goes to the Worker. HTTP paths in
+ * `assets.runWorkerFirst` reach the Worker before the proxy, as they do
+ * with `@cloudflare/vite-plugin`. `server.proxy` only applies in dev; the
+ * deployed Worker serves every path.
+ *
+ * **Example:** vite.config.ts
+ * ```typescript
+ * import { defineConfig } from "vite";
+ *
+ * export default defineConfig({
+ *   server: {
+ *     proxy: {
+ *       "/api": "http://localhost:3000",
+ *       "/socket": { target: "http://localhost:3000", ws: true },
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * ### Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether
  * a rebuild is needed. Use `memo` to narrow the scope when your
