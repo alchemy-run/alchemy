@@ -153,7 +153,7 @@ export type IssueAutomation = Resource<
  *   alertType: "workers_observability_real_time_issue",
  * });
  *
- * class Api extends Cloudflare.Worker<Api>()(
+ * export default class Api extends Cloudflare.Worker<Api>()(
  *   "Api",
  *   { main: import.meta.url, observability: { enabled: true, issues: { enabled: true } } },
  *   Effect.gen(function* () {
