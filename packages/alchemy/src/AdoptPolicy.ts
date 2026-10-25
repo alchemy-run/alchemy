@@ -67,6 +67,16 @@ export class UnverifiableReplacement extends Data.TaggedError("UnverifiableRepla
   logicalId?: string;
 }> {}
 
+/** A provider cannot identify the resource before an operation that writes. */
+export class UnverifiableResource extends Data.TaggedError("UnverifiableResource")<{
+  /** Why the physical identity cannot be checked. */
+  message: string;
+  /** The resource type whose identity is unresolved. */
+  resourceType?: string;
+  /** The logical ID whose identity is unresolved. */
+  logicalId?: string;
+}> {}
+
 /**
  * Private symbol used to brand attribute objects returned by `read` as
  * "exists in cloud, but not owned by this stack/stage/logical-id".

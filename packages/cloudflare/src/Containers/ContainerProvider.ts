@@ -3,7 +3,7 @@ import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { repositoryFromImageRef } from "@alchemy.run/docker/Registry";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, UnverifiableResource } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { getStableContextDir } from "alchemy/Bundle/TempRoot";
 import { deepEqual, isResolved } from "alchemy/Diff";
@@ -1287,7 +1287,7 @@ export const LiveContainerProvider = () =>
         observe: Effect.fn(function* ({ id, news = {} }) {
           // Precreate creates — or adopts and updates — the application
           // named here; ownership follows `read`.
-          if (!isResolved(nameOf(news))) return undefined;
+          if (!isResolved(nameOf(news))) return Provider.PendingObservation;
           const name = yield* createApplicationName(id, nameOf(news));
           const existing = yield* findApplicationByName(name);
           if (existing === undefined) return undefined;
@@ -1297,6 +1297,13 @@ export const LiveContainerProvider = () =>
           return nameOf(news) === undefined ? observed : Unowned(observed);
         }),
         precreate: Effect.fn(function* ({ id, news = {}, session }) {
+          if (!isResolved(nameOf(news))) {
+            return yield* new UnverifiableResource({
+              message: "Cannot pre-create a Container before its application name resolves.",
+              resourceType: ContainerPlatform.Type,
+              logicalId: id,
+            });
+          }
           yield* validateContainerConfiguration(news);
           const name = yield* createApplicationName(id, nameOf(news));
           yield* Effect.logInfo(`Cloudflare Container precreate: starting ${name}`);

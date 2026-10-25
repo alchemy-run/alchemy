@@ -11,7 +11,13 @@ import * as Predicate from "effect/Predicate";
 import type { Simplify } from "effect/Types";
 import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
-import { OwnedBySomeoneElse, stripUnowned, Unowned } from "./AdoptPolicy.ts";
+import {
+  OwnedBySomeoneElse,
+  stripUnowned,
+  Unowned,
+  UnverifiableReplacement,
+  UnverifiableResource,
+} from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
 import {
   Artifacts,
@@ -36,6 +42,7 @@ import {
   type ProviderService,
   findProviderByType,
   missingProviderError,
+  PendingObservation,
   tryFindProviderByType,
 } from "./Provider.ts";
 import { stampedMode, type ProviderMode } from "./ProviderMode.ts";
@@ -175,20 +182,24 @@ const instrumentLifecycle =
 const isPreviousGeneration = (
   observed: { readonly [key: string]: any },
   stables: readonly string[] | undefined,
-  previous: { attr?: any } | undefined,
+  previous: { attr?: any; admissionPending?: true } | undefined,
 ): boolean => {
   const keys = (stables ?? []).filter((key) => observed[key] !== undefined);
   const attr = previous?.attr;
-  return keys.length > 0 && attr !== undefined && keys.every((key) => attr[key] === observed[key]);
+  return (
+    !previous?.admissionPending &&
+    keys.length > 0 &&
+    attr !== undefined &&
+    keys.every((key) => attr[key] === observed[key])
+  );
 };
 
 /**
- * A dependency cycle precreates on raw props, before `read` can check
- * ownership. Ask the provider's `observe` what exists at the identity
- * precreate would claim, and refuse a foreign resource unless adoption is
- * allowed. A provider without `observe` precreates unchecked.
+ * Observe before precreate, or before reconcile when `read` is absent.
+ * Pending identity leaves admission deferred until upstream outputs resolve.
+ * A provider without `observe` retains its existing precreate behavior.
  */
-const observeBeforePrecreate = Effect.fn(function* (
+const observeForAdmission = Effect.fn(function* (
   node: {
     provider: Pick<ProviderService<any>, "observe" | "stables">;
     props: any;
@@ -198,12 +209,13 @@ const observeBeforePrecreate = Effect.fn(function* (
   fqn: string,
   logicalId: string,
   instanceId: string,
-  previous?: { attr?: any },
+  previous?: { attr?: any; admissionPending?: true },
 ) {
-  if (node.provider.observe === undefined || node.deferredAdoption === undefined) return;
+  if (node.provider.observe === undefined || node.deferredAdoption === undefined) return true;
   const observed = yield* node.provider
     .observe({ id: logicalId, fqn, instanceId, news: node.props })
     .pipe(instrumentLifecycle("observe", fqn, node.resource.Type, logicalId, instanceId));
+  if (observed === PendingObservation) return false;
   if (
     observed !== undefined &&
     Unowned.is(observed) &&
@@ -212,7 +224,7 @@ const observeBeforePrecreate = Effect.fn(function* (
   ) {
     return yield* new OwnedBySomeoneElse({
       message:
-        `Cannot pre-create resource '${fqn}' (${node.resource.Type}): ` +
+        `Cannot admit resource '${fqn}' (${node.resource.Type}): ` +
         "it exists in the cloud but is not owned by this " +
         "stack/stage/logical-id. Re-run with `--adopt` (or " +
         "wrap the effect in `adopt(true)`) to take it over.",
@@ -220,6 +232,7 @@ const observeBeforePrecreate = Effect.fn(function* (
       logicalId,
     });
   }
+  return true;
 });
 
 export const apply = <P extends Plan>(
@@ -866,6 +879,9 @@ const executeNode = (
       }
 
       let attr: any = node.state?.attr;
+      let admissionPending = node.state?.admissionPending;
+      let admitted =
+        node.deferredAdoption === undefined || (attr !== undefined && !admissionPending);
 
       if (attr !== undefined) {
         // Precreate/read may already have produced a usable output snapshot. Publish
@@ -879,7 +895,8 @@ const executeNode = (
       // Durable Object classes are empty) can serve traffic while the real
       // version propagates.
       if (inCycle && node.provider.precreate && attr === undefined) {
-        yield* observeBeforePrecreate(node, fqn, logicalId, instanceId);
+        admitted = yield* observeForAdmission(node, fqn, logicalId, instanceId);
+        admissionPending = admitted ? undefined : true;
         // Some resources need a placeholder physical resource before their real
         // create can finish. Persist that stub so downstream evaluation can proceed.
         yield* report("pre-creating");
@@ -901,6 +918,7 @@ const executeNode = (
           resourceType: node.resource.Type,
           props: node.props,
           attr,
+          admissionPending,
           providerVersion: node.provider.version ?? 0,
           bindings: excludeDeletedBindings(node.bindings),
           downstream: node.downstream,
@@ -926,7 +944,7 @@ const executeNode = (
 
       const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
 
-      if (attr === undefined && node.deferredAdoption && node.provider.read) {
+      if (!admitted && node.deferredAdoption) {
         const checkpoint = () =>
           commit<CreatingResourceState>({
             status: "creating",
@@ -936,6 +954,7 @@ const executeNode = (
             resourceType: node.resource.Type,
             props: news,
             attr,
+            admissionPending,
             providerVersion: node.provider.version ?? 0,
             bindings: bindingOutputs,
             downstream: node.downstream,
@@ -945,24 +964,41 @@ const executeNode = (
           });
         // Refusal or interruption must retain identity, never foreign attributes.
         yield* checkpoint();
-        const observed = yield* node.provider
-          .read({ id: logicalId, fqn, instanceId, olds: news, output: undefined })
-          .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
-        if (observed !== undefined) {
-          if (Unowned.is(observed) && !node.deferredAdoption.adopt) {
-            return yield* new OwnedBySomeoneElse({
-              message:
-                `Cannot adopt resource '${fqn}' (${node.resource.Type}): ` +
-                "it exists in the cloud but is not owned by this " +
-                "stack/stage/logical-id. Re-run with `--adopt` (or " +
-                "wrap the effect in `adopt(true)`) to take it over.",
+        if (node.provider.read === undefined) {
+          admitted = yield* observeForAdmission(
+            { ...node, props: news },
+            fqn,
+            logicalId,
+            instanceId,
+          );
+          if (!admitted) {
+            return yield* new UnverifiableResource({
+              message: `Cannot identify resource '${fqn}' after its inputs resolve.`,
               resourceType: node.resource.Type,
               logicalId,
             });
           }
-          attr = stripUnowned(observed);
-          // A creating checkpoint retains olds: undefined on retry.
-          yield* checkpoint();
+        } else {
+          const observed = yield* node.provider
+            .read({ id: logicalId, fqn, instanceId, olds: news, output: undefined })
+            .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
+          if (observed !== undefined) {
+            if (Unowned.is(observed) && !node.deferredAdoption.adopt) {
+              return yield* new OwnedBySomeoneElse({
+                message:
+                  `Cannot adopt resource '${fqn}' (${node.resource.Type}): ` +
+                  "it exists in the cloud but is not owned by this " +
+                  "stack/stage/logical-id. Re-run with `--adopt` (or " +
+                  "wrap the effect in `adopt(true)`) to take it over.",
+                resourceType: node.resource.Type,
+                logicalId,
+              });
+            }
+            attr = stripUnowned(observed);
+            admissionPending = undefined;
+            // A creating checkpoint retains olds: undefined on retry.
+            yield* checkpoint();
+          }
         }
       }
 
@@ -1220,7 +1256,12 @@ const executeNode = (
       ): Effect.Effect<void, any, any> =>
         Effect.gen(function* () {
           const retain = node.resource.RemovalPolicy === "retain";
-          if (old.attr !== undefined && !retain) {
+          if (old.admissionPending && !retain) {
+            yield* scopedSession.note(
+              "Skipping provisional attributes without verified physical identity. An interrupted reconcile may need manual cleanup.",
+            );
+          }
+          if (old.attr !== undefined && !old.admissionPending && !retain) {
             // Delete each old generation with the provider variant of the
             // mode that created it — after a local ⇄ live switch,
             // `node.provider` (the new mode) cannot tear down the other
@@ -1264,16 +1305,37 @@ const executeNode = (
       // precreate, reconcile, and delete-first cleanup of the previous
       // generation — and refuse an unowned target unless adoption is allowed,
       // exactly like a fresh create.
-      let admitted = attr !== undefined || node.deferredAdoption === undefined;
+      let admissionPending = replState.admissionPending;
+      let admitted =
+        (attr !== undefined && !admissionPending) || node.deferredAdoption === undefined;
       const admit = Effect.fn(function* (props: Record<string, any>) {
+        if (node.provider.read === undefined) {
+          admitted = yield* observeForAdmission(
+            { ...node, props },
+            fqn,
+            logicalId,
+            instanceId,
+            replState.old,
+          );
+          if (!admitted) {
+            return yield* new UnverifiableResource({
+              message: `Cannot identify replacement '${fqn}' after its inputs resolve.`,
+              resourceType: node.resource.Type,
+              logicalId,
+            });
+          }
+          return;
+        }
         admitted = true;
-        const observed = yield* node.provider.read!({
-          id: logicalId,
-          fqn,
-          instanceId,
-          olds: props,
-          output: undefined,
-        }).pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
+        const observed = yield* node.provider
+          .read({
+            id: logicalId,
+            fqn,
+            instanceId,
+            olds: props,
+            output: undefined,
+          })
+          .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
         if (observed === undefined) return;
         if (
           Unowned.is(observed) &&
@@ -1292,7 +1354,10 @@ const executeNode = (
         }
         // A delete-first target may be the previous generation itself, which
         // is about to be deleted — never hand its attributes to reconcile.
-        if (!node.deleteFirst) attr = stripUnowned(observed);
+        if (!node.deleteFirst) {
+          attr = stripUnowned(observed);
+          admissionPending = undefined;
+        }
       });
 
       if (!admitted && isResolved(node.props)) {
@@ -1302,7 +1367,15 @@ const executeNode = (
       // A cycle precreates before its props resolve, so `observe` admits the
       // identity precreate will claim — before delete-first, too.
       if (!admitted && inCycle) {
-        yield* observeBeforePrecreate(node, fqn, logicalId, instanceId, replState.old);
+        admitted = yield* observeForAdmission(node, fqn, logicalId, instanceId, replState.old);
+        admissionPending = admitted ? admissionPending : true;
+        if (!admitted && node.deleteFirst && !node.deferredAdoption?.adopt) {
+          return yield* new UnverifiableReplacement({
+            message: `Cannot delete '${fqn}' before its replacement identity resolves.`,
+            resourceType: node.resource.Type,
+            logicalId,
+          });
+        }
       }
 
       // A cycle must delete before precreate claims the identity. Plan has
@@ -1341,6 +1414,7 @@ const executeNode = (
           resourceType: node.resource.Type,
           props: node.props,
           attr,
+          admissionPending,
           providerVersion: node.provider.version ?? 0,
           bindings: excludeDeletedBindings(node.bindings),
           downstream: node.downstream,
@@ -1366,7 +1440,7 @@ const executeNode = (
 
       const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
 
-      if (!admitted && attr === undefined) {
+      if (!admitted) {
         yield* admit(news);
       }
       if (node.deleteFirst && !deletedFirst) {
@@ -2040,9 +2114,10 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
         const incompleteProps = isDeleteNode(node)
           ? node.state.propsIncomplete
           : generation.propsIncomplete;
+        const admissionPending = generation.admissionPending;
         // Mutable: an attr-less row (interrupted create) may recover its
         // attributes from `provider.read` below, right before deletion.
-        let attr = persistedAttr;
+        let attr = admissionPending ? undefined : persistedAttr;
 
         const nextAncestors = new Set(ancestors).add(fqn);
 
@@ -2186,7 +2261,12 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
             //                      stamping ownership) — never delete a
             //                      foreign resource; drop our state and say so
             //   - undefined      → nothing exists; dropping state is safe
-            if (attr === undefined && !retainOldGeneration) {
+            if (admissionPending && !retainOldGeneration) {
+              yield* scopedSession.note(
+                "Skipping provisional attributes without verified physical identity. An interrupted reconcile may need manual cleanup.",
+              );
+            }
+            if (attr === undefined && !retainOldGeneration && !admissionPending) {
               if (adoptionBlocked === "migrated-fqn") {
                 yield* scopedSession.note(
                   "Skipping recovery of a reused FQN: a lookup could find its " +
@@ -2262,6 +2342,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                 providerMode,
                 adoptionBlocked,
                 propsIncomplete: incompleteProps,
+                admissionPending,
               });
             }
 
@@ -2333,6 +2414,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                   removalPolicy: node.removalPolicy,
                   providerMode: node.providerMode,
                   propsIncomplete: node.propsIncomplete,
+                  admissionPending: node.admissionPending,
                 });
               }
               yield* scopedSession.note(

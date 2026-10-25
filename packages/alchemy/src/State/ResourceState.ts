@@ -59,6 +59,8 @@ interface BaseResourceState {
   adoptionBlocked?: "migrated-fqn";
   /** Unresolved props were stripped from this attr-less checkpoint; they cannot identify it. */
   propsIncomplete?: true;
+  /** Provisional attributes have not been verified as a physical resource. */
+  admissionPending?: true;
   /**
    * The {@link ProviderMode} this resource was last reconciled with.
    *

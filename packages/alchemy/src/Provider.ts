@@ -80,6 +80,9 @@ type Props<Res extends ResourceLike> = keyof Res["Props"] extends never
   ? Res["Props"] | undefined
   : Res["Props"];
 
+/** The observer cannot identify its target until upstream outputs resolve. */
+export const PendingObservation: unique symbol = Symbol("alchemy/PendingObservation");
+
 export interface LogLine {
   timestamp: Date;
   message: string;
@@ -299,10 +302,15 @@ export interface ProviderService<
    *
    * It receives the same raw props as `precreate` and must derive the same
    * identity. Report what exists there the way {@link read} does: `undefined`
-   * when nothing does, its attributes when it belongs to this
+   * when nothing does, {@link PendingObservation} when its identity is not yet
+   * known, its attributes when it belongs to this
    * stack/stage/logical-id, and `Unowned(attrs)` otherwise. The attributes
    * may be partial, but should include the {@link stables} the provider can
    * observe, so the engine recognizes a previous generation of this resource.
+   * After a pending observation, `precreate` must return a synthetic output
+   * without cloud writes, or fail before writing. The engine checks the
+   * resolved identity before reconcile and never deletes a predecessor on
+   * a pending observation unless adoption is allowed.
    *
    * Opt-in: implement it whenever `precreate` can write to a resource that
    * already exists. Without it, such a cycle precreates unchecked.
@@ -316,7 +324,11 @@ export interface ProviderService<
     fqn: string;
     news: Props<Res>;
     instanceId: string;
-  }): Effect.Effect<Partial<Res["Attributes"]> | undefined, any, PrecreateReq>;
+  }): Effect.Effect<
+    Partial<Res["Attributes"]> | typeof PendingObservation | undefined,
+    any,
+    PrecreateReq
+  >;
   precreate?(input: {
     id: string;
     /**

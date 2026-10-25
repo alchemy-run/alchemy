@@ -4,7 +4,7 @@ import * as iam from "@distilled.cloud/aws/iam";
 import type { CreateFunctionRequest } from "@distilled.cloud/aws/lambda";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { Region } from "@distilled.cloud/aws/Region";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, UnverifiableResource } from "alchemy/AdoptPolicy";
 import * as Binding from "alchemy/Binding";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import type { PackageInstall } from "alchemy/Bundle/InstalledPackages";
@@ -2652,7 +2652,7 @@ export const FunctionProvider = () =>
         observe: Effect.fn(function* ({ id, news }) {
           // Precreate creates — or updates — the function named here. Its
           // execution role is named from the logical id alone.
-          if (!isResolved(news.functionName)) return undefined;
+          if (!isResolved(news.functionName)) return Provider.PendingObservation;
           const functionName = yield* createFunctionName(id, news.functionName);
           const result = yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
@@ -2669,6 +2669,13 @@ export const FunctionProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? observed : Unowned(observed);
         }),
         precreate: Effect.fn(function* ({ id, news, session }) {
+          if (!isResolved(news.functionName)) {
+            return yield* new UnverifiableResource({
+              message: "Cannot pre-create a Lambda Function before its name resolves.",
+              resourceType: Function.Type,
+              logicalId: id,
+            });
+          }
           yield* validateFunctionPackageProps(id, news);
           if (isFunctionImageProps(news)) {
             // Resolve and validate the image before creating the execution

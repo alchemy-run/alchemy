@@ -242,14 +242,15 @@ URL before either is fully created.
 
 ### `observe`
 
-Optional, and only useful next to `precreate`. A cycle precreates on
-raw props before they resolve, so `read` can't check ownership yet.
+Optional. A cycle precreates on raw props before they resolve,
+so `read` can't check ownership yet. Providers without `read`
+can also use `observe` to check ownership before reconcile.
 `observe` gets the same raw props and reports what exists at the
 identity `precreate` would claim, without writing:
 
 ```typescript
 observe: Effect.fn(function* ({ id, news }) {
-  if (!isResolved(news.name)) return undefined;
+  if (!isResolved(news.name)) return Provider.PendingObservation;
   const live = yield* lookup(news.name);
   if (!live) return undefined;
   const attrs = { productId: live.id, name: live.name };
@@ -262,6 +263,13 @@ adoption is allowed. Implement it whenever `precreate` can write to a
 resource that already exists, and include your `stables` in the
 attributes so the engine recognizes the resource's own previous
 generation.
+
+Return `undefined` only after confirming that the target does not exist.
+Return `Provider.PendingObservation` when its identity is still unresolved.
+In that case, `precreate` must return a synthetic output without cloud
+writes, or fail before writing. The engine checks the resolved identity
+before reconcile. A pending observation blocks delete-first replacement
+unless adoption is allowed.
 
 ### `list`
 

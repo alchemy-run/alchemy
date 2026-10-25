@@ -1494,13 +1494,14 @@ const makePlan = <A>(
           renamedFrom,
           adoptionBlocked: reusesMigratedFqn ? "migrated-fqn" : undefined,
           deferredAdoption:
-            provider.read &&
+            (provider.read || provider.observe) &&
             !reusesMigratedFqn &&
             // A replacement targets a new physical identity, which may belong
             // to someone else — admit it like a fresh create.
             (node.action === "replace" ||
               (node.action === "create" &&
-                ((oldState === undefined && !isResolved(news)) ||
+                ((oldState === undefined && (!isResolved(news) || !provider.read)) ||
+                  oldState?.admissionPending ||
                   (oldState?.status === "creating" && oldState.attr === undefined))))
               ? { adopt: adoptThis }
               : undefined,
@@ -1534,6 +1535,7 @@ const makePlan = <A>(
         if (
           provider.read &&
           !reusesMigratedFqn &&
+          !oldState.admissionPending &&
           !oldState.propsIncomplete &&
           isResolved(oldState.props)
         ) {
