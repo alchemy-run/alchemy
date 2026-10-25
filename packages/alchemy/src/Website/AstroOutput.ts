@@ -40,3 +40,44 @@ export const resolveAstroOutput = Effect.fn("Website.resolveAstroOutput")(functi
   );
   return declared ?? "server";
 });
+
+export interface AstroSettings {
+  /** The resolved `output` (see {@link resolveAstroOutput}). */
+  readonly output: "server" | "static";
+  /**
+   * Whether the Astro config routes caching through the Cloudflare cache
+   * provider (`cacheCloudflare()`), so the Worker needs Workers Cache on.
+   */
+  readonly workerCache: boolean;
+}
+
+/**
+ * Resolves the Astro settings a Cloudflare composite deploys from one read
+ * of the project's `astro.config.*`: the `output` (as
+ * {@link resolveAstroOutput}) and whether the config uses the Cloudflare
+ * cache provider. When the config cannot be loaded the site falls back to
+ * `"server"` without Workers Cache (the build reports the real error).
+ */
+export const resolveAstroSettings = Effect.fn("Website.resolveAstroSettings")(function* (
+  props: AstroOutputProps,
+) {
+  const declared = yield* Effect.tryPromise(
+    () => import("@alchemy.run/frontend-frameworks/astro/config"),
+  ).pipe(
+    Effect.flatMap((astro) =>
+      astro.readConfigSettings({ cwd: initialCwd, rootDir: props.rootDir, config: props.config }),
+    ),
+    Effect.catch((error) =>
+      Effect.logWarning(
+        `Could not read the Astro config in "${props.rootDir ?? "."}"; deploying with ${
+          props.output === undefined ? '"server"' : `"${props.output}"`
+        } and without Workers Cache`,
+        error,
+      ).pipe(Effect.as(undefined)),
+    ),
+  );
+  return {
+    output: props.output ?? declared?.output ?? "server",
+    workerCache: declared?.workerCache ?? false,
+  } satisfies AstroSettings;
+});
