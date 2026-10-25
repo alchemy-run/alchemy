@@ -13,6 +13,7 @@ import { localAccountId } from "../LocalAccount.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
+import { abortMultipartUploads } from "./internal/MultipartUploads.ts";
 
 export const isBucket = (value: any): value is Bucket =>
   isResourceOfType(value, "Cloudflare.R2.Bucket");
@@ -264,6 +265,10 @@ export type BucketProps = {
    * `BucketNotEmpty` and both the bucket and its objects survive. Set this
    * to `true` for buckets whose contents are disposable (caches, previews,
    * test fixtures).
+   *
+   * Incomplete multipart uploads also hold a bucket. If R2 still refuses
+   * the delete after the objects are gone, alchemy mints a temporary API
+   * token scoped to the bucket and aborts the uploads through R2's S3 API.
    *
    * `alchemy unsafe nuke` empties buckets regardless, since it is an
    * explicitly operator-confirmed account teardown.
@@ -1511,9 +1516,8 @@ export const ProviderLive = () =>
           // A writer that outlives the emptying pass (a Durable Object's
           // alarm finishing a job while the stack tears down) can land an
           // object between the sweep and the delete: re-empty and retry,
-          // bounded. Incomplete multipart uploads also hold a bucket; those
-          // only a lifecycle rule clears, and the refusal then stands.
-          yield* deleteBucket.pipe(
+          // bounded.
+          const deleteEmptied = deleteBucket.pipe(
             Effect.catchTag("BucketNotEmpty", (error) =>
               Effect.sleep("2 seconds").pipe(
                 Effect.andThen(emptyBucket(output.bucketName, output.jurisdiction)),
@@ -1524,6 +1528,44 @@ export const ProviderLive = () =>
               while: (error) => error._tag === "BucketNotEmpty",
               times: 5,
             }),
+          );
+          yield* deleteBucket.pipe(
+            // Incomplete multipart uploads also hold a bucket, and the
+            // object listing does not show them. Abort them once (this
+            // mints a temporary token, so only after R2 refuses), then
+            // fall back to the re-empty loop.
+            Effect.catchTag("BucketNotEmpty", () =>
+              abortMultipartUploads(output.accountId, output.bucketName, output.jurisdiction).pipe(
+                Effect.tap((aborted) =>
+                  aborted > 0
+                    ? Effect.logInfo(
+                        `Aborted ${aborted} incomplete multipart upload(s) in R2 bucket ${output.bucketName}`,
+                      )
+                    : Effect.void,
+                ),
+                Effect.catch((error) =>
+                  Effect.logWarning(
+                    `Could not abort incomplete multipart uploads in R2 bucket ${output.bucketName}`,
+                    error,
+                  ),
+                ),
+                Effect.andThen(emptyBucket(output.bucketName, output.jurisdiction)),
+                Effect.andThen(deleteEmptied),
+              ),
+            ),
+            Effect.catchTag("BucketNotEmpty", (error) =>
+              Effect.fail(
+                new BucketNotEmpty({
+                  bucketName: output.bucketName,
+                  message:
+                    `${error.message} forceDestroy deleted its objects and tried to abort its ` +
+                    `incomplete multipart uploads, but R2 still refuses the delete. Incomplete ` +
+                    `multipart uploads are the likely cause: add a lifecycle rule ` +
+                    `{ abortMultipartUploadsTransition: { condition: { type: "Age", maxAge: 86400 } } } ` +
+                    `and retry once R2 has applied it, or wait for R2's default 7-day abort.`,
+                }),
+              ),
+            ),
           );
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
@@ -1622,6 +1664,15 @@ export const BucketProvider = () =>
  * Local Uploads was requested on a jurisdiction-restricted bucket, which
  * Cloudflare does not support.
  */
+/**
+ * A `forceDestroy` delete emptied the bucket, but R2 still refuses to delete
+ * it — usually because incomplete multipart uploads hold it.
+ */
+class BucketNotEmpty extends Data.TaggedError("BucketNotEmpty")<{
+  bucketName: string;
+  message: string;
+}> {}
+
 export class LocalUploadsUnsupported extends Data.TaggedError("LocalUploadsUnsupported")<{
   bucketName: string;
   jurisdiction: Bucket.Jurisdiction;

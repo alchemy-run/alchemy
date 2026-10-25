@@ -19,7 +19,7 @@ import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import type * as HttpClient from "effect/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Redacted from "effect/Redacted";
@@ -28,6 +28,7 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { resourceContext } from "../../Util/ResourceContext.ts";
+import MultipartWorker, { MultipartBucket } from "./fixtures/multipart-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -191,6 +192,56 @@ test.provider(
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"] },
 );
+
+// An incomplete multipart upload holds a bucket but is invisible to the
+// object listing, so emptying the objects alone can't get R2 to delete it.
+// See https://github.com/alchemy-run/alchemy/issues/2478.
+test.provider(
+  "destroying a bucket with forceDestroy aborts its incomplete multipart uploads",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const { bucket, worker } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* MultipartBucket;
+          const worker = yield* MultipartWorker;
+          return { bucket, worker };
+        }),
+      );
+
+      const client = yield* HttpClient.HttpClient;
+      yield* client
+        .post(`${worker.url}/start-upload?key=${encodeURIComponent("big/entry.bin")}`)
+        .pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? Effect.void
+              : Effect.fail(new WorkerNotReady({ status: res.status })),
+          ),
+          Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
+        );
+
+      // The upload lists no objects, yet R2 refuses to delete the bucket.
+      expect(yield* listKeysWhenReady(accountId, bucket.bucketName, 0)).toEqual([]);
+      const refused = yield* r2
+        .deleteBucket({ accountId, bucketName: bucket.bucketName })
+        .pipe(Effect.flip);
+      expect(refused._tag).toEqual("BucketNotEmpty");
+
+      yield* stack.destroy();
+
+      yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
+);
+
+class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{ status: number }> {}
 
 // Without `forceDestroy`, R2's own refusal to delete a non-empty bucket is
 // the last line of defense for the data in it — alchemy must not empty the
