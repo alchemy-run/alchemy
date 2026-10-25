@@ -10,12 +10,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Redacted from "effect/Redacted";
-import {
-  deployStaticSite,
-  localWebsite,
-  unwrapEnv,
-  type FrameworkSiteProps,
-} from "./FrameworkSite.ts";
+import { deploySite, localWebsite, unwrapEnv, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 export interface StaticSiteProps extends Pick<
   FrameworkSiteProps,
@@ -41,9 +36,9 @@ export interface StaticSiteProps extends Pick<
   memo?: MemoOptions | boolean;
   /**
    * Answer misses with the index page so client-side routes deep-link
-   * correctly. The storage endpoint sends it with a `404` status; set
-   * `frontDoor` to answer with `200`. Mutually exclusive with
-   * {@link errorPage}.
+   * correctly. Front Door answers them with a `200` status; with
+   * `frontDoor: false` the storage endpoint sends a `404` status. Mutually
+   * exclusive with {@link errorPage}.
    */
   spa?: boolean;
   /**
@@ -80,14 +75,23 @@ export interface StaticSiteProps extends Pick<
 }
 
 /**
- * A static site built by a shell command and served from the static
- * website endpoint of an Azure Storage account.
+ * A static site built by a shell command, stored in the static website
+ * endpoint of an Azure Storage account, and served through Azure Front
+ * Door.
  *
  * `StaticSite` runs a build command (e.g. `npm run build`) and uploads the
- * output directory to the account's `$web` container. Unchanged files are
- * skipped and removed files are deleted. No Docker image and no server are
- * involved. Use this when your site has its own build step — Hugo, Zola,
- * Eleventy, or any custom pipeline.
+ * output directory to the account's `$web` container with a
+ * `Cache-Control` per file (HTML is never cached, other files are
+ * immutable). Unchanged files are skipped, removed files are deleted, and
+ * the paths of replaced and deleted files are purged from Front Door. No
+ * Docker image and no server are involved. Use this when your site has its
+ * own build step — Hugo, Zola, Eleventy, or any custom pipeline.
+ *
+ * Front Door Standard is on by default and costs a monthly base fee per
+ * profile: pass `frontDoor: { profile }` to share one profile across
+ * sites, or `frontDoor: false` to serve straight from the storage
+ * endpoint. A new Front Door endpoint takes 10-20 minutes to serve
+ * everywhere.
  *
  * For Vite-based projects, prefer {@link Vite | Azure.Website.Vite}.
  *
@@ -123,14 +127,24 @@ export interface StaticSiteProps extends Pick<
  * ```
  *
  * ### Front Door
- * **Example:** SPA deep links with a `200` status
+ * **Example:** Share one Front Door profile across sites
  * ```typescript
- * const site = yield* Azure.Website.StaticSite("App", {
+ * const profile = yield* Azure.Cdn.Profile("Edge");
+ * const docs = yield* Azure.Website.StaticSite("Docs", {
  *   command: "npm run build",
  *   outdir: "dist",
- *   spa: true,
- *   frontDoor: true,
+ *   frontDoor: { profile },
  * });
+ * ```
+ *
+ * **Example:** Serve from the storage endpoint without Front Door
+ * ```typescript
+ * const site = yield* Azure.Website.StaticSite("Preview", {
+ *   command: "npm run build",
+ *   outdir: "dist",
+ *   frontDoor: false,
+ * });
+ * // site.url → "https://{account}.z13.web.core.windows.net"
  * ```
  *
  * ### Local Development
@@ -221,9 +235,12 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     const published = Output.map((dir: string) => path.resolve(initialCwd, dir))(
       build.outdir as unknown as Output.Output<string>,
     );
-    return yield* deployStaticSite({
+    return yield* deploySite({
       site: props,
-      path: published as unknown as string,
+      framework: "StaticSite",
+      clientDir: published,
+      serverEntry: undefined,
+      assetPatterns: undefined,
       spa: props.spa === true,
       errorPage: props.errorPage,
     }).pipe(Namespace.push(id));

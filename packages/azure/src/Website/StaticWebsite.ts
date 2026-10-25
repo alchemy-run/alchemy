@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import * as cdn from "@distilled.cloud/azure/cdn";
 import * as storage from "@distilled.cloud/azure/storage";
+import * as blob from "@distilled.cloud/azure/storage-blob";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
@@ -9,24 +11,33 @@ import { cacheControlOf, contentTypeOf } from "alchemy/Website/assets";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
-import { orUndefinedIfNotFound } from "../Arm.ts";
-import { xmlElements, xmlField } from "../Binding.ts";
+import { collectAll, orUndefinedIfNotFound } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 
+/** A Front Door endpoint whose cache a deploy purges of changed files. */
+export interface StaticWebsitePurgeTarget {
+  /** Resource group of the Front Door profile. */
+  resourceGroup: string;
+  /** Name of the Front Door profile. */
+  profile: string;
+  /** Name of the endpoint in the profile (`AfdEndpoint.endpointName`). */
+  endpoint: string;
+}
+
 export interface StaticWebsiteProps {
-  /** Resource group of the storage account. */
+  /**
+   * Resource group of the storage account.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Storage account that hosts the site. Alchemy enables its static
-   * website endpoint and owns the contents of its `$web` container. The
-   * account must allow shared-key access (the default): uploads use an
-   * account SAS minted through Azure Resource Manager.
+   * website endpoint and owns the contents of its `$web` container.
+   * Changing it replaces the resource.
    */
   storageAccount: string;
   /** Directory whose files are published, relative to the working directory. */
@@ -42,6 +53,12 @@ export interface StaticWebsiteProps {
    * `404.html` for a real not-found page.
    */
   errorDocument404Path?: string;
+  /**
+   * Front Door endpoint in front of the site. After an upload, Alchemy
+   * purges the paths of changed and deleted files from its cache (all of
+   * them, `/*`, when more than 100 paths changed).
+   */
+  purge?: StaticWebsitePurgeTarget;
 }
 
 export interface StaticWebsite extends Resource<
@@ -60,6 +77,8 @@ export interface StaticWebsite extends Resource<
     fileCount: number;
     /** Hash of the published file set; changes when any file changes. */
     contentHash: string;
+    /** Paths the last deploy purged from the Front Door cache (empty when none). */
+    purgedPaths: string[];
   },
   never,
   Providers
@@ -73,9 +92,15 @@ export interface StaticWebsite extends Resource<
  * Alchemy enables the endpoint, uploads new and changed files to the `$web`
  * container (with a `Content-Type` and a `Cache-Control` per file: HTML is
  * never cached, other files are immutable), and deletes files that are no
- * longer in the directory. Unchanged files are skipped by MD5. No Docker
- * and no build service are involved: the upload goes straight to Blob
- * Storage.
+ * longer in the directory. Unchanged files are skipped by MD5. With
+ * `purge`, the changed paths are then purged from a Front Door endpoint's
+ * cache.
+ *
+ * Uploads go through the Blob Storage data plane with the deployer's
+ * Microsoft Entra token (no account keys, no SAS). The deployer needs
+ * **Storage Blob Data Contributor** on the account; the `Azure.Website`
+ * composites grant it. A new grant takes a minute or two to apply, and the
+ * upload waits for it.
  *
  * Deleting the resource empties `$web` and disables the endpoint; the
  * storage account itself stays.
@@ -83,13 +108,32 @@ export interface StaticWebsite extends Resource<
  * ### Publishing a Directory
  * **Example:** Static files on a storage account
  * ```typescript
- * const account = yield* Azure.Storage.StorageAccount("files");
+ * const account = yield* Azure.Storage.StorageAccount("Files");
+ * const uploader = yield* Azure.Authorization.RoleAssignment("Uploader", {
+ *   scope: account.storageAccountId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataContributor,
+ *   principalId: deployerObjectId,
+ * });
  * const site = yield* Azure.Website.StaticWebsite("Site", {
  *   storageAccount: account.storageAccountName,
  *   path: "dist",
  *   errorDocument404Path: "404.html",
  * });
  * // site.url → "https://{account}.z13.web.core.windows.net"
+ * ```
+ *
+ * ### Purging Front Door
+ * **Example:** Purge changed files from a Front Door endpoint
+ * ```typescript
+ * const site = yield* Azure.Website.StaticWebsite("Site", {
+ *   storageAccount: account.storageAccountName,
+ *   path: "dist",
+ *   purge: {
+ *     resourceGroup: profile.resourceGroup,
+ *     profile: profile.profileName,
+ *     endpoint: endpoint.endpointName,
+ *   },
+ * });
  * ```
  *
  * @resource
@@ -100,12 +144,13 @@ export const StaticWebsite = GroupedResource<StaticWebsite>("Azure.Website.Stati
 export class StaticWebsiteError extends Data.TaggedError("Azure.Website.StaticWebsiteError")<{
   readonly storageAccount: string;
   readonly message: string;
-  readonly status?: number;
   readonly cause?: unknown;
 }> {}
 
-const STORAGE_VERSION = "2023-11-03";
 const WEB_CONTAINER = "$web";
+
+/** Front Door accepts at most 100 content paths per purge. */
+const MAX_PURGE_PATHS = 100;
 
 interface LocalFile {
   /** POSIX path relative to the published directory; also the blob name. */
@@ -125,7 +170,8 @@ const readLocalFiles = Effect.fn(function* (dir: string) {
     (name) =>
       Effect.gen(function* () {
         const full = path.join(root, name);
-        if ((yield* fs.stat(full)).type !== "File") return undefined;
+        const stat = yield* fs.stat(full);
+        if (stat.type !== "File") return undefined;
         const bytes = yield* fs.readFile(full);
         const md5 = yield* Effect.sync(() => createHash("md5").update(bytes).digest("base64"));
         return { name: name.split(path.sep).join("/"), full, md5 };
@@ -142,197 +188,15 @@ const contentHashOf = (files: readonly LocalFile[]) =>
     Effect.map((hash) => hash.slice(0, 16)),
   );
 
-const encodeBlobName = (name: string) => name.split("/").map(encodeURIComponent).join("/");
-
-const xmlEscape = (value: string) =>
-  value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-
-/** Blob data-plane access to one account through an ARM-minted account SAS. */
-const blobClient = Effect.fn(function* (resourceGroup: string, storageAccount: string) {
-  const { subscriptionId } = yield* AzureEnvironment.current;
-  const http = yield* HttpClient.HttpClient;
-  const expiry = new Date((yield* Effect.sync(() => Date.now())) + 60 * 60 * 1000)
-    .toISOString()
-    .replace(/\.\d+Z$/, "Z");
-  const { accountSasToken } = yield* storage.ListStorageAccountAccountSAS({
-    subscriptionId,
-    resourceGroupName: resourceGroup,
-    accountName: storageAccount,
-    signedServices: "b",
-    signedResourceTypes: "sco",
-    signedPermission: "rwdlc",
-    signedProtocol: "https",
-    signedExpiry: expiry,
-  });
-  if (accountSasToken === undefined) {
-    return yield* new StaticWebsiteError({
-      storageAccount,
-      message: "Azure returned no account SAS token",
-    });
-  }
-  const base = `https://${storageAccount}.blob.core.windows.net`;
-
-  const send = (request: HttpClientRequest.HttpClientRequest, allow: readonly number[] = []) =>
-    http.execute(request.pipe(HttpClientRequest.setHeader("x-ms-version", STORAGE_VERSION))).pipe(
-      Effect.mapError(
-        (cause) =>
-          new StaticWebsiteError({
-            storageAccount,
-            message: `${request.method} ${request.url.split("?")[0]} failed`,
-            cause,
-          }),
-      ),
-      Effect.flatMap((response) =>
-        response.status < 300 || allow.includes(response.status)
-          ? Effect.succeed(response)
-          : response.text.pipe(
-              Effect.orElseSucceed(() => ""),
-              Effect.flatMap((body) =>
-                Effect.fail(
-                  new StaticWebsiteError({
-                    storageAccount,
-                    status: response.status,
-                    message: `${request.method} ${request.url.split("?")[0]} returned ${response.status}: ${body.slice(0, 300)}`,
-                  }),
-                ),
-              ),
-            ),
-      ),
-      // Throttling and transient server errors.
-      Effect.retry({
-        while: (error) => error.status === undefined || error.status === 429 || error.status >= 500,
-        schedule: Schedule.exponential("500 millis"),
-        times: 5,
-      }),
-    );
-
-  const url = (resource: string, query: string) =>
-    `${base}${resource}?${query}${query ? "&" : ""}${accountSasToken}`;
-
-  const getStaticWebsite = send(
-    HttpClientRequest.get(url("/", "restype=service&comp=properties")),
-  ).pipe(
-    Effect.flatMap((response) => response.text),
-    Effect.mapError(
-      (cause) =>
-        new StaticWebsiteError({
-          storageAccount,
-          message: "failed to read blob service properties",
-          cause,
-        }),
-    ),
-    Effect.map((xml) => {
-      const section = xmlField(xml, "StaticWebsite") ?? "";
-      return {
-        enabled: xmlField(section, "Enabled") === "true",
-        indexDocument: xmlField(section, "IndexDocument"),
-        errorDocument404Path: xmlField(section, "ErrorDocument404Path"),
-      };
-    }),
-  );
-
-  const setStaticWebsite = (website: {
-    enabled: boolean;
-    indexDocument?: string;
-    errorDocument404Path?: string;
-  }) =>
-    send(
-      HttpClientRequest.put(url("/", "restype=service&comp=properties")).pipe(
-        HttpClientRequest.bodyText(
-          [
-            `<?xml version="1.0" encoding="utf-8"?>`,
-            `<StorageServiceProperties><StaticWebsite>`,
-            `<Enabled>${website.enabled}</Enabled>`,
-            website.indexDocument !== undefined
-              ? `<IndexDocument>${xmlEscape(website.indexDocument)}</IndexDocument>`
-              : "",
-            website.errorDocument404Path !== undefined
-              ? `<ErrorDocument404Path>${xmlEscape(website.errorDocument404Path)}</ErrorDocument404Path>`
-              : "",
-            `</StaticWebsite></StorageServiceProperties>`,
-          ].join(""),
-          "application/xml",
-        ),
-      ),
-    ).pipe(Effect.asVoid);
-
-  /** `{blob name → Content-MD5}` of `$web`; empty when it does not exist yet. */
-  const listBlobs = Effect.gen(function* () {
-    const blobs = new Map<string, string | undefined>();
-    let marker: string | undefined;
-    // 5000 blobs per page; 200 pages bounds the walk at one million blobs.
-    for (let page = 0; page < 200; page++) {
-      const response = yield* send(
-        HttpClientRequest.get(
-          url(
-            `/${WEB_CONTAINER}`,
-            `restype=container&comp=list${marker ? `&marker=${encodeURIComponent(marker)}` : ""}`,
-          ),
-        ),
-        [404],
-      );
-      if (response.status === 404) return blobs;
-      const xml = yield* response.text.pipe(
-        Effect.mapError(
-          (cause) =>
-            new StaticWebsiteError({
-              storageAccount,
-              message: "failed to read the blob listing",
-              cause,
-            }),
-        ),
-      );
-      for (const blob of xmlElements(xml, "Blob")) {
-        const name = xmlField(blob, "Name");
-        if (name !== undefined) blobs.set(name, xmlField(blob, "Content-MD5"));
-      }
-      marker = xmlField(xml, "NextMarker");
-      if (!marker) return blobs;
-    }
-    return blobs;
-  });
-
-  const putBlob = (file: LocalFile) =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const bytes = yield* fs.readFile(file.full).pipe(
-        Effect.mapError(
-          (cause) =>
-            new StaticWebsiteError({
-              storageAccount,
-              message: `failed to read ${file.full}`,
-              cause,
-            }),
-        ),
-      );
-      const contentType = contentTypeOf(file.name);
-      yield* send(
-        HttpClientRequest.put(url(`/${WEB_CONTAINER}/${encodeBlobName(file.name)}`, "")).pipe(
-          HttpClientRequest.setHeaders({
-            "x-ms-blob-type": "BlockBlob",
-            "x-ms-blob-content-type": contentType,
-            "x-ms-blob-cache-control": cacheControlOf(file.name),
-            "x-ms-blob-content-md5": file.md5,
-          }),
-          HttpClientRequest.bodyUint8Array(bytes, contentType),
-        ),
-      );
-    });
-
-  const deleteBlob = (name: string) =>
-    send(
-      HttpClientRequest.delete(url(`/${WEB_CONTAINER}/${encodeBlobName(name)}`, "")),
-      [404],
-    ).pipe(Effect.asVoid);
-
-  return {
-    getStaticWebsite,
-    setStaticWebsite,
-    listBlobs,
-    putBlob,
-    deleteBlob,
-  };
-});
+/**
+ * A new data-plane role assignment takes a minute or two to apply; Blob
+ * Storage answers `AuthorizationPermissionMismatch` until then.
+ */
+const whileAccessPending = {
+  while: (error: { readonly _tag: string }) => error._tag === "SchemaRegistryStorageAccessDenied",
+  schedule: Schedule.spaced("10 seconds"),
+  times: 30,
+} as const;
 
 /** Observe the account; `undefined` once it (or its group) is gone. */
 const getAccount = (resourceGroup: string, storageAccount: string) =>
@@ -347,13 +211,58 @@ const getAccount = (resourceGroup: string, storageAccount: string) =>
     );
   });
 
-const webEndpointOf = (
+const endpointOf = (
   account: storage.GetStorageAccountPropertiesResponse,
   storageAccount: string,
+  kind: "web" | "blob",
 ) =>
   (
-    account.properties?.primaryEndpoints?.web ?? `https://${storageAccount}.web.core.windows.net/`
+    account.properties?.primaryEndpoints?.[kind] ??
+    `https://${storageAccount}.${kind}.core.windows.net/`
   ).replace(/\/+$/, "");
+
+/** `{blob name → Content-MD5}` of `$web`; empty when it does not exist yet. */
+const listWebBlobs = (url: string) =>
+  collectAll(blob.ListContainerBlobFlatSegment, { url, containerName: WEB_CONTAINER }).pipe(
+    Effect.map(
+      (page) =>
+        new Map(
+          page.value.flatMap((item) =>
+            item.Name?.content === undefined
+              ? []
+              : [[item.Name.content, item.Properties?.Content_MD5] as const],
+          ),
+        ),
+    ),
+    Effect.catchTag("ContainerNotFound", () =>
+      Effect.succeed(new Map<string, string | undefined>()),
+    ),
+    Effect.retry(whileAccessPending),
+  );
+
+const deleteWebBlob = (url: string, name: string) =>
+  blob.DeleteBlob({ url, containerName: WEB_CONTAINER, blob: name }).pipe(
+    Effect.catchTag(["BlobNotFound", "ContainerNotFound"], () => Effect.void),
+    Effect.retry(whileAccessPending),
+  );
+
+/**
+ * Paths to purge for changed or deleted files. An index document also
+ * purges the directory URLs that serve it (`/docs/` and `/docs`).
+ */
+const purgePathsOf = (names: readonly string[], indexDocument: string) => {
+  const paths = new Set<string>();
+  for (const name of names) {
+    paths.add(`/${name}`);
+    if (name === indexDocument || name.endsWith(`/${indexDocument}`)) {
+      const dir = name.slice(0, name.length - indexDocument.length);
+      paths.add(`/${dir}`);
+      if (dir.length > 0) paths.add(`/${dir.replace(/\/$/, "")}`);
+    }
+  }
+  const sorted = [...paths].sort();
+  return sorted.length > MAX_PURGE_PATHS ? ["/*"] : sorted;
+};
 
 export const StaticWebsiteProvider = () =>
   Provider.succeed(StaticWebsite, {
@@ -372,7 +281,8 @@ export const StaticWebsiteProvider = () =>
       const files = yield* readLocalFiles(news.path).pipe(
         Effect.orElseSucceed(() => [] as LocalFile[]),
       );
-      if ((yield* contentHashOf(files)) !== output.contentHash) {
+      const contentHash = yield* contentHashOf(files);
+      if (contentHash !== output.contentHash) {
         return { action: "update" } as const;
       }
       return undefined;
@@ -390,6 +300,7 @@ export const StaticWebsiteProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news, session }) {
+      // Observe.
       const account = yield* getAccount(news.resourceGroup, news.storageAccount);
       if (account === undefined) {
         return yield* new StaticWebsiteError({
@@ -397,21 +308,25 @@ export const StaticWebsiteProvider = () =>
           message: `storage account ${news.storageAccount} does not exist`,
         });
       }
-      const client = yield* blobClient(news.resourceGroup, news.storageAccount);
+      const url = endpointOf(account, news.storageAccount, "blob");
 
       // Sync the static website settings against the observed service properties.
-      const desired = {
-        enabled: true,
-        indexDocument: news.indexDocument ?? "index.html",
-        errorDocument404Path: news.errorDocument404Path,
-      };
-      const observed = yield* client.getStaticWebsite;
+      const indexDocument = news.indexDocument ?? "index.html";
+      const observed = yield* blob.GetServiceProperties({ url });
+      const website = observed.StaticWebsite;
       if (
-        !observed.enabled ||
-        observed.indexDocument !== desired.indexDocument ||
-        observed.errorDocument404Path !== desired.errorDocument404Path
+        website?.Enabled !== true ||
+        website.IndexDocument !== indexDocument ||
+        website.ErrorDocument404Path !== news.errorDocument404Path
       ) {
-        yield* client.setStaticWebsite(desired);
+        yield* blob.SetServiceProperties({
+          url,
+          StaticWebsite: {
+            Enabled: true,
+            IndexDocument: indexDocument,
+            ErrorDocument404Path: news.errorDocument404Path,
+          },
+        });
       }
 
       // Sync `$web` against the local directory by MD5.
@@ -425,8 +340,7 @@ export const StaticWebsiteProvider = () =>
             }),
         ),
       );
-      // Enabling the endpoint creates `$web` asynchronously.
-      const remote = yield* client.listBlobs;
+      const remote = yield* listWebBlobs(url);
       const changed = files.filter((file) => remote.get(file.name) !== file.md5);
       const wanted = new Set(files.map((file) => file.name));
       const stale = [...remote.keys()].filter((name) => !wanted.has(name));
@@ -435,44 +349,79 @@ export const StaticWebsiteProvider = () =>
           `Uploading ${changed.length} of ${files.length} files to ${news.storageAccount}/$web`,
         );
       }
+      const fs = yield* FileSystem.FileSystem;
       yield* Effect.forEach(
         changed,
         (file) =>
-          client.putBlob(file).pipe(
-            Effect.retry({
-              // `$web` not created yet right after enabling the endpoint.
-              while: (error) => error.status === 404,
-              schedule: Schedule.spaced("2 seconds"),
-              times: 10,
-            }),
-          ),
+          Effect.gen(function* () {
+            const body = yield* fs.readFile(file.full);
+            yield* blob
+              .UploadBlockBlob({
+                url,
+                containerName: WEB_CONTAINER,
+                blob: file.name,
+                body,
+                xMsBlobContentType: contentTypeOf(file.name),
+                xMsBlobCacheControl: cacheControlOf(file.name),
+                xMsBlobContentMd5: file.md5,
+              })
+              .pipe(
+                Effect.retry({
+                  // Enabling the endpoint creates `$web` asynchronously.
+                  while: (error) =>
+                    error._tag === "ContainerNotFound" ||
+                    error._tag === "SchemaRegistryStorageAccessDenied",
+                  schedule: Schedule.spaced("5 seconds"),
+                  times: 12,
+                }),
+              );
+          }),
         { concurrency: 16, discard: true },
       );
-      yield* Effect.forEach(stale, client.deleteBlob, {
+      yield* Effect.forEach(stale, (name) => deleteWebBlob(url, name), {
         concurrency: 16,
         discard: true,
       });
 
-      const url = webEndpointOf(account, news.storageAccount);
+      // Purge what the edge may still cache: replaced and deleted files.
+      const replaced = changed.filter((file) => remote.has(file.name)).map((file) => file.name);
+      const purgedPaths =
+        news.purge === undefined ? [] : purgePathsOf([...replaced, ...stale], indexDocument);
+      if (news.purge !== undefined && purgedPaths.length > 0) {
+        const { subscriptionId } = yield* AzureEnvironment.current;
+        yield* session.note(`Purging ${purgedPaths.length} paths from ${news.purge.endpoint}`);
+        // Purging runs asynchronously on the edge; the request returns at once.
+        yield* cdn.PurgeAFDEndpointContent({
+          subscriptionId,
+          resourceGroupName: news.purge.resourceGroup,
+          profileName: news.purge.profile,
+          endpointName: news.purge.endpoint,
+          contentPaths: purgedPaths,
+        });
+      }
+
+      const webUrl = endpointOf(account, news.storageAccount, "web");
+      const contentHash = yield* contentHashOf(files);
       return {
         storageAccount: news.storageAccount,
         resourceGroup: news.resourceGroup,
-        url,
-        hostName: new URL(url).hostname,
+        url: webUrl,
+        hostName: new URL(webUrl).hostname,
         fileCount: files.length,
-        contentHash: yield* contentHashOf(files),
+        contentHash,
+        purgedPaths,
       };
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const account = yield* getAccount(output.resourceGroup, output.storageAccount);
       if (account === undefined) return;
-      const client = yield* blobClient(output.resourceGroup, output.storageAccount);
-      const remote = yield* client.listBlobs;
-      yield* Effect.forEach([...remote.keys()], client.deleteBlob, {
+      const url = endpointOf(account, output.storageAccount, "blob");
+      const remote = yield* listWebBlobs(url);
+      yield* Effect.forEach([...remote.keys()], (name) => deleteWebBlob(url, name), {
         concurrency: 16,
         discard: true,
       });
-      yield* client.setStaticWebsite({ enabled: false });
+      yield* blob.SetServiceProperties({ url, StaticWebsite: { Enabled: false } });
     }),
   });

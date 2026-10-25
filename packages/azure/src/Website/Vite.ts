@@ -27,11 +27,24 @@ export interface ViteProps extends FrameworkSiteProps {
 }
 
 /**
- * Deploy a plain [Vite](https://vite.dev) application to the static
- * website endpoint of an Azure Storage account: the `vite build` output is
- * uploaded to the `$web` container, with no Docker image and no server.
- * For client-only projects — React/Vue/Solid SPAs, `index.html`
- * multi-page apps — whose entire deployable output is static assets.
+ * Deploy a plain [Vite](https://vite.dev) application to Azure: the
+ * `vite build` output is uploaded to the static website endpoint of an
+ * Azure Storage account and served through Azure Front Door, with no
+ * Docker image and no server. For client-only projects — React/Vue/Solid
+ * SPAs, `index.html` multi-page apps — whose entire deployable output is
+ * static assets.
+ *
+ * Each file is uploaded with a `Cache-Control` header (HTML is never
+ * cached, hashed assets are immutable), and a redeploy purges the paths of
+ * replaced and deleted files from Front Door. Front Door answers a
+ * single-page application's deep links with the index page and a `200`
+ * status.
+ *
+ * Front Door Standard is on by default and costs a monthly base fee per
+ * profile: pass `frontDoor: { profile }` to share one profile across
+ * sites, or `frontDoor: false` to serve straight from the storage
+ * endpoint (deep links then answer `404` with the index page). A new Front
+ * Door endpoint takes 10-20 minutes to serve everywhere.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/vite` with the
  * `@alchemy.run/frontend-frameworks/vite/node` deploy target — the package
@@ -67,11 +80,20 @@ export interface ViteProps extends FrameworkSiteProps {
  * ```
  *
  * ### Front Door
- * **Example:** SPA deep links with a `200` status
+ * **Example:** Share one Front Door profile across sites
  * ```typescript
- * const site = yield* Azure.Website.Vite("Web", {
- *   frontDoor: true,
+ * const profile = yield* Azure.Cdn.Profile("Edge");
+ * const web = yield* Azure.Website.Vite("Web", { frontDoor: { profile } });
+ * const docs = yield* Azure.Website.Vite("Docs", {
+ *   rootDir: "./docs",
+ *   frontDoor: { profile },
  * });
+ * ```
+ *
+ * **Example:** Serve from the storage endpoint without Front Door
+ * ```typescript
+ * const site = yield* Azure.Website.Vite("Preview", { frontDoor: false });
+ * // site.url → "https://{account}.z13.web.core.windows.net"
  * ```
  *
  * ### Build Configuration

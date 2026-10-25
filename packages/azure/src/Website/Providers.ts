@@ -6,14 +6,8 @@ import {
   ServerProvider as WebsiteServerProvider,
 } from "alchemy/Website/Server";
 import * as Layer from "effect/Layer";
-import { AppDeployment, AppDeploymentProvider } from "./AppDeployment.ts";
 import { StaticWebsite, StaticWebsiteProvider } from "./StaticWebsite.ts";
 
-export const resources = [Build, Dev, AppDeployment, StaticWebsite, WebsiteServer];
+export const resources = [Build, Dev, StaticWebsite, WebsiteServer];
 export const layers = () =>
-  Layer.mergeAll(
-    AppDeploymentProvider(),
-    StaticWebsiteProvider(),
-    WebsiteServerProvider(),
-    Command.providers(),
-  );
+  Layer.mergeAll(StaticWebsiteProvider(), WebsiteServerProvider(), Command.providers());

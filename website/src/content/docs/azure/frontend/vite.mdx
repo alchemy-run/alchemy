@@ -1,14 +1,14 @@
 ---
 title: Vite
-description: "Deploy a Vite SPA to the static website endpoint of an Azure Storage account with Azure.Website.Vite — no Docker, and Vite's own dev server under alchemy dev."
+description: "Deploy a Vite SPA to Blob Storage behind Azure Front Door with Azure.Website.Vite — no Docker, no server, and Vite's own dev server under alchemy dev."
 sidebar:
   order: 2
 ---
 
-`Azure.Website.Vite` deploys a [Vite](https://vite.dev) project to the
-static website endpoint of an Azure Storage account. It runs `vite build`
-and uploads the output to the account's `$web` container. No Docker image
-and no server are involved.
+`Azure.Website.Vite` deploys a [Vite](https://vite.dev) project to Azure.
+It runs `vite build`, uploads the output to the static website endpoint of
+an Azure Storage account, and serves it through Azure Front Door. No Docker
+image and no server are involved.
 
 ## Install
 
@@ -33,16 +33,38 @@ export default Alchemy.Stack(
 );
 ```
 
-Unknown paths return `index.html` (SPA) with a `404` status. Add
-`frontDoor: true` to answer them with `200` through Azure Front Door. Use
-`assets: { notFoundHandling: "404-page" }` for multi-page sites.
+`web.url` is the Front Door endpoint, `https://{endpoint}.z01.azurefd.net`.
+A new endpoint takes 10-20 minutes to serve everywhere.
+
+Unknown paths return `index.html` with a `200` status, so client-side
+routes deep-link. Use `assets: { notFoundHandling: "404-page" }` for
+multi-page sites with a `404.html`.
+
+## Redeploy
+
+A redeploy uploads only changed files and deletes removed ones. HTML is
+never cached; hashed assets are cached for a year. Alchemy then purges the
+paths of replaced and deleted files from Front Door.
 
 ## Share infrastructure
 
 ```typescript
+const profile = yield* Azure.Cdn.Profile("Edge");
 const storageAccount = yield* Azure.Storage.StorageAccount("Files");
-const web = yield* Azure.Website.Vite("Web", { storageAccount });
+const web = yield* Azure.Website.Vite("Web", {
+  storageAccount,
+  frontDoor: { profile },
+});
 ```
+
+Each Front Door profile bills a monthly base fee, so share one across
+sites. `frontDoor: false` serves the site straight from the storage
+endpoint; deep links then answer `404` with the app shell.
+
+## Local development
+
+Under `alchemy dev`, `web.url` is Vite's own dev server (HMR included) and
+no Azure resources are created.
 
 See the [`azure-website-vite`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-vite)
 example.

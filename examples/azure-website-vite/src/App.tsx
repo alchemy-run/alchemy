@@ -4,7 +4,7 @@ export function App() {
   const [count, setCount] = useState(0);
   return (
     <main className="mx-auto max-w-xl p-8">
-      <h1 className="text-3xl font-bold">Hello from Azure Container Apps</h1>
+      <h1 className="text-3xl font-bold">Hello from Azure Front Door</h1>
       <p className="mt-2 text-slate-400">
         A Vite SPA deployed with <code>Azure.Website.Vite</code>.
       </p>

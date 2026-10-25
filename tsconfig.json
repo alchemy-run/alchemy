@@ -428,10 +428,37 @@
       "path": "./examples/docker-postgres/tsconfig.json"
     },
     {
+      "path": "./examples/azure-container-app/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-container-app-job/tsconfig.json"
+    },
+    {
       "path": "./examples/azure-effect-workflows/tsconfig.json"
     },
     {
+      "path": "./examples/azure-function/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-function-async/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-function-httpapi/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-schedule/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-service-bus/tsconfig.json"
+    },
+    {
       "path": "./examples/azure-storage/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-storage-queue/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-storage-uploads/tsconfig.json"
     },
     {
       "path": "./examples/azure-website-vite/tsconfig.json"

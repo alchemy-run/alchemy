@@ -15,8 +15,24 @@ describe(
           dev: {},
           tags: { team: "web" },
           location: "eastus",
-          sku: "B1",
+          instanceMemoryMB: 4096,
+          maximumInstanceCount: 40,
+          frontDoor: {},
+        }),
+      () =>
+        Azure.Website.Vite("V", {
+          // @ts-expect-error Front Door is on by default; only `false` opts out
           frontDoor: true,
+        }),
+      () =>
+        Azure.Website.Vite("V", {
+          // @ts-expect-error server builds run on Flex Consumption, not an App Service plan
+          sku: "B1",
+        }),
+      () => Azure.Website.Vite("V", { frontDoor: false }),
+      () =>
+        Azure.Website.Vite("V", {
+          frontDoor: { profile: Azure.Cdn.Profile("Edge") },
         }),
       () =>
         Azure.Website.Vite("V", {
@@ -72,7 +88,7 @@ describe(
           outdir: "public",
           spa: true,
           location: "eastus",
-          frontDoor: {},
+          frontDoor: false,
         }),
     ];
 

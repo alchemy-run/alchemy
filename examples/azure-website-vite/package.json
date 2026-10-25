@@ -23,6 +23,7 @@
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@distilled.cloud/azure": "workspace:*",
     "alchemy": "workspace:*",
+    "alchemy-test": "workspace:*",
     "effect": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"

@@ -34,6 +34,12 @@
       "worker": "./dist/*/neon.js",
       "import": "./dist/*/neon.js"
     },
+    "./*/azure": {
+      "types": "./dist/*/azure.d.ts",
+      "bun": "./dist/*/azure.js",
+      "worker": "./dist/*/azure.js",
+      "import": "./dist/*/azure.js"
+    },
     "./aws-lambda": {
       "types": "./dist/aws-lambda/index.d.ts",
       "bun": "./dist/aws-lambda/index.js",

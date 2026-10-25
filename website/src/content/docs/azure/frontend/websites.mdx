@@ -1,6 +1,6 @@
 ---
 title: Websites
-description: Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Vocs, or any static build to Azure without Docker — static builds on a Storage static website, server builds on App Service.
+description: Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Vocs, or any static build to Azure — static assets on Blob Storage behind Azure Front Door, server rendering on Azure Functions.
 sidebar:
   label: Overview
   order: 1
@@ -8,20 +8,17 @@ sidebar:
 
 Alchemy deploys frontends to Azure with a family of `Azure.Website`
 resources. Each one builds your project through
-`@alchemy.run/frontend-frameworks/<framework>/node`, then picks the hosting
-from the build output. Your framework's own config file (`vite.config.ts`,
-`astro.config.*`, `nuxt.config.ts`, ...) loads natively. No Docker daemon,
-image, or registry is involved.
+`@alchemy.run/frontend-frameworks/<framework>`, uploads the static assets to
+Blob Storage, and serves the site through Azure Front Door. A
+server-rendered build also runs on an Azure Functions app (Flex
+Consumption), which scales to zero. Your framework's own config file
+(`vite.config.ts`, `astro.config.*`, `nuxt.config.ts`, ...) loads natively.
+No Docker image, App Service plan, or container is involved.
 
-| Build output | Hosting | URL |
+| Build output | Origin behind Front Door | URL |
 | --- | --- | --- |
-| Static assets (Vite, Foldkit SPA or `output: "static"`, Astro `output: "static"`, `StaticSite`) | Storage account static website (`$web` container) | `https://{account}.z13.web.core.windows.net` |
-| Server (SSR frameworks, Foldkit `output: "server"`) | Linux App Service web app on the Node.js runtime, zip-deployed | `https://{app}.azurewebsites.net` |
-
-Static builds upload only new and changed files (by MD5) and delete
-removed files. HTML is served with `no-cache`; other files are immutable.
-Server builds bundle the framework's Node serve entry and publish it with
-Kudu zip deploy; the same process serves the client assets.
+| Static assets (Vite, Foldkit SPA or `output: "static"`, Astro `output: "static"`, `StaticSite`) | Storage account static website (`$web` container) | `https://{endpoint}.z01.azurefd.net` |
+| Server (SSR frameworks, Foldkit `output: "server"`) | `/*` → Flex Consumption Function; the client directory's top-level paths → Blob Storage | `https://{endpoint}.z01.azurefd.net` |
 
 ```typescript
 import * as Azure from "@alchemy.run/azure";
@@ -29,40 +26,63 @@ import * as Azure from "@alchemy.run/azure";
 const site = yield* Azure.Website.Vite("Web", { location: "eastus" });
 ```
 
-Omit `storageAccount` and `plan` and Alchemy creates them under the site's
-namespace (the plan defaults to `B1`). The site goes into the stack's
-resource group unless you pass `resourceGroup`. Pass them to share
-infrastructure between sites.
+## Assets and caching
+
+Alchemy uploads only new and changed files (by MD5) and deletes removed
+files. It uploads with the deployer's Microsoft Entra token and grants the
+deployer **Storage Blob Data Contributor** on the storage account; no
+account keys or SAS tokens are used. Each file carries a `Cache-Control`
+header:
+
+- HTML: `max-age=0,no-cache,no-store,must-revalidate`, so a deploy is
+  visible at once.
+- Every other file: `max-age=31536000,public,immutable`.
+
+Front Door caches what the headers allow. After an upload, Alchemy purges
+the paths of replaced and deleted files from the endpoint (`/*` when more
+than 100 paths changed). The purge runs on the edge after the deploy
+returns.
 
 ## Front Door
 
-The storage endpoint answers a single-page app's deep link (for example
-`/counter/42`) with the app shell and a `404` status. Set `frontDoor` to
-serve the site through an Azure Front Door (Standard) endpoint instead: a
-rule rewrites extensionless paths to `/index.html`, so deep links return
-`200`.
+Front Door Standard is on by default. It answers a single-page app's deep
+link (for example `/counter/42`) with the app shell and a `200` status. A
+new endpoint takes 10-20 minutes to serve everywhere, and each profile
+bills a monthly base fee.
+
+Share one profile across sites:
 
 ```typescript
-const site = yield* Azure.Website.Foldkit("Web", {
-  frontDoor: true,
-});
+const profile = yield* Azure.Cdn.Profile("Edge");
+const web = yield* Azure.Website.Vite("Web", { frontDoor: { profile } });
 ```
 
-Front Door profiles bill a monthly base fee. Pass
-`frontDoor: { profile }` to share one profile across sites.
+Serve an assets-only build straight from the storage endpoint with
+`frontDoor: false`. Deep links then answer `404` with the app shell. A
+server build needs Front Door.
+
+```typescript
+const preview = yield* Azure.Website.Vite("Preview", { frontDoor: false });
+```
+
+## Shared infrastructure
+
+Omit `storageAccount` and Alchemy creates a `Standard_LRS` account under
+the site's namespace. The site goes into the stack's resource group unless
+you pass `resourceGroup`. A server build's Function is set with
+`location` (a region that offers Flex Consumption), `instanceMemoryMB`, and
+`maximumInstanceCount`.
 
 ## Resources
 
 - [`Vite`](/azure/frontend/vite) — client-only Vite apps.
-- `Foldkit` — browser-only and prerendered apps on the storage endpoint;
-  `output: "server"` runs Foldkit's request handler on App Service.
-- `Astro`, `Nextjs`, `Vinext`, `Nuxt`, `ReactRouter`, `SolidStart`,
-  `SvelteKit`, `TanStackStart`, `Waku`, `Octane`, `Vocs` — server builds
-  on App Service; Astro with `output: "static"` uses the storage endpoint.
 - `StaticSite` — any build command's output directory (Hugo, Zola,
   Eleventy).
-- `StaticWebsite` and `AppDeployment` — the building blocks the composites
-  use, for publishing your own directory or Node server.
+- `Foldkit`, `Astro`, `Nextjs`, `Vinext`, `Nuxt`, `ReactRouter`,
+  `SolidStart`, `SvelteKit`, `TanStackStart`, `Waku`, `Octane`, `Vocs` —
+  framework sites.
+- `StaticWebsite` — the building block that publishes a directory to a
+  storage account and purges Front Door.
 
 During `alchemy dev` every site runs its framework's own dev server and no
 Azure resources are created. `Alchemy.remote()` opts back into the live
