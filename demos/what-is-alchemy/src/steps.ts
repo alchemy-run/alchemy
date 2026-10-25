@@ -1,271 +1,147 @@
-import api from "../snippets/api.ts?raw";
-import jobs from "../snippets/jobs.ts?raw";
-import photos from "../snippets/Photos.ts?raw";
-import photosS3 from "../snippets/PhotosS3.ts?raw";
-import plainApi from "../snippets/plain-api.ts?raw";
-import plain from "../snippets/plain.ts?raw";
-import stack from "../snippets/stack.ts?raw";
-import type { Pane, Scene, Step } from "./scene.ts";
-import { cut } from "./snippet.ts";
-import { color } from "./theme.ts";
+import type { Step } from "./scene.ts";
 
 /**
- * The talk, in order: the "What is Alchemy?" docs page as a sequence
- * (website/src/content/docs/what-is-alchemy.mdx). Each step is one press of →.
+ * The talk, in order. Its content is the "What is Alchemy?" docs page
+ * (website/src/content/docs/what-is-alchemy.mdx) and the compare page
+ * (website/src/pages/compare.astro). Each step is one press of →.
  */
-const API: Pane = { file: "src/api.ts", code: cut(api) };
-const PLAIN: Pane[] = [
-  { file: "alchemy.run.ts", code: cut(plain) },
-  { file: "src/api.ts", code: cut(plainApi) },
-];
-const GENERATED = `# IAM policy
-- Effect: Allow
-  Action: dynamodb:GetItem
-  Resource: arn:aws:dynamodb:…:table/Jobs-a1b2c3
-
-# environment
-Jobs_tableName: Jobs-a1b2c3`;
-const SLICE = {
-  label: "serve an upload",
-  items: ["Uploads bucket", "access · env.Uploads", "fetch handler", "download link"],
-} as const satisfies Extract<Scene, { kind: "pyramid" }>["slice"];
-
-const ok = (text: string) => ({ text, color: color.moss });
-const dim = (text: string) => ({ text, color: "#6f6656" });
-const plainText = (text: string) => ({ text, color: color.fg });
-const bold = (text: string) => ({ text, color: color.fg, bold: true });
-
 export const steps: Step[] = [
   {
     notes:
       "Alchemy is a TypeScript framework for building cloud applications with Effects and Layers. Your infrastructure and the code that runs on it are written together, type-checked together, and deployed together.",
     scene: {
-      kind: "title",
-      heading: "What is Alchemy?",
-      subtitle: "Cloud applications built with Effects and Layers",
-      footer: "alchemy.run",
+      kind: "hero",
+      eyebrow: "What is Alchemy?",
+      heading: "More than just\nInfrastructure as Code",
+      lede: "A TypeScript framework for cloud applications, built with Effects and Layers. Infrastructure and the code that runs on it, written, type-checked and deployed together.",
     },
   },
   {
-    title: "An R2 Bucket and a Worker that serves files from it",
+    heading: "Infrastructure and app code, together",
     notes:
-      "Here's a whole app in one file. An R2 Bucket, and a Worker that serves a file from it. The Bucket is declared right next to the Worker that uses it.",
-    scene: { kind: "code", group: "api", panes: [API] },
+      "Here's an R2 Bucket and a Worker that serves a file from it, written the way Terraform, Pulumi, SST or the CDK would have you write it. One program creates the Bucket and the Worker. The Worker's code is a second program that finds the Bucket through an environment variable.",
+    scene: { kind: "versus", stage: 1 },
   },
   {
-    title: "The Worker asks for the Bucket in its own code",
+    heading: "Infrastructure and app code, together",
     notes:
-      "The Worker asks for the Bucket itself. This one line does two jobs. When you deploy, it gives the Worker access to the Bucket.",
+      "The two programs meet at one name, Uploads. The handler can't see how the Bucket got there, and the infrastructure can't see what the handler does with it. Every feature you build has to change both, and they have to agree.",
+    scene: { kind: "versus", stage: 2 },
+  },
+  {
+    heading: "Infrastructure and app code, together",
+    notes:
+      "In Alchemy it's one file. The Bucket is declared next to the Worker, and the Worker asks for it in its own code. That one line gives the Worker access when you deploy, and hands back a typed client while it runs. Alchemy still deploys the two-program version, so existing handlers work as they are.",
+    scene: { kind: "versus", stage: 3 },
+  },
+  {
+    heading: "One line does three jobs",
+    lede: "To read a table, a function needs a permission, the table's name, and a client.",
+    notes: "Here's the same idea on AWS. A Lambda asks for GetItem on the Jobs table.",
+    scene: { kind: "oneLine", stage: 1 },
+  },
+  {
+    heading: "One line does three jobs",
+    lede: "To read a table, a function needs a permission, the table's name, and a client.",
+    notes:
+      "That one line produces all three: a statement in the IAM policy, the table's name in the environment, and a typed client. No name to keep in sync, no policy to write, no client to set up.",
+    scene: { kind: "oneLine", stage: 2 },
+  },
+  {
+    heading: "Least privilege, from the code",
+    lede: "Permissions come from the bindings your code uses.",
+    notes:
+      "Because the policy comes from the code, it grants exactly what the code calls: GetItem on that table. SST's link grants every DynamoDB action on the table. Pulumi and Terraform deploy whatever policy you write, which is often dynamodb:* on everything.",
+    scene: { kind: "permissions" },
+  },
+  {
+    heading: "Infrastructure as Effects",
+    lede: "A Runtime's code asks for what it needs, then returns what runs.",
+    notes:
+      "We call this Infrastructure as Effects. A Worker, a Lambda Function or a Container is a Runtime, and its code always has the same shape. First it asks for what it needs. That's the Construction phase. It runs when you deploy, and again when the Worker starts.",
+    scene: { kind: "phases", stage: 1 },
+  },
+  {
+    heading: "Infrastructure as Effects",
+    lede: "A Runtime's code asks for what it needs, then returns what runs.",
+    notes:
+      "Then it returns what it exposes. The fetch handler runs once per request. That's the Runtime phase. Both live in one Effect, so the types know every resource it uses and every access it needs: leave one out and it doesn't compile.",
+    scene: { kind: "phases", stage: 2 },
+  },
+  {
+    heading: "Your services own their infrastructure",
+    notes:
+      "Because infrastructure is created inside Effects, a service's Layer can create what it needs. JobServiceKV creates a KV Namespace, asks for access to it, and implements getJob. Any Runtime that provides the Layer gets all three.",
+    scene: { kind: "layers", variant: "kv" },
+  },
+  {
+    heading: "Your services own their infrastructure",
+    notes:
+      "Your business logic only sees JobService. Provide a different Layer and the jobs live in a DynamoDB table instead, with the IAM policy to match. This is why Alchemy reaches past infrastructure into your application: workflows, APIs and domain models are Layers too.",
+    frames: 48,
+    scene: { kind: "layers", variant: "dynamo" },
+  },
+  {
+    heading: "Underneath, it's Infrastructure as Code",
+    lede: "Its own engine in TypeScript, not a wrapper.",
+    notes:
+      "Underneath, deploying works like Terraform or Pulumi, with one difference. SST, Pulumi and Terraform talk to their providers over a bridge, sometimes two. Alchemy imports its providers as TypeScript and runs them directly.",
+    scene: { kind: "engine" },
+  },
+  {
+    heading: "Underneath, it's Infrastructure as Code",
+    lede: "alchemy deploy shows a plan, then applies only what changed.",
+    notes:
+      "A Stack is what you deploy. alchemy deploy reads the last result from state, compares it with your program, shows a plan, and applies only what changed. Each stage is its own copy of every resource, so dev and prod never touch each other.",
+    frames: 72,
+    scene: { kind: "deploy" },
+  },
+  {
+    heading: "True emulation for faster dev loops",
+    notes:
+      "Back on your machine. alchemy dev runs the whole stack locally: the Lambda in Docker, DynamoDB in an emulator. A request never leaves your laptop.",
+    scene: { kind: "dev", stage: 1 },
+  },
+  {
+    heading: "True emulation for faster dev loops",
+    notes:
+      "And you choose what's real. Pipe the Lambda through remote() and it's deployed for real, while it still reads and writes your local DynamoDB.",
+    frames: 48,
+    scene: { kind: "dev", stage: 2 },
+  },
+  {
+    heading: "True emulation for faster dev loops",
+    notes:
+      "Compare that with SST, where every request goes through a deployed stage, three round trips across the network. And Pulumi and Terraform have no local runtime at all: every change is a redeploy.",
+    scene: { kind: "dev", stage: 3 },
+  },
+  {
+    heading: "A complete iteration loop for agents",
+    lede: "Deploy a real stack, test it, and tear it down, from the test runner you already use.",
+    notes:
+      "When it works locally, the same test deploys the app to a stage of its own, runs against real infrastructure, and destroys it. Our preview benchmark does one full loop in about 17 seconds. An agent makes a change and runs one test file.",
+    frames: 84,
+    scene: { kind: "loop" },
+  },
+  {
+    heading: "At a glance",
+    notes: "Here's all of it side by side.",
+    frames: 48,
+    scene: { kind: "glance" },
+  },
+  {
+    notes: "That's Alchemy. Read more at alchemy.run/what-is-alchemy.",
     scene: {
-      kind: "code",
-      group: "api",
-      panes: [
-        {
-          ...API,
-          marks: [
-            {
-              kind: "circle",
-              find: "Cloudflare.R2.ReadWriteBucket(Uploads)",
-              label: "access when you deploy",
-              tone: "construct",
-            },
-          ],
-        },
-      ],
-    },
-  },
-  {
-    title: "…and gets back a typed client",
-    notes:
-      "And when the Worker runs, the same line hands back a typed client. So bucket.get is checked by the compiler like any other function call.",
-    scene: {
-      kind: "code",
-      group: "api",
-      panes: [
-        {
-          ...API,
-          marks: [
-            {
-              kind: "circle",
-              find: "Cloudflare.R2.ReadWriteBucket(Uploads)",
-              label: "access when you deploy",
-              tone: "construct",
-            },
-            {
-              kind: "underline",
-              find: 'bucket.get("hello.txt")',
-              label: "checked like any function call",
-              tone: "runtime",
-            },
-          ],
-        },
-      ],
-    },
-  },
-  {
-    title: "On AWS, the same kind of line writes the IAM policy",
-    notes:
-      "It's the same on AWS. Ask for GetItem on the Jobs table, and Alchemy writes an IAM statement that allows exactly that call on exactly that table, and puts the table's name in the Function's environment. No name to keep in sync, no policy to write, no client to set up.",
-    scene: {
-      kind: "code",
-      group: "aws",
-      panes: [
-        { file: "src/api.ts", code: cut(jobs) },
-        { file: "generated at deploy", code: GENERATED, lang: "yaml" },
-      ],
-      links: [
-        { from: "AWS.DynamoDB.GetItem(Jobs)", to: "dynamodb:GetItem", tone: "good" },
-        { from: "AWS.DynamoDB.GetItem(Jobs)", to: "Jobs_tableName", tone: "good" },
-      ],
-    },
-  },
-  {
-    notes:
-      "If you've used Terraform, Pulumi, SST or the CDK, that probably looks unusual. Here's why.",
-    scene: { kind: "section", heading: "More than just\nInfrastructure as Code" },
-  },
-  {
-    title: "Infrastructure as Code stops at the Bucket and the Worker",
-    notes:
-      "Infrastructure as Code tools only cover half of that file: the Bucket and the Worker. The Worker's code is a separate program, and it finds the Bucket through an environment variable. Alchemy can be used this way too.",
-    scene: { kind: "code", group: "plain", panes: PLAIN },
-  },
-  {
-    title: "The two halves meet at one name",
-    notes:
-      "The two halves meet at one name, Uploads. The handler can't see how the Bucket got there, and the infrastructure can't see what the handler does with it.",
-    scene: {
-      kind: "code",
-      group: "plain",
-      panes: PLAIN,
-      links: [{ from: "env: { Uploads }", to: "env.Uploads", tone: "bad" }],
-    },
-  },
-  {
-    title: "Every Infrastructure as Code tool draws this line",
-    notes:
-      "Terraform, Pulumi, SST and the CDK all split an app the same way. Infrastructure and policies below the line, in one program. The code that runs above it, in another.",
-    scene: { kind: "pyramid", cut: true },
-  },
-  {
-    title: "…but every feature crosses it",
-    notes:
-      "But features don't live on one side of that line. Serving an upload needs a Bucket, access to it, a handler, and a link on the page. Every feature is split across two programs that have to agree.",
-    scene: { kind: "pyramid", cut: true, slice: SLICE },
-  },
-  {
-    title: "In Alchemy, a feature owns both halves",
-    notes:
-      "Alchemy is built on Infrastructure as Code, but it doesn't stop there. When the Worker's code is an Effect that asks for the Bucket itself, one feature owns everything it needs, top to bottom.",
-    scene: { kind: "pyramid", slice: { ...SLICE, label: "one Effect" } },
-  },
-  {
-    notes:
-      "We call this Infrastructure as Effects. Your app is built from Effects and Layers, and the infrastructure it needs is part of them. Their types record the resources it uses and the access it needs, so a missing piece is a compile error, not a failed deploy.",
-    scene: { kind: "section", heading: "Infrastructure as Effects" },
-  },
-  {
-    title: "The Construction phase asks for what it needs",
-    notes:
-      "A Worker, a Lambda Function, a Container: each one is a Runtime, a resource that carries the code it runs, and its code always has the same shape. First, ask for what you need. This runs when you deploy and again when the Worker starts. We call it the Construction phase.",
-    scene: {
-      kind: "code",
-      group: "phases",
-      panes: [{ ...API, tints: [{ from: "const bucket", tone: "construct" }] }],
-    },
-  },
-  {
-    title: "…and returns what runs on every request",
-    notes:
-      "Then return what you expose. The fetch it returns runs once per request. That's the Runtime phase.",
-    scene: {
-      kind: "code",
-      group: "phases",
-      panes: [
-        {
-          ...API,
-          tints: [
-            { from: "const bucket", tone: "construct" },
-            { from: "fetch: Effect.gen", to: '"Not found"', tone: "runtime" },
-          ],
-        },
-      ],
-    },
-  },
-  {
-    title: "A service can own its infrastructure",
-    notes:
-      "Because infrastructure is created inside Effects, a service's Layer can create what it needs. Here's a Photos service. Its Layer creates an R2 Bucket, asks for access to it, and implements upload. Any Runtime that provides this Layer gets all three.",
-    scene: {
-      kind: "code",
-      group: "photos",
-      panes: [{ file: "src/Photos.ts", code: cut(photos) }],
-      reel: { items: ["Cloudflare", "AWS"], at: 0 },
-    },
-  },
-  {
-    title: "Swap the Layer, and the photos move to S3",
-    notes:
-      "Your business logic only sees the Photos service. Provide a different Layer, and the photos live in an S3 bucket instead, with the IAM policy to match. This is why Alchemy reaches past infrastructure into your application: workflows, APIs and domain models become Layers too.",
-    scene: {
-      kind: "code",
-      group: "photos",
-      panes: [{ file: "src/Photos.ts", code: cut(photosS3) }],
-      reel: { items: ["Cloudflare", "AWS"], at: 1 },
-    },
-  },
-  {
-    notes: "And underneath all of that, deploying works like Terraform or Pulumi.",
-    scene: { kind: "section", heading: "Underneath, it's\nInfrastructure as Code" },
-  },
-  {
-    title: "A Stack is what you deploy",
-    notes:
-      "A Stack is the unit you deploy. It creates resources, here the Worker and the Bucket it asks for, and returns the outputs you want printed.",
-    scene: { kind: "code", group: "stack", panes: [{ file: "alchemy.run.ts", code: cut(stack) }] },
-  },
-  {
-    title: "alchemy deploy shows a plan, then applies only what changed",
-    notes:
-      "alchemy deploy reads the last result from state, compares it with your program, shows a plan, and applies only what changed. Each stage is its own copy of every resource, so dev and prod never touch each other.",
-    frames: 60,
-    scene: {
-      kind: "terminal",
-      lines: [
-        [dim("$ "), plainText("alchemy deploy")],
-        [ok("✓ "), plainText("Plan ready")],
-        [dim("─".repeat(48))],
-        [
-          { text: "Deploy", color: color.ember, bold: true },
-          dim(" · "),
-          ok("2 to create"),
-          dim(" · "),
-          ok("1 binding"),
-        ],
-        [],
-        [ok("  + "), bold("Uploads "), dim("(Cloudflare.R2.Bucket)")],
-        [ok("  + "), bold("Api "), dim("(Cloudflare.Worker)")],
-        [ok("      ↳ binds Uploads")],
-        [dim("─".repeat(48))],
-        [ok("✓ "), plainText("Uploads created")],
-        [ok("✓ "), plainText("Api created")],
-        [],
-        [bold("url"), plainText(": https://myapp-api.workers.dev")],
-      ],
-    },
-  },
-  {
-    notes: "That's Alchemy. The docs walk through all of this at alchemy.run/what-is-alchemy.",
-    scene: {
-      kind: "title",
+      kind: "hero",
+      eyebrow: "Alchemy",
       heading: "Infrastructure and app code,\ntogether",
-      subtitle: "alchemy.run/what-is-alchemy",
-      footer: "alchemy.run",
+      lede: "Built on Infrastructure as Code, written with Effects and Layers.",
+      footer: "alchemy.run/what-is-alchemy",
     },
   },
 ];
 
-const DEFAULT_FRAMES = 36;
+const DEFAULT_FRAMES = 40;
 
 /** Each step's frames `[from, to)` on the composition's timeline. */
 export const ranges = steps.reduce<{ from: number; to: number }[]>((acc, step) => {

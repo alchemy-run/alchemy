@@ -1,49 +1,27 @@
-import type { Tone } from "./theme.ts";
-
-/** A hand-drawn mark on code, with a label beside it. */
-export interface Mark {
-  find: string;
-  kind: "circle" | "underline";
-  label: string;
-  tone: Tone;
-}
-
-/** One file on screen. */
-export interface Pane {
-  file: string;
-  code: string;
-  lang?: "ts" | "yaml";
-  marks?: Mark[];
-  /** Tint lines by phase: from the line containing `from` to the one containing `to`. */
-  tints?: { from: string; to?: string; tone: Tone }[];
-}
-
+/** What a step draws. Scenes with a `stage` build up over consecutive steps. */
 export type Scene =
-  | { kind: "title"; heading: string; subtitle?: string; footer?: string }
-  | { kind: "section"; heading: string }
-  | {
-      kind: "code";
-      /** Consecutive code scenes in the same group don't re-enter, only their new marks animate. */
-      group: string;
-      panes: Pane[];
-      /** Lines from text in the first pane to text in the second. */
-      links?: { from: string; to: string; tone: Tone }[];
-      /** A row of options under the code, with the current one lit. */
-      reel?: { items: string[]; at: number };
-    }
-  | {
-      kind: "pyramid";
-      /** The line between the two programs. */
-      cut?: boolean;
-      /** One feature cut vertically through every layer. */
-      slice?: { label: string; items: [string, string, string, string] };
-    }
-  | { kind: "terminal"; lines: { text: string; color?: string; bold?: boolean }[][] };
+  | { kind: "hero"; eyebrow: string; heading: string; lede: string; footer?: string }
+  /** Plain IaC (two programs) against Alchemy (one Effect), from the compare page. */
+  | { kind: "versus"; stage: 1 | 2 | 3 }
+  /** One capability line → IAM policy, env var, typed client. */
+  | { kind: "oneLine"; stage: 1 | 2 }
+  | { kind: "permissions" }
+  /** The Construction and Runtime phases of a Runtime's code. */
+  | { kind: "phases"; stage: 1 | 2 }
+  /** A service Layer that brings its own infrastructure, swapped from KV to DynamoDB. */
+  | { kind: "layers"; variant: "kv" | "dynamo" }
+  | { kind: "engine" }
+  | { kind: "deploy" }
+  /** Where one request goes in dev: Alchemy local, Lambda moved to the cloud, then the others. */
+  | { kind: "dev"; stage: 1 | 2 | 3 }
+  | { kind: "loop" }
+  | { kind: "glance" };
 
 /** One press of →. */
 export interface Step {
-  /** The caption at the top of the screen (none on title and section slides). */
-  title?: string;
+  /** The heading over the scene (hero scenes carry their own). */
+  heading?: string;
+  lede?: string;
   /** What to say. Shown in the presenter, never in the video. */
   notes: string;
   scene: Scene;

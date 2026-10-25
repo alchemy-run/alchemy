@@ -1,7 +1,7 @@
 # What is Alchemy? (talk)
 
-The "What is Alchemy?" docs page as an animated talk you step through and
-record over. Built with [Remotion](https://remotion.dev): one composition,
+The "What is Alchemy?" docs page and the compare page as an animated talk
+you step through and record over. Built with [Remotion](https://remotion.dev): one composition,
 one step per key press.
 
 ```sh
@@ -17,6 +17,7 @@ recording.
 | Path | What it is |
 | --- | --- |
 | `src/steps.ts` | The talk, in order: each step's caption, notes and scene |
-| `src/scenes/` | How each kind of scene is drawn: code, pyramid, terminal, slides |
+| `src/scenes/` | One file per scene: versus, one line, permissions, phases, layers, engine, deploy, dev, loop, at a glance |
+| `src/ui.tsx` | The code window, heading and pill every scene shares |
 | `snippets/` | The code on screen, type-checked; the slide shows `// #region show` |
 | `src/present.tsx` | The presenter |

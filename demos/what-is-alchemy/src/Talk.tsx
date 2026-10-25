@@ -1,12 +1,20 @@
 import { AbsoluteFill, useCurrentFrame } from "remotion";
 import { enter, progress } from "./anim.ts";
 import type { Scene } from "./scene.ts";
-import { Code } from "./scenes/Code.tsx";
-import { Pyramid } from "./scenes/Pyramid.tsx";
-import { Section, Title } from "./scenes/Slides.tsx";
-import { Terminal } from "./scenes/Terminal.tsx";
+import { Deploy } from "./scenes/Deploy.tsx";
+import { Dev } from "./scenes/Dev.tsx";
+import { Engine } from "./scenes/Engine.tsx";
+import { Glance } from "./scenes/Glance.tsx";
+import { Hero } from "./scenes/Hero.tsx";
+import { Layers } from "./scenes/Layers.tsx";
+import { Loop } from "./scenes/Loop.tsx";
+import { OneLine } from "./scenes/OneLine.tsx";
+import { Permissions } from "./scenes/Permissions.tsx";
+import { Phases } from "./scenes/Phases.tsx";
+import { Versus } from "./scenes/Versus.tsx";
 import { ranges, steps } from "./steps.ts";
-import { color, font } from "./theme.ts";
+import { color } from "./theme.ts";
+import { Heading } from "./ui.tsx";
 
 /** The whole talk as one composition: each step plays in its own range of frames, then holds. */
 export const Talk = () => {
@@ -18,26 +26,16 @@ export const Talk = () => {
   const t = frame - ranges[i]!.from;
   const step = steps[i]!;
   const prev = steps[i - 1];
+  const sameHeading = prev?.heading === step.heading && prev?.lede === step.lede;
   return (
     <AbsoluteFill
       style={{
-        background: `radial-gradient(1200px 700px at 10% 0%, #2a2a1a 0%, transparent 60%), radial-gradient(900px 600px at 95% 100%, #2a1c14 0%, transparent 60%), ${color.bg}`,
+        background: `radial-gradient(1100px 700px at 8% 0%, #232614 0%, transparent 60%), radial-gradient(900px 600px at 100% 100%, #2a1c14 0%, transparent 60%), ${color.bg}`,
       }}
     >
-      {step.title && (
-        <div
-          style={{
-            position: "absolute",
-            left: 80,
-            top: 52,
-            fontFamily: font.sans,
-            fontWeight: 700,
-            fontSize: 50,
-            color: color.fg,
-            ...(prev?.title === step.title ? {} : enter(progress(t, 0, 10))),
-          }}
-        >
-          {step.title}
+      {step.heading && (
+        <div style={sameHeading ? undefined : enter(progress(t, 0, 10))}>
+          <Heading heading={step.heading} lede={step.lede} />
         </div>
       )}
       <SceneView scene={step.scene} prev={prev?.scene} t={t} />
@@ -47,15 +45,27 @@ export const Talk = () => {
 
 const SceneView = ({ scene, prev, t }: { scene: Scene; prev?: Scene; t: number }) => {
   switch (scene.kind) {
-    case "title":
-      return <Title {...scene} t={t} />;
-    case "section":
-      return <Section heading={scene.heading} t={t} />;
-    case "code":
-      return <Code scene={scene} prev={prev} t={t} />;
-    case "pyramid":
-      return <Pyramid scene={scene} prev={prev} t={t} />;
-    case "terminal":
-      return <Terminal {...scene} t={t} />;
+    case "hero":
+      return <Hero {...scene} t={t} />;
+    case "versus":
+      return <Versus scene={scene} prev={prev} t={t} />;
+    case "oneLine":
+      return <OneLine scene={scene} prev={prev} t={t} />;
+    case "permissions":
+      return <Permissions t={t} />;
+    case "phases":
+      return <Phases scene={scene} prev={prev} t={t} />;
+    case "layers":
+      return <Layers scene={scene} prev={prev} t={t} />;
+    case "engine":
+      return <Engine t={t} />;
+    case "deploy":
+      return <Deploy t={t} />;
+    case "dev":
+      return <Dev scene={scene} prev={prev} t={t} />;
+    case "loop":
+      return <Loop t={t} />;
+    case "glance":
+      return <Glance t={t} />;
   }
 };
