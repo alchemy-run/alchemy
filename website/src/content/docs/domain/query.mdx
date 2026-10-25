@@ -148,8 +148,22 @@ WHERE account_id = ? AND (amount < ? OR (amount = ? AND id < ?))
 ORDER BY amount DESC, id DESC LIMIT ?
 ```
 
-- Each order needs its own index (here on `account_id, amount, id`). That is why an order is one of a few declared values, not a column name the client sends.
-- A cursor only means something under the order that produced it. Encode the order in the cursor (`largest:9000:l-42`), and when a client sends a cursor from another order, fail with a declared rejection rather than return a wrong page. A client that changes the order starts again from the first page.
+Each order needs its own index (here on `account_id, amount, id`). That is why an order is one of a few declared values, not a column name the client sends.
+
+A cursor only means something under the order that produced it, so make it carry the order, and give it a schema rather than joining values with a separator: ids such as `Account/a-1:3` may contain any separator. Encode the cursor as base64url JSON, so the client sees an opaque string:
+
+```typescript
+const LargestFirst = Schema.Struct({ order: Schema.Literal("largest"), amount: Cents, id: Schema.String });
+const LargestFirstCursor = Schema.StringFromBase64Url.pipe(Schema.decodeTo(Schema.fromJsonString(LargestFirst)));
+
+// the last row of a page → the next page's `after`
+const cursorOf = (row: LedgerRow) =>
+  Schema.encodeSync(LargestFirstCursor)({ order: "largest", amount: row.amount, id: row.id });
+// `after` → where the next page starts: None for a cursor from another order, or not a cursor at all
+const parseCursor = Schema.decodeUnknownOption(LargestFirstCursor);
+```
+
+When `parseCursor` returns `None`, fail with a declared rejection (`InvalidCursor`) rather than return a wrong page. A client that changes the order starts again from the first page.
 
 ## Decide who may ask, and who sees each row
 
