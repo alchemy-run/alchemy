@@ -619,6 +619,12 @@ export const EventSourceMappingProvider = () =>
       return {
         stables: ["uuid", "eventSourceMappingArn"],
         diff: Effect.fn(function* ({ news, olds }) {
+          // An event source ARN is unresolved only while its source is being
+          // created or replaced (sources expose their ARN as stable on update),
+          // and AWS cannot move a mapping to another source.
+          if ("eventSourceArn" in news && !isResolved(news.eventSourceArn)) {
+            return { action: "replace" } as const;
+          }
           if (!isResolved(news)) return;
           if ((news.eventSourceArn as string) !== (olds.eventSourceArn as string)) {
             return { action: "replace" } as const;
@@ -660,6 +666,14 @@ export const EventSourceMappingProvider = () =>
             config = yield* lambda
               .getEventSourceMapping({ UUID: output.uuid })
               .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          }
+          // `updateEventSourceMapping` cannot change the source, so a mapping
+          // that reads another source (e.g. state written before a source was
+          // replaced) is recreated for this source and the stale one deleted.
+          let stale: string | undefined;
+          if (config?.UUID && config.EventSourceArn !== eventSourceArn) {
+            stale = config.UUID;
+            config = undefined;
           }
           if (!config?.UUID) {
             config = yield* lambda.listEventSourceMappings
@@ -741,6 +755,16 @@ export const EventSourceMappingProvider = () =>
           }
 
           const uuid = config.UUID;
+          if (stale !== undefined && stale !== uuid) {
+            yield* lambda.deleteEventSourceMapping({ UUID: stale }).pipe(
+              Effect.retry({
+                while: (e: { _tag: string }) =>
+                  e._tag === "ResourceInUseException" || e._tag === "ResourceConflictException",
+                schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(20)]),
+              }),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
+          }
           const mappingArn = `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${uuid}`;
 
           // Sync configuration — `updateEventSourceMapping` is a full PUT

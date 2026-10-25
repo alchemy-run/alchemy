@@ -9,6 +9,11 @@ import * as Schedule from "effect/Schedule";
 import EventSourceMappingFunctionLive, {
   EventSourceMappingFunction,
 } from "./fixtures/event-source-mapping-handler.ts";
+import {
+  EventSourceMappingReplaceFunction,
+  FifoQueueLive,
+  StandardQueueLive,
+} from "./fixtures/event-source-mapping-replace-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -59,6 +64,44 @@ test.provider(
           schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
         }),
       );
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:sqs", "live"],
+    timeout: 240_000,
+  },
+);
+
+// Switching the queue between standard and FIFO replaces it in the same deploy
+// that updates the mapping, so the queue's ARN is unresolved when the mapping
+// is diffed. AWS cannot move a mapping to another source, so the mapping must
+// be replaced rather than updated in place.
+test.provider(
+  "replaces the mapping when its queue is replaced",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const mappingsOf = (functionName: string) =>
+        Lambda.listEventSourceMappings({ FunctionName: functionName }).pipe(
+          Effect.map((page) => page.EventSourceMappings ?? []),
+        );
+
+      const standard = yield* stack.deploy(
+        EventSourceMappingReplaceFunction.pipe(Effect.provide(StandardQueueLive)),
+      );
+      const [before] = yield* mappingsOf(standard.functionName);
+      expect(before?.EventSourceArn?.endsWith(".fifo")).toBe(false);
+
+      const fifo = yield* stack.deploy(
+        EventSourceMappingReplaceFunction.pipe(Effect.provide(FifoQueueLive)),
+      );
+      const after = yield* mappingsOf(fifo.functionName);
+
+      expect(after.length).toBe(1);
+      expect(after[0]!.EventSourceArn?.endsWith(".fifo")).toBe(true);
+      expect(after[0]!.UUID).not.toEqual(before!.UUID);
+
+      yield* stack.destroy();
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   {
     tags: ["provider:aws", "provider:aws:lambda", "provider:aws:sqs", "live"],
