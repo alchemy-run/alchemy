@@ -160,7 +160,7 @@ A linear six-part walkthrough from zero to a tested, locally-developed, CI-deplo
 - [Vue](https://alchemy.run/cloudflare/frontend/vue) — Deploy a Vue single-page app to Cloudflare with the Vite resource — one declaration, no Wrangler config.
 - [Foldkit](https://alchemy.run/cloudflare/frontend/foldkit) — Deploy Foldkit SPA, SSR, SSG, and hybrid applications to Cloudflare Workers.
 - [SolidStart](https://alchemy.run/cloudflare/frontend/solidstart) — Deploy SolidStart to Cloudflare with Cloudflare.Website.Vite — plus the hand-rolled SolidJS SSR variant for full control over the server entry.
-- [Astro](https://alchemy.run/cloudflare/frontend/astro) — Deploy an Astro site to Cloudflare Workers with Cloudflare.Website.Astro — SSR in the Worker, prerendered pages as static assets, sessions backed by an auto-provisioned KV namespace.
+- [Astro](https://alchemy.run/cloudflare/frontend/astro) — Deploy an Astro site to Cloudflare Workers with Cloudflare.Website.Astro — SSR in the Worker, prerendered pages as static assets, sessions backed by an auto-provisioned KV namespace, and route caching on Workers Cache.
 - [Next.js](https://alchemy.run/cloudflare/frontend/nextjs) — Deploy a Next.js app to Cloudflare Workers with Cloudflare.Website.Nextjs — the OpenNext pipeline, writable ISR, and wrangler-free local dev.
 - [Vinext](https://alchemy.run/cloudflare/frontend/vinext) — Deploy vinext to Cloudflare Workers with the shared Website API, native local development, and KV-backed caching.
 - [Nuxt](https://alchemy.run/cloudflare/frontend/nuxt) — Deploy a Nuxt app to Cloudflare Workers with Cloudflare.Website.Nuxt — nitro's cloudflare_module preset, native nuxt.config.ts loading, and wrangler-free local dev.
@@ -908,4 +908,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~120 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~199 KB) — only fetch it when you need to locate a specific resource's reference page.

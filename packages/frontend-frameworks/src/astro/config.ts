@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import * as Effect from "effect/Effect";
 import { FrameworkError } from "../core/Framework.ts";
 import { loadProjectModule, resolveProjectPackageDirectory } from "../core/Loader.ts";
+import { usesCloudflareCacheProvider } from "./cache.ts";
 
 /** Astro's own config discovery list, in its lookup order. */
 const CONFIG_FILES = ["astro.config.mjs", "astro.config.js", "astro.config.ts", "astro.config.mts"];
@@ -34,9 +35,22 @@ interface ViteModule {
   ) => Promise<{ readonly config: unknown } | null>;
 }
 
+/** The deploy-relevant settings a project's `astro.config.*` declares. */
+export interface AstroConfigSettings {
+  /** The declared `output`, or `undefined` when the file does not set one. */
+  readonly output: AstroOutput | undefined;
+  /**
+   * Whether the config routes caching through the Cloudflare cache provider
+   * (`cache: { provider: cacheCloudflare() }`), which needs Workers Cache
+   * enabled on the Worker.
+   */
+  readonly workerCache: boolean;
+}
+
 /**
- * Read the `output` declared by a project's `astro.config.*` file, or
- * `undefined` when there is no config file or it does not set `output`.
+ * Read the deploy-relevant settings of a project's `astro.config.*` file.
+ * Without a config file, `output` is `undefined` and `workerCache` is
+ * `false`.
  *
  * Deploy composites call this at plan time: whether a site is assets-only
  * decides which resources exist, and Astro gives no way to tell an explicit
@@ -45,7 +59,7 @@ interface ViteModule {
  * import for `.js`/`.mjs`, otherwise through the project's Vite module
  * runner.
  */
-export const readConfigOutput = Effect.fn("Astro.readConfigOutput")(function* (
+export const readConfigSettings = Effect.fn("Astro.readConfigSettings")(function* (
   options: ReadConfigOutputOptions = {},
 ) {
   const root = yield* Effect.sync(() =>
@@ -56,7 +70,9 @@ export const readConfigOutput = Effect.fn("Astro.readConfigOutput")(function* (
       ? NodePath.resolve(root, options.config)
       : CONFIG_FILES.map((file) => NodePath.join(root, file)).find((file) => existsSync(file)),
   );
-  if (configPath === undefined) return undefined;
+  if (configPath === undefined) {
+    return { output: undefined, workerCache: false } satisfies AstroConfigSettings;
+  }
   const fail = (cause: unknown) =>
     new FrameworkError({
       framework: "astro",
@@ -97,5 +113,19 @@ export const readConfigOutput = Effect.fn("Astro.readConfigOutput")(function* (
     : yield* viaVite;
   const output =
     typeof config === "object" && config !== null && "output" in config ? config.output : undefined;
-  return output === "server" || output === "static" ? (output as AstroOutput) : undefined;
+  return {
+    output: output === "server" || output === "static" ? (output as AstroOutput) : undefined,
+    workerCache: usesCloudflareCacheProvider(config),
+  } satisfies AstroConfigSettings;
+});
+
+/**
+ * Read the `output` declared by a project's `astro.config.*` file, or
+ * `undefined` when there is no config file or it does not set `output`.
+ * See {@link readConfigSettings}.
+ */
+export const readConfigOutput = Effect.fn("Astro.readConfigOutput")(function* (
+  options: ReadConfigOutputOptions = {},
+) {
+  return (yield* readConfigSettings(options)).output;
 });

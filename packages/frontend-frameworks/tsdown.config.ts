@@ -28,6 +28,7 @@ export default defineConfig([
       "astro/cloudflare": "src/astro/cloudflare.ts",
       "astro/entrypoints/aws-server": "src/astro/entrypoints/aws-server.ts",
       "astro/entrypoints/node-server": "src/astro/entrypoints/node-server.ts",
+      "astro/cache": "src/astro/cache.ts",
       "astro/config": "src/astro/config.ts",
       "astro/source": "src/astro/source.ts",
       "astro/runtime/entrypoints/server": "src/astro/runtime/entrypoints/server.ts",
@@ -124,6 +125,31 @@ export default defineConfig([
     outputOptions: {
       entryFileNames: "[name].js",
       chunkFileNames: "_chunks/[name]-[hash].js",
+    },
+  },
+  // The Astro cache provider runs in the Worker. It builds alone so its
+  // entry never changes how the main build splits chunks, which modules
+  // that resolve siblings via `import.meta.url` depend on.
+  {
+    cwd: ".",
+    entry: { "astro/runtime/cache/provider": "src/astro/runtime/cache/provider.ts" },
+    exports: false,
+    outDir: "dist",
+    clean: false,
+    tsconfig: "tsconfig.runtime.json",
+    format: "esm",
+    target: "esnext",
+    dts: false,
+    shims: false,
+    sourcemap: true,
+    deps: { onlyBundle: [] },
+    inputOptions: {
+      external: [/^(?:astro|cloudflare):/, /^astro(?:\/|$)/],
+      makeAbsoluteExternalsRelative: true,
+    },
+    outputOptions: {
+      entryFileNames: "[name].js",
+      codeSplitting: false,
     },
   },
   {

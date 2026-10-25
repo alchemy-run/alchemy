@@ -835,5 +835,105 @@ describe.concurrent(
         }).pipe(logLevel),
       { timeout: 360_000 },
     );
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Route caching (#2320): `cache: { provider: cacheCloudflare() }` turns
+    // on Workers Cache for the Worker, and `routeRules` decide what the edge
+    // caches. Each page stamps a fresh UUID per render, so a repeated body
+    // proves the edge served it without invoking the Worker; a route with
+    // no rule must render on every request (`no-store` default).
+    // ─────────────────────────────────────────────────────────────────────
+
+    test.provider(
+      "Astro: cacheCloudflare() route rules serve repeat requests from Workers Cache",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-astro-cache-",
+            tempRoot,
+            entries: ["package.json", "public", "src"],
+          });
+          yield* fs.writeFileString(
+            path.join(rootDir, "astro.config.mjs"),
+            [
+              'import { defineConfig } from "astro/config";',
+              'import { cacheCloudflare } from "@alchemy.run/frontend-frameworks/astro/cache";',
+              "",
+              "export default defineConfig({",
+              '  output: "server",',
+              "  cache: { provider: cacheCloudflare() },",
+              '  routeRules: { "/cached": { maxAge: 300 } },',
+              "});",
+              "",
+            ].join("\n"),
+          );
+          const page = (name: string) =>
+            `---\nconst id = crypto.randomUUID();\n---\n<p>${name}:{id}</p>\n`;
+          yield* fs.writeFileString(path.join(rootDir, "src/pages/cached.astro"), page("cached"));
+          yield* fs.writeFileString(
+            path.join(rootDir, "src/pages/uncached.astro"),
+            page("uncached"),
+          );
+
+          const site = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Website.Astro("AstroCacheSite", {
+                rootDir,
+                workersDev: { enabled: true, previewsEnabled: true },
+                compatibility: { date: "2026-03-10" },
+                memo: {
+                  include: ["src/**", "public/**", "package.json", "astro.config.mjs"],
+                  workspaces: [],
+                },
+              });
+            }),
+          );
+          expect(site.url).toBeDefined();
+          yield* expectWorkerExists(site.workerName, accountId);
+          yield* expectUrlContains(`${site.url!}/cached`, "cached:", {
+            timeout: "120 seconds",
+            label: "cached route propagation",
+          });
+
+          // Same URL every time (no cache-busting): the cache key must match.
+          const render = (route: string) =>
+            Effect.tryPromise(async (signal) => {
+              const res = await fetch(`${site.url!}/${route}`, { signal });
+              const body = await res.text();
+              return res.ok ? body.match(new RegExp(`${route}:([0-9a-f-]{36})`))?.[1] : undefined;
+            });
+
+          let previous: string | undefined;
+          const hit = yield* render("cached").pipe(
+            Effect.map((id) => {
+              const isHit = id !== undefined && id === previous;
+              if (id !== undefined) previous = id;
+              return isHit;
+            }),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (isHit) => isHit,
+              times: 20,
+            }),
+          );
+          expect(hit).toBe(true);
+
+          const first = yield* render("uncached");
+          const second = yield* render("uncached");
+          expect(first).toBeDefined();
+          expect(second).toBeDefined();
+          expect(second).not.toBe(first);
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:kv", "provider:cloudflare:cache"], timeout: 360_000 },
+    );
   },
 );

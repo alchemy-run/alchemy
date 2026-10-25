@@ -141,6 +141,47 @@ export type IssueAutomation = Resource<
  * });
  * ```
  *
+ * ### Handling issues in code
+ * **Example:** Open a GitHub issue for every new Worker issue
+ * A Worker only records issues with `observability.issues.enabled`.
+ * `consumeNotifications` points the policy at the handling Worker, so the
+ * policy declares no `mechanisms`.
+ * ```typescript
+ * const Repo = GitHub.Repository("Repo", { owner: "acme", name: "api" });
+ *
+ * const IssuePolicy = Cloudflare.Alerting.NotificationPolicy("IssuePolicy", {
+ *   alertType: "workers_observability_real_time_issue",
+ * });
+ *
+ * class Api extends Cloudflare.Worker<Api>()(
+ *   "Api",
+ *   { main: import.meta.url, observability: { enabled: true, issues: { enabled: true } } },
+ *   Effect.gen(function* () {
+ *     const policy = yield* IssuePolicy;
+ *     const createIssue = yield* GitHub.CreateIssue(yield* Repo);
+ *     yield* Cloudflare.Alerting.consumeNotifications(policy, (notification) =>
+ *       createIssue({ title: notification.text.split("\n")[0], body: notification.text }),
+ *     );
+ *     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+ *   }).pipe(
+ *     Effect.provide(
+ *       Layer.mergeAll(Cloudflare.Alerting.NotificationEventSourceLive, GitHub.CreateIssueHttp),
+ *     ),
+ *   ),
+ * ) {}
+ *
+ * const Stack = Effect.gen(function* () {
+ *   yield* Repo;
+ *   const policy = yield* IssuePolicy;
+ *   const api = yield* Api;
+ *   yield* Cloudflare.Workers.IssueAutomation("ApiIssues", {
+ *     policyId: policy.policyId,
+ *     service: api.workerName,
+ *     afterOccurrences: 1,
+ *   });
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/workers/observability/issues/
  *
  * @resource

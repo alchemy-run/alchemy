@@ -3,7 +3,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import type { AlertType } from "./NotificationPolicy.ts";
+import type { AlertType, NotificationPolicyMechanisms } from "./NotificationPolicy.ts";
 
 // Notification-policy plumbing shared by NotificationPolicy and CustomAlert.
 
@@ -69,6 +69,33 @@ export const createPolicyName = (id: string, name: string | undefined) =>
   });
 
 export type PolicyBody = Omit<alerting.CreatePolicyRequest, "accountId">;
+
+/**
+ * Binding contract of a notification policy (`NotificationPolicy`,
+ * `CustomAlert`): destinations contributed by the runtimes that consume its
+ * notifications, e.g. `Cloudflare.Alerting.consumeNotifications`.
+ */
+export interface NotificationPolicyBinding {
+  /** Webhook destinations to notify, alongside the declared `mechanisms`. */
+  webhooks?: ReadonlyArray<{ id: string }>;
+}
+
+/**
+ * The declared mechanisms plus the webhooks bound onto the policy. The engine
+ * sid-sorts bindings, so the merged order is stable across deploys.
+ */
+export const boundMechanisms = (
+  mechanisms: NotificationPolicyMechanisms | undefined,
+  bindings: ReadonlyArray<{ data: NotificationPolicyBinding }>,
+): PolicyBody["mechanisms"] => {
+  const bound = bindings.flatMap((b) => b.data.webhooks ?? []);
+  if (bound.length === 0) return mechanisms as PolicyBody["mechanisms"];
+  const webhooks = [...(mechanisms?.webhooks ?? []), ...bound];
+  return {
+    ...mechanisms,
+    webhooks: webhooks.filter((w, i) => webhooks.findIndex((x) => x.id === w.id) === i),
+  } as PolicyBody["mechanisms"];
+};
 
 export const policyEqualsObserved = (desired: PolicyBody, observed: ObservedPolicy): boolean =>
   desired.name === (observed.name ?? "") &&
