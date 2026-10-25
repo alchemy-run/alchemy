@@ -17,7 +17,10 @@ const SETTING_NAME = "default";
 const DEFAULT_TLS_VERSION = "1.2";
 
 export interface DedicatedSqlMinimalTlsSettingProps {
-  /** Resource group of the workspace. Changing it replaces the setting. */
+  /**
+   * Resource group of the workspace. Changing it replaces the setting.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Synapse workspace. Changing it replaces the setting. */
   workspace: string;
@@ -49,16 +52,33 @@ export interface DedicatedSqlMinimalTlsSetting extends Resource<
 
 /**
  * The minimum TLS version accepted by a Synapse workspace's dedicated SQL
- * endpoint (`{workspace}.sql.azuresynapse.net`).
+ * endpoint (`{workspace}.sql.azuresynapse.net`)
+ * (`Microsoft.Synapse/workspaces/dedicatedSQLminimalTlsSettings`).
  *
  * This is a singleton setting that always exists on a workspace.
  * Destroying the resource restores TLS 1.2.
+ *
+ * :::caution
+ * Changing `workspace` or `resourceGroup` replaces the setting.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/security/connectivity-settings#minimal-tls-version
  *
  * ### Configuring TLS
  * **Example:** Require TLS 1.2
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
  * yield* Azure.Synapse.DedicatedSqlMinimalTlsSetting("tls", {
  *   workspace: workspace.workspaceName,
  *   minimalTlsVersion: "1.2",

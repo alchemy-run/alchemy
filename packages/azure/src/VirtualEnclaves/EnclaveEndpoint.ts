@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,24 +32,40 @@ import {
 
 /** One ingress rule into the enclave. */
 export interface EnclaveEndpointRule {
-  /** Rule name. */
+  /**
+   * Rule name.
+   * @default not set
+   */
   endpointRuleName?: string;
-  /** Destination IP address or CIDR inside the enclave. */
+  /**
+   * Destination IP address or CIDR inside the enclave.
+   * @default not set
+   */
   destination?: string;
-  /** Protocols, e.g. `["TCP"]`. */
+  /**
+   * Protocols, e.g. `["TCP"]`.
+   * @default not set
+   */
   protocols?: ("ANY" | "TCP" | "UDP" | "ICMP" | "ESP" | "AH")[];
-  /** Ports, e.g. `"443"` or `"8000-8080"`. */
+  /**
+   * Ports, e.g. `"443"` or `"8000-8080"`.
+   * @default not set
+   */
   ports?: string;
 }
 
 export interface EnclaveEndpointProps {
-  /** Resource group of the enclave. Changing it replaces the endpoint. */
+  /**
+   * Resource group of the enclave. Changing it replaces the endpoint.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the parent virtual enclave. Changing it replaces the endpoint. */
   virtualEnclave: string;
   /**
    * Endpoint name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the endpoint.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -59,11 +75,15 @@ export interface EnclaveEndpointProps {
   location?: string;
   /** Ingress rules programmed into the community firewall. */
   ruleCollection: EnclaveEndpointRule[];
-  /** Whether rule updates apply `Automatic`ally or need `Manual` approval. */
+  /**
+   * Whether rule updates apply `Automatic`ally or need `Manual` approval.
+   * @default not set
+   */
   updateMode?: "Automatic" | "Manual";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -94,15 +114,28 @@ export interface EnclaveEndpoint extends Resource<
 > {}
 
 /**
- * An enclave endpoint — firewall ingress rules into an Azure
- * {@link VirtualEnclave}. Other enclaves reach it through an
- * {@link EnclaveConnection}.
+ * An enclave endpoint (`Microsoft.Mission/virtualEnclaves/enclaveEndpoints`)
+ * — firewall ingress rules into an Azure {@link VirtualEnclave}. Other
+ * enclaves reach it through an {@link EnclaveConnection}.
+ *
+ * :::caution
+ * Changing `virtualEnclave`, `name`, `location`, or `resourceGroup` replaces
+ * the enclave endpoint.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-enclaves/overview
  *
  * ### Creating an Enclave Endpoint
  * **Example:** Expose HTTPS on an enclave subnet
  * ```typescript
+ * const community = yield* Azure.VirtualEnclaves.Community("hub", {
+ *   addressSpace: "10.0.0.0/16",
+ *   firewallSku: "Basic",
+ * });
+ * const enclave = yield* Azure.VirtualEnclaves.VirtualEnclave("spoke", {
+ *   communityId: community.communityId,
+ *   enclaveVirtualNetwork: { networkSize: "small" },
+ * });
  * const endpoint = yield* Azure.VirtualEnclaves.EnclaveEndpoint("ingress", {
  *   virtualEnclave: enclave.virtualEnclaveName,
  *   ruleCollection: [
@@ -167,24 +200,21 @@ export const EnclaveEndpointProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const enclaves = yield* mission
-        .ListVirtualEnclaveBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListVirtualEnclaveBySubscription", page)),
-        );
+      const enclaves = yield* collectAll(mission.ListVirtualEnclaveBySubscription, {
+        subscriptionId,
+      });
       const results: EnclaveEndpoint["Attributes"][] = [];
       for (const enclave of enclaves.value) {
         const group = resourceGroupOf(enclave.id);
         if (group === undefined || enclave.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          mission.ListEnclaveEndpointByEnclaveResource({
+          collectAll(mission.ListEnclaveEndpointByEnclaveResource, {
             subscriptionId,
             resourceGroupName: group,
             virtualEnclaveName: enclave.name,
           }),
         );
         if (page === undefined) continue;
-        yield* requireSinglePage("ListEnclaveEndpointByEnclaveResource", page);
         for (const endpoint of page.value) {
           if (hasAnyAlchemyTag(endpoint.tags) && endpoint.name !== undefined) {
             results.push(toAttrs(group, enclave.name, endpoint.name, endpoint));

@@ -25,6 +25,7 @@ export interface NodePoolProps {
   /**
    * Resource group of the parent supercomputer. Changing it replaces the
    * node pool.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /** Name of the parent supercomputer. Changing it replaces the node pool. */
@@ -33,6 +34,7 @@ export interface NodePoolProps {
    * Node pool name: 3-24 letters, digits, and hyphens. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the node pool.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -67,16 +69,19 @@ export interface NodePoolProps {
   /**
    * Disk usage percent below which image garbage collection never runs.
    * Changing it replaces the node pool.
+   * @default unset
    */
   imageCacheLowerThreshold?: number;
   /**
    * Disk usage percent above which image garbage collection always runs.
    * Changing it replaces the node pool.
+   * @default unset
    */
   imageCacheUpperThreshold?: number;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -114,15 +119,43 @@ export interface NodePool extends Resource<
  * GPU nodes in a Discovery supercomputer.
  *
  * Only GPU VM sizes are supported (A100 nodes cost ~$3.7/hour each, T4
- * nodes ~$0.53/hour). Microsoft Discovery is a gated preview: on
- * subscriptions without the preview, ARM rejects the resource type with
- * `InvalidResourceType`.
+ * nodes ~$0.53/hour).
+ *
+ * :::caution
+ * Changing `supercomputer`, `name`, `location`, `resourceGroup`, `vmSize`,
+ * `subnetId`, `scaleSetPriority`, `osDiskSizeGb`,
+ * `imageCacheLowerThreshold`, or `imageCacheUpperThreshold` replaces the
+ * node pool.
+ * :::
+ *
+ * :::caution
+ * Microsoft Discovery is a gated preview. On subscriptions without the
+ * preview, ARM rejects the resource type with `InvalidResourceType`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/microsoft-discovery/
  *
  * ### Creating a Node Pool
  * **Example:** Scale-to-zero A100 pool
  * ```typescript
+ * const clusterIdentity = yield* Azure.ManagedIdentity.UserAssignedIdentity("cluster");
+ * const kubeletIdentity = yield* Azure.ManagedIdentity.UserAssignedIdentity("kubelet");
+ * const vnet = yield* Azure.Network.VirtualNetwork("hpc", {
+ *   addressPrefixes: ["10.40.0.0/16"],
+ * });
+ * const systemSubnet = yield* Azure.Network.Subnet("system", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.40.0.0/24",
+ * });
+ * const supercomputer = yield* Azure.Discovery.Supercomputer("hpc", {
+ *   subnetId: systemSubnet.subnetId,
+ *   clusterIdentity: clusterIdentity.identityId,
+ *   kubeletIdentity: kubeletIdentity.identityId,
+ * });
+ * const nodeSubnet = yield* Azure.Network.Subnet("gpu", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.40.2.0/24",
+ * });
  * const gpus = yield* Azure.Discovery.NodePool("a100", {
  *   supercomputer: supercomputer.supercomputerName,
  *   subnetId: nodeSubnet.subnetId,

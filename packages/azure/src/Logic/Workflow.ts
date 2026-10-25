@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -80,6 +80,7 @@ export interface WorkflowProps {
    * Workflow name: 1-80 letters, digits, `-`, `_`, `.`, `(`, `)`. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the workflow.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -96,6 +97,7 @@ export interface WorkflowProps {
   /**
    * Values for parameters declared in `definition.parameters`. Azure
    * rejects values for undeclared parameters.
+   * @default none
    */
   parameters?: Record<string, WorkflowParameterValue>;
   /**
@@ -104,18 +106,26 @@ export interface WorkflowProps {
    * @default "Enabled"
    */
   state?: "Enabled" | "Disabled";
-  /** Caller restrictions (IP ranges, Entra ID policies). */
+  /**
+   * Caller restrictions (IP ranges, Entra ID policies).
+   * @default none
+   */
   accessControl?: WorkflowAccessControl;
   /**
    * ARM ID of an integration account (same location) whose B2B artifacts
    * the workflow uses.
+   * @default none
    */
   integrationAccount?: string;
-  /** Managed identity used by HTTP actions and managed connectors. */
+  /**
+   * Managed identity used by HTTP actions and managed connectors.
+   * @default none
+   */
   identity?: WorkflowIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`, and a configuration hash) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -156,10 +166,15 @@ export interface Workflow extends Resource<
  * A Consumption (multi-tenant) Azure Logic Apps workflow. Billed per
  * action execution, so an idle workflow costs nothing.
  *
+ * ARM type: `Microsoft.Logic/workflows`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/logic-apps/logic-apps-overview).
+ *
  * Standard (single-tenant) Logic Apps run on App Service; see
  * `Azure.Web.WebApp`.
  *
- * @see https://learn.microsoft.com/azure/logic-apps/logic-apps-overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the workflow.
+ * :::
  *
  * ### Creating a Workflow
  * **Example:** HTTP request/response workflow
@@ -322,9 +337,7 @@ export const WorkflowProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* logic
-        .ListWorkflowBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListWorkflowBySubscription", page)));
+      const page = yield* collectAll(logic.ListWorkflowBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((workflow) => {
         const group = resourceGroupOf(workflow.id);
         return hasAnyAlchemyTag(workflow.tags) && group !== undefined && workflow.name !== undefined

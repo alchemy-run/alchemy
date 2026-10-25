@@ -20,7 +20,10 @@ import {
 } from "./common.ts";
 
 export interface CoordinatorConfigurationProps {
-  /** Resource group of the cluster. Changing it replaces the configuration. */
+  /**
+   * Resource group of the cluster. Changing it replaces the configuration.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the cluster. Changing it replaces the configuration. */
   cluster: string;
@@ -64,17 +67,24 @@ export interface CoordinatorConfiguration extends Resource<
 
 /**
  * A server parameter on the coordinator of an Azure Cosmos DB for
- * PostgreSQL cluster.
+ * PostgreSQL cluster
+ * (`Microsoft.DBforPostgreSQL/serverGroupsv2/coordinatorConfigurations`).
  *
  * Every parameter always exists; this resource overrides its value and
  * restores Azure's default when deleted. Parameters with
  * `requiresRestart` apply after the next cluster restart.
  *
- * @see https://learn.microsoft.com/azure/cosmos-db/postgresql/reference-parameters
+ * :::caution
+ * Changing `resourceGroup`, `cluster`, or `name` replaces the resource:
+ * the old parameter goes back to Azure's default.
+ * :::
+ *
+ * See [Cosmos DB for PostgreSQL server parameters](https://learn.microsoft.com/azure/cosmos-db/postgresql/reference-parameters).
  *
  * ### Setting Parameters
  * **Example:** Log slow statements on the coordinator
  * ```typescript
+ * const cluster = yield* Azure.CosmosDBPostgreSQL.Cluster("db");
  * const slowLog = yield* Azure.CosmosDBPostgreSQL.CoordinatorConfiguration(
  *   "slow-log",
  *   {

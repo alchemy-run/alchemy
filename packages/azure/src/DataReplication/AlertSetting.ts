@@ -18,7 +18,10 @@ import { DATA_REPLICATION_NAMESPACE, ownedByVaultOrUnowned, sameName } from "./S
 export const DEFAULT_EMAIL_CONFIGURATION = "default";
 
 export interface AlertSettingProps {
-  /** Resource group of the vault. Changing it replaces the setting. */
+  /**
+   * Resource group of the vault. Changing it replaces the setting.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the data replication vault. Changing it replaces the setting. */
   vault: string;
@@ -69,13 +72,17 @@ export interface AlertSetting extends Resource<
 
 /**
  * Email notification settings of an Azure Site Recovery data replication
- * vault (`replicationVaults/alertSettings`): who is emailed about
- * replication health, failover, and job events.
+ * vault (`Microsoft.DataReplication/replicationVaults/alertSettings`): who
+ * is emailed about replication health, failover, and job events.
  *
  * Email configurations cannot be tagged; Alchemy treats one as owned when
  * its vault is tagged for the current stack and stage. There is no delete
  * API: destroying the resource resets it to `sendToOwners: false` with no
  * recipients, and it disappears with the vault.
+ *
+ * :::caution
+ * Changing `vault`, `name`, or `resourceGroup` replaces the setting.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/datareplication/email-configuration/create
  *

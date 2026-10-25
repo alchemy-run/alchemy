@@ -144,7 +144,10 @@ export interface TypedDocument {
    * `Microsoft.StreamAnalytics/JavascriptUdf`.
    */
   type: string;
-  /** Type-specific properties. */
+  /**
+   * Type-specific properties.
+   * @default not set
+   */
   properties?: Record<string, unknown>;
 }
 

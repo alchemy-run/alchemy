@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -38,6 +38,7 @@ export interface RoutePolicyProps {
   /**
    * Name of the route policy. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the route policy.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -52,23 +53,31 @@ export interface RoutePolicyProps {
    * replaces the policy.
    */
   networkFabricId: string;
-  /** Address family (`IPv4` or `IPv6`). Changing it replaces the policy. */
+  /**
+   * Address family (`IPv4` or `IPv6`). Changing it replaces the policy.
+   * @default "IPv4"
+   */
   addressFamilyType?: mnf.RoutePolicyPropertiesInput["addressFamilyType"];
   /**
    * Ordered statements: a match condition (IP prefix, community, or
    * extended community list IDs) and the action to take.
    */
   statements: mnf.RoutePolicyPropertiesInput["statements"];
-  /** Action when no statement matches (`Permit` or `Deny`). */
+  /**
+   * Action when no statement matches (`Permit` or `Deny`).
+   * @default Azure's default
+   */
   defaultAction?: mnf.RoutePolicyPropertiesInput["defaultAction"];
   /**
    * Free-form description. Azure cannot update it in place, so changing
    * it replaces the resource.
+   * @default none
    */
   annotation?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -106,7 +115,13 @@ export interface RoutePolicy extends Resource<
  * rewrite routes. A route policy belongs to a Network Fabric, so it needs an
  * on-premises Operator Nexus deployment.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-route-policy
+ * ARM type: `Microsoft.ManagedNetworkFabric/routePolicies`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-route-policy).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `networkFabricId`,
+ * `addressFamilyType`, or `annotation` replaces the policy.
+ * :::
  *
  * ### Creating a Route Policy
  * **Example:** Permit routes from a prefix list
@@ -170,9 +185,7 @@ export const RoutePolicyProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mnf
-        .ListRoutePolicyBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListRoutePolicyBySubscription", page)));
+      const page = yield* collectAll(mnf.ListRoutePolicyBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

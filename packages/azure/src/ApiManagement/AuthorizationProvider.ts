@@ -21,12 +21,14 @@ export interface AuthorizationProviderGrantTypes {
   /**
    * Parameters of the OAuth2 authorization-code grant (interactive
    * consent), e.g. `{ clientId, clientSecret, scopes }`.
+   * @default not set
    */
   authorizationCode?: AuthorizationProviderGrantParameters;
   /**
    * Parameters of the OAuth2 client-credentials grant, e.g.
    * `{ resourceUri, scopes, loginUri, tenantId }` for `aad` (the client id
    * and secret belong to each authorization, not the provider).
+   * @default not set
    */
   clientCredentials?: AuthorizationProviderGrantParameters;
 }
@@ -40,6 +42,7 @@ export interface AuthorizationProviderProps {
    * Authorization provider identifier. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces
    * the provider.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -86,12 +89,23 @@ export interface AuthorizationProvider extends Resource<
  * An API Management credential manager provider — OAuth2 settings for an
  * identity provider from which APIM acquires and refreshes tokens on
  * behalf of APIs (`get-authorization-context` policy).
+ * The ARM type is `Microsoft.ApiManagement/service/authorizationProviders`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, `identityProvider`, or `resourceGroup`
+ * replaces the provider.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/credentials-overview
  *
  * ### Creating a Provider
  * **Example:** Microsoft Entra ID with the client-credentials grant
  * ```typescript
+ * const { tenantId } = yield* Azure.AzureEnvironment.current;
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const entra = yield* Azure.ApiManagement.AuthorizationProvider("entra", {
  *   serviceName: apim.serviceName,
  *   identityProvider: "aad",
@@ -108,13 +122,17 @@ export interface AuthorizationProvider extends Resource<
  *
  * **Example:** GitHub with the authorization-code grant
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const github = yield* Azure.ApiManagement.AuthorizationProvider("github", {
  *   serviceName: apim.serviceName,
  *   identityProvider: "github",
  *   grantTypes: {
  *     authorizationCode: {
- *       clientId: githubClientId,
- *       clientSecret: Redacted.make(githubClientSecret),
+ *       clientId: yield* Config.string("GITHUB_CLIENT_ID"),
+ *       clientSecret: yield* Config.redacted("GITHUB_CLIENT_SECRET"),
  *       scopes: "repo",
  *     },
  *   },

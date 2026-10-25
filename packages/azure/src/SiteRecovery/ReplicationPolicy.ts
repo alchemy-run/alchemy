@@ -33,20 +33,35 @@ export interface ReplicationPolicyProviderInput {
    * `InMageRcm`, `VMwareCbt`, ... Changing it replaces the policy.
    */
   instanceType: string;
-  /** How long recovery points are kept, in minutes (A2A, max 15 days). */
+  /**
+   * How long recovery points are kept, in minutes (A2A, max 15 days).
+   * @default Azure's default
+   */
   recoveryPointHistory?: number;
-  /** App-consistent snapshot frequency in minutes (A2A, 0 disables). */
+  /**
+   * App-consistent snapshot frequency in minutes (A2A, 0 disables).
+   * @default Azure's default
+   */
   appConsistentFrequencyInMinutes?: number;
-  /** Crash-consistent snapshot frequency in minutes (A2A, 5). */
+  /**
+   * Crash-consistent snapshot frequency in minutes (A2A, 5).
+   * @default Azure's default
+   */
   crashConsistentFrequencyInMinutes?: number;
-  /** Multi-VM consistency: `Enable` or `Disable` (A2A). */
+  /**
+   * Multi-VM consistency: `Enable` or `Disable` (A2A).
+   * @default Azure's default
+   */
   multiVmSyncStatus?: "Enable" | "Disable";
   /** Any other provider field. */
   [key: string]: unknown;
 }
 
 export interface ReplicationPolicyProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the policy. */
+  /**
+   * Resource group of the Recovery Services vault. Changing it replaces the policy.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Recovery Services vault. Changing it replaces the policy. */
   vault: string;
@@ -54,6 +69,7 @@ export interface ReplicationPolicyProps {
    * Policy name, unique within the vault. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * policy.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -85,19 +101,28 @@ export interface ReplicationPolicy extends Resource<
 > {}
 
 /**
- * An Azure Site Recovery replication policy: how long recovery points are
- * kept and how often app- and crash-consistent snapshots are taken.
+ * An Azure Site Recovery replication policy
+ * (`Microsoft.RecoveryServices/vaults/replicationPolicies`): how long
+ * recovery points are kept and how often ASR takes app- and crash-consistent
+ * snapshots. See the
+ * [Azure docs](https://learn.microsoft.com/rest/api/site-recovery/replication-policies/create).
  *
- * Policies cannot be tagged; Alchemy treats a policy as owned when its
- * vault is tagged for the current stack and stage. Retention and snapshot
- * frequencies are updated in place; a policy cannot be deleted while a
- * container mapping uses it, so mappings are removed first.
+ * Policies have no tags. Alchemy treats a policy as owned when its vault carries this stack's ownership tags.
+ * Azure can't delete a policy while a container mapping uses it, so remove
+ * the mappings first.
  *
- * @see https://learn.microsoft.com/rest/api/site-recovery/replication-policies/create
+ * :::caution
+ * Changing `resourceGroup`, `vault`, `name`, or
+ * `providerSpecificInput.instanceType` replaces the policy. Alchemy updates
+ * retention and snapshot frequencies in place.
+ * :::
  *
  * ### Azure-to-Azure Disaster Recovery
  * **Example:** 24-hour retention with 4-hourly app-consistent snapshots
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("dr-vault", {
+ *   location: "westus2",
+ * });
  * const policy = yield* Azure.SiteRecovery.ReplicationPolicy("a2a-policy", {
  *   vault: vault.vaultName,
  *   providerSpecificInput: {

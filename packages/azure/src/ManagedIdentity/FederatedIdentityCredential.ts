@@ -7,11 +7,11 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   stackAndStage,
   waitUntilGone,
@@ -195,13 +195,9 @@ export const FederatedIdentityCredentialProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const identities = yield* msi
-        .ListUserAssignedIdentityBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListUserAssignedIdentityBySubscription", page),
-          ),
-        );
+      const identities = yield* collectAll(msi.ListUserAssignedIdentityBySubscription, {
+        subscriptionId,
+      });
       const owned = (identities.value ?? []).flatMap((identity) => {
         const group = resourceGroupOf(identity.id);
         return hasAnyAlchemyTag(identity.tags) && group !== undefined && identity.name !== undefined
@@ -212,17 +208,11 @@ export const FederatedIdentityCredentialProvider = () =>
         owned,
         ({ group, name }) =>
           orUndefinedIfNotFound(
-            msi
-              .ListFederatedIdentityCredentials({
-                subscriptionId,
-                resourceGroupName: group,
-                resourceName: name,
-              })
-              .pipe(
-                Effect.flatMap((page) =>
-                  requireSinglePage("ListFederatedIdentityCredentials", page),
-                ),
-              ),
+            collectAll(msi.ListFederatedIdentityCredentials, {
+              subscriptionId,
+              resourceGroupName: group,
+              resourceName: name,
+            }),
           ).pipe(
             Effect.map((page) =>
               (page?.value ?? []).flatMap((credential) =>

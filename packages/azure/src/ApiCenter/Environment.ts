@@ -23,16 +23,28 @@ export type ApiCenterEnvironmentServerType =
   | "MuleSoft API Management";
 
 export interface ApiCenterEnvironmentServer {
-  /** Kind of server (gateway or platform) behind the environment. */
+  /**
+   * Kind of server (gateway or platform) behind the environment.
+   * @default not set
+   */
   type?: ApiCenterEnvironmentServerType;
-  /** URLs of the server's management portal. */
+  /**
+   * URLs of the server's management portal.
+   * @default none
+   */
   managementPortalUri?: string[];
 }
 
 export interface ApiCenterEnvironmentOnboarding {
-  /** Instructions for onboarding to the environment. */
+  /**
+   * Instructions for onboarding to the environment.
+   * @default not set
+   */
   instructions?: string;
-  /** URLs of the environment's developer portal. */
+  /**
+   * URLs of the environment's developer portal.
+   * @default none
+   */
   developerPortalUri?: string[];
 }
 
@@ -45,6 +57,7 @@ export interface EnvironmentProps {
    * Environment name: 3-90 letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the environment.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -54,15 +67,25 @@ export interface EnvironmentProps {
   title?: string;
   /** Kind of environment. */
   kind: ApiCenterEnvironmentKind;
-  /** Description of the environment. */
+  /**
+   * Description of the environment.
+   * @default no description
+   */
   description?: string;
-  /** Server (gateway/platform) that hosts the environment. */
+  /**
+   * Server (gateway/platform) that hosts the environment.
+   * @default no server
+   */
   server?: ApiCenterEnvironmentServer;
-  /** Onboarding information for API consumers. */
+  /**
+   * Onboarding information for API consumers.
+   * @default no onboarding information
+   */
   onboarding?: ApiCenterEnvironmentOnboarding;
   /**
    * Custom metadata values, keyed by {@link MetadataSchema} name. Values
    * are validated against the schemas assigned to `environment`.
+   * @default no custom properties
    */
   customProperties?: Record<string, unknown>;
 }
@@ -95,13 +118,20 @@ export interface Environment extends Resource<
 
 /**
  * An environment (gateway, platform, or stage) where APIs from an Azure
- * API Center inventory are deployed.
+ * API Center inventory are deployed
+ * (`Microsoft.ApiCenter/services/workspaces/environments`).
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the
+ * environment.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-center/configure-environments-deployments
  *
  * ### Creating Environments
  * **Example:** Production environment on API Management
  * ```typescript
+ * const center = yield* Azure.ApiCenter.Service("catalog", {});
  * const prod = yield* Azure.ApiCenter.Environment("prod", {
  *   serviceName: center.serviceName,
  *   title: "Production",

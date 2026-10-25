@@ -695,8 +695,8 @@ function deliverableRows(): Row[] {
   row(
     "distilled",
     "nextLink pagination (`.pages` / `.items`)",
-    false,
-    `${allOps.length} ops return single pages; alchemy calls requireSinglePage at 429 sites`,
+    true,
+    "ARM list ops are paginated; alchemy reads every page with `collectAll` (Arm.ts)",
   );
   row(
     "distilled",

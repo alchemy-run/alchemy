@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -39,6 +39,7 @@ export interface ForwardingRuleProps {
   /**
    * Resource group of the ruleset. The DNS resolver API rejects resource group names
    * longer than 80 characters. Changing it replaces the rule.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /** Name of the DNS forwarding ruleset that holds the rule. Changing it replaces the rule. */
@@ -47,6 +48,7 @@ export interface ForwardingRuleProps {
    * Rule name: 1-80 letters, digits, `_`, and `-`. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the rule.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -66,6 +68,7 @@ export interface ForwardingRuleProps {
    * User metadata. Alchemy ownership markers (`alchemy::stack`,
    * `alchemy::stage`, `alchemy::id`) are merged in because forwarding
    * rules have no tags.
+   * @default {}
    */
   metadata?: Record<string, string>;
 }
@@ -96,18 +99,27 @@ export interface ForwardingRule extends Resource<
 > {}
 
 /**
- * A conditional forwarding rule in an Azure DNS forwarding ruleset: queries
- * for `domainName` from linked virtual networks are forwarded to
- * `targetDnsServers` through the ruleset's outbound endpoints.
+ * A conditional forwarding rule in an Azure DNS forwarding ruleset
+ * (`Microsoft.Network/dnsForwardingRulesets/forwardingRules`): queries for
+ * `domainName` from linked virtual networks are forwarded to
+ * `targetDnsServers` through the ruleset's outbound endpoints. See
+ * [ruleset rules](https://learn.microsoft.com/azure/dns/private-resolver-endpoints-rulesets#rules).
  *
  * Forwarding rules cannot be tagged, so Alchemy records ownership in the
  * rule's metadata.
  *
- * @see https://learn.microsoft.com/azure/dns/private-resolver-endpoints-rulesets#rules
+ * :::caution
+ * Changing `resourceGroup`, `dnsForwardingRuleset`, `name`, or
+ * `domainName` replaces the rule. A domain appears once per ruleset, so a
+ * rename that keeps the domain deletes the old rule first.
+ * :::
  *
  * ### Creating a Rule
  * **Example:** Forward a domain to on-premises DNS
  * ```typescript
+ * const ruleset = yield* Azure.DnsResolver.ForwardingRuleset("rules", {
+ *   outboundEndpointIds: [outbound.outboundEndpointId],
+ * });
  * const rule = yield* Azure.DnsResolver.ForwardingRule("corp", {
  *   dnsForwardingRuleset: ruleset.dnsForwardingRulesetName,
  *   domainName: "corp.example.com.",
@@ -184,23 +196,18 @@ export const ForwardingRuleProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const rulesets = yield* dnsresolver
-        .ListDnsForwardingRulesets({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDnsForwardingRulesets", page)));
+      const rulesets = yield* collectAll(dnsresolver.ListDnsForwardingRulesets, { subscriptionId });
       const found: ForwardingRule["Attributes"][] = [];
       for (const ruleset of rulesets.value ?? []) {
         const group = resourceGroupOf(ruleset.id);
         if (group === undefined || ruleset.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          dnsresolver.ListForwardingRules({
+          collectAll(dnsresolver.ListForwardingRules, {
             subscriptionId,
             resourceGroupName: group,
             dnsForwardingRulesetName: ruleset.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListForwardingRules", page);
-        }
         for (const rule of page?.value ?? []) {
           if (hasAnyAlchemyTag(rule.properties.metadata) && rule.name !== undefined) {
             found.push(toAttrs(group, ruleset.name, rule.name, rule));

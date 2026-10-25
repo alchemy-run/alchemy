@@ -23,29 +23,53 @@ export type ApiCenterLifecycleStage =
   | "retired";
 
 export interface ApiCenterExternalDocumentation {
-  /** Title of the documentation. */
+  /**
+   * Title of the documentation.
+   * @default no title
+   */
   title?: string;
-  /** Description of the documentation. */
+  /**
+   * Description of the documentation.
+   * @default no description
+   */
   description?: string;
   /** URL of the documentation. */
   url: string;
 }
 
 export interface ApiCenterContact {
-  /** Name of the contact. */
+  /**
+   * Name of the contact.
+   * @default not set
+   */
   name?: string;
-  /** URL of the contact. */
+  /**
+   * URL of the contact.
+   * @default not set
+   */
   url?: string;
-  /** Email address of the contact. */
+  /**
+   * Email address of the contact.
+   * @default not set
+   */
   email?: string;
 }
 
 export interface ApiCenterLicense {
-  /** Name of the license. */
+  /**
+   * Name of the license.
+   * @default not set
+   */
   name?: string;
-  /** URL of the license text. */
+  /**
+   * URL of the license text.
+   * @default not set
+   */
   url?: string;
-  /** SPDX license identifier, e.g. `MIT`. */
+  /**
+   * SPDX license identifier, e.g. `MIT`.
+   * @default not set
+   */
   identifier?: string;
 }
 
@@ -58,6 +82,7 @@ export interface ApiProps {
    * API name: 3-90 letters, digits, and hyphens. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the API.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -67,21 +92,40 @@ export interface ApiProps {
   title?: string;
   /** Kind of API. */
   kind: ApiCenterApiKind;
-  /** Description of the API. */
+  /**
+   * Description of the API.
+   * @default no description
+   */
   description?: string;
-  /** Short summary of the API. */
+  /**
+   * Short summary of the API.
+   * @default no summary
+   */
   summary?: string;
-  /** URL of the API's terms of service. */
+  /**
+   * URL of the API's terms of service.
+   * @default no terms of service
+   */
   termsOfServiceUrl?: string;
-  /** External documentation links. */
+  /**
+   * External documentation links.
+   * @default no links
+   */
   externalDocumentation?: ApiCenterExternalDocumentation[];
-  /** Contacts for the API. */
+  /**
+   * Contacts for the API.
+   * @default no contacts
+   */
   contacts?: ApiCenterContact[];
-  /** License of the API. */
+  /**
+   * License of the API.
+   * @default no license
+   */
   license?: ApiCenterLicense;
   /**
    * Custom metadata values, keyed by {@link MetadataSchema} name. Values
    * are validated against the schemas assigned to `api`.
+   * @default no custom properties
    */
   customProperties?: Record<string, unknown>;
 }
@@ -113,15 +157,23 @@ export interface Api extends Resource<
 > {}
 
 /**
- * An API registered in an Azure API Center inventory.
+ * An API registered in an Azure API Center inventory
+ * (`Microsoft.ApiCenter/services/workspaces/apis`), in the service's
+ * `default` workspace.
  *
  * Deleting an API also deletes its versions, definitions, and deployments.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the API and
+ * deletes its versions, definitions, and deployments.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-center/register-apis
  *
  * ### Registering APIs
  * **Example:** REST API
  * ```typescript
+ * const center = yield* Azure.ApiCenter.Service("catalog", {});
  * const api = yield* Azure.ApiCenter.Api("orders", {
  *   serviceName: center.serviceName,
  *   title: "Orders API",
@@ -131,6 +183,12 @@ export interface Api extends Resource<
  *
  * **Example:** API with contacts and custom metadata
  * ```typescript
+ * const center = yield* Azure.ApiCenter.Service("catalog", {});
+ * const schema = yield* Azure.ApiCenter.MetadataSchema("domain", {
+ *   serviceName: center.serviceName,
+ *   schema: { type: "string" },
+ *   assignedTo: [{ entity: "api" }],
+ * });
  * const api = yield* Azure.ApiCenter.Api("orders", {
  *   serviceName: center.serviceName,
  *   title: "Orders API",

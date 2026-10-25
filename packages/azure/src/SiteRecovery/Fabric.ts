@@ -22,7 +22,10 @@ import {
 } from "./Shared.ts";
 
 export interface FabricProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the fabric. */
+  /**
+   * Resource group of the Recovery Services vault. Changing it replaces the fabric.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Recovery Services vault. Changing it replaces the fabric. */
   vault: string;
@@ -30,6 +33,7 @@ export interface FabricProps {
    * Fabric name, unique within the vault. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * fabric.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -67,16 +71,21 @@ export interface Fabric extends Resource<
 > {}
 
 /**
- * An Azure Site Recovery fabric: the site container for a region in a
- * Recovery Services vault. Azure-to-Azure disaster recovery needs one
- * `Azure` fabric for the primary region and one for the recovery region.
+ * An Azure Site Recovery fabric
+ * (`Microsoft.RecoveryServices/vaults/replicationFabrics`): the site
+ * container for one region in a Recovery Services vault. Azure-to-Azure
+ * disaster recovery needs one `Azure` fabric for the primary region and one
+ * for the recovery region. See the
+ * [Azure docs](https://learn.microsoft.com/rest/api/site-recovery/replication-fabrics/create).
  *
- * Fabrics cannot be tagged; Alchemy treats a fabric as owned when its
- * vault is tagged for the current stack and stage. Creating a fabric runs
- * an ASR job that takes about three minutes; removing it is graceful (the
- * fabric's protection containers are removed first).
+ * Fabrics have no tags. Alchemy treats a fabric as owned when its vault carries this stack's ownership tags.
+ * Creating a fabric runs an ASR job that takes about three minutes. Removing
+ * it is graceful: Azure removes the fabric's protection containers first.
  *
- * @see https://learn.microsoft.com/rest/api/site-recovery/replication-fabrics/create
+ * :::caution
+ * A vault holds one fabric per region. Changing `resourceGroup`, `vault`,
+ * `name`, or `location` replaces the fabric.
+ * :::
  *
  * ### Azure-to-Azure Disaster Recovery
  * **Example:** Primary and recovery fabrics

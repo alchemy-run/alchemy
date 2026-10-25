@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -265,13 +265,9 @@ export const PrometheusRuleGroupProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* alertsmanagement
-        .ListPrometheusRuleGroupBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListPrometheusRuleGroupBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(alertsmanagement.ListPrometheusRuleGroupBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((group) => {
         const rg = resourceGroupOf(group.id);
         return hasAnyAlchemyTag(group.tags) && rg !== undefined && group.name !== undefined

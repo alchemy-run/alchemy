@@ -7,10 +7,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -135,17 +135,11 @@ const findConnection = Effect.fn(function* (
   privateEndpointId: string,
 ) {
   const page = yield* orUndefinedIfNotFound(
-    keyvault
-      .ListMHSMPrivateEndpointConnectionByResource({
-        subscriptionId,
-        resourceGroupName,
-        name: managedHsmName,
-      })
-      .pipe(
-        Effect.flatMap((page) =>
-          requireSinglePage("ListMHSMPrivateEndpointConnectionByResource", page),
-        ),
-      ),
+    collectAll(keyvault.ListMHSMPrivateEndpointConnectionByResource, {
+      subscriptionId,
+      resourceGroupName,
+      name: managedHsmName,
+    }),
   );
   return (page?.value ?? []).find((connection) =>
     sameId(connection.properties?.privateEndpoint?.id, privateEndpointId),

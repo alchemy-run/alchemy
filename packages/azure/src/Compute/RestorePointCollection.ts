@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -150,9 +150,7 @@ export const RestorePointCollectionProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* compute
-        .ListRestorePointCollectionAll({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListRestorePointCollectionAll", page)));
+      const page = yield* collectAll(compute.ListRestorePointCollectionAll, { subscriptionId });
       return page.value.flatMap((collection) => {
         const resourceGroup = resourceGroupOf(collection.id);
         return hasAnyAlchemyTag(collection.tags) &&

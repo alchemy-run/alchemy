@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -113,14 +113,12 @@ const getItem = (
   raiBlocklistItemName: string,
 ) =>
   orUndefinedIfNotFound(
-    cognitiveservices
-      .ListRaiBlocklistItems({
-        subscriptionId,
-        resourceGroupName,
-        accountName,
-        raiBlocklistName,
-      })
-      .pipe(Effect.flatMap((page) => requireSinglePage("ListRaiBlocklistItems", page))),
+    collectAll(cognitiveservices.ListRaiBlocklistItems, {
+      subscriptionId,
+      resourceGroupName,
+      accountName,
+      raiBlocklistName,
+    }),
   ).pipe(
     Effect.map((page) =>
       page?.value?.find((item) => item.name?.toLowerCase() === raiBlocklistItemName.toLowerCase()),

@@ -7,12 +7,12 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -38,6 +38,7 @@ export interface BatchAccountAutoStorage {
   /**
    * ARM resource ID of a user-assigned identity, assigned to pools, that
    * compute nodes use to reach the auto-storage account.
+   * @default not set
    */
   nodeIdentityResourceId?: string;
 }
@@ -45,7 +46,10 @@ export interface BatchAccountAutoStorage {
 export interface BatchAccountIdentityProps {
   /** Identity type. */
   type: "SystemAssigned" | "UserAssigned" | "None";
-  /** ARM resource IDs of the user-assigned identities (for `UserAssigned`). */
+  /**
+   * ARM resource IDs of the user-assigned identities (for `UserAssigned`).
+   * @default none
+   */
   userAssignedIdentityIds?: string[];
 }
 
@@ -57,6 +61,7 @@ export interface AccountProps {
    * region (it is part of `<name>.<region>.batch.azure.com`). If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the account.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -74,6 +79,7 @@ export interface AccountProps {
   /**
    * Key vault associated with the account (required for
    * `UserSubscription` allocation). Changing it replaces the account.
+   * @default not set
    */
   keyVaultReference?: {
     /** ARM resource ID of the key vault. */
@@ -84,6 +90,7 @@ export interface AccountProps {
   /**
    * Auto-storage account, required for application packages and task
    * output files.
+   * @default no auto-storage account
    */
   autoStorage?: BatchAccountAutoStorage;
   /**
@@ -91,12 +98,16 @@ export interface AccountProps {
    * @default Azure's default (`Enabled`)
    */
   publicNetworkAccess?: "Enabled" | "Disabled" | "SecuredByPerimeter";
-  /** IP rules for the account and node-management endpoints (only with public access enabled). */
+  /**
+   * IP rules for the account and node-management endpoints (only with public access enabled).
+   * @default not set
+   */
   networkProfile?: batch.NetworkProfile;
   /**
    * Customer data encryption. Defaults to Microsoft-managed keys; a
    * `Microsoft.KeyVault` key needs a system-assigned identity with key
    * permissions.
+   * @default not set (Microsoft-managed keys)
    */
   encryption?: batch.EncryptionProperties;
   /**
@@ -104,11 +115,15 @@ export interface AccountProps {
    * @default Azure's default (`["SharedKey", "AAD", "TaskAuthenticationToken"]`)
    */
   allowedAuthenticationModes?: BatchAuthenticationMode[];
-  /** Managed identity of the account. */
+  /**
+   * Managed identity of the account.
+   * @default no managed identity
+   */
   identity?: BatchAccountIdentityProps;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -156,6 +171,12 @@ export interface Account extends Resource<
  * An Azure Batch account — the container for pools of compute nodes, jobs,
  * and application packages used for large-scale parallel and HPC workloads.
  * The account itself is free; compute nodes in its pools bill as VMs.
+ * The ARM type is `Microsoft.Batch/batchAccounts`.
+ *
+ * :::caution
+ * Changing `name`, `location`, `poolAllocationMode`, `keyVaultReference`, or
+ * `resourceGroup` replaces the account.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/batch/accounts
  *
@@ -279,9 +300,7 @@ export const AccountProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* batch
-        .ListBatchAccount({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListBatchAccount", page)));
+      const page = yield* collectAll(batch.ListBatchAccount, { subscriptionId });
       return (page.value ?? []).flatMap((account) => {
         const group = resourceGroupOf(account.id);
         return hasAnyAlchemyTag(account.tags) && group !== undefined && account.name !== undefined

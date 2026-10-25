@@ -34,13 +34,25 @@ export type VirtualMachineInstanceDynamicMemory =
 export type VirtualMachineInstanceHttpProxy = hci.HttpProxyConfiguration;
 
 export interface VirtualMachineInstanceHardwareProfile {
-  /** VM size, e.g. `Default` or `Custom` (with processors and memory). */
+  /**
+   * VM size, e.g. `Default` or `Custom` (with processors and memory).
+   * @default not set
+   */
   vmSize?: string;
-  /** Number of virtual processors. */
+  /**
+   * Number of virtual processors.
+   * @default not set
+   */
   processors?: number;
-  /** Memory in MB. */
+  /**
+   * Memory in MB.
+   * @default not set
+   */
   memoryMB?: number;
-  /** Dynamic memory settings. Changing them replaces the VM. */
+  /**
+   * Dynamic memory settings. Changing them replaces the VM.
+   * @default not set
+   */
   dynamicMemoryConfig?: VirtualMachineInstanceDynamicMemory;
 }
 
@@ -55,32 +67,53 @@ export interface VirtualMachineInstanceProps {
    * Changing it replaces the VM.
    */
   extendedLocation: HciExtendedLocation;
-  /** Size, processors, and memory of the VM. */
+  /**
+   * Size, processors, and memory of the VM.
+   * @default not set
+   */
   hardwareProfile?: VirtualMachineInstanceHardwareProfile;
-  /** ARM IDs of the Azure Local network interfaces attached to the VM. */
+  /**
+   * ARM IDs of the Azure Local network interfaces attached to the VM.
+   * @default no network interfaces
+   */
   networkInterfaceIds?: string[];
-  /** ARM IDs of the Azure Local virtual hard disks attached as data disks. */
+  /**
+   * ARM IDs of the Azure Local virtual hard disks attached as data disks.
+   * @default no data disks
+   */
   dataDiskIds?: string[];
   /**
    * ARM ID of the gallery or marketplace image the OS disk is created
    * from. Changing it replaces the VM.
+   * @default not set
    */
   imageId?: string;
   /**
    * ARM ID of an existing virtual hard disk to boot from instead of an
    * image. Changing it replaces the VM.
+   * @default not set
    */
   osDiskId?: string;
   /**
    * ARM ID of the storage container that holds the VM configuration.
    * Changing it replaces the VM.
+   * @default not set
    */
   vmConfigStoragePathId?: string;
-  /** OS profile. Changing it replaces the VM. */
+  /**
+   * OS profile. Changing it replaces the VM.
+   * @default not set
+   */
   osProfile?: VirtualMachineInstanceOsProfile;
-  /** Security profile. Changing it replaces the VM. */
+  /**
+   * Security profile. Changing it replaces the VM.
+   * @default not set
+   */
   securityProfile?: VirtualMachineInstanceSecurityProfile;
-  /** HTTP proxy configuration. Changing it replaces the VM. */
+  /**
+   * HTTP proxy configuration. Changing it replaces the VM.
+   * @default not set
+   */
   httpProxyConfig?: VirtualMachineInstanceHttpProxy;
   /**
    * Give the VM a system-assigned managed identity. Changing it replaces
@@ -118,17 +151,45 @@ export interface VirtualMachineInstance extends Resource<
  * singleton `virtualMachineInstances/default` extension of an Arc-enabled
  * server (`Microsoft.HybridCompute/machines`, kind `HCI`) and places it
  * through the cluster's Arc custom location.
+ * The ARM type is `Microsoft.AzureStackHCI/virtualMachineInstances`, an
+ * extension resource on the Arc-enabled server.
  *
  * The VM instance has no tags of its own; Alchemy treats it as owned when
  * its Arc machine carries this stack's ownership tags. Size, network
  * interfaces, and data disks are updated in place; other settings replace
  * the VM.
  *
+ * :::caution
+ * Changing `machineId`, `extendedLocation`, `imageId`, `osDiskId`,
+ * `vmConfigStoragePathId`, `osProfile`, `securityProfile`,
+ * `httpProxyConfig`, or `systemAssignedIdentity` replaces the VM.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/azure-local/manage/create-arc-virtual-machines
  *
  * ### Creating a VM
  * **Example:** Linux VM from a gallery image
  * ```typescript
+ * // Arc custom location of the Azure Local cluster.
+ * const customLocationId = yield* Config.string("HCI_CUSTOM_LOCATION_ID");
+ * const image = yield* Azure.AzureStackHCI.GalleryImage("ubuntu", {
+ *   extendedLocation: { name: customLocationId },
+ *   imagePath: "https://account.blob.core.windows.net/images/ubuntu.vhdx",
+ *   osType: "Linux",
+ * });
+ * const lnet = yield* Azure.AzureStackHCI.LogicalNetwork("lan", {
+ *   extendedLocation: { name: customLocationId },
+ *   vmSwitchName: "ConvergedSwitch(management_compute_storage)",
+ *   subnets: [{ name: "lan", properties: { ipAllocationMethod: "Dynamic" } }],
+ * });
+ * const nic = yield* Azure.AzureStackHCI.NetworkInterface("vm-nic", {
+ *   extendedLocation: { name: customLocationId },
+ *   ipConfigurations: [
+ *     { name: "ipconfig", properties: { subnet: { id: lnet.logicalNetworkId } } },
+ *   ],
+ * });
+ * // ARM ID of the Arc-enabled server (Microsoft.HybridCompute/machines).
+ * const arcMachineId = yield* Config.string("ARC_SERVER_ID");
  * const vm = yield* Azure.AzureStackHCI.VirtualMachineInstance("web", {
  *   machineId: arcMachineId,
  *   extendedLocation: { name: customLocationId },

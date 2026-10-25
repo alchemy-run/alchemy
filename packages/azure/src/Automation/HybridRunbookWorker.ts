@@ -65,12 +65,39 @@ export interface HybridRunbookWorker extends Resource<
 /**
  * Registers an Azure VM or Arc-enabled server as an extension-based (V2)
  * hybrid runbook worker in a {@link HybridRunbookWorkerGroup}.
+ * The ARM type is
+ * `Microsoft.Automation/automationAccounts/hybridRunbookWorkerGroups/hybridRunbookWorkers`.
+ *
+ * :::caution
+ * Changing `automationAccount`, `hybridRunbookWorkerGroup`, `vmResourceId`,
+ * or `resourceGroup` replaces the worker.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/extension-based-hybrid-runbook-worker-install
  *
  * ### Adding a Worker
  * **Example:** Register a VM, then install the worker extension
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
+ * const workers = yield* Azure.Automation.HybridRunbookWorkerGroup("onprem", {
+ *   automationAccount: account.automationAccountName,
+ * });
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("app", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const nic = yield* Azure.Network.NetworkInterface("vm", {
+ *   ipConfigurations: [{ subnetId: subnet.subnetId }],
+ * });
+ * const vm = yield* Azure.Compute.VirtualMachine("vm", {
+ *   vmSize: "Standard_B1s",
+ *   networkInterfaceIds: [nic.networkInterfaceId],
+ *   adminUsername: "azureuser",
+ *   sshPublicKeys: [yield* Config.string("SSH_PUBLIC_KEY")],
+ * });
  * const worker = yield* Azure.Automation.HybridRunbookWorker("vm1", {
  *   automationAccount: account.automationAccountName,
  *   hybridRunbookWorkerGroup: workers.hybridRunbookWorkerGroupName,

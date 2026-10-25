@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -44,6 +44,7 @@ export interface ClusterProps {
   /**
    * Name of the cluster. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the cluster.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -68,48 +69,88 @@ export interface ClusterProps {
   networkFabricId: string;
   /** Aggregator (multi-rack) or single rack definition. */
   aggregatorOrSingleRackDefinition: nc.RackDefinitionInput;
-  /** Compute rack definitions of a multi-rack cluster. */
+  /**
+   * Compute rack definitions of a multi-rack cluster.
+   * @default none
+   */
   computeRackDefinitions?: nc.RackDefinitionInput[];
   /**
    * ARM ID of the Log Analytics workspace that receives cluster logs.
    * Changing it replaces the cluster.
+   * @default none
    */
   analyticsWorkspaceId?: string;
-  /** Where cluster analytics are sent. */
+  /**
+   * Where cluster analytics are sent.
+   * @default none
+   */
   analyticsOutputSettings?: nc.AnalyticsOutputSettings;
-  /** Customer-facing name of the cluster's physical location. */
+  /**
+   * Customer-facing name of the cluster's physical location.
+   * @default none
+   */
   clusterLocation?: string;
-  /** Service principal the cluster uses to call Azure (password may be `Redacted`). */
+  /**
+   * Service principal the cluster uses to call Azure (password may be `Redacted`).
+   * @default none
+   */
   clusterServicePrincipal?: nc.ServicePrincipalInformation;
-  /** Where long-running command output is stored. */
+  /**
+   * Where long-running command output is stored.
+   * @default none
+   */
   commandOutputSettings?: nc.CommandOutputSettings;
-  /** Share of compute machines that must deploy for the cluster to succeed. */
+  /**
+   * Share of compute machines that must deploy for the cluster to succeed.
+   * @default Azure's default
+   */
   computeDeploymentThreshold?: nc.ValidationThreshold;
   /**
    * Name and location of the managed resource group the cluster creates.
    * Changing it replaces the cluster.
+   * @default none
    */
   managedResourceGroupConfiguration?: NexusManagedResourceGroupConfiguration;
-  /** Runtime protection (Defender) settings. */
+  /**
+   * Runtime protection (Defender) settings.
+   * @default none
+   */
   runtimeProtectionConfiguration?: nc.RuntimeProtectionConfiguration;
-  /** Key Vault that archives cluster secrets. */
+  /**
+   * Key Vault that archives cluster secrets.
+   * @default none
+   */
   secretArchive?: nc.ClusterSecretArchive;
-  /** Key Vault settings for secret archiving. */
+  /**
+   * Key Vault settings for secret archiving.
+   * @default none
+   */
   secretArchiveSettings?: nc.SecretArchiveSettings;
-  /** How version upgrades roll across racks. */
+  /**
+   * How version upgrades roll across racks.
+   * @default Azure's default
+   */
   updateStrategy?: nc.ClusterUpdateStrategy;
-  /** Container vulnerability scanning settings. */
+  /**
+   * Container vulnerability scanning settings.
+   * @default none
+   */
   vulnerabilityScanningSettings?: nc.VulnerabilityScanningSettings;
   /**
    * Deployment kind; must match the cluster manager's kind. Changing it
    * replaces the cluster.
+   * @default the cluster manager's kind
    */
   kind?: "Nexus" | "AzureLocal";
-  /** Managed identity of the cluster. */
+  /**
+   * Managed identity of the cluster.
+   * @default none
+   */
   identity?: NexusIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -165,20 +206,36 @@ export interface Cluster extends Resource<
  * is started separately with the cluster `deploy` action. Changing
  * `clusterVersion` runs an in-place upgrade. Needs Operator Nexus hardware.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-configure-cluster
+ * ARM type: `Microsoft.NetworkCloud/clusters`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-configure-cluster).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `customLocationId`,
+ * `clusterType`, `networkFabricId`, `analyticsWorkspaceId`,
+ * `managedResourceGroupConfiguration`, or `kind` replaces the cluster.
+ * :::
  *
  * ### Creating a Cluster
  * **Example:** Single-rack cluster
  * ```typescript
+ * // The cluster manager, fabric, and rack come with the Operator Nexus site.
+ * const managerLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ExtendedLocation/customLocations/manager-cl";
+ * const fabricId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/networkFabrics/fab1";
+ * const rackId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.NetworkCloud/racks/aggregator";
+ * const rackSkuId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.NetworkCloud/rackSkus/VNearEdge1_Aggregator_x70r3_9";
  * const cluster = yield* Azure.NetworkCloud.Cluster("site1", {
- *   customLocationId: manager.managerCustomLocationId,
+ *   customLocationId: managerLocationId,
  *   clusterType: "SingleRack",
  *   clusterVersion: "3.10.0",
- *   networkFabricId: fabric.networkFabricId,
+ *   networkFabricId: fabricId,
  *   aggregatorOrSingleRackDefinition: {
  *     networkRackId: rackId,
  *     rackSerialNumber: "AA1234",
- *     rackSkuId: rackSkuId,
+ *     rackSkuId,
  *   },
  * });
  * ```
@@ -232,9 +289,7 @@ export const ClusterProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* nc
-        .ListClusterBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListClusterBySubscription", page)));
+      const page = yield* collectAll(nc.ListClusterBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

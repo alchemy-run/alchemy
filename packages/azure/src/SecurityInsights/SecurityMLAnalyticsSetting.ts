@@ -22,7 +22,10 @@ import {
 } from "./Common.ts";
 
 export interface SecurityMLAnalyticsSettingProps {
-  /** Resource group of the Sentinel workspace. Changing it replaces the setting. */
+  /**
+   * Resource group of the Sentinel workspace. Changing it replaces the setting.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Sentinel-enabled Log Analytics workspace. Pass `OnboardingState.workspace`
@@ -33,6 +36,7 @@ export interface SecurityMLAnalyticsSettingProps {
    * Settings resource name (a GUID). If omitted, a deterministic GUID is
    * derived from the app, stage, and logical ID. Changing it replaces the
    * setting.
+   * @default a GUID derived from the app, stage, and logical ID
    */
   settingsResourceName?: string;
   /**
@@ -42,7 +46,10 @@ export interface SecurityMLAnalyticsSettingProps {
   kind?: "Anomaly" | (string & {});
   /** Display name of the anomaly rule. */
   displayName: string;
-  /** Description of the anomaly rule. An Alchemy ownership marker is appended. */
+  /**
+   * Description of the anomaly rule. An Alchemy ownership marker is appended.
+   * @default only the Alchemy ownership marker
+   */
   description?: string;
   /** Whether the anomaly rule is enabled. */
   enabled: boolean;
@@ -54,20 +61,36 @@ export interface SecurityMLAnalyticsSettingProps {
   settingsStatus: "Production" | "Flighting" | (string & {});
   /** Whether these are the built-in default settings. */
   isDefaultSettings: boolean;
-  /** Version of the anomaly settings. */
+  /**
+   * Version of the anomaly settings.
+   * @default not set
+   */
   anomalySettingsVersion?: number;
   /**
    * ID of the built-in anomaly definition the settings customize. Changing
    * it replaces the setting.
+   * @default not set
    */
   settingsDefinitionId?: string;
-  /** Customizable observations (thresholds, exclusions) of the model. */
+  /**
+   * Customizable observations (thresholds, exclusions) of the model.
+   * @default not set
+   */
   customizableObservations?: Record<string, unknown>;
-  /** Data connectors the model requires, e.g. `[{ connectorId: "AzureActiveDirectory", dataTypes: ["SigninLogs"] }]`. */
+  /**
+   * Data connectors the model requires, e.g. `[{ connectorId: "AzureActiveDirectory", dataTypes: ["SigninLogs"] }]`.
+   * @default not set
+   */
   requiredDataConnectors?: Record<string, unknown>[];
-  /** MITRE ATT&CK tactics. */
+  /**
+   * MITRE ATT&CK tactics.
+   * @default not set
+   */
   tactics?: string[];
-  /** MITRE ATT&CK techniques. */
+  /**
+   * MITRE ATT&CK techniques.
+   * @default not set
+   */
   techniques?: string[];
 }
 
@@ -95,21 +118,38 @@ export interface SecurityMLAnalyticsSetting extends Resource<
 > {}
 
 /**
- * Microsoft Sentinel ML analytics (anomaly rule) settings: customizes a
- * built-in anomaly detection model — thresholds, enabled state, and
- * whether it runs in production or flighting mode.
+ * Microsoft Sentinel ML analytics settings
+ * (`Microsoft.SecurityInsights/securityMLAnalyticsSettings`): they customize
+ * a built-in anomaly detection model, such as its thresholds, enabled state,
+ * and whether it runs in production or flighting mode. See the
+ * [Azure docs](https://learn.microsoft.com/azure/sentinel/work-with-anomaly-rules).
  *
- * The built-in definitions (`settingsDefinitionId`) are seeded into a
- * workspace by Microsoft some time after onboarding; list them with
+ * :::caution
+ * Onboard the workspace first with `Azure.SecurityInsights.OnboardingState`,
+ * and pass its `workspace` attribute so Alchemy creates this resource after
+ * the onboarding and deletes it before.
+ * :::
+ *
+ * :::caution
+ * Microsoft adds the built-in definitions (`settingsDefinitionId`) to a
+ * workspace some time after onboarding. List them with
  * `ListSecurityMLAnalyticsSettings`.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/sentinel/work-with-anomaly-rules
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `kind`, `settingsResourceName`, or
+ * `settingsDefinitionId` replaces the setting. Alchemy updates every other
+ * prop in place.
+ * :::
  *
  * ### Tuning Anomaly Rules
  * **Example:** Run a customized anomaly model in flighting mode
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
+ *   workspace: logs.workspaceName,
+ * });
  * yield* Azure.SecurityInsights.SecurityMLAnalyticsSetting("rare-logons", {
- *   resourceGroup: sentinel.resourceGroup,
  *   workspace: sentinel.workspace,
  *   displayName: "Unusual logons (tuned)",
  *   enabled: true,

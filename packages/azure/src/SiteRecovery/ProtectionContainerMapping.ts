@@ -32,18 +32,28 @@ export interface ProtectionContainerMappingProviderInput {
    * Whether ASR keeps the Mobility agent on protected VMs up to date (A2A).
    * Enabling it without `automationAccountArmId` lets ASR create an
    * automation account in the vault's resource group.
+   * @default Azure's default
    */
   agentAutoUpdateStatus?: "Enabled" | "Disabled";
-  /** Automation account that runs the agent update runbook (A2A). */
+  /**
+   * Automation account that runs the agent update runbook (A2A).
+   * @default an automation account ASR creates when auto-update is enabled
+   */
   automationAccountArmId?: string;
-  /** How the automation account authenticates (A2A). */
+  /**
+   * How the automation account authenticates (A2A).
+   * @default Azure's default
+   */
   automationAccountAuthenticationType?: "RunAsAccount" | "SystemAssignedIdentity";
   /** Any other provider field. */
   [key: string]: unknown;
 }
 
 export interface ProtectionContainerMappingProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the mapping. */
+  /**
+   * Resource group of the Recovery Services vault. Changing it replaces the mapping.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Recovery Services vault. Changing it replaces the mapping. */
   vault: string;
@@ -55,6 +65,7 @@ export interface ProtectionContainerMappingProps {
    * Mapping name, unique within the container. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * mapping.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** ARM ID of the recovery protection container. Changing it replaces the mapping. */
@@ -101,21 +112,54 @@ export interface ProtectionContainerMapping extends Resource<
 > {}
 
 /**
- * An Azure Site Recovery protection container mapping: pairs a primary
- * protection container with a recovery container under a replication
- * policy. VMs in the primary container replicate to the recovery region
- * with the policy's settings.
+ * An Azure Site Recovery protection container mapping
+ * (`Microsoft.RecoveryServices/vaults/replicationFabrics/replicationProtectionContainers/replicationProtectionContainerMappings`).
+ * It pairs a primary protection container with a recovery container under a
+ * replication policy. VMs in the primary container replicate to the recovery
+ * region with the policy's settings. See the
+ * [Azure docs](https://learn.microsoft.com/rest/api/site-recovery/replication-protection-container-mappings/create).
  *
- * Mappings cannot be tagged; Alchemy treats a mapping as owned when its
- * vault is tagged for the current stack and stage. Agent auto-update
- * settings are updated in place; the containers and policy are immutable.
+ * Mappings have no tags. Alchemy treats a mapping as owned when its vault carries this stack's ownership tags.
  * Delete is the graceful `remove` (unpair) operation.
  *
- * @see https://learn.microsoft.com/rest/api/site-recovery/replication-protection-container-mappings/create
+ * :::caution
+ * Changing `resourceGroup`, `vault`, `fabric`, `protectionContainer`,
+ * `name`, `targetProtectionContainerId`, `policyId`, or
+ * `providerSpecificInput.instanceType` replaces the mapping. Alchemy updates
+ * the agent auto-update settings in place.
+ * :::
  *
  * ### Azure-to-Azure Disaster Recovery
  * **Example:** Pair the primary and recovery containers
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("dr-vault", {
+ *   location: "westus2",
+ * });
+ * const primary = yield* Azure.SiteRecovery.Fabric("primary", {
+ *   vault: vault.vaultName,
+ *   location: "eastus",
+ * });
+ * const recovery = yield* Azure.SiteRecovery.Fabric("recovery", {
+ *   vault: vault.vaultName,
+ *   location: "westus2",
+ * });
+ * const primaryContainer = yield* Azure.SiteRecovery.ProtectionContainer("primary", {
+ *   vault: vault.vaultName,
+ *   fabric: primary.fabricName,
+ * });
+ * const recoveryContainer = yield* Azure.SiteRecovery.ProtectionContainer("recovery", {
+ *   vault: vault.vaultName,
+ *   fabric: recovery.fabricName,
+ * });
+ * const policy = yield* Azure.SiteRecovery.ReplicationPolicy("a2a-policy", {
+ *   vault: vault.vaultName,
+ *   providerSpecificInput: {
+ *     instanceType: "A2A",
+ *     recoveryPointHistory: 1440,
+ *     appConsistentFrequencyInMinutes: 240,
+ *     multiVmSyncStatus: "Enable",
+ *   },
+ * });
  * const mapping = yield* Azure.SiteRecovery.ProtectionContainerMapping(
  *   "primary-to-recovery",
  *   {

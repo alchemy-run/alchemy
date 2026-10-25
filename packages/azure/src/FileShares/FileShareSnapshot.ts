@@ -19,7 +19,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createFileShareName } from "./FileShareNames.ts";
 
 export interface FileShareSnapshotProps {
-  /** Resource group of the file share. Changing it replaces the snapshot. */
+  /**
+   * Resource group of the file share. Changing it replaces the snapshot.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Resource name of the file share. Changing it replaces the snapshot. */
   fileShare: string;
@@ -27,17 +30,20 @@ export interface FileShareSnapshotProps {
    * Snapshot name: 3-63 lowercase letters, digits, and hyphens. If omitted,
    * a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the snapshot.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * User-defined initiator recorded on the snapshot. Only applied when the
    * snapshot is taken; changing it replaces the snapshot.
+   * @default none
    */
   initiatorId?: string;
   /**
    * User metadata. Alchemy ownership markers (`alchemy_stack`,
    * `alchemy_stage`, `alchemy_id`) are merged in because snapshots have no
    * tags.
+   * @default {}
    */
   metadata?: Record<string, string>;
 }
@@ -67,15 +73,20 @@ export interface FileShareSnapshot extends Resource<
 
 /**
  * A point-in-time, read-only snapshot of a `Microsoft.FileShares` file
- * share. Snapshots are differential: they are billed only for data that
- * changed since the snapshot was taken.
+ * share (`Microsoft.FileShares/fileShares/fileShareSnapshots`). Snapshots
+ * are differential: they are billed only for data that changed since the
+ * snapshot was taken. See
+ * [share snapshots](https://learn.microsoft.com/azure/storage/files/storage-snapshots-files).
  *
  * Snapshots cannot be tagged, so Alchemy records ownership in snapshot
  * metadata (`alchemy_stack`, `alchemy_stage`, `alchemy_id`). A share
  * cannot be deleted while it has snapshots; Alchemy deletes the snapshot
  * before its share.
  *
- * @see https://learn.microsoft.com/azure/storage/files/storage-snapshots-files
+ * :::caution
+ * Changing `resourceGroup`, `fileShare`, `name`, or `initiatorId`
+ * replaces the snapshot with one taken at deploy time.
+ * :::
  *
  * ### Taking a Snapshot
  * **Example:** Snapshot a file share

@@ -1,7 +1,7 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
-import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
+import { collectAll, orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower, ref, sameId, sameSet } from "./common.ts";
@@ -165,7 +165,7 @@ export const ServiceGatewayProvider = () =>
           serviceGatewayName: path.name,
           tags,
         }),
-      listAll: (subscriptionId) => network.ListServiceGatewayAll({ subscriptionId }),
+      listAll: (subscriptionId) => collectAll(network.ListServiceGatewayAll, { subscriptionId }),
       drifted: (observed, _body, news) =>
         routeTargetDrifted(observed.properties?.routeTargetAddress, news.routeTarget) ||
         routeTargetDrifted(observed.properties?.routeTargetAddressV6, news.routeTargetV6) ||

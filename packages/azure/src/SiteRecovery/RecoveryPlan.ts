@@ -40,21 +40,39 @@ export interface RecoveryPlanGroupAction {
 export interface RecoveryPlanGroup {
   /** Group kind: `Shutdown`, `Failover`, or `Boot` (boot groups run in order). */
   groupType: "Shutdown" | "Boot" | "Failover";
-  /** Protected items in the group (ARM IDs of replication protected items). */
+  /**
+   * Protected items in the group (ARM IDs of replication protected items).
+   * @default []
+   */
   replicationProtectedItems?: {
-    /** ARM ID of the replication protected item. */
+    /**
+     * ARM ID of the replication protected item.
+     * @default not set
+     */
     id?: string;
-    /** ARM ID of the protected virtual machine. */
+    /**
+     * ARM ID of the protected virtual machine.
+     * @default not set
+     */
     virtualMachineId?: string;
   }[];
-  /** Actions run before the group. */
+  /**
+   * Actions run before the group.
+   * @default []
+   */
   startGroupActions?: RecoveryPlanGroupAction[];
-  /** Actions run after the group. */
+  /**
+   * Actions run after the group.
+   * @default []
+   */
   endGroupActions?: RecoveryPlanGroupAction[];
 }
 
 export interface RecoveryPlanProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the plan. */
+  /**
+   * Resource group of the Recovery Services vault. Changing it replaces the plan.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Recovery Services vault. Changing it replaces the plan. */
   vault: string;
@@ -62,6 +80,7 @@ export interface RecoveryPlanProps {
    * Plan name, unique within the vault. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * plan.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** ARM ID of the primary fabric. Changing it replaces the plan. */
@@ -83,6 +102,7 @@ export interface RecoveryPlanProps {
   /**
    * Provider-specific inputs, e.g. `[{ instanceType: "A2A",
    * primaryZone, recoveryZone }]`. Changing them replaces the plan.
+   * @default []
    */
   providerSpecificInput?: { instanceType: string; [key: string]: unknown }[];
 }
@@ -115,21 +135,104 @@ export interface RecoveryPlan extends Resource<
 > {}
 
 /**
- * An Azure Site Recovery recovery plan: ordered failover groups of
- * replication protected items, with optional scripts, runbooks, or manual
- * steps before and after each group.
+ * An Azure Site Recovery recovery plan
+ * (`Microsoft.RecoveryServices/vaults/replicationRecoveryPlans`): ordered
+ * failover groups of replication protected items, with optional scripts,
+ * runbooks, or manual steps before and after each group. See the
+ * [Azure docs](https://learn.microsoft.com/rest/api/site-recovery/replication-recovery-plans/create).
  *
- * Plans cannot be tagged; Alchemy treats a plan as owned when its vault is
- * tagged for the current stack and stage. Groups are updated in place; the
- * fabrics and deployment model are immutable. A plan's boot groups
- * reference protected items, so it is usually created after
- * {@link ProtectedItem}.
+ * Plans have no tags. Alchemy treats a plan as owned when its vault carries this stack's ownership tags.
  *
- * @see https://learn.microsoft.com/rest/api/site-recovery/replication-recovery-plans/create
+ * :::caution
+ * A plan needs at least one `Boot` group that holds at least one protected
+ * item. ASR's create job fails for an empty plan and the plan never appears,
+ * so create the plan after its `Azure.SiteRecovery.ProtectedItem`s.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `vault`, `name`, `primaryFabricId`,
+ * `recoveryFabricId`, `failoverDeploymentModel`, or `providerSpecificInput`
+ * replaces the plan. Alchemy updates `groups` in place.
+ * :::
  *
  * ### Azure-to-Azure Disaster Recovery
  * **Example:** One boot group with a protected VM
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("dr-vault", {
+ *   location: "westus2",
+ * });
+ * const primary = yield* Azure.SiteRecovery.Fabric("primary", {
+ *   vault: vault.vaultName,
+ *   location: "eastus",
+ * });
+ * const recovery = yield* Azure.SiteRecovery.Fabric("recovery", {
+ *   vault: vault.vaultName,
+ *   location: "westus2",
+ * });
+ * const primaryContainer = yield* Azure.SiteRecovery.ProtectionContainer("primary", {
+ *   vault: vault.vaultName,
+ *   fabric: primary.fabricName,
+ * });
+ * const recoveryContainer = yield* Azure.SiteRecovery.ProtectionContainer("recovery", {
+ *   vault: vault.vaultName,
+ *   fabric: recovery.fabricName,
+ * });
+ * const policy = yield* Azure.SiteRecovery.ReplicationPolicy("a2a-policy", {
+ *   vault: vault.vaultName,
+ *   providerSpecificInput: {
+ *     instanceType: "A2A",
+ *     recoveryPointHistory: 1440,
+ *     appConsistentFrequencyInMinutes: 240,
+ *     multiVmSyncStatus: "Enable",
+ *   },
+ * });
+ * const mapping = yield* Azure.SiteRecovery.ProtectionContainerMapping(
+ *   "primary-to-recovery",
+ *   {
+ *     vault: vault.vaultName,
+ *     fabric: primary.fabricName,
+ *     protectionContainer: primaryContainer.protectionContainerName,
+ *     targetProtectionContainerId: recoveryContainer.protectionContainerId,
+ *     policyId: policy.policyId,
+ *     providerSpecificInput: {
+ *       instanceType: "A2A",
+ *       agentAutoUpdateStatus: "Disabled",
+ *     },
+ *   },
+ * );
+ * const recoveryGroup = yield* Azure.Resources.ResourceGroup("dr-recovery", {
+ *   location: "westus2",
+ * });
+ * const cache = yield* Azure.Storage.StorageAccount("asrcache", {
+ *   location: "eastus",
+ * });
+ * const vm = yield* Azure.Compute.VirtualMachine("web", {
+ *   location: "eastus",
+ *   vmSize: "Standard_B1s",
+ *   networkInterfaceIds: [nic.networkInterfaceId],
+ *   adminUsername: "azureuser",
+ *   sshPublicKeys: ["ssh-ed25519 AAAAC3Nza... me@example.com"],
+ * });
+ * const item = yield* Azure.SiteRecovery.ProtectedItem("web-vm", {
+ *   vault: vault.vaultName,
+ *   fabric: primary.fabricName,
+ *   protectionContainer: primaryContainer.protectionContainerName,
+ *   policyId: policy.policyId,
+ *   providerSpecificDetails: {
+ *     instanceType: "A2A",
+ *     fabricObjectId: vm.virtualMachineId,
+ *     recoveryContainerId: recoveryContainer.protectionContainerId,
+ *     recoveryResourceGroupId: recoveryGroup.resourceGroupId,
+ *     vmManagedDisks: [
+ *       {
+ *         diskId: vm.osDiskId,
+ *         primaryStagingAzureStorageAccountId: cache.storageAccountId,
+ *         recoveryResourceGroupId: recoveryGroup.resourceGroupId,
+ *       },
+ *     ],
+ *   },
+ *   recoveryAzureVMSize: "Standard_B1s",
+ * });
  * yield* Azure.SiteRecovery.RecoveryPlan("dr-plan", {
  *   vault: vault.vaultName,
  *   primaryFabricId: primary.fabricId,

@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -33,9 +33,15 @@ import {
 export type ArtifactStoreType = "AzureContainerRegistry" | "AzureStorageAccount";
 
 export interface ArtifactStoreManagedResourceGroup {
-  /** Name of the managed resource group AOSM creates for the backing store. */
+  /**
+   * Name of the managed resource group AOSM creates for the backing store.
+   * @default a name AOSM picks
+   */
   name?: string;
-  /** Location of the managed resource group. */
+  /**
+   * Location of the managed resource group.
+   * @default a location AOSM picks
+   */
   location?: string;
 }
 
@@ -46,15 +52,22 @@ export interface ArtifactStoreManagedResourceGroup {
 const STORE_NAME_LENGTH = 24;
 
 export interface ArtifactStoreProps {
-  /** Resource group of the publisher. Changing it replaces the store. */
+  /**
+   * Resource group of the publisher. Changing it replaces the store.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the publisher that owns the store. Changing it replaces the store. */
+  /**
+   * Name of the publisher that owns the store. Required. Changing it
+   * replaces the store.
+   */
   publisher: string;
   /**
    * Store name: 1-64 letters, digits, `_`, and `-` (keep it short: the
    * backing registry name is derived from it). If omitted, a unique
    * 24-character name is generated from the app, stage, and logical ID.
    * Changing it replaces the store.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -80,11 +93,13 @@ export interface ArtifactStoreProps {
    * Managed resource group AOSM creates to hold the backing registry or
    * storage account. AOSM picks a name when omitted. Changing it replaces
    * the store.
+   * @default a managed resource group AOSM names
    */
   managedResourceGroupConfiguration?: ArtifactStoreManagedResourceGroup;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -119,19 +134,21 @@ export interface ArtifactStore extends Resource<
 > {}
 
 /**
- * An Azure Operator Service Manager artifact store — a publisher-scoped
- * store for network function artifacts (Helm charts, container images,
- * ARM templates, VHDs). AOSM provisions a managed resource group holding
- * an Azure Container Registry or a storage account behind it.
+ * An Azure Operator Service Manager artifact store
+ * (`Microsoft.HybridNetwork/publishers/artifactStores`): a publisher-scoped
+ * store for network function artifacts (Helm charts, container images, ARM
+ * templates, VHDs). AOSM creates a managed resource group holding an Azure
+ * Container Registry or a storage account behind it.
  *
  * The backing container registry is billed (Standard tier, about
- * $0.17/day); creation and deletion take several minutes.
+ * $0.17/day). Creation and deletion take several minutes.
  *
  * @see https://learn.microsoft.com/azure/operator-service-manager/artifact-store-overview
  *
  * ### Creating a Store
  * **Example:** Container registry artifact store
  * ```typescript
+ * const publisher = yield* Azure.HybridNetwork.Publisher("publisher");
  * const store = yield* Azure.HybridNetwork.ArtifactStore("store", {
  *   publisher: publisher.publisherName,
  * });
@@ -139,6 +156,7 @@ export interface ArtifactStore extends Resource<
  *
  * **Example:** Storage account store for VHD images
  * ```typescript
+ * const publisher = yield* Azure.HybridNetwork.Publisher("publisher");
  * const store = yield* Azure.HybridNetwork.ArtifactStore("vhds", {
  *   publisher: publisher.publisherName,
  *   storeType: "AzureStorageAccount",
@@ -148,6 +166,12 @@ export interface ArtifactStore extends Resource<
  *   },
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `publisher`, `location`, `resourceGroup`, `storeType`,
+ * or `managedResourceGroupConfiguration.name` replaces the store and
+ * deletes the artifacts in its backing registry or storage account.
+ * :::
  *
  * @resource
  */
@@ -202,23 +226,20 @@ export const ArtifactStoreProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const publishers = yield* hybridnetwork
-        .ListPublisherBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPublisherBySubscription", page)));
+      const publishers = yield* collectAll(hybridnetwork.ListPublisherBySubscription, {
+        subscriptionId,
+      });
       const found: ArtifactStore["Attributes"][] = [];
       for (const publisher of publishers.value ?? []) {
         const group = resourceGroupOf(publisher.id);
         if (group === undefined || publisher.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          hybridnetwork.ListArtifactStoreByPublisher({
+          collectAll(hybridnetwork.ListArtifactStoreByPublisher, {
             subscriptionId,
             resourceGroupName: group,
             publisherName: publisher.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListArtifactStoreByPublisher", page);
-        }
         for (const store of page?.value ?? []) {
           if (hasAnyAlchemyTag(store.tags) && store.name !== undefined) {
             found.push(toAttrs(group, publisher.name, store.name, store));

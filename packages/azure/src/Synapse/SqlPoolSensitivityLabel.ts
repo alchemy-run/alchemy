@@ -31,13 +31,25 @@ export interface SqlPoolSensitivityLabelProps extends SqlPoolChildProps {
   tableName: string;
   /** Labelled column. Changing it replaces the label. */
   columnName: string;
-  /** Sensitivity label, e.g. `Confidential` or `Highly Confidential`. */
+  /**
+   * Sensitivity label, e.g. `Confidential` or `Highly Confidential`.
+   * @default not set
+   */
   labelName?: string;
-  /** ID of the sensitivity label in the information protection policy. */
+  /**
+   * ID of the sensitivity label in the information protection policy.
+   * @default not set
+   */
   labelId?: string;
-  /** Information type, e.g. `Contact Info`, `Financial`, `Credentials`. */
+  /**
+   * Information type, e.g. `Contact Info`, `Financial`, `Credentials`.
+   * @default not set
+   */
   informationType?: string;
-  /** ID of the information type in the information protection policy. */
+  /**
+   * ID of the information type in the information protection policy.
+   * @default not set
+   */
   informationTypeId?: string;
   /**
    * Sensitivity rank of the column.
@@ -71,8 +83,8 @@ export interface SqlPoolSensitivityLabel extends Resource<
 
 /**
  * A data classification (sensitivity label) on a column of a dedicated SQL
- * pool (`Microsoft.Synapse/workspaces/sqlPools/schemas/tables/columns/sensitivityLabels`).
- * Labels feed auditing and Microsoft Purview reports.
+ * pool (`Microsoft.Synapse/workspaces/sqlPools/schemas/tables/columns/sensit
+ * ivityLabels`). Labels feed auditing and Microsoft Purview reports.
  *
  * The column must exist: only T-SQL DDL can create tables, so create the
  * table first. The pool must be online. Destroying the resource removes
@@ -88,6 +100,22 @@ export interface SqlPoolSensitivityLabel extends Resource<
  * ### Classifying Columns
  * **Example:** Label an email column as confidential contact info
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
+ * const pool = yield* Azure.Synapse.SqlPool("dw", {
+ *   workspace: workspace.workspaceName,
+ *   sku: "DW100c",
+ * });
  * yield* Azure.Synapse.SqlPoolSensitivityLabel("email-label", {
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,

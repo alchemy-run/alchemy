@@ -8,7 +8,10 @@ import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 type ProfileScope = InstanceScope & { readonly dataflowProfileName: string };
 
 export interface DataflowProps {
-  /** Resource group of the IoT Operations instance. Changing it replaces the dataflow. */
+  /**
+   * Resource group of the IoT Operations instance. Changing it replaces the dataflow.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** IoT Operations instance that holds the profile. Changing it replaces the dataflow. */
   instanceName: string;
@@ -21,6 +24,7 @@ export interface DataflowProps {
    * Dataflow name (lowercase letters, digits, and hyphens). If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the dataflow.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -28,7 +32,10 @@ export interface DataflowProps {
    * @default "Enabled"
    */
   mode?: "Enabled" | "Disabled";
-  /** Whether the dataflow requests disk persistence from the broker. */
+  /**
+   * Whether the dataflow requests disk persistence from the broker.
+   * @default Azure's default
+   */
   requestDiskPersistence?: "Enabled" | "Disabled";
   /**
    * Operations of the dataflow: exactly one `Source` (endpoint reference
@@ -62,7 +69,8 @@ export interface Dataflow extends Resource<
 > {}
 
 /**
- * A dataflow of an Azure IoT Operations instance: routes messages from a
+ * A dataflow of an Azure IoT Operations instance
+ * (`Microsoft.IoTOperations/instances/dataflowProfiles/dataflows`): routes messages from a
  * source dataflow endpoint, through optional transformations, to a
  * destination dataflow endpoint.
  *
@@ -71,6 +79,24 @@ export interface Dataflow extends Resource<
  * ### Routing Messages
  * **Example:** Forward broker telemetry to Event Hubs
  * ```typescript
+ * const instance = yield* Azure.IoTOperations.Instance("aio", {
+ *   customLocationId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/aio-location",
+ *   schemaRegistryId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.DeviceRegistry/schemaRegistries/aio-schemas",
+ * });
+ * const eventHubs = yield* Azure.IoTOperations.DataflowEndpoint("event-hubs", {
+ *   instanceName: instance.instanceName,
+ *   endpointType: "Kafka",
+ *   hostType: "Eventhub",
+ *   kafkaSettings: {
+ *     host: "contoso-telemetry.servicebus.windows.net:9093",
+ *     authentication: {
+ *       method: "SystemAssignedManagedIdentity",
+ *       systemAssignedManagedIdentitySettings: {},
+ *     },
+ *   },
+ * });
  * const dataflow = yield* Azure.IoTOperations.Dataflow("telemetry", {
  *   instanceName: instance.instanceName,
  *   operations: [
@@ -88,6 +114,11 @@ export interface Dataflow extends Resource<
  *   ],
  * });
  * ```
+ *
+ * :::caution
+ * Changing `resourceGroup`, `instanceName`, `dataflowProfileName`, or
+ * `name` replaces the dataflow.
+ * :::
  *
  * @resource
  */

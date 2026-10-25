@@ -21,18 +21,31 @@ export interface ProjectPolicyResourcePolicy {
   /**
    * ID of an existing resource the rule applies to, e.g. an attached
    * network or image. Azure rejects wildcards and unknown IDs.
+   * @default unset
    */
   resources?: string;
-  /** Filter expression over `resourceType`, e.g. a SKU name. */
+  /**
+   * Filter expression over `resourceType`, e.g. a SKU name.
+   * @default unset
+   */
   filter?: string;
-  /** Whether matching resources are allowed or denied. */
+  /**
+   * Whether matching resources are allowed or denied.
+   * @default unset (Azure's default)
+   */
   action?: "Allow" | "Deny";
-  /** Kind of resource the filter applies to. */
+  /**
+   * Kind of resource the filter applies to.
+   * @default unset
+   */
   resourceType?: "Images" | "Skus" | "AttachedNetworks";
 }
 
 export interface ProjectPolicyProps {
-  /** Resource group of the dev center. Changing it replaces the policy. */
+  /**
+   * Resource group of the dev center. Changing it replaces the policy.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the dev center. Changing it replaces the policy. */
   devCenter: string;
@@ -41,16 +54,19 @@ export interface ProjectPolicyProps {
    * others can only be created after it exists. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the policy.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Resources (images, SKUs, attached networks) the scoped projects may
    * use. Azure rejects an empty list.
+   * @default unset (Azure rejects an empty list)
    */
   resourcePolicies?: ProjectPolicyResourcePolicy[];
   /**
    * ARM resource IDs of the projects the policy applies to. Must be empty
    * for the `default` policy, which applies to every project.
+   * @default [] (every project)
    */
   scopes?: string[];
 }
@@ -77,17 +93,31 @@ export interface ProjectPolicy extends Resource<
 > {}
 
 /**
- * A dev center project policy — restricts which images, dev box SKUs, and
+ * A dev center project policy (`Microsoft.DevCenter/devcenters/projectPolicies`)
+ * — restricts which images, dev box SKUs, and
  * attached networks the projects in its scope may use.
  *
  * Project policies have no tags; Alchemy treats a policy as owned when
  * its dev center carries this stack's ownership tags.
+ *
+ * :::caution
+ * Changing `devCenter`, `name`, or `resourceGroup` replaces the policy.
+ * Alchemy deletes the old policy first.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/dev-box/how-to-configure-project-policy
  *
  * ### Restricting Projects
  * **Example:** A default policy plus a stricter policy for one project
  * ```typescript
+ * const center = yield* Azure.DevCenter.DevCenter("center");
+ * const project = yield* Azure.DevCenter.Project("team", {
+ *   devCenterId: center.devCenterId,
+ * });
+ * const attached = yield* Azure.DevCenter.AttachedNetwork("network", {
+ *   devCenter: center.devCenterName,
+ *   networkConnectionId: "<network-connection-arm-id>",
+ * });
  * // Every dev center needs a `default` policy (no scopes) before any other.
  * const defaults = yield* Azure.DevCenter.ProjectPolicy("default", {
  *   devCenter: center.devCenterName,

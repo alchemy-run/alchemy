@@ -5,8 +5,8 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { normalizeScope } from "../Authorization/Ownership.ts";
 import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, waitUntilGone } from "../Arm.ts";
+import { normalizeScope } from "../Authorization/Ownership.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -27,6 +27,7 @@ export interface SuppressionProps {
   /**
    * Name of the suppression. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the suppression.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -166,7 +167,7 @@ export const SuppressionProvider = () =>
       if (!("resourceUri" in news) || !isResolved(news.resourceUri)) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
+      if (!isResolved<SuppressionProps>(news)) return undefined;
       if (
         normalizeScope(news.resourceUri) !== normalizeScope(output.resourceUri) ||
         news.recommendationId.toLowerCase() !== output.recommendationId.toLowerCase() ||

@@ -28,16 +28,33 @@ export interface WorkspaceNamedValue extends Resource<
  * The workspace-scoped counterpart of {@link NamedValue}: a named value inside an API
  * Management {@link Workspace} (Premium and v2 tiers). Props and
  * attributes match {@link NamedValue} plus `workspaceName`.
+ * The ARM type is `Microsoft.ApiManagement/service/workspaces/namedValues`.
+ *
+ * :::caution
+ * Changing `workspaceName`, `serviceName`, `name`, or `resourceGroup`
+ * replaces the named value.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/workspaces-overview
  *
  * ### Workspace Named Values
  * **Example:** A secret named value
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
  * yield* Azure.ApiManagement.WorkspaceNamedValue("backend-key", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
- *   value: Redacted.make(backendKey),
+ *   value: yield* Config.redacted("BACKEND_KEY"),
  *   secret: true,
  * });
  * ```

@@ -28,12 +28,37 @@ export interface WorkspaceDiagnostic extends Resource<
  * The workspace-scoped counterpart of {@link Diagnostic}: workspace-wide diagnostic settings inside an API
  * Management {@link Workspace} (Premium and v2 tiers). Props and
  * attributes match {@link Diagnostic} plus `workspaceName`.
+ * The ARM type is `Microsoft.ApiManagement/service/workspaces/diagnostics`.
+ *
+ * :::caution
+ * Changing `workspaceName`, `serviceName`, `name`, or `resourceGroup`
+ * replaces the diagnostic.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/workspaces-overview
  *
  * ### Workspace Telemetry
  * **Example:** Log every workspace API
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
+ * const logger = yield* Azure.ApiManagement.WorkspaceLogger("insights", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   loggerType: "applicationInsights",
+ *   credentials: {
+ *     connectionString: yield* Config.redacted("APPINSIGHTS_CONNECTION_STRING"),
+ *   },
+ * });
  * yield* Azure.ApiManagement.WorkspaceDiagnostic("insights", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

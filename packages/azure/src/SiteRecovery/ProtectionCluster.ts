@@ -22,7 +22,10 @@ import {
 } from "./Shared.ts";
 
 export interface ProtectionClusterProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the cluster. */
+  /**
+   * Resource group of the Recovery Services vault. Changing it replaces the cluster.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Recovery Services vault. Changing it replaces the cluster. */
   vault: string;
@@ -33,6 +36,7 @@ export interface ProtectionClusterProps {
   /**
    * Protection cluster name. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the cluster.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** ARM ID of the replication policy. Changing it replaces the cluster. */
@@ -48,13 +52,25 @@ export interface ProtectionClusterProps {
    * the cluster.
    */
   providerSpecificDetails: { instanceType: string; [key: string]: unknown };
-  /** Agent cluster ID. Changing it replaces the cluster. */
+  /**
+   * Agent cluster ID. Changing it replaces the cluster.
+   * @default not set
+   */
   agentClusterId?: string;
-  /** Cluster FQDN. Changing it replaces the cluster. */
+  /**
+   * Cluster FQDN. Changing it replaces the cluster.
+   * @default not set
+   */
   clusterFqdn?: string;
-  /** FQDNs of the cluster nodes. Changing them replaces the cluster. */
+  /**
+   * FQDNs of the cluster nodes. Changing them replaces the cluster.
+   * @default not set
+   */
   clusterNodeFqdns?: string[];
-  /** ARM IDs of the protected items of the cluster nodes. Changing them replaces the cluster. */
+  /**
+   * ARM IDs of the protected items of the cluster nodes. Changing them replaces the cluster.
+   * @default not set
+   */
   clusterProtectedItemIds?: string[];
 }
 
@@ -88,18 +104,25 @@ export interface ProtectionCluster extends Resource<
 > {}
 
 /**
- * An Azure Site Recovery replication protection cluster: replicates a
- * shared-disk VM cluster (e.g. Windows Server Failover Cluster nodes that
- * share a managed disk) to the recovery region as one unit (A2A).
+ * An Azure Site Recovery replication protection cluster
+ * (`Microsoft.RecoveryServices/vaults/replicationFabrics/replicationProtectionContainers/replicationProtectionClusters`).
+ * It replicates a shared-disk VM cluster, such as Windows Server Failover
+ * Cluster nodes that share a managed disk, to the recovery region as one unit
+ * (A2A). See the
+ * [Azure docs](https://learn.microsoft.com/rest/api/site-recovery/replication-protection-clusters/create).
  *
- * Protection clusters cannot be tagged; Alchemy treats a cluster as owned
- * when its vault is tagged for the current stack and stage. There is no
- * update API, so every change replaces the cluster, and delete is the
- * purge operation. Requires two or more VMs sharing a Premium SSD shared
- * disk, each already a {@link ProtectedItem}; without nodes the create
- * fails with `SiteRecoveryOperationNotStarted`.
+ * Protection clusters have no tags. Alchemy treats a cluster as owned when
+ * its vault carries this stack's ownership tags. Delete is the purge operation.
  *
- * @see https://learn.microsoft.com/rest/api/site-recovery/replication-protection-clusters/create
+ * :::caution
+ * You need two or more VMs that share a Premium SSD shared disk, each already
+ * an `Azure.SiteRecovery.ProtectedItem`. Without nodes, the create fails with
+ * `SiteRecoveryOperationNotStarted`.
+ * :::
+ *
+ * :::caution
+ * Azure has no update API. Changing any prop replaces the cluster.
+ * :::
  *
  * ### Shared-Disk Clusters
  * **Example:** Protect a two-node shared-disk cluster

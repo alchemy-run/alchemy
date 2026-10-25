@@ -104,6 +104,7 @@ export interface AccountProps {
    * Account name: 1-128 letters, digits, `-` and `_`, starting with a
    * letter or digit. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the account.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -115,16 +116,24 @@ export interface AccountProps {
   /**
    * Active Directory connection for SMB / dual-protocol volumes. Azure
    * allows one connection per subscription and region.
+   * @default none
    */
   activeDirectories?: NetAppActiveDirectory[];
-  /** Encryption key source of the account's volumes. */
+  /**
+   * Encryption key source of the account's volumes.
+   * @default Microsoft-managed keys
+   */
   encryption?: NetAppAccountEncryption;
   /**
    * Domain for NFSv4 user ID mapping. Applies to every account in the
    * subscription and region.
+   * @default none
    */
   nfsV4IDDomain?: string;
-  /** Managed identity of the account (needed for customer-managed keys). */
+  /**
+   * Managed identity of the account (needed for customer-managed keys).
+   * @default none
+   */
   identity?: {
     /** Identity type. */
     type: "None" | "SystemAssigned" | "UserAssigned" | "SystemAssigned,UserAssigned";
@@ -134,6 +143,7 @@ export interface AccountProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -170,7 +180,14 @@ export interface Account extends Resource<
  * pools, volumes, snapshot and backup policies, and backup vaults. The
  * account itself is free; capacity pools are billed.
  *
- * @see https://learn.microsoft.com/azure/azure-netapp-files/azure-netapp-files-create-netapp-account
+ * ARM type: `Microsoft.NetApp/netAppAccounts`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/azure-netapp-files/azure-netapp-files-create-netapp-account).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the account.
+ * Switching `encryption.keySource` from `Microsoft.KeyVault` back to
+ * `Microsoft.NetApp` also replaces it.
+ * :::
  *
  * ### Creating an Account
  * **Example:** NetApp account

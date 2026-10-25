@@ -30,41 +30,68 @@ export interface AuthorizationServerProps {
    * @default the server identifier
    */
   displayName?: string;
-  /** Description of the server (may contain HTML). */
+  /**
+   * Description of the server (may contain HTML).
+   * @default no description
+   */
   description?: string;
   /** Client registration page URL of the identity provider. */
   clientRegistrationEndpoint: string;
   /** OAuth 2.0 authorization endpoint. */
   authorizationEndpoint: string;
-  /** OAuth 2.0 token endpoint. */
+  /**
+   * OAuth 2.0 token endpoint.
+   * @default not set
+   */
   tokenEndpoint?: string;
   /** Grant types the developer console uses to obtain tokens. */
   grantTypes: AuthorizationServerGrantType[];
   /** Client (application) ID registered with the identity provider. */
   clientId: string;
-  /** Client secret registered with the identity provider. */
+  /**
+   * Client secret registered with the identity provider.
+   * @default no client secret
+   */
   clientSecret?: Redacted.Redacted<string>;
   /**
    * HTTP verbs supported by the authorization endpoint (`GET` is required).
    * @default ["GET"]
    */
   authorizationMethods?: ("GET" | "POST")[];
-  /** How the token endpoint authenticates the client. */
+  /**
+   * How the token endpoint authenticates the client.
+   * @default none
+   */
   clientAuthenticationMethod?: ("Basic" | "Body")[];
   /**
    * How the access token is sent to the API.
    * @default ["authorizationHeader"]
    */
   bearerTokenSendingMethods?: ("authorizationHeader" | "query")[];
-  /** Scope requested by default. */
+  /**
+   * Scope requested by default.
+   * @default not set
+   */
   defaultScope?: string;
-  /** Whether the `state` parameter is supported. */
+  /**
+   * Whether the `state` parameter is supported.
+   * @default not set (Azure's default applies)
+   */
   supportState?: boolean;
-  /** Extra form parameters sent to the token endpoint. */
+  /**
+   * Extra form parameters sent to the token endpoint.
+   * @default none
+   */
   tokenBodyParameters?: { name: string; value: string }[];
-  /** Whether the server is offered in the developer portal test console. */
+  /**
+   * Whether the server is offered in the developer portal test console.
+   * @default not set (Azure's default applies)
+   */
   useInTestConsole?: boolean;
-  /** Whether the server is shown in the API documentation. */
+  /**
+   * Whether the server is shown in the API documentation.
+   * @default not set (Azure's default applies)
+   */
   useInApiDocumentation?: boolean;
 }
 
@@ -91,12 +118,22 @@ export interface AuthorizationServer extends Resource<
  * An OAuth 2.0 authorization server of an API Management service. APIs
  * reference it so the developer portal test console can obtain tokens
  * for calls.
+ * The ARM type is `Microsoft.ApiManagement/service/authorizationServers`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the server.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-oauth2
  *
  * ### Configuring OAuth 2.0
  * **Example:** A Microsoft Entra authorization server
  * ```typescript
+ * const appId = yield* Config.string("ENTRA_CLIENT_ID");
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * yield* Azure.ApiManagement.AuthorizationServer("entra", {
  *   serviceName: apim.serviceName,
  *   displayName: "Entra ID",
@@ -105,7 +142,7 @@ export interface AuthorizationServer extends Resource<
  *   tokenEndpoint: `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
  *   grantTypes: ["authorizationCode"],
  *   clientId: appId,
- *   clientSecret: Redacted.make(appSecret),
+ *   clientSecret: yield* Config.redacted("ENTRA_CLIENT_SECRET"),
  *   defaultScope: `api://${appId}/.default`,
  * });
  * ```

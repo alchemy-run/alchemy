@@ -28,12 +28,29 @@ export interface WorkspaceBackend extends Resource<
  * The workspace-scoped counterpart of {@link Backend}: a backend inside an API
  * Management {@link Workspace} (Premium and v2 tiers). Props and
  * attributes match {@link Backend} plus `workspaceName`.
+ * The ARM type is `Microsoft.ApiManagement/service/workspaces/backends`.
+ *
+ * :::caution
+ * Changing `workspaceName`, `serviceName`, `name`, `type`, or
+ * `resourceGroup` replaces the backend.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/workspaces-overview
  *
  * ### Workspace Backends
  * **Example:** An HTTP backend
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
  * yield* Azure.ApiManagement.WorkspaceBackend("orders-backend", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

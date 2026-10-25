@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -289,11 +289,7 @@ export const CassandraClusterProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* cosmos
-        .ListCassandraClusterBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListCassandraClusterBySubscription", page)),
-        );
+      const page = yield* collectAll(cosmos.ListCassandraClusterBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((cluster) => {
         const group = resourceGroupOf(cluster.id);
         return hasAnyAlchemyTag(cluster.tags) && group !== undefined && cluster.name !== undefined

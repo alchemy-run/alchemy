@@ -62,27 +62,60 @@ export interface ConnectionAuthInfo {
    * @default "optInAllAuth"
    */
   authMode?: "optInAllAuth" | "optOutAllAuth";
-  /** Database user mapped to the identity (identity, userAccount, servicePrincipal* types). */
+  /**
+   * Database user mapped to the identity (identity, userAccount, servicePrincipal* types).
+   * @default not set
+   */
   userName?: string;
-  /** Whether to clean up the auth setup (role assignments, ...) on update or delete. */
+  /**
+   * Whether to clean up the auth setup (role assignments, ...) on update or delete.
+   * @default "Default"
+   */
   deleteOrUpdateBehavior?: "Default" | "ForcedCleanup";
-  /** RBAC role names to grant on the target instead of the defaults. */
+  /**
+   * RBAC role names to grant on the target instead of the defaults.
+   * @default the default roles for the target
+   */
   roles?: string[];
-  /** Client ID of the user-assigned identity or service principal. */
+  /**
+   * Client ID of the user-assigned identity or service principal.
+   * @default not set
+   */
   clientId?: string;
-  /** Subscription of the user-assigned identity. */
+  /**
+   * Subscription of the user-assigned identity.
+   * @default not set
+   */
   subscriptionId?: string;
-  /** Principal ID of the service principal or user. */
+  /**
+   * Principal ID of the service principal or user.
+   * @default not set
+   */
   principalId?: string;
-  /** Service principal secret (`servicePrincipalSecret`). */
+  /**
+   * Service principal secret (`servicePrincipalSecret`).
+   * @default not set
+   */
   secret?: Redacted.Redacted<string>;
-  /** Service principal certificate (`servicePrincipalCertificate`). */
+  /**
+   * Service principal certificate (`servicePrincipalCertificate`).
+   * @default not set
+   */
   certificate?: Redacted.Redacted<string>;
-  /** User or account name (`secret`). */
+  /**
+   * User or account name (`secret`).
+   * @default not set
+   */
   name?: string;
-  /** Password or Key Vault secret (`secret`). */
+  /**
+   * Password or Key Vault secret (`secret`).
+   * @default not set
+   */
   secretInfo?: ConnectionSecretInfo;
-  /** Access-key permissions (`accessKey`), e.g. `["Listen", "Send"]`. */
+  /**
+   * Access-key permissions (`accessKey`), e.g. `["Listen", "Send"]`.
+   * @default not set
+   */
   permissions?: string[];
 }
 
@@ -114,53 +147,119 @@ export interface ConnectionProps {
    * @default "none"
    */
   clientType?: ConnectionClientType;
-  /** Reach the target over a service endpoint or private link. */
+  /**
+   * Reach the target over a service endpoint or private link.
+   * @default not set (public network)
+   */
   vNetSolution?: {
-    /** VNet solution type. */
+    /**
+     * VNet solution type.
+     * @default not set
+     */
     type?: "serviceEndpoint" | "privateLink";
-    /** Whether to clean up the VNet setup on update or delete. */
+    /**
+     * Whether to clean up the VNet setup on update or delete.
+     * @default "Default"
+     */
     deleteOrUpdateBehavior?: "Default" | "ForcedCleanup";
   };
-  /** Store generated secrets in a Key Vault instead of plain app settings. */
+  /**
+   * Store generated secrets in a Key Vault instead of plain app settings.
+   * @default not set (secrets go to app settings)
+   */
   secretStore?: {
-    /** ARM ID of the Key Vault. */
+    /**
+     * ARM ID of the Key Vault.
+     * @default not set
+     */
     keyVaultId?: string;
-    /** Secret name; only valid when one secret is stored. */
+    /**
+     * Secret name; only valid when one secret is stored.
+     * @default a name Service Connector picks
+     */
     keyVaultSecretName?: string;
   };
-  /** Connection scope in the source, e.g. the container name of a Container App. */
+  /**
+   * Connection scope in the source, e.g. the container name of a Container App.
+   * @default not set
+   */
   scope?: string;
-  /** Firewall setup on the target to admit the source. */
+  /**
+   * Firewall setup on the target to admit the source.
+   * @default Service Connector's default
+   */
   publicNetworkSolution?: {
-    /** Whether to clean up firewall rules on update or delete. */
+    /**
+     * Whether to clean up firewall rules on update or delete.
+     * @default "Default"
+     */
     deleteOrUpdateBehavior?: "Default" | "ForcedCleanup";
-    /** `enable` (default) configures public network access; `optOut` skips it. */
+    /**
+     * `enable` (default) configures public network access; `optOut` skips it.
+     * @default "enable"
+     */
     action?: "enable" | "optOut";
-    /** Firewall rules to add on the target. */
+    /**
+     * Firewall rules to add on the target.
+     * @default not set
+     */
     firewallRules?: {
-      /** IP ranges in CIDR form. */
+      /**
+       * IP ranges in CIDR form.
+       * @default []
+       */
       ipRanges?: string[];
-      /** Allow Azure services. */
+      /**
+       * Allow Azure services.
+       * @default not set
+       */
       azureServices?: "true" | "false";
-      /** Allow the caller's client IP. */
+      /**
+       * Allow the caller's client IP.
+       * @default not set
+       */
       callerClientIP?: "true" | "false";
     };
   };
-  /** How generated configuration is applied to the source. */
+  /**
+   * How generated configuration is applied to the source.
+   * @default Service Connector's default
+   */
   configurationInfo?: {
-    /** Whether to remove generated configuration on update or delete. */
+    /**
+     * Whether to remove generated configuration on update or delete.
+     * @default "Default"
+     */
     deleteOrUpdateBehavior?: "Default" | "ForcedCleanup";
-    /** `enable` (default) writes configuration to the source; `optOut` does not. */
+    /**
+     * `enable` (default) writes configuration to the source; `optOut` does not.
+     * @default "enable"
+     */
     action?: "enable" | "optOut";
-    /** Map of default configuration names to custom names. */
+    /**
+     * Map of default configuration names to custom names.
+     * @default {}
+     */
     customizedKeys?: Record<string, string>;
-    /** Extra configurations to add. */
+    /**
+     * Extra configurations to add.
+     * @default {}
+     */
     additionalConfigurations?: Record<string, string>;
-    /** Extra properties appended to the connection string. */
+    /**
+     * Extra properties appended to the connection string.
+     * @default {}
+     */
     additionalConnectionStringProperties?: Record<string, string>;
-    /** Store configuration in an App Configuration store. */
+    /**
+     * Store configuration in an App Configuration store.
+     * @default not set
+     */
     configurationStore?: {
-      /** ARM ID of the App Configuration store. */
+      /**
+       * ARM ID of the App Configuration store.
+       * @default not set
+       */
       appConfigurationId?: string;
     };
   };

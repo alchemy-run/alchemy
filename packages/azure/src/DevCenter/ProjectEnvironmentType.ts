@@ -21,7 +21,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { identityDiffers, sameArm, toIdentityInput, type DevCenterIdentity } from "./Common.ts";
 
 export interface ProjectEnvironmentTypeProps {
-  /** Resource group of the project. Changing it replaces the project environment type. */
+  /**
+   * Resource group of the project. Changing it replaces the project environment type.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the project. Changing it replaces the project environment type. */
   project: string;
@@ -41,6 +44,7 @@ export interface ProjectEnvironmentTypeProps {
    * Subscription environments of this type deploy into, as
    * `/subscriptions/{subscriptionId}`. The dev center's identity needs
    * Owner (or Contributor and User Access Administrator) on it to deploy.
+   * @default unset
    */
   deploymentTargetId?: string;
   /**
@@ -48,23 +52,32 @@ export interface ProjectEnvironmentTypeProps {
    * @default "Enabled"
    */
   status?: "Enabled" | "Disabled";
-  /** Display name of the project environment type. */
+  /**
+   * Display name of the project environment type.
+   * @default unset
+   */
   displayName?: string;
   /**
    * Role definition IDs (GUIDs) granted to an environment's creator on the
    * environment's resource group.
+   * @default []
    */
   creatorRoles?: string[];
   /**
    * Additional role assignments on every environment's resource group,
    * keyed by Entra object ID, valued by role definition IDs (GUIDs).
+   * @default {}
    */
   userRoleAssignments?: Record<string, string[]>;
-  /** Managed identity used to deploy environments of this type. */
+  /**
+   * Managed identity used to deploy environments of this type.
+   * @default no managed identity
+   */
   identity?: DevCenterIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -99,15 +112,26 @@ export interface ProjectEnvironmentType extends Resource<
 > {}
 
 /**
- * A project environment type — enables a dev center `EnvironmentType` for
+ * A project environment type (`Microsoft.DevCenter/projects/environmentTypes`)
+ * — enables a dev center `EnvironmentType` for
  * one project, and decides where environments of that type deploy and
  * which roles their creators get.
+ *
+ * :::caution
+ * Changing `project`, `environmentType`, `location`, or `resourceGroup`
+ * replaces the project environment type.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/deployment-environments/how-to-configure-project-environment-types
  *
  * ### Enabling an Environment Type
  * **Example:** Deploy `dev` environments into the current subscription
  * ```typescript
+ * const center = yield* Azure.DevCenter.DevCenter("center");
+ * const project = yield* Azure.DevCenter.Project("team", {
+ *   devCenterId: center.devCenterId,
+ * });
+ * const { subscriptionId } = yield* Azure.AzureEnvironment.current;
  * const dev = yield* Azure.DevCenter.EnvironmentType("dev", {
  *   devCenter: center.devCenterName,
  *   name: "dev",
@@ -117,8 +141,7 @@ export interface ProjectEnvironmentType extends Resource<
  *   environmentType: dev.environmentTypeName,
  *   deploymentTargetId: `/subscriptions/${subscriptionId}`,
  *   identity: { type: "SystemAssigned" },
- *   // Contributor for environment creators
- *   creatorRoles: ["b24988ac-6180-42a0-ab88-20f7382dd24c"],
+ *   creatorRoles: [Azure.Authorization.BuiltInRole.Contributor],
  * });
  * ```
  *

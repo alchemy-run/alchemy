@@ -26,28 +26,35 @@ import {
 } from "./common.ts";
 
 export interface GlobalReachConnectionProps {
-  /** Resource group of the private cloud. Changing it replaces the connection. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the connection.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the connection. */
   privateCloud: string;
   /**
    * Name of the Global Reach connection. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the connection.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Authorization key from the peer ExpressRoute circuit. Changing it
    * replaces the connection.
+   * @default not set
    */
   authorizationKey?: Redacted.Redacted<string>;
   /**
    * ID of the ExpressRoute circuit to peer with. Changing it replaces the
    * connection.
+   * @default not set
    */
   peerExpressRouteCircuit?: string;
   /**
    * ID of the private cloud's ExpressRoute circuit (for a peer within the
    * same subscription). Changing it replaces the connection.
+   * @default not set
    */
   expressRouteId?: string;
 }
@@ -78,18 +85,31 @@ export interface GlobalReachConnection extends Resource<
 > {}
 
 /**
- * An ExpressRoute Global Reach connection between an Azure VMware Solution
- * private cloud's circuit and another (e.g. on-premises) ExpressRoute circuit.
+ * An ExpressRoute Global Reach connection
+ * (`Microsoft.AVS/privateClouds/globalReachConnections`) between an Azure
+ * VMware Solution private cloud's circuit and another (e.g. on-premises)
+ * ExpressRoute circuit.
+ *
+ * :::caution
+ * Changing `privateCloud`, `name`, `peerExpressRouteCircuit`,
+ * `expressRouteId`, `authorizationKey`, or `resourceGroup` replaces the
+ * connection.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/tutorial-expressroute-global-reach-private-cloud
  *
  * ### Connecting On-Premises
  * **Example:** Peer with an on-premises circuit
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
  * yield* Azure.VMware.GlobalReachConnection("onprem", {
  *   privateCloud: cloud.privateCloudName,
- *   peerExpressRouteCircuit: onPremCircuitId,
- *   authorizationKey: Redacted.make(onPremAuthorizationKey),
+ *   peerExpressRouteCircuit: `/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/network/providers/Microsoft.Network/expressRouteCircuits/onprem`,
+ *   authorizationKey: yield* Config.redacted("ONPREM_CIRCUIT_AUTH_KEY"),
  * });
  * ```
  *

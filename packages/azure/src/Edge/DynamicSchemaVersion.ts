@@ -16,7 +16,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, payloadText } from "./EdgeShared.ts";
 
 export interface DynamicSchemaVersionProps {
-  /** Resource group of the schema. Changing it replaces the version. */
+  /**
+   * Resource group of the schema. Changing it replaces the version.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Name of the schema that holds the dynamic schema. Changing it replaces the version. */
   schema: string;
@@ -57,16 +60,25 @@ export interface DynamicSchemaVersion extends Resource<
 
 /**
  * An immutable version of an Azure Arc workload orchestration dynamic
- * schema.
+ * schema (`Microsoft.Edge/schemas/dynamicSchemas/versions`). See the
+ * [configuration model](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model).
  *
  * Versions carry no tags or free-form fields, so Alchemy cannot mark them;
  * a version found under the expected name is treated as this resource.
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model
+ * :::caution
+ * Versions are immutable. Changing `resourceGroup`, `schema`,
+ * `dynamicSchema`, `version`, or `value` replaces the version. A new
+ * `value` under the same `version` deletes the old version first.
+ * :::
  *
  * ### Publishing a Version
  * **Example:** Dynamic schema rules
  * ```typescript
+ * const schema = yield* Azure.Edge.Schema("app");
+ * const dynamic = yield* Azure.Edge.DynamicSchema("dynamic", {
+ *   schema: schema.schemaName,
+ * });
  * yield* Azure.Edge.DynamicSchemaVersion("dynamic-v1", {
  *   schema: schema.schemaName,
  *   dynamicSchema: dynamic.dynamicSchemaName,

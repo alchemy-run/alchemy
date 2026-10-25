@@ -7,12 +7,12 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -26,15 +26,30 @@ import { canonicalJson, getMonitor, sameName } from "./common.ts";
 
 /** Company details Elastic uses to provision the Elastic Cloud organization. */
 export interface ElasticCompanyInfo {
-  /** Domain of the company, e.g. `example.com`. */
+  /**
+   * Domain of the company, e.g. `example.com`.
+   * @default none
+   */
   domain?: string;
-  /** Business of the company. */
+  /**
+   * Business of the company.
+   * @default none
+   */
   business?: string;
-  /** Number of employees, e.g. `1-10`. */
+  /**
+   * Number of employees, e.g. `1-10`.
+   * @default none
+   */
   employeesNumber?: string;
-  /** State of the company location. */
+  /**
+   * State of the company location.
+   * @default none
+   */
   state?: string;
-  /** Country of the company location. */
+  /**
+   * Country of the company location.
+   * @default none
+   */
   country?: string;
 }
 
@@ -42,27 +57,54 @@ export interface ElasticCompanyInfo {
 export interface ElasticUserInfo {
   /** Email address Elastic uses to contact the owner (required). */
   emailAddress: string;
-  /** First name of the owner. */
+  /**
+   * First name of the owner.
+   * @default none
+   */
   firstName?: string;
-  /** Last name of the owner. */
+  /**
+   * Last name of the owner.
+   * @default none
+   */
   lastName?: string;
-  /** Company name of the owner. */
+  /**
+   * Company name of the owner.
+   * @default none
+   */
   companyName?: string;
-  /** Company details. */
+  /**
+   * Company details.
+   * @default none
+   */
   companyInfo?: ElasticCompanyInfo;
 }
 
 /** The Azure Marketplace plan the monitor subscribes to. */
 export interface ElasticPlanDetails {
-  /** Marketplace offer ID, e.g. `ec-azure-pp`. */
+  /**
+   * Marketplace offer ID, e.g. `ec-azure-pp`.
+   * @default Azure's default
+   */
   offerID?: string;
-  /** Marketplace publisher ID, e.g. `elastic`. */
+  /**
+   * Marketplace publisher ID, e.g. `elastic`.
+   * @default Azure's default
+   */
   publisherID?: string;
-  /** Billing term ID. */
+  /**
+   * Billing term ID.
+   * @default Azure's default
+   */
   termID?: string;
-  /** Marketplace plan ID, e.g. `ess-consumption-2024`. */
+  /**
+   * Marketplace plan ID, e.g. `ess-consumption-2024`.
+   * @default Azure's default
+   */
   planID?: string;
-  /** Display name of the plan. */
+  /**
+   * Display name of the plan.
+   * @default Azure's default
+   */
   planName?: string;
 }
 
@@ -70,12 +112,14 @@ export interface MonitorProps {
   /**
    * Resource group the monitor is created in. Changing it replaces the
    * monitor.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
    * Name of the monitor resource (at most 32 characters). If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the monitor.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -92,17 +136,20 @@ export interface MonitorProps {
   /**
    * The kind of Elastic resource, e.g. observability, security, or search.
    * Changing it replaces the monitor.
+   * @default Azure's default
    */
   kind?: string;
   /** The Elastic Cloud organization owner. Changing it replaces the monitor. */
   userInfo: ElasticUserInfo;
   /**
    * Marketplace plan details. Changing them replaces the monitor.
+   * @default Azure's default (derived from `sku`)
    */
   planDetails?: ElasticPlanDetails;
   /**
    * Elastic Stack version of the deployment, e.g. `8.15.0`. Changing it
    * replaces the monitor.
+   * @default Azure's default (the latest Elastic Stack version)
    */
   version?: string;
   /**
@@ -114,11 +161,18 @@ export interface MonitorProps {
   /**
    * Serverless project details (only for `hostingType: "Serverless"`).
    * Changing them replaces the monitor.
+   * @default none
    */
   projectDetails?: {
-    /** Project type. */
+    /**
+     * Project type.
+     * @default Azure's default
+     */
     projectType?: "Elasticsearch" | "Observability" | "Security";
-    /** Configuration type of an Elasticsearch project. */
+    /**
+     * Configuration type of an Elasticsearch project.
+     * @default Azure's default
+     */
     configurationType?: "GeneralPurpose" | "Vector" | "TimeSeries";
   };
   /**
@@ -143,6 +197,7 @@ export interface MonitorProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -194,19 +249,26 @@ export interface Monitor extends Resource<
  * Cloud plan through Azure Marketplace, creates an Elastic Cloud
  * deployment (or serverless project), and streams Azure logs to it.
  * Deleting it deletes the deployment and cancels the SaaS subscription.
+ * Tag rules, monitored subscriptions, and OpenAI integrations are managed
+ * as children of the monitor. See the
+ * [Elastic on Azure overview](https://learn.microsoft.com/azure/partner-solutions/elastic/overview).
  *
+ * :::caution
  * The subscription must allow Marketplace purchases (free trial and
- * sponsored subscriptions cannot). Tag rules, monitored subscriptions, and
- * OpenAI integrations are managed as children of the monitor.
+ * sponsored subscriptions cannot). Creating a monitor starts Elastic Cloud
+ * billing.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/partner-solutions/elastic/overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `sku`, `kind`, `userInfo`,
+ * `planDetails`, `version`, `hostingType`, `projectDetails`,
+ * `monitoringStatus`, or `systemAssignedIdentity` replaces the monitor and
+ * deletes its Elastic deployment with all its data.
+ * :::
  *
  * ### Creating a Monitor
  * **Example:** Pay-as-you-go hosted Elastic deployment
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("observability", {
- *   location: "westus2",
- * });
  * const monitor = yield* Azure.Elastic.Monitor("elastic", {
  *   location: "westus2",
  *   userInfo: {
@@ -301,9 +363,7 @@ export const MonitorProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* elastic
-        .ListMonitors({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListMonitors", page)));
+      const page = yield* collectAll(elastic.ListMonitors, { subscriptionId });
       return (page.value ?? []).flatMap((monitor) => {
         const group = resourceGroupOf(monitor.id);
         return hasAnyAlchemyTag(monitor.tags) && group !== undefined && monitor.name !== undefined

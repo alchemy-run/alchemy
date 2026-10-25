@@ -41,6 +41,7 @@ export interface OnlineEndpointProps {
    * letter, unique within the Azure region (it is part of the scoring
    * URI). If omitted, a unique name is generated from the logical ID.
    * Changing it replaces the endpoint.
+   * @default a unique name generated from the logical ID
    */
   name?: string;
   /**
@@ -57,20 +58,26 @@ export interface OnlineEndpointProps {
   /**
    * ARM resource ID of a Kubernetes compute to host the endpoint on
    * (omit for a managed endpoint). Changing it replaces the endpoint.
+   * @default none
    */
   compute?: string;
   /**
    * Description of the endpoint. Azure ignores description changes on an
    * existing endpoint, so changing it replaces the endpoint.
+   * @default none
    */
   description?: string;
   /**
    * Percentage of live traffic per deployment name. Deployments must exist
    * before traffic can point at them, so set it in a deploy after the
    * deployments are created.
+   * @default unchanged
    */
   traffic?: Record<string, number>;
-  /** Percentage of live traffic mirrored to each deployment. */
+  /**
+   * Percentage of live traffic mirrored to each deployment.
+   * @default unchanged
+   */
   mirrorTraffic?: Record<string, number>;
   /**
    * Whether the scoring endpoint accepts public traffic.
@@ -85,6 +92,7 @@ export interface OnlineEndpointProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -124,13 +132,29 @@ export interface OnlineEndpoint extends Resource<
  * boundary; `OnlineDeployment`s behind it run the model and share its
  * traffic.
  *
+ * ARM type: `Microsoft.MachineLearningServices/workspaces/onlineEndpoints`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/concept-endpoints-online).
+ *
  * An endpoint without deployments has no compute and no hourly charge.
  *
- * @see https://learn.microsoft.com/azure/machine-learning/concept-endpoints-online
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `name`, `location`, `authMode`,
+ * `compute`, or `description` replaces the endpoint.
+ * :::
  *
  * ### Creating an Endpoint
  * **Example:** Key-authenticated endpoint
  * ```typescript
+ * // An existing Application Insights component for workspace telemetry.
+ * const insightsId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/monitoring/providers/Microsoft.Insights/components/ml-insights";
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const workspace = yield* Azure.MachineLearning.Workspace("ml", {
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ *   applicationInsights: insightsId,
+ * });
  * const endpoint = yield* Azure.MachineLearning.OnlineEndpoint("scoring", {
  *   workspace: workspace.workspaceName,
  *   description: "Real-time scoring",

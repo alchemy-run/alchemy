@@ -6,12 +6,12 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -40,9 +40,15 @@ export interface WorkspaceDataLakeStorage {
   accountUrl: string;
   /** Name of the file system (blob container) in the account. */
   filesystem: string;
-  /** ARM resource ID of the storage account. */
+  /**
+   * ARM resource ID of the storage account.
+   * @default not set
+   */
   resourceId?: string;
-  /** Create a managed private endpoint to the account (managed VNet only). */
+  /**
+   * Create a managed private endpoint to the account (managed VNet only).
+   * @default not set
+   */
   createManagedPrivateEndpoint?: boolean;
 }
 
@@ -50,7 +56,10 @@ export interface WorkspaceDataLakeStorage {
 export interface WorkspaceIdentity {
   /** Identity type. */
   type: "None" | "SystemAssigned" | "SystemAssigned,UserAssigned";
-  /** ARM resource IDs of user-assigned identities. */
+  /**
+   * ARM resource IDs of user-assigned identities.
+   * @default not set
+   */
   userAssignedIdentityIds?: string[];
 }
 
@@ -75,11 +84,17 @@ export interface WorkspaceCustomerManagedKey {
 export interface WorkspaceRepositoryConfiguration {
   /** `WorkspaceVSTSConfiguration` (Azure DevOps) or `WorkspaceGitHubConfiguration`. */
   type: "WorkspaceVSTSConfiguration" | "WorkspaceGitHubConfiguration";
-  /** GitHub Enterprise host name, e.g. `https://github.mydomain.com`. */
+  /**
+   * GitHub Enterprise host name, e.g. `https://github.mydomain.com`.
+   * @default not set
+   */
   hostName?: string;
   /** Account (organization) name. */
   accountName: string;
-  /** Azure DevOps project name. */
+  /**
+   * Azure DevOps project name.
+   * @default not set
+   */
   projectName?: string;
   /** Repository name. */
   repositoryName: string;
@@ -87,18 +102,25 @@ export interface WorkspaceRepositoryConfiguration {
   collaborationBranch: string;
   /** Root folder in the repository. */
   rootFolder: string;
-  /** Azure DevOps tenant ID. */
+  /**
+   * Azure DevOps tenant ID.
+   * @default not set
+   */
   tenantId?: string;
 }
 
 export interface WorkspaceProps {
-  /** Resource group the workspace is created in. Changing it replaces the workspace. */
+  /**
+   * Resource group the workspace is created in. Changing it replaces the workspace.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Globally unique workspace name: 1-50 lowercase letters, digits, and
    * hyphens, starting and ending with a letter or digit. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the workspace.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -114,12 +136,14 @@ export interface WorkspaceProps {
   /**
    * SQL administrator login of the built-in SQL endpoints. Cannot be
    * changed after creation, so changing it replaces the workspace.
+   * @default not set
    */
   sqlAdministratorLogin?: string;
   /**
    * SQL administrator password. Write-only: Azure never returns it, so
    * Alchemy stores a salted fingerprint and only re-sends it when it
    * changes.
+   * @default not set
    */
   sqlAdministratorLoginPassword?: Redacted.Redacted<string>;
   /**
@@ -144,11 +168,13 @@ export interface WorkspaceProps {
   /**
    * Entra tenants the managed virtual network may link to when data
    * exfiltration protection is on.
+   * @default not set
    */
   allowedAadTenantIdsForLinking?: string[];
   /**
    * Subnet for Spark compute (legacy VNet injection). Changing it replaces
    * the workspace.
+   * @default not set
    */
   computeSubnetId?: string;
   /**
@@ -165,30 +191,41 @@ export interface WorkspaceProps {
    * Double-encrypt the workspace with a customer-managed key. Only applied
    * at creation; changing it replaces the workspace. The workspace stays
    * pending until the key is activated with `Azure.Synapse.WorkspaceKey`.
+   * @default not set
    */
   customerManagedKey?: WorkspaceCustomerManagedKey;
-  /** ARM resource ID of a Microsoft Purview account to connect. */
+  /**
+   * ARM resource ID of a Microsoft Purview account to connect.
+   * @default not set
+   */
   purviewResourceId?: string;
-  /** Git integration for Synapse Studio. */
+  /**
+   * Git integration for Synapse Studio.
+   * @default not set
+   */
   repositoryConfiguration?: WorkspaceRepositoryConfiguration;
   /**
    * Object ID of the initial workspace administrator. Only applied at
    * creation.
+   * @default not set
    */
   initialWorkspaceAdminObjectId?: string;
   /**
    * Allow only Microsoft Entra authentication at creation. Manage it
    * afterwards with `Azure.Synapse.AzureADOnlyAuthentication`.
+   * @default not set
    */
   azureADOnlyAuthentication?: boolean;
   /**
    * Let trusted Azure services bypass the workspace firewall. Only applied
    * at creation.
+   * @default not set
    */
   trustedServiceBypassEnabled?: boolean;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -241,16 +278,24 @@ export interface Workspace extends Resource<
 > {}
 
 /**
- * An Azure Synapse Analytics workspace — the boundary for Spark pools,
- * dedicated and serverless SQL pools, pipelines, and Synapse Studio. The
- * workspace itself and its serverless SQL endpoint cost nothing while
- * idle.
+ * An Azure Synapse Analytics workspace (`Microsoft.Synapse/workspaces`) —
+ * the boundary for Spark pools, dedicated and serverless SQL pools,
+ * pipelines, and Synapse Studio. The workspace itself and its serverless SQL
+ * endpoint cost nothing while idle.
  *
  * A workspace needs a default ADLS Gen2 file system (a storage account
  * with `isHnsEnabled: true` and a container). Grant the workspace identity
  * `Storage Blob Data Contributor` on the account so Spark and serverless
  * SQL can read and write it. Deleting the workspace also deletes its
  * managed resource group.
+ *
+ * :::caution
+ * Changing `name`, `location`, `sqlAdministratorLogin`,
+ * `managedResourceGroupName`, `defaultDataLakeStorage`,
+ * `managedVirtualNetwork`, `preventDataExfiltration`, `computeSubnetId`,
+ * `customerManagedKey`, or `resourceGroup` replaces the workspace. Deleting
+ * the old workspace also deletes its managed resource group.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/overview-what-is
  *
@@ -263,13 +308,14 @@ export interface Workspace extends Resource<
  * const fs = yield* Azure.Storage.BlobContainer("fs", {
  *   storageAccount: lake.storageAccountName,
  * });
+ * const password = yield* Config.redacted("SYNAPSE_SQL_PASSWORD");
  * const workspace = yield* Azure.Synapse.Workspace("ws", {
  *   defaultDataLakeStorage: {
  *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
  *     filesystem: fs.containerName,
  *   },
  *   sqlAdministratorLogin: "sqladmin",
- *   sqlAdministratorLoginPassword: Redacted.make(password),
+ *   sqlAdministratorLoginPassword: password,
  * });
  * ```
  *
@@ -374,9 +420,7 @@ export const WorkspaceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* synapse
-        .ListWorkspaces({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListWorkspaces", page)));
+      const page = yield* collectAll(synapse.ListWorkspaces, { subscriptionId });
       return (page.value ?? []).flatMap((workspace) => {
         const group = resourceGroupOf(workspace.id);
         return hasAnyAlchemyTag(workspace.tags) &&

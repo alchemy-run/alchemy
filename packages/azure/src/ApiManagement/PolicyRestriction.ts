@@ -50,12 +50,27 @@ export interface PolicyRestriction extends Resource<
  * A policy restriction of an API Management service: it constrains the
  * policy document at a scope, e.g. requiring it to keep `<base />` so the
  * inherited policies always run.
+ * The ARM type is `Microsoft.ApiManagement/service/policyRestrictions`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the
+ * restriction.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/apimanagement/policy-restriction
  *
  * ### Restricting Policies
  * **Example:** Require `<base />` in the orders API policy
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const orders = yield* Azure.ApiManagement.Api("orders", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * yield* Azure.ApiManagement.PolicyRestriction("orders-base", {
  *   serviceName: apim.serviceName,
  *   scope: `/apis/${orders.apiName}`,

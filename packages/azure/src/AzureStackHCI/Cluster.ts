@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -28,9 +28,13 @@ export interface ClusterDesiredProperties {
   /**
    * Whether Windows Server guest licensing through the cluster's Azure
    * subscription is enabled.
+   * @default not set
    */
   windowsServerSubscription?: "Disabled" | "Enabled";
-  /** Level of diagnostic data the cluster sends to Microsoft. */
+  /**
+   * Level of diagnostic data the cluster sends to Microsoft.
+   * @default not set
+   */
   diagnosticLevel?: "Off" | "Basic" | "Enhanced";
 }
 
@@ -40,6 +44,7 @@ export interface ClusterProps {
   /**
    * Name of the cluster record. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the cluster.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -52,6 +57,7 @@ export interface ClusterProps {
   /**
    * Purpose of the cluster deployment, e.g. `AzureLocal`. Changing it
    * replaces the cluster.
+   * @default not set
    */
   kind?: string;
   /**
@@ -59,27 +65,42 @@ export interface ClusterProps {
    * @default "SystemAssigned"
    */
   identity?: "SystemAssigned" | "None";
-  /** App (client) ID of the cluster's Microsoft Entra identity. */
+  /**
+   * App (client) ID of the cluster's Microsoft Entra identity.
+   * @default not set
+   */
   aadClientId?: string;
-  /** Tenant ID of the cluster's Microsoft Entra identity. */
+  /**
+   * Tenant ID of the cluster's Microsoft Entra identity.
+   * @default not set
+   */
   aadTenantId?: string;
   /**
    * Object ID of the cluster's Microsoft Entra application. Changing it
    * replaces the cluster.
+   * @default not set
    */
   aadApplicationObjectId?: string;
   /**
    * Object ID of the cluster identity's service principal. Changing it
    * replaces the cluster.
+   * @default not set
    */
   aadServicePrincipalObjectId?: string;
-  /** Endpoint configured for management from the Azure portal. */
+  /**
+   * Endpoint configured for management from the Azure portal.
+   * @default not set
+   */
   cloudManagementEndpoint?: string;
-  /** Desired cluster settings (diagnostics, Windows Server subscription). */
+  /**
+   * Desired cluster settings (diagnostics, Windows Server subscription).
+   * @default not set
+   */
   desiredProperties?: ClusterDesiredProperties;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -137,15 +158,18 @@ export interface Cluster extends Resource<
  * The Azure-side record of an Azure Local (formerly Azure Stack HCI)
  * cluster. On-premises nodes register against it with its `cloudId`; until
  * then it stays `NotYetRegistered` and is not billed.
+ * The ARM type is `Microsoft.AzureStackHCI/clusters`.
+ *
+ * :::caution
+ * Changing `name`, `location`, `kind`, `aadApplicationObjectId`,
+ * `aadServicePrincipalObjectId`, or `resourceGroup` replaces the cluster.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/overview
  *
  * ### Creating a Cluster Record
  * **Example:** Cluster record with a system-assigned identity
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("edge", {
- *   location: "eastus",
- * });
  * const cluster = yield* Azure.AzureStackHCI.Cluster("site-a");
  * ```
  *
@@ -208,9 +232,7 @@ export const ClusterProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        hci
-          .ListClusterBySubscription({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListClusterBySubscription", page))),
+        collectAll(hci.ListClusterBySubscription, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((cluster) => {
         const group = resourceGroupOf(cluster.id);

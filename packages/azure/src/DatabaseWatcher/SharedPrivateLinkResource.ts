@@ -20,7 +20,10 @@ import { createWatcherChildName } from "./common.ts";
 export type SharedPrivateLinkGroupId = "sqlServer" | "managedInstance" | "cluster" | "vault";
 
 export interface SharedPrivateLinkResourceProps {
-  /** Resource group of the watcher. Changing it replaces the link. */
+  /**
+   * Resource group of the watcher. Changing it replaces the link.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the watcher. Changing it replaces the link. */
   watcher: string;
@@ -28,6 +31,7 @@ export interface SharedPrivateLinkResourceProps {
    * Name of the shared private link. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces
    * the link.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -53,6 +57,7 @@ export interface SharedPrivateLinkResourceProps {
    * Explorer clusters (e.g. `eastus`) and SQL managed instances (e.g.
    * `767d5869f605`); omit it for SQL logical servers and Key Vaults.
    * Changing it replaces the link.
+   * @default unset
    */
   dnsZone?: string;
 }
@@ -86,21 +91,41 @@ export interface SharedPrivateLinkResource extends Resource<
 > {}
 
 /**
- * A managed private endpoint from a database watcher to a SQL server,
- * SQL managed instance, Azure Data Explorer cluster, or Key Vault, so the
- * watcher reaches its targets and data store without public network
- * access.
+ * A managed private endpoint from a database watcher
+ * (`Microsoft.DatabaseWatcher/watchers/sharedPrivateLinkResources`) to a
+ * SQL server, SQL managed instance, Azure Data Explorer cluster, or Key
+ * Vault, so the watcher reaches its targets and data store without public
+ * network access.
  *
  * The connection starts as `Pending`; approve it on the target resource
  * (e.g. with the target's private endpoint connection resource). Links
  * cannot be tagged; Alchemy owns a link it created or whose name it
- * generated. All properties are immutable.
+ * generated.
+ *
+ * :::caution
+ * All props are immutable. Changing `watcher`, `name`,
+ * `privateLinkResourceId`, `groupId`, `requestMessage`, `dnsZone`, or
+ * `resourceGroup` replaces the link. Alchemy deletes the old link first,
+ * because a watcher holds one link per target resource and group, and the
+ * new connection must be approved again.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-sql/database-watcher-manage#create-a-managed-private-endpoint
  *
  * ### Connecting Privately
  * **Example:** Private link to a SQL logical server
  * ```typescript
+ * // Object ID of the Entra group that administers the server.
+ * const dbaGroupObjectId = "00000000-0000-0000-0000-000000000000";
+ * const server = yield* Azure.Sql.Server("db", {
+ *   administrators: {
+ *     login: "dba-group",
+ *     sid: dbaGroupObjectId,
+ *     principalType: "Group",
+ *     azureADOnlyAuthentication: true,
+ *   },
+ * });
+ * const watcher = yield* Azure.DatabaseWatcher.Watcher("sql-watcher");
  * const link = yield* Azure.DatabaseWatcher.SharedPrivateLinkResource("sql", {
  *   watcher: watcher.watcherName,
  *   privateLinkResourceId: server.serverId,
@@ -110,6 +135,7 @@ export interface SharedPrivateLinkResource extends Resource<
  *
  * **Example:** Private link to an Azure Data Explorer cluster
  * ```typescript
+ * const cluster = yield* Azure.Kusto.Cluster("adx");
  * const link = yield* Azure.DatabaseWatcher.SharedPrivateLinkResource("adx", {
  *   watcher: watcher.watcherName,
  *   privateLinkResourceId: cluster.clusterId,

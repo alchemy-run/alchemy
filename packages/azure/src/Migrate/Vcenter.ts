@@ -25,6 +25,7 @@ export interface VcenterProps {
   /**
    * Name of the vCenter in the site. If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the vCenter.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Fully qualified domain name (or IP address) of the vCenter. */
@@ -42,7 +43,10 @@ export interface VcenterProps {
    * @default "443"
    */
   port?: string;
-  /** Display name of the vCenter in the portal. */
+  /**
+   * Display name of the vCenter in the portal.
+   * @default none
+   */
   friendlyName?: string;
 }
 
@@ -70,17 +74,24 @@ export interface Vcenter extends Resource<
 /**
  * An Azure Migrate vCenter (`Microsoft.OffAzure/vmwareSites/vcenters`) — a vCenter Server the site's appliance discovers VMware VMs from.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/migrate/migrate-appliance-architecture).
+ *
  * The appliance registered with the site must be able to reach the
  * vCenter with the referenced run-as account; without a running appliance
  * Azure rejects the request. vCenter entries cannot be tagged; Alchemy
  * treats one as owned when its site carries this stack's and stage's
  * ownership tags.
  *
- * @see https://learn.microsoft.com/azure/migrate/migrate-appliance-architecture
+ * :::caution
+ * Changing `resourceGroup`, `vmwareSite`, or `name` replaces the vCenter.
+ * :::
  *
  * ### Adding a vCenter
  * **Example:** vCenter discovered by an appliance
  * ```typescript
+ * const site = yield* Azure.Migrate.VmwareSite("vmware", {
+ *   location: "centralus",
+ * });
  * const vcenter = yield* Azure.Migrate.Vcenter("vcenter", {
  *   vmwareSite: site.siteName,
  *   fqdn: "vcenter.contoso.local",

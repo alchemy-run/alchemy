@@ -21,9 +21,14 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { machineLocation } from "./MachineCommon.ts";
 
 export interface LicenseProfileProps {
-  /** Resource group of the Arc machine. Changing it replaces the profile. */
+  /**
+   * Resource group of the Arc machine. Changing it replaces the profile.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the Arc machine. Changing it replaces the profile. */
+  /**
+   * Name of the Arc machine. Required. Changing it replaces the profile.
+   */
   machineName: string;
   /**
    * Azure location; must match the machine's location. Changing it
@@ -33,20 +38,29 @@ export interface LicenseProfileProps {
   location?: string;
   /**
    * ARM ID of the `HybridCompute.License` (ESU) assigned to the machine.
+   * @default no ESU license on create; unchanged on update
    */
   assignedLicense?: string;
   /**
    * Whether the machine is covered by Software Assurance, which unlocks
    * Azure benefits for Windows Server.
+   * @default unset on create; unchanged on update
    */
   softwareAssuranceCustomer?: boolean;
-  /** Product licensed pay-as-you-go through Azure Arc. */
+  /**
+   * Product licensed pay-as-you-go through Azure Arc.
+   * @default unset on create; unchanged on update
+   */
   productType?: "WindowsServer" | "WindowsIoTEnterprise";
-  /** Whether the pay-as-you-go product subscription is enabled. */
+  /**
+   * Whether the pay-as-you-go product subscription is enabled.
+   * @default unset on create; unchanged on update
+   */
   subscriptionStatus?: "Enabled" | "Disabled";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -85,12 +99,11 @@ export interface LicenseProfile extends Resource<
 > {}
 
 /**
- * The license profile of an Azure Arc-enabled Windows server: assigns an
+ * The license profile of an Azure Arc-enabled Windows server
+ * (`Microsoft.HybridCompute/machines/licenseProfiles`). It assigns an
  * Extended Security Updates `License`, declares Software Assurance, or
  * enables pay-as-you-go Windows Server licensing. Each machine has one
  * profile, named `default`.
- *
- * The machine must be a connected Windows server.
  *
  * @see https://learn.microsoft.com/azure/azure-arc/servers/license-extended-security-updates
  *
@@ -98,7 +111,6 @@ export interface LicenseProfile extends Resource<
  * **Example:** Assign an ESU license to a server
  * ```typescript
  * const license = yield* Azure.HybridCompute.License("esu", {
- *   resourceGroup: "arc",
  *   target: "Windows Server 2012",
  *   edition: "Standard",
  *   coreType: "vCore",
@@ -106,7 +118,6 @@ export interface LicenseProfile extends Resource<
  *   state: "Activated",
  * });
  * yield* Azure.HybridCompute.LicenseProfile("esu-assignment", {
- *   resourceGroup: "arc",
  *   machineName: "win-2012",
  *   assignedLicense: license.licenseId,
  * });
@@ -116,11 +127,20 @@ export interface LicenseProfile extends Resource<
  * **Example:** Declare Software Assurance coverage
  * ```typescript
  * yield* Azure.HybridCompute.LicenseProfile("sa", {
- *   resourceGroup: "arc",
  *   machineName: "win-2022",
  *   softwareAssuranceCustomer: true,
  * });
  * ```
+ *
+ * :::caution
+ * The machine must be a connected Arc-enabled Windows server in the same
+ * resource group. Onboard it with `azcmagent connect` first.
+ * :::
+ *
+ * :::caution
+ * Changing `machineName`, `location`, or `resourceGroup` replaces the
+ * profile.
+ * :::
  *
  * @resource
  */

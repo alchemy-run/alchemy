@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -37,6 +37,7 @@ export interface IpExtendedCommunityProps {
   /**
    * Name of the IP extended community list. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the IP extended community list.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -51,11 +52,15 @@ export interface IpExtendedCommunityProps {
    * e.g. `{ action: "Permit", sequenceNumber: 10, routeTargets: ["65000:100"] }`.
    */
   ipExtendedCommunityRules: mnf.IpExtendedCommunityPropertiesInput["ipExtendedCommunityRules"];
-  /** Free-form description. */
+  /**
+   * Free-form description.
+   * @default none
+   */
   annotation?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -92,7 +97,12 @@ export interface IpExtendedCommunity extends Resource<
  * extended communities that route policies match on or set. The list is plain
  * ARM configuration until a route policy on a Network Fabric references it.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-route-policy
+ * ARM type: `Microsoft.ManagedNetworkFabric/ipExtendedCommunities`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-route-policy).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the community.
+ * :::
  *
  * ### Creating an Extended Community List
  * **Example:** Match a route target
@@ -150,13 +160,7 @@ export const IpExtendedCommunityProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mnf
-        .ListIpExtendedCommunityBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListIpExtendedCommunityBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(mnf.ListIpExtendedCommunityBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

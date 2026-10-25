@@ -54,7 +54,7 @@ export const bootstrap = async (entrypoint: unknown): Promise<void> => {
       Effect.onExit(() =>
         Deferred.die(initialized, new Error("Azure Functions program exited during init")),
       ),
-    ) as Effect.Effect<unknown>,
+    ),
   );
   await Effect.runPromise(Deferred.await(initialized));
 

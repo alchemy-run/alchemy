@@ -20,6 +20,7 @@ export interface SyncGroupProps {
   /**
    * Resource group of the Storage Sync Service. Changing it replaces the
    * sync group.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -30,6 +31,7 @@ export interface SyncGroupProps {
   /**
    * Name of the sync group. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the sync group.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
 }
@@ -56,10 +58,16 @@ export interface SyncGroup extends Resource<
 > {}
 
 /**
- * An Azure File Sync sync group — the sync topology that keeps one cloud
- * endpoint (an Azure file share) and one or more server endpoints (paths on
- * registered Windows servers) in sync. Sync groups are free and have no
- * settings of their own.
+ * An Azure File Sync sync group
+ * (`Microsoft.StorageSync/storageSyncServices/syncGroups`) — the sync
+ * topology that keeps one cloud endpoint (an Azure file share) and one or
+ * more server endpoints (paths on registered Windows servers) in sync. Sync
+ * groups are free and have no settings of their own.
+ *
+ * :::caution
+ * Changing `storageSyncService`, `name`, or `resourceGroup` replaces the
+ * sync group.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/storage/file-sync/file-sync-deployment-guide
  *

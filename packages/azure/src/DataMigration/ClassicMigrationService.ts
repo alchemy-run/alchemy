@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -34,6 +34,7 @@ export interface ClassicMigrationServiceProps {
   /**
    * Resource group the service is created in. Changing it replaces the
    * service.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -44,6 +45,7 @@ export interface ClassicMigrationServiceProps {
    * :::caution
    * Changing the name replaces the service.
    * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -82,6 +84,7 @@ export interface ClassicMigrationServiceProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -128,7 +131,12 @@ export interface ClassicMigrationService extends Resource<
  *
  * Standard sizes are free. Provisioning takes 10 minutes or more.
  *
- * @see https://learn.microsoft.com/azure/dms/dms-overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `virtualSubnetId`, or `sku`
+ * replaces the service and deletes its projects.
+ * :::
+ *
+ * See [Azure Database Migration Service](https://learn.microsoft.com/azure/dms/dms-overview).
  *
  * ### Creating a Classic Migration Service
  * **Example:** Service joined to a subnet
@@ -210,9 +218,7 @@ export const ClassicMigrationServiceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* datamigration
-        .ListServices({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListServices", page)));
+      const page = yield* collectAll(datamigration.ListServices, { subscriptionId });
       return (page.value ?? []).flatMap((service) => {
         const group = resourceGroupOf(service.id);
         return hasAnyAlchemyTag(service.tags) && group !== undefined && service.name !== undefined

@@ -22,7 +22,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, listClusters, lower } from "./Common.ts";
 
 export interface ApplicationTypeProps {
-  /** Resource group of the cluster. Changing it replaces the application type. */
+  /**
+   * Resource group of the cluster. Changing it replaces the application type.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the classic Service Fabric cluster. Changing it replaces the application type. */
   cluster: string;
@@ -31,11 +34,13 @@ export interface ApplicationTypeProps {
    * application manifest of the packages registered as versions. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the application type.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -62,15 +67,38 @@ export interface ApplicationType extends Resource<
 > {}
 
 /**
- * An application type on a classic Service Fabric cluster — the named
- * container that application packages are registered under as application
- * type versions.
+ * An application type on a classic Service Fabric cluster
+ * (`Microsoft.ServiceFabric/clusters/applicationTypes`): the named container
+ * that you register application packages under as application type
+ * versions. See the
+ * [Azure docs](https://learn.microsoft.com/azure/service-fabric/service-fabric-application-arm-resource).
  *
- * @see https://learn.microsoft.com/azure/service-fabric/service-fabric-application-arm-resource
+ * :::caution
+ * `name` must equal the `ApplicationTypeName` in the application manifest.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `cluster`, or `name` replaces the application
+ * type. Alchemy updates `tags` in place.
+ * :::
  *
  * ### Registering an Application Type
  * **Example:** Application type matching the manifest name
  * ```typescript
+ * const cluster = yield* Azure.ServiceFabricClassic.Cluster("sf", {
+ *   reliabilityLevel: "None",
+ *   nodeTypes: [
+ *     {
+ *       name: "nt1",
+ *       isPrimary: true,
+ *       vmInstanceCount: 1,
+ *       clientConnectionEndpointPort: 19000,
+ *       httpGatewayEndpointPort: 19080,
+ *       applicationPorts: { startPort: 20000, endPort: 30000 },
+ *       ephemeralPorts: { startPort: 49152, endPort: 65534 },
+ *     },
+ *   ],
+ * });
  * const appType = yield* Azure.ServiceFabricClassic.ApplicationType("voting-type", {
  *   cluster: cluster.clusterName,
  *   name: "VotingType",

@@ -30,11 +30,15 @@ export interface ProvisionedClusterControlPlane {
    * @default 1
    */
   count?: number;
-  /** VM size of the control plane nodes, e.g. `Standard_A4_v2`. Mutable. */
+  /**
+   * VM size of the control plane nodes, e.g. `Standard_A4_v2`. Mutable.
+   * @default Azure's default control plane size
+   */
   vmSize?: string;
   /**
    * IP address of the Kubernetes API server. Changing it replaces the
    * cluster.
+   * @default assigned by Azure
    */
   hostIP?: string;
 }
@@ -46,7 +50,10 @@ export interface ProvisionedClusterNetworkProfile {
    * @default "calico"
    */
   networkPolicy?: "calico";
-  /** CIDR range pod IPs are assigned from, e.g. `10.244.0.0/16`. */
+  /**
+   * CIDR range pod IPs are assigned from, e.g. `10.244.0.0/16`.
+   * @default Azure's default pod CIDR
+   */
   podCidr?: string;
   /**
    * Number of HA Proxy load balancer VMs.
@@ -82,20 +89,24 @@ export interface ProvisionedClusterProps {
    * (`Microsoft.Kubernetes/connectedClusters`, kind `ProvisionedCluster`)
    * the AKS Arc cluster is provisioned into. The provisioned cluster is the
    * singleton `default` extension resource of that connected cluster.
-   * Changing it replaces the cluster.
+   * Required. Changing it replaces the cluster.
    */
   connectedClusterId: string;
   /**
    * Arc custom location of the Azure Local cluster the node VMs run on.
-   * Changing it replaces the cluster.
+   * Required. Changing it replaces the cluster.
    */
   extendedLocation: HybridAksExtendedLocation;
   /**
    * SSH public keys (at most one) installed on the control plane and node
    * VMs. Changing them replaces the cluster.
+   * @default no SSH key
    */
   sshPublicKeys?: string[];
-  /** Control plane nodes. `count` and `vmSize` are mutable. */
+  /**
+   * Control plane nodes. `count` and `vmSize` are mutable.
+   * @default one control plane node of Azure's default size
+   */
   controlPlane?: ProvisionedClusterControlPlane;
   /**
    * Kubernetes version, e.g. `1.29.4`. Changing it upgrades the cluster in
@@ -103,18 +114,26 @@ export interface ProvisionedClusterProps {
    * @default the newest version the custom location supports
    */
   kubernetesVersion?: string;
-  /** Network configuration. Changing it replaces the cluster. */
+  /**
+   * Network configuration. Changing it replaces the cluster.
+   * @default Calico, Azure's default pod CIDR, no HA Proxy load balancer
+   */
   networkProfile?: ProvisionedClusterNetworkProfile;
-  /** CSI drivers installed on the cluster. Mutable. */
+  /**
+   * CSI drivers installed on the cluster. Mutable.
+   * @default SMB and NFS CSI drivers installed
+   */
   storageProfile?: ProvisionedClusterStorageProfile;
   /**
    * IP address or CIDR allowed to SSH into the cluster VMs. Mutable.
+   * @default unset
    */
   authorizedIPRanges?: string;
   /**
    * Node pools created together with the cluster. Only applied on
    * creation; manage pools afterwards with
    * `Azure.HybridContainerService.AgentPool`.
+   * @default []
    */
   agentPoolProfiles?: ProvisionedClusterAgentPoolProfile[];
   /**
@@ -122,6 +141,7 @@ export interface ProvisionedClusterProps {
    * an `Azure.AzureStackHCI.LogicalNetwork` or an
    * `Azure.HybridContainerService.VirtualNetwork`. Changing it replaces the
    * cluster.
+   * @default unset
    */
   vnetSubnetIds?: string[];
   /**
@@ -129,7 +149,10 @@ export interface ProvisionedClusterProps {
    * @default "False"
    */
   azureHybridBenefit?: "True" | "False" | "NotApplicable";
-  /** Cluster-autoscaler settings. Mutable. */
+  /**
+   * Cluster-autoscaler settings. Mutable.
+   * @default Azure's autoscaler defaults
+   */
   autoScalerProfile?: ProvisionedClusterAutoScalerProfile;
 }
 
@@ -157,21 +180,31 @@ export interface ProvisionedCluster extends Resource<
 > {}
 
 /**
- * An AKS cluster on Azure Local (AKS enabled by Azure Arc): the
- * `provisionedClusterInstances/default` extension of an Arc-enabled
+ * An AKS cluster on Azure Local, also called AKS enabled by Azure Arc
+ * (`Microsoft.HybridContainerService/provisionedClusterInstances`). It is
+ * the `provisionedClusterInstances/default` extension of an Arc-enabled
  * Kubernetes cluster, whose control plane and node VMs run on an Azure
  * Local (Azure Stack HCI) cluster behind an Arc custom location.
  *
- * Create the `Microsoft.Kubernetes/connectedClusters` resource (kind
- * `ProvisionedCluster`) first and pass its ID. The cluster carries no tags of
- * its own, so one found at the expected scope is only treated as owned when
- * Alchemy created it. Deleting it leaves the connected cluster in place.
+ * The cluster carries no tags of its own, so one found at the expected
+ * scope is only treated as owned when Alchemy created it. Deleting it
+ * leaves the connected cluster in place.
  *
  * @see https://learn.microsoft.com/azure/aks/aksarc/aks-create-clusters-cli
  *
  * ### Creating a Cluster
  * **Example:** Cluster on an Azure Local logical network
  * ```typescript
+ * const connectedClusterId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hci/providers/Microsoft.Kubernetes/connectedClusters/aks";
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hci/providers/Microsoft.ExtendedLocation/customLocations/hci-location";
+ * const sshPublicKey = "ssh-rsa AAAAB3NzaC1yc2E... admin@contoso";
+ * const logicalNetwork = yield* Azure.AzureStackHCI.LogicalNetwork("aks-lnet", {
+ *   extendedLocation: { name: customLocationId },
+ *   vmSwitchName: "ConvergedSwitch(management_compute_storage)",
+ *   subnets: [{ name: "aks", properties: { ipAllocationMethod: "Dynamic" } }],
+ * });
  * const cluster = yield* Azure.HybridContainerService.ProvisionedCluster("aks", {
  *   connectedClusterId,
  *   extendedLocation: { name: customLocationId },
@@ -185,6 +218,8 @@ export interface ProvisionedCluster extends Resource<
  * ### Updating a Cluster
  * **Example:** Upgrade Kubernetes and scale the control plane
  * ```typescript
+ * // same connectedClusterId, customLocationId, sshPublicKey, and
+ * // logicalNetwork as the example above
  * yield* Azure.HybridContainerService.ProvisionedCluster("aks", {
  *   connectedClusterId,
  *   extendedLocation: { name: customLocationId },
@@ -195,6 +230,19 @@ export interface ProvisionedCluster extends Resource<
  *   azureHybridBenefit: "True",
  * });
  * ```
+ *
+ * :::caution
+ * You need a deployed Azure Local cluster with an Arc Resource Bridge and
+ * a custom location. Create the `Microsoft.Kubernetes/connectedClusters`
+ * resource (kind `ProvisionedCluster`) first and pass its ID.
+ * :::
+ *
+ * :::caution
+ * Changing `connectedClusterId`, `extendedLocation`, `sshPublicKeys`,
+ * `networkProfile`, `vnetSubnetIds`, or `controlPlane.hostIP` replaces the
+ * cluster. The old cluster is deleted first, because each connected
+ * cluster holds one instance. Workloads on it are lost.
+ * :::
  *
  * @resource
  */

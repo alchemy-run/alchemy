@@ -5,10 +5,10 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitUntilGone,
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
@@ -127,13 +127,9 @@ export const EventSubscriptionProvider = () =>
     // topics and other resources are deleted with their parent.
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* eventgrid
-        .ListEventSubscriptionGlobalBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListEventSubscriptionGlobalBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(eventgrid.ListEventSubscriptionGlobalBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((sub) => {
         const scope = scopeOf(sub.id);
         return hasAnyOwnershipLabel(sub) && scope !== undefined && sub.name !== undefined

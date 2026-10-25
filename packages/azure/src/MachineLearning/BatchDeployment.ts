@@ -31,6 +31,7 @@ export interface BatchDeploymentProps {
    * Deployment name: 3-32 letters, digits, and hyphens, starting with a
    * letter. If omitted, a unique name is generated from the logical ID.
    * Changing it replaces the deployment.
+   * @default a unique name generated from the logical ID
    */
   name?: string;
   /**
@@ -43,38 +44,73 @@ export interface BatchDeploymentProps {
   /**
    * Model to score with: an ARM asset ID (e.g. a registered model
    * version).
+   * @default none
    */
   model?: string;
-  /** Environment (image + dependencies): an ARM asset ID or `azureml://` URI. */
+  /**
+   * Environment (image + dependencies): an ARM asset ID or `azureml://` URI.
+   * @default none
+   */
   environmentId?: string;
-  /** Scoring script and code asset (not needed for MLflow models). */
+  /**
+   * Scoring script and code asset (not needed for MLflow models).
+   * @default none
+   */
   codeConfiguration?: { codeId?: string; scoringScript: string };
-  /** Environment variables of the scoring job. */
+  /**
+   * Environment variables of the scoring job.
+   * @default none
+   */
   environmentVariables?: Record<string, string>;
   /**
    * Nodes per scoring job.
    * @default 1
    */
   instanceCount?: number;
-  /** Parallel scoring processes per node. */
+  /**
+   * Parallel scoring processes per node.
+   * @default 1
+   */
   maxConcurrencyPerInstance?: number;
-  /** Files (or rows) per mini batch. */
+  /**
+   * Files (or rows) per mini batch.
+   * @default 10
+   */
   miniBatchSize?: number;
-  /** Where scoring output goes: `AppendRow` or `SummaryOnly`. */
+  /**
+   * Where scoring output goes: `AppendRow` or `SummaryOnly`.
+   * @default "AppendRow"
+   */
   outputAction?: "AppendRow" | "SummaryOnly";
-  /** Output file name for `AppendRow`. */
+  /**
+   * Output file name for `AppendRow`.
+   * @default "predictions.csv"
+   */
   outputFileName?: string;
-  /** Failed mini batches tolerated before the job fails (-1 = all). */
+  /**
+   * Failed mini batches tolerated before the job fails (-1 = all).
+   * @default -1
+   */
   errorThreshold?: number;
-  /** Logging level: `Info`, `Warning`, or `Debug`. */
+  /**
+   * Logging level: `Info`, `Warning`, or `Debug`.
+   * @default "Info"
+   */
   loggingLevel?: "Info" | "Warning" | "Debug";
-  /** Retries per mini batch. */
+  /**
+   * Retries per mini batch.
+   * @default Azure's default
+   */
   retrySettings?: { maxRetries?: number; timeout?: string };
-  /** Description of the deployment. */
+  /**
+   * Description of the deployment.
+   * @default none
+   */
   description?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -110,11 +146,40 @@ export interface BatchDeployment extends Resource<
  * cluster. The deployment itself is free; compute is billed only while a
  * job runs.
  *
- * @see https://learn.microsoft.com/azure/machine-learning/how-to-use-batch-model-deployments
+ * ARM type:
+ * `Microsoft.MachineLearningServices/workspaces/batchEndpoints/deployments`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/how-to-use-batch-model-deployments).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `endpoint`, `name`, or `location`
+ * replaces the deployment.
+ * :::
  *
  * ### Deploying a Model
  * **Example:** MLflow model on a CPU cluster
  * ```typescript
+ * // An existing Application Insights component for workspace telemetry.
+ * const insightsId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/monitoring/providers/Microsoft.Insights/components/ml-insights";
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const workspace = yield* Azure.MachineLearning.Workspace("ml", {
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ *   applicationInsights: insightsId,
+ * });
+ * const cluster = yield* Azure.MachineLearning.Compute("cpu", {
+ *   workspace: workspace.workspaceName,
+ *   vmSize: "Standard_DS3_v2",
+ *   scaleSettings: { minNodeCount: 0, maxNodeCount: 4 },
+ * });
+ * const model = yield* Azure.MachineLearning.ModelVersion("churn-v1", {
+ *   workspace: workspace.workspaceName,
+ *   name: "churn",
+ *   version: "1",
+ *   modelType: "mlflow_model",
+ *   modelUri: "azureml://datastores/workspaceblobstore/paths/models/churn",
+ * });
  * const endpoint = yield* Azure.MachineLearning.BatchEndpoint("nightly", {
  *   workspace: workspace.workspaceName,
  * });
@@ -122,7 +187,7 @@ export interface BatchDeployment extends Resource<
  *   workspace: workspace.workspaceName,
  *   endpoint: endpoint.endpointName,
  *   compute: cluster.computeId,
- *   model: modelVersionId,
+ *   model: model.versionId,
  *   instanceCount: 2,
  *   miniBatchSize: 10,
  * });

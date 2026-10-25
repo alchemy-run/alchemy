@@ -24,6 +24,7 @@ export interface MsixPackageProps {
    * :::caution
    * Changing it replaces the package.
    * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -92,7 +93,10 @@ export interface MsixPackageProps {
    * :::
    */
   lastUpdated: string;
-  /** Name shown in the Azure portal. */
+  /**
+   * Name shown in the Azure portal.
+   * @default unset
+   */
   displayName?: string;
   /**
    * Make this version the active one across the host pool.
@@ -108,20 +112,20 @@ export interface MsixPackageProps {
   /**
    * Applications in the package. Azure requires `iconImageName`, `rawIcon`,
    * and `rawPng` (base64) on each one.
-   * @default []
    *
    * :::caution
    * Changing it replaces the package.
    * :::
+   * @default []
    */
   packageApplications?: MsixPackageApplication[];
   /**
    * Packages this package depends on.
-   * @default []
    *
    * :::caution
    * Changing it replaces the package.
    * :::
+   * @default []
    */
   packageDependencies?: MsixPackageDependency[];
 }
@@ -164,9 +168,13 @@ export interface MsixPackage extends Resource<
  * action for the image path. For packages shared across host pools, use
  * `AppAttachPackage` instead.
  *
- * Azure rejects changes to the image metadata, so changing any of it
- * replaces the package; only `displayName`, `isActive`, and
- * `isRegularRegistration` update in place.
+ * :::caution
+ * Azure rejects changes to the image metadata. Changing `hostPool`,
+ * `packageFullName`, `imagePath`, `packageName`, `packageFamilyName`,
+ * `packageRelativePath`, `version`, `lastUpdated`, `packageApplications`,
+ * `packageDependencies`, or `resourceGroup` replaces the package. Only
+ * `displayName`, `isActive`, and `isRegularRegistration` update in place.
+ * :::
  *
  * MSIX packages have no tags; Alchemy treats a package as owned when its
  * host pool carries this stack's ownership tags.
@@ -176,6 +184,10 @@ export interface MsixPackage extends Resource<
  * ### Adding a Package
  * **Example:** Add an MSIX image to a host pool
  * ```typescript
+ * const pool = yield* Azure.DesktopVirtualization.HostPool("pool", {
+ *   hostPoolType: "Pooled",
+ *   loadBalancerType: "BreadthFirst",
+ * });
  * const notepad = yield* Azure.DesktopVirtualization.MsixPackage("notepadpp", {
  *   hostPool: pool.hostPoolName,
  *   packageFullName: "NotepadPlusPlus_8.6.0.0_x64__7njy0v32s6xk6",

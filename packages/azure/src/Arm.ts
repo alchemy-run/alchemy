@@ -12,6 +12,7 @@ import {
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 /**
  * Typed tags distilled Azure returns for a missing resource: ARM's
@@ -118,11 +119,6 @@ export class DeleteTimedOut extends Data.TaggedError("Azure.DeleteTimedOut")<{
   readonly message: string;
 }> {}
 
-export class ListIncomplete extends Data.TaggedError("Azure.ListIncomplete")<{
-  readonly operation: string;
-  readonly message: string;
-}> {}
-
 const TERMINAL_FAILURES = new Set(["Failed", "Canceled", "Cancelled"]);
 
 export interface WaitBudget {
@@ -223,19 +219,15 @@ export const waitUntilGone = <A, E, R>(
 };
 
 /**
- * Fail loudly when an ARM list returns more than one page. Distilled Azure
- * does not follow `nextLink` yet, and a silently truncated list would hide
- * leaked resources from `alchemy unsafe nuke`.
+ * Every item of a paginated ARM list, following `nextLink` across pages.
+ * Returns the `{ value }` shape of a single list page so callers read
+ * `page.value` as before.
  */
-export const requireSinglePage = <T extends { nextLink?: string }>(operation: string, page: T) =>
-  page.nextLink
-    ? Effect.fail(
-        new ListIncomplete({
-          operation,
-          message: `${operation} returned more than one page; paging via nextLink is not supported yet`,
-        }),
-      )
-    : Effect.succeed(page);
+export const collectAll = <I, A, E, R>(
+  op: { readonly items: (input: I) => Stream.Stream<A, E, R> },
+  input: I,
+): Effect.Effect<{ value: A[] }, E, R> =>
+  Stream.runCollect(op.items(input)).pipe(Effect.map((items) => ({ value: Array.from(items) })));
 
 /**
  * Desired Azure tags: the user's tags plus the Alchemy ownership tags

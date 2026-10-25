@@ -122,6 +122,7 @@ export const ExpressRouteGatewayProvider = () =>
           expressRouteGatewayName: path.name,
           tags,
         }),
+      // The list response has no nextLink: one page holds every gateway.
       listAll: (subscriptionId) =>
         network.ListExpressRouteGatewayBySubscription({ subscriptionId }),
       // The PUT replaces the connection collection: carry the observed

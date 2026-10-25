@@ -21,6 +21,7 @@ export interface DomainOwnershipIdentifierProps {
   /**
    * Resource group of the App Service Domain. Changing it replaces the
    * identifier.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
@@ -31,6 +32,7 @@ export interface DomainOwnershipIdentifierProps {
   /**
    * Name of the identifier. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the identifier.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -71,14 +73,18 @@ export interface DomainOwnershipIdentifier extends Resource<
  *
  * The identifier needs an existing App Service Domain (see
  * {@link Domain}). Identifiers have no tags: ownership follows the domain's
- * Alchemy tags.
+ * Alchemy tags. See the
+ * [ownership identifier API](https://learn.microsoft.com/rest/api/appservice/domains/create-or-update-ownership-identifier).
+ *
+ * :::caution
+ * The identifier needs a purchased App Service Domain, which is a real,
+ * non-refundable purchase.
+ * :::
  *
  * :::caution
  * Changing `resourceGroup`, `domainName`, or `name` replaces the
  * identifier.
  * :::
- *
- * @see https://learn.microsoft.com/rest/api/appservice/domains/create-or-update-ownership-identifier
  *
  * ### Verifying Domain Ownership
  * **Example:** Record a web app's verification ID on a domain

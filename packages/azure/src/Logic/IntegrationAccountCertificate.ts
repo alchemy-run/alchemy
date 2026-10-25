@@ -38,18 +38,24 @@ export interface IntegrationAccountCertificateProps {
    * Certificate name: 1-80 letters, digits, `-`, `_`, `.`, `(`, `)`. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the certificate.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Base64-encoded public certificate (DER `.cer`). Provide it alone for
    * a public certificate, or with `key` for a private certificate.
+   * @default none
    */
   publicCertificate?: string;
-  /** Private key in Key Vault (private certificates). */
+  /**
+   * Private key in Key Vault (private certificates).
+   * @default none
+   */
   key?: IntegrationAccountCertificateKey;
   /**
    * User metadata. Alchemy adds `alchemy::*` ownership and hash keys
    * because artifacts do not return tags.
+   * @default none
    */
   metadata?: Record<string, unknown>;
 }
@@ -82,16 +88,20 @@ export interface IntegrationAccountCertificate extends Resource<
  * encrypt, and verify AS2 messages. A public certificate needs only the
  * base64 `.cer`; a private certificate references a key in Key Vault.
  *
+ * ARM type: `Microsoft.Logic/integrationAccounts/certificates`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-certificates).
+ *
  * :::caution
  * Changing `name`, `integrationAccount`, or `resourceGroup` replaces the
  * certificate.
  * :::
  *
- * @see https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-certificates
- *
  * ### Adding Certificates
  * **Example:** Public certificate
  * ```typescript
+ * const account = yield* Azure.Logic.IntegrationAccount("b2b");
+ * // The partner's DER certificate (.cer), base64-encoded.
+ * const cerBase64 = yield* Config.string("FABRIKAM_CERT_BASE64");
  * const partnerCert = yield* Azure.Logic.IntegrationAccountCertificate("fabrikam", {
  *   integrationAccount: account.integrationAccountName,
  *   publicCertificate: cerBase64,

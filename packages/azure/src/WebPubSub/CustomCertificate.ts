@@ -25,7 +25,10 @@ import {
 } from "./internal.ts";
 
 export interface CustomCertificateProps {
-  /** Resource group of the Web PubSub service. Changing it replaces the certificate. */
+  /**
+   * Resource group of the Web PubSub service. Changing it replaces the certificate.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Web PubSub service that serves the certificate. Needs the `Premium_P1`
@@ -36,6 +39,7 @@ export interface CustomCertificateProps {
   /**
    * Name of the certificate. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the certificate.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -54,6 +58,7 @@ export interface CustomCertificateProps {
   /**
    * Version of the secret. If omitted, the service tracks the latest
    * version.
+   * @default the latest version
    */
   keyVaultSecretVersion?: string;
 }
@@ -82,14 +87,26 @@ export interface CustomCertificate extends Resource<
 > {}
 
 /**
- * A TLS certificate of an Azure Web PubSub service, loaded from Key Vault with
- * the service's managed identity. Custom domains reference it by ID.
+ * A TLS certificate of an Azure Web PubSub service
+ * (`Microsoft.SignalRService/webPubSub/customCertificates`), loaded from Key
+ * Vault with the service's managed identity. Custom domains reference it by ID.
+ *
+ * :::caution
+ * Changing `webPubSub`, `name`, `keyVaultBaseUri`, `keyVaultSecretName`, or
+ * `resourceGroup` replaces the certificate.
+ * :::
+ *
+ * :::caution
+ * The service's identity needs `Key Vault Secrets User` on the vault before
+ * you create the certificate, as the example does.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-web-pubsub/howto-custom-domain
  *
  * ### Importing a Certificate from Key Vault
  * **Example:** Certificate read with the service's system identity
  * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("certs");
  * const webPubSub = yield* Azure.WebPubSub.WebPubSub("realtime", {
  *   sku: "Premium_P1",
  *   identity: { type: "SystemAssigned" },

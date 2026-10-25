@@ -6,10 +6,10 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   waitUntilGone,
@@ -68,22 +68,40 @@ export interface TrafficManagerMonitorConfig {
    * @default 3
    */
   toleratedNumberOfFailures?: number;
-  /** Custom headers sent with each health probe. */
-  customHeaders?: { name: string; value: string }[];
-  /** HTTP status code ranges that count as healthy, e.g. `[{ min: 200, max: 299 }]`. */
-  expectedStatusCodeRanges?: { min: number; max: number }[];
+  /**
+   * Custom headers sent with each health probe.
+   * @default not set
+   */
+  customHeaders?: {
+    /** Header name. */
+    name: string;
+    /** Header value. */
+    value: string;
+  }[];
+  /**
+   * HTTP status code ranges that count as healthy, e.g. `[{ min: 200, max: 299 }]`.
+   * @default not set
+   */
+  expectedStatusCodeRanges?: {
+    /** Lowest status code in the range. */
+    min: number;
+    /** Highest status code in the range. */
+    max: number;
+  }[];
 }
 
 export interface ProfileProps {
   /**
    * Resource group the profile is created in. Changing it replaces the
    * profile.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the profile, 1-63 characters of letters, digits, `-`, and `.`.
    * If omitted, a unique lowercase name is generated from the app, stage,
    * and logical ID. Changing it replaces the profile.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -103,6 +121,7 @@ export interface ProfileProps {
   /**
    * Endpoint health-probe settings. Unset fields keep Azure's current
    * values (or the documented defaults on create).
+   * @default {}
    */
   monitorConfig?: TrafficManagerMonitorConfig;
   /**
@@ -115,17 +134,22 @@ export interface ProfileProps {
    * @default "Disabled"
    */
   trafficViewEnrollmentStatus?: "Enabled" | "Disabled";
-  /** DNS record types the profile's endpoints may use. */
+  /**
+   * DNS record types the profile's endpoints may use.
+   * @default not set
+   */
   allowedEndpointRecordTypes?: ("DomainName" | "IPv4Address" | "IPv6Address" | "Any")[];
   /**
    * Maximum number of endpoints returned per DNS response (1-8). Only valid
    * with `trafficRoutingMethod: "MultiValue"`.
+   * @default not set
    */
   maxReturn?: number;
   /**
    * User tags. Traffic Manager drops tag keys containing `:`, so Alchemy's
    * ownership markers (`alchemy_stack`, `alchemy_stage`, `alchemy_id`) are
    * merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -160,11 +184,19 @@ export interface Profile extends Resource<
 > {}
 
 /**
- * An Azure Traffic Manager profile — global DNS-based load balancing that
- * answers `<relativeName>.trafficmanager.net` with the healthiest endpoint
- * according to its routing method (priority failover, weighted,
- * performance, geographic, multi-value, or subnet). Add endpoints with
- * `Azure.TrafficManager.Endpoint`.
+ * An Azure Traffic Manager profile
+ * (`Microsoft.Network/trafficManagerProfiles`) — global DNS-based load
+ * balancing that answers `<relativeName>.trafficmanager.net` with the
+ * healthiest endpoint according to its routing method (priority failover,
+ * weighted, performance, geographic, multi-value, or subnet). Add endpoints
+ * with `Azure.TrafficManager.Endpoint`.
+ *
+ * :::caution
+ * Changing `name`, `relativeName`, or `resourceGroup` replaces the profile,
+ * and the DNS name follows `relativeName`. With a pinned `name`, Alchemy
+ * deletes the old profile first, so its DNS name stops resolving until the
+ * new profile exists.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/traffic-manager/traffic-manager-overview
  *
@@ -273,9 +305,7 @@ export const ProfileProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* trafficmanager
-        .ListProfileBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListProfileBySubscription", page)));
+      const page = yield* collectAll(trafficmanager.ListProfileBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((profile) => {
         const group = resourceGroupOf(profile.id);
         return hasAnyProfileMarker(profile.tags) &&

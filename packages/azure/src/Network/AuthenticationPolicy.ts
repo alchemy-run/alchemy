@@ -1,7 +1,7 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
-import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
+import { collectAll, orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameSet } from "./common.ts";
@@ -182,7 +182,8 @@ export const AuthenticationPolicyProvider = () =>
           authenticationPolicyName: path.name,
           tags,
         }),
-      listAll: (subscriptionId) => network.ListAuthenticationPolicyAll({ subscriptionId }),
+      listAll: (subscriptionId) =>
+        collectAll(network.ListAuthenticationPolicyAll, { subscriptionId }),
       drifted: (observed, body, news) =>
         subsetDiffers(body.properties, observed.properties) ||
         !sameSet(

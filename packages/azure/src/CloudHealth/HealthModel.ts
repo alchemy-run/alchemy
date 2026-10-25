@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -47,6 +47,7 @@ export interface HealthModelProps {
   /**
    * Resource group the health model is created in. Changing it replaces
    * the model.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -54,6 +55,7 @@ export interface HealthModelProps {
    * letter and ending with a letter or digit. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * model.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -76,6 +78,7 @@ export interface HealthModelProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -121,7 +124,12 @@ export interface HealthModel extends Resource<
  * relationships, and signal definitions. An empty model costs nothing;
  * signal evaluation is billed as Azure Monitor queries.
  *
- * @see https://learn.microsoft.com/azure/azure-monitor/health-models/overview
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the health model
+ * and deletes every entity, relationship, and rule in it.
+ * :::
+ *
+ * See [Azure Monitor health models](https://learn.microsoft.com/azure/azure-monitor/health-models/overview).
  *
  * ### Creating a Health Model
  * **Example:** Health model with a system-assigned identity
@@ -144,11 +152,6 @@ export interface HealthModel extends Resource<
  *   tags: { team: "sre" },
  * });
  * ```
- *
- * :::caution
- * Changing `name`, `location`, or `resourceGroup` replaces the health model
- * and deletes every entity, relationship, and rule in it.
- * :::
  *
  * @resource
  */
@@ -203,9 +206,7 @@ export const HealthModelProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* cloudhealth
-        .ListHealthModelBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListHealthModelBySubscription", page)));
+      const page = yield* collectAll(cloudhealth.ListHealthModelBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((model) => {
         const group = resourceGroupOf(model.id);
         return hasAnyAlchemyTag(model.tags) && group !== undefined && model.name !== undefined

@@ -61,21 +61,37 @@ export interface VirtualMachineScaleSetAssignment extends Resource<
 
 /**
  * A machine configuration (guest configuration) assignment on an Azure
- * virtual machine scale set — audits or applies an OS-level configuration
- * package on every instance and reports per-instance compliance.
+ * virtual machine scale set
+ * (`Microsoft.Compute/virtualMachineScaleSets/providers/Microsoft.GuestConfiguration/guestConfigurationAssignments`)
+ * — audits or applies an OS-level configuration package on every instance
+ * and reports per-instance compliance. See the
+ * [machine configuration overview](https://learn.microsoft.com/azure/governance/machine-configuration/overview).
  *
+ * :::caution
  * As of API version `2024-04-05` the service answers scale set
  * assignments with an embedded error (`VMSSFlexNotSupported` for Flexible
  * orchestration, `VMSSNotSupported` seen earlier for Uniform); the deploy
- * then fails with
- * `ScaleSetAssignmentRejected`. Assign configurations to the individual
- * VMs with `VirtualMachineAssignment`, or through Azure Policy, instead.
+ * then fails with `ScaleSetAssignmentRejected`. Assign configurations to
+ * the individual VMs with `VirtualMachineAssignment`, or through Azure
+ * Policy, instead.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/governance/machine-configuration/overview
+ * :::caution
+ * Changing `resourceGroup`, `virtualMachineScaleSet`, `name`, `location`,
+ * or `configurationName` replaces the assignment.
+ * :::
  *
  * ### Auditing a Baseline
  * **Example:** Audit the Azure Linux security baseline on a scale set
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("Vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("Default", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.0.0/24",
+ * });
+ * const publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... azureuser";
  * const scaleSet = yield* Azure.Compute.VirtualMachineScaleSet("Vmss", {
  *   vmSize: "Standard_B1s",
  *   capacity: 2,

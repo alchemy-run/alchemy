@@ -192,7 +192,8 @@ const desiredFields = (news: ApplicationProps, displayName: string, tags: string
   displayName,
   description: news.description ?? null,
   notes: news.notes ?? null,
-  signInAudience: news.signInAudience ?? "AzureADMyOrg",
+  // Widened to Graph's `string` so observed values share this shape.
+  signInAudience: (news.signInAudience ?? "AzureADMyOrg") as string,
   identifierUris: news.identifierUris ?? [],
   web: {
     redirectUris: news.web?.redirectUris ?? [],

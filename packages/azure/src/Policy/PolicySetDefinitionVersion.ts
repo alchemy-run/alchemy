@@ -27,28 +27,74 @@ import type { PolicySetGroup, PolicySetMember } from "./PolicySetDefinition.ts";
 export interface PolicySetDefinitionVersionProps {
   /**
    * Name of the parent custom policy set definition, e.g.
-   * `set.policySetDefinitionName`. Changing it replaces the version.
+   * `set.policySetDefinitionName`.
+   *
+   * :::caution
+   * Changing it replaces the version.
+   * :::
    */
   policySetDefinitionName: string;
   /**
    * Semantic version `major.minor.patch`, e.g. `1.0.0`. ARM only accepts
-   * versions older than the parent's current `version`. Changing it
-   * replaces the version.
+   * versions older than the parent's current `version`.
+   *
+   * :::caution
+   * Changing it replaces the version.
+   * :::
    */
   version: string;
-  /** Display name of this version. */
+  /**
+   * Display name of this version.
+   *
+   * :::caution
+   * Changing it replaces the version.
+   * :::
+   * @default none
+   */
   displayName?: string;
-  /** Description of this version. */
+  /**
+   * Description of this version.
+   *
+   * :::caution
+   * Changing it replaces the version.
+   * :::
+   * @default none
+   */
   description?: string;
-  /** The policy definitions this version bundles. */
+  /**
+   * The policy definitions this version bundles.
+   *
+   * :::caution
+   * Changing it replaces the version.
+   * :::
+   */
   policyDefinitions: PolicySetMember[];
-  /** Groups that categorise the members. */
+  /**
+   * Groups that categorise the members.
+   *
+   * :::caution
+   * Changing it replaces the version.
+   * :::
+   * @default []
+   */
   policyDefinitionGroups?: PolicySetGroup[];
-  /** Parameter definitions of this version. */
+  /**
+   * Parameter definitions of this version.
+   *
+   * :::caution
+   * Changing it replaces the version.
+   * :::
+   * @default {}
+   */
   parameters?: Record<string, PolicyParameterDefinition>;
   /**
    * Metadata of this version. Alchemy merges ownership entries
    * (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) in.
+   *
+   * :::caution
+   * Changing it replaces the version.
+   * :::
+   * @default {} (plus the ownership entries)
    */
   metadata?: Record<string, unknown>;
 }
@@ -71,17 +117,33 @@ export interface PolicySetDefinitionVersion extends Resource<
 > {}
 
 /**
- * A version of a custom Azure Policy set definition (initiative).
+ * A version of a custom Azure Policy set definition, or initiative
+ * (`Microsoft.Authorization/policySetDefinitions/versions`).
  *
- * Deleting the parent set deletes its versions. Versions are immutable
- * in ARM, so changing any other property deletes and re-publishes the
- * same version.
+ * Deleting the parent set deletes its versions.
+ *
+ * :::caution
+ * Versions are immutable in ARM. Changing any property deletes the version
+ * and publishes it again.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/governance/policy/concepts/initiative-definition-structure
  *
  * ### Publishing a Version
  * **Example:** Keep version 1.0.0 of an initiative
  * ```typescript
+ * const definition = yield* Azure.Policy.PolicyDefinition("audit-owner-tag", {
+ *   policyRule: {
+ *     if: { field: "tags['owner']", exists: "false" },
+ *     then: { effect: "audit" },
+ *   },
+ * });
+ * const other = yield* Azure.Policy.PolicyDefinition("audit-team-tag", {
+ *   policyRule: {
+ *     if: { field: "tags['team']", exists: "false" },
+ *     then: { effect: "audit" },
+ *   },
+ * });
  * const set = yield* Azure.Policy.PolicySetDefinition("baseline", {
  *   version: "2.0.0",
  *   policyDefinitions: [{ policyDefinitionId: definition.policyDefinitionId }],

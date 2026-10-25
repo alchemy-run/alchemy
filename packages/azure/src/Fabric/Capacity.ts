@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -42,6 +42,7 @@ export interface CapacityProps {
   /**
    * Resource group the capacity is created in. Changing it replaces the
    * capacity.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
@@ -49,6 +50,7 @@ export interface CapacityProps {
    * letter (no hyphens), unique per region. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * capacity.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -71,11 +73,13 @@ export interface CapacityProps {
    * Desired run state. `Paused` suspends the capacity (compute billing
    * stops); `Active` resumes it. When omitted, the run state is not
    * managed and a new capacity starts `Active`.
+   * @default unmanaged (a new capacity starts `Active`)
    */
   state?: "Active" | "Paused";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -108,11 +112,16 @@ export interface Capacity extends Resource<
 > {}
 
 /**
- * A Microsoft Fabric capacity — the pool of compute (capacity units) that
- * backs Fabric and Power BI workspaces. Billing is per second while the
- * capacity is `Active`; pause it to stop compute charges.
+ * A Microsoft Fabric capacity (`Microsoft.Fabric/capacities`) — the pool
+ * of compute (capacity units) that backs Fabric and Power BI workspaces.
+ * Billing is per second while the capacity is `Active`; pause it to stop
+ * compute charges. See
+ * [buy a Fabric subscription](https://learn.microsoft.com/fabric/enterprise/buy-subscription).
  *
- * @see https://learn.microsoft.com/fabric/enterprise/buy-subscription
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the capacity.
+ * Workspaces assigned to the old capacity must be reassigned.
+ * :::
  *
  * ### Creating a Capacity
  * **Example:** F2 capacity with one administrator
@@ -228,8 +237,9 @@ export const CapacityProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* fabric.ListFabricCapacityBySubscription({ subscriptionId }).pipe(
-        Effect.flatMap((page) => requireSinglePage("ListFabricCapacityBySubscription", page)),
+      const page = yield* collectAll(fabric.ListFabricCapacityBySubscription, {
+        subscriptionId,
+      }).pipe(
         // An unregistered subscription cannot hold capacities.
         Effect.catchTag("MissingRegistration", () =>
           Effect.succeed({ value: [] as fabric.FabricCapacity[] }),

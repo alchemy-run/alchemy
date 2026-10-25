@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -37,6 +37,7 @@ export interface VolumeProps {
   /**
    * Name of the volume. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the volume.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,11 +56,13 @@ export interface VolumeProps {
   /**
    * ARM ID of the storage appliance that hosts the volume. Changing it
    * replaces the volume.
+   * @default none
    */
   storageApplianceId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -104,13 +107,22 @@ export interface Volume extends Resource<
  * cluster's storage appliance that virtual machines attach as data disks.
  * Needs a deployed Operator Nexus cluster (on-premises hardware).
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-virtual-machine-volume
+ * ARM type: `Microsoft.NetworkCloud/volumes`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-virtual-machine-volume).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `customLocationId`, `sizeMiB`,
+ * or `storageApplianceId` replaces the volume.
+ * :::
  *
  * ### Creating a Volume
  * **Example:** 10 GiB volume
  * ```typescript
+ * // An existing Operator Nexus cluster, "site1", in the stack's resource group.
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ExtendedLocation/customLocations/site1-cl";
  * const volume = yield* Azure.NetworkCloud.Volume("data", {
- *   customLocationId: cluster.clusterExtendedLocationId,
+ *   customLocationId,
  *   sizeMiB: 10240,
  * });
  * ```
@@ -149,9 +161,7 @@ export const VolumeProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* nc
-        .ListVolumeBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListVolumeBySubscription", page)));
+      const page = yield* collectAll(nc.ListVolumeBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

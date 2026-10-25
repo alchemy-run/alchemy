@@ -22,7 +22,10 @@ import { createHyphenName, definitionDiffers } from "./FactoryChild.ts";
 export type IntegrationRuntimeType = "Managed" | "SelfHosted";
 
 export interface IntegrationRuntimeProps {
-  /** Resource group of the factory. Changing it replaces the integration runtime. */
+  /**
+   * Resource group of the factory. Changing it replaces the integration runtime.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the factory that holds the integration runtime. Changing it replaces the integration runtime. */
   factoryName: string;
@@ -31,6 +34,7 @@ export interface IntegrationRuntimeProps {
    * starting and ending with a letter or digit. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * integration runtime.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -44,18 +48,21 @@ export interface IntegrationRuntimeProps {
    * e.g. `"AutoResolve"`, `dataFlowProperties`, SSIS node size/count),
    * `ssisProperties`, `customerVirtualNetwork`. `SelfHosted`: `linkedInfo`
    * (shared runtime) and `selfContainedInteractiveAuthoringEnabled`.
+   * @default {}
    */
   typeProperties?: Record<string, unknown>;
   /**
    * Name of the factory's managed virtual network (always `default`) to
    * run a `Managed` integration runtime in. Changing it replaces the
    * integration runtime.
+   * @default none (the public Azure network)
    */
   managedVirtualNetwork?: string;
   /**
    * Integration runtime description. Alchemy appends an ownership marker
    * (`[alchemy <stack>/<stage>/<id>]`) because integration runtimes have
    * no tags or annotations.
+   * @default none
    */
   description?: string;
 }
@@ -98,20 +105,30 @@ export interface IntegrationRuntime extends Resource<
 > {}
 
 /**
- * A Data Factory integration runtime — the compute that runs activities
- * and data flows: a managed Azure runtime (optionally inside the factory's
- * managed virtual network), an Azure-SSIS runtime, or a self-hosted runtime
- * whose nodes you register with the `authKey1`/`authKey2` attributes.
+ * A Data Factory integration runtime
+ * (`Microsoft.DataFactory/factories/integrationRuntimes`) — the compute that
+ * runs activities and data flows: a managed Azure runtime (optionally
+ * inside the factory's managed virtual network), an Azure-SSIS runtime, or
+ * a self-hosted runtime whose nodes you register with the
+ * `authKey1`/`authKey2` attributes.
  *
  * Azure and self-hosted runtimes cost nothing while idle. Azure-SSIS
  * runtimes bill per node-hour while started; Alchemy stops a started SSIS
  * runtime before updating or deleting it.
  *
- * @see https://learn.microsoft.com/azure/data-factory/concepts-integration-runtime
+ * :::caution
+ * Changing `resourceGroup`, `factoryName`, `name`, `type`, or
+ * `managedVirtualNetwork` replaces the integration runtime. A replaced
+ * self-hosted runtime has new registration keys, so its nodes must
+ * register again.
+ * :::
+ *
+ * See [Integration runtimes](https://learn.microsoft.com/azure/data-factory/concepts-integration-runtime).
  *
  * ### Managed Runtimes
  * **Example:** Azure runtime with a data flow time-to-live
  * ```typescript
+ * const factory = yield* Azure.DataFactory.Factory("etl");
  * const runtime = yield* Azure.DataFactory.IntegrationRuntime("flows", {
  *   factoryName: factory.factoryName,
  *   type: "Managed",

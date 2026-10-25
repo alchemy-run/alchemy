@@ -27,7 +27,10 @@ export interface ApplicationScriptAction {
   name: string;
   /** Publicly readable URI of the bash script. */
   uri: string;
-  /** Parameters passed to the script. */
+  /**
+   * Parameters passed to the script.
+   * @default none
+   */
   parameters?: string;
   /**
    * Roles the script runs on.
@@ -55,13 +58,17 @@ export interface ApplicationHttpsEndpoint {
 }
 
 export interface ApplicationProps {
-  /** Resource group of the cluster. Changing it replaces the application. */
+  /**
+   * Resource group of the cluster. Changing it replaces the application.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Cluster the application is installed on. Changing it replaces the application. */
   cluster: string;
   /**
    * Application name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the application.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -77,13 +84,20 @@ export interface ApplicationProps {
   edgeNodeCount?: number;
   /** Scripts that install the application. Changing them replaces the application. */
   installScriptActions: ApplicationScriptAction[];
-  /** Scripts that run when the application is removed. Changing them replaces the application. */
+  /**
+   * Scripts that run when the application is removed. Changing them replaces the application.
+   * @default []
+   */
   uninstallScriptActions?: ApplicationScriptAction[];
-  /** HTTPS endpoints exposed through the cluster gateway. Changing them replaces the application. */
+  /**
+   * HTTPS endpoints exposed through the cluster gateway. Changing them replaces the application.
+   * @default []
+   */
   httpsEndpoints?: ApplicationHttpsEndpoint[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -114,19 +128,26 @@ export interface Application extends Resource<
 > {}
 
 /**
- * An HDInsight application — a custom application installed on dedicated
- * edge nodes of an HDInsight cluster by install script actions, optionally
- * exposed through the cluster gateway over HTTPS.
+ * An HDInsight application (`Microsoft.HDInsight/clusters/applications`) —
+ * a custom application installed on dedicated edge nodes of an HDInsight
+ * cluster by install script actions, optionally exposed through the
+ * cluster gateway over HTTPS. See
+ * [install custom applications](https://learn.microsoft.com/azure/hdinsight/hdinsight-apps-install-custom-applications).
  *
  * Installing an application provisions new edge-node VMs (10-20 minutes)
- * that bill until the application is removed. Everything except tags is
- * fixed at creation; changes replace the application.
+ * that bill until the application is removed.
  *
- * @see https://learn.microsoft.com/azure/hdinsight/hdinsight-apps-install-custom-applications
+ * :::caution
+ * Everything except tags is fixed at creation. Changing `resourceGroup`,
+ * `cluster`, `name`, `edgeNodeVmSize`, `edgeNodeCount`,
+ * `installScriptActions`, `uninstallScriptActions`, or `httpsEndpoints`
+ * replaces the application and its edge nodes.
+ * :::
  *
  * ### Installing an Application
  * **Example:** Edge node with an install script
  * ```typescript
+ * // `cluster` is an `Azure.HDInsight.Cluster` (see its page)
  * const app = yield* Azure.HDInsight.Application("hue", {
  *   cluster: cluster.clusterName,
  *   installScriptActions: [

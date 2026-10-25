@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -29,6 +29,7 @@ export interface ImportSiteProps {
   /**
    * Name of the site. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the site.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -38,11 +39,15 @@ export interface ImportSiteProps {
    * @default the `Azure.Location` layer, else the profile location
    */
   location?: string;
-  /** ARM ID of the `Migrate.Solution` (discovery tool) that tracks this site. */
+  /**
+   * ARM ID of the `Migrate.Solution` (discovery tool) that tracks this site.
+   * @default none
+   */
   discoverySolutionId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -74,7 +79,11 @@ export interface ImportSite extends Resource<
  * instead of an on-premises appliance. Pair it with a
  * `Migrate.ImportCollector` in an assessment project.
  *
- * @see https://learn.microsoft.com/azure/migrate/tutorial-discover-import
+ * See the [Azure documentation](https://learn.microsoft.com/azure/migrate/tutorial-discover-import).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the site.
+ * :::
  *
  * ### Creating a Site
  * **Example:** Discovery site
@@ -126,13 +135,9 @@ export const ImportSiteProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* migrate
-        .ListImportSitesControllerBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListImportSitesControllerBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(migrate.ListImportSitesControllerBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((site) => {
         const group = resourceGroupOf(site.id);
         return hasAnyAlchemyTag(site.tags) && group !== undefined && site.name !== undefined

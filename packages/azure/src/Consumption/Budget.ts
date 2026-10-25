@@ -9,11 +9,11 @@ import { Resource } from "alchemy/Resource";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   stackAndStage,
   waitForProvisioned,
   waitUntilGone,
@@ -69,6 +69,7 @@ export interface BudgetProps {
    * Budget name, 1-63 letters, digits, `-` and `_`. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the budget.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Spend limit tracked per time grain, in the billing currency. */
@@ -94,10 +95,12 @@ export interface BudgetProps {
   /**
    * Restricts the tracked spend to resource groups, resources, meters, or
    * tags.
+   * @default none (all spend in the scope)
    */
   filter?: BudgetFilter;
   /**
    * Alerts keyed by a name of your choice; at most five.
+   * @default {} (no alerts)
    */
   notifications?: Record<string, BudgetNotification>;
 }
@@ -126,16 +129,21 @@ export interface Budget extends Resource<
 > {}
 
 /**
- * A Cost Management budget — tracks spend at a subscription or resource
- * group scope and emails (or triggers action groups) when actual or
- * forecasted spend crosses a threshold. Budgets only alert; they never stop
- * resources.
+ * A Cost Management budget (`Microsoft.Consumption/budgets`) — tracks spend
+ * at a subscription or resource group scope and emails (or triggers action
+ * groups) when actual or forecasted spend crosses a threshold. Budgets only
+ * alert; they never stop resources.
  *
  * Budgets cannot be tagged. Alchemy treats a budget as owned when its name
  * is the one Alchemy generated for this stack, stage and logical ID, or
  * when it lives in a resource group carrying this stack's ownership tags.
  *
- * @see https://learn.microsoft.com/azure/cost-management-billing/costs/tutorial-acm-create-budgets
+ * :::caution
+ * Changing `scope`, `name`, `timeGrain`, or `startDate` replaces the
+ * budget.
+ * :::
+ *
+ * See [Create and manage budgets](https://learn.microsoft.com/azure/cost-management-billing/costs/tutorial-acm-create-budgets).
  *
  * ### Subscription Budget
  * **Example:** Alert at 80% of a monthly $50 budget
@@ -331,11 +339,7 @@ export const BudgetProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const listAt = (scope: string) =>
-        orUndefinedIfNotFound(
-          consumption
-            .ListBudgets({ scope })
-            .pipe(Effect.flatMap((page) => requireSinglePage("ListBudgets", page))),
-        ).pipe(
+        orUndefinedIfNotFound(collectAll(consumption.ListBudgets, { scope })).pipe(
           Effect.map((page) =>
             (page?.value ?? []).flatMap((budget) =>
               budget.name !== undefined ? [{ scope, name: budget.name, budget }] : [],
@@ -347,12 +351,10 @@ export const BudgetProvider = () =>
       const subscriptionBudgets = (yield* listAt(subscriptionScope(subscriptionId))).filter(
         ({ name }) => GENERATED_NAME.test(name),
       );
-      const groups = yield* resources
-        .ListResourceGroups({
-          subscriptionId,
-          _filter: "tagName eq 'alchemy::stack'",
-        })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListResourceGroups", page)));
+      const groups = yield* collectAll(resources.ListResourceGroups, {
+        subscriptionId,
+        _filter: "tagName eq 'alchemy::stack'",
+      });
       const groupBudgets = yield* Effect.forEach(
         (groups.value ?? []).filter(
           (group) => hasAnyAlchemyTag(group.tags) && group.name !== undefined,

@@ -28,11 +28,20 @@ export interface ApiSchemaProps {
    * `application/vnd.ms-azure-apim.graphql.schema` (GraphQL SDL).
    */
   contentType: string;
-  /** Schema document as a string (XSD, GraphQL SDL, or JSON text). */
+  /**
+   * Schema document as a string (XSD, GraphQL SDL, or JSON text).
+   * @default not set
+   */
   value?: string;
-  /** Swagger `definitions` object (Swagger content types). */
+  /**
+   * Swagger `definitions` object (Swagger content types).
+   * @default not set
+   */
   definitions?: Record<string, unknown>;
-  /** OpenAPI `components` object (OpenAPI content types). */
+  /**
+   * OpenAPI `components` object (OpenAPI content types).
+   * @default not set
+   */
   components?: Record<string, unknown>;
 }
 
@@ -61,12 +70,27 @@ export interface ApiSchema extends Resource<
  * A schema document (OpenAPI components, Swagger definitions, XSD, or
  * GraphQL SDL) attached to an API in API Management. Operations reference
  * its types for request/response validation and the developer portal.
+ * The ARM type is `Microsoft.ApiManagement/service/apis/schemas`.
+ *
+ * :::caution
+ * Changing `serviceName`, `apiName`, `name`, or `resourceGroup` replaces the
+ * schema.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/apimanagement/api-schema
  *
  * ### Attaching Schemas
  * **Example:** OpenAPI components for request validation
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const api = yield* Azure.ApiManagement.Api("orders", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * yield* Azure.ApiManagement.ApiSchema("orders-schema", {
  *   serviceName: apim.serviceName,
  *   apiName: api.apiName,
@@ -81,11 +105,24 @@ export interface ApiSchema extends Resource<
  *
  * **Example:** XSD for a SOAP API
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const soapApi = yield* Azure.ApiManagement.Api("orders-soap", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders-soap",
+ *   type: "soap",
+ *   serviceUrl: "https://orders.example.com/soap",
+ * });
  * yield* Azure.ApiManagement.ApiSchema("soap-schema", {
  *   serviceName: apim.serviceName,
  *   apiName: soapApi.apiName,
  *   contentType: "application/vnd.ms-azure-apim.xsd+xml",
- *   value: xsdDocument,
+ *   value: `<?xml version="1.0" encoding="utf-8"?>
+ * <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+ *   <xs:element name="Order" type="xs:string" />
+ * </xs:schema>`,
  * });
  * ```
  *

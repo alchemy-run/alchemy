@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -30,7 +30,10 @@ import {
 } from "./DeviceRegistryShared.ts";
 
 export interface RegistryDeviceProps {
-  /** Resource group of the parent namespace. Changing it replaces the device. */
+  /**
+   * Resource group of the parent namespace. Changing it replaces the device.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the parent Device Registry namespace. Changing it replaces the device. */
   namespace: string;
@@ -38,6 +41,7 @@ export interface RegistryDeviceProps {
    * Device name: 3-63 letters, digits, and hyphens, starting with a letter
    * or digit. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the device.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -56,17 +60,30 @@ export interface RegistryDeviceProps {
    * @default Azure's default
    */
   externalDeviceId?: string;
-  /** Device manufacturer. */
+  /**
+   * Device manufacturer.
+   * @default unset
+   */
   manufacturer?: string;
-  /** Device model. */
+  /**
+   * Device model.
+   * @default unset
+   */
   model?: string;
-  /** Device hardware revision. */
+  /**
+   * Device hardware revision.
+   * @default unset
+   */
   hardwareRevision?: string;
-  /** Device software revision. */
+  /**
+   * Device software revision.
+   * @default unset
+   */
   softwareRevision?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -207,15 +224,11 @@ export const RegistryDeviceProvider = () =>
       const all: RegistryDevice["Attributes"][] = [];
       for (const ns of namespaces) {
         const page = yield* orUndefinedIfNotFound(
-          deviceregistry
-            .ListRegistryDeviceByNamespace({
-              subscriptionId,
-              resourceGroupName: ns.resourceGroup,
-              namespaceName: ns.name,
-            })
-            .pipe(
-              Effect.flatMap((page) => requireSinglePage("ListRegistryDeviceByNamespace", page)),
-            ),
+          collectAll(deviceregistry.ListRegistryDeviceByNamespace, {
+            subscriptionId,
+            resourceGroupName: ns.resourceGroup,
+            namespaceName: ns.name,
+          }),
         );
         for (const device of page?.value ?? []) {
           if (hasAnyAlchemyTag(device.tags) && device.name !== undefined) {

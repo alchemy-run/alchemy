@@ -28,17 +28,34 @@ export interface WorkspaceCertificate extends Resource<
  * The workspace-scoped counterpart of {@link Certificate}: a certificate inside an API
  * Management {@link Workspace} (Premium and v2 tiers). Props and
  * attributes match {@link Certificate} plus `workspaceName`.
+ * The ARM type is `Microsoft.ApiManagement/service/workspaces/certificates`.
+ *
+ * :::caution
+ * Changing `workspaceName`, `serviceName`, `name`, or `resourceGroup`
+ * replaces the certificate.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/workspaces-overview
  *
  * ### Workspace Certificates
  * **Example:** Upload a PFX
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
  * yield* Azure.ApiManagement.WorkspaceCertificate("client-cert", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
- *   data: Redacted.make(pfxBase64),
- *   password: Redacted.make(pfxPassword),
+ *   data: yield* Config.redacted("CERT_PFX_BASE64"),
+ *   password: yield* Config.redacted("CERT_PFX_PASSWORD"),
  * });
  * ```
  *

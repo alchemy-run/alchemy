@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -168,11 +168,9 @@ export const InterconnectBlockProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* compute
-        .ListInterconnectBlockBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListInterconnectBlockBySubscription", page)),
-        );
+      const page = yield* collectAll(compute.ListInterconnectBlockBySubscription, {
+        subscriptionId,
+      });
       return page.value.flatMap((block) => {
         const resourceGroup = resourceGroupOf(block.id);
         return hasAnyAlchemyTag(block.tags) &&

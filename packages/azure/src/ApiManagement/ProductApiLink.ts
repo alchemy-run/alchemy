@@ -50,12 +50,33 @@ export interface ProductApiLink extends Resource<
  * (`products/{productId}/apiLinks/{linkId}`). It expresses the same
  * relation as {@link ProductApi}; use one or the other for a given
  * product and API.
+ * The ARM type is `Microsoft.ApiManagement/service/products/apiLinks`.
+ *
+ * :::caution
+ * Changing `serviceName`, `productName`, `apiName`, `name`, or
+ * `resourceGroup` replaces the link.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/apimanagement/product-api-link
  *
  * ### Linking APIs to Products
  * **Example:** Publish an API through a product
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const product = yield* Azure.ApiManagement.Product("starter", {
+ *   serviceName: apim.serviceName,
+ *   displayName: "Starter",
+ *   subscriptionRequired: true,
+ *   state: "published",
+ * });
+ * const api = yield* Azure.ApiManagement.Api("orders", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * yield* Azure.ApiManagement.ProductApiLink("starter-orders", {
  *   serviceName: apim.serviceName,
  *   productName: product.productName,

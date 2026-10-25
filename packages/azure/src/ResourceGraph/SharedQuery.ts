@@ -8,13 +8,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -26,14 +26,22 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface SharedQueryProps {
   /**
-   * Resource group the shared query is saved in. Changing it replaces the
-   * query.
+   * Resource group the shared query is saved in.
+   *
+   * :::caution
+   * Changing it replaces the query.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
-   * Name of the shared query, 3-64 characters of letters, digits, `-`,
-   * `_`, and `.`. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the query.
+   * Name of the shared query, 3-64 characters of letters, digits, `-`, `_`, and
+   * `.`.
+   *
+   * :::caution
+   * Changing it replaces the query.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -43,11 +51,13 @@ export interface SharedQueryProps {
   query: string;
   /**
    * Human-readable description shown in the Resource Graph Explorer.
+   * @default none
    */
   description?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -82,7 +92,8 @@ export interface SharedQuery extends Resource<
 > {}
 
 /**
- * An Azure Resource Graph shared query — a saved KQL query over the
+ * An Azure Resource Graph shared query (`Microsoft.ResourceGraph/queries`)
+ * — a saved KQL query over the
  * resources of your subscriptions that appears in the Resource Graph
  * Explorer and can be pinned to dashboards or shared with other users
  * through Azure RBAC.
@@ -151,9 +162,9 @@ export const SharedQueryProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* resourcegraph
-        .ListGraphQueryBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListGraphQueryBySubscription", page)));
+      const page = yield* collectAll(resourcegraph.ListGraphQueryBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((query) => {
         const group = resourceGroupOf(query.id);
         return hasAnyAlchemyTag(query.tags) && group !== undefined && query.name !== undefined

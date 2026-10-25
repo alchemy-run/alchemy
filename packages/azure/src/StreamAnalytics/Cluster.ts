@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -27,12 +27,14 @@ export interface ClusterProps {
    * Resource group the cluster is created in, at most 80 characters
    * (Stream Analytics rejects longer names). Changing it replaces the
    * cluster.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Cluster name: 3-63 letters, digits, hyphens, and underscores. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the cluster.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -49,6 +51,7 @@ export interface ClusterProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -81,12 +84,18 @@ export interface Cluster extends Resource<
 > {}
 
 /**
- * A dedicated Azure Stream Analytics cluster — single-tenant capacity for
+ * A dedicated Azure Stream Analytics cluster
+ * (`Microsoft.StreamAnalytics/clusters`) — single-tenant capacity for
  * streaming jobs, with private endpoints into virtual networks.
  *
  * A cluster is billed per streaming unit-hour for as long as it exists
  * (36 SU minimum, several dollars per hour), and provisioning takes 30 to
  * 60 minutes.
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the cluster. A
+ * new cluster takes 30 to 60 minutes to provision.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/stream-analytics/cluster-overview
  *
@@ -143,9 +152,7 @@ export const ClusterProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* streamanalytics
-        .ListClusterBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListClusterBySubscription", page)));
+      const page = yield* collectAll(streamanalytics.ListClusterBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((cluster) => {
         const group = resourceGroupOf(cluster.id);
         return hasAnyAlchemyTag(cluster.tags) && group !== undefined && cluster.name !== undefined

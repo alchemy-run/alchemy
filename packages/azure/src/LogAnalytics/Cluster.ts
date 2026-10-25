@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -239,9 +239,7 @@ export const ClusterProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* operationalinsights
-        .ListClusters({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListClusters", page)));
+      const page = yield* collectAll(operationalinsights.ListClusters, { subscriptionId });
       return (page.value ?? []).flatMap((cluster) => {
         const group = resourceGroupOf(cluster.id);
         return hasAnyAlchemyTag(cluster.tags) && group !== undefined && cluster.name !== undefined

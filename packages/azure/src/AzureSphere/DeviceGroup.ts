@@ -59,11 +59,13 @@ export interface DeviceGroupProps {
    * :::caution
    * Changing it replaces the device group.
    * :::
+   * @default an alphanumeric name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Description of the device group, at most 77 characters: Azure Sphere stores
    * at most 100, and Alchemy appends a 23-character ownership marker.
+   * @default no description
    */
   description?: string;
   /**
@@ -131,6 +133,11 @@ export interface DeviceGroup extends Resource<
  * `[alchemy <hash>]` marker (a hash of the stack, stage, and logical ID)
  * at the end of `description`.
  *
+ * :::caution
+ * Changing `catalog`, `product`, `name`, or `resourceGroup` replaces the
+ * device group.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure-sphere/deployment/deployment-concepts
  *
  * ### Creating a Device Group
@@ -150,6 +157,10 @@ export interface DeviceGroup extends Resource<
  * ### Configuring Updates
  * **Example:** Early OS feed, OS updates only, EU crash dumps
  * ```typescript
+ * const catalog = yield* Azure.AzureSphere.Catalog("fleet");
+ * const product = yield* Azure.AzureSphere.Product("dishwasher", {
+ *   catalog: catalog.catalogName,
+ * });
  * const group = yield* Azure.AzureSphere.DeviceGroup("os-eval", {
  *   catalog: catalog.catalogName,
  *   product: product.productName,

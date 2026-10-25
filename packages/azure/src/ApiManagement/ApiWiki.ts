@@ -44,12 +44,31 @@ export interface ApiWiki extends Resource<
  * The wiki of an API in API Management: an ordered list of
  * {@link Documentation} pages shown with the API in the developer portal.
  * There is one per API.
+ * The ARM type is `Microsoft.ApiManagement/service/apis/wikis`.
+ *
+ * :::caution
+ * Changing `serviceName`, `apiName`, or `resourceGroup` replaces the wiki.
+ *
+ * Azure does not serve the wiki routes yet: they answer an empty 404 or "did
+ * not have proper uri path format" on Developer, BasicV2, and Premium
+ * services.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/apimanagement/api-wiki
  *
  * ### Attaching Documentation
  * **Example:** Show a getting-started page with an API
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const api = yield* Azure.ApiManagement.Api("orders", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * const page = yield* Azure.ApiManagement.Documentation("getting-started", {
  *   serviceName: apim.serviceName,
  *   title: "Getting started",

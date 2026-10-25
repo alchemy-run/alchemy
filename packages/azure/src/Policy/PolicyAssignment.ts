@@ -6,12 +6,12 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -32,7 +32,10 @@ import { isWholeExpression } from "./Members.ts";
 export interface PolicyAssignmentIdentity {
   /** `SystemAssigned`, `UserAssigned`, or `None`. */
   type: "SystemAssigned" | "UserAssigned" | "None";
-  /** ARM IDs of user-assigned identities (with `type: "UserAssigned"`). */
+  /**
+   * ARM IDs of user-assigned identities (with `type: "UserAssigned"`).
+   * @default []
+   */
   userAssignedIdentityIds?: string[];
 }
 
@@ -40,7 +43,10 @@ export interface PolicyAssignmentIdentity {
 export interface PolicyNonComplianceMessage {
   /** Message text. */
   message: string;
-  /** Member of a policy set the message applies to (initiatives only). */
+  /**
+   * Member of a policy set the message applies to (initiatives only).
+   * @default every member of the assignment
+   */
   policyDefinitionReferenceId?: string;
 }
 
@@ -48,31 +54,57 @@ export interface PolicyAssignmentProps {
   /**
    * ARM ID of the scope the policy applies to — a subscription
    * (`/subscriptions/{id}`), a resource group (`group.resourceGroupId`), or
-   * a single resource. Changing it replaces the assignment.
+   * a single resource.
+   *
+   * :::caution
+   * Changing it replaces the assignment.
+   * :::
    */
   scope: string;
   /**
    * Name of the assignment. At most 64 characters (24 at management-group
-   * scope), without `<>*%&:\?.+/`. If omitted, a unique name is generated
-   * from the app, stage, and logical ID. Changing it replaces the assignment.
+   * scope), without `<>*%&:\?.+/`.
+   *
+   * :::caution
+   * Changing it replaces the assignment.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * ID of the policy definition or policy set definition to assign, e.g.
    * `definition.policyDefinitionId` or a built-in
    * `/providers/Microsoft.Authorization/policyDefinitions/{guid}`.
+   *
+   * :::caution
    * Changing it replaces the assignment.
+   * :::
    */
   policyDefinitionId: string;
-  /** Version of the definition to use, e.g. `1.*.*`. */
+  /**
+   * Version of the definition to use, e.g. `1.*.*`.
+   * @default Azure's default
+   */
   definitionVersion?: string;
-  /** Display name shown in the portal. */
+  /**
+   * Display name shown in the portal.
+   * @default none
+   */
   displayName?: string;
-  /** Description of the assignment. */
+  /**
+   * Description of the assignment.
+   * @default none
+   */
   description?: string;
-  /** Parameter values, e.g. `{ tagName: "owner" }`. */
+  /**
+   * Parameter values, e.g. `{ tagName: "owner" }`.
+   * @default {}
+   */
   parameters?: Record<string, unknown>;
-  /** Child scopes excluded from the assignment. */
+  /**
+   * Child scopes excluded from the assignment.
+   * @default []
+   */
   notScopes?: string[];
   /**
    * `Default` enforces the effect; `DoNotEnforce` only evaluates
@@ -80,22 +112,32 @@ export interface PolicyAssignmentProps {
    * @default "Default"
    */
   enforcementMode?: "Default" | "DoNotEnforce";
-  /** Messages explaining why a resource is non-compliant. */
+  /**
+   * Messages explaining why a resource is non-compliant.
+   * @default []
+   */
   nonComplianceMessages?: PolicyNonComplianceMessage[];
   /**
    * Metadata of the assignment. Alchemy merges ownership entries
    * (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) in because
    * assignments have no tags.
+   * @default {} (plus the ownership entries)
    */
   metadata?: Record<string, unknown>;
   /**
    * Managed identity used by `modify` and `deployIfNotExists` effects.
    * Requires `location`.
+   * @default no identity
    */
   identity?: PolicyAssignmentIdentity;
   /**
    * Location of the assignment's managed identity. Required with
-   * `identity`. Changing it replaces the assignment.
+   * `identity`.
+   *
+   * :::caution
+   * Changing it replaces the assignment.
+   * :::
+   * @default none
    */
   location?: string;
 }
@@ -124,7 +166,8 @@ export interface PolicyAssignment extends Resource<
 > {}
 
 /**
- * An Azure Policy assignment — applies a policy definition or policy set
+ * An Azure Policy assignment (`Microsoft.Authorization/policyAssignments`)
+ * — applies a policy definition or policy set
  * (initiative) to a subscription, resource group, or resource.
  *
  * Assignments cannot be tagged, so Alchemy records ownership as
@@ -135,6 +178,7 @@ export interface PolicyAssignment extends Resource<
  * ### Assigning a Built-in Policy
  * **Example:** Audit a missing tag on a resource group (built-in definition)
  * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
  * yield* Azure.Policy.PolicyAssignment("require-owner-tag", {
  *   scope: group.resourceGroupId,
  *   // Built-in "Require a tag on resources"
@@ -148,6 +192,7 @@ export interface PolicyAssignment extends Resource<
  * ### Assigning a Custom Policy
  * **Example:** Assign a custom definition with a non-compliance message
  * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
  * const definition = yield* Azure.Policy.PolicyDefinition("allowed-locations", {
  *   policyRule: {
  *     if: { field: "location", notIn: ["eastus", "global"] },
@@ -164,6 +209,28 @@ export interface PolicyAssignment extends Resource<
  * ### Remediation Identity
  * **Example:** System-assigned identity for `modify` effects
  * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
+ * const definition = yield* Azure.Policy.PolicyDefinition("inherit-tags", {
+ *   mode: "Indexed",
+ *   policyRule: {
+ *     if: { field: "tags['costCenter']", exists: "false" },
+ *     then: {
+ *       effect: "modify",
+ *       details: {
+ *         roleDefinitionIds: [
+ *           "/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c",
+ *         ],
+ *         operations: [
+ *           {
+ *             operation: "addOrReplace",
+ *             field: "tags['costCenter']",
+ *             value: "[resourceGroup().tags['costCenter']]",
+ *           },
+ *         ],
+ *       },
+ *     },
+ *   },
+ * });
  * const assignment = yield* Azure.Policy.PolicyAssignment("inherit-tags", {
  *   scope: group.resourceGroupId,
  *   policyDefinitionId: definition.policyDefinitionId,
@@ -229,9 +296,7 @@ export const PolicyAssignmentProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* resources
-        .ListPolicyAssignments({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPolicyAssignments", page)));
+      const page = yield* collectAll(resources.ListPolicyAssignments, { subscriptionId });
       return page.value.flatMap((assignment) =>
         assignment.name !== undefined &&
         assignment.properties?.scope !== undefined &&

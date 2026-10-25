@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -27,12 +27,14 @@ export interface ManagedDashboardProps {
   /**
    * Resource group the dashboard is created in. Changing it replaces the
    * dashboard.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Dashboard name: letters, digits, and hyphens, starting with a letter.
    * If omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the dashboard.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -43,6 +45,7 @@ export interface ManagedDashboardProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -74,12 +77,18 @@ export interface ManagedDashboard extends Resource<
  *
  * Managed dashboards are free.
  *
- * @see https://learn.microsoft.com/azure/azure-monitor/visualize/visualize-use-grafana-dashboards
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the dashboard
+ * and deletes the panels authored in it.
+ * :::
+ *
+ * See [Grafana dashboards in Azure Monitor](https://learn.microsoft.com/azure/azure-monitor/visualize/visualize-use-grafana-dashboards).
  *
  * ### Creating a Managed Dashboard
- * **Example:** Dashboard in a resource group
+ * **Example:** Dashboard with tags
  * ```typescript
  * const board = yield* Azure.Dashboard.ManagedDashboard("ops", {
+ *   location: "eastus",
  *   tags: { team: "ops" },
  * });
  * ```
@@ -116,10 +125,9 @@ export const ManagedDashboardProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        dashboard.ListDashboardBySubscription({ subscriptionId }),
+        collectAll(dashboard.ListDashboardBySubscription, { subscriptionId }),
       );
       if (page === undefined) return [];
-      yield* requireSinglePage("ListDashboardBySubscription", page);
       return (page.value ?? []).flatMap((board) => {
         const group = resourceGroupOf(board.id);
         return hasAnyAlchemyTag(board.tags) && group !== undefined && board.name !== undefined

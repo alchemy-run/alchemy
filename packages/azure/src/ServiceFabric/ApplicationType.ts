@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -24,7 +24,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { APP_BUDGET, sameArm } from "./Common.ts";
 
 export interface ApplicationTypeProps {
-  /** Resource group of the cluster. Changing it replaces the application type. */
+  /**
+   * Resource group of the cluster. Changing it replaces the application type.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the managed cluster. Changing it replaces the application type. */
   cluster: string;
@@ -37,6 +40,7 @@ export interface ApplicationTypeProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -63,16 +67,38 @@ export interface ApplicationType extends Resource<
 > {}
 
 /**
- * An application type registered on an Azure Service Fabric managed
- * cluster. Register package versions under it with
- * {@link ApplicationTypeVersion} and instantiate it with
- * {@link Application}.
+ * An application type registered on an Azure Service Fabric managed cluster
+ * (`Microsoft.ServiceFabric/managedClusters/applicationTypes`). Register
+ * package versions under it with `Azure.ServiceFabric.ApplicationTypeVersion`
+ * and run it with `Azure.ServiceFabric.Application`. See the
+ * [Azure docs](https://learn.microsoft.com/azure/service-fabric/how-to-managed-cluster-app-deployment-template).
  *
- * @see https://learn.microsoft.com/azure/service-fabric/how-to-managed-cluster-app-deployment-template
+ * :::caution
+ * `name` must equal the `ApplicationTypeName` in the application manifest of
+ * every package you register under it.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `cluster`, or `name` replaces the application
+ * type. Alchemy updates `tags` in place.
+ * :::
  *
  * ### Registering an Application Type
  * **Example:** Application type matching the manifest's type name
  * ```typescript
+ * const password = yield* Config.redacted("SF_ADMIN_PASSWORD");
+ * const cluster = yield* Azure.ServiceFabric.ManagedCluster("cluster", {
+ *   adminUserName: "sfadmin",
+ *   adminPassword: password,
+ *   clients: [
+ *     { isAdmin: true, thumbprint: "0123456789ABCDEF0123456789ABCDEF01234567" },
+ *   ],
+ * });
+ * const primary = yield* Azure.ServiceFabric.NodeType("primary", {
+ *   cluster: cluster.managedClusterName,
+ *   isPrimary: true,
+ *   vmInstanceCount: 3,
+ * });
  * const appType = yield* Azure.ServiceFabric.ApplicationType("voting", {
  *   cluster: cluster.managedClusterName,
  *   name: "VotingType",
@@ -122,25 +148,18 @@ export const ApplicationTypeProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const clusters = yield* sf
-        .ListManagedClusterBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListManagedClusterBySubscription", page)),
-        );
+      const clusters = yield* collectAll(sf.ListManagedClusterBySubscription, { subscriptionId });
       const found: ApplicationType["Attributes"][] = [];
       for (const cluster of clusters.value ?? []) {
         const group = resourceGroupOf(cluster.id);
         if (group === undefined || cluster.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          sf.ListApplicationTypes({
+          collectAll(sf.ListApplicationTypes, {
             subscriptionId,
             resourceGroupName: group,
             clusterName: cluster.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListApplicationTypes", page);
-        }
         for (const appType of page?.value ?? []) {
           if (hasAnyAlchemyTag(appType.tags) && appType.name !== undefined) {
             found.push(toAttrs(group, cluster.name, appType.name, appType));

@@ -24,19 +24,32 @@ export interface MetadataSource {
   /**
    * Name of the source (e.g. the solution or repository name). For
    * `LocalWorkspace` it must be the workspace name and defaults to it.
+   * @default the workspace name for `LocalWorkspace`, else not set
    */
   name?: string;
-  /** ID of the source (e.g. the solution ID). */
+  /**
+   * ID of the source (e.g. the solution ID).
+   * @default not set
+   */
   sourceId?: string;
 }
 
 /** Author of a piece of content. */
 export interface MetadataAuthor {
-  /** Author name. */
+  /**
+   * Author name.
+   * @default not set
+   */
   name?: string;
-  /** Author email. */
+  /**
+   * Author email.
+   * @default not set
+   */
   email?: string;
-  /** Author link. */
+  /**
+   * Author link.
+   * @default not set
+   */
   link?: string;
 }
 
@@ -44,19 +57,34 @@ export interface MetadataAuthor {
 export interface MetadataSupport {
   /** Support tier: `Microsoft`, `Partner`, or `Community`. */
   tier: "Microsoft" | "Partner" | "Community" | (string & {});
-  /** Support contact name. */
+  /**
+   * Support contact name.
+   * @default not set
+   */
   name?: string;
-  /** Support email. */
+  /**
+   * Support email.
+   * @default not set
+   */
   email?: string;
-  /** Support link. */
+  /**
+   * Support link.
+   * @default not set
+   */
   link?: string;
 }
 
 /** Categories of a piece of content. */
 export interface MetadataCategories {
-  /** Domains, e.g. `["Security - Threat Protection"]`. */
+  /**
+   * Domains, e.g. `["Security - Threat Protection"]`.
+   * @default []
+   */
   domains?: string[];
-  /** Industry verticals. */
+  /**
+   * Industry verticals.
+   * @default []
+   */
   verticals?: string[];
 }
 
@@ -65,22 +93,43 @@ export interface MetadataCategories {
  * an `operator` over a list of `criteria`.
  */
 export interface MetadataDependency {
-  /** Static ID of the content depended on. */
+  /**
+   * Static ID of the content depended on.
+   * @default not set
+   */
   contentId?: string;
-  /** Kind of the content depended on, e.g. `DataConnector`. */
+  /**
+   * Kind of the content depended on, e.g. `DataConnector`.
+   * @default not set
+   */
   kind?: string;
-  /** Version required; blank or `*` accepts any version. */
+  /**
+   * Version required; blank or `*` accepts any version.
+   * @default not set
+   */
   version?: string;
-  /** Name of the content depended on. */
+  /**
+   * Name of the content depended on.
+   * @default not set
+   */
   name?: string;
-  /** How `criteria` combine: `AND` or `OR`. */
+  /**
+   * How `criteria` combine: `AND` or `OR`.
+   * @default not set
+   */
   operator?: "AND" | "OR" | (string & {});
-  /** Dependencies combined by `operator`. */
+  /**
+   * Dependencies combined by `operator`.
+   * @default not set
+   */
   criteria?: MetadataDependency[];
 }
 
 export interface MetadataProps {
-  /** Resource group of the Sentinel workspace. Changing it replaces the metadata. */
+  /**
+   * Resource group of the Sentinel workspace. Changing it replaces the metadata.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Sentinel-enabled Log Analytics workspace. Pass `OnboardingState.workspace`
@@ -90,41 +139,87 @@ export interface MetadataProps {
   /**
    * Name of the metadata. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the metadata.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   metadataName?: string;
   /** ARM resource ID of the content described (e.g. `AlertRule.alertRuleResourceId`). */
   parentId: string;
   /** Kind of the content, e.g. `AnalyticsRule`, `Workbook`, `Playbook`. Changing it replaces the metadata. */
   kind: string;
-  /** Static ID of the content (e.g. the rule GUID). */
+  /**
+   * Static ID of the content (e.g. the rule GUID).
+   * @default not set
+   */
   contentId?: string;
-  /** Version of the content (e.g. `1.0.0`). */
+  /**
+   * Version of the content (e.g. `1.0.0`).
+   * @default not set
+   */
   version?: string;
-  /** Source of the content. */
+  /**
+   * Source of the content.
+   * @default not set
+   */
   source?: MetadataSource;
-  /** Author of the content. */
+  /**
+   * Author of the content.
+   * @default not set
+   */
   author?: MetadataAuthor;
-  /** Support information of the content. */
+  /**
+   * Support information of the content.
+   * @default not set
+   */
   support?: MetadataSupport;
-  /** Categories of the content. */
+  /**
+   * Categories of the content.
+   * @default not set
+   */
   categories?: MetadataCategories;
-  /** Providers of the content, e.g. `["Microsoft"]`. */
+  /**
+   * Providers of the content, e.g. `["Microsoft"]`.
+   * @default not set
+   */
   providers?: string[];
-  /** First publish date (`YYYY-MM-DD`). */
+  /**
+   * First publish date (`YYYY-MM-DD`).
+   * @default not set
+   */
   firstPublishDate?: string;
-  /** Last publish date (`YYYY-MM-DD`). */
+  /**
+   * Last publish date (`YYYY-MM-DD`).
+   * @default not set
+   */
   lastPublishDate?: string;
-  /** Customer-provided version of the content. */
+  /**
+   * Customer-provided version of the content.
+   * @default not set
+   */
   customVersion?: string;
-  /** Schema version of the content. */
+  /**
+   * Schema version of the content.
+   * @default not set
+   */
   contentSchemaVersion?: string;
-  /** Icon identifier. */
+  /**
+   * Icon identifier.
+   * @default not set
+   */
   icon?: string;
-  /** MITRE ATT&CK tactics covered by the content. */
+  /**
+   * MITRE ATT&CK tactics covered by the content.
+   * @default not set
+   */
   threatAnalysisTactics?: string[];
-  /** MITRE ATT&CK techniques covered by the content. */
+  /**
+   * MITRE ATT&CK techniques covered by the content.
+   * @default not set
+   */
   threatAnalysisTechniques?: string[];
-  /** Dependencies of the content (`{ operator, criteria: [{ kind, contentId }] }`). */
+  /**
+   * Dependencies of the content (`{ operator, criteria: [{ kind, contentId }] }`).
+   * @default not set
+   */
   dependencies?: MetadataDependency;
 }
 
@@ -154,17 +249,33 @@ export interface Metadata extends Resource<
 > {}
 
 /**
- * Microsoft Sentinel content metadata: links a piece of content (an
- * analytics rule, workbook, playbook, …) to its source, author, version,
- * and support details, as Content Hub solutions do.
+ * Microsoft Sentinel content metadata
+ * (`Microsoft.SecurityInsights/metadata`): it links a piece of content (an
+ * analytics rule, workbook, playbook, and so on) to its source, author,
+ * version, and support details, as Content Hub solutions do. See the
+ * [Azure docs](https://learn.microsoft.com/azure/sentinel/sentinel-solutions).
  *
- * @see https://learn.microsoft.com/azure/sentinel/sentinel-solutions
+ * :::caution
+ * Onboard the workspace first with `Azure.SecurityInsights.OnboardingState`,
+ * and pass its `workspace` attribute so Alchemy creates this resource after
+ * the onboarding and deletes it before.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `kind`, or `metadataName` replaces
+ * the metadata. Azure allows one metadata per `parentId`, so Alchemy deletes
+ * the old metadata first when the parent stays the same. Alchemy updates
+ * every other prop in place.
+ * :::
  *
  * ### Describing Content
  * **Example:** Version an analytics rule
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
+ *   workspace: logs.workspaceName,
+ * });
  * const rule = yield* Azure.SecurityInsights.AlertRule("heartbeat", {
- *   resourceGroup: sentinel.resourceGroup,
  *   workspace: sentinel.workspace,
  *   displayName: "Missing heartbeat",
  *   severity: "Medium",
@@ -173,7 +284,6 @@ export interface Metadata extends Resource<
  *   queryPeriod: "PT1H",
  * });
  * yield* Azure.SecurityInsights.Metadata("heartbeat-metadata", {
- *   resourceGroup: sentinel.resourceGroup,
  *   workspace: sentinel.workspace,
  *   kind: "AnalyticsRule",
  *   parentId: rule.alertRuleResourceId,

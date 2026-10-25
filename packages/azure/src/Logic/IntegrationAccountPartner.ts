@@ -36,6 +36,7 @@ export interface IntegrationAccountPartnerProps {
    * Partner name: 1-80 letters, digits, `-`, `_`, `.`, `(`, `)`. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the partner.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Business identities that identify the partner in B2B messages. */
@@ -48,6 +49,7 @@ export interface IntegrationAccountPartnerProps {
   /**
    * User metadata. Alchemy adds `alchemy::*` ownership and hash keys
    * because artifacts do not return tags.
+   * @default none
    */
   metadata?: Record<string, unknown>;
 }
@@ -80,16 +82,18 @@ export interface IntegrationAccountPartner extends Resource<
  * by one or more business identities. Agreements are made between two
  * partners.
  *
+ * ARM type: `Microsoft.Logic/integrationAccounts/partners`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-partners).
+ *
  * :::caution
  * Changing `name`, `integrationAccount`, or `resourceGroup` replaces the
  * partner.
  * :::
  *
- * @see https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-partners
- *
  * ### Adding Partners
  * **Example:** Host and guest partners
  * ```typescript
+ * const account = yield* Azure.Logic.IntegrationAccount("b2b");
  * const contoso = yield* Azure.Logic.IntegrationAccountPartner("contoso", {
  *   integrationAccount: account.integrationAccountName,
  *   businessIdentities: [{ qualifier: "ZZ", value: "CONTOSO" }],

@@ -82,25 +82,34 @@ export interface DeploymentSetting extends Resource<
  * Cloud deployment of an Azure Local cluster: validates and then deploys
  * the cluster onto Arc-registered physical nodes. A deployment runs for
  * hours and needs real Azure Local hardware.
+ * The ARM type is `Microsoft.AzureStackHCI/clusters/deploymentSettings`.
  *
  * The setting has no tags; Alchemy treats it as owned when its parent
  * cluster carries this stack's ownership tags. Because Azure never returns
  * the configured secrets, the deployment configuration is compared with
  * the last deployed props rather than the observed resource.
  *
+ * :::caution
+ * Changing `cluster`, `name`, `arcNodeResourceIds`, `operationType`, or
+ * `resourceGroup` replaces the setting.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/azure-local/deploy/deployment-azure-resource-manager-template
  *
  * ### Validating and Deploying a Cluster
  * **Example:** Validate the configuration first
  * ```typescript
+ * const cluster = yield* Azure.AzureStackHCI.Cluster("site-a");
+ * // ARM IDs of the Arc-enabled servers (Microsoft.HybridCompute/machines).
+ * const node1Id = yield* Config.string("HCI_NODE_1_ID");
+ * const node2Id = yield* Config.string("HCI_NODE_2_ID");
+ * // The deployment configuration exported from the Azure portal, as JSON.
+ * const configuration = yield* Config.string("HCI_DEPLOYMENT_CONFIGURATION");
  * const deployment = yield* Azure.AzureStackHCI.DeploymentSetting("deploy", {
  *   cluster: cluster.clusterName,
  *   arcNodeResourceIds: [node1Id, node2Id],
  *   deploymentMode: "Validate", // then "Deploy"
- *   deploymentConfiguration: {
- *     version: "10.0.0.0",
- *     scaleUnits: [{ deploymentData: { ... } }],
- *   },
+ *   deploymentConfiguration: JSON.parse(configuration),
  * });
  * ```
  *

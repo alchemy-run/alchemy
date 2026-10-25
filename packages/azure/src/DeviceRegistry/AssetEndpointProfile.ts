@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -39,12 +39,16 @@ import {
 export type AssetEndpointProfileAuthentication = deviceregistry.Authentication;
 
 export interface AssetEndpointProfileProps {
-  /** Resource group the profile is created in. Changing it replaces the profile. */
+  /**
+   * Resource group the profile is created in. Changing it replaces the profile.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Profile name: lowercase letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the profile.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -69,16 +73,21 @@ export interface AssetEndpointProfileProps {
    * @default Azure's default (`Anonymous`)
    */
   authentication?: AssetEndpointProfileAuthentication;
-  /** Stringified JSON with connector-specific configuration. */
+  /**
+   * Stringified JSON with connector-specific configuration.
+   * @default unset
+   */
   additionalConfiguration?: string;
   /**
    * Name of the discovered profile this profile was promoted from.
    * Changing it replaces the profile.
+   * @default unset
    */
   discoveredAssetEndpointProfileRef?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -111,19 +120,30 @@ export interface AssetEndpointProfile extends Resource<
 > {}
 
 /**
- * An Azure Device Registry asset endpoint profile (Azure IoT Operations
+ * An Azure Device Registry asset endpoint profile
+ * (`Microsoft.DeviceRegistry/assetEndpointProfiles`, Azure IoT Operations
  * v1 model) — the connection information connectors use to reach a
  * southbound device. Superseded by namespace devices
  * (`Azure.DeviceRegistry.NamespaceDevice`).
  *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `customLocationId`, or
+ * `discoveredAssetEndpointProfileRef` replaces the profile.
+ * :::
+ *
+ * :::caution
  * Requires an Arc-enabled Kubernetes cluster running Azure IoT Operations
  * (its custom location).
+ * :::
  *
  * @see https://learn.microsoft.com/azure/iot-operations/discover-manage-assets/overview-manage-assets
  *
  * ### Creating a Profile
  * **Example:** Anonymous OPC UA endpoint
  * ```typescript
+ * // Custom location of an Arc-enabled cluster running Azure IoT Operations.
+ * const aioCustomLocationId =
+ *   "/subscriptions/<subscription-id>/resourceGroups/iot/providers/Microsoft.ExtendedLocation/customLocations/aio";
  * const profile = yield* Azure.DeviceRegistry.AssetEndpointProfile("plc", {
  *   customLocationId: aioCustomLocationId,
  *   targetAddress: "opc.tcp://plc.factory.local:4840",
@@ -197,13 +217,7 @@ export const AssetEndpointProfileProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        deviceregistry
-          .ListAssetEndpointProfileBySubscription({ subscriptionId })
-          .pipe(
-            Effect.flatMap((page) =>
-              requireSinglePage("ListAssetEndpointProfileBySubscription", page),
-            ),
-          ),
+        collectAll(deviceregistry.ListAssetEndpointProfileBySubscription, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((profile) => {
         const group = resourceGroupOf(profile.id);

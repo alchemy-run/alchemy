@@ -28,7 +28,10 @@ import {
 import { getWorkspace } from "./Workspace.ts";
 
 export interface ProjectProps {
-  /** Resource group of the parent workspace. Changing it replaces the project. */
+  /**
+   * Resource group of the parent workspace. Changing it replaces the project.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the parent workspace. Changing it replaces the project. */
   workspace: string;
@@ -36,6 +39,7 @@ export interface ProjectProps {
    * Project name: 3-24 letters, digits, and hyphens. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the project.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -46,13 +50,18 @@ export interface ProjectProps {
   /**
    * ARM IDs of the Discovery storage containers the project may use.
    * Changing them replaces the project.
+   * @default []
    */
   storageContainerIds?: string[];
-  /** Default preferences that guide AI behavior in the project. */
+  /**
+   * Default preferences that guide AI behavior in the project.
+   * @default unset
+   */
   behaviorPreferences?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -85,14 +94,32 @@ export interface Project extends Resource<
  * — a scoped research effort inside a Discovery workspace, with access to a
  * set of storage containers.
  *
- * Microsoft Discovery is a gated preview: on subscriptions without the
+ * :::caution
+ * Changing `workspace`, `name`, `location`, `resourceGroup`, or
+ * `storageContainerIds` replaces the project.
+ * :::
+ *
+ * :::caution
+ * Microsoft Discovery is a gated preview. On subscriptions without the
  * preview, ARM rejects the resource type with `InvalidResourceType`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/microsoft-discovery/
  *
  * ### Creating a Project
  * **Example:** Project with access to a storage container
  * ```typescript
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("ws");
+ * const workspace = yield* Azure.Discovery.Workspace("lab", {
+ *   workspaceIdentity: identity.identityId,
+ * });
+ * const account = yield* Azure.Storage.StorageAccount("data");
+ * const container = yield* Azure.Discovery.StorageContainer("data", {
+ *   storageStore: {
+ *     kind: "AzureStorageBlob",
+ *     storageAccountId: account.storageAccountId,
+ *   },
+ * });
  * const project = yield* Azure.Discovery.Project("battery", {
  *   workspace: workspace.workspaceName,
  *   storageContainerIds: [container.storageContainerId],

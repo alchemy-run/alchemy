@@ -28,6 +28,7 @@ export interface SnapshotProps {
   /**
    * Snapshot name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the snapshot.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
 }
@@ -64,14 +65,38 @@ export interface Snapshot extends Resource<
  * immutable: every prop change replaces the snapshot. They are deleted
  * together with their volume.
  *
+ * ARM type: `Microsoft.NetApp/netAppAccounts/capacityPools/volumes/snapshots`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/azure-netapp-files/azure-netapp-files-manage-snapshots).
+ *
  * Snapshots have no tags; Alchemy treats a snapshot as owned when its
  * volume carries this stack's ownership tags.
  *
- * @see https://learn.microsoft.com/azure/azure-netapp-files/azure-netapp-files-manage-snapshots
+ * :::caution
+ * Changing `resourceGroup`, `account`, `pool`, `volume`, or `name` replaces the
+ * snapshot.
+ * :::
  *
  * ### Creating a Snapshot
  * **Example:** Snapshot a volume
  * ```typescript
+ * const account = yield* Azure.NetApp.Account("files");
+ * const pool = yield* Azure.NetApp.CapacityPool("pool", {
+ *   account: account.accountName,
+ * });
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("anf", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ *   delegations: [{ serviceName: "Microsoft.NetApp/volumes" }],
+ * });
+ * const volume = yield* Azure.NetApp.Volume("data", {
+ *   account: account.accountName,
+ *   pool: pool.poolName,
+ *   subnetId: subnet.subnetId,
+ *   usageThreshold: 100 * Azure.NetApp.GiB,
+ * });
  * const snapshot = yield* Azure.NetApp.Snapshot("before-upgrade", {
  *   account: account.accountName,
  *   pool: pool.poolName,

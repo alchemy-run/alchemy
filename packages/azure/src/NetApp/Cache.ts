@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -56,6 +56,7 @@ export interface CacheProps {
   /**
    * Cache name. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the cache.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -77,15 +78,30 @@ export interface CacheProps {
    * @default "Microsoft.NetApp"
    */
   encryptionKeySource?: "Microsoft.NetApp" | "Microsoft.KeyVault";
-  /** Private endpoint to the Key Vault for customer-managed keys. */
+  /**
+   * Private endpoint to the Key Vault for customer-managed keys.
+   * @default none
+   */
   keyVaultPrivateEndpointResourceId?: string;
-  /** Protocols the cache serves. */
+  /**
+   * Protocols the cache serves.
+   * @default ["NFSv3"]
+   */
   protocolTypes?: ("NFSv3" | "NFSv4" | "SMB")[];
-  /** Export policy rules. */
+  /**
+   * Export policy rules.
+   * @default Azure's default
+   */
   exportPolicy?: NetAppExportPolicyRule[];
-  /** Throughput in MiB/s (manual-QoS pools). */
+  /**
+   * Throughput in MiB/s (manual-QoS pools).
+   * @default Azure's default
+   */
   throughputMibps?: number;
-  /** SMB share settings. */
+  /**
+   * SMB share settings.
+   * @default none
+   */
   smbSettings?: {
     /** SMB3 encryption of in-flight data. */
     smbEncryption?: Toggle;
@@ -94,23 +110,45 @@ export interface CacheProps {
     /** Hide the share from browse lists. */
     smbNonBrowsable?: Toggle;
   };
-  /** Kerberos. Changing it replaces the cache. */
+  /**
+   * Kerberos. Changing it replaces the cache.
+   * @default Azure's default
+   */
   kerberos?: Toggle;
-  /** LDAP. Changing it replaces the cache. */
+  /**
+   * LDAP. Changing it replaces the cache.
+   * @default Azure's default
+   */
   ldap?: Toggle;
-  /** LDAP server type. Changing it replaces the cache. */
+  /**
+   * LDAP server type. Changing it replaces the cache.
+   * @default Azure's default
+   */
   ldapServerType?: "ActiveDirectory" | "OpenLDAP";
-  /** Global file locking across caches. Changing it replaces the cache. */
+  /**
+   * Global file locking across caches. Changing it replaces the cache.
+   * @default Azure's default
+   */
   globalFileLocking?: Toggle;
-  /** CIFS change notifications. */
+  /**
+   * CIFS change notifications.
+   * @default Azure's default
+   */
   cifsChangeNotifications?: Toggle;
-  /** Write-back caching. */
+  /**
+   * Write-back caching.
+   * @default Azure's default
+   */
   writeBack?: Toggle;
-  /** Availability zone. Changing it replaces the cache. */
+  /**
+   * Availability zone. Changing it replaces the cache.
+   * @default none
+   */
   zones?: string[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -165,11 +203,35 @@ export interface Cache extends Resource<
  * `clusterPeeringCommand` / `vserverPeeringCommand` on the origin cluster
  * to finish peering.
  *
- * @see https://learn.microsoft.com/azure/azure-netapp-files/cache-volumes
+ * ARM type: `Microsoft.NetApp/netAppAccounts/capacityPools/caches`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/azure-netapp-files/cache-volumes).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `account`, `pool`, `name`, `filePath`,
+ * `cacheSubnetResourceId`, `peeringSubnetResourceId`,
+ * `originClusterInformation`, `encryptionKeySource`, `kerberos`, `ldap`,
+ * `ldapServerType`, `globalFileLocking`, or `zones` replaces the cache.
+ * :::
  *
  * ### Creating a Cache
  * **Example:** Cache an on-premises ONTAP volume
  * ```typescript
+ * const account = yield* Azure.NetApp.Account("files");
+ * const pool = yield* Azure.NetApp.CapacityPool("pool", {
+ *   account: account.accountName,
+ * });
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const anfSubnet = yield* Azure.Network.Subnet("anf", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ *   delegations: [{ serviceName: "Microsoft.NetApp/volumes" }],
+ * });
+ * const peeringSubnet = yield* Azure.Network.Subnet("peering", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.2.0/24",
+ * });
  * const cache = yield* Azure.NetApp.Cache("cache", {
  *   account: account.accountName,
  *   pool: pool.poolName,
@@ -261,14 +323,12 @@ export const CacheProvider = () =>
       const pools = yield* listAllPools(subscriptionId);
       const caches = yield* Effect.forEach(poolRefs(pools), ({ resourceGroup, account, name }) =>
         orUndefinedIfNotFound(
-          netapp
-            .ListCaches({
-              subscriptionId,
-              resourceGroupName: resourceGroup,
-              accountName: account,
-              poolName: name,
-            })
-            .pipe(Effect.flatMap((page) => requireSinglePage("ListCaches", page))),
+          collectAll(netapp.ListCaches, {
+            subscriptionId,
+            resourceGroupName: resourceGroup,
+            accountName: account,
+            poolName: name,
+          }),
         ).pipe(Effect.map((page) => page?.value ?? [])),
       );
       return caches.flat().flatMap((cache) => {

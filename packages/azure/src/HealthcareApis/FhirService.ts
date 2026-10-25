@@ -5,10 +5,10 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   waitForProvisioned,
   waitUntilGone,
@@ -37,31 +37,61 @@ export type FhirVersion = "fhir-R4" | "fhir-Stu3";
 export type FhirResourceVersionPolicy = "no-version" | "versioned" | "versioned-update";
 
 export interface HealthcareCorsConfiguration {
-  /** Origins allowed via CORS, e.g. `https://app.contoso.com` or `*`. */
+  /**
+   * Origins allowed via CORS, e.g. `https://app.contoso.com` or `*`.
+   * @default []
+   */
   origins?: string[];
-  /** Request headers allowed via CORS. */
+  /**
+   * Request headers allowed via CORS.
+   * @default []
+   */
   headers?: string[];
-  /** HTTP methods allowed via CORS. */
+  /**
+   * HTTP methods allowed via CORS.
+   * @default []
+   */
   methods?: string[];
-  /** Seconds a browser may cache the preflight response. */
+  /**
+   * Seconds a browser may cache the preflight response.
+   * @default unset (the browser's default)
+   */
   maxAge?: number;
-  /** Whether credentials are allowed via CORS. */
+  /**
+   * Whether credentials are allowed via CORS.
+   * @default false
+   */
   allowCredentials?: boolean;
 }
 
 export interface FhirSmartIdentityProviderApplication {
-  /** Application client ID in the identity provider. */
+  /**
+   * Application client ID in the identity provider.
+   * @default unset
+   */
   clientId?: string;
-  /** Audience used to validate bearer tokens against the authority. */
+  /**
+   * Audience used to validate bearer tokens against the authority.
+   * @default unset
+   */
   audience?: string;
-  /** Data actions the application may perform (`Read`). */
+  /**
+   * Data actions the application may perform (`Read`).
+   * @default []
+   */
   allowedDataActions?: "Read"[];
 }
 
 export interface FhirSmartIdentityProvider {
-  /** Token-issuing authority of the identity provider. */
+  /**
+   * Token-issuing authority of the identity provider.
+   * @default unset
+   */
   authority?: string;
-  /** Applications registered with the identity provider. */
+  /**
+   * Applications registered with the identity provider.
+   * @default []
+   */
   applications?: FhirSmartIdentityProviderApplication[];
 }
 
@@ -76,50 +106,90 @@ export interface FhirAuthenticationConfiguration {
    * @default the service URL
    */
   audience?: string;
-  /** Enable the SMART on FHIR proxy. */
+  /**
+   * Enable the SMART on FHIR proxy.
+   * @default false
+   */
   smartProxyEnabled?: boolean;
-  /** Third-party identity providers for SMART on FHIR authentication. */
+  /**
+   * Third-party identity providers for SMART on FHIR authentication.
+   * @default []
+   */
   smartIdentityProviders?: FhirSmartIdentityProvider[];
 }
 
 export interface FhirOciArtifact {
-  /** Azure Container Registry login server. */
+  /**
+   * Azure Container Registry login server.
+   * @default unset
+   */
   loginServer?: string;
-  /** Artifact (image) name. */
+  /**
+   * Artifact (image) name.
+   * @default unset
+   */
   imageName?: string;
-  /** Artifact digest. */
+  /**
+   * Artifact digest.
+   * @default unset (the latest artifact)
+   */
   digest?: string;
 }
 
 export interface FhirAcrConfiguration {
-  /** Login servers of Azure Container Registries holding custom templates. */
+  /**
+   * Login servers of Azure Container Registries holding custom templates.
+   * @default []
+   */
   loginServers?: string[];
-  /** OCI artifacts (e.g. `$convert-data` templates) to load. */
+  /**
+   * OCI artifacts (e.g. `$convert-data` templates) to load.
+   * @default []
+   */
   ociArtifacts?: FhirOciArtifact[];
 }
 
 export interface FhirImportConfiguration {
-  /** Name of the storage account `$import` reads from. */
+  /**
+   * Name of the storage account `$import` reads from.
+   * @default unset
+   */
   integrationDataStore?: string;
-  /** Put the service in initial import mode (bulk load into an empty service). */
+  /**
+   * Put the service in initial import mode (bulk load into an empty service).
+   * @default false
+   */
   initialImportMode?: boolean;
-  /** Enable the `$import` operation. */
+  /**
+   * Enable the `$import` operation.
+   * @default false
+   */
   enabled?: boolean;
 }
 
 export interface FhirResourceVersionPolicyConfiguration {
-  /** Default history tracking for all resource types. */
+  /**
+   * Default history tracking for all resource types.
+   * @default "versioned"
+   */
   default?: FhirResourceVersionPolicy;
-  /** Per resource type overrides, e.g. `{ Patient: "no-version" }`. */
+  /**
+   * Per resource type overrides, e.g. `{ Patient: "no-version" }`.
+   * @default {}
+   */
   resourceTypeOverrides?: Record<string, FhirResourceVersionPolicy>;
 }
 
 export interface FhirServiceProps {
   /**
    * Resource group of the workspace. Changing it replaces the service.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
-  /** Name of the Health Data Services workspace. Changing it replaces the service. */
+  /**
+   * Name of the Health Data Services workspace. Required. Changing it
+   * replaces the service.
+   */
   workspace: string;
   /**
    * Service name: 3-24 lowercase letters and digits, starting with a
@@ -127,9 +197,9 @@ export interface FhirServiceProps {
    * characters: longer ones are accepted by ARM but end in provisioning
    * state `Failed`, so reconcile rejects them up front. Generated names
    * are shortened to fit. The service URL is
-   * `https://{workspace}-{name}.fhir.azurehealthcareapis.com`. If omitted,
-   * a unique name is generated from the app, stage, and logical ID.
-   * Changing it replaces the service.
+   * `https://{workspace}-{name}.fhir.azurehealthcareapis.com`. Changing it
+   * replaces the service.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -146,34 +216,56 @@ export interface FhirServiceProps {
   /**
    * Managed identity, e.g. `{ type: "SystemAssigned" }` (required for
    * export/import and ACR access).
+   * @default no identity
    */
   identity?: HealthcareIdentity;
-  /** Authentication settings for the data plane. */
+  /**
+   * Authentication settings for the data plane.
+   * @default Entra ID tokens from your tenant, with the service URL as audience
+   */
   authenticationConfiguration?: FhirAuthenticationConfiguration;
-  /** CORS settings for browser clients. */
+  /**
+   * CORS settings for browser clients.
+   * @default no CORS rules
+   */
   corsConfiguration?: HealthcareCorsConfiguration;
   /**
    * Name of the storage account `$export` writes to. The service identity
    * needs `Storage Blob Data Contributor` on it.
+   * @default unset (`$export` is disabled)
    */
   exportStorageAccountName?: string;
-  /** `$import` settings. */
+  /**
+   * `$import` settings.
+   * @default unset (`$import` is disabled)
+   */
   importConfiguration?: FhirImportConfiguration;
-  /** Azure Container Registry settings for custom conversion templates. */
+  /**
+   * Azure Container Registry settings for custom conversion templates.
+   * @default no registries
+   */
   acrConfiguration?: FhirAcrConfiguration;
-  /** History tracking (versioning) of FHIR resources. */
+  /**
+   * History tracking (versioning) of FHIR resources.
+   * @default Azure's default (`versioned` for every resource type)
+   */
   resourceVersionPolicyConfiguration?: FhirResourceVersionPolicyConfiguration;
-  /** Enable the US Core "missing data" implementation guide requirement. */
+  /**
+   * Enable the US Core "missing data" implementation guide requirement.
+   * @default false
+   */
   usCoreMissingData?: boolean;
   /**
    * Key Vault key URL for customer-managed key encryption. Chosen at
    * creation: changing it replaces the service.
+   * @default Microsoft-managed keys
    */
   keyEncryptionKeyUrl?: string;
   /**
    * User tags. Alchemy ownership markers (`alchemy_stack`, `alchemy_stage`,
    * `alchemy_id`) are merged in automatically; this resource provider
    * rejects `:` in tag names.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -214,7 +306,8 @@ export interface FhirService extends Resource<
 > {}
 
 /**
- * A FHIR service in an Azure Health Data Services workspace — a managed,
+ * A FHIR service in an Azure Health Data Services workspace
+ * (`Microsoft.HealthcareApis/workspaces/fhirservices`): a managed,
  * standards-based FHIR R4 (or STU3) API for exchanging clinical data.
  * Billing is consumption based (storage and API calls); an empty service
  * costs next to nothing. Provisioning takes several minutes.
@@ -234,6 +327,7 @@ export interface FhirService extends Resource<
  * ### Browser Access
  * **Example:** FHIR service with CORS for a web app
  * ```typescript
+ * const workspace = yield* Azure.HealthcareApis.Workspace("workspace");
  * const fhir = yield* Azure.HealthcareApis.FhirService("fhir", {
  *   workspace: workspace.workspaceName,
  *   corsConfiguration: {
@@ -248,12 +342,26 @@ export interface FhirService extends Resource<
  * ### Bulk Export
  * **Example:** Managed identity and an export storage account
  * ```typescript
+ * const workspace = yield* Azure.HealthcareApis.Workspace("workspace");
+ * const account = yield* Azure.Storage.StorageAccount("exports");
  * const fhir = yield* Azure.HealthcareApis.FhirService("fhir", {
  *   workspace: workspace.workspaceName,
  *   identity: { type: "SystemAssigned" },
  *   exportStorageAccountName: account.storageAccountName,
  * });
+ * // grant fhir.principalId "Storage Blob Data Contributor" on the account
  * ```
+ *
+ * :::caution
+ * Changing `name`, `workspace`, `resourceGroup`, `location`, `kind`, or
+ * `keyEncryptionKeyUrl` replaces the service and deletes its FHIR data.
+ * :::
+ *
+ * :::caution
+ * The service's full ARM resource ID must be at most 253 characters.
+ * Reconcile fails with `Azure.HealthcareApis.ServiceIdTooLong` for longer
+ * IDs: shorten the resource group, workspace, or service name.
+ * :::
  *
  * @resource
  */
@@ -333,23 +441,20 @@ export const FhirServiceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const workspaces = yield* healthcareapis
-        .ListWorkspaceBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListWorkspaceBySubscription", page)));
+      const workspaces = yield* collectAll(healthcareapis.ListWorkspaceBySubscription, {
+        subscriptionId,
+      });
       const found: FhirService["Attributes"][] = [];
       for (const workspace of workspaces.value ?? []) {
         const group = resourceGroupOf(workspace.id);
         if (group === undefined || workspace.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          healthcareapis.ListFhirServiceByWorkspace({
+          collectAll(healthcareapis.ListFhirServiceByWorkspace, {
             subscriptionId,
             resourceGroupName: group,
             workspaceName: workspace.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListFhirServiceByWorkspace", page);
-        }
         for (const fhir of page?.value ?? []) {
           const name = lastSegment(fhir.name);
           if (hasAnyMarker(fhir.tags) && name !== undefined) {

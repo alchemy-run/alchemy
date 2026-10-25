@@ -29,7 +29,10 @@ import {
 export type AddonType = "SRM" | "VR" | "HCX" | "Arc";
 
 export interface AddonProps {
-  /** Resource group of the private cloud. Changing it replaces the add-on. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the add-on.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the add-on. */
   privateCloud: string;
@@ -39,13 +42,25 @@ export interface AddonProps {
    * it replaces the add-on.
    */
   addonType: AddonType;
-  /** `SRM` only: VMware Site Recovery Manager license key. Write-only. */
+  /**
+   * `SRM` only: VMware Site Recovery Manager license key. Write-only.
+   * @default not set
+   */
   licenseKey?: Redacted.Redacted<string>;
-  /** `VR` only: number of vSphere Replication Servers. */
+  /**
+   * `VR` only: number of vSphere Replication Servers.
+   * @default not set
+   */
   vrsCount?: number;
-  /** `HCX` only: HCX offer, e.g. `VMware MaaS Cloud Provider (Enterprise)`. */
+  /**
+   * `HCX` only: HCX offer, e.g. `VMware MaaS Cloud Provider (Enterprise)`.
+   * @default not set
+   */
   offer?: string;
-  /** `Arc` only: ARM resource ID of the Arc-enabled VMware vCenter. */
+  /**
+   * `Arc` only: ARM resource ID of the Arc-enabled VMware vCenter.
+   * @default not set
+   */
   vCenter?: string;
 }
 
@@ -73,14 +88,25 @@ export interface Addon extends Resource<
 > {}
 
 /**
- * An add-on on an Azure VMware Solution private cloud: VMware HCX, Site
+ * An add-on on an Azure VMware Solution private cloud
+ * (`Microsoft.AVS/privateClouds/addons`): VMware HCX, Site
  * Recovery Manager (SRM), vSphere Replication (VR), or Azure Arc.
+ *
+ * :::caution
+ * Changing `privateCloud`, `addonType`, or `resourceGroup` replaces the
+ * add-on.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/install-vmware-hcx
  *
  * ### Installing HCX
  * **Example:** HCX Enterprise
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
  * yield* Azure.VMware.Addon("hcx", {
  *   privateCloud: cloud.privateCloudName,
  *   addonType: "HCX",
@@ -94,7 +120,7 @@ export interface Addon extends Resource<
  * yield* Azure.VMware.Addon("srm", {
  *   privateCloud: cloud.privateCloudName,
  *   addonType: "SRM",
- *   licenseKey: Redacted.make(srmLicenseKey),
+ *   licenseKey: yield* Config.redacted("SRM_LICENSE_KEY"),
  * });
  * yield* Azure.VMware.Addon("vr", {
  *   privateCloud: cloud.privateCloudName,

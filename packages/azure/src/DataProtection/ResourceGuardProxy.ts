@@ -20,7 +20,10 @@ import { isVaultOwnedByStack, NAMESPACE, sameText } from "./Common.ts";
 const PROXY_NAME = "DppResourceGuardProxy";
 
 export interface ResourceGuardProxyProps {
-  /** Resource group of the Backup vault. Changing it replaces the proxy. */
+  /**
+   * Resource group of the Backup vault. Changing it replaces the proxy.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Backup vault to protect. Changing it replaces the proxy. */
   backupVault: string;
@@ -32,6 +35,7 @@ export interface ResourceGuardProxyProps {
   /**
    * Free-form description sent when the link is created. Azure does not
    * return it, so later changes are not synced.
+   * @default none
    */
   description?: string;
 }
@@ -70,14 +74,17 @@ export interface ResourceGuardProxy extends Resource<
  * guard excludes
  * `Microsoft.DataProtection/backupVaults/backupResourceGuardProxies/delete`.
  *
- * @see https://learn.microsoft.com/azure/backup/multi-user-authorization
+ * :::caution
+ * Changing `resourceGroup`, `backupVault`, or `resourceGuardId` replaces
+ * the proxy.
+ * :::
+ *
+ * See [Multi-user authorization](https://learn.microsoft.com/azure/backup/multi-user-authorization).
  *
  * ### Protecting a Vault
  * **Example:** Link a vault to a resource guard
  * ```typescript
- * const guard = yield* Azure.DataProtection.ResourceGuard("guard", {
- *   resourceGroup: securityGroup.resourceGroupName,
- * });
+ * const guard = yield* Azure.DataProtection.ResourceGuard("guard");
  * const vault = yield* Azure.DataProtection.BackupVault("vault");
  * yield* Azure.DataProtection.ResourceGuardProxy("mua", {
  *   backupVault: vault.backupVaultName,

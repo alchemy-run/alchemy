@@ -15,9 +15,22 @@ export interface NetworkRuleSetIpRule {
 }
 
 export interface NetworkRuleSetProps {
-  /** Resource group of the namespace. Changing it replaces the rule set. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the rule set.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Relay namespace the rule set applies to. Changing it replaces the rule set. */
+  /**
+   * Relay namespace the rule set applies to.
+   *
+   * :::caution
+   * Changing it replaces the rule set.
+   * :::
+   */
   namespace: string;
   /**
    * Action for traffic that matches no rule.
@@ -34,7 +47,10 @@ export interface NetworkRuleSetProps {
    * @default false
    */
   trustedServiceAccessEnabled?: boolean;
-  /** IP ranges allowed when `defaultAction` is `Deny`. */
+  /**
+   * IP ranges allowed when `defaultAction` is `Deny`.
+   * @default []
+   */
   ipRules?: NetworkRuleSetIpRule[];
 }
 
@@ -63,8 +79,8 @@ export interface NetworkRuleSet extends Resource<
 
 /**
  * The network firewall of an Azure Relay namespace (the singleton
- * `networkRuleSets/default`): default action, public access, trusted
- * services, and IP rules.
+ * `Microsoft.Relay/namespaces/networkRuleSets/default`): default action,
+ * public access, trusted services, and IP rules.
  *
  * Every namespace already has a rule set, so this resource converges the
  * existing one instead of creating it; destroying it resets the namespace
@@ -85,6 +101,7 @@ export interface NetworkRuleSet extends Resource<
  *
  * **Example:** Disable the public endpoint, allow trusted services
  * ```typescript
+ * const ns = yield* Azure.Relay.Namespace("relay");
  * yield* Azure.Relay.NetworkRuleSet("relay-firewall", {
  *   namespace: ns.namespaceName,
  *   publicNetworkAccess: "Disabled",

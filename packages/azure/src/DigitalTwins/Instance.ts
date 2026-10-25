@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -39,13 +39,17 @@ export interface InstanceIdentity {
 }
 
 export interface InstanceProps {
-  /** Resource group the instance is created in. Changing it replaces the instance. */
+  /**
+   * Resource group the instance is created in. Changing it replaces the instance.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Instance name: 3-63 letters, digits, and hyphens, starting and ending
    * with a letter or digit. It becomes the globally unique data-plane host
    * name. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the instance.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -67,6 +71,7 @@ export interface InstanceProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -105,13 +110,19 @@ export interface Instance extends Resource<
 > {}
 
 /**
- * An Azure Digital Twins instance — a live graph of digital twins of
+ * An Azure Digital Twins instance (`Microsoft.DigitalTwins/digitalTwinsInstances`)
+ * — a live graph of digital twins of
  * physical environments, queried and updated through its data-plane API.
  * There is no hourly fee: Digital Twins bills per operation, query, and
  * message.
  *
  * Data-plane access needs the `Azure Digital Twins Data Owner` (or Reader)
  * role on the instance.
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the instance.
+ * The new instance starts with an empty twin graph.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/digital-twins/overview
  *
@@ -133,6 +144,8 @@ export interface Instance extends Resource<
  * ### Granting Data-Plane Access
  * **Example:** Let an identity manage twins
  * ```typescript
+ * const twins = yield* Azure.DigitalTwins.Instance("factory");
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api");
  * yield* Azure.Authorization.RoleAssignment("api-owns-twins", {
  *   scope: twins.instanceId,
  *   // Azure Digital Twins Data Owner
@@ -200,14 +213,7 @@ export const InstanceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* digitaltwins.ListDigitalTwins({ subscriptionId }).pipe(
-        Effect.flatMap((page) =>
-          requireSinglePage("ListDigitalTwins", {
-            ...page,
-            nextLink: page.nextLink ?? undefined,
-          }),
-        ),
-      );
+      const page = yield* collectAll(digitaltwins.ListDigitalTwins, { subscriptionId });
       return (page.value ?? []).flatMap((instance) => {
         const group = resourceGroupOf(instance.id);
         return hasAnyAlchemyTag(instance.tags ?? undefined) &&

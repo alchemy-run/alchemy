@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -29,7 +29,10 @@ export type NetworkFunctionType = "VirtualNetworkFunction" | "ContainerizedNetwo
 export type NetworkFunctionDefinitionVersionState = "Preview" | "Active" | "Deprecated";
 
 export interface NetworkFunctionDefinitionVersionProps {
-  /** Resource group of the publisher. Changing it replaces the version. */
+  /**
+   * Resource group of the publisher. Changing it replaces the version.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the publisher. Changing it replaces the version. */
   publisher: string;
@@ -51,11 +54,16 @@ export interface NetworkFunctionDefinitionVersionProps {
   location?: string;
   /** Kind of network function the version describes. Changing it replaces the version. */
   networkFunctionType: NetworkFunctionType;
-  /** Description of the version. Versions are immutable; changing it replaces the version. */
+  /**
+   * Description of the version. Versions are immutable; changing it
+   * replaces the version.
+   * @default unset
+   */
   description?: string;
   /**
    * JSON schema (as a string) of the deployment parameters operators supply.
    * Changing it replaces the version.
+   * @default unset (no deployment parameters)
    */
   deployParameters?: string;
   /**
@@ -67,11 +75,13 @@ export interface NetworkFunctionDefinitionVersionProps {
   /**
    * Version state. New versions start in `Preview`; set `Active` to publish
    * the version or `Deprecated` to retire it. Updated in place.
+   * @default "Preview" on create; unchanged on update
    */
   versionState?: NetworkFunctionDefinitionVersionState;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -106,18 +116,23 @@ export interface NetworkFunctionDefinitionVersion extends Resource<
 > {}
 
 /**
- * An Azure Operator Service Manager network function definition version —
- * an immutable, versioned description of how to deploy one network function
- * (its applications, artifacts and deployment parameters).
- *
- * Versions are immutable once created: changing any definition property
- * replaces the version. Only the version state and tags update in place.
+ * An Azure Operator Service Manager network function definition version
+ * (`Microsoft.HybridNetwork/publishers/networkFunctionDefinitionGroups/networkFunctionDefinitionVersions`):
+ * an immutable, versioned description of how to deploy one network
+ * function (its applications, artifacts, and deployment parameters).
  *
  * @see https://learn.microsoft.com/azure/operator-service-manager/network-function-definition-version-overview
  *
  * ### Creating a Version
  * **Example:** Virtual network function definition version
  * ```typescript
+ * const publisher = yield* Azure.HybridNetwork.Publisher("publisher");
+ * const store = yield* Azure.HybridNetwork.ArtifactStore("store", {
+ *   publisher: publisher.publisherName,
+ * });
+ * const nfdg = yield* Azure.HybridNetwork.NetworkFunctionDefinitionGroup("firewall", {
+ *   publisher: publisher.publisherName,
+ * });
  * const nfdv = yield* Azure.HybridNetwork.NetworkFunctionDefinitionVersion(
  *   "firewall-1-0-0",
  *   {
@@ -149,11 +164,21 @@ export interface NetworkFunctionDefinitionVersion extends Resource<
  * ### Publishing a Version
  * **Example:** Mark the version Active
  * ```typescript
+ * // props: the props of the example above
  * const nfdv = yield* Azure.HybridNetwork.NetworkFunctionDefinitionVersion(
  *   "firewall-1-0-0",
  *   { ...props, versionState: "Active" },
  * );
  * ```
+ *
+ * :::caution
+ * Versions are immutable. Changing `version`, `publisher`,
+ * `networkFunctionDefinitionGroup`, `location`, `resourceGroup`,
+ * `networkFunctionType`, `description`, `deployParameters`, or
+ * `networkFunctionTemplate` replaces the version. A replacement with the
+ * same `version` deletes the old one first. Only `versionState` and `tags`
+ * update in place.
+ * :::
  *
  * @resource
  */
@@ -223,9 +248,9 @@ export const NetworkFunctionDefinitionVersionProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const publishers = yield* hybridnetwork
-        .ListPublisherBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPublisherBySubscription", page)));
+      const publishers = yield* collectAll(hybridnetwork.ListPublisherBySubscription, {
+        subscriptionId,
+      });
       const found: NetworkFunctionDefinitionVersion["Attributes"][] = [];
       for (const publisher of publishers.value ?? []) {
         const resourceGroup = resourceGroupOf(publisher.id);
@@ -233,31 +258,25 @@ export const NetworkFunctionDefinitionVersionProvider = () =>
           continue;
         }
         const groups = yield* orUndefinedIfNotFound(
-          hybridnetwork.ListNetworkFunctionDefinitionGroupByPublisher({
+          collectAll(hybridnetwork.ListNetworkFunctionDefinitionGroupByPublisher, {
             subscriptionId,
             resourceGroupName: resourceGroup,
             publisherName: publisher.name,
           }),
         );
-        if (groups !== undefined) {
-          yield* requireSinglePage("ListNetworkFunctionDefinitionGroupByPublisher", groups);
-        }
         for (const group of groups?.value ?? []) {
           if (group.name === undefined) continue;
           const page = yield* orUndefinedIfNotFound(
-            hybridnetwork.ListNetworkFunctionDefinitionVersionByNetworkFunctionDefinitionGroup({
-              subscriptionId,
-              resourceGroupName: resourceGroup,
-              publisherName: publisher.name,
-              networkFunctionDefinitionGroupName: group.name,
-            }),
+            collectAll(
+              hybridnetwork.ListNetworkFunctionDefinitionVersionByNetworkFunctionDefinitionGroup,
+              {
+                subscriptionId,
+                resourceGroupName: resourceGroup,
+                publisherName: publisher.name,
+                networkFunctionDefinitionGroupName: group.name,
+              },
+            ),
           );
-          if (page !== undefined) {
-            yield* requireSinglePage(
-              "ListNetworkFunctionDefinitionVersionByNetworkFunctionDefinitionGroup",
-              page,
-            );
-          }
           for (const item of page?.value ?? []) {
             if (hasAnyAlchemyTag(item.tags) && item.name !== undefined) {
               found.push(toAttrs(resourceGroup, publisher.name, group.name, item.name, item));

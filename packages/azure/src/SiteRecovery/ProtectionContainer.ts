@@ -29,7 +29,10 @@ export interface ProtectionContainerProviderInput {
 }
 
 export interface ProtectionContainerProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the container. */
+  /**
+   * Resource group of the Recovery Services vault. Changing it replaces the container.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Recovery Services vault. Changing it replaces the container. */
   vault: string;
@@ -39,6 +42,7 @@ export interface ProtectionContainerProps {
    * Container name, unique within the fabric. If omitted, a unique
    * lowercase name of up to 32 characters is generated from the app, stage,
    * and logical ID. Changing it replaces the container.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -74,23 +78,42 @@ export interface ProtectionContainer extends Resource<
 > {}
 
 /**
- * An Azure Site Recovery protection container inside a fabric. Protected
- * items live in a container, and a container mapping pairs a primary
- * container with a recovery container under a replication policy.
+ * An Azure Site Recovery protection container
+ * (`Microsoft.RecoveryServices/vaults/replicationFabrics/replicationProtectionContainers`)
+ * inside a fabric. Protected items live in a container, and a container
+ * mapping pairs a primary container with a recovery container under a
+ * replication policy. See the
+ * [Azure docs](https://learn.microsoft.com/rest/api/site-recovery/replication-protection-containers/create).
  *
- * Containers cannot be tagged; Alchemy treats a container as owned when
- * its vault is tagged for the current stack and stage. Every input is
- * immutable, so changing one replaces the container. Delete is the
- * graceful `remove` operation.
+ * Containers have no tags. Alchemy treats a container as owned when its
+ * vault carries this stack's ownership tags. Delete is the graceful `remove` operation.
  *
- * @see https://learn.microsoft.com/rest/api/site-recovery/replication-protection-containers/create
+ * :::caution
+ * Every input is immutable. Changing `resourceGroup`, `vault`, `fabric`,
+ * `name`, or `providerSpecificInput` replaces the container.
+ * :::
  *
  * ### Azure-to-Azure Disaster Recovery
- * **Example:** A2A container in a fabric
+ * **Example:** A2A containers in the primary and recovery fabrics
  * ```typescript
- * const container = yield* Azure.SiteRecovery.ProtectionContainer("primary", {
+ * const vault = yield* Azure.RecoveryServices.Vault("dr-vault", {
+ *   location: "westus2",
+ * });
+ * const primary = yield* Azure.SiteRecovery.Fabric("primary", {
+ *   vault: vault.vaultName,
+ *   location: "eastus",
+ * });
+ * const recovery = yield* Azure.SiteRecovery.Fabric("recovery", {
+ *   vault: vault.vaultName,
+ *   location: "westus2",
+ * });
+ * const primaryContainer = yield* Azure.SiteRecovery.ProtectionContainer("primary", {
  *   vault: vault.vaultName,
  *   fabric: primary.fabricName,
+ * });
+ * const recoveryContainer = yield* Azure.SiteRecovery.ProtectionContainer("recovery", {
+ *   vault: vault.vaultName,
+ *   fabric: recovery.fabricName,
  * });
  * ```
  *
@@ -198,8 +221,7 @@ export const ProtectionContainerProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       yield* ensureRegistered(subscriptionId, SITE_RECOVERY_NAMESPACE);
       const { resourceGroup, vault, fabric } = news;
-      const name =
-        news.name ?? output?.protectionContainerName ?? (yield* createContainerName(id));
+      const name = news.name ?? output?.protectionContainerName ?? (yield* createContainerName(id));
       const get = getContainer(subscriptionId, resourceGroup, vault, fabric, name);
 
       // Observe; ensure (nothing is mutable after creation).

@@ -28,13 +28,15 @@ const record = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 
 /** Event Grid subscription names: 3-64 letters, digits, and hyphens. */
-const subscriptionNameOf = Effect.fn(function* (hostId: string, functionName: string) {
-  const stack = yield* Stack;
-  return `${stack.name}-${stack.stage}-${hostId}-${functionName}`
+const subscriptionNameOf = (
+  stack: { name: string; stage: string },
+  hostId: string,
+  functionName: string,
+) =>
+  `${stack.name}-${stack.stage}-${hostId}-${functionName}`
     .replace(/[^A-Za-z0-9-]+/g, "-")
     .slice(0, 64)
     .replace(/-+$/, "");
-});
 
 /** A timer invocation (`TimerInfo` from the Functions host). */
 export interface TimerInvocation {
@@ -111,7 +113,10 @@ export const StorageQueueEventSource = Layer.effect(
           },
           roleAssignments: [
             { roleDefinitionId: BuiltInRole.StorageQueueDataReader, scope: queue.queueId },
-            { roleDefinitionId: BuiltInRole.StorageQueueDataMessageProcessor, scope: queue.queueId },
+            {
+              roleDefinitionId: BuiltInRole.StorageQueueDataMessageProcessor,
+              scope: queue.queueId,
+            },
           ],
         });
       }
@@ -161,10 +166,11 @@ export const BlobCreatedEventSource = Layer.effect(
   StorageBlobCreatedSource,
   Effect.gen(function* () {
     const host = yield* Function;
+    const stack = yield* Stack;
     return Effect.fn(function* (container, props, handler) {
       const functionName = props.functionName ?? functionNameOf("blob", container.LogicalId);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const subscriptionName = yield* subscriptionNameOf(host.LogicalId, functionName);
+        const subscriptionName = subscriptionNameOf(stack, host.LogicalId, functionName);
         yield* host.bind`Allow(${host}, Azure.Functions.BlobCreatedEventSource(${container}))`({
           eventSubscriptions: [
             {
@@ -349,10 +355,11 @@ export const EventGridEventSource_ = Layer.effect(
   EventGridEventSource,
   Effect.gen(function* () {
     const host = yield* Function;
+    const stack = yield* Stack;
     return Effect.fn(function* (name, props, handler) {
       const functionName = functionNameOf("eventgrid", name);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const subscriptionName = yield* subscriptionNameOf(host.LogicalId, functionName);
+        const subscriptionName = subscriptionNameOf(stack, host.LogicalId, functionName);
         yield* host.bind`Allow(${host}, Azure.Functions.EventGridEventSource(${name}))`({
           eventSubscriptions: [
             {
@@ -386,6 +393,8 @@ export const CosmosDBChangeFeedEventSource = Layer.effect(
   ChangeFeedEventSource,
   Effect.gen(function* () {
     const host = yield* Function;
+    // The data-role assignment is a deploy-time resource.
+    const assignRole = globalThis.__ALCHEMY_RUNTIME__ ? undefined : yield* SqlRoleAssignment;
     return Effect.fn(function* (container, props, handler) {
       const conn = `ALCHEMY_COSMOS_${settingSuffix(container.LogicalId)}`;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -399,14 +408,16 @@ export const CosmosDBChangeFeedEventSource = Layer.effect(
             },
           },
         );
-        yield* SqlRoleAssignment(`${host.LogicalId}${container.LogicalId}ChangeFeedReader`, {
-          resourceGroup: container.resourceGroup,
-          account: container.account,
-          roleDefinitionId: SqlBuiltInRole.DataContributor,
-          // Covers the watched container and the lease container.
-          scope: Output.interpolate`/dbs/${container.database}`,
-          principalId: host.principalId.pipe(Output.map((id) => id ?? "")),
-        });
+        if (assignRole !== undefined) {
+          yield* assignRole(`${host.LogicalId}${container.LogicalId}ChangeFeedReader`, {
+            resourceGroup: container.resourceGroup,
+            account: container.account,
+            roleDefinitionId: SqlBuiltInRole.DataContributor,
+            // Covers the watched container and the lease container.
+            scope: Output.interpolate`/dbs/${container.database}`,
+            principalId: host.principalId.pipe(Output.map((id) => id ?? "")),
+          });
+        }
       }
       yield* host.trigger(
         props.functionName ?? functionNameOf("cosmos", container.LogicalId),

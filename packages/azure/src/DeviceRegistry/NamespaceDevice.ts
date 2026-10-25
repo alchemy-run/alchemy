@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -39,7 +39,10 @@ import {
 export type NamespaceDeviceEndpoints = deviceregistry.MessagingEndpoints;
 
 export interface NamespaceDeviceProps {
-  /** Resource group of the parent namespace. Changing it replaces the device. */
+  /**
+   * Resource group of the parent namespace. Changing it replaces the device.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the parent Device Registry namespace. Changing it replaces the device. */
   namespace: string;
@@ -47,6 +50,7 @@ export interface NamespaceDeviceProps {
    * Device name: lowercase letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the device.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -68,6 +72,7 @@ export interface NamespaceDeviceProps {
   /**
    * Name of the discovered device this device was promoted from. Changing
    * it replaces the device.
+   * @default unset
    */
   discoveredDeviceRef?: string;
   /**
@@ -75,21 +80,40 @@ export interface NamespaceDeviceProps {
    * @default Azure's default (`false`)
    */
   enabled?: boolean;
-  /** Device manufacturer. Changing it replaces the device. */
+  /**
+   * Device manufacturer. Changing it replaces the device.
+   * @default unset
+   */
   manufacturer?: string;
-  /** Device model. Changing it replaces the device. */
+  /**
+   * Device model. Changing it replaces the device.
+   * @default unset
+   */
   model?: string;
-  /** Device operating system. Changing it replaces the device. */
+  /**
+   * Device operating system. Changing it replaces the device.
+   * @default unset
+   */
   operatingSystem?: string;
-  /** Device operating system version. */
+  /**
+   * Device operating system version.
+   * @default unset
+   */
   operatingSystemVersion?: string;
-  /** Inbound and outbound endpoints of the device. */
+  /**
+   * Inbound and outbound endpoints of the device.
+   * @default unset
+   */
   endpoints?: NamespaceDeviceEndpoints;
-  /** Custom key-value attributes of the device. */
+  /**
+   * Custom key-value attributes of the device.
+   * @default {}
+   */
   attributes?: Record<string, unknown>;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -126,9 +150,16 @@ export interface NamespaceDevice extends Resource<
 > {}
 
 /**
- * A device in an Azure Device Registry namespace — the cloud
+ * A device in an Azure Device Registry namespace
+ * (`Microsoft.DeviceRegistry/namespaces/devices`) — the cloud
  * representation of a physical or logical device that Azure IoT
  * Operations connectors (or IoT Hub) talk to.
+ *
+ * :::caution
+ * Changing `namespace`, `name`, `location`, `resourceGroup`,
+ * `customLocationId`, `externalDeviceId`, `discoveredDeviceRef`,
+ * `manufacturer`, `model`, or `operatingSystem` replaces the device.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/iot-operations/discover-manage-assets/overview-manage-assets
  *
@@ -214,15 +245,11 @@ export const NamespaceDeviceProvider = () =>
       const all: NamespaceDevice["Attributes"][] = [];
       for (const ns of namespaces) {
         const page = yield* orUndefinedIfNotFound(
-          deviceregistry
-            .ListNamespaceDeviceByNamespace({
-              subscriptionId,
-              resourceGroupName: ns.resourceGroup,
-              namespaceName: ns.name,
-            })
-            .pipe(
-              Effect.flatMap((page) => requireSinglePage("ListNamespaceDeviceByNamespace", page)),
-            ),
+          collectAll(deviceregistry.ListNamespaceDeviceByNamespace, {
+            subscriptionId,
+            resourceGroupName: ns.resourceGroup,
+            namespaceName: ns.name,
+          }),
         );
         for (const device of page?.value ?? []) {
           if (hasAnyAlchemyTag(device.tags) && device.name !== undefined) {

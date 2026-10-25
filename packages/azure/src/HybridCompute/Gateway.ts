@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -28,11 +28,13 @@ export interface GatewayProps {
   /**
    * Resource group the gateway is created in. Changing it replaces the
    * gateway.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the gateway. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the gateway.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -53,6 +55,7 @@ export interface GatewayProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -90,9 +93,9 @@ export interface Gateway extends Resource<
 > {}
 
 /**
- * An Azure Arc gateway — a single public egress endpoint Arc-enabled
- * servers route their Azure Arc traffic through, so firewalls only need to
- * allow a handful of URLs.
+ * An Azure Arc gateway (`Microsoft.HybridCompute/gateways`): a single
+ * public egress endpoint that Arc-enabled servers route their Azure Arc
+ * traffic through, so firewalls only need to allow a handful of URLs.
  *
  * Provisioning takes 5-25 minutes, and a subscription holds at most five
  * gateways.
@@ -115,11 +118,18 @@ export interface Gateway extends Resource<
  * ### Associating Machines
  * **Example:** Route an Arc machine through the gateway
  * ```typescript
+ * const gateway = yield* Azure.HybridCompute.Gateway("arc-gateway");
  * yield* Azure.HybridCompute.Settings("machine-gateway", {
  *   machineName: "my-server",
  *   gatewayResourceId: gateway.gatewayResourceId,
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the gateway and
+ * changes its `gatewayResourceId`. Every machine routed through it must be
+ * associated with the new gateway.
+ * :::
  *
  * @resource
  */
@@ -183,9 +193,7 @@ export const GatewayProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* hybridcompute
-        .ListGatewayBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListGatewayBySubscription", page)));
+      const page = yield* collectAll(hybridcompute.ListGatewayBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((gateway) => {
         const group = resourceGroupOf(gateway.id);
         return hasAnyAlchemyTag(gateway.tags) && group !== undefined && gateway.name !== undefined

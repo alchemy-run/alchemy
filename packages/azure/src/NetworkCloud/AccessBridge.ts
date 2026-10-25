@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -57,15 +57,25 @@ export interface AccessBridgeProps {
    * replaces the access bridge.
    */
   networkId: string;
-  /** IPv4 prefix (CIDR) for the bridge endpoints. Changing it replaces the bridge. */
+  /**
+   * IPv4 prefix (CIDR) for the bridge endpoints. Changing it replaces the bridge.
+   * @default none
+   */
   ipv4ConnectedPrefix?: string;
-  /** IPv6 prefix (CIDR) for the bridge endpoints. Changing it replaces the bridge. */
+  /**
+   * IPv6 prefix (CIDR) for the bridge endpoints. Changing it replaces the bridge.
+   * @default none
+   */
   ipv6ConnectedPrefix?: string;
-  /** Security rules that govern traffic through the bridge. */
+  /**
+   * Security rules that govern traffic through the bridge.
+   * @default none
+   */
   securityRules?: nc.AccessBridgeSecurityRule[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -107,14 +117,33 @@ export interface AccessBridge extends Resource<
  * name is its type, so one of each kind exists per resource group. Needs a
  * deployed Operator Nexus cluster.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/
+ * ARM type: `Microsoft.NetworkCloud/accessBridges`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `customLocationId`,
+ * `networkId`, `ipv4ConnectedPrefix`, or `ipv6ConnectedPrefix` replaces the
+ * bridge.
+ * :::
  *
  * ### Creating an Access Bridge
  * **Example:** Bastion on an L3 network
  * ```typescript
+ * // An existing Operator Nexus cluster, "site1", in the stack's resource group.
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ExtendedLocation/customLocations/site1-cl";
+ * const l3DomainId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/l3IsolationDomains/tenant";
+ * const l3 = yield* Azure.NetworkCloud.L3Network("l3", {
+ *   customLocationId,
+ *   l3IsolationDomainId: l3DomainId,
+ *   vlan: 1001,
+ *   ipAllocationType: "IPV4",
+ *   ipv4ConnectedPrefix: "10.10.0.0/24",
+ * });
  * const bastion = yield* Azure.NetworkCloud.AccessBridge("bastion", {
  *   name: "Bastion",
- *   customLocationId: cluster.clusterExtendedLocationId,
+ *   customLocationId,
  *   networkId: l3.l3NetworkId,
  *   securityRules: [
  *     { direction: "Inbound", port: "22", ipv4Addresses: ["10.0.0.0/8"] },
@@ -170,9 +199,7 @@ export const AccessBridgeProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* nc
-        .ListAccessBridgeBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListAccessBridgeBySubscription", page)));
+      const page = yield* collectAll(nc.ListAccessBridgeBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

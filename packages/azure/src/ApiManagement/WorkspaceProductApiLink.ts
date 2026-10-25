@@ -52,17 +52,48 @@ export interface WorkspaceProductApiLink extends Resource<
 /**
  * The workspace-scoped counterpart of {@link ProductApiLink}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/workspaces/products/apiLinks`.
  *
  * Adds an API to an API Management product as a named link entity
  * (`products/{productId}/apiLinks/{linkId}`). It expresses the same
  * relation as {@link ProductApi}; use one or the other for a given
  * product and API.
  *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `productName`, `apiName`, `name`,
+ * or `resourceGroup` replaces the link.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
+ *
  * @see https://learn.microsoft.com/rest/api/apimanagement/product-api-link
  *
  * ### Linking APIs to Products
  * **Example:** Publish an API through a product
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
+ * const product = yield* Azure.ApiManagement.WorkspaceProduct("starter", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   displayName: "Starter",
+ *   subscriptionRequired: true,
+ *   state: "published",
+ * });
+ * const api = yield* Azure.ApiManagement.WorkspaceApi("orders", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * yield* Azure.ApiManagement.WorkspaceProductApiLink("starter-orders", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

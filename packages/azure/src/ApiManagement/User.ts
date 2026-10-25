@@ -32,13 +32,25 @@ export interface UserProps {
    * @default "active"
    */
   state?: UserState;
-  /** Optional note about the user set by an administrator. */
+  /**
+   * Optional note about the user set by an administrator.
+   * @default no note
+   */
   note?: string;
-  /** Sign-in password. Only sent when the user is created or updated. */
+  /**
+   * Sign-in password. Only sent when the user is created or updated.
+   * @default no password
+   */
   password?: Redacted.Redacted<string>;
-  /** External identities of the user, e.g. `{ provider: "aad", id: objectId }`. */
+  /**
+   * External identities of the user, e.g. `{ provider: "aad", id: objectId }`.
+   * @default none
+   */
   identities?: apim.UserIdentityContract[];
-  /** Whether a confirmation email is sent on creation (`signup`) or an invitation (`invite`). */
+  /**
+   * Whether a confirmation email is sent on creation (`signup`) or an invitation (`invite`).
+   * @default not set (Azure's default applies)
+   */
   confirmation?: "signup" | "invite";
   /**
    * Developer portal the user belongs to.
@@ -72,12 +84,25 @@ export interface User extends Resource<
  * A developer account of an API Management service. Users hold
  * subscriptions and belong to groups. Not available on the Consumption
  * tier. Deleting the user also deletes its subscriptions.
+ * The ARM type is `Microsoft.ApiManagement/service/users`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the user.
+ *
+ * Users are not available on the Consumption tier ("Method not allowed in
+ * Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-create-or-invite-developers
  *
  * ### Creating Users
  * **Example:** A developer account
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const user = yield* Azure.ApiManagement.User("jane", {
  *   serviceName: apim.serviceName,
  *   email: "jane@example.com",
@@ -88,6 +113,11 @@ export interface User extends Resource<
  *
  * **Example:** Block a user
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * yield* Azure.ApiManagement.User("jane", {
  *   serviceName: apim.serviceName,
  *   email: "jane@example.com",

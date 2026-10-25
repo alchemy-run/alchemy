@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,28 +32,50 @@ import {
 
 /** One egress rule from the community to an external destination. */
 export interface CommunityEndpointRule {
-  /** Rule name. */
+  /**
+   * Rule name.
+   * @default not set
+   */
   endpointRuleName?: string;
-  /** Destination: an FQDN, FQDN tag, IP address/CIDR, private network or service tag. */
+  /**
+   * Destination: an FQDN, FQDN tag, IP address/CIDR, private network or service tag.
+   * @default not set
+   */
   destination?: string;
-  /** Kind of destination. */
+  /**
+   * Kind of destination.
+   * @default not set
+   */
   destinationType?: "FQDN" | "FQDNTag" | "IPAddress" | "PrivateNetwork" | "ServiceTag";
-  /** Protocols, e.g. `["TCP"]` or `["HTTPS"]`. */
+  /**
+   * Protocols, e.g. `["TCP"]` or `["HTTPS"]`.
+   * @default not set
+   */
   protocols?: ("ANY" | "TCP" | "UDP" | "ICMP" | "ESP" | "AH" | "HTTPS" | "HTTP")[];
-  /** Ports, e.g. `"443"` or `"8000-8080"`. */
+  /**
+   * Ports, e.g. `"443"` or `"8000-8080"`.
+   * @default not set
+   */
   ports?: string;
-  /** ARM ID of the transit hub the traffic leaves through, if any. */
+  /**
+   * ARM ID of the transit hub the traffic leaves through, if any.
+   * @default not set
+   */
   transitHubResourceId?: string;
 }
 
 export interface CommunityEndpointProps {
-  /** Resource group of the community. Changing it replaces the endpoint. */
+  /**
+   * Resource group of the community. Changing it replaces the endpoint.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the parent community. Changing it replaces the endpoint. */
   community: string;
   /**
    * Endpoint name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the endpoint.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -63,11 +85,15 @@ export interface CommunityEndpointProps {
   location?: string;
   /** Egress rules programmed into the community firewall. */
   ruleCollection: CommunityEndpointRule[];
-  /** Whether rule updates apply `Automatic`ally or need `Manual` approval. */
+  /**
+   * Whether rule updates apply `Automatic`ally or need `Manual` approval.
+   * @default not set
+   */
   updateMode?: "Automatic" | "Manual";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -98,15 +124,24 @@ export interface CommunityEndpoint extends Resource<
 > {}
 
 /**
- * A community endpoint — firewall egress rules from an Azure Virtual
- * Enclaves {@link Community} to an external destination. Enclave
- * connections can target it.
+ * A community endpoint (`Microsoft.Mission/communities/communityEndpoints`)
+ * — firewall egress rules from an Azure Virtual Enclaves {@link Community}
+ * to an external destination. Enclave connections can target it.
+ *
+ * :::caution
+ * Changing `community`, `name`, `location`, or `resourceGroup` replaces the
+ * community endpoint.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-enclaves/overview
  *
  * ### Creating a Community Endpoint
  * **Example:** Allow HTTPS egress to an FQDN
  * ```typescript
+ * const community = yield* Azure.VirtualEnclaves.Community("hub", {
+ *   addressSpace: "10.0.0.0/16",
+ *   firewallSku: "Basic",
+ * });
  * const endpoint = yield* Azure.VirtualEnclaves.CommunityEndpoint("egress", {
  *   community: community.communityName,
  *   ruleCollection: [
@@ -172,22 +207,21 @@ export const CommunityEndpointProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const communities = yield* mission
-        .ListCommunityBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListCommunityBySubscription", page)));
+      const communities = yield* collectAll(mission.ListCommunityBySubscription, {
+        subscriptionId,
+      });
       const results: CommunityEndpoint["Attributes"][] = [];
       for (const community of communities.value) {
         const group = resourceGroupOf(community.id);
         if (group === undefined || community.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          mission.ListCommunityEndpointByCommunityResource({
+          collectAll(mission.ListCommunityEndpointByCommunityResource, {
             subscriptionId,
             resourceGroupName: group,
             communityName: community.name,
           }),
         );
         if (page === undefined) continue;
-        yield* requireSinglePage("ListCommunityEndpointByCommunityResource", page);
         for (const endpoint of page.value) {
           if (hasAnyAlchemyTag(endpoint.tags) && endpoint.name !== undefined) {
             results.push(toAttrs(group, community.name, endpoint.name, endpoint));

@@ -27,7 +27,10 @@ import { DEVTESTLAB_NAMESPACE, labLocation, vmSettingsInput } from "./Common.ts"
 import type { FormulaVmSettings } from "./Formula.ts";
 
 export interface VirtualMachineProps extends FormulaVmSettings {
-  /** Resource group of the lab. Changing it replaces the VM. */
+  /**
+   * Resource group of the lab. Changing it replaces the VM.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the lab. Changing it replaces the VM. */
   lab: string;
@@ -35,19 +38,30 @@ export interface VirtualMachineProps extends FormulaVmSettings {
    * VM name: up to 15 letters, digits, and `-` (the Windows limit, also
    * used for Linux). If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the VM.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** VM size, e.g. `"Standard_B1s"`. Changing it resizes the VM in place. */
   size: string;
-  /** ISO 8601 time after which the lab deletes the VM. Changing it replaces the VM. */
+  /**
+   * ISO 8601 time after which the lab deletes the VM. Changing it replaces the VM.
+   * @default no expiry
+   */
   expirationDate?: string;
-  /** Object ID of the lab user who owns the VM. Changing it replaces the VM. */
+  /**
+   * Object ID of the lab user who owns the VM. Changing it replaces the VM.
+   * @default unset
+   */
   ownerObjectId?: string;
-  /** UPN of the lab user who owns the VM. Changing it replaces the VM. */
+  /**
+   * UPN of the lab user who owns the VM. Changing it replaces the VM.
+   * @default unset
+   */
   ownerUserPrincipalName?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -88,14 +102,42 @@ export interface VirtualMachine extends Resource<
 > {}
 
 /**
- * A DevTest Labs virtual machine — a VM created and governed by a lab
+ * A DevTest Labs virtual machine (`Microsoft.DevTestLab/labs/virtualmachines`)
+ * — a VM created and governed by a lab
  * (policies, auto-shutdown, artifacts, claimable pools).
+ *
+ * :::caution
+ * Only `size` and `tags` update in place. Changing any other setting
+ * (image, credentials, network, `name`, `lab`, `expirationDate`,
+ * `ownerObjectId`, `ownerUserPrincipalName`, or `resourceGroup`) replaces
+ * the VM: Alchemy deletes it and creates a new one.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/devtest-labs/devtest-lab-add-vm
  *
  * ### Creating a Lab VM
  * **Example:** Ubuntu VM with an SSH key
  * ```typescript
+ * const lab = yield* Azure.DevTestLabs.Lab("team-lab");
+ * const vnet = yield* Azure.Network.VirtualNetwork("lab-vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("lab-vms", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const network = yield* Azure.DevTestLabs.LabVirtualNetwork("net", {
+ *   lab: lab.labName,
+ *   externalProviderResourceId: vnet.virtualNetworkId,
+ *   subnetOverrides: [
+ *     {
+ *       resourceId: subnet.subnetId,
+ *       labSubnetName: subnet.subnetName,
+ *       useInVmCreationPermission: "Allow",
+ *     },
+ *   ],
+ * });
+ * const publicKey = "ssh-ed25519 AAAAC3Nza... me@example.com";
  * const vm = yield* Azure.DevTestLabs.VirtualMachine("dev", {
  *   lab: lab.labName,
  *   size: "Standard_B1s",

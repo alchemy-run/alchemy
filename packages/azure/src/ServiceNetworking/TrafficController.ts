@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,11 +32,13 @@ export interface TrafficControllerSecurityPolicyConfigurations {
   /**
    * ARM ID of a `waf` security policy of this traffic controller applied
    * to all its frontends.
+   * @default no policy
    */
   wafSecurityPolicyId?: string;
   /**
    * ARM ID of an `ipAccessRules` security policy of this traffic
    * controller applied to all its frontends.
+   * @default no policy
    */
   ipAccessRulesSecurityPolicyId?: string;
 }
@@ -45,12 +47,14 @@ export interface TrafficControllerProps {
   /**
    * Resource group the traffic controller is created in. Changing it
    * replaces the traffic controller.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Traffic controller name: up to 64 letters, digits, `-`, `_`, and `.`.
    * If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the traffic controller.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -64,11 +68,13 @@ export interface TrafficControllerProps {
    * Security policies applied to every frontend of the traffic controller.
    * The policies are children of this traffic controller, so set this on
    * a later deploy than the one that creates the policy.
+   * @default no policies
    */
   securityPolicyConfigurations?: TrafficControllerSecurityPolicyConfigurations;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -100,20 +106,35 @@ export interface TrafficController extends Resource<
 > {}
 
 /**
- * An Application Gateway for Containers traffic controller — the parent
- * resource that frontends, associations, and security policies hang off.
- * The ALB controller running in an AKS cluster programs it with routing
- * configuration from Gateway API / Ingress resources.
+ * An Application Gateway for Containers traffic controller
+ * (`Microsoft.ServiceNetworking/trafficControllers`): the parent resource of
+ * frontends, associations, and security policies. The ALB controller in an
+ * AKS cluster programs it with routing configuration from Gateway API or
+ * Ingress resources. See the
+ * [Azure docs](https://learn.microsoft.com/azure/application-gateway/for-containers/overview).
  *
  * A traffic controller bills hourly (about $0.017/hour) and provisions in a
  * few minutes.
  *
- * @see https://learn.microsoft.com/azure/application-gateway/for-containers/overview
+ * :::caution
+ * `location` must be a region that supports Application Gateway for
+ * Containers. Security policies are children of the traffic controller, so
+ * set `securityPolicyConfigurations` on a later deploy than the one that
+ * creates the policy.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the traffic
+ * controller and every frontend, association, and policy under it. Alchemy
+ * updates `securityPolicyConfigurations` and `tags` in place.
+ * :::
  *
  * ### Creating a Traffic Controller
- * **Example:** Traffic controller in a resource group
+ * **Example:** Traffic controller in the stack's resource group
  * ```typescript
- * const controller = yield* Azure.ServiceNetworking.TrafficController("alb");
+ * const controller = yield* Azure.ServiceNetworking.TrafficController("alb", {
+ *   location: "eastus",
+ * });
  * // configure the ALB controller with controller.trafficControllerId
  * ```
  *
@@ -178,13 +199,10 @@ export const TrafficControllerProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* servicenetworking
-        .ListTrafficControllerInterfaceBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListTrafficControllerInterfaceBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(
+        servicenetworking.ListTrafficControllerInterfaceBySubscription,
+        { subscriptionId },
+      );
       return (page.value ?? []).flatMap((controller) => {
         const group = resourceGroupOf(controller.id);
         return hasAnyAlchemyTag(controller.tags) &&

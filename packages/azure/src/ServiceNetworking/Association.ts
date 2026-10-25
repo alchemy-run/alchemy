@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -27,6 +27,7 @@ export interface AssociationProps {
   /**
    * Resource group of the traffic controller. Changing it replaces the
    * association.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -39,6 +40,7 @@ export interface AssociationProps {
    * Association name: up to 64 letters, digits, `-`, `_`, and `.`. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the association.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -57,6 +59,7 @@ export interface AssociationProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -89,20 +92,32 @@ export interface Association extends Resource<
 > {}
 
 /**
- * An association of an Application Gateway for Containers traffic
- * controller — connects the traffic controller to a delegated subnet of
- * the virtual network your AKS pods run in, so the proxies can reach the
- * backends.
+ * An association of an Application Gateway for Containers traffic controller
+ * (`Microsoft.ServiceNetworking/trafficControllers/associations`). It
+ * connects the traffic controller to a delegated subnet of the virtual
+ * network your AKS pods run in, so the proxies can reach the backends. See
+ * the
+ * [Azure docs](https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components).
  *
- * Associations bill hourly (about $0.12/hour) and take several minutes to
- * inject into the subnet and to delete. A traffic controller holds one
- * association.
+ * Associations bill hourly (about $0.12/hour). They take several minutes to
+ * inject into the subnet and to delete.
  *
- * @see https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components
+ * :::caution
+ * The subnet must be delegated to
+ * `Microsoft.ServiceNetworking/trafficControllers`, be at least `/24`, and
+ * hold nothing else. A traffic controller holds one association.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `trafficController`, `name`, `location`, or
+ * `subnetId` replaces the association. Alchemy deletes the old association
+ * before it creates the new one. Alchemy updates `tags` in place.
+ * :::
  *
  * ### Creating an Association
  * **Example:** Association with a delegated subnet
  * ```typescript
+ * const controller = yield* Azure.ServiceNetworking.TrafficController("alb");
  * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
  *   addressPrefixes: ["10.0.0.0/16"],
  * });
@@ -173,27 +188,21 @@ export const AssociationProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const controllers = yield* servicenetworking
-        .ListTrafficControllerInterfaceBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListTrafficControllerInterfaceBySubscription", page),
-          ),
-        );
+      const controllers = yield* collectAll(
+        servicenetworking.ListTrafficControllerInterfaceBySubscription,
+        { subscriptionId },
+      );
       const found: Association["Attributes"][] = [];
       for (const controller of controllers.value ?? []) {
         const group = resourceGroupOf(controller.id);
         if (group === undefined || controller.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          servicenetworking.ListAssociationsInterfaceByTrafficController({
+          collectAll(servicenetworking.ListAssociationsInterfaceByTrafficController, {
             subscriptionId,
             resourceGroupName: group,
             trafficControllerName: controller.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListAssociationsInterfaceByTrafficController", page);
-        }
         for (const association of page?.value ?? []) {
           if (hasAnyAlchemyTag(association.tags) && association.name !== undefined) {
             found.push(toAttrs(group, controller.name, association.name, association));

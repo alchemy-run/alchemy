@@ -17,6 +17,7 @@ export interface SerialPortProps {
   /**
    * Resource group of the parent VM or scale set. Changing it replaces the
    * serial port.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -67,23 +68,44 @@ export interface SerialPort extends Resource<
 > {}
 
 /**
- * The serial console port of an Azure VM or VM scale set. Use it to turn
- * the Azure Serial Console on or off for one machine. The parent needs boot
- * diagnostics enabled for a console session to connect.
+ * The serial console port of an Azure VM or VM scale set
+ * (`Microsoft.SerialConsole/serialPorts`). Use it to turn the Azure Serial
+ * Console on or off for one machine. See the
+ * [Azure docs](https://learn.microsoft.com/troubleshoot/azure/virtual-machines/windows/serial-console-overview).
  *
- * Port `0` exists implicitly on every VM (enabled by default), so this
- * resource configures it rather than creating it; destroying the resource
- * resets the port to `enabled`. The port carries no tags; ownership follows
- * the parent VM, which must be tagged by the same Alchemy stack and stage.
+ * Port `0` exists on every VM and is enabled by default, so this resource
+ * configures it rather than creating it. Destroying the resource resets the
+ * port to `enabled`. The port carries no tags. Ownership follows the parent
+ * VM, which must carry the same Alchemy stack and stage tags.
+ *
+ * :::caution
+ * A console session only connects when the parent has boot diagnostics
+ * enabled.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `virtualMachine`, `parentType`, or `name`
+ * replaces the serial port. Alchemy updates `state` in place.
+ * :::
  *
  * ### Enabling the Serial Console
  * **Example:** Serial port on a VM
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("vms", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const nic = yield* Azure.Network.NetworkInterface("vm", {
+ *   ipConfigurations: [{ subnetId: subnet.subnetId }],
+ * });
  * const vm = yield* Azure.Compute.VirtualMachine("Vm", {
  *   vmSize: "Standard_B1s",
  *   networkInterfaceIds: [nic.networkInterfaceId],
  *   adminUsername: "azureuser",
- *   sshPublicKeys: [publicKey],
+ *   sshPublicKeys: ["ssh-ed25519 AAAAC3Nza... me@example.com"],
  *   bootDiagnostics: true,
  * });
  * yield* Azure.SerialConsole.SerialPort("Console", {
@@ -95,7 +117,7 @@ export interface SerialPort extends Resource<
  * **Example:** Block console sessions to a VM
  * ```typescript
  * yield* Azure.SerialConsole.SerialPort("Console", {
- *   virtualMachine: vm.virtualMachineName,
+ *   virtualMachine: "web-vm",
  *   state: "disabled",
  * });
  * ```

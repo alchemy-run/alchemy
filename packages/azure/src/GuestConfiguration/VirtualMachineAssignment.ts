@@ -49,19 +49,38 @@ export interface VirtualMachineAssignment extends Resource<
 
 /**
  * A machine configuration (guest configuration) assignment on an Azure
- * virtual machine — audits or applies an OS-level configuration package
- * such as the built-in Linux/Windows security baselines.
+ * virtual machine
+ * (`Microsoft.Compute/virtualMachines/providers/Microsoft.GuestConfiguration/guestConfigurationAssignments`)
+ * — audits or applies an OS-level configuration package such as the
+ * built-in Linux/Windows security baselines. See the
+ * [machine configuration overview](https://learn.microsoft.com/azure/governance/machine-configuration/overview).
  *
+ * :::caution
  * Compliance is only evaluated when the VM has a system-assigned managed
  * identity and the guest configuration extension
  * (`Microsoft.GuestConfiguration` / `ConfigurationForLinux` or
  * `ConfigurationForWindows`); without them the assignment stays `Pending`.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/governance/machine-configuration/overview
+ * :::caution
+ * Changing `resourceGroup`, `virtualMachine`, `name`, `location`, or
+ * `configurationName` replaces the assignment.
+ * :::
  *
  * ### Auditing a Baseline
  * **Example:** Audit the Azure Linux security baseline
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("Vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("Default", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.0.0/24",
+ * });
+ * const nic = yield* Azure.Network.NetworkInterface("Nic", {
+ *   ipConfigurations: [{ subnetId: subnet.subnetId }],
+ * });
+ * const publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... azureuser";
  * const vm = yield* Azure.Compute.VirtualMachine("Vm", {
  *   vmSize: "Standard_B1s",
  *   networkInterfaceIds: [nic.networkInterfaceId],

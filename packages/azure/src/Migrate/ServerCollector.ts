@@ -26,6 +26,7 @@ export interface ServerCollectorProps {
   /**
    * Name of the collector. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the collector.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -37,6 +38,7 @@ export interface ServerCollectorProps {
   /**
    * ARM ID of the discovery site the collector reads inventory from.
    * Changing it replaces the collector.
+   * @default none
    */
   discoverySiteId?: string;
   /**
@@ -77,6 +79,8 @@ export interface ServerCollector extends Resource<
  * — registers an on-premises appliance agent with an assessment project so
  * the physical-server inventory it discovers can be assessed.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/migrate/migrate-appliance-architecture).
+ *
  * The collector is a control-plane registration: it becomes useful once the
  * appliance whose agent it names starts sending heartbeats. Collectors
  * cannot be tagged; Alchemy treats a collector as owned when its
@@ -90,11 +94,12 @@ export interface ServerCollector extends Resource<
  * the old collector before it creates the new one.
  * :::
  *
- * @see https://learn.microsoft.com/azure/migrate/migrate-appliance-architecture
- *
  * ### Registering an Appliance Agent
  * **Example:** Collector for a discovery site's agent
  * ```typescript
+ * const project = yield* Azure.Migrate.AssessmentProject("assess", {
+ *   location: "centralus",
+ * });
  * const site = yield* Azure.Migrate.ServerSite("servers-site", {
  *   location: "centralus",
  * });

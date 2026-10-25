@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -23,46 +23,80 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createPeeringName, getPeeringService } from "./Common.ts";
 
 export interface PeeringServiceProps {
-  /** Resource group the peering service is created in. Changing it replaces the peering service. */
+  /**
+   * Resource group the peering service is created in.
+   *
+   * :::caution
+   * Changing it replaces the peering service.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
-   * Name of the peering service. If omitted, a unique name is generated
-   * from the app, stage, and logical ID. Changing it replaces the peering
-   * service.
+   * Name of the peering service.
+   *
+   * :::caution
+   * Changing it replaces the peering service.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the ARM resource. Changing it replaces the peering
-   * service.
+   * Azure location of the ARM resource.
+   *
+   * :::caution
+   * Changing it replaces the peering service.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
    * Customer location served by the peering service, e.g. a US state
-   * (`Washington`) or a country. Changing it replaces the peering service.
+   * (`Washington`) or a country.
+   *
+   * :::caution
+   * Changing it replaces the peering service.
+   * :::
    */
   peeringServiceLocation: string;
   /**
    * Name of the Peering Service partner provider, as returned by
-   * `ListPeeringServiceProviders` (e.g. `T-Mobile USA`). Changing it
-   * replaces the peering service.
+   * `ListPeeringServiceProviders` (e.g. `T-Mobile USA`).
+   *
+   * :::caution
+   * Changing it replaces the peering service.
+   * :::
    */
   peeringServiceProvider: string;
   /**
    * The provider's primary peering location (one of the provider's
-   * `peeringLocations`). Changing it replaces the peering service.
+   * `peeringLocations`).
+   *
+   * :::caution
+   * Changing it replaces the peering service.
+   * :::
+   * @default none
    */
   providerPrimaryPeeringLocation?: string;
   /**
-   * The provider's backup peering location. Changing it replaces the
-   * peering service.
+   * The provider's backup peering location.
+   *
+   * :::caution
+   * Changing it replaces the peering service.
+   * :::
+   * @default none
    */
   providerBackupPeeringLocation?: string;
-  /** SKU name of the peering service. Changing it replaces the peering service. */
+  /**
+   * SKU name of the peering service. Azure sets it at creation only;
+   * Alchemy does not apply a later change.
+   * @default Azure's default SKU
+   */
   sku?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -97,10 +131,11 @@ export interface PeeringService extends Resource<
 > {}
 
 /**
- * An Azure Peering Service — a connection to Microsoft's network that is
- * routed through a certified Peering Service partner provider for a given
- * customer location. Register your provider-assigned IP prefixes on it
- * with `Azure.Peering.PeeringServicePrefix`.
+ * An Azure Peering Service (`Microsoft.Peering/peeringServices`) — a
+ * connection to Microsoft's network that is routed through a certified
+ * Peering Service partner provider for a given customer location. Register
+ * your provider-assigned IP prefixes on it with
+ * `Azure.Peering.PeeringServicePrefix`.
  *
  * @see https://learn.microsoft.com/azure/peering-service/about
  *
@@ -155,11 +190,7 @@ export const PeeringServiceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* peering
-        .ListPeeringServiceBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListPeeringServiceBySubscription", page)),
-        );
+      const page = yield* collectAll(peering.ListPeeringServiceBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((service) => {
         const group = resourceGroupOf(service.id);
         return hasAnyAlchemyTag(service.tags) && group !== undefined && service.name !== undefined

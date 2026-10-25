@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -40,11 +40,15 @@ import type {
 } from "./Types.ts";
 
 export interface CommunityProps {
-  /** Resource group the community is created in. Changing it replaces the community. */
+  /**
+   * Resource group the community is created in. Changing it replaces the community.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Community name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the community.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -56,20 +60,34 @@ export interface CommunityProps {
    * Single CIDR address space of the community hub, e.g. `"10.0.0.0/16"`.
    * Either `addressSpace` or `addressSpaces` is required. Changing it
    * replaces the community.
+   * @default not set
    */
   addressSpace?: string;
   /**
    * CIDR address spaces of the community hub. Either `addressSpace` or
    * `addressSpaces` is required.
+   * @default not set
    */
   addressSpaces?: string[];
-  /** Custom DNS servers for the community network. */
+  /**
+   * Custom DNS servers for the community network.
+   * @default not set
+   */
   dnsServers?: string[];
-  /** Per-service governance (allow/deny and policy enforcement). */
+  /**
+   * Per-service governance (allow/deny and policy enforcement).
+   * @default not set
+   */
   governedServiceList?: VirtualEnclavesGovernedService[];
-  /** Whether enclaves may override community policies (`Enclave`) or not (`None`). */
+  /**
+   * Whether enclaves may override community policies (`Enclave`) or not (`None`).
+   * @default not set
+   */
   policyOverride?: "Enclave" | "None";
-  /** RBAC role assignments on the community. */
+  /**
+   * RBAC role assignments on the community.
+   * @default not set
+   */
   communityRoleAssignments?: VirtualEnclavesRoleAssignment[];
   /**
    * SKU of the community's Azure Firewall. Azure cannot change the tier of
@@ -79,19 +97,35 @@ export interface CommunityProps {
    * @default "Standard"
    */
   firewallSku?: "Basic" | "Standard" | "Premium";
-  /** Approval requirements for change requests governed by the community. */
+  /**
+   * Approval requirements for change requests governed by the community.
+   * @default not set
+   */
   approvalSettings?: CommunityApprovalSettings;
-  /** Maintenance mode of the community. */
+  /**
+   * Maintenance mode of the community.
+   * @default not set
+   */
   maintenanceModeConfiguration?: VirtualEnclavesMaintenanceMode;
-  /** Diagnostic and flow-log destinations. */
+  /**
+   * Diagnostic and flow-log destinations.
+   * @default not set
+   */
   monitoringSettings?: VirtualEnclavesMonitoringSettings;
-  /** Managed identity type of the community. */
+  /**
+   * Managed identity type of the community.
+   * @default not set
+   */
   identityType?: VirtualEnclavesIdentityType;
-  /** User-assigned identity resource IDs (with a `UserAssigned` identity type). */
+  /**
+   * User-assigned identity resource IDs (with a `UserAssigned` identity type).
+   * @default not set
+   */
   userAssignedIdentityIds?: string[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -130,12 +164,18 @@ export interface Community extends Resource<
 > {}
 
 /**
- * An Azure Virtual Enclaves community — the governed hub of a mission
- * landing zone. Creating one deploys a managed resource group with a
- * Virtual WAN hub, an Azure Firewall and policy, Log Analytics and Key
- * Vault; virtual enclaves attach to it as spokes.
+ * An Azure Virtual Enclaves community (`Microsoft.Mission/communities`) —
+ * the governed hub of a mission landing zone. Creating one deploys a managed
+ * resource group with a Virtual WAN hub, an Azure Firewall and policy, Log
+ * Analytics and Key Vault; virtual enclaves attach to it as spokes.
  *
  * Provisioning takes 30-60+ minutes and the firewall and hub bill hourly.
+ *
+ * :::caution
+ * Changing `name`, `location`, `addressSpace`, `firewallSku`, or
+ * `resourceGroup` replaces the community. A new community takes 30-60+
+ * minutes to provision.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-enclaves/overview
  *
@@ -199,9 +239,7 @@ export const CommunityProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mission
-        .ListCommunityBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListCommunityBySubscription", page)));
+      const page = yield* collectAll(mission.ListCommunityBySubscription, { subscriptionId });
       return page.value.flatMap((community) => {
         const group = resourceGroupOf(community.id);
         return hasAnyAlchemyTag(community.tags) &&

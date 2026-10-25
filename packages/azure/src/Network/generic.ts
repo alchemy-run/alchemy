@@ -14,7 +14,6 @@ import {
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   waitForProvisioned,
@@ -122,10 +121,9 @@ export interface NetworkResourceSpec<
     path: NetworkPath,
     tags: Record<string, string>,
   ) => Op<unknown>;
-  /** Subscription-wide list (tracked resources only). */
+  /** Subscription-wide list (tracked resources only), every page: use `collectAll`. */
   readonly listAll?: (subscriptionId: string) => Op<{
     readonly value?: ReadonlyArray<Obs>;
-    readonly nextLink?: string;
   }>;
   /** Tags of the tracked ancestor that owns an untracked child. */
   readonly ownerTags?: (
@@ -279,9 +277,7 @@ export const networkProvider =
           return [] as Array<Res["Attributes"]>;
         }
         const { subscriptionId } = yield* AzureEnvironment.current;
-        const page = yield* spec
-          .listAll(subscriptionId)
-          .pipe(Effect.flatMap((page) => requireSinglePage(spec.label, page)));
+        const page = yield* spec.listAll(subscriptionId);
         return (page.value ?? []).flatMap((observed) => {
           const path = pathFromId(observed.id, parents);
           return hasAnyAlchemyTag(observed.tags) && path !== undefined

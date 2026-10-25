@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -25,11 +25,15 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { NAMESPACE, sameText } from "./Common.ts";
 
 export interface ResourceGuardProps {
-  /** Resource group the guard is created in. Changing it replaces the guard. */
+  /**
+   * Resource group the guard is created in. Changing it replaces the guard.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Guard name. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the guard.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -48,6 +52,7 @@ export interface ResourceGuardProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -83,22 +88,26 @@ export interface ResourceGuard extends Resource<
  * linked to the guard with a {@link ResourceGuardProxy}, its critical
  * operations (disabling soft delete, deleting backup instances, removing
  * the proxy, …) require permissions on the guard, which usually lives in a
- * security team's resource group or subscription.
+ * security team's resource group or subscription. Set `resourceGroup` to
+ * put the guard in that team's group.
  *
- * @see https://learn.microsoft.com/azure/backup/multi-user-authorization-concept
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the guard. Vaults
+ * linked to the old guard lose multi-user authorization until their
+ * {@link ResourceGuardProxy} points at the new one.
+ * :::
+ *
+ * See [Multi-user authorization](https://learn.microsoft.com/azure/backup/multi-user-authorization-concept).
  *
  * ### Creating a Resource Guard
  * **Example:** Guard protecting every critical operation
  * ```typescript
- * const guard = yield* Azure.DataProtection.ResourceGuard("guard", {
- *   resourceGroup: securityGroup.resourceGroupName,
- * });
+ * const guard = yield* Azure.DataProtection.ResourceGuard("guard");
  * ```
  *
  * **Example:** Guard that lets the proxy be removed without approval
  * ```typescript
  * const guard = yield* Azure.DataProtection.ResourceGuard("guard", {
- *   resourceGroup: securityGroup.resourceGroupName,
  *   vaultCriticalOperationExclusionList: [
  *     "Microsoft.DataProtection/backupVaults/backupResourceGuardProxies/delete",
  *   ],
@@ -155,13 +164,9 @@ export const ResourceGuardProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* dataprotection
-        .GetResourceGuardResourcesInSubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("GetResourceGuardResourcesInSubscription", page),
-          ),
-        );
+      const page = yield* collectAll(dataprotection.GetResourceGuardResourcesInSubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((guard) => {
         const group = resourceGroupOf(guard.id);
         return hasAnyAlchemyTag(guard.tags) && group !== undefined && guard.name !== undefined

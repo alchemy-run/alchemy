@@ -5,10 +5,10 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -150,12 +150,10 @@ const columnOf = (column: string): Column => {
 /** Rules have no GET; find the enabled rule on the column in the list. */
 const getRule = (subscriptionId: string, scope: DatabaseScope, column: Column) =>
   orUndefinedIfNotFound(
-    sql
-      .ListDataMaskingRuleByDatabase({
-        ...databasePath(subscriptionId, scope),
-        dataMaskingPolicyName: POLICY_NAME,
-      })
-      .pipe(Effect.flatMap((page) => requireSinglePage("ListDataMaskingRuleByDatabase", page))),
+    collectAll(sql.ListDataMaskingRuleByDatabase, {
+      ...databasePath(subscriptionId, scope),
+      dataMaskingPolicyName: POLICY_NAME,
+    }),
   ).pipe(
     Effect.map((page) =>
       (page?.value ?? []).find(

@@ -24,24 +24,40 @@ import {
 } from "./common.ts";
 
 export interface WorkloadNetworkDnsServiceProps {
-  /** Resource group of the private cloud. Changing it replaces the DNS service. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the DNS service.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the DNS service. */
   privateCloud: string;
   /**
    * NSX ID of the DNS service. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the DNS service.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name of the DNS service. */
+  /**
+   * Display name of the DNS service.
+   * @default not set
+   */
   displayName?: string;
   /** IP address the DNS forwarder listens on. */
   dnsServiceIp: string;
-  /** NSX ID of the default DNS zone (`Azure.VMware.WorkloadNetworkDnsZone`). */
+  /**
+   * NSX ID of the default DNS zone (`Azure.VMware.WorkloadNetworkDnsZone`).
+   * @default not set
+   */
   defaultDnsZone?: string;
-  /** NSX IDs of FQDN DNS zones for conditional forwarding. */
+  /**
+   * NSX IDs of FQDN DNS zones for conditional forwarding.
+   * @default not set
+   */
   fqdnZones?: string[];
-  /** Log level of the DNS service. */
+  /**
+   * Log level of the DNS service.
+   * @default not set
+   */
   logLevel?: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "FATAL";
 }
 
@@ -70,13 +86,24 @@ export interface WorkloadNetworkDnsService extends Resource<
 
 /**
  * A DNS forwarder service on the NSX-T tier-1 gateway of an Azure VMware
- * Solution private cloud.
+ * Solution private cloud
+ * (`Microsoft.AVS/privateClouds/workloadNetworks/dnsServices`).
+ *
+ * :::caution
+ * Changing `privateCloud`, `name`, or `resourceGroup` replaces the DNS
+ * service.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/configure-dns-azure-vmware-solution
  *
  * ### DNS Forwarding
  * **Example:** DNS forwarder with a default zone
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
  * const zone = yield* Azure.VMware.WorkloadNetworkDnsZone("default", {
  *   privateCloud: cloud.privateCloudName,
  *   domain: [],

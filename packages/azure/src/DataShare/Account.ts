@@ -6,12 +6,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -24,12 +24,16 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { getAccount, sameName } from "./internal.ts";
 
 export interface AccountProps {
-  /** Resource group the account is created in. Changing it replaces the account. */
+  /**
+   * Resource group the account is created in. Changing it replaces the account.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Account name, 3-90 characters (no `<>%&:\?/#*$^();,.|+={}[]!~@`). If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the account.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -40,6 +44,7 @@ export interface AccountProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -76,18 +81,24 @@ export interface Account extends Resource<
 > {}
 
 /**
- * An Azure Data Share account — the top-level container for shares you
- * offer (provider side) and share subscriptions you receive (consumer
- * side). Every account gets a system-assigned managed identity that Data
- * Share uses to read shared stores and write mapped targets.
+ * An Azure Data Share account (`Microsoft.DataShare/accounts`) — the
+ * top-level container for shares you offer (provider side) and share
+ * subscriptions you receive (consumer side). Every account gets a
+ * system-assigned managed identity that Data Share uses to read shared
+ * stores and write mapped targets.
  *
  * Accounts are free; Data Share bills per snapshot execution and data
  * moved.
  *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the account. The
+ * new account has a new managed identity and `principalId`.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/data-share/overview
  *
  * ### Creating an Account
- * **Example:** Account in a resource group
+ * **Example:** Account in the stack's resource group
  * ```typescript
  * const account = yield* Azure.DataShare.Account("sharing");
  * ```
@@ -95,6 +106,8 @@ export interface Account extends Resource<
  * ### Granting the Account Access
  * **Example:** Let the account read a storage account it shares from
  * ```typescript
+ * const account = yield* Azure.DataShare.Account("sharing");
+ * const storage = yield* Azure.Storage.StorageAccount("exports");
  * yield* Azure.Authorization.RoleAssignment("share-reads-source", {
  *   scope: storage.storageAccountId,
  *   roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataReader,
@@ -136,9 +149,7 @@ export const AccountProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* datashare
-        .ListAccountBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListAccountBySubscription", page)));
+      const page = yield* collectAll(datashare.ListAccountBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((account) => {
         const group = resourceGroupOf(account.id);
         return hasAnyAlchemyTag(account.tags) && group !== undefined && account.name !== undefined

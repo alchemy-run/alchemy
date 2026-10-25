@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -47,7 +47,10 @@ export interface EnclaveSubnetConfiguration {
   subnetName: string;
   /** Prefix length of the subnet, e.g. `26` for a /26. */
   networkPrefixSize: number;
-  /** Service delegation of the subnet, e.g. `"Microsoft.Web/serverFarms"`. */
+  /**
+   * Service delegation of the subnet, e.g. `"Microsoft.Web/serverFarms"`.
+   * @default not set
+   */
   subnetDelegation?: string;
 }
 
@@ -56,22 +59,36 @@ export interface EnclaveVirtualNetwork {
   /**
    * Size of the enclave network, e.g. `"small"`, `"medium"`, `"large"`.
    * Changing it replaces the enclave.
+   * @default not set
    */
   networkSize?: string;
-  /** Custom CIDR range of the enclave network. Changing it replaces the enclave. */
+  /**
+   * Custom CIDR range of the enclave network. Changing it replaces the enclave.
+   * @default not set
+   */
   customCidrRange?: string;
-  /** Subnets of the enclave network. */
+  /**
+   * Subnets of the enclave network.
+   * @default not set
+   */
   subnetConfigurations?: EnclaveSubnetConfiguration[];
-  /** Whether subnets of the enclave may talk to each other. */
+  /**
+   * Whether subnets of the enclave may talk to each other.
+   * @default not set
+   */
   allowSubnetCommunication?: boolean;
 }
 
 export interface VirtualEnclaveProps {
-  /** Resource group the enclave is created in. Changing it replaces the enclave. */
+  /**
+   * Resource group the enclave is created in. Changing it replaces the enclave.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Enclave name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the enclave.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -83,38 +100,76 @@ export interface VirtualEnclaveProps {
   communityId: string;
   /** The enclave's spoke virtual network. */
   enclaveVirtualNetwork: EnclaveVirtualNetwork;
-  /** Deploy Azure Bastion into the enclave. */
+  /**
+   * Deploy Azure Bastion into the enclave.
+   * @default not set
+   */
   bastionEnabled?: boolean;
-  /** Whether workload resources are visible to enclave users. */
+  /**
+   * Whether workload resources are visible to enclave users.
+   * @default not set
+   */
   workloadResourceVisibility?: "Enabled" | "Disabled";
-  /** Whether enclave role assignments are inherited by workloads. */
+  /**
+   * Whether enclave role assignments are inherited by workloads.
+   * @default not set
+   */
   rbacInheritance?: "Enabled" | "Disabled";
-  /** RBAC role assignments on the enclave. */
+  /**
+   * RBAC role assignments on the enclave.
+   * @default not set
+   */
   enclaveRoleAssignments?: VirtualEnclavesRoleAssignment[];
-  /** RBAC role assignments on the enclave's workloads. */
+  /**
+   * RBAC role assignments on the enclave's workloads.
+   * @default not set
+   */
   workloadRoleAssignments?: VirtualEnclavesRoleAssignment[];
-  /** Per-service governance (allow/deny and policy enforcement). */
+  /**
+   * Per-service governance (allow/deny and policy enforcement).
+   * @default not set
+   */
   governedServiceList?: VirtualEnclavesGovernedService[];
-  /** Where enclave diagnostics are sent: `CommunityOnly`, `EnclaveOnly` or `Both`. */
+  /**
+   * Where enclave diagnostics are sent: `CommunityOnly`, `EnclaveOnly` or `Both`.
+   * @default not set
+   */
   diagnosticDestination?: "CommunityOnly" | "EnclaveOnly" | "Both";
-  /** Maintenance mode of the enclave. */
+  /**
+   * Maintenance mode of the enclave.
+   * @default not set
+   */
   maintenanceModeConfiguration?: VirtualEnclavesMaintenanceMode;
   /**
    * ARM ID of a dedicated hub of the community to attach to. Changing it
    * replaces the enclave.
+   * @default not set
    */
   dedicatedHubId?: string;
-  /** Approval requirements for change requests on the enclave. */
+  /**
+   * Approval requirements for change requests on the enclave.
+   * @default not set
+   */
   approvalSettings?: VirtualEnclaveApprovalSettings;
-  /** Diagnostic and flow-log destinations. */
+  /**
+   * Diagnostic and flow-log destinations.
+   * @default not set
+   */
   monitoringSettings?: VirtualEnclavesMonitoringSettings;
-  /** Managed identity type of the enclave. */
+  /**
+   * Managed identity type of the enclave.
+   * @default not set
+   */
   identityType?: VirtualEnclavesIdentityType;
-  /** User-assigned identity resource IDs (with a `UserAssigned` identity type). */
+  /**
+   * User-assigned identity resource IDs (with a `UserAssigned` identity type).
+   * @default not set
+   */
   userAssignedIdentityIds?: string[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -143,8 +198,11 @@ export interface VirtualEnclave extends Resource<
     managedAddressSpace: string | undefined;
     /** Subnets of the enclave network with their resolved IDs and prefixes. */
     subnets: {
+      /** Name of the subnet. */
       subnetName: string;
+      /** ARM ID of the subnet. */
       subnetResourceId: string | undefined;
+      /** Address prefix of the subnet (CIDR). */
       addressPrefix: string | undefined;
     }[];
     /** Last provisioning state. */
@@ -159,20 +217,32 @@ export interface VirtualEnclave extends Resource<
 > {}
 
 /**
- * An Azure Virtual Enclave — a governed spoke virtual network and managed
- * resource group attached to a {@link Community}. Workloads, enclave
- * endpoints and enclave connections live inside it.
+ * An Azure Virtual Enclave (`Microsoft.Mission/virtualEnclaves`) — a
+ * governed spoke virtual network and managed resource group attached to a
+ * {@link Community}. Workloads, enclave endpoints and enclave connections
+ * live inside it.
  *
  * Provisioning takes 20-40+ minutes. The first enclave of a community
  * deploys the community's virtual hub; create further enclaves after it
  * (make them depend on its `virtualEnclaveId`), because enclaves created
  * concurrently with it end in provisioning state `Failed`.
  *
+ * :::caution
+ * Changing `name`, `location`, `communityId`, `dedicatedHubId`,
+ * `enclaveVirtualNetwork.networkSize`,
+ * `enclaveVirtualNetwork.customCidrRange`, or `resourceGroup` replaces the
+ * enclave. A new enclave takes 20-40+ minutes to provision.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/virtual-enclaves/overview
  *
  * ### Creating a Virtual Enclave
  * **Example:** Small enclave with one subnet
  * ```typescript
+ * const community = yield* Azure.VirtualEnclaves.Community("hub", {
+ *   addressSpace: "10.0.0.0/16",
+ *   firewallSku: "Basic",
+ * });
  * const enclave = yield* Azure.VirtualEnclaves.VirtualEnclave("spoke", {
  *   communityId: community.communityId,
  *   enclaveVirtualNetwork: {
@@ -192,7 +262,7 @@ export interface VirtualEnclave extends Resource<
  *   enclaveRoleAssignments: [
  *     {
  *       roleDefinitionId: "acdd72a7-3385-48ef-bd42-f606fba81ae7",
- *       principals: [{ id: groupObjectId, type: "Group" }],
+ *       principals: [{ id: "6f1c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f", type: "Group" }],
  *     },
  *   ],
  * });
@@ -245,11 +315,7 @@ export const VirtualEnclaveProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mission
-        .ListVirtualEnclaveBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListVirtualEnclaveBySubscription", page)),
-        );
+      const page = yield* collectAll(mission.ListVirtualEnclaveBySubscription, { subscriptionId });
       return page.value.flatMap((enclave) => {
         const group = resourceGroupOf(enclave.id);
         return hasAnyAlchemyTag(enclave.tags) && group !== undefined && enclave.name !== undefined

@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,11 +32,13 @@ export interface LicenseProps {
   /**
    * Resource group the license is created in. Changing it replaces the
    * license.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the license. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the license.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -79,6 +81,7 @@ export interface LicenseProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -120,8 +123,8 @@ export interface License extends Resource<
 
 /**
  * A Windows Server Extended Security Updates (ESU) license delivered
- * through Azure Arc. Assign it to Arc-enabled servers with a
- * `LicenseProfile`.
+ * through Azure Arc (`Microsoft.HybridCompute/licenses`). Assign it to
+ * Arc-enabled servers with a `LicenseProfile`.
  *
  * A license stays free while `Deactivated`. Setting `state: "Activated"`
  * starts billing for the full ESU term and cannot be refunded.
@@ -150,6 +153,17 @@ export interface License extends Resource<
  *   state: "Activated",
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `target`, `edition`,
+ * `coreType`, or `tenantId` replaces the license. Replacing an activated
+ * license creates a new one; the charge for the old one is not refunded.
+ * :::
+ *
+ * :::caution
+ * Azure only allows increasing `processors` in place. Azure rejects an
+ * update that lowers it.
+ * :::
  *
  * @resource
  */
@@ -200,9 +214,7 @@ export const LicenseProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* hybridcompute
-        .ListLicenseBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListLicenseBySubscription", page)));
+      const page = yield* collectAll(hybridcompute.ListLicenseBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((license) => {
         const group = resourceGroupOf(license.id);
         return hasAnyAlchemyTag(license.tags) && group !== undefined && license.name !== undefined

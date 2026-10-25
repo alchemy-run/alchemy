@@ -6,10 +6,10 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   waitForProvisioned,
   waitUntilGone,
@@ -53,36 +53,78 @@ export interface SrvRecord {
 
 /** The records of a record set, by type. Only the field for `recordType` is used. */
 export interface Records {
-  /** IPv4 addresses (`A` record sets). */
+  /**
+   * IPv4 addresses (`A` record sets).
+   * @default []
+   */
   aRecords?: string[];
-  /** IPv6 addresses (`AAAA` record sets). */
+  /**
+   * IPv6 addresses (`AAAA` record sets).
+   * @default []
+   */
   aaaaRecords?: string[];
-  /** Canonical name (`CNAME` record sets hold exactly one). */
+  /**
+   * Canonical name (`CNAME` record sets hold exactly one).
+   * @default none
+   */
   cname?: string;
-  /** Mail exchangers (`MX` record sets). */
+  /**
+   * Mail exchangers (`MX` record sets).
+   * @default []
+   */
   mxRecords?: MxRecord[];
-  /** Target domain names (`PTR` record sets). */
+  /**
+   * Target domain names (`PTR` record sets).
+   * @default []
+   */
   ptrRecords?: string[];
-  /** Service locations (`SRV` record sets). */
+  /**
+   * Service locations (`SRV` record sets).
+   * @default []
+   */
   srvRecords?: SrvRecord[];
   /**
    * Text values (`TXT` record sets), one string per record. Values longer
    * than 255 characters are split into 255-character strings.
+   * @default []
    */
   txtRecords?: string[];
 }
 
 export interface RecordSetProps extends Records {
-  /** Resource group of the zone. Changing it replaces the record set. */
+  /**
+   * Resource group of the zone.
+   *
+   * :::caution
+   * Changing it replaces the record set.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the private DNS zone. Changing it replaces the record set. */
+  /**
+   * Name of the private DNS zone.
+   *
+   * :::caution
+   * Changing it replaces the record set.
+   * :::
+   */
   privateZoneName: string;
-  /** DNS record type. Changing it replaces the record set. */
+  /**
+   * DNS record type.
+   *
+   * :::caution
+   * Changing it replaces the record set.
+   * :::
+   */
   recordType: RecordType;
   /**
    * Record set name relative to the zone, e.g. `www`, or `@` for the zone
-   * apex. If omitted, a unique lowercase name is generated from the app,
-   * stage, and logical ID. Changing it replaces the record set.
+   * apex.
+   *
+   * :::caution
+   * Changing it replaces the record set.
+   * :::
+   * @default a unique lowercase name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -94,6 +136,7 @@ export interface RecordSetProps extends Records {
    * User metadata (keys: letters, digits, and `_`). Alchemy ownership
    * markers (`alchemy_stack`, `alchemy_stage`, `alchemy_id`) are merged in
    * because record sets have no tags.
+   * @default {}
    */
   metadata?: Record<string, string>;
 }
@@ -138,8 +181,14 @@ export interface RecordSet extends Resource<
 > {}
 
 /**
- * A DNS record set in an Azure Private DNS zone: all records of one type
- * under one name.
+ * A DNS record set in an Azure Private DNS zone
+ * (`Microsoft.Network/privateDnsZones/{A,AAAA,CNAME,MX,PTR,SRV,TXT}`): all
+ * records of one type under one name.
+ *
+ * :::caution
+ * A CNAME cannot share a name with other records, so a replacement that
+ * keeps the same zone and name deletes the old record set first.
+ * :::
  *
  * Record sets cannot be tagged, so Alchemy records ownership in the record
  * set's metadata. Records auto-registered by virtual machines are never
@@ -150,6 +199,9 @@ export interface RecordSet extends Resource<
  * ### Address Records
  * **Example:** A record with two addresses
  * ```typescript
+ * const zone = yield* Azure.PrivateDns.Zone("internal", {
+ *   name: "internal.contoso.com",
+ * });
  * const www = yield* Azure.PrivateDns.RecordSet("www", {
  *   privateZoneName: zone.privateZoneName,
  *   recordType: "A",
@@ -162,6 +214,9 @@ export interface RecordSet extends Resource<
  * ### Aliases and Text
  * **Example:** CNAME record
  * ```typescript
+ * const zone = yield* Azure.PrivateDns.Zone("internal", {
+ *   name: "internal.contoso.com",
+ * });
  * yield* Azure.PrivateDns.RecordSet("api", {
  *   privateZoneName: zone.privateZoneName,
  *   recordType: "CNAME",
@@ -172,6 +227,9 @@ export interface RecordSet extends Resource<
  *
  * **Example:** TXT record
  * ```typescript
+ * const zone = yield* Azure.PrivateDns.Zone("internal", {
+ *   name: "internal.contoso.com",
+ * });
  * yield* Azure.PrivateDns.RecordSet("verify", {
  *   privateZoneName: zone.privateZoneName,
  *   recordType: "TXT",
@@ -183,6 +241,9 @@ export interface RecordSet extends Resource<
  * ### Service Records
  * **Example:** SRV record
  * ```typescript
+ * const zone = yield* Azure.PrivateDns.Zone("internal", {
+ *   name: "internal.contoso.com",
+ * });
  * yield* Azure.PrivateDns.RecordSet("ldap", {
  *   privateZoneName: zone.privateZoneName,
  *   recordType: "SRV",
@@ -389,23 +450,18 @@ export const RecordSetProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const zones = yield* privatedns
-        .ListPrivateZones({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPrivateZones", page)));
+      const zones = yield* collectAll(privatedns.ListPrivateZones, { subscriptionId });
       const found: RecordSet["Attributes"][] = [];
       for (const zone of zones.value ?? []) {
         const group = resourceGroupOf(zone.id);
         if (group === undefined || zone.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          privatedns.ListRecordSets({
+          collectAll(privatedns.ListRecordSets, {
             subscriptionId,
             resourceGroupName: group,
             privateZoneName: zone.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListRecordSets", page);
-        }
         for (const recordSet of page?.value ?? []) {
           const recordType = recordTypeOf(recordSet.type);
           if (

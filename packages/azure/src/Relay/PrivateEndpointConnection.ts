@@ -6,10 +6,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -29,20 +29,42 @@ export class PrivateEndpointConnectionMissing extends Data.TaggedError(
 export type PrivateEndpointConnectionStatus = "Approved" | "Rejected";
 
 export interface PrivateEndpointConnectionProps {
-  /** Resource group of the namespace. Changing it replaces the resource. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the resource.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Relay namespace the private endpoint targets. Changing it replaces the resource. */
+  /**
+   * Relay namespace the private endpoint targets.
+   *
+   * :::caution
+   * Changing it replaces the resource.
+   * :::
+   */
   namespace: string;
   /**
    * ARM resource ID of the private endpoint whose connection is managed —
    * typically `Azure.Network.PrivateEndpoint(...).privateEndpointId`. The
-   * connection is looked up by this ID. Changing it replaces the resource.
+   * connection is looked up by this ID.
+   *
+   * :::caution
+   * Changing it replaces the resource.
+   * :::
+   * @default none (then `name` is required)
    */
   privateEndpointId?: string;
   /**
-   * Name of the connection, when known (Azure generates it when the
-   * private endpoint is created). Either `name` or `privateEndpointId` is
-   * required. Changing it replaces the resource.
+   * Name of the connection, when known (Azure generates it when the private
+   * endpoint is created). Either `name` or `privateEndpointId` is required.
+   *
+   * :::caution
+   * Changing it replaces the resource.
+   * :::
+   * @default the name of the connection that `privateEndpointId` matches
    */
   name?: string;
   /**
@@ -50,7 +72,10 @@ export interface PrivateEndpointConnectionProps {
    * @default "Approved"
    */
   status?: PrivateEndpointConnectionStatus;
-  /** Reason shown to the private endpoint owner. */
+  /**
+   * Reason shown to the private endpoint owner.
+   * @default none
+   */
   description?: string;
 }
 
@@ -79,7 +104,8 @@ export interface PrivateEndpointConnection extends Resource<
 
 /**
  * Approves (or rejects) a private endpoint connection to an Azure Relay
- * namespace. The connection itself is created by the private endpoint
+ * namespace (`Microsoft.Relay/namespaces/privateEndpointConnections`). The
+ * connection itself is created by the private endpoint
  * (`Azure.Network.PrivateEndpoint` with
  * `manualPrivateLinkServiceConnections`); this resource takes it over and
  * drives its approval state. Deleting it removes the connection, which
@@ -94,6 +120,13 @@ export interface PrivateEndpointConnection extends Resource<
  * **Example:** Manual-approval endpoint, approved by the namespace owner
  * ```typescript
  * const ns = yield* Azure.Relay.Namespace("relay");
+ * const vnet = yield* Azure.Network.VirtualNetwork("net", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("endpoints", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
  * const endpoint = yield* Azure.Network.PrivateEndpoint("relay-pe", {
  *   subnetId: subnet.subnetId,
  *   manualPrivateLinkServiceConnections: [
@@ -137,9 +170,7 @@ const findConnection = (
     if (name !== undefined) return yield* getConnection(parent, name);
     if (privateEndpointId === undefined) return undefined;
     const page = yield* orUndefinedIfNotFound(
-      relay
-        .ListPrivateEndpointConnections(parent)
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPrivateEndpointConnections", page))),
+      collectAll(relay.ListPrivateEndpointConnections, parent),
     );
     return (page?.value ?? []).find((connection) =>
       sameName(connection.properties?.privateEndpoint?.id, privateEndpointId),

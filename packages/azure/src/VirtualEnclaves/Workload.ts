@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -31,13 +31,17 @@ import {
 } from "./Common.ts";
 
 export interface WorkloadProps {
-  /** Resource group of the enclave. Changing it replaces the workload. */
+  /**
+   * Resource group of the enclave. Changing it replaces the workload.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the parent virtual enclave. Changing it replaces the workload. */
   virtualEnclave: string;
   /**
    * Workload name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the workload.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -48,11 +52,13 @@ export interface WorkloadProps {
   /**
    * ARM IDs of existing resource groups governed by the workload. If
    * omitted, the service creates the workload's resource group.
+   * @default a resource group the service creates
    */
   resourceGroupCollection?: string[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -83,15 +89,28 @@ export interface Workload extends Resource<
 > {}
 
 /**
- * A workload — a governed resource group inside an Azure
- * {@link VirtualEnclave} where application resources are deployed under
- * the enclave's policies and role assignments.
+ * A workload (`Microsoft.Mission/virtualEnclaves/workloads`) — a governed
+ * resource group inside an Azure {@link VirtualEnclave} where application
+ * resources are deployed under the enclave's policies and role assignments.
+ *
+ * :::caution
+ * Changing `virtualEnclave`, `name`, `location`, or `resourceGroup` replaces
+ * the workload.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-enclaves/overview
  *
  * ### Creating a Workload
  * **Example:** Workload in an enclave
  * ```typescript
+ * const community = yield* Azure.VirtualEnclaves.Community("hub", {
+ *   addressSpace: "10.0.0.0/16",
+ *   firewallSku: "Basic",
+ * });
+ * const enclave = yield* Azure.VirtualEnclaves.VirtualEnclave("spoke", {
+ *   communityId: community.communityId,
+ *   enclaveVirtualNetwork: { networkSize: "small" },
+ * });
  * const workload = yield* Azure.VirtualEnclaves.Workload("app", {
  *   virtualEnclave: enclave.virtualEnclaveName,
  * });
@@ -140,24 +159,21 @@ export const WorkloadProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const enclaves = yield* mission
-        .ListVirtualEnclaveBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListVirtualEnclaveBySubscription", page)),
-        );
+      const enclaves = yield* collectAll(mission.ListVirtualEnclaveBySubscription, {
+        subscriptionId,
+      });
       const results: Workload["Attributes"][] = [];
       for (const enclave of enclaves.value) {
         const group = resourceGroupOf(enclave.id);
         if (group === undefined || enclave.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          mission.ListWorkloadByEnclaveResource({
+          collectAll(mission.ListWorkloadByEnclaveResource, {
             subscriptionId,
             resourceGroupName: group,
             virtualEnclaveName: enclave.name,
           }),
         );
         if (page === undefined) continue;
-        yield* requireSinglePage("ListWorkloadByEnclaveResource", page);
         for (const workload of page.value) {
           if (hasAnyAlchemyTag(workload.tags) && workload.name !== undefined) {
             results.push(toAttrs(group, enclave.name, workload.name, workload));

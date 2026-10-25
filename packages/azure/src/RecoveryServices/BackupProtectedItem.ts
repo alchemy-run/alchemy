@@ -7,11 +7,11 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
   ProvisioningTimedOut,
-  requireSinglePage,
   resourceGroupOf,
   waitUntilGone,
 } from "../Arm.ts";
@@ -32,38 +32,71 @@ export type BackupProtectedItemType =
   | "AzureVmWorkloadSAPHanaDatabase";
 
 export interface BackupProtectedItemProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the item. */
+  /**
+   * Resource group of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the item and deletes its backup data.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the Recovery Services vault. Changing it replaces the item. */
+  /**
+   * Name of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the item and deletes its backup data.
+   * :::
+   */
   vault: string;
   /**
    * What is backed up: `AzureFileShareProtectedItem` (an Azure file share),
    * `Microsoft.Compute/virtualMachines` (an Azure VM), or a workload
-   * database inside a VM. Changing it replaces the item.
+   * database inside a VM.
+   *
+   * :::caution
+   * Changing it replaces the item and deletes its backup data.
+   * :::
    */
   protectedItemType: BackupProtectedItemType;
   /**
    * ARM ID of the source: the storage account for file shares, the VM for
-   * VM backup. Changing it replaces the item.
+   * VM backup.
+   *
+   * :::caution
+   * Changing it replaces the item and deletes its backup data.
+   * :::
    */
   sourceResourceId: string;
   /**
    * Container holding the item, e.g. a
-   * {@link BackupProtectionContainer}'s `containerName`. Derived for VMs
-   * (`iaasvmcontainer;iaasvmcontainerv2;<rg>;<vm>`). Changing it replaces
-   * the item.
+   * {@link BackupProtectionContainer}'s `containerName`. Required for file
+   * shares.
+   *
+   * :::caution
+   * Changing it replaces the item and deletes its backup data.
+   * :::
+   * @default derived for VMs (`iaasvmcontainer;iaasvmcontainerv2;<rg>;<vm>`)
    */
   containerName?: string;
   /**
    * Name of the item to protect. For file shares, pass `friendlyName`
-   * (the share name) instead and Alchemy discovers the item name; for VMs
-   * it is derived (`VM;iaasvmcontainerv2;<rg>;<vm>`). Changing it replaces
-   * the item.
+   * (the share name) instead and Alchemy discovers the item name.
+   *
+   * :::caution
+   * Changing it replaces the item and deletes its backup data.
+   * :::
+   * @default derived for VMs (`VM;iaasvmcontainerv2;<rg>;<vm>`)
    */
   protectedItemName?: string;
   /**
    * Friendly name of the data source to discover, e.g. the file share
-   * name. Changing it replaces the item.
+   * name.
+   *
+   * :::caution
+   * Changing it replaces the item and deletes its backup data.
+   * :::
+   * @default none
    */
   friendlyName?: string;
   /** ARM ID of the {@link BackupPolicy} that protects the item. */
@@ -104,16 +137,21 @@ export interface BackupProtectedItem extends Resource<
 > {}
 
 /**
- * Enables Azure Backup for a data source — an Azure file share or a
+ * A backup protected item
+ * (`Microsoft.RecoveryServices/vaults/backupFabrics/protectionContainers/protectedItems`):
+ * enables Azure Backup for a data source — an Azure file share or a
  * virtual machine — with a {@link BackupPolicy}.
  *
  * Protected items cannot be tagged; Alchemy treats an item as owned when
  * its vault is tagged for the current stack and stage. Changing the policy
- * updates the item in place. Destroying the resource stops protection and
- * deletes the backup data; when soft delete is on (new vaults default to
- * the irreversible `AlwaysON`) the item is kept soft-deleted for the
- * retention period (14 days by default) and the vault cannot be deleted
- * until it expires.
+ * updates the item in place.
+ *
+ * :::caution
+ * Destroying the resource stops protection and deletes the backup data.
+ * When soft delete is on (new vaults default to the irreversible
+ * `AlwaysON`), Azure keeps the item soft-deleted for the retention period
+ * (14 days by default), and you cannot delete the vault until it expires.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/backup/backup-azure-file-share-rest-api
  *
@@ -132,6 +170,23 @@ export interface BackupProtectedItem extends Resource<
  *     sourceResourceId: account.storageAccountId,
  *   },
  * );
+ * const policy = yield* Azure.RecoveryServices.BackupPolicy("policy", {
+ *   vault: vault.vaultName,
+ *   backupManagementType: "AzureStorage",
+ *   workLoadType: "AzureFileShare",
+ *   schedulePolicy: {
+ *     schedulePolicyType: "SimpleSchedulePolicy",
+ *     scheduleRunFrequency: "Daily",
+ *     scheduleRunTimes: ["2026-01-01T23:00:00Z"],
+ *   },
+ *   retentionPolicy: {
+ *     retentionPolicyType: "LongTermRetentionPolicy",
+ *     dailySchedule: {
+ *       retentionTimes: ["2026-01-01T23:00:00Z"],
+ *       retentionDuration: { count: 7, durationType: "Days" },
+ *     },
+ *   },
+ * });
  * yield* Azure.RecoveryServices.BackupProtectedItem("share-backup", {
  *   vault: vault.vaultName,
  *   protectedItemType: "AzureFileShareProtectedItem",
@@ -145,10 +200,29 @@ export interface BackupProtectedItem extends Resource<
  * ### Virtual Machines
  * **Example:** Back up a VM
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault");
+ * const vmPolicy = yield* Azure.RecoveryServices.BackupPolicy("vmPolicy", {
+ *   vault: vault.vaultName,
+ *   backupManagementType: "AzureIaasVM",
+ *   schedulePolicy: {
+ *     schedulePolicyType: "SimpleSchedulePolicy",
+ *     scheduleRunFrequency: "Daily",
+ *     scheduleRunTimes: ["2026-01-01T23:00:00Z"],
+ *   },
+ *   retentionPolicy: {
+ *     retentionPolicyType: "LongTermRetentionPolicy",
+ *     dailySchedule: {
+ *       retentionTimes: ["2026-01-01T23:00:00Z"],
+ *       retentionDuration: { count: 7, durationType: "Days" },
+ *     },
+ *   },
+ * });
  * yield* Azure.RecoveryServices.BackupProtectedItem("vm-backup", {
  *   vault: vault.vaultName,
  *   protectedItemType: "Microsoft.Compute/virtualMachines",
- *   sourceResourceId: vm.id,
+ *   // ARM ID of an existing VM
+ *   sourceResourceId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/web/providers/Microsoft.Compute/virtualMachines/web-01",
  *   policyId: vmPolicy.policyId,
  * });
  * ```
@@ -219,12 +293,10 @@ const discoverFileShareItemName = Effect.fn(function* (
 ) {
   const where = { subscriptionId, resourceGroupName, vaultName };
   const inContainer = (item: { id?: string }) => sameId(containerOfId(item.id), containerName);
-  const protectedPage = yield* backup
-    .ListBackupProtectedItems({
-      ...where,
-      _filter: "backupManagementType eq 'AzureStorage' and itemType eq 'AzureFileShare'",
-    })
-    .pipe(Effect.flatMap((page) => requireSinglePage("ListBackupProtectedItems", page)));
+  const protectedPage = yield* collectAll(backup.ListBackupProtectedItems, {
+    ...where,
+    _filter: "backupManagementType eq 'AzureStorage' and itemType eq 'AzureFileShare'",
+  });
   const existing = (protectedPage.value ?? []).find(
     (item) =>
       inContainer(item) &&
@@ -239,37 +311,34 @@ const discoverFileShareItemName = Effect.fn(function* (
     containerName,
     _filter: "workloadType eq 'AzureFileShare'",
   });
-  return yield* backup
-    .ListBackupProtectableItems({
-      ...where,
-      _filter: "backupManagementType eq 'AzureStorage' and workloadType eq 'AzureFileShare'",
-    })
-    .pipe(
-      Effect.flatMap((page) => requireSinglePage("ListBackupProtectableItems", page)),
-      Effect.flatMap((page) => {
-        const found = (page.value ?? []).find(
-          (item) => inContainer(item) && sameId(item.properties?.friendlyName, friendlyName),
-        );
-        return found?.name !== undefined
-          ? Effect.succeed(found.name)
-          : Effect.fail("pending" as const);
-      }),
-      Effect.retry({
-        while: (e) => e === "pending",
-        schedule: Schedule.spaced("5 seconds"),
-        times: 24,
-      }),
-      Effect.catchIf(
-        (e): e is "pending" => e === "pending",
-        () =>
-          Effect.fail(
-            new BackupItemNotDiscovered({
-              friendlyName,
-              message: `file share '${friendlyName}' was not discovered in container ${containerName} after 2 minutes`,
-            }),
-          ),
-      ),
-    );
+  return yield* collectAll(backup.ListBackupProtectableItems, {
+    ...where,
+    _filter: "backupManagementType eq 'AzureStorage' and workloadType eq 'AzureFileShare'",
+  }).pipe(
+    Effect.flatMap((page) => {
+      const found = (page.value ?? []).find(
+        (item) => inContainer(item) && sameId(item.properties?.friendlyName, friendlyName),
+      );
+      return found?.name !== undefined
+        ? Effect.succeed(found.name)
+        : Effect.fail("pending" as const);
+    }),
+    Effect.retry({
+      while: (e) => e === "pending",
+      schedule: Schedule.spaced("5 seconds"),
+      times: 24,
+    }),
+    Effect.catchIf(
+      (e): e is "pending" => e === "pending",
+      () =>
+        Effect.fail(
+          new BackupItemNotDiscovered({
+            friendlyName,
+            message: `file share '${friendlyName}' was not discovered in container ${containerName} after 2 minutes`,
+          }),
+        ),
+    ),
+  );
 });
 
 const toAttrs = (

@@ -29,6 +29,7 @@ export interface ServerEndpointProps {
   /**
    * Resource group of the Storage Sync Service. Changing it replaces the
    * server endpoint.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -41,6 +42,7 @@ export interface ServerEndpointProps {
   /**
    * Name of the server endpoint. If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the endpoint.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -84,16 +86,25 @@ export interface ServerEndpointProps {
    * @default Azure's default (20)
    */
   volumeFreeSpacePercent?: number;
-  /** Tier files not accessed for this many days (cloud tiering only). */
+  /**
+   * Tier files not accessed for this many days (cloud tiering only).
+   * @default not set
+   */
   tierFilesOlderThanDays?: number;
   /**
    * Offline data transfer (Azure Data Box seeding).
    * @default Azure's default (`off`)
    */
   offlineDataTransfer?: FeatureStatus;
-  /** File share used for offline data transfer. */
+  /**
+   * File share used for offline data transfer.
+   * @default not set
+   */
   offlineDataTransferShareName?: string;
-  /** How the local cache follows changes made elsewhere. */
+  /**
+   * How the local cache follows changes made elsewhere.
+   * @default not set
+   */
   localCacheMode?: LocalCacheMode;
 }
 
@@ -143,19 +154,38 @@ export interface ServerEndpoint extends Resource<
 > {}
 
 /**
- * An Azure File Sync server endpoint — a path on a registered Windows
- * server that syncs with the sync group's cloud endpoint, optionally with
- * cloud tiering.
+ * An Azure File Sync server endpoint
+ * (`Microsoft.StorageSync/storageSyncServices/syncGroups/serverEndpoints`) —
+ * a path on a registered Windows server that syncs with the sync group's
+ * cloud endpoint, optionally with cloud tiering.
  *
  * The server must already run the Azure File Sync agent and be registered
  * with the Storage Sync Service; registration happens on the server, not
  * through ARM.
+ *
+ * :::caution
+ * Changing `storageSyncService`, `syncGroup`, `name`, `serverResourceId`,
+ * `serverLocalPath`, `initialDownloadPolicy`, `initialUploadPolicy`,
+ * `friendlyName`, or `resourceGroup` replaces the server endpoint.
+ * :::
+ *
+ * :::caution
+ * Register the server with the Storage Sync Service before you deploy.
+ * Registration happens on the server with the Azure File Sync agent, not
+ * through ARM.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/storage/file-sync/file-sync-server-endpoint-create
  *
  * ### Creating a Server Endpoint
  * **Example:** Sync a server folder
  * ```typescript
+ * const sync = yield* Azure.StorageSync.StorageSyncService("sync");
+ * const syncGroup = yield* Azure.StorageSync.SyncGroup("docs", {
+ *   storageSyncService: sync.storageSyncServiceName,
+ * });
+ * // The ID the server reports when you register it with the agent.
+ * const serverId = "3f2a1c9e-6b8d-4e0f-9a7c-2d5e8b1f4c60";
  * yield* Azure.StorageSync.ServerEndpoint("docs-server", {
  *   storageSyncService: sync.storageSyncServiceName,
  *   syncGroup: syncGroup.syncGroupName,

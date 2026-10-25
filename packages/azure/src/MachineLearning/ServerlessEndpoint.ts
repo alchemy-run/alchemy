@@ -37,6 +37,7 @@ export interface ServerlessEndpointProps {
    * Endpoint name: 3-32 letters, digits, and hyphens, starting with a
    * letter. If omitted, a unique name is generated from the logical ID.
    * Changing it replaces the endpoint.
+   * @default a unique name generated from the logical ID
    */
   name?: string;
   /**
@@ -56,11 +57,15 @@ export interface ServerlessEndpointProps {
    * @default Azure's default
    */
   contentSafety?: "Enabled" | "Disabled";
-  /** Managed identity of the endpoint. */
+  /**
+   * Managed identity of the endpoint.
+   * @default none
+   */
   identity?: MachineLearningIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -98,11 +103,28 @@ export interface ServerlessEndpoint extends Resource<
  * manage. Non-Microsoft models need a marketplace subscription in the
  * project first.
  *
- * @see https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-serverless
+ * ARM type: `Microsoft.MachineLearningServices/workspaces/serverlessEndpoints`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-serverless).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `name`, `location`, or `modelId`
+ * replaces the endpoint.
+ * :::
  *
  * ### Deploying a Model
  * **Example:** Serverless endpoint for a catalog model
  * ```typescript
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const hub = yield* Azure.MachineLearning.Workspace("hub", {
+ *   kind: "Hub",
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ * });
+ * const project = yield* Azure.MachineLearning.Workspace("project", {
+ *   kind: "Project",
+ *   hubResourceId: hub.workspaceId,
+ * });
  * const llama = yield* Azure.MachineLearning.ServerlessEndpoint("llama", {
  *   workspace: project.workspaceName,
  *   modelId: "azureml://registries/azureml-meta/models/Llama-3.3-70B-Instruct",

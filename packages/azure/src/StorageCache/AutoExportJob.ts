@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
@@ -12,7 +13,6 @@ import {
   isOwned,
   orUndefinedIfNotFound,
   ProvisioningFailed,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -28,6 +28,7 @@ import { AmlFilesystemMissing, createLustreName, JOB_BUDGET, sameList } from "./
 export interface AutoExportJobProps {
   /**
    * Resource group of the parent file system. Changing it replaces the job.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -40,6 +41,7 @@ export interface AutoExportJobProps {
    * Name of the job: alphanumerics, `_` and `-`, starting and ending with an
    * alphanumeric. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the job.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -62,6 +64,7 @@ export interface AutoExportJobProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -96,15 +99,50 @@ export interface AutoExportJob extends Resource<
 > {}
 
 /**
- * An Azure Managed Lustre auto export job — continuously exports new and
- * changed files from the Lustre namespace to the file system's blob
- * integration container.
+ * An Azure Managed Lustre auto export job
+ * (`Microsoft.StorageCache/amlFilesystems/autoExportJobs`). It continuously
+ * exports new and changed files from the Lustre namespace to the file
+ * system's blob integration container. See the
+ * [Azure docs](https://learn.microsoft.com/azure/azure-managed-lustre/auto-export).
  *
- * @see https://learn.microsoft.com/azure/azure-managed-lustre/auto-export
+ * :::caution
+ * The parent `Azure.StorageCache.AmlFilesystem` must have blob integration
+ * (`hsm`) configured. Only one blob integration job runs on a file system at
+ * a time. A second one fails with `AutoExportJobEnableFailed`.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `amlFilesystem`, `name`, `location`, or
+ * `autoExportPrefixes` replaces the job. Alchemy deletes the old job before
+ * it creates the new one. Alchemy updates `adminStatus` and `tags` in place.
+ * :::
  *
  * ### Exporting Changes
  * **Example:** Continuously export the whole namespace
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("lustre", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.0.0/24",
+ *   defaultOutboundAccess: true,
+ * });
+ * const account = yield* Azure.Storage.StorageAccount("lustredata");
+ * const data = yield* Azure.Storage.BlobContainer("data", {
+ *   storageAccount: account.storageAccountName,
+ * });
+ * const logs = yield* Azure.Storage.BlobContainer("logs", {
+ *   storageAccount: account.storageAccountName,
+ * });
+ * const fs = yield* Azure.StorageCache.AmlFilesystem("scratch", {
+ *   zones: ["1"],
+ *   sku: "AMLFS-Durable-Premium-500",
+ *   storageCapacityTiB: 4,
+ *   filesystemSubnet: subnet.subnetId,
+ *   maintenanceWindow: { dayOfWeek: "Sunday", timeOfDayUTC: "22:00" },
+ *   hsm: { container: data.containerId, loggingContainer: logs.containerId },
+ * });
  * const exportJob = yield* Azure.StorageCache.AutoExportJob("export", {
  *   amlFilesystem: fs.amlFilesystemName,
  * });
@@ -113,7 +151,7 @@ export interface AutoExportJob extends Resource<
  * **Example:** Export one directory and pause the job
  * ```typescript
  * const exportJob = yield* Azure.StorageCache.AutoExportJob("export", {
- *   amlFilesystem: fs.amlFilesystemName,
+ *   amlFilesystem: "scratch",
  *   autoExportPrefixes: ["/results"],
  *   adminStatus: "Disable",
  * });
@@ -168,24 +206,18 @@ export const AutoExportJobProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const filesystems = yield* orUndefinedIfNotFound(
-        storagecache
-          .ListAmlFilesystems({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListAmlFilesystems", page))),
+        collectAll(storagecache.ListAmlFilesystems, { subscriptionId }),
       );
       const out: AutoExportJob["Attributes"][] = [];
       for (const fs of filesystems?.value ?? []) {
         const group = resourceGroupOf(fs.id);
         if (group === undefined || fs.name === undefined) continue;
         const jobs = yield* orUndefinedIfNotFound(
-          storagecache
-            .ListAutoExportJobByAmlFilesystem({
-              subscriptionId,
-              resourceGroupName: group,
-              amlFilesystemName: fs.name,
-            })
-            .pipe(
-              Effect.flatMap((page) => requireSinglePage("ListAutoExportJobByAmlFilesystem", page)),
-            ),
+          collectAll(storagecache.ListAutoExportJobByAmlFilesystem, {
+            subscriptionId,
+            resourceGroupName: group,
+            amlFilesystemName: fs.name,
+          }),
         );
         for (const job of jobs?.value ?? []) {
           const parent = filesystemOf(job.id) ?? fs.name;

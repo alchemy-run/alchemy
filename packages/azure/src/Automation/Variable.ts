@@ -32,12 +32,14 @@ export interface VariableProps {
    * Variable name (up to 128 characters). If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * variable.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Value of the variable: any JSON-serializable value (a string, number,
    * boolean, object, ...). A `Redacted` value is unwrapped before it is
    * serialized. Omit it for an empty variable.
+   * @default not set (the variable has no value)
    */
   value?: unknown;
   /**
@@ -46,7 +48,10 @@ export interface VariableProps {
    * @default false
    */
   isEncrypted?: boolean;
-  /** Description of the variable. */
+  /**
+   * Description of the variable.
+   * @default no description
+   */
   description?: string;
 }
 
@@ -76,12 +81,19 @@ export interface Variable extends Resource<
 /**
  * A variable asset in an Azure Automation account, shared by its runbooks
  * and DSC configurations (`Get-AutomationVariable`).
+ * The ARM type is `Microsoft.Automation/automationAccounts/variables`.
+ *
+ * :::caution
+ * Changing `automationAccount`, `name`, `isEncrypted`, or `resourceGroup`
+ * replaces the variable.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/shared-resources/variables
  *
  * ### Creating Variables
  * **Example:** Plain variable
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const region = yield* Azure.Automation.Variable("region", {
  *   automationAccount: account.automationAccountName,
  *   value: "eastus",
@@ -90,6 +102,7 @@ export interface Variable extends Resource<
  *
  * **Example:** Encrypted variable
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const apiKey = yield* Azure.Automation.Variable("api-key", {
  *   automationAccount: account.automationAccountName,
  *   value: Redacted.make("s3cr3t"),

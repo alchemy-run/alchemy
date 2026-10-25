@@ -29,7 +29,10 @@ export interface EdgeMachineDiskProps {
    * Name of the disk (as reported by the machine). Changing it replaces the disk.
    */
   name: string;
-  /** Volumes to carve out of the disk. */
+  /**
+   * Volumes to carve out of the disk.
+   * @default not set
+   */
   diskConfiguration?: EdgeMachineDiskConfiguration;
 }
 
@@ -57,22 +60,32 @@ export interface EdgeMachineDisk extends Resource<
 /**
  * A local disk of an Azure Local edge machine and the volumes to carve
  * out of it. Needs a claimed, connected physical machine.
+ * The ARM type is `Microsoft.AzureStackHCI/edgeMachines/disks`.
  *
  * It has no tags; Alchemy treats it as owned when its parent edge machine
  * carries this stack's ownership tags.
+ *
+ * :::caution
+ * Changing `edgeMachine`, `name`, or `resourceGroup` replaces the edge
+ * machine disk.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/overview
  *
  * ### Configuring a Disk
  * **Example:** Volumes on a local disk
  * ```typescript
+ * // ARM ID of the Arc-enabled server (Microsoft.HybridCompute/machines).
+ * const arcServerId = yield* Config.string("ARC_SERVER_ID");
  * const machine = yield* Azure.AzureStackHCI.EdgeMachine("node-1", {
  *   arcMachineResourceId: arcServerId,
  * });
  * yield* Azure.AzureStackHCI.EdgeMachineDisk("data-disk", {
  *   edgeMachine: machine.edgeMachineName,
  *   name: "disk1",
- *   diskConfiguration: { volumes: [{ ... }] },
+ *   diskConfiguration: {
+ *     volumes: [{ sizeInBytes: "107374182400", path: "D:\\data" }],
+ *   },
  * });
  * ```
  *

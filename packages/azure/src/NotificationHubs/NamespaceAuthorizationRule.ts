@@ -41,6 +41,7 @@ export interface NamespaceAuthorizationRuleProps {
    * Rule name: letters, digits, `.`, `-`, and `_`. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the rule.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -82,12 +83,17 @@ export interface NamespaceAuthorizationRule extends Resource<
  * namespace. It grants `Listen`, `Send`, and/or `Manage` on every hub in the
  * namespace and exposes the rule's keys and connection strings as secrets.
  *
+ * ARM type: `Microsoft.NotificationHubs/namespaces/authorizationRules`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/notification-hubs/notification-hubs-push-notification-security).
+ *
  * Authorization rules have no tags: Alchemy treats a rule it did not create
  * (e.g. an existing rule with the same explicit `name`) as unowned and only
  * takes it over with `--adopt`. The built-in `RootManageSharedAccessKey` rule
  * is never deleted.
  *
- * @see https://learn.microsoft.com/azure/notification-hubs/notification-hubs-push-notification-security
+ * :::caution
+ * Changing `resourceGroup`, `namespace`, or `name` replaces the rule.
+ * :::
  *
  * ### Creating a Rule
  * **Example:** Send-only rule for a backend

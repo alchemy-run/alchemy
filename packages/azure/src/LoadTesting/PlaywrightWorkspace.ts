@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,6 +32,7 @@ export interface PlaywrightWorkspaceProps {
    * Workspace name: 3-24 letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the workspace.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -52,7 +53,10 @@ export interface PlaywrightWorkspaceProps {
    * @default Azure's default (`Disabled`)
    */
   localAuth?: "Enabled" | "Disabled";
-  /** User tags. Alchemy ownership tags are merged in. */
+  /**
+   * User tags. Alchemy ownership tags are merged in.
+   * @default {}
+   */
   tags?: Record<string, string>;
 }
 
@@ -93,7 +97,12 @@ export interface PlaywrightWorkspace extends Resource<
  * running Playwright tests at scale. Billing is per test minute, so an idle
  * workspace costs nothing.
  *
- * @see https://learn.microsoft.com/azure/app-testing/playwright-workspaces/overview-what-is-microsoft-playwright-workspaces
+ * ARM type: `Microsoft.LoadTestService/playwrightWorkspaces`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/app-testing/playwright-workspaces/overview-what-is-microsoft-playwright-workspaces).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the workspace.
+ * :::
  *
  * ### Creating a Workspace
  * **Example:** Playwright workspace in East US
@@ -178,13 +187,9 @@ export const PlaywrightWorkspaceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* loadtestservice
-        .ListPlaywrightWorkspaceBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListPlaywrightWorkspaceBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(loadtestservice.ListPlaywrightWorkspaceBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((workspace) => {
         const group = resourceGroupOf(workspace.id);
         return hasAnyAlchemyTag(workspace.tags) &&

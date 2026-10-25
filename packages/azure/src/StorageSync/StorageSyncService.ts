@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,16 +32,21 @@ export interface StorageSyncServiceIdentity {
   /**
    * ARM IDs of user-assigned identities to attach (required for
    * `UserAssigned` and `SystemAssigned,UserAssigned`).
+   * @default not set
    */
   userAssignedIdentityIds?: string[];
 }
 
 export interface StorageSyncServiceProps {
-  /** Resource group the service is created in. Changing it replaces the service. */
+  /**
+   * Resource group the service is created in. Changing it replaces the service.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Name of the Storage Sync Service. If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the service.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -62,11 +67,15 @@ export interface StorageSyncServiceProps {
    * @default Azure's default (`false`)
    */
   useIdentity?: boolean;
-  /** Managed identity of the service. */
+  /**
+   * Managed identity of the service.
+   * @default not set
+   */
   identity?: StorageSyncServiceIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -103,9 +112,15 @@ export interface StorageSyncService extends Resource<
 > {}
 
 /**
- * An Azure File Sync Storage Sync Service — the top-level resource that
- * groups sync groups (cloud + server endpoints) and the Windows servers
+ * An Azure File Sync Storage Sync Service
+ * (`Microsoft.StorageSync/storageSyncServices`) — the top-level resource
+ * that groups sync groups (cloud + server endpoints) and the Windows servers
  * registered to sync with Azure file shares. The service itself is free.
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the service and
+ * deletes its sync groups and server registrations.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/storage/file-sync/file-sync-introduction
  *
@@ -212,13 +227,7 @@ export const StorageSyncServiceProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        storagesync
-          .ListStorageSyncServiceBySubscription({ subscriptionId })
-          .pipe(
-            Effect.flatMap((page) =>
-              requireSinglePage("ListStorageSyncServiceBySubscription", page),
-            ),
-          ),
+        collectAll(storagesync.ListStorageSyncServiceBySubscription, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((service) => {
         const group = resourceGroupOf(service.id);

@@ -4,11 +4,11 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -24,7 +24,10 @@ import {
 } from "./DeviceRegistryShared.ts";
 
 export interface CertificatePolicyProps {
-  /** Resource group of the parent namespace. Changing it replaces the policy. */
+  /**
+   * Resource group of the parent namespace. Changing it replaces the policy.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the parent Device Registry namespace. Changing it replaces the policy. */
   namespace: string;
@@ -37,6 +40,7 @@ export interface CertificatePolicyProps {
    * Policy name: 3-63 letters, digits, and hyphens, starting with a letter
    * or digit. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the policy.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -165,34 +169,22 @@ export const CertificatePolicyProvider = () =>
       const all: CertificatePolicy["Attributes"][] = [];
       for (const ns of namespaces) {
         const cas = yield* orUndefinedIfNotFound(
-          deviceregistry
-            .ListCertificateAuthorityByNamespace({
-              subscriptionId,
-              resourceGroupName: ns.resourceGroup,
-              namespaceName: ns.name,
-            })
-            .pipe(
-              Effect.flatMap((page) =>
-                requireSinglePage("ListCertificateAuthorityByNamespace", page),
-              ),
-            ),
+          collectAll(deviceregistry.ListCertificateAuthorityByNamespace, {
+            subscriptionId,
+            resourceGroupName: ns.resourceGroup,
+            namespaceName: ns.name,
+          }),
         );
         for (const ca of cas?.value ?? []) {
           if (!hasAnyAlchemyTag(ca.tags) || ca.name === undefined) continue;
           const caName = ca.name;
           const policies = yield* orUndefinedIfNotFound(
-            deviceregistry
-              .ListCertificatePolicyByCertificateAuthority({
-                subscriptionId,
-                resourceGroupName: ns.resourceGroup,
-                namespaceName: ns.name,
-                certificateAuthorityName: caName,
-              })
-              .pipe(
-                Effect.flatMap((page) =>
-                  requireSinglePage("ListCertificatePolicyByCertificateAuthority", page),
-                ),
-              ),
+            collectAll(deviceregistry.ListCertificatePolicyByCertificateAuthority, {
+              subscriptionId,
+              resourceGroupName: ns.resourceGroup,
+              namespaceName: ns.name,
+              certificateAuthorityName: caName,
+            }),
           );
           for (const policy of policies?.value ?? []) {
             if (policy.name !== undefined) {
@@ -266,8 +258,7 @@ export const CertificatePolicyProvider = () =>
         yield* deviceregistry.CertificatePoliciesCreateOrReplace({
           ...where,
           properties: {
-            certificate:
-              validity === undefined ? undefined : { validityPeriodInDays: validity },
+            certificate: validity === undefined ? undefined : { validityPeriodInDays: validity },
           },
         });
       }

@@ -6,10 +6,10 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -40,6 +40,7 @@ export interface RegistrationDefinitionProps {
    * GUID naming the definition. If omitted, a deterministic GUID is derived
    * from the app, stage, logical ID, and instance ID. Changing it replaces
    * the definition.
+   * @default a GUID derived from the app, stage, logical ID, and instance ID
    */
   registrationDefinitionId?: string;
   /**
@@ -52,6 +53,7 @@ export interface RegistrationDefinitionProps {
    * Description of the offer. Alchemy appends an ownership marker
    * (`[alchemy <stack>/<stage>/<id>]`) because registration definitions have
    * no tags.
+   * @default none
    */
   description?: string;
   /**
@@ -73,12 +75,13 @@ export interface RegistrationDefinitionProps {
   /**
    * Just-in-time (PIM) access the managing tenant's principals can
    * activate. Requires Entra ID P2 in the managing tenant.
+   * @default none
    */
   eligibleAuthorizations?: LighthouseEligibleAuthorization[];
   /**
    * Azure Marketplace plan of a published managed-service offer. Leave
-   * unset for definitions created directly. Changing it replaces the
-   * definition.
+   * unset for definitions created directly. Updated in place.
+   * @default none
    */
   plan?: LighthousePlan;
 }
@@ -117,10 +120,16 @@ export interface RegistrationDefinition extends Resource<
  * grants nothing on its own: pair it with a
  * {@link RegistrationAssignment} at the scope you want to delegate.
  *
+ * ARM type: `Microsoft.ManagedServices/registrationDefinitions`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/lighthouse/overview).
+ *
  * Registration definitions cannot be tagged, so Alchemy records ownership as
  * a `[alchemy <stack>/<stage>/<id>]` marker at the end of the description.
  *
- * @see https://learn.microsoft.com/azure/lighthouse/overview
+ * :::caution
+ * Changing `scope`, `registrationDefinitionId`, or `managedByTenantId` replaces
+ * the definition.
+ * :::
  *
  * ### Defining an Offer
  * **Example:** Give a managing tenant's group Reader access
@@ -214,9 +223,7 @@ export const RegistrationDefinitionProvider = () =>
 
     list: Effect.fn(function* () {
       const scope = yield* defaultScope;
-      const page = yield* managedservices
-        .ListRegistrationDefinitions({ scope })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListRegistrationDefinitions", page)));
+      const page = yield* collectAll(managedservices.ListRegistrationDefinitions, { scope });
       return (page.value ?? []).flatMap((definition) =>
         MARKER.test(definition.properties?.description ?? "") && definition.name !== undefined
           ? [toAttrs(scope, definition.name, definition)]

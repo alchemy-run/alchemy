@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -37,22 +37,30 @@ export interface SiteNfvi {
   name: string;
   /** NFVI kind. */
   nfviType: SiteNfviType;
-  /** Azure location of an `AzureCore` NFVI. */
+  /**
+   * Azure location of an `AzureCore` NFVI.
+   * @default unset (required for `AzureCore`)
+   */
   location?: string;
   /**
    * ARM ID of the custom location of an `AzureArcKubernetes` or
    * `AzureOperatorNexus` NFVI.
+   * @default unset (required for `AzureArcKubernetes` and `AzureOperatorNexus`)
    */
   customLocationId?: string;
 }
 
 export interface SiteProps {
-  /** Resource group the site is created in. Changing it replaces the site. */
+  /**
+   * Resource group the site is created in. Changing it replaces the site.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Site name: 1-64 letters, digits, `_`, and `-`. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the site.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -60,11 +68,16 @@ export interface SiteProps {
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
-  /** Network function virtualization infrastructures (NFVIs) of the site. */
+  /**
+   * Network function virtualization infrastructures (NFVIs) of the site.
+   * Updated in place.
+   * @default []
+   */
   nfvis?: SiteNfvi[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -93,10 +106,10 @@ export interface Site extends Resource<
 > {}
 
 /**
- * An Azure Operator Service Manager site — an operator's logical grouping
- * of network function virtualization infrastructures (Azure regions,
- * Arc-enabled Kubernetes clusters, or Azure Operator Nexus clusters) that
- * site network services deploy to.
+ * An Azure Operator Service Manager site (`Microsoft.HybridNetwork/sites`):
+ * an operator's logical grouping of network function virtualization
+ * infrastructures (Azure regions, Arc-enabled Kubernetes clusters, or Azure
+ * Operator Nexus clusters) that site network services deploy to.
  *
  * Sites are free metadata resources.
  *
@@ -112,16 +125,22 @@ export interface Site extends Resource<
  *
  * **Example:** Site with an Arc-enabled Kubernetes NFVI
  * ```typescript
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/edge-cluster";
  * const site = yield* Azure.HybridNetwork.Site("edge", {
  *   nfvis: [
  *     {
  *       name: "edge-cluster",
  *       nfviType: "AzureArcKubernetes",
- *       customLocationId: customLocation.id,
+ *       customLocationId,
  *     },
  *   ],
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the site.
+ * :::
  *
  * @resource
  */
@@ -180,9 +199,7 @@ export const SiteProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* hybridnetwork
-        .ListSiteBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListSiteBySubscription", page)));
+      const page = yield* collectAll(hybridnetwork.ListSiteBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((site) => {
         const group = resourceGroupOf(site.id);
         return hasAnyAlchemyTag(site.tags) && group !== undefined && site.name !== undefined

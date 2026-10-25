@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -36,6 +36,7 @@ export interface WatcherIdentity {
   /**
    * ARM resource IDs of user-assigned identities attached to the watcher.
    * Required when `type` includes `UserAssigned`.
+   * @default []
    */
   userAssignedIdentities?: string[];
 }
@@ -43,9 +44,15 @@ export interface WatcherIdentity {
 export type KustoOfferingType = "adx" | "free" | "fabric";
 
 export interface WatcherDatastore {
-  /** ARM resource ID of the Azure Data Explorer cluster (`adx` offerings). */
+  /**
+   * ARM resource ID of the Azure Data Explorer cluster (`adx` offerings).
+   * @default unset
+   */
   adxClusterResourceId?: string;
-  /** Display name of the Kusto cluster. */
+  /**
+   * Display name of the Kusto cluster.
+   * @default unset
+   */
   kustoClusterDisplayName?: string;
   /** Kusto cluster URI, e.g. `https://mycluster.eastus.kusto.windows.net`. */
   kustoClusterUri: string;
@@ -63,12 +70,14 @@ export interface WatcherProps {
   /**
    * Resource group the watcher is created in. Changing it replaces the
    * watcher.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the watcher: 3-60 letters, digits, and hyphens, starting with
    * a letter. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the watcher.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -87,22 +96,26 @@ export interface WatcherProps {
    * Kusto data store that receives the collected monitoring data. A
    * running watcher is stopped while its data store changes and restarted
    * afterwards.
+   * @default no data store
    */
   datastore?: WatcherDatastore;
   /**
    * ARM resource ID of a user-assigned managed identity assigned to new
    * alert rules created from the watcher.
+   * @default unset
    */
   defaultAlertRuleIdentityResourceId?: string;
   /**
    * Desired monitoring state. `true` starts data collection (requires a
    * data store and at least one target), `false` stops it. When omitted,
    * the run state is left as observed.
+   * @default unmanaged (the run state is left as observed)
    */
   started?: boolean;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -142,13 +155,18 @@ export interface Watcher extends Resource<
 > {}
 
 /**
- * A database watcher — a managed monitoring service that collects
- * performance telemetry from Azure SQL databases, elastic pools, and
- * managed instances into an Azure Data Explorer (Kusto) or Fabric
- * Real-Time Intelligence data store.
+ * A database watcher (`Microsoft.DatabaseWatcher/watchers`) — a managed
+ * monitoring service that collects performance telemetry from Azure SQL
+ * databases, elastic pools, and managed instances into an Azure Data
+ * Explorer (Kusto) or Fabric Real-Time Intelligence data store.
  *
  * The watcher itself is free; you pay for the data store and the
  * monitored SQL resources.
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the watcher,
+ * with a new managed identity.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-sql/database-watcher-overview
  *
@@ -161,6 +179,10 @@ export interface Watcher extends Resource<
  * ### Collecting Data
  * **Example:** Watcher writing to an Azure Data Explorer database
  * ```typescript
+ * const cluster = yield* Azure.Kusto.Cluster("adx");
+ * const database = yield* Azure.Kusto.Database("telemetry", {
+ *   cluster: cluster.clusterName,
+ * });
  * const watcher = yield* Azure.DatabaseWatcher.Watcher("sql-watcher", {
  *   datastore: {
  *     adxClusterResourceId: cluster.clusterId,
@@ -264,9 +286,7 @@ export const WatcherProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* databasewatcher
-        .ListWatcherBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListWatcherBySubscription", page)));
+      const page = yield* collectAll(databasewatcher.ListWatcherBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((watcher) => {
         const group = resourceGroupOf(watcher.id);
         return hasAnyAlchemyTag(watcher.tags) && group !== undefined && watcher.name !== undefined

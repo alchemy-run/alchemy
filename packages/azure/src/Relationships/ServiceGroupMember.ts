@@ -17,26 +17,40 @@ import type { Providers } from "../Providers.ts";
 
 export interface ServiceGroupMemberProps {
   /**
-   * ARM ID of the member — a resource, resource group, or subscription —
-   * e.g. `account.storageAccountId`. Changing it replaces the membership.
+   * ARM ID of the member — a resource, resource group, or subscription — e.g.
+   * `account.storageAccountId`.
+   *
+   * :::caution
+   * Changing it replaces the membership.
+   * :::
    */
   resourceId: string;
   /**
    * The service group to join: its name or ARM ID
    * (`/providers/Microsoft.Management/serviceGroups/{name}`), e.g.
-   * `group.serviceGroupId`. Changing it replaces the membership.
+   * `group.serviceGroupId`.
+   *
+   * :::caution
+   * Changing it replaces the membership.
+   * :::
    */
   serviceGroup: string;
   /**
-   * Tenant ID of the service group, for cross-tenant membership. Changing
-   * it replaces the membership.
+   * Tenant ID of the service group, for cross-tenant membership.
+   *
+   * :::caution
+   * Changing it replaces the membership.
+   * :::
    * @default the tenant of the member
    */
   sourceTenant?: string;
   /**
-   * Relationship name (3-64 letters, digits, and hyphens). If omitted, a
-   * unique name is generated from the app, stage, and logical ID. Changing
-   * it replaces the membership.
+   * Relationship name (3-64 letters, digits, and hyphens).
+   *
+   * :::caution
+   * Changing it replaces the membership.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
 }
@@ -71,7 +85,7 @@ export interface ServiceGroupMember extends Resource<
 
 /**
  * Membership of an ARM resource, resource group, or subscription in an
- * Azure service group (Microsoft.Relationships `serviceGroupMember`).
+ * Azure service group (`Microsoft.Relationships/serviceGroupMember`).
  *
  * The membership is an extension resource on the member and is deleted
  * with it. Memberships cannot be tagged; a generated name (derived from
@@ -87,6 +101,7 @@ export interface ServiceGroupMember extends Resource<
  * const checkout = yield* Azure.Management.ServiceGroup("checkout", {
  *   displayName: "Checkout",
  * });
+ * const account = yield* Azure.Storage.StorageAccount("orders");
  * yield* Azure.Relationships.ServiceGroupMember("checkout-storage", {
  *   resourceId: account.storageAccountId,
  *   serviceGroup: checkout.serviceGroupId,
@@ -95,6 +110,10 @@ export interface ServiceGroupMember extends Resource<
  *
  * **Example:** Add a whole resource group
  * ```typescript
+ * const checkout = yield* Azure.Management.ServiceGroup("checkout", {
+ *   displayName: "Checkout",
+ * });
+ * const group = yield* Azure.Resources.ResourceGroup("checkout-rg");
  * yield* Azure.Relationships.ServiceGroupMember("checkout-rg", {
  *   resourceId: group.resourceGroupId,
  *   serviceGroup: checkout.serviceGroupId,

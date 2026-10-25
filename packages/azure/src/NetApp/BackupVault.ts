@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -38,11 +38,13 @@ export interface BackupVaultProps {
   /**
    * Vault name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the vault.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -73,11 +75,17 @@ export interface BackupVault extends Resource<
  * backups taken manually or by a backup policy. The vault is free; stored
  * backups are billed.
  *
- * @see https://learn.microsoft.com/azure/azure-netapp-files/backup-vault-manage
+ * ARM type: `Microsoft.NetApp/netAppAccounts/backupVaults`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/azure-netapp-files/backup-vault-manage).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `account`, or `name` replaces the vault.
+ * :::
  *
  * ### Creating a Backup Vault
  * **Example:** Backup vault
  * ```typescript
+ * const account = yield* Azure.NetApp.Account("files");
  * const vault = yield* Azure.NetApp.BackupVault("vault", {
  *   account: account.accountName,
  * });
@@ -137,15 +145,11 @@ export const BackupVaultProvider = () =>
         accountRefs(accounts),
         ({ resourceGroup, accountName }) =>
           orUndefinedIfNotFound(
-            netapp
-              .ListBackupVaultByNetAppAccount({
-                subscriptionId,
-                resourceGroupName: resourceGroup,
-                accountName,
-              })
-              .pipe(
-                Effect.flatMap((page) => requireSinglePage("ListBackupVaultByNetAppAccount", page)),
-              ),
+            collectAll(netapp.ListBackupVaultByNetAppAccount, {
+              subscriptionId,
+              resourceGroupName: resourceGroup,
+              accountName,
+            }),
           ).pipe(Effect.map((page) => page?.value ?? [])),
       );
       return vaults.flat().flatMap((vault) => {

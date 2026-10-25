@@ -8,13 +8,13 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -29,19 +29,31 @@ export type RelayTlsVersion = relay.TlsVersion;
 
 export interface NamespaceProps {
   /**
-   * Resource group the namespace is created in. Changing it replaces the
-   * namespace.
+   * Resource group the namespace is created in.
+   *
+   * :::caution
+   * Changing it replaces the namespace.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Globally unique namespace name (`<name>.servicebus.windows.net`): 6-50
    * letters, digits, and hyphens, starting with a letter and ending with a
-   * letter or digit. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the namespace.
+   * letter or digit.
+   *
+   * :::caution
+   * Changing it replaces the namespace.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the namespace. Changing it replaces the namespace.
+   * Azure location of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the namespace.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
@@ -59,6 +71,7 @@ export interface NamespaceProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -102,10 +115,10 @@ export interface Namespace extends Resource<
 > {}
 
 /**
- * An Azure Relay namespace — the container for Hybrid Connections and WCF
- * relays, with its own `<name>.servicebus.windows.net` endpoint. Relay
- * exposes on-premises services to the cloud without opening inbound
- * firewall ports.
+ * An Azure Relay namespace (`Microsoft.Relay/namespaces`) — the container
+ * for Hybrid Connections and WCF relays, with its own
+ * `<name>.servicebus.windows.net` endpoint. Relay exposes on-premises
+ * services to the cloud without opening inbound firewall ports.
  *
  * Relay has a single `Standard` tier; an idle namespace with no listeners
  * costs next to nothing. The connection string of the built-in
@@ -221,9 +234,7 @@ export const NamespaceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* relay
-        .ListNamespaces({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListNamespaces", page)));
+      const page = yield* collectAll(relay.ListNamespaces, { subscriptionId });
       return (page.value ?? []).flatMap((ns) => {
         const group = resourceGroupOf(ns.id);
         return hasAnyAlchemyTag(ns.tags) && group !== undefined && ns.name !== undefined

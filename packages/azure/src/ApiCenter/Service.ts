@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -34,6 +34,7 @@ export interface ApiCenterServiceIdentity {
   /**
    * ARM resource IDs of user-assigned identities (required when `type`
    * includes `UserAssigned`).
+   * @default none
    */
   userAssignedIdentities?: string[];
 }
@@ -74,7 +75,10 @@ export interface ServiceProps {
    * @default no identity
    */
   identity?: ApiCenterServiceIdentity;
-  /** User tags. Alchemy ownership tags are merged in. */
+  /**
+   * User tags. Alchemy ownership tags are merged in.
+   * @default {}
+   */
   tags?: Record<string, string>;
 }
 
@@ -112,6 +116,11 @@ export interface Service extends Resource<
  * {@link Environment}, {@link MetadataSchema}, ...) live in the service's
  * `default` workspace and are deleted with it. Azure creates that
  * workspace with the service and allows no second one.
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the service and
+ * deletes every API, environment, and schema in it.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-center/overview
  *
@@ -182,9 +191,7 @@ export const ServiceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* apicenter
-        .ListServiceBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListServiceBySubscription", page)));
+      const page = yield* collectAll(apicenter.ListServiceBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((service) => {
         const group = resourceGroupOf(service.id);
         return hasAnyAlchemyTag(service.tags) && group !== undefined && service.name !== undefined

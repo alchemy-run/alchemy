@@ -19,7 +19,10 @@ import { type ClusterRef, isHostOwned, parseClusterId, revealMap, sameSecrets } 
 
 /** Where the extension's Helm release is installed. Set one of the two. */
 export interface ExtensionScope {
-  /** Install cluster-wide. */
+  /**
+   * Install cluster-wide.
+   * @default unset (set this or `namespace`)
+   */
   cluster?: {
     /**
      * Namespace of the Helm release; created if missing.
@@ -27,24 +30,36 @@ export interface ExtensionScope {
      */
     releaseNamespace?: string;
   };
-  /** Install into a single namespace. */
+  /**
+   * Install into a single namespace.
+   * @default unset (set this or `cluster`)
+   */
   namespace?: {
-    /** Namespace to install into; created if missing. */
+    /**
+     * Namespace to install into; created if missing.
+     * @default the extension type's default namespace
+     */
     targetNamespace?: string;
   };
 }
 
 /** Marketplace plan of a third-party extension. */
 export interface ExtensionPlan {
-  /** Plan name. */
+  /** Plan name. Required. */
   name: string;
-  /** Publisher of the offer, e.g. `NewRelic`. */
+  /** Publisher of the offer, e.g. `NewRelic`. Required. */
   publisher: string;
-  /** Offer ID of the product. */
+  /** Offer ID of the product. Required. */
   product: string;
-  /** Publisher-provided promotion code. */
+  /**
+   * Publisher-provided promotion code.
+   * @default unset
+   */
   promotionCode?: string;
-  /** Version of the product. */
+  /**
+   * Version of the product.
+   * @default the latest version
+   */
   version?: string;
 }
 
@@ -60,6 +75,7 @@ export interface ExtensionProps {
    * Extension name: lowercase letters, digits, `-` and `.`. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the extension.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -88,17 +104,20 @@ export interface ExtensionProps {
   releaseTrain?: string;
   /**
    * Version to pin. Requires `autoUpgradeMinorVersion: false`.
+   * @default unset (the release train's latest version)
    */
   version?: string;
   /**
    * Helm configuration settings passed to the extension, as name-value
    * pairs. Keys are added or changed in place; Azure merges the map, so
    * removing a key does not unset it.
+   * @default {}
    */
   configurationSettings?: Record<string, string>;
   /**
    * Sensitive configuration settings. Azure never returns them, so they are
    * re-sent whenever their values change from the last deploy.
+   * @default {}
    */
   configurationProtectedSettings?: Record<string, string | Redacted.Redacted<string>>;
   /**
@@ -110,6 +129,7 @@ export interface ExtensionProps {
   /**
    * Marketplace plan for third-party extensions. Changing it replaces the
    * extension.
+   * @default unset (first-party extensions need no plan)
    */
   plan?: ExtensionPlan;
 }
@@ -152,11 +172,12 @@ export interface Extension extends Resource<
 > {}
 
 /**
- * A cluster extension: an Azure-managed Helm release (Flux, Dapr, Azure
- * Monitor, Azure ML, Key Vault secrets provider, ...) installed into an AKS
- * or Arc-enabled Kubernetes cluster.
+ * A cluster extension (`Microsoft.KubernetesConfiguration/extensions`): an
+ * Azure-managed Helm release (Flux, Dapr, Azure Monitor, Azure ML, Key
+ * Vault secrets provider) installed into an AKS or Arc-enabled Kubernetes
+ * cluster.
  *
- * Extensions cannot be tagged; ownership follows the hosting AKS cluster's
+ * Extensions cannot be tagged. Ownership follows the hosting cluster's
  * Alchemy tags.
  *
  * @see https://learn.microsoft.com/azure/aks/cluster-extensions
@@ -164,6 +185,9 @@ export interface Extension extends Resource<
  * ### Installing an Extension
  * **Example:** Install Flux (GitOps) on an AKS cluster
  * ```typescript
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+ *   defaultNodePool: { vmSize: "Standard_D2s_v7", count: 1 },
+ * });
  * const flux = yield* Azure.KubernetesConfiguration.Extension("Flux", {
  *   clusterId: cluster.clusterId,
  *   extensionType: "microsoft.flux",
@@ -172,6 +196,7 @@ export interface Extension extends Resource<
  *
  * **Example:** Install into a specific namespace
  * ```typescript
+ * // cluster: the Azure.ContainerService.ManagedCluster of the first example
  * yield* Azure.KubernetesConfiguration.Extension("Dapr", {
  *   clusterId: cluster.clusterId,
  *   extensionType: "microsoft.dapr",
@@ -182,6 +207,7 @@ export interface Extension extends Resource<
  * ### Configuring an Extension
  * **Example:** Pass Helm settings
  * ```typescript
+ * // cluster: the Azure.ContainerService.ManagedCluster of the first example
  * yield* Azure.KubernetesConfiguration.Extension("Flux", {
  *   clusterId: cluster.clusterId,
  *   extensionType: "microsoft.flux",
@@ -193,6 +219,7 @@ export interface Extension extends Resource<
  *
  * **Example:** Pin a version
  * ```typescript
+ * // cluster: the Azure.ContainerService.ManagedCluster of the first example
  * yield* Azure.KubernetesConfiguration.Extension("Flux", {
  *   clusterId: cluster.clusterId,
  *   extensionType: "microsoft.flux",
@@ -200,6 +227,12 @@ export interface Extension extends Resource<
  *   version: "1.13.1",
  * });
  * ```
+ *
+ * :::caution
+ * Changing `clusterId`, `name`, `extensionType`, `scope`,
+ * `systemAssignedIdentity`, or `plan` replaces the extension: Azure
+ * uninstalls the Helm release and installs it again.
+ * :::
  *
  * @resource
  */

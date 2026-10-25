@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,6 +32,7 @@ export interface OutboundEndpointProps {
   /**
    * Resource group of the resolver. The DNS resolver API rejects resource group names
    * longer than 80 characters. Changing it replaces the endpoint.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /** Name of the DNS resolver that owns the endpoint. Changing it replaces the endpoint. */
@@ -40,6 +41,7 @@ export interface OutboundEndpointProps {
    * Endpoint name: 1-80 letters, digits, `_`, and `-`. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the endpoint.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -58,6 +60,7 @@ export interface OutboundEndpointProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -88,22 +91,42 @@ export interface OutboundEndpoint extends Resource<
 > {}
 
 /**
- * An outbound endpoint of an Azure DNS Private Resolver — the egress point
+ * An outbound endpoint of an Azure DNS Private Resolver
+ * (`Microsoft.Network/dnsResolvers/outboundEndpoints`) — the egress point
  * for queries that a DNS forwarding ruleset sends to other DNS servers
- * (e.g. on-premises).
+ * (e.g. on-premises). See
+ * [endpoints and rulesets](https://learn.microsoft.com/azure/dns/private-resolver-endpoints-rulesets).
  *
- * Outbound endpoints are billed hourly (about $0.25/hour). The subnet must
- * be delegated to `Microsoft.Network/dnsResolvers` and dedicated to the
- * endpoint.
+ * Outbound endpoints are billed hourly (about $0.25/hour).
  *
- * @see https://learn.microsoft.com/azure/dns/private-resolver-endpoints-rulesets
+ * :::caution
+ * The subnet must be delegated to `Microsoft.Network/dnsResolvers`, be at
+ * least `/28`, and hold nothing else (not even an inbound endpoint).
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `dnsResolver`, `name`, `location`, or
+ * `subnetId` replaces the endpoint. A replacement on the same subnet
+ * deletes the old endpoint first.
+ * :::
  *
  * ### Creating an Outbound Endpoint
  * **Example:** Endpoint used by a forwarding ruleset
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const outboundSubnet = yield* Azure.Network.Subnet("outbound", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/28",
+ *   delegations: [{ serviceName: "Microsoft.Network/dnsResolvers" }],
+ * });
+ * const resolver = yield* Azure.DnsResolver.DnsResolver("resolver", {
+ *   virtualNetworkId: vnet.virtualNetworkId,
+ * });
  * const outbound = yield* Azure.DnsResolver.OutboundEndpoint("outbound", {
  *   dnsResolver: resolver.dnsResolverName,
- *   subnetId: outboundSubnetId,
+ *   subnetId: outboundSubnet.subnetId,
  * });
  * const ruleset = yield* Azure.DnsResolver.ForwardingRuleset("rules", {
  *   outboundEndpointIds: [outbound.outboundEndpointId],
@@ -161,23 +184,18 @@ export const OutboundEndpointProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const resolvers = yield* dnsresolver
-        .ListDnsResolvers({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDnsResolvers", page)));
+      const resolvers = yield* collectAll(dnsresolver.ListDnsResolvers, { subscriptionId });
       const found: OutboundEndpoint["Attributes"][] = [];
       for (const resolver of resolvers.value ?? []) {
         const group = resourceGroupOf(resolver.id);
         if (group === undefined || resolver.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          dnsresolver.ListOutboundEndpoints({
+          collectAll(dnsresolver.ListOutboundEndpoints, {
             subscriptionId,
             resourceGroupName: group,
             dnsResolverName: resolver.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListOutboundEndpoints", page);
-        }
         for (const endpoint of page?.value ?? []) {
           if (hasAnyAlchemyTag(endpoint.tags) && endpoint.name !== undefined) {
             found.push(toAttrs(group, resolver.name, endpoint.name, endpoint));

@@ -6,10 +6,10 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   waitForProvisioned,
   waitUntilGone,
@@ -478,23 +478,18 @@ export const RecordSetProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const zones = yield* dns
-        .ListZones({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListZones", page)));
+      const zones = yield* collectAll(dns.ListZones, { subscriptionId });
       const found: RecordSet["Attributes"][] = [];
       for (const zone of zones.value ?? []) {
         const group = resourceGroupOf(zone.id);
         if (group === undefined || zone.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          dns.ListRecordSetByDnsZone({
+          collectAll(dns.ListRecordSetByDnsZone, {
             subscriptionId,
             resourceGroupName: group,
             zoneName: zone.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListRecordSetByDnsZone", page);
-        }
         for (const recordSet of page?.value ?? []) {
           const recordType = recordTypeOf(recordSet.type);
           if (

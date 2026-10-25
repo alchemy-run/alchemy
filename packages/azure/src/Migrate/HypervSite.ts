@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -30,6 +30,7 @@ export interface HypervSiteProps {
   /**
    * Name of the site. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the site.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -43,17 +44,28 @@ export interface HypervSiteProps {
    * Name of the Azure Migrate appliance that reports to this site. Azure
    * fixes it once the site exists, so setting or changing it replaces the
    * site; leaving it out keeps whatever the appliance registered.
+   * @default none
    */
   applianceName?: string;
-  /** ARM ID of the `Migrate.Solution` (discovery tool) that tracks this site. */
+  /**
+   * ARM ID of the `Migrate.Solution` (discovery tool) that tracks this site.
+   * @default none
+   */
   discoverySolutionId?: string;
-  /** Microsoft Entra application the appliance authenticates with. */
+  /**
+   * Microsoft Entra application the appliance authenticates with.
+   * @default none
+   */
   servicePrincipalIdentityDetails?: SiteServicePrincipal;
-  /** Key Vault the appliance agent stores its secrets in. */
+  /**
+   * Key Vault the appliance agent stores its secrets in.
+   * @default none
+   */
   agentDetails?: SiteAgentKeyVault;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -90,13 +102,13 @@ export interface HypervSite extends Resource<
  * An Azure Migrate Hyper-V discovery site (`Microsoft.OffAzure/hypervSites`) — the discovery container an
  * on-premises Azure Migrate appliance reports Hyper-V inventory to.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/migrate/how-to-set-up-appliance-hyper-v).
+ *
  * :::caution
  * Azure fixes the appliance name once the site exists. Setting or changing
  * `applianceName`, or changing `name`, `location`, or `resourceGroup`,
  * replaces the site.
  * :::
- *
- * @see https://learn.microsoft.com/azure/migrate/how-to-set-up-appliance-hyper-v
  *
  * ### Creating a Site
  * **Example:** Discovery site
@@ -181,9 +193,7 @@ export const HypervSiteProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* migrate
-        .ListHypervSiteBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListHypervSiteBySubscription", page)));
+      const page = yield* collectAll(migrate.ListHypervSiteBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((site) => {
         const group = resourceGroupOf(site.id);
         return hasAnyAlchemyTag(site.tags) && group !== undefined && site.name !== undefined

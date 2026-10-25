@@ -15,11 +15,20 @@ export interface ApiTagDescriptionProps {
   apiName: string;
   /** Identifier of the tag being described (`Tag.tagName`). Changing it replaces the description. */
   tagName: string;
-  /** Description of the tag in the context of the API (Markdown). */
+  /**
+   * Description of the tag in the context of the API (Markdown).
+   * @default no description
+   */
   description?: string;
-  /** URL of external documentation for the tag. */
+  /**
+   * URL of external documentation for the tag.
+   * @default not set
+   */
   externalDocsUrl?: string;
-  /** Description of the external documentation. */
+  /**
+   * Description of the external documentation.
+   * @default not set
+   */
   externalDocsDescription?: string;
 }
 
@@ -46,12 +55,31 @@ export interface ApiTagDescription extends Resource<
  * Describes how an API Management {@link Tag} applies to an API
  * (`apis/{apiId}/tagDescriptions/{tagId}`). It maps to an OpenAPI tag
  * object (description and external docs) and attaches the tag to the API.
+ * The ARM type is `Microsoft.ApiManagement/service/apis/tagDescriptions`.
+ *
+ * :::caution
+ * Changing `serviceName`, `apiName`, `tagName`, or `resourceGroup` replaces
+ * the description.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/apimanagement/api-tag-description
  *
  * ### Documenting a Tag
  * **Example:** Describe the orders tag with external docs
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const api = yield* Azure.ApiManagement.Api("orders", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
+ * const tag = yield* Azure.ApiManagement.Tag("public", {
+ *   serviceName: apim.serviceName,
+ *   displayName: "Public",
+ * });
  * yield* Azure.ApiManagement.ApiTagDescription("orders-tag-docs", {
  *   serviceName: apim.serviceName,
  *   apiName: api.apiName,

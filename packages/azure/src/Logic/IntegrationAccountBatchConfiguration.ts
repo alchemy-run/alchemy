@@ -49,6 +49,7 @@ export interface IntegrationAccountBatchConfigurationProps {
    * Batch configuration name: 1-20 letters or digits. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the batch configuration.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Name of the batch group that batch-receiver workflows release into. */
@@ -58,6 +59,7 @@ export interface IntegrationAccountBatchConfigurationProps {
   /**
    * User metadata. Alchemy adds `alchemy::*` ownership and hash keys
    * because artifacts do not return tags.
+   * @default none
    */
   metadata?: Record<string, unknown>;
 }
@@ -90,16 +92,18 @@ export interface IntegrationAccountBatchConfiguration extends Resource<
  * batch group and the criteria (message count, size, or schedule) that
  * release batched messages to batch-receiver workflows.
  *
+ * ARM type: `Microsoft.Logic/integrationAccounts/batchConfigurations`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/logic-apps/logic-apps-batch-process-send-receive-messages).
+ *
  * :::caution
  * Changing `name`, `integrationAccount`, or `resourceGroup` replaces the
  * batch configuration. Names are 1-20 letters or digits.
  * :::
  *
- * @see https://learn.microsoft.com/azure/logic-apps/logic-apps-batch-process-send-receive-messages
- *
  * ### Configuring a Batch
  * **Example:** Release every 10 messages
  * ```typescript
+ * const account = yield* Azure.Logic.IntegrationAccount("b2b");
  * const orders = yield* Azure.Logic.IntegrationAccountBatchConfiguration("orders", {
  *   integrationAccount: account.integrationAccountName,
  *   batchGroupName: "orders",

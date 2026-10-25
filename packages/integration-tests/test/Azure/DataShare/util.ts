@@ -1,5 +1,6 @@
 import * as Azure from "@alchemy.run/azure";
 import { Credentials, type AzureOpError } from "@distilled.cloud/azure";
+import type * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
@@ -157,7 +158,7 @@ export const chain = (options: ChainOptions) =>
       sourceShareLocation: account.location,
     });
     let mapping: Azure.DataShare.DataSetMapping | undefined;
-    let targetContainerName: string | undefined;
+    let targetContainerName: Output.Output<string> | undefined;
     if (options.mapping) {
       yield* Azure.Authorization.RoleAssignment("ConsumerWritesTarget", {
         scope: storage.storageAccountId,

@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -284,26 +284,18 @@ export const DeploymentStackProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const groups = yield* resources
-        .ListResourceGroups({
-          subscriptionId,
-          _filter: "tagName eq 'alchemy::stack'",
-        })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListResourceGroups", page)));
+      const groups = yield* collectAll(resources.ListResourceGroups, {
+        subscriptionId,
+        _filter: "tagName eq 'alchemy::stack'",
+      });
       const perGroup = yield* Effect.forEach(
         (groups.value ?? []).flatMap((group) => (group.name === undefined ? [] : [group.name])),
         (resourceGroupName) =>
           orUndefinedIfNotFound(
-            resources
-              .ListDeploymentStackAtResourceGroup({
-                subscriptionId,
-                resourceGroupName,
-              })
-              .pipe(
-                Effect.flatMap((page) =>
-                  requireSinglePage("ListDeploymentStackAtResourceGroup", page),
-                ),
-              ),
+            collectAll(resources.ListDeploymentStackAtResourceGroup, {
+              subscriptionId,
+              resourceGroupName,
+            }),
           ).pipe(
             Effect.map((page) =>
               (page?.value ?? []).flatMap((stack) =>

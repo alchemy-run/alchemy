@@ -25,27 +25,46 @@ import {
 
 /** The subnet of an NSX segment. */
 export interface WorkloadNetworkSegmentSubnet {
-  /** Gateway address as a CIDR, e.g. `10.10.0.1/24`. */
+  /**
+   * Gateway address as a CIDR, e.g. `10.10.0.1/24`.
+   * @default not set
+   */
   gatewayAddress?: string;
-  /** DHCP ranges, e.g. `["10.10.0.100-10.10.0.200"]`. */
+  /**
+   * DHCP ranges, e.g. `["10.10.0.100-10.10.0.200"]`.
+   * @default not set
+   */
   dhcpRanges?: string[];
 }
 
 export interface WorkloadNetworkSegmentProps {
-  /** Resource group of the private cloud. Changing it replaces the segment. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the segment.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the segment. */
   privateCloud: string;
   /**
    * NSX ID of the segment. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the segment.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name of the segment. */
+  /**
+   * Display name of the segment.
+   * @default not set
+   */
   displayName?: string;
-  /** Path of the tier-1 gateway to connect the segment to. */
+  /**
+   * Path of the tier-1 gateway to connect the segment to.
+   * @default not set
+   */
   connectedGateway?: string;
-  /** Subnet of the segment. */
+  /**
+   * Subnet of the segment.
+   * @default not set
+   */
   subnet?: WorkloadNetworkSegmentSubnet;
 }
 
@@ -73,14 +92,24 @@ export interface WorkloadNetworkSegment extends Resource<
 > {}
 
 /**
- * An NSX-T network segment in an Azure VMware Solution private cloud — the
+ * An NSX-T network segment in an Azure VMware Solution private cloud
+ * (`Microsoft.AVS/privateClouds/workloadNetworks/segments`) — the
  * layer-2 network workload VMs attach to.
+ *
+ * :::caution
+ * Changing `privateCloud`, `name`, or `resourceGroup` replaces the segment.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/tutorial-nsx-t-network-segment
  *
  * ### Creating a Segment
  * **Example:** Segment on the default tier-1 gateway
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
  * yield* Azure.VMware.WorkloadNetworkSegment("web", {
  *   privateCloud: cloud.privateCloudName,
  *   displayName: "web",

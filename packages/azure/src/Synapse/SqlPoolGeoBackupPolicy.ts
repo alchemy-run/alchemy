@@ -48,17 +48,38 @@ export interface SqlPoolGeoBackupPolicy extends Resource<
 > {}
 
 /**
- * The geo-backup policy of a dedicated SQL pool — a daily backup copied
- * to the paired region for geo-restore.
+ * The geo-backup policy of a dedicated SQL pool
+ * (`Microsoft.Synapse/workspaces/sqlPools/geoBackupPolicies`) — a daily
+ * backup copied to the paired region for geo-restore.
  *
  * This is a singleton setting that always exists on a pool. Destroying the
  * resource re-enables geo-backups.
+ *
+ * :::caution
+ * Changing `workspace`, `sqlPool`, or `resourceGroup` replaces the policy.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/sql-data-warehouse/backup-and-restore#geo-backups-and-disaster-recovery
  *
  * ### Configuring Geo-Backups
  * **Example:** Disable geo-backups for a dev pool
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
+ * const pool = yield* Azure.Synapse.SqlPool("dw", {
+ *   workspace: workspace.workspaceName,
+ *   sku: "DW100c",
+ * });
  * yield* Azure.Synapse.SqlPoolGeoBackupPolicy("geo", {
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,

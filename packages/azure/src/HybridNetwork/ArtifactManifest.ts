@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -36,25 +36,32 @@ const createManifestName = Effect.fn(function* (id: string) {
 export type ManifestArtifactType = "OCIArtifact" | "VhdImageFile" | "ArmTemplate" | "ImageFile";
 
 export interface ManifestArtifact {
-  /** Name of the artifact (repository name in the backing registry). */
+  /** Name of the artifact (repository name in the backing registry). Required. */
   artifactName: string;
-  /** Kind of artifact. */
+  /** Kind of artifact. Required. */
   artifactType: ManifestArtifactType;
-  /** Version (tag) of the artifact, e.g. `1.0.0`. */
+  /** Version (tag) of the artifact, e.g. `1.0.0`. Required. */
   artifactVersion: string;
 }
 
 export interface ArtifactManifestProps {
-  /** Resource group of the publisher. Changing it replaces the manifest. */
+  /**
+   * Resource group of the publisher. Changing it replaces the manifest.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the publisher. Changing it replaces the manifest. */
+  /** Name of the publisher. Required. Changing it replaces the manifest. */
   publisher: string;
-  /** Name of the artifact store that holds the manifest. Changing it replaces the manifest. */
+  /**
+   * Name of the artifact store that holds the manifest. Required. Changing
+   * it replaces the manifest.
+   */
   artifactStore: string;
   /**
    * Manifest name: 5-50 lowercase letters, digits, and `-`, starting with
    * a letter. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the manifest.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -71,6 +78,7 @@ export interface ArtifactManifestProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -106,11 +114,12 @@ export interface ArtifactManifest extends Resource<
 > {}
 
 /**
- * An Azure Operator Service Manager artifact manifest — declares the
- * artifacts (Helm charts, container images, ARM templates, VHDs) a
- * publisher uploads to an artifact store. After the manifest is created,
- * push the artifacts to the store's backing registry with the manifest's
- * credential.
+ * An Azure Operator Service Manager artifact manifest
+ * (`Microsoft.HybridNetwork/publishers/artifactStores/artifactManifests`).
+ * It declares the artifacts (Helm charts, container images, ARM templates,
+ * VHDs) a publisher uploads to an artifact store. After you create the
+ * manifest, push the artifacts to the store's backing registry with the
+ * manifest's credential.
  *
  * Manifests are free; the backing artifact store is billed.
  *
@@ -119,6 +128,10 @@ export interface ArtifactManifest extends Resource<
  * ### Declaring Artifacts
  * **Example:** Manifest for an ARM template
  * ```typescript
+ * const publisher = yield* Azure.HybridNetwork.Publisher("publisher");
+ * const store = yield* Azure.HybridNetwork.ArtifactStore("store", {
+ *   publisher: publisher.publisherName,
+ * });
  * const manifest = yield* Azure.HybridNetwork.ArtifactManifest("templates", {
  *   publisher: publisher.publisherName,
  *   artifactStore: store.artifactStoreName,
@@ -134,6 +147,10 @@ export interface ArtifactManifest extends Resource<
  *
  * **Example:** Manifest for a Helm chart and its image
  * ```typescript
+ * const publisher = yield* Azure.HybridNetwork.Publisher("publisher");
+ * const store = yield* Azure.HybridNetwork.ArtifactStore("store", {
+ *   publisher: publisher.publisherName,
+ * });
  * const manifest = yield* Azure.HybridNetwork.ArtifactManifest("cnf", {
  *   publisher: publisher.publisherName,
  *   artifactStore: store.artifactStoreName,
@@ -143,6 +160,12 @@ export interface ArtifactManifest extends Resource<
  *   ],
  * });
  * ```
+ *
+ * :::caution
+ * Manifests are immutable. Changing `artifacts`, `name`, `publisher`,
+ * `artifactStore`, `location`, or `resourceGroup` replaces the manifest.
+ * With a fixed `name`, the old manifest is deleted first.
+ * :::
  *
  * @resource
  */
@@ -219,36 +242,30 @@ export const ArtifactManifestProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const publishers = yield* hybridnetwork
-        .ListPublisherBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPublisherBySubscription", page)));
+      const publishers = yield* collectAll(hybridnetwork.ListPublisherBySubscription, {
+        subscriptionId,
+      });
       const found: ArtifactManifest["Attributes"][] = [];
       for (const publisher of publishers.value ?? []) {
         const group = resourceGroupOf(publisher.id);
         if (group === undefined || publisher.name === undefined) continue;
         const stores = yield* orUndefinedIfNotFound(
-          hybridnetwork.ListArtifactStoreByPublisher({
+          collectAll(hybridnetwork.ListArtifactStoreByPublisher, {
             subscriptionId,
             resourceGroupName: group,
             publisherName: publisher.name,
           }),
         );
-        if (stores !== undefined) {
-          yield* requireSinglePage("ListArtifactStoreByPublisher", stores);
-        }
         for (const store of stores?.value ?? []) {
           if (store.name === undefined) continue;
           const page = yield* orUndefinedIfNotFound(
-            hybridnetwork.ListArtifactManifestByArtifactStore({
+            collectAll(hybridnetwork.ListArtifactManifestByArtifactStore, {
               subscriptionId,
               resourceGroupName: group,
               publisherName: publisher.name,
               artifactStoreName: store.name,
             }),
           );
-          if (page !== undefined) {
-            yield* requireSinglePage("ListArtifactManifestByArtifactStore", page);
-          }
           for (const manifest of page?.value ?? []) {
             if (hasAnyAlchemyTag(manifest.tags) && manifest.name !== undefined) {
               found.push(toAttrs(group, publisher.name, store.name, manifest.name, manifest));

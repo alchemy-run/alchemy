@@ -8,7 +8,10 @@ import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 type BrokerScope = InstanceScope & { readonly brokerName: string };
 
 export interface BrokerAuthenticationProps {
-  /** Resource group of the IoT Operations instance. Changing it replaces the authentication. */
+  /**
+   * Resource group of the IoT Operations instance. Changing it replaces the authentication.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** IoT Operations instance that holds the broker. Changing it replaces the authentication. */
   instanceName: string;
@@ -21,6 +24,7 @@ export interface BrokerAuthenticationProps {
    * Authentication name (lowercase letters, digits, and hyphens). If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the authentication.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,14 +59,21 @@ export interface BrokerAuthentication extends Resource<
 > {}
 
 /**
- * Client authentication policy of an Azure IoT Operations MQTT broker.
- * Broker listener ports reference it by name via `authenticationRef`.
+ * Client authentication policy of an Azure IoT Operations MQTT broker
+ * (`Microsoft.IoTOperations/instances/brokers/authentications`). Broker
+ * listener ports reference it by name via `authenticationRef`.
  *
  * @see https://learn.microsoft.com/azure/iot-operations/manage-mqtt-broker/howto-configure-authentication
  *
  * ### Authenticating Clients
  * **Example:** Kubernetes service account tokens
  * ```typescript
+ * const instance = yield* Azure.IoTOperations.Instance("aio", {
+ *   customLocationId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/aio-location",
+ *   schemaRegistryId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.DeviceRegistry/schemaRegistries/aio-schemas",
+ * });
  * const authn = yield* Azure.IoTOperations.BrokerAuthentication("sat", {
  *   instanceName: instance.instanceName,
  *   authenticationMethods: [
@@ -76,6 +87,7 @@ export interface BrokerAuthentication extends Resource<
  *
  * **Example:** X.509 client certificates
  * ```typescript
+ * // instance: the Azure.IoTOperations.Instance of the first example
  * const authn = yield* Azure.IoTOperations.BrokerAuthentication("x509", {
  *   instanceName: instance.instanceName,
  *   authenticationMethods: [
@@ -86,6 +98,12 @@ export interface BrokerAuthentication extends Resource<
  *   ],
  * });
  * ```
+ *
+ * :::caution
+ * Changing `resourceGroup`, `instanceName`, `brokerName`, or `name`
+ * replaces the policy. Listener ports that reference it by name must
+ * follow.
+ * :::
  *
  * @resource
  */

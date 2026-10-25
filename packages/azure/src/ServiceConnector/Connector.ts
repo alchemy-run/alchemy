@@ -23,7 +23,10 @@ import {
 import { createLinkerName } from "./Linker.ts";
 
 export interface ConnectorProps extends ConnectionProps {
-  /** Resource group that holds the connector. Changing it replaces the connector. */
+  /**
+   * Resource group that holds the connector. Changing it replaces the connector.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Azure region of the connector. Changing it replaces the connector.
@@ -34,6 +37,7 @@ export interface ConnectorProps extends ConnectionProps {
    * Connector name: letters, digits, `.` and `_`. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the connector.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
 }
@@ -66,25 +70,33 @@ export interface Connector extends Resource<
 > {}
 
 /**
- * A regional Service Connector connector — a connection to a target
- * service that is not attached to an Azure compute resource, e.g. for an
- * app running locally or outside Azure.
+ * A regional Service Connector connector
+ * (`Microsoft.ServiceLinker/locations/connectors`): a connection to a target
+ * service that is not attached to an Azure compute resource, for example for
+ * an app that runs on your laptop or outside Azure. See the
+ * [Azure docs](https://learn.microsoft.com/azure/service-connector/how-to-provide-correct-parameters).
  *
  * Service Connector validates the target, sets up the requested auth
- * (firewall rules, RBAC), and generates the configuration the client
- * needs; it applies no settings to a source. Use `Linker` to connect an
- * App Service site or Container App.
+ * (firewall rules, RBAC), and generates the configuration the client needs.
+ * It applies no settings to a source. Use `Azure.ServiceConnector.Linker` to
+ * connect an App Service site or a Container App.
  *
- * Connectors cannot be tagged. The generated name encodes the app, stage,
- * logical ID, and instance ID, which is how Alchemy recognises its own
- * connectors; one with a custom name found without state is reported as
- * unowned.
+ * Connectors have no tags. The generated name encodes the app, stage,
+ * logical ID, and instance ID, and Alchemy uses it to recognise its own
+ * connectors. Alchemy reports a connector with a custom name that it finds
+ * without state as unowned.
  *
- * @see https://learn.microsoft.com/azure/service-connector/how-to-provide-correct-parameters
+ * :::caution
+ * Changing `resourceGroup`, `location`, `name`, or the target
+ * (`targetService.type`, `targetService.id`, or `targetService.endpoint`)
+ * replaces the connector. Alchemy updates `authInfo`, `clientType`, and the
+ * other connection settings in place.
+ * :::
  *
  * ### Connecting to Storage
  * **Example:** Secret-based connection to a blob service
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("files");
  * yield* Azure.ServiceConnector.Connector("local-storage", {
  *   targetService: {
  *     type: "AzureResource",
@@ -98,8 +110,13 @@ export interface Connector extends Resource<
  * ### Connecting with a User Account
  * **Example:** Grant a developer RBAC on the target
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("files");
+ * const developerObjectId = "00000000-0000-0000-0000-000000000000";
  * yield* Azure.ServiceConnector.Connector("dev-storage", {
- *   targetService: { type: "AzureResource", id: blobServiceId },
+ *   targetService: {
+ *     type: "AzureResource",
+ *     id: Output.interpolate`${account.storageAccountId}/blobServices/default`,
+ *   },
  *   authInfo: { authType: "userAccount", principalId: developerObjectId },
  *   clientType: "python",
  * });

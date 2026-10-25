@@ -108,6 +108,7 @@ export interface MaintenanceConfigurationProps {
    * the app, stage, and logical ID. Keep the resource group and name within
    * ~128 characters combined; the service fails longer resource IDs with an
    * internal server error. Changing it replaces the configuration.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -122,25 +123,36 @@ export interface MaintenanceConfigurationProps {
    * Changing it replaces the configuration.
    */
   maintenanceScope: MaintenanceScope;
-  /** Namespace of the configuration. */
+  /**
+   * Namespace of the configuration.
+   * @default "default"
+   */
   namespace?: string;
   /**
    * Scope-specific extension properties. `InGuestPatch` requires
    * `{ InGuestPatchMode: "User" }`.
+   * @default none
    */
   extensionProperties?: Record<string, string>;
-  /** The recurring maintenance window. */
+  /**
+   * The recurring maintenance window.
+   * @default Azure's default
+   */
   maintenanceWindow?: MaintenanceWindow;
   /**
    * Visibility of the configuration.
    * @default "Custom"
    */
   visibility?: "Custom" | "Public";
-  /** Patches to install (`InGuestPatch` scope only). */
+  /**
+   * Patches to install (`InGuestPatch` scope only).
+   * @default none
+   */
   installPatches?: MaintenanceInstallPatches;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -175,9 +187,15 @@ export interface MaintenanceConfiguration extends Resource<
  * settings that control when platform updates, guest OS patches, or SQL
  * maintenance are applied to the resources assigned to it.
  *
+ * ARM type: `Microsoft.Maintenance/maintenanceConfigurations`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/virtual-machines/maintenance-configurations).
+ *
  * Assign resources with `Azure.Maintenance.ConfigurationAssignment`.
  *
- * @see https://learn.microsoft.com/azure/virtual-machines/maintenance-configurations
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `maintenanceScope` replaces
+ * the configuration.
+ * :::
  *
  * ### Scheduled Guest Patching
  * **Example:** Patch Linux VMs daily in a four-hour window

@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -25,11 +25,15 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState } from "./EdgeShared.ts";
 
 export interface DiagnosticProps {
-  /** Resource group the diagnostic is created in. Changing it replaces the diagnostic. */
+  /**
+   * Resource group the diagnostic is created in. Changing it replaces the diagnostic.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /**
    * Name of the diagnostic. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the diagnostic.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -46,6 +50,7 @@ export interface DiagnosticProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -72,21 +77,28 @@ export interface Diagnostic extends Resource<
 > {}
 
 /**
- * An Azure Arc workload orchestration diagnostic. It collects workload
- * orchestration diagnostics for a custom location on an Arc-enabled
- * Kubernetes cluster.
+ * An Azure Arc workload orchestration diagnostic
+ * (`Microsoft.Edge/diagnostics`). It collects workload orchestration
+ * diagnostics for a custom location on an Arc-enabled Kubernetes cluster.
+ * See the
+ * [workload orchestration overview](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview).
  *
- * Requires an existing custom location (an Arc-enabled cluster with the
- * workload orchestration extension).
+ * :::caution
+ * The diagnostic needs an existing custom location: an Arc-enabled
+ * cluster with the workload orchestration extension.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `customLocationId`
+ * replaces the diagnostic.
+ * :::
  *
  * ### Creating a Diagnostic
  * **Example:** Diagnostic for a custom location
  * ```typescript
  * const diagnostic = yield* Azure.Edge.Diagnostic("diag", {
  *   customLocationId:
- *     "/subscriptions/.../resourceGroups/arc/providers/Microsoft.ExtendedLocation/customLocations/plant",
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/arc/providers/Microsoft.ExtendedLocation/customLocations/plant",
  * });
  * ```
  *
@@ -118,9 +130,7 @@ export const DiagnosticProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* edge
-        .ListDiagnosticBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDiagnosticBySubscription", page)));
+      const page = yield* collectAll(edge.ListDiagnosticBySubscription, { subscriptionId });
       return page.value.flatMap((diagnostic) => {
         const group = resourceGroupOf(diagnostic.id);
         return hasAnyAlchemyTag(diagnostic.tags) &&

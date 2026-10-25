@@ -24,13 +24,17 @@ import {
 } from "./common.ts";
 
 export interface CloudLinkProps {
-  /** Resource group of the private cloud. Changing it replaces the link. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the link.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the link. */
   privateCloud: string;
   /**
    * Name of the cloud link. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the link.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -64,14 +68,26 @@ export interface CloudLink extends Resource<
 > {}
 
 /**
- * A cloud link between two Azure VMware Solution private clouds, used to
+ * A cloud link between two Azure VMware Solution private clouds
+ * (`Microsoft.AVS/privateClouds/cloudLinks`), used to
  * stretch vSAN clusters or enable cross-cloud vCenter features.
+ *
+ * :::caution
+ * Changing `privateCloud`, `name`, `linkedCloud`, or `resourceGroup`
+ * replaces the link.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/create-cloud-link
  *
  * ### Linking Private Clouds
  * **Example:** Link two private clouds
  * ```typescript
+ * const primary = yield* Azure.VMware.PrivateCloud("primary", {
+ *   networkBlock: "10.175.0.0/22",
+ * });
+ * const secondary = yield* Azure.VMware.PrivateCloud("secondary", {
+ *   networkBlock: "10.176.0.0/22",
+ * });
  * yield* Azure.VMware.CloudLink("link", {
  *   privateCloud: primary.privateCloudName,
  *   linkedCloud: secondary.privateCloudId,

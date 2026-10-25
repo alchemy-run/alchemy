@@ -8,7 +8,10 @@ import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 type ProfileScope = InstanceScope & { readonly dataflowProfileName: string };
 
 export interface DataflowGraphProps {
-  /** Resource group of the IoT Operations instance. Changing it replaces the graph. */
+  /**
+   * Resource group of the IoT Operations instance. Changing it replaces the graph.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** IoT Operations instance that holds the profile. Changing it replaces the graph. */
   instanceName: string;
@@ -21,6 +24,7 @@ export interface DataflowGraphProps {
    * Graph name (lowercase letters, digits, and hyphens). If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the graph.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -28,7 +32,10 @@ export interface DataflowGraphProps {
    * @default "Enabled"
    */
   mode?: "Enabled" | "Disabled";
-  /** Whether the graph requests disk persistence from the broker. */
+  /**
+   * Whether the graph requests disk persistence from the broker.
+   * @default Azure's default
+   */
   requestDiskPersistence?: "Enabled" | "Disabled";
   /**
    * Nodes of the graph. Each node has a `name` and a `nodeType` plus the
@@ -66,7 +73,8 @@ export interface DataflowGraph extends Resource<
 > {}
 
 /**
- * A dataflow graph of an Azure IoT Operations instance: a pipeline of
+ * A dataflow graph of an Azure IoT Operations instance
+ * (`Microsoft.IoTOperations/instances/dataflowProfiles/dataflowGraphs`): a pipeline of
  * WebAssembly processing nodes, pulled from a registry endpoint, between a
  * source and a destination dataflow endpoint.
  *
@@ -75,6 +83,17 @@ export interface DataflowGraph extends Resource<
  * ### Building a Graph
  * **Example:** Source → WASM module → destination
  * ```typescript
+ * const instance = yield* Azure.IoTOperations.Instance("aio", {
+ *   customLocationId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/aio-location",
+ *   schemaRegistryId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.DeviceRegistry/schemaRegistries/aio-schemas",
+ * });
+ * const registry = yield* Azure.IoTOperations.RegistryEndpoint("public", {
+ *   instanceName: instance.instanceName,
+ *   host: "ghcr.io",
+ *   authentication: { method: "Anonymous", anonymousSettings: {} },
+ * });
  * const graph = yield* Azure.IoTOperations.DataflowGraph("graph", {
  *   instanceName: instance.instanceName,
  *   nodes: [
@@ -103,6 +122,11 @@ export interface DataflowGraph extends Resource<
  *   ],
  * });
  * ```
+ *
+ * :::caution
+ * Changing `resourceGroup`, `instanceName`, `dataflowProfileName`, or
+ * `name` replaces the graph.
+ * :::
  *
  * @resource
  */

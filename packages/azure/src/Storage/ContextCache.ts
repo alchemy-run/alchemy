@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -155,9 +155,7 @@ export const ContextCacheProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* storage
-        .ListContextCachBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListContextCachBySubscription", page)));
+      const page = yield* collectAll(storage.ListContextCachBySubscription, { subscriptionId });
       return page.value.flatMap((cache) => {
         const group = resourceGroupOf(cache.id);
         return hasAnyAlchemyTag(cache.tags) && group !== undefined && cache.name !== undefined

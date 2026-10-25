@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -38,6 +38,7 @@ export interface IpCommunityProps {
   /**
    * Name of the IP community list. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the IP community list.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,11 +56,13 @@ export interface IpCommunityProps {
   /**
    * Free-form description. Azure cannot update it in place, so changing
    * it replaces the resource.
+   * @default none
    */
   annotation?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -97,7 +100,13 @@ export interface IpCommunity extends Resource<
  * set. The list is plain ARM configuration until a route policy on a Network
  * Fabric references it.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-route-policy
+ * ARM type: `Microsoft.ManagedNetworkFabric/ipCommunities`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-route-policy).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `annotation` replaces the
+ * community.
+ * :::
  *
  * ### Creating an IP Community List
  * **Example:** Match a community value
@@ -161,9 +170,7 @@ export const IpCommunityProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mnf
-        .ListIpCommunityBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListIpCommunityBySubscription", page)));
+      const page = yield* collectAll(mnf.ListIpCommunityBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

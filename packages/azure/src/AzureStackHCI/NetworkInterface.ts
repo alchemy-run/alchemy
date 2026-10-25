@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -39,6 +39,7 @@ export interface NetworkInterfaceProps {
   /**
    * Name of the network interface. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the network interface.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,11 +56,18 @@ export interface NetworkInterfaceProps {
   /**
    * IP configurations, each referencing a logical network subnet.
    * Changing them replaces the interface.
+   * @default none
    */
   ipConfigurations?: NetworkInterfaceIpConfiguration[];
-  /** MAC address of the interface. Changing it replaces the interface. */
+  /**
+   * MAC address of the interface. Changing it replaces the interface.
+   * @default not set
+   */
   macAddress?: string;
-  /** DNS settings. Changing them replaces the interface. */
+  /**
+   * DNS settings. Changing them replaces the interface.
+   * @default not set
+   */
   dnsSettings?: {
     /** DNS server IP addresses. */
     dnsServers?: string[];
@@ -67,6 +75,7 @@ export interface NetworkInterfaceProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -100,12 +109,26 @@ export interface NetworkInterface extends Resource<
  * A network interface on an Azure Local logical network, attached to Arc
  * VMs. Needs an Arc custom location backed by the Arc Resource Bridge of a
  * deployed Azure Local cluster.
+ * The ARM type is `Microsoft.AzureStackHCI/networkInterfaces`.
+ *
+ * :::caution
+ * Changing `name`, `location`, `extendedLocation`, `ipConfigurations`,
+ * `macAddress`, `dnsSettings`, or `resourceGroup` replaces the network
+ * interface.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/manage/create-network-interfaces
  *
  * ### Creating a Network Interface
  * **Example:** Interface on a logical network
  * ```typescript
+ * // Arc custom location of the Azure Local cluster.
+ * const customLocationId = yield* Config.string("HCI_CUSTOM_LOCATION_ID");
+ * const lnet = yield* Azure.AzureStackHCI.LogicalNetwork("lan", {
+ *   extendedLocation: { name: customLocationId },
+ *   vmSwitchName: "ConvergedSwitch(management_compute_storage)",
+ *   subnets: [{ name: "lan", properties: { ipAllocationMethod: "Dynamic" } }],
+ * });
  * const nic = yield* Azure.AzureStackHCI.NetworkInterface("vm-nic", {
  *   extendedLocation: { name: customLocationId },
  *   ipConfigurations: [
@@ -159,9 +182,7 @@ export const NetworkInterfaceProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        hci
-          .ListNetworkInterfaceAll({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListNetworkInterfaceAll", page))),
+        collectAll(hci.ListNetworkInterfaceAll, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((value) => {
         const group = resourceGroupOf(value.id);

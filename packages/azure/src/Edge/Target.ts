@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -25,11 +25,15 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, sameId, sameJson } from "./EdgeShared.ts";
 
 export interface TargetProps {
-  /** Resource group the target is created in. Changing it replaces the target. */
+  /**
+   * Resource group the target is created in. Changing it replaces the target.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /**
    * Name of the target. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the target.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,7 +59,10 @@ export interface TargetProps {
   capabilities: string[];
   /** Target specification: topologies and provider bindings. */
   targetSpecification: Record<string, unknown>;
-  /** Scope of the target's solutions (for example a Kubernetes namespace). */
+  /**
+   * Scope of the target's solutions (for example a Kubernetes namespace).
+   * @default Azure's default
+   */
   solutionScope?: string;
   /**
    * Whether the target accepts deployments.
@@ -65,6 +72,7 @@ export interface TargetProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -103,21 +111,33 @@ export interface Target extends Resource<
 > {}
 
 /**
- * An Azure Arc workload orchestration target: a deployment destination
- * (typically a namespace on an Arc-enabled Kubernetes cluster, reached
- * through a custom location) at one hierarchy level of a context.
+ * An Azure Arc workload orchestration target (`Microsoft.Edge/targets`): a
+ * deployment destination (typically a namespace on an Arc-enabled
+ * Kubernetes cluster, reached through a custom location) at one hierarchy
+ * level of a context. See the
+ * [workload orchestration overview](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview).
  *
- * Requires an existing custom location (an Arc-enabled cluster with the
- * workload orchestration extension) and the subscription's
+ * :::caution
+ * The target needs an existing custom location (an Arc-enabled cluster
+ * with the workload orchestration extension) and the subscription's
  * `Azure.Edge.Context`.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `customLocationId`
+ * replaces the target.
+ * :::
  *
  * ### Creating a Target
  * **Example:** Line-level Helm target
  * ```typescript
+ * const context = yield* Azure.Edge.Context("context", {
+ *   capabilities: [{ name: "soap", description: "Soap production" }],
+ *   hierarchies: [{ name: "line", description: "Production line" }],
+ * });
  * const target = yield* Azure.Edge.Target("line1", {
- *   customLocationId: customLocationId,
+ *   customLocationId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/arc/providers/Microsoft.ExtendedLocation/customLocations/plant",
  *   contextId: context.contextId,
  *   displayName: "Line 1",
  *   description: "Packaging line 1",
@@ -173,9 +193,7 @@ export const TargetProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* edge
-        .ListTargetBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListTargetBySubscription", page)));
+      const page = yield* collectAll(edge.ListTargetBySubscription, { subscriptionId });
       return page.value.flatMap((target) => {
         const group = resourceGroupOf(target.id);
         return hasAnyAlchemyTag(target.tags) && group !== undefined && target.name !== undefined

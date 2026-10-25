@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -38,6 +38,7 @@ export interface NetworkFabricProps {
   /**
    * Name of the network fabric. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the network fabric.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -62,7 +63,10 @@ export interface NetworkFabricProps {
    * (use the upgrade action for in-place upgrades).
    */
   fabricVersion: string;
-  /** Number of storage arrays. Changing it replaces the fabric. */
+  /**
+   * Number of storage arrays. Changing it replaces the fabric.
+   * @default Azure's default
+   */
   storageArrayCount?: number;
   /** Number of compute servers per rack. */
   serverCountPerRack: number;
@@ -70,7 +74,10 @@ export interface NetworkFabricProps {
   rackCount: number;
   /** IPv4 prefix for the fabric's management network, e.g. `10.18.0.0/19`. */
   ipv4Prefix: string;
-  /** IPv6 prefix for the fabric's management network. */
+  /**
+   * IPv6 prefix for the fabric's management network.
+   * @default none
+   */
   ipv6Prefix?: string;
   /** BGP autonomous system number of the fabric. */
   fabricASN: number;
@@ -81,27 +88,55 @@ export interface NetworkFabricProps {
   terminalServerConfiguration: mnf.NetworkFabricPropertiesInput["terminalServerConfiguration"];
   /** Infrastructure and workload management VPN configuration. */
   managementNetworkConfiguration: mnf.NetworkFabricPropertiesInput["managementNetworkConfiguration"];
-  /** Storage account the fabric writes device logs and configuration to. */
+  /**
+   * Storage account the fabric writes device logs and configuration to.
+   * @default none
+   */
   storageAccountConfiguration?: mnf.NetworkFabricPropertiesInput["storageAccountConfiguration"];
-  /** Hardware alert threshold percentage. */
+  /**
+   * Hardware alert threshold percentage.
+   * @default Azure's default
+   */
   hardwareAlertThreshold?: number;
-  /** ARM IDs of control-plane ACLs applied to the fabric. */
+  /**
+   * ARM IDs of control-plane ACLs applied to the fabric.
+   * @default none
+   */
   controlPlaneAcls?: mnf.NetworkFabricPropertiesInput["controlPlaneAcls"];
-  /** Fabric feature flags. */
+  /**
+   * Fabric feature flags.
+   * @default none
+   */
   featureFlags?: mnf.NetworkFabricPropertiesInput["featureFlags"];
-  /** ARM IDs of trusted IP prefix lists. */
+  /**
+   * ARM IDs of trusted IP prefix lists.
+   * @default none
+   */
   trustedIpPrefixes?: mnf.NetworkFabricPropertiesInput["trustedIpPrefixes"];
-  /** Unique route distinguisher configuration. */
+  /**
+   * Unique route distinguisher configuration.
+   * @default none
+   */
   uniqueRdConfiguration?: mnf.NetworkFabricPropertiesInput["uniqueRdConfiguration"];
-  /** Authorized transceiver key configuration. */
+  /**
+   * Authorized transceiver key configuration.
+   * @default none
+   */
   authorizedTransceiver?: mnf.NetworkFabricPropertiesInput["authorizedTransceiver"];
-  /** Quality-of-service configuration. */
+  /**
+   * Quality-of-service configuration.
+   * @default none
+   */
   qosConfiguration?: mnf.NetworkFabricPropertiesInput["qosConfiguration"];
-  /** Free-form description. */
+  /**
+   * Free-form description.
+   * @default none
+   */
   annotation?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -146,13 +181,24 @@ export interface NetworkFabric extends Resource<
  * records the fabric's design; the hardware is brought up with the provision
  * action. Needs Operator Nexus hardware.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-configure-network-fabric
+ * ARM type: `Microsoft.ManagedNetworkFabric/networkFabrics`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-configure-network-fabric).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `networkFabricControllerId`,
+ * `networkFabricSku`, `fabricVersion`, or `storageArrayCount` replaces the
+ * fabric.
+ * :::
  *
  * ### Creating a Network Fabric
  * **Example:** Fabric managed by a controller
  * ```typescript
+ * // An existing Network Fabric Controller.
+ * const controllerId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/networkFabricControllers/nfc1";
+ * const terminalServerPassword = yield* Config.string("TERMINAL_SERVER_PASSWORD");
  * const fabric = yield* Azure.ManagedNetworkFabric.NetworkFabric("fab1", {
- *   networkFabricControllerId: nfc.networkFabricControllerId,
+ *   networkFabricControllerId: controllerId,
  *   networkFabricSku: "M4-A400-A100-C16-aa",
  *   fabricVersion: "5.0.0",
  *   rackCount: 4,
@@ -221,9 +267,7 @@ export const NetworkFabricProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mnf
-        .ListNetworkFabricBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListNetworkFabricBySubscription", page)));
+      const page = yield* collectAll(mnf.ListNetworkFabricBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

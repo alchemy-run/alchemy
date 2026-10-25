@@ -25,6 +25,7 @@ export interface HypervClusterProps {
   /**
    * Name of the Hyper-V cluster in the site. If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the Hyper-V cluster.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Fully qualified domain name (or IP address) of the Hyper-V cluster. */
@@ -37,7 +38,10 @@ export interface HypervClusterProps {
    * in a non-terminal state until the site is deleted.
    */
   runAsAccountId: string;
-  /** FQDNs of the cluster's member hosts. */
+  /**
+   * FQDNs of the cluster's member hosts.
+   * @default none
+   */
   hostFqdnList?: string[];
 }
 
@@ -65,17 +69,24 @@ export interface HypervCluster extends Resource<
 /**
  * An Azure Migrate Hyper-V cluster (`Microsoft.OffAzure/hypervSites/clusters`) — a Hyper-V failover cluster the site's appliance discovers VMs from.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/migrate/migrate-appliance-architecture).
+ *
  * The appliance registered with the site must be able to reach the
  * Hyper-V cluster with the referenced run-as account; without a running appliance
  * Azure rejects the request. Hyper-V cluster entries cannot be tagged; Alchemy
  * treats one as owned when its site carries this stack's and stage's
  * ownership tags.
  *
- * @see https://learn.microsoft.com/azure/migrate/migrate-appliance-architecture
+ * :::caution
+ * Changing `resourceGroup`, `hypervSite`, or `name` replaces the cluster.
+ * :::
  *
  * ### Adding a Hyper-V cluster
  * **Example:** Hyper-V cluster discovered by an appliance
  * ```typescript
+ * const site = yield* Azure.Migrate.HypervSite("hyperv", {
+ *   location: "centralus",
+ * });
  * const cluster = yield* Azure.Migrate.HypervCluster("cluster", {
  *   hypervSite: site.siteName,
  *   fqdn: "hvcluster.contoso.local",

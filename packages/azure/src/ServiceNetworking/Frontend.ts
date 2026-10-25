@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -28,11 +28,13 @@ export interface FrontendSecurityPolicyConfigurations {
    * ARM ID of a `waf` security policy of the same traffic controller.
    * Azure currently rejects WAF policies on frontends; attach them to the
    * traffic controller instead.
+   * @default no policy
    */
   wafSecurityPolicyId?: string;
   /**
    * ARM ID of an `ipAccessRules` security policy of the same traffic
    * controller.
+   * @default no policy
    */
   ipAccessRulesSecurityPolicyId?: string;
 }
@@ -41,6 +43,7 @@ export interface FrontendProps {
   /**
    * Resource group of the traffic controller. Changing it replaces the
    * frontend.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -52,6 +55,7 @@ export interface FrontendProps {
    * Frontend name: up to 64 letters, digits, `-`, `_`, and `.`. If omitted,
    * a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the frontend.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -69,13 +73,18 @@ export interface FrontendProps {
   /**
    * ARM ID of the association whose subnet hosts a private frontend
    * (required when `publicNetworkAccess` is `Disabled`).
+   * @default not set (public frontend)
    */
   associationId?: string;
-  /** Security policies applied to traffic of this frontend. */
+  /**
+   * Security policies applied to traffic of this frontend.
+   * @default no policies
+   */
   securityPolicyConfigurations?: FrontendSecurityPolicyConfigurations;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -116,17 +125,31 @@ export interface Frontend extends Resource<
 > {}
 
 /**
- * A frontend of an Application Gateway for Containers traffic controller —
- * the entry point (an `*.alb.azure.com` FQDN, or a private IP in an
- * association's subnet) that client traffic arrives on.
+ * A frontend of an Application Gateway for Containers traffic controller
+ * (`Microsoft.ServiceNetworking/trafficControllers/frontends`): the entry
+ * point that client traffic arrives on. It is an `*.alb.azure.com` FQDN, or a
+ * private IP in an association's subnet. See the
+ * [Azure docs](https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components).
  *
  * Frontends bill hourly (about $0.01/hour) and provision in a few minutes.
  *
- * @see https://learn.microsoft.com/azure/application-gateway/for-containers/application-gateway-for-containers-components
+ * :::caution
+ * A private frontend (`publicNetworkAccess: "Disabled"`) needs
+ * `associationId`. Azure rejects WAF policies on frontends, so attach them to
+ * the traffic controller.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `trafficController`, `name`, or `location`
+ * replaces the frontend, and its FQDN changes. Alchemy updates
+ * `publicNetworkAccess`, `associationId`, `securityPolicyConfigurations`, and
+ * `tags` in place.
+ * :::
  *
  * ### Creating a Frontend
  * **Example:** Public frontend
  * ```typescript
+ * const controller = yield* Azure.ServiceNetworking.TrafficController("alb");
  * const frontend = yield* Azure.ServiceNetworking.Frontend("web", {
  *   trafficController: controller.trafficControllerName,
  * });
@@ -136,6 +159,17 @@ export interface Frontend extends Resource<
  * ### Securing a Frontend
  * **Example:** Frontend with IP access rules
  * ```typescript
+ * const policy = yield* Azure.ServiceNetworking.SecurityPolicy("ip-rules", {
+ *   trafficController: controller.trafficControllerName,
+ *   ipAccessRules: [
+ *     {
+ *       name: "office",
+ *       priority: 100,
+ *       sourceAddressPrefixes: ["203.0.113.0/24"],
+ *       action: "allow",
+ *     },
+ *   ],
+ * });
  * const frontend = yield* Azure.ServiceNetworking.Frontend("web", {
  *   trafficController: controller.trafficControllerName,
  *   securityPolicyConfigurations: {
@@ -205,27 +239,21 @@ export const FrontendProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const controllers = yield* servicenetworking
-        .ListTrafficControllerInterfaceBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListTrafficControllerInterfaceBySubscription", page),
-          ),
-        );
+      const controllers = yield* collectAll(
+        servicenetworking.ListTrafficControllerInterfaceBySubscription,
+        { subscriptionId },
+      );
       const found: Frontend["Attributes"][] = [];
       for (const controller of controllers.value ?? []) {
         const group = resourceGroupOf(controller.id);
         if (group === undefined || controller.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          servicenetworking.ListFrontendsInterfaceByTrafficController({
+          collectAll(servicenetworking.ListFrontendsInterfaceByTrafficController, {
             subscriptionId,
             resourceGroupName: group,
             trafficControllerName: controller.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListFrontendsInterfaceByTrafficController", page);
-        }
         for (const frontend of page?.value ?? []) {
           if (hasAnyAlchemyTag(frontend.tags) && frontend.name !== undefined) {
             found.push(toAttrs(group, controller.name, frontend.name, frontend));

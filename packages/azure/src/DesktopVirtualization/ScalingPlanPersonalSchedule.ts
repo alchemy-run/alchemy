@@ -19,7 +19,10 @@ export type ScalingStartVMOnConnect = "Enable" | "Disable";
 export type ScalingSessionAction = "None" | "Deallocate" | "Hibernate";
 
 export interface ScalingPlanPersonalScheduleProps {
-  /** Resource group of the scaling plan. Changing it replaces the schedule. */
+  /**
+   * Resource group of the scaling plan. Changing it replaces the schedule.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of a `Personal` scaling plan. Changing it replaces the schedule. */
   scalingPlan: string;
@@ -27,6 +30,7 @@ export interface ScalingPlanPersonalScheduleProps {
    * Schedule name, 1-64 letters, digits, `@`, `.`, `-`, `_`, or spaces. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the schedule.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Days the schedule applies to. Days may not overlap other schedules of the plan. */
@@ -39,11 +43,17 @@ export interface ScalingPlanPersonalScheduleProps {
   rampUpStartVMOnConnect?: ScalingStartVMOnConnect;
   /** Action after a user disconnects during ramp-up. @default "None" */
   rampUpActionOnDisconnect?: "None" | "Deallocate";
-  /** Minutes to wait after a disconnect during ramp-up. */
+  /**
+   * Minutes to wait after a disconnect during ramp-up.
+   * @default unset (Azure's default)
+   */
   rampUpMinutesToWaitOnDisconnect?: number;
   /** Action after a user logs off during ramp-up. @default "None" */
   rampUpActionOnLogoff?: "None" | "Deallocate";
-  /** Minutes to wait after a logoff during ramp-up. */
+  /**
+   * Minutes to wait after a logoff during ramp-up.
+   * @default unset (Azure's default)
+   */
   rampUpMinutesToWaitOnLogoff?: number;
   /** Start of the peak phase. */
   peakStartTime: ScalingTime;
@@ -51,11 +61,17 @@ export interface ScalingPlanPersonalScheduleProps {
   peakStartVMOnConnect?: ScalingStartVMOnConnect;
   /** Action after a user disconnects during peak. @default "None" */
   peakActionOnDisconnect?: "None" | "Deallocate";
-  /** Minutes to wait after a disconnect during peak. */
+  /**
+   * Minutes to wait after a disconnect during peak.
+   * @default unset (Azure's default)
+   */
   peakMinutesToWaitOnDisconnect?: number;
   /** Action after a user logs off during peak. @default "None" */
   peakActionOnLogoff?: "None" | "Deallocate";
-  /** Minutes to wait after a logoff during peak. */
+  /**
+   * Minutes to wait after a logoff during peak.
+   * @default unset (Azure's default)
+   */
   peakMinutesToWaitOnLogoff?: number;
   /** Start of the ramp-down phase. */
   rampDownStartTime: ScalingTime;
@@ -63,11 +79,17 @@ export interface ScalingPlanPersonalScheduleProps {
   rampDownStartVMOnConnect?: ScalingStartVMOnConnect;
   /** Action after a user disconnects during ramp-down. @default "None" */
   rampDownActionOnDisconnect?: "None" | "Deallocate";
-  /** Minutes to wait after a disconnect during ramp-down. */
+  /**
+   * Minutes to wait after a disconnect during ramp-down.
+   * @default unset (Azure's default)
+   */
   rampDownMinutesToWaitOnDisconnect?: number;
   /** Action after a user logs off during ramp-down. @default "None" */
   rampDownActionOnLogoff?: ScalingSessionAction;
-  /** Minutes to wait after a logoff during ramp-down. */
+  /**
+   * Minutes to wait after a logoff during ramp-down.
+   * @default unset (Azure's default)
+   */
   rampDownMinutesToWaitOnLogoff?: number;
   /** Start of the off-peak phase. */
   offPeakStartTime: ScalingTime;
@@ -75,11 +97,17 @@ export interface ScalingPlanPersonalScheduleProps {
   offPeakStartVMOnConnect?: ScalingStartVMOnConnect;
   /** Action after a user disconnects during off-peak. @default "None" */
   offPeakActionOnDisconnect?: ScalingSessionAction;
-  /** Minutes to wait after a disconnect during off-peak. */
+  /**
+   * Minutes to wait after a disconnect during off-peak.
+   * @default unset (Azure's default)
+   */
   offPeakMinutesToWaitOnDisconnect?: number;
   /** Action after a user logs off during off-peak. @default "None" */
   offPeakActionOnLogoff?: ScalingSessionAction;
-  /** Minutes to wait after a logoff during off-peak. */
+  /**
+   * Minutes to wait after a logoff during off-peak.
+   * @default unset (Azure's default)
+   */
   offPeakMinutesToWaitOnLogoff?: number;
 }
 
@@ -103,18 +131,29 @@ export interface ScalingPlanPersonalSchedule extends Resource<
 > {}
 
 /**
- * A schedule of a `Personal` Azure Virtual Desktop scaling plan: when
+ * A schedule of a `Personal` Azure Virtual Desktop scaling plan
+ * (`Microsoft.DesktopVirtualization/scalingPlans/personalSchedules`): when
  * personal session hosts start, and whether they are deallocated or
  * hibernated after users disconnect or log off, per phase.
  *
  * Schedules have no tags; Alchemy treats a schedule as owned when its
  * scaling plan carries this stack's ownership tags.
  *
+ * :::caution
+ * Changing `scalingPlan`, `name`, or `resourceGroup` replaces the
+ * schedule. Alchemy deletes the old schedule first, because a plan allows
+ * one schedule per weekday.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/virtual-desktop/autoscale-scaling-plan
  *
  * ### Creating a Schedule
  * **Example:** Deallocate idle personal desktops on weekdays
  * ```typescript
+ * const plan = yield* Azure.DesktopVirtualization.ScalingPlan("autoscale", {
+ *   timeZone: "UTC",
+ *   hostPoolType: "Personal",
+ * });
  * const weekdays = yield* Azure.DesktopVirtualization.ScalingPlanPersonalSchedule(
  *   "weekdays",
  *   {

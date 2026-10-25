@@ -126,7 +126,7 @@ const registryProgram = Effect.gen(function* () {
     name: container.containerName,
     version: "1",
     description: "shared v1",
-    codeUri: Output.interpolate`https://${registry.registryName}.blob.core.windows.net/azureml-blobstore-${base.workspace.mlWorkspaceId}/code/trainer-a`,
+    codeUri: Output.interpolate`https://${registry.registryName}.blob.core.windows.net/code/trainer-a`,
   });
   return { group, registry, container, version };
 });

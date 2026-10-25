@@ -47,7 +47,10 @@ export const isMonitorOwnedByStack = Effect.fn(function* (
 
 /** Location props shared by every monitor child. */
 export interface MonitorChildProps {
-  /** Resource group of the monitor. Changing it replaces the resource. */
+  /**
+   * Resource group of the monitor. Changing it replaces the resource.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Name of the Elastic monitor. Changing it replaces the resource. */
   monitor: string;
@@ -57,7 +60,10 @@ export interface MonitorChildProps {
 export interface ElasticFilteringTag {
   /** Tag name (key). */
   name: string;
-  /** Tag value. Omit to match any value. */
+  /**
+   * Tag value. Omit to match any value.
+   * @default any value
+   */
   value?: string;
   /**
    * Whether matching resources are included or excluded. Exclusion wins

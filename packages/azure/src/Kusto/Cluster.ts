@@ -7,12 +7,12 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -51,7 +51,7 @@ export interface KustoClusterSku {
 }
 
 export interface KustoOptimizedAutoscale {
-  /** Version of the autoscale template (currently `1`). */
+  /** Version of the autoscale template (currently `1`). Required. */
   version: number;
   /** Whether optimized autoscale is enabled. */
   isEnabled: boolean;
@@ -71,23 +71,39 @@ export interface KustoLanguageExtension {
 }
 
 export interface KustoKeyVaultProperties {
-  /** Name of the key-vault key used for customer-managed key encryption. */
+  /**
+   * Name of the key-vault key used for customer-managed key encryption.
+   * @default unset
+   */
   keyName?: string;
-  /** Version of the key; omit to always use the latest version. */
+  /**
+   * Version of the key; omit to always use the latest version.
+   * @default the latest version
+   */
   keyVersion?: string;
-  /** URI of the key vault, e.g. `https://myvault.vault.azure.net/`. */
+  /**
+   * URI of the key vault, e.g. `https://myvault.vault.azure.net/`.
+   * @default unset
+   */
   keyVaultUri?: string;
-  /** Resource ID of the user-assigned identity used to access the key. */
+  /**
+   * Resource ID of the user-assigned identity used to access the key.
+   * @default the cluster's system-assigned identity
+   */
   userIdentity?: string;
 }
 
 export interface ClusterProps {
-  /** Resource group the cluster is created in. Changing it replaces the cluster. */
+  /**
+   * Resource group the cluster is created in. Changing it replaces the cluster.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Globally unique cluster name: 4-22 lowercase letters and digits,
    * starting with a letter. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the cluster.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -103,6 +119,7 @@ export interface ClusterProps {
   sku?: KustoClusterSku;
   /**
    * Availability zones. Changing them replaces the cluster.
+   * @default no zones
    */
   zones?: string[];
   /**
@@ -113,27 +130,45 @@ export interface ClusterProps {
   /**
    * Resource IDs of user-assigned identities attached to the cluster
    * (requires an `identityType` that includes `UserAssigned`).
+   * @default []
    */
   userAssignedIdentities?: string[];
   /**
    * Tenant IDs from which principals may be granted access (`*` allows all
    * tenants).
+   * @default Azure's default
    */
   trustedExternalTenants?: string[];
-  /** Optimized autoscale settings (not supported on Dev SKUs). */
+  /**
+   * Optimized autoscale settings (not supported on Dev SKUs).
+   * @default unset (no autoscale)
+   */
   optimizedAutoscale?: KustoOptimizedAutoscale;
-  /** Encrypt the cluster's disks. */
+  /**
+   * Encrypt the cluster's disks.
+   * @default Azure's default
+   */
   enableDiskEncryption?: boolean;
-  /** Enable streaming ingestion. */
+  /**
+   * Enable streaming ingestion.
+   * @default false
+   */
   enableStreamingIngest?: boolean;
-  /** Allow `.purge` commands on the cluster. */
+  /**
+   * Allow `.purge` commands on the cluster.
+   * @default false
+   */
   enablePurge?: boolean;
   /**
    * Enable infrastructure (double) encryption. Create-time only: changing
    * it replaces the cluster.
+   * @default false
    */
   enableDoubleEncryption?: boolean;
-  /** Customer-managed key encryption settings. */
+  /**
+   * Customer-managed key encryption settings.
+   * @default Microsoft-managed keys
+   */
   keyVaultProperties?: KustoKeyVaultProperties;
   /**
    * Language extensions (Python, R) enabled on the cluster. Applied via the
@@ -141,6 +176,7 @@ export interface ClusterProps {
    * extensions not listed are removed. Requires a SKU whose VM supports
    * nested virtualization (e.g. `Standard_E2ads_v5`); the default Dev
    * `Standard_E2a_v4` SKU silently never enables them.
+   * @default unset (extensions are left as they are)
    */
   languageExtensions?: KustoLanguageExtension[];
   /**
@@ -148,26 +184,45 @@ export interface ClusterProps {
    * @default Azure's default (`Enabled`)
    */
   publicNetworkAccess?: "Enabled" | "Disabled";
-  /** IP ranges (CIDR) allowed to reach the public endpoint. */
+  /**
+   * IP ranges (CIDR) allowed to reach the public endpoint.
+   * @default []
+   */
   allowedIpRangeList?: string[];
-  /** Engine version (`V2` → `V3` only). */
+  /**
+   * Engine version (`V2` → `V3` only).
+   * @default Azure's default
+   */
   engineType?: "V2" | "V3";
-  /** Audiences (application IDs) accepted when authenticating. */
+  /**
+   * Audiences (application IDs) accepted when authenticating.
+   * @default []
+   */
   acceptedAudiences?: string[];
   /**
    * Stop the cluster automatically after a long idle period.
    * @default Azure's default (`true`)
    */
   enableAutoStop?: boolean;
-  /** Restrict outbound network access from the cluster. */
+  /**
+   * Restrict outbound network access from the cluster.
+   * @default Azure's default (`Disabled`)
+   */
   restrictOutboundNetworkAccess?: "Enabled" | "Disabled";
-  /** FQDNs the cluster may reach when outbound access is restricted. */
+  /**
+   * FQDNs the cluster may reach when outbound access is restricted.
+   * @default []
+   */
   allowedFqdnList?: string[];
-  /** Public IP type of the cluster endpoints. */
+  /**
+   * Public IP type of the cluster endpoints.
+   * @default Azure's default (`IPv4`)
+   */
   publicIPType?: "IPv4" | "DualStack";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -208,8 +263,8 @@ export interface Cluster extends Resource<
 > {}
 
 /**
- * An Azure Data Explorer (Kusto) cluster — the compute and storage that
- * hosts Kusto databases. Defaults to the cheapest Dev SKU
+ * An Azure Data Explorer (Kusto) cluster (`Microsoft.Kusto/clusters`): the
+ * compute and storage that hosts Kusto databases. Defaults to the cheapest Dev SKU
  * (`Dev(No SLA)_Standard_E2a_v4`, one instance, no SLA). Creating a
  * cluster takes 10-20 minutes.
  *
@@ -239,6 +294,12 @@ export interface Cluster extends Resource<
  *   languageExtensions: [{ name: "PYTHON", imageName: "Python3_11_7" }],
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `zones`, or
+ * `enableDoubleEncryption` replaces the cluster and deletes every database
+ * and its data. A new cluster takes 10-20 minutes to create.
+ * :::
  *
  * @resource
  */
@@ -315,9 +376,7 @@ export const ClusterProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* kusto
-        .ListClusters({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListClusters", page)));
+      const page = yield* collectAll(kusto.ListClusters, { subscriptionId });
       return (page.value ?? []).flatMap((cluster) => {
         const group = resourceGroupOf(cluster.id);
         return hasAnyAlchemyTag(cluster.tags) && group !== undefined && cluster.name !== undefined

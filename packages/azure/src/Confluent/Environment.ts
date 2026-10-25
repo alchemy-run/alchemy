@@ -18,6 +18,7 @@ export interface EnvironmentProps extends OrganizationChildProps {
    * Environment ID (the ARM resource name), 1-64 letters, digits, `-`, and
    * `_`. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the environment.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -51,20 +52,28 @@ export interface Environment extends Resource<
 > {}
 
 /**
- * A Confluent Cloud environment inside an Azure-managed Confluent
- * organization. Environments group Kafka clusters and share a Stream
- * Governance (Schema Registry) package.
+ * A Confluent Cloud environment
+ * (`Microsoft.Confluent/organizations/environments`) inside an
+ * Azure-managed Confluent organization. Environments group Kafka clusters
+ * and share a Stream Governance (Schema Registry) package.
  *
  * Environments carry no tags, so Alchemy ownership is inherited from the
  * organization's tags.
  *
- * @see https://docs.confluent.io/cloud/current/access-management/hierarchy/cloud-environments.html
+ * :::caution
+ * Changing `resourceGroup`, `organization`, or `name` replaces the
+ * environment and deletes its clusters.
+ * :::
+ *
+ * See [Confluent Cloud environments](https://docs.confluent.io/cloud/current/access-management/hierarchy/cloud-environments.html).
  *
  * ### Creating an Environment
  * **Example:** Environment with the Essentials governance package
  * ```typescript
+ * const org = yield* Azure.Confluent.Organization("kafka", {
+ *   userDetail: { emailAddress: "platform@example.com" },
+ * });
  * const environment = yield* Azure.Confluent.Environment("dev", {
- *   resourceGroup: org.resourceGroup,
  *   organization: org.organizationName,
  *   streamGovernancePackage: "ESSENTIALS",
  * });

@@ -28,6 +28,7 @@ export interface IntegrationAccountAssemblyProps {
    * Assembly name: 1-80 letters, digits, `-`, `_`, `.`, `(`, `)`. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the assembly.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** .NET assembly name, e.g. `Contoso.Maps`. */
@@ -39,15 +40,25 @@ export interface IntegrationAccountAssemblyProps {
    * @default "application/octet-stream"
    */
   contentType?: string;
-  /** Assembly version, e.g. `1.0.0.0`. */
+  /**
+   * Assembly version, e.g. `1.0.0.0`.
+   * @default none
+   */
   assemblyVersion?: string;
-  /** Assembly culture, e.g. `neutral`. */
+  /**
+   * Assembly culture, e.g. `neutral`.
+   * @default none
+   */
   assemblyCulture?: string;
-  /** Assembly public key token. */
+  /**
+   * Assembly public key token.
+   * @default none
+   */
   assemblyPublicKeyToken?: string;
   /**
    * User metadata. Alchemy adds `alchemy::*` ownership and hash keys
    * because artifacts do not return tags.
+   * @default none
    */
   metadata?: Record<string, unknown>;
 }
@@ -83,6 +94,9 @@ export interface IntegrationAccountAssembly extends Resource<
  * A .NET assembly in a Logic Apps integration account, callable from XSLT
  * maps that use custom code.
  *
+ * ARM type: `Microsoft.Logic/integrationAccounts/assemblies`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-maps#add-referenced-assemblies).
+ *
  * Azure stores the content but never returns it, so Alchemy keeps a hash
  * of the desired configuration in the assembly's metadata to detect
  * changes.
@@ -93,11 +107,11 @@ export interface IntegrationAccountAssembly extends Resource<
  * rename that keeps `assemblyName` deletes the old artifact first.
  * :::
  *
- * @see https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-maps#add-referenced-assemblies
- *
  * ### Uploading an Assembly
  * **Example:** Assembly from a base64-encoded DLL
  * ```typescript
+ * const account = yield* Azure.Logic.IntegrationAccount("b2b");
+ * const dllBase64 = yield* Config.string("MAP_HELPERS_DLL_BASE64");
  * const helpers = yield* Azure.Logic.IntegrationAccountAssembly("helpers", {
  *   integrationAccount: account.integrationAccountName,
  *   assemblyName: "Contoso.MapHelpers",

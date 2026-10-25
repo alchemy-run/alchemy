@@ -17,16 +17,39 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createPeeringName, peeringOwnedByStage } from "./Common.ts";
 
 export interface RegisteredAsnProps {
-  /** Resource group of the peering. Changing it replaces the registered ASN. */
+  /**
+   * Resource group of the peering.
+   *
+   * :::caution
+   * Changing it replaces the registered ASN.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Peering the ASN is registered on. Changing it replaces the registered ASN. */
+  /**
+   * Name of the peering the ASN is registered on.
+   *
+   * :::caution
+   * Changing it replaces the registered ASN.
+   * :::
+   */
   peering: string;
   /**
-   * Name of the registered ASN. If omitted, a unique name is generated from
-   * the app, stage, and logical ID. Changing it replaces the registered ASN.
+   * Name of the registered ASN.
+   *
+   * :::caution
+   * Changing it replaces the registered ASN.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Customer ASN served over the peering. Changing it replaces the registered ASN. */
+  /**
+   * Customer ASN served over the peering.
+   *
+   * :::caution
+   * Changing it replaces the registered ASN.
+   * :::
+   */
   asn: number;
 }
 
@@ -57,7 +80,8 @@ export interface RegisteredAsn extends Resource<
 > {}
 
 /**
- * A customer ASN registered on a Peering Service provider's peering.
+ * A customer ASN registered on a Peering Service provider's peering
+ * (`Microsoft.Peering/peerings/registeredAsns`).
  * Microsoft issues a `peeringServicePrefixKey` that the customer uses to
  * register prefixes on their own `Azure.Peering.PeeringService`.
  *
@@ -69,6 +93,25 @@ export interface RegisteredAsn extends Resource<
  * ### Registering a Customer ASN
  * **Example:** Register a customer's ASN on a peering
  * ```typescript
+ * const asn = yield* Azure.Peering.PeerAsn("provider", {
+ *   peerAsn: 65000,
+ *   peerName: "Contoso Networks",
+ *   peerContactDetail: [{ role: "Noc", email: "noc@contoso.com" }],
+ * });
+ * const exchange = yield* Azure.Peering.Peering("seattle-ix", {
+ *   kind: "Exchange",
+ *   sku: "Basic_Exchange_Free",
+ *   peeringLocation: "Seattle",
+ *   exchange: {
+ *     peerAsnId: asn.peerAsnId,
+ *     connections: [
+ *       {
+ *         peeringDBFacilityId: 26,
+ *         bgpSession: { peerSessionIPv4Address: "198.32.134.10" },
+ *       },
+ *     ],
+ *   },
+ * });
  * const customer = yield* Azure.Peering.RegisteredAsn("customer-a", {
  *   peering: exchange.peeringName,
  *   asn: 65010,

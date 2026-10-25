@@ -1,7 +1,7 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
-import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
+import { collectAll, orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { circuitPeeringInput, lower } from "./common.ts";
@@ -214,7 +214,8 @@ export const ExpressRouteCircuitProvider = () =>
           circuitName: path.name,
           tags,
         }),
-      listAll: (subscriptionId) => network.ListExpressRouteCircuitAll({ subscriptionId }),
+      listAll: (subscriptionId) =>
+        collectAll(network.ListExpressRouteCircuitAll, { subscriptionId }),
       drifted: (observed, body) =>
         lower(observed.sku?.tier) !== lower(body.sku.tier) ||
         lower(observed.sku?.family) !== lower(body.sku.family) ||

@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -50,18 +50,39 @@ export interface NetworkServiceDesignResourceElementTemplate {
   name: string;
   /** `ArmResourceDefinition` or `NetworkFunctionDefinition`. */
   type: "ArmResourceDefinition" | "NetworkFunctionDefinition";
-  /** Install / uninstall / update ordering between templates. */
+  /**
+   * Install / uninstall / update ordering between templates.
+   * @default no ordering
+   */
   dependsOnProfile?: {
+    /**
+     * Templates that must be installed before this one.
+     * @default []
+     */
     installDependsOn?: string[];
+    /**
+     * Templates that must be uninstalled before this one.
+     * @default []
+     */
     uninstallDependsOn?: string[];
+    /**
+     * Templates that must be updated before this one.
+     * @default []
+     */
     updateDependsOn?: string[];
   };
-  /** Type-specific configuration as ARM JSON. */
+  /**
+   * Type-specific configuration as ARM JSON.
+   * @default unset
+   */
   configuration?: Record<string, unknown>;
 }
 
 export interface NetworkServiceDesignVersionProps {
-  /** Resource group of the publisher. Changing it replaces the version. */
+  /**
+   * Resource group of the publisher. Changing it replaces the version.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the publisher. Changing it replaces the version. */
   publisher: string;
@@ -81,17 +102,23 @@ export interface NetworkServiceDesignVersionProps {
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
-  /** Description of the version. Versions are immutable; changing it replaces the version. */
+  /**
+   * Description of the version. Versions are immutable; changing it
+   * replaces the version.
+   * @default unset
+   */
   description?: string;
   /**
    * Configuration group schemas the design consumes, as
    * `{ referenceName: configurationGroupSchemaId }`. Changing it replaces
    * the version.
+   * @default {}
    */
   configurationGroupSchemaReferences?: Record<string, string>;
   /**
    * NFVI placeholders of the design, keyed by reference name. Changing it
    * replaces the version.
+   * @default {}
    */
   nfvisFromSite?: Record<string, NetworkServiceDesignNfvi>;
   /**
@@ -102,11 +129,13 @@ export interface NetworkServiceDesignVersionProps {
   /**
    * Version state. New versions start in `Preview`; set `Active` to publish
    * the version or `Deprecated` to retire it. Updated in place.
+   * @default "Preview" on create; unchanged on update
    */
   versionState?: NetworkServiceDesignVersionState;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -139,18 +168,30 @@ export interface NetworkServiceDesignVersion extends Resource<
 > {}
 
 /**
- * An Azure Operator Service Manager network service design version — an
- * immutable, versioned design that composes network functions and ARM
+ * An Azure Operator Service Manager network service design version
+ * (`Microsoft.HybridNetwork/publishers/networkServiceDesignGroups/networkServiceDesignVersions`):
+ * an immutable, versioned design that composes network functions and ARM
  * resources into a network service operators deploy onto a `Site`.
- *
- * Versions are immutable once created: changing any design property
- * replaces the version. Only the version state and tags update in place.
  *
  * @see https://learn.microsoft.com/azure/operator-service-manager/network-service-design-version-overview
  *
  * ### Creating a Version
  * **Example:** Design version consuming a configuration group schema
  * ```typescript
+ * const publisher = yield* Azure.HybridNetwork.Publisher("publisher");
+ * const store = yield* Azure.HybridNetwork.ArtifactStore("store", {
+ *   publisher: publisher.publisherName,
+ * });
+ * const schema = yield* Azure.HybridNetwork.ConfigurationGroupSchema("config", {
+ *   publisher: publisher.publisherName,
+ *   schemaDefinition: JSON.stringify({
+ *     type: "object",
+ *     properties: { region: { type: "string" } },
+ *   }),
+ * });
+ * const nsdg = yield* Azure.HybridNetwork.NetworkServiceDesignGroup("edge-service", {
+ *   publisher: publisher.publisherName,
+ * });
  * const nsdv = yield* Azure.HybridNetwork.NetworkServiceDesignVersion(
  *   "service-1-0-0",
  *   {
@@ -183,11 +224,21 @@ export interface NetworkServiceDesignVersion extends Resource<
  * ### Publishing a Version
  * **Example:** Mark the version Active
  * ```typescript
+ * // props: the props of the example above
  * const nsdv = yield* Azure.HybridNetwork.NetworkServiceDesignVersion(
  *   "service-1-0-0",
  *   { ...props, versionState: "Active" },
  * );
  * ```
+ *
+ * :::caution
+ * Versions are immutable. Changing `version`, `publisher`,
+ * `networkServiceDesignGroup`, `location`, `resourceGroup`, `description`,
+ * `configurationGroupSchemaReferences`, `nfvisFromSite`, or
+ * `resourceElementTemplates` replaces the version. A replacement with the
+ * same `version` deletes the old one first. Only `versionState` and `tags`
+ * update in place.
+ * :::
  *
  * @resource
  */
@@ -257,9 +308,9 @@ export const NetworkServiceDesignVersionProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const publishers = yield* hybridnetwork
-        .ListPublisherBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPublisherBySubscription", page)));
+      const publishers = yield* collectAll(hybridnetwork.ListPublisherBySubscription, {
+        subscriptionId,
+      });
       const found: NetworkServiceDesignVersion["Attributes"][] = [];
       for (const publisher of publishers.value ?? []) {
         const resourceGroup = resourceGroupOf(publisher.id);
@@ -267,31 +318,22 @@ export const NetworkServiceDesignVersionProvider = () =>
           continue;
         }
         const groups = yield* orUndefinedIfNotFound(
-          hybridnetwork.ListNetworkServiceDesignGroupByPublisher({
+          collectAll(hybridnetwork.ListNetworkServiceDesignGroupByPublisher, {
             subscriptionId,
             resourceGroupName: resourceGroup,
             publisherName: publisher.name,
           }),
         );
-        if (groups !== undefined) {
-          yield* requireSinglePage("ListNetworkServiceDesignGroupByPublisher", groups);
-        }
         for (const group of groups?.value ?? []) {
           if (group.name === undefined) continue;
           const page = yield* orUndefinedIfNotFound(
-            hybridnetwork.ListNetworkServiceDesignVersionByNetworkServiceDesignGroup({
+            collectAll(hybridnetwork.ListNetworkServiceDesignVersionByNetworkServiceDesignGroup, {
               subscriptionId,
               resourceGroupName: resourceGroup,
               publisherName: publisher.name,
               networkServiceDesignGroupName: group.name,
             }),
           );
-          if (page !== undefined) {
-            yield* requireSinglePage(
-              "ListNetworkServiceDesignVersionByNetworkServiceDesignGroup",
-              page,
-            );
-          }
           for (const item of page?.value ?? []) {
             if (hasAnyAlchemyTag(item.tags) && item.name !== undefined) {
               found.push(toAttrs(resourceGroup, publisher.name, group.name, item.name, item));

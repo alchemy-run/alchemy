@@ -28,13 +28,17 @@ export interface TargetVault {
 }
 
 export interface TargetProps {
-  /** Resource group of the watcher. Changing it replaces the target. */
+  /**
+   * Resource group of the watcher. Changing it replaces the target.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the watcher that monitors the target. Changing it replaces the target. */
   watcher: string;
   /**
    * Name of the target. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the target.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -46,21 +50,25 @@ export interface TargetProps {
   /**
    * ARM resource ID of the database (`SqlDb`). Changing it replaces the
    * target.
+   * @default unset
    */
   sqlDbResourceId?: string;
   /**
    * ARM resource ID of the elastic pool (`SqlEp`). Changing it replaces
    * the target.
+   * @default unset
    */
   sqlEpResourceId?: string;
   /**
    * ARM resource ID of a database in the elastic pool used to connect to
    * it (`SqlEp`). Changing it replaces the target.
+   * @default unset
    */
   anchorDatabaseResourceId?: string;
   /**
    * ARM resource ID of the managed instance (`SqlMi`). Changing it
    * replaces the target.
+   * @default unset
    */
   sqlMiResourceId?: string;
   /**
@@ -74,7 +82,10 @@ export interface TargetProps {
    * `my-server.database.windows.net`.
    */
   connectionServerName: string;
-  /** TCP port used to connect to a managed instance (`SqlMi`). */
+  /**
+   * TCP port used to connect to a managed instance (`SqlMi`).
+   * @default unset (Azure's default)
+   */
   connectionTcpPort?: number;
   /**
    * How the watcher authenticates to the target: its managed identity
@@ -83,7 +94,10 @@ export interface TargetProps {
    * @default "Aad"
    */
   targetAuthenticationType?: "Aad" | "Sql";
-  /** Key Vault secrets holding the SQL login when `targetAuthenticationType` is `Sql`. */
+  /**
+   * Key Vault secrets holding the SQL login when `targetAuthenticationType` is `Sql`.
+   * @default unset
+   */
   targetVault?: TargetVault;
 }
 
@@ -114,16 +128,37 @@ export interface Target extends Resource<
 
 /**
  * A SQL database, elastic pool, or managed instance monitored by a
- * database watcher.
+ * database watcher (`Microsoft.DatabaseWatcher/watchers/targets`).
  *
  * Targets cannot be tagged; Alchemy owns a target it created or whose
  * name it generated.
+ *
+ * :::caution
+ * Changing `watcher`, `name`, `targetType`, `sqlDbResourceId`,
+ * `sqlEpResourceId`, `anchorDatabaseResourceId`, `sqlMiResourceId`,
+ * `readIntent`, or `resourceGroup` replaces the target.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-sql/database-watcher-manage
  *
  * ### Monitoring a Database
  * **Example:** Watch a single Azure SQL database with Entra authentication
  * ```typescript
+ * // Object ID of the Entra group that administers the server.
+ * const dbaGroupObjectId = "00000000-0000-0000-0000-000000000000";
+ * const server = yield* Azure.Sql.Server("db", {
+ *   administrators: {
+ *     login: "dba-group",
+ *     sid: dbaGroupObjectId,
+ *     principalType: "Group",
+ *     azureADOnlyAuthentication: true,
+ *   },
+ * });
+ * const database = yield* Azure.Sql.Database("orders", {
+ *   server: server.serverName,
+ *   sku: { name: "Basic" },
+ * });
+ * const watcher = yield* Azure.DatabaseWatcher.Watcher("sql-watcher");
  * const target = yield* Azure.DatabaseWatcher.Target("orders-db", {
  *   watcher: watcher.watcherName,
  *   targetType: "SqlDb",

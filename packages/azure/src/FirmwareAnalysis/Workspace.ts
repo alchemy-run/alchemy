@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -33,6 +33,7 @@ export interface WorkspaceSku {
   name: string;
   /**
    * Tier of the SKU.
+   * @default Azure's default for the SKU name
    */
   tier?: "Free" | "Basic" | "Standard" | "Premium";
 }
@@ -41,12 +42,14 @@ export interface WorkspaceProps {
   /**
    * Resource group the workspace is created in. Changing it replaces the
    * workspace.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
    * Name of the workspace (letters, digits, and `-`, unique within the
    * resource group). If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the workspace.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -59,11 +62,13 @@ export interface WorkspaceProps {
   /**
    * SKU of the workspace. Updated in place. When omitted, the service
    * default is used and left unmanaged.
+   * @default Azure's default (left unmanaged when omitted)
    */
   sku?: WorkspaceSku;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -92,12 +97,16 @@ export interface Workspace extends Resource<
 > {}
 
 /**
- * A firmware analysis workspace (Microsoft.IoTFirmwareDefense, formerly
- * Defender for IoT firmware analysis). Firmware images uploaded to the
- * workspace are scanned for CVEs, weak crypto, hard-coded credentials, binary
- * hardening gaps and SBOM components.
+ * A firmware analysis workspace (`Microsoft.IoTFirmwareDefense/workspaces`,
+ * formerly Defender for IoT firmware analysis). Firmware images uploaded
+ * to the workspace are scanned for CVEs, weak crypto, hard-coded
+ * credentials, binary hardening gaps and SBOM components. See the
+ * [firmware analysis overview](https://learn.microsoft.com/azure/firmware-analysis/overview-firmware-analysis).
  *
- * @see https://learn.microsoft.com/azure/firmware-analysis/overview-firmware-analysis
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the workspace
+ * and deletes its uploaded firmware and scan results.
+ * :::
  *
  * ### Creating a Workspace
  * **Example:** Workspace in a resource group
@@ -150,9 +159,7 @@ export const WorkspaceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* fist
-        .ListWorkspaceBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListWorkspaceBySubscription", page)));
+      const page = yield* collectAll(fist.ListWorkspaceBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((workspace) => {
         const group = resourceGroupOf(workspace.id);
         return hasAnyAlchemyTag(workspace.tags) &&

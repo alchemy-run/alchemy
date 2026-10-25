@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
@@ -12,7 +13,6 @@ import {
   isOwned,
   orUndefinedIfNotFound,
   ProvisioningFailed,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -28,6 +28,7 @@ import { AmlFilesystemMissing, createLustreName, JOB_BUDGET, sameList } from "./
 export interface AutoImportJobProps {
   /**
    * Resource group of the parent file system. Changing it replaces the job.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -40,6 +41,7 @@ export interface AutoImportJobProps {
    * Name of the job: alphanumerics, `_` and `-`, starting and ending with an
    * alphanumeric. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the job.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -82,6 +84,7 @@ export interface AutoImportJobProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -122,16 +125,55 @@ export interface AutoImportJob extends Resource<
 > {}
 
 /**
- * An Azure Managed Lustre auto import job — continuously imports new,
- * changed, and (optionally) deleted blobs from the file system's blob
- * integration container into the Lustre namespace. The storage account must
- * have the blob change feed enabled.
+ * An Azure Managed Lustre auto import job
+ * (`Microsoft.StorageCache/amlFilesystems/autoImportJobs`). It continuously
+ * imports new, changed, and (optionally) deleted blobs from the file
+ * system's blob integration container into the Lustre namespace. See the
+ * [Azure docs](https://learn.microsoft.com/azure/azure-managed-lustre/auto-import).
  *
- * @see https://learn.microsoft.com/azure/azure-managed-lustre/auto-import
+ * :::caution
+ * The parent `Azure.StorageCache.AmlFilesystem` must have blob integration
+ * (`hsm`) configured, and its storage account must have the blob change feed
+ * enabled.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `amlFilesystem`, `name`, `location`,
+ * `autoImportPrefixes`, `conflictResolutionMode`, `enableDeletions`, or
+ * `maximumErrors` replaces the job. Alchemy updates `adminStatus` and `tags`
+ * in place.
+ * :::
  *
  * ### Importing Changes
  * **Example:** Continuously import the whole container
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("lustre", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.0.0/24",
+ *   defaultOutboundAccess: true,
+ * });
+ * const account = yield* Azure.Storage.StorageAccount("lustredata");
+ * yield* Azure.Storage.BlobServiceProperties("lustredata-blob", {
+ *   storageAccount: account.storageAccountName,
+ *   changeFeed: { enabled: true },
+ * });
+ * const data = yield* Azure.Storage.BlobContainer("data", {
+ *   storageAccount: account.storageAccountName,
+ * });
+ * const logs = yield* Azure.Storage.BlobContainer("logs", {
+ *   storageAccount: account.storageAccountName,
+ * });
+ * const fs = yield* Azure.StorageCache.AmlFilesystem("scratch", {
+ *   zones: ["1"],
+ *   sku: "AMLFS-Durable-Premium-500",
+ *   storageCapacityTiB: 4,
+ *   filesystemSubnet: subnet.subnetId,
+ *   maintenanceWindow: { dayOfWeek: "Sunday", timeOfDayUTC: "22:00" },
+ *   hsm: { container: data.containerId, loggingContainer: logs.containerId },
+ * });
  * const importJob = yield* Azure.StorageCache.AutoImportJob("import", {
  *   amlFilesystem: fs.amlFilesystemName,
  * });
@@ -140,7 +182,7 @@ export interface AutoImportJob extends Resource<
  * **Example:** Import two prefixes, overwriting dirty files and applying deletions
  * ```typescript
  * const importJob = yield* Azure.StorageCache.AutoImportJob("import", {
- *   amlFilesystem: fs.amlFilesystemName,
+ *   amlFilesystem: "scratch",
  *   autoImportPrefixes: ["/datasets", "/models"],
  *   conflictResolutionMode: "OverwriteIfDirty",
  *   enableDeletions: true,
@@ -199,24 +241,18 @@ export const AutoImportJobProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const filesystems = yield* orUndefinedIfNotFound(
-        storagecache
-          .ListAmlFilesystems({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListAmlFilesystems", page))),
+        collectAll(storagecache.ListAmlFilesystems, { subscriptionId }),
       );
       const out: AutoImportJob["Attributes"][] = [];
       for (const fs of filesystems?.value ?? []) {
         const group = resourceGroupOf(fs.id);
         if (group === undefined || fs.name === undefined) continue;
         const jobs = yield* orUndefinedIfNotFound(
-          storagecache
-            .ListAutoImportJobByAmlFilesystem({
-              subscriptionId,
-              resourceGroupName: group,
-              amlFilesystemName: fs.name,
-            })
-            .pipe(
-              Effect.flatMap((page) => requireSinglePage("ListAutoImportJobByAmlFilesystem", page)),
-            ),
+          collectAll(storagecache.ListAutoImportJobByAmlFilesystem, {
+            subscriptionId,
+            resourceGroupName: group,
+            amlFilesystemName: fs.name,
+          }),
         );
         for (const job of jobs?.value ?? []) {
           const parent = filesystemOf(job.id) ?? fs.name;

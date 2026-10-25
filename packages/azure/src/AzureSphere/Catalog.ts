@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -39,11 +39,13 @@ export interface CatalogProps {
    * :::caution
    * Changing it replaces the catalog.
    * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -79,6 +81,10 @@ export interface Catalog extends Resource<
  * device. Microsoft announced the retirement of Azure Sphere: extended
  * support for the OS and security service ends on July 31, 2031, and the
  * product is not recommended for new designs.
+ *
+ * :::caution
+ * Changing `name` or `resourceGroup` replaces the catalog.
+ * :::
  *
  * @see https://learn.microsoft.com/azure-sphere/deployment/manage-catalogs
  *
@@ -127,9 +133,7 @@ export const CatalogProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* sphere
-        .ListCatalogBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListCatalogBySubscription", page)));
+      const page = yield* collectAll(sphere.ListCatalogBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((catalog) => {
         const group = resourceGroupOf(catalog.id);
         return hasAnyAlchemyTag(catalog.tags) && group !== undefined && catalog.name !== undefined

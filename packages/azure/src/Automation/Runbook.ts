@@ -43,6 +43,7 @@ export interface RunbookProps {
    * Runbook name: letters, digits, hyphens, and underscores, starting with a
    * letter (up to 63 characters). If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the runbook.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Runbook language/runtime. Changing it replaces the runbook. */
@@ -51,14 +52,19 @@ export interface RunbookProps {
    * Script source. When set, it is uploaded as the draft and published;
    * a change re-uploads and re-publishes. Omit to leave the runbook empty
    * (in the `New` state) or to manage content elsewhere.
+   * @default not set (the runbook stays empty, in the `New` state)
    */
   content?: string;
   /**
    * Name of a {@link RuntimeEnvironment} to run the runbook in (for
    * runtime-environment based runbooks).
+   * @default not set
    */
   runtimeEnvironment?: string;
-  /** Description of the runbook. */
+  /**
+   * Description of the runbook.
+   * @default no description
+   */
   description?: string;
   /**
    * Write verbose records to the job streams.
@@ -78,6 +84,7 @@ export interface RunbookProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -113,15 +120,22 @@ export interface Runbook extends Resource<
  * A runbook in an Azure Automation account — a PowerShell or Python script
  * that runs on demand, on a {@link Schedule} (via a {@link JobSchedule}),
  * or from a {@link Webhook}.
+ * The ARM type is `Microsoft.Automation/automationAccounts/runbooks`.
  *
  * With `content`, Alchemy uploads the script as the draft and publishes it,
  * and re-publishes whenever the script changes.
+ *
+ * :::caution
+ * Changing `automationAccount`, `name`, `runbookType`, or `resourceGroup`
+ * replaces the runbook.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/automation-runbook-types
  *
  * ### Creating a Runbook
  * **Example:** PowerShell 7.2 runbook
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const cleanup = yield* Azure.Automation.Runbook("cleanup", {
  *   automationAccount: account.automationAccountName,
  *   runbookType: "PowerShell72",
@@ -131,6 +145,7 @@ export interface Runbook extends Resource<
  *
  * **Example:** Python 3 runbook
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const report = yield* Azure.Automation.Runbook("report", {
  *   automationAccount: account.automationAccountName,
  *   runbookType: "Python3",

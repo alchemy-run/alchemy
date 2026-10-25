@@ -34,7 +34,10 @@ export interface IntegrationRuntimeReference {
 }
 
 export interface LinkedServiceProps {
-  /** Resource group of the factory. Changing it replaces the linked service. */
+  /**
+   * Resource group of the factory. Changing it replaces the linked service.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the factory that holds the linked service. Changing it replaces the linked service. */
   factoryName: string;
@@ -43,6 +46,7 @@ export interface LinkedServiceProps {
    * digit, or `_`, without `< > * # . % & : \ + ? /`. If omitted, a unique
    * name of letters, digits, and `_` is generated from the app, stage, and
    * logical ID. Changing it replaces the linked service.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,19 +59,33 @@ export interface LinkedServiceProps {
    * documented for the connector. Prefer managed identity or Key Vault
    * secret references over inline secrets: inline values are stored in
    * Alchemy state.
+   * @default {}
    */
   typeProperties?: Record<string, unknown>;
-  /** Integration runtime to connect through. Defaults to the Azure IR. */
+  /**
+   * Integration runtime to connect through. Defaults to the Azure IR.
+   * @default the Azure integration runtime (`AutoResolveIntegrationRuntime`)
+   */
   connectVia?: IntegrationRuntimeReference;
-  /** Connector version, e.g. `"2.0"` for connectors with versioned implementations. */
+  /**
+   * Connector version, e.g. `"2.0"` for connectors with versioned implementations.
+   * @default the connector's default version
+   */
   version?: string;
-  /** Linked service description. */
+  /**
+   * Linked service description.
+   * @default none
+   */
   description?: string;
-  /** Parameters the linked service accepts. */
+  /**
+   * Parameters the linked service accepts.
+   * @default {}
+   */
   parameters?: Record<string, ParameterSpecification>;
   /**
    * Annotations shown in the authoring UI. Alchemy appends an ownership
    * annotation (`alchemy:<stack>/<stage>/<id>`).
+   * @default []
    */
   annotations?: string[];
 }
@@ -96,11 +114,17 @@ export interface LinkedService extends Resource<
 > {}
 
 /**
- * A Data Factory linked service — the connection information Data Factory
- * uses to reach a data store or compute service. Datasets and activities
- * reference it by name.
+ * A Data Factory linked service
+ * (`Microsoft.DataFactory/factories/linkedservices`) — the connection
+ * information Data Factory uses to reach a data store or compute service.
+ * Datasets and activities reference it by name.
  *
- * @see https://learn.microsoft.com/azure/data-factory/concepts-linked-services
+ * :::caution
+ * Changing `resourceGroup`, `factoryName`, `name`, or `type` replaces the
+ * linked service.
+ * :::
+ *
+ * See [Linked services](https://learn.microsoft.com/azure/data-factory/concepts-linked-services).
  *
  * ### Connecting to Storage
  * **Example:** Blob storage through the factory's managed identity
@@ -108,11 +132,12 @@ export interface LinkedService extends Resource<
  * const factory = yield* Azure.DataFactory.Factory("etl", {
  *   identity: { type: "SystemAssigned" },
  * });
+ * const account = yield* Azure.Storage.StorageAccount("lake");
  * const blob = yield* Azure.DataFactory.LinkedService("blob", {
  *   factoryName: factory.factoryName,
  *   type: "AzureBlobStorage",
  *   typeProperties: {
- *     serviceEndpoint: "https://myaccount.blob.core.windows.net/",
+ *     serviceEndpoint: account.primaryEndpoints.blob,
  *     accountKind: "StorageV2",
  *   },
  * });
@@ -121,6 +146,7 @@ export interface LinkedService extends Resource<
  * ### Connecting to HTTP APIs
  * **Example:** Anonymous REST service
  * ```typescript
+ * const factory = yield* Azure.DataFactory.Factory("etl");
  * const api = yield* Azure.DataFactory.LinkedService("api", {
  *   factoryName: factory.factoryName,
  *   type: "RestService",

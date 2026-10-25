@@ -36,6 +36,8 @@ export interface CodeVersion extends Resource<
  * declare one to manage its description and tags (workspace containers
  * accept neither).
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/concept-component).
+ *
  * Versions are immutable: only the description, tags, and archive flag
  * update in place.
  *
@@ -45,11 +47,19 @@ export interface CodeVersion extends Resource<
  * same, the old version is deleted before the new one is created.
  * :::
  *
- * @see https://learn.microsoft.com/azure/machine-learning/concept-component
- *
  * ### Registering a Code version
  * **Example:** Code version in a workspace
  * ```typescript
+ * // An existing Application Insights component for workspace telemetry.
+ * const insightsId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/monitoring/providers/Microsoft.Insights/components/ml-insights";
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const workspace = yield* Azure.MachineLearning.Workspace("ml", {
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ *   applicationInsights: insightsId,
+ * });
  * const code = yield* Azure.MachineLearning.CodeVersion("trainer-v1", {
  *   workspace: workspace.workspaceName,
  *   name: "trainer",

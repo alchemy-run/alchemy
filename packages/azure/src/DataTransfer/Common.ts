@@ -5,7 +5,10 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 export interface DataTransferIdentity {
   /** Kind of managed identity to attach. */
   type: "None" | "SystemAssigned" | "UserAssigned" | "SystemAssigned,UserAssigned";
-  /** ARM IDs of user-assigned identities to attach. */
+  /**
+   * ARM IDs of user-assigned identities to attach.
+   * @default []
+   */
   userAssignedIdentities?: string[];
 }
 

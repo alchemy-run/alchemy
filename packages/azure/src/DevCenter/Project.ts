@@ -6,12 +6,12 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -34,7 +34,10 @@ import {
 export type ProjectCatalogItemSyncType = "EnvironmentDefinition" | "ImageDefinition";
 
 export interface ProjectProps {
-  /** Resource group the project is created in. Changing it replaces the project. */
+  /**
+   * Resource group the project is created in. Changing it replaces the project.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * ARM resource ID of the dev center the project belongs to. A project
@@ -45,6 +48,7 @@ export interface ProjectProps {
    * Project name: 3-63 letters, digits, hyphens, underscores, and periods.
    * If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the project.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -52,26 +56,38 @@ export interface ProjectProps {
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
-  /** Description of the project. */
+  /**
+   * Description of the project.
+   * @default unset
+   */
   description?: string;
-  /** Display name of the project. */
+  /**
+   * Display name of the project.
+   * @default unset
+   */
   displayName?: string;
   /**
    * Maximum number of dev boxes a single user may create across all pools
    * of the project. `0` means no limit. Lowering it does not affect
    * existing dev boxes.
+   * @default unset (no limit)
    */
   maxDevBoxesPerUser?: number;
   /**
    * Catalog item types synced from project catalogs. Requires the dev
    * center's `projectCatalogItemSyncEnableStatus: "Enabled"`.
+   * @default []
    */
   catalogItemSyncTypes?: ProjectCatalogItemSyncType[];
-  /** Managed identity of the project. */
+  /**
+   * Managed identity of the project.
+   * @default no managed identity
+   */
   identity?: DevCenterIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -106,10 +122,16 @@ export interface Project extends Resource<
 > {}
 
 /**
- * A Dev Center project — the unit of access for developers. Projects
+ * A Dev Center project (`Microsoft.DevCenter/projects`) — the unit of access for developers. Projects
  * group dev box pools, environment types, and catalogs for a team, and
  * are where developers are granted the Dev Box User and Deployment
  * Environments User roles.
+ *
+ * :::caution
+ * Changing `devCenterId`, `name`, `location`, or `resourceGroup` replaces
+ * the project. Role assignments scoped to the old project do not carry
+ * over.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/dev-box/how-to-manage-dev-box-projects
  *
@@ -126,6 +148,7 @@ export interface Project extends Resource<
  * ### Limits
  * **Example:** Cap dev boxes per developer
  * ```typescript
+ * const center = yield* Azure.DevCenter.DevCenter("center");
  * const project = yield* Azure.DevCenter.Project("team", {
  *   devCenterId: center.devCenterId,
  *   maxDevBoxesPerUser: 2,
@@ -168,9 +191,7 @@ export const ProjectProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* devcenter
-        .ListProjectBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListProjectBySubscription", page)));
+      const page = yield* collectAll(devcenter.ListProjectBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((project) => {
         const group = resourceGroupOf(project.id);
         return hasAnyAlchemyTag(project.tags) && group !== undefined && project.name !== undefined

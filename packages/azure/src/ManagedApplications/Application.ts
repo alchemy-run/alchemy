@@ -8,13 +8,13 @@ import type { Resource } from "alchemy/Resource";
 import { stableStringify } from "alchemy/Util/stable";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -71,6 +71,7 @@ export interface ApplicationProps {
    * Name of the application, 3-64 characters. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * application.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -89,6 +90,7 @@ export interface ApplicationProps {
   /**
    * Resource ID of the `ApplicationDefinition` to deploy. Required for
    * `ServiceCatalog` applications. Changing it replaces the application.
+   * @default none
    */
   applicationDefinitionId?: string;
   /**
@@ -101,18 +103,24 @@ export interface ApplicationProps {
   /**
    * Values for the main template's parameters, keyed by parameter name.
    * Changing them redeploys the template in place.
+   * @default none
    */
   parameters?: Record<string, unknown>;
-  /** Publisher just-in-time access policy. */
+  /**
+   * Publisher just-in-time access policy.
+   * @default none
+   */
   jitAccessPolicy?: ApplicationJitAccessPolicy;
   /**
    * Marketplace plan; required for `MarketPlace` applications. Changing it
    * replaces the application.
+   * @default none
    */
   plan?: ApplicationPlan;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -157,15 +165,33 @@ export interface Application extends Resource<
  * marketplace offer) whose resources Azure deploys into a dedicated managed
  * resource group that the publisher manages.
  *
- * @see https://learn.microsoft.com/azure/azure-resource-manager/managed-applications/overview
+ * ARM type: `Microsoft.Solutions/applications`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/azure-resource-manager/managed-applications/overview).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `kind`,
+ * `applicationDefinitionId`, `managedResourceGroupName`, or `plan` replaces the
+ * application.
+ * :::
  *
  * ### Deploying a Managed Application
  * **Example:** Application from a service catalog definition
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("apps");
+ * const mainTemplate = {
+ *   $schema: "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+ *   contentVersion: "1.0.0.0",
+ *   resources: [],
+ * };
+ * const createUiDefinition = {
+ *   $schema:
+ *     "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+ *   handler: "Microsoft.Azure.CreateUIDef",
+ *   version: "0.1.2-preview",
+ *   parameters: { basics: [], steps: [], outputs: {} },
+ * };
  * const definition = yield* Azure.ManagedApplications.ApplicationDefinition(
  *   "storage-app",
- *   { resourceGroup: group.resourceGroupName, mainTemplate, createUiDefinition },
+ *   { mainTemplate, createUiDefinition },
  * );
  * const app = yield* Azure.ManagedApplications.Application("customer-a", {
  *   applicationDefinitionId: definition.applicationDefinitionId,
@@ -268,9 +294,7 @@ export const ApplicationProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* solutions
-        .ListApplicationBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListApplicationBySubscription", page)));
+      const page = yield* collectAll(solutions.ListApplicationBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((app) => {
         const group = resourceGroupOf(app.id);
         return hasAnyAlchemyTag(app.tags) && group !== undefined && app.name !== undefined

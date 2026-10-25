@@ -25,6 +25,7 @@ export interface HypervHostProps {
   /**
    * Name of the Hyper-V host in the site. If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the Hyper-V host.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Fully qualified domain name (or IP address) of the Hyper-V host. */
@@ -63,17 +64,24 @@ export interface HypervHost extends Resource<
 /**
  * An Azure Migrate Hyper-V host (`Microsoft.OffAzure/hypervSites/hosts`) — a standalone Hyper-V host the site's appliance discovers VMs from.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/migrate/migrate-appliance-architecture).
+ *
  * The appliance registered with the site must be able to reach the
  * Hyper-V host with the referenced run-as account; without a running appliance
  * Azure rejects the request. Hyper-V host entries cannot be tagged; Alchemy
  * treats one as owned when its site carries this stack's and stage's
  * ownership tags.
  *
- * @see https://learn.microsoft.com/azure/migrate/migrate-appliance-architecture
+ * :::caution
+ * Changing `resourceGroup`, `hypervSite`, or `name` replaces the host.
+ * :::
  *
  * ### Adding a Hyper-V host
  * **Example:** Hyper-V host discovered by an appliance
  * ```typescript
+ * const site = yield* Azure.Migrate.HypervSite("hyperv", {
+ *   location: "centralus",
+ * });
  * const host = yield* Azure.Migrate.HypervHost("host", {
  *   hypervSite: site.siteName,
  *   fqdn: "hyperv01.contoso.local",

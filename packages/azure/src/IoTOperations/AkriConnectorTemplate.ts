@@ -6,7 +6,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 
 export interface AkriConnectorTemplateProps {
-  /** Resource group of the IoT Operations instance. Changing it replaces the template. */
+  /**
+   * Resource group of the IoT Operations instance. Changing it replaces the template.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** IoT Operations instance that holds the template. Changing it replaces the template. */
   instanceName: string;
@@ -14,6 +17,7 @@ export interface AkriConnectorTemplateProps {
    * Template name (lowercase letters, digits, and hyphens). If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the template.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -26,13 +30,25 @@ export interface AkriConnectorTemplateProps {
   runtimeConfiguration: iot.AkriConnectorTemplateRuntimeConfiguration;
   /** Device inbound endpoint types the connector handles (e.g. `Microsoft.Rest`). */
   deviceInboundEndpointTypes: iot.AkriConnectorTemplateDeviceInboundEndpointType[];
-  /** Minimum and maximum IoT Operations versions the connector supports. */
+  /**
+   * Minimum and maximum IoT Operations versions the connector supports.
+   * @default unset
+   */
   aioMetadata?: iot.AkriConnectorTemplateAioMetadata;
-  /** Log level of the connector. */
+  /**
+   * Log level of the connector.
+   * @default Azure's defaults
+   */
   diagnostics?: iot.AkriConnectorTemplateDiagnostics;
-  /** How connector pods connect to the MQTT broker. */
+  /**
+   * How connector pods connect to the MQTT broker.
+   * @default Azure's defaults
+   */
   mqttConnectionConfiguration?: iot.AkriConnectorsMqttConnectionConfiguration;
-  /** Reference to a connector metadata document in a container registry. */
+  /**
+   * Reference to a connector metadata document in a container registry.
+   * @default unset
+   */
   connectorMetadataRef?: string;
 }
 
@@ -58,15 +74,22 @@ export interface AkriConnectorTemplate extends Resource<
 > {}
 
 /**
- * An Akri connector template of an Azure IoT Operations instance: the
+ * An Akri connector template of an Azure IoT Operations instance
+ * (`Microsoft.IoTOperations/instances/akriConnectorTemplates`): the
  * container image and runtime settings of a connector that discovers and
- * talks to devices (REST, ONVIF, media, SSE, ...).
+ * talks to devices (REST, ONVIF, media, SSE).
  *
  * @see https://learn.microsoft.com/azure/iot-operations/discover-manage-assets/overview-akri
  *
  * ### Registering a Connector
  * **Example:** REST connector from Microsoft Container Registry
  * ```typescript
+ * const instance = yield* Azure.IoTOperations.Instance("aio", {
+ *   customLocationId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/aio-location",
+ *   schemaRegistryId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.DeviceRegistry/schemaRegistries/aio-schemas",
+ * });
  * const template = yield* Azure.IoTOperations.AkriConnectorTemplate("rest", {
  *   instanceName: instance.instanceName,
  *   deviceInboundEndpointTypes: [{ endpointType: "Microsoft.Rest" }],
@@ -86,6 +109,11 @@ export interface AkriConnectorTemplate extends Resource<
  *   },
  * });
  * ```
+ *
+ * :::caution
+ * Changing `resourceGroup`, `instanceName`, or `name` replaces the
+ * template.
+ * :::
  *
  * @resource
  */

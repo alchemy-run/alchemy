@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,11 +32,15 @@ import {
 } from "./Common.ts";
 
 export interface VmmServerProps {
-  /** Resource group the VMM server is projected into. Changing it replaces the VMM server. */
+  /**
+   * Resource group the VMM server is projected into. Changing it replaces the
+   * VMM server.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
-   * Name of the VMM server resource. If omitted, a unique name is generated
-   * from the app, stage, and logical ID. Changing it replaces the VMM server.
+   * Name of the VMM server resource. Changing it replaces the VMM server.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -57,13 +61,21 @@ export interface VmmServerProps {
    * @default 8100
    */
   port?: number;
-  /** User name of a VMM administrator account. Re-sent in place when changed. */
+  /**
+   * User name of a VMM administrator account. Re-sent in place when changed.
+   * @default no credentials are sent
+   */
   username?: string;
-  /** Password of the VMM administrator account. Never returned by Azure; re-sent in place when changed. */
+  /**
+   * Password of the VMM administrator account. Never returned by Azure;
+   * re-sent in place when changed.
+   * @default no credentials are sent
+   */
   password?: string | Redacted.Redacted<string>;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -102,20 +114,35 @@ export interface VmmServer extends Resource<
 > {}
 
 /**
- * An on-premises System Center Virtual Machine Manager (SCVMM) server
- * connected to Azure through Azure Arc. Requires an Arc resource bridge and
- * its custom location deployed next to a reachable VMM server.
+ * An Azure Arc-enabled SCVMM server (`Microsoft.ScVmm/vmmServers`): an
+ * on-premises System Center Virtual Machine Manager connected to Azure, so
+ * you can manage its clouds and VMs from Azure. See the
+ * [Azure docs](https://learn.microsoft.com/azure/azure-arc/system-center-virtual-machine-manager/quickstart-connect-system-center-virtual-machine-manager-to-arc).
  *
- * @see https://learn.microsoft.com/azure/azure-arc/system-center-virtual-machine-manager/quickstart-connect-system-center-virtual-machine-manager-to-arc
+ * :::caution
+ * You need an Arc resource bridge and its custom location, deployed next
+ * to a VMM server that the bridge can reach.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `extendedLocation`, `fqdn`,
+ * or `port` replaces the VMM server. Alchemy updates `username` and
+ * `password` in place.
+ * :::
  *
  * ### Connecting a VMM Server
  * **Example:** Connect a VMM server through a custom location
  * ```typescript
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/arc/providers/Microsoft.ExtendedLocation/customLocations/contoso-vmm";
+ * const password = yield* Config.redacted("VMM_PASSWORD");
  * const vmm = yield* Azure.ScVmm.VmmServer("vmm", {
+ *   location: "eastus",
  *   extendedLocation: { name: customLocationId },
  *   fqdn: "vmm.contoso.local",
+ *   port: 8100,
  *   username: "contoso\\vmmadmin",
- *   password: Redacted.make(vmmPassword),
+ *   password,
  * });
  * ```
  *
@@ -154,9 +181,7 @@ export const VmmServerProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        scvmm
-          .ListVmmServerBySubscription({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListVmmServerBySubscription", page))),
+        collectAll(scvmm.ListVmmServerBySubscription, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((value) => {
         const group = resourceGroupOf(value.id);

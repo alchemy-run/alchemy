@@ -21,18 +21,23 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, labLocation } from "./Common.ts";
 
 export interface CustomImageProps {
-  /** Resource group of the lab. Changing it replaces the image. */
+  /**
+   * Resource group of the lab. Changing it replaces the image.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the lab. Changing it replaces the image. */
   lab: string;
   /**
    * Image name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the image.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Capture the image from a lab VM. Exactly one of `vm` or `vhd` is
    * required. Changing the source replaces the image.
+   * @default unset
    */
   vm?: {
     /** ARM ID of the source lab VM. */
@@ -45,6 +50,7 @@ export interface CustomImageProps {
   /**
    * Create the image from a VHD uploaded to the lab's storage account.
    * Changing it replaces the image.
+   * @default unset
    */
   vhd?: {
     /** HTTPS URI of the VHD blob in the lab's storage account. */
@@ -54,15 +60,25 @@ export interface CustomImageProps {
     /** Whether the Windows VHD is sysprepped. */
     sysPrep?: boolean;
   };
-  /** Storage type per data disk LUN. Changing it replaces the image. */
+  /**
+   * Storage type per data disk LUN. Changing it replaces the image.
+   * @default []
+   */
   dataDiskStorageInfo?: { lun: string; storageType: "Standard" | "Premium" | "StandardSSD" }[];
-  /** Description of the image. */
+  /**
+   * Description of the image.
+   * @default unset
+   */
   description?: string;
-  /** Author of the image. */
+  /**
+   * Author of the image.
+   * @default unset
+   */
   author?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -98,11 +114,51 @@ export interface CustomImage extends Resource<
  * can create VMs from. The lab RP does not import managed images or
  * snapshots on their own: a source needs `vm` or `vhd`.
  *
+ * :::caution
+ * Changing `lab`, `name`, `resourceGroup`, or the image source (`vm`,
+ * `vhd`, `dataDiskStorageInfo`) replaces the custom image.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/devtest-labs/devtest-lab-create-custom-image-from-vm-using-portal
  *
  * ### Capturing a Lab VM
  * **Example:** Image from a deprovisioned Linux lab VM
  * ```typescript
+ * const lab = yield* Azure.DevTestLabs.Lab("team-lab");
+ * const vnet = yield* Azure.Network.VirtualNetwork("lab-vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("lab-vms", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const network = yield* Azure.DevTestLabs.LabVirtualNetwork("net", {
+ *   lab: lab.labName,
+ *   externalProviderResourceId: vnet.virtualNetworkId,
+ *   subnetOverrides: [
+ *     {
+ *       resourceId: subnet.subnetId,
+ *       labSubnetName: subnet.subnetName,
+ *       useInVmCreationPermission: "Allow",
+ *     },
+ *   ],
+ * });
+ * const publicKey = "ssh-ed25519 AAAAC3Nza... me@example.com";
+ * const vm = yield* Azure.DevTestLabs.VirtualMachine("dev", {
+ *   lab: lab.labName,
+ *   size: "Standard_B1s",
+ *   galleryImageReference: {
+ *     publisher: "Canonical",
+ *     offer: "0001-com-ubuntu-server-jammy",
+ *     sku: "22_04-lts-gen2",
+ *     osType: "Linux",
+ *   },
+ *   userName: "azureuser",
+ *   isAuthenticationWithSshKey: true,
+ *   sshKey: publicKey,
+ *   labVirtualNetworkId: network.labVirtualNetworkId,
+ *   labSubnetName: subnet.subnetName,
+ * });
  * const image = yield* Azure.DevTestLabs.CustomImage("golden", {
  *   lab: lab.labName,
  *   vm: {

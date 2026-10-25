@@ -18,13 +18,25 @@ import { createDnsName, fieldsMatch, isWorkspaceOwnedByStack, lower } from "./co
 
 /** Data flow compute of a Managed (Azure) integration runtime. */
 export interface IntegrationRuntimeDataFlowProperties {
-  /** Compute type of the data flow cluster. */
+  /**
+   * Compute type of the data flow cluster.
+   * @default not set
+   */
   computeType?: "General" | "MemoryOptimized" | "ComputeOptimized";
-  /** Core count of the data flow cluster (8, 16, 32, ...). */
+  /**
+   * Core count of the data flow cluster (8, 16, 32, ...).
+   * @default not set
+   */
   coreCount?: number;
-  /** Minutes to keep the cluster warm after a data flow run. */
+  /**
+   * Minutes to keep the cluster warm after a data flow run.
+   * @default not set
+   */
   timeToLive?: number;
-  /** Release the cluster after `timeToLive` instead of reusing it. */
+  /**
+   * Release the cluster after `timeToLive` instead of reusing it.
+   * @default not set
+   */
   cleanup?: boolean;
 }
 
@@ -36,12 +48,18 @@ export interface IntegrationRuntimeComputeProperties {
    * @default "AutoResolve"
    */
   location?: string;
-  /** Data flow compute settings. */
+  /**
+   * Data flow compute settings.
+   * @default not set
+   */
   dataFlowProperties?: IntegrationRuntimeDataFlowProperties;
 }
 
 export interface IntegrationRuntimeProps {
-  /** Resource group of the workspace. Changing it replaces the runtime. */
+  /**
+   * Resource group of the workspace. Changing it replaces the runtime.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Synapse workspace. Changing it replaces the runtime. */
   workspace: string;
@@ -49,6 +67,7 @@ export interface IntegrationRuntimeProps {
    * Runtime name: 3-63 letters, digits, and hyphens, starting and ending
    * with a letter or digit. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the runtime.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -56,9 +75,15 @@ export interface IntegrationRuntimeProps {
    * Changing it replaces the runtime.
    */
   type: "Managed" | "SelfHosted";
-  /** Description of the runtime. */
+  /**
+   * Description of the runtime.
+   * @default not set
+   */
   description?: string;
-  /** Compute settings of a `Managed` runtime. */
+  /**
+   * Compute settings of a `Managed` runtime.
+   * @default not set
+   */
   computeProperties?: IntegrationRuntimeComputeProperties;
   /**
    * Run a `Managed` runtime in the workspace's managed virtual network
@@ -91,16 +116,34 @@ export interface IntegrationRuntime extends Resource<
 > {}
 
 /**
- * An integration runtime in a Synapse workspace — the compute that
+ * An integration runtime in a Synapse workspace
+ * (`Microsoft.Synapse/workspaces/integrationRuntimes`) — the compute that
  * pipelines and data flows run on. A `Managed` runtime is Azure-hosted and
- * billed only while activities run; a `SelfHosted` runtime is a
- * registration that your own nodes join with its authentication key.
+ * billed only while activities run; a `SelfHosted` runtime is a registration
+ * that your own nodes join with its authentication key.
+ *
+ * :::caution
+ * Changing `workspace`, `name`, `type`, `managedVirtualNetwork`, or
+ * `resourceGroup` replaces the runtime.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/data-integration/concepts-data-factory-differences
  *
  * ### Managed Runtimes
  * **Example:** Azure-hosted runtime with a data flow cluster
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
  * yield* Azure.Synapse.IntegrationRuntime("flows", {
  *   workspace: workspace.workspaceName,
  *   type: "Managed",

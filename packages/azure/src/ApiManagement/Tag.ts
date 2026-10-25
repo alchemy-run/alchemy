@@ -48,12 +48,26 @@ export interface Tag extends Resource<
  * and products (via {@link TagApiLink}, {@link TagOperationLink},
  * {@link TagProductLink}, {@link ApiTagLink}, ...). These are not ARM
  * resource tags.
+ * The ARM type is `Microsoft.ApiManagement/service/tags`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the tag.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/apimanagement/tag
  *
  * ### Creating Tags
  * **Example:** Tag an API as public
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const api = yield* Azure.ApiManagement.Api("orders", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * const tag = yield* Azure.ApiManagement.Tag("public", {
  *   serviceName: apim.serviceName,
  *   displayName: "Public",

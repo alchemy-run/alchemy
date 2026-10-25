@@ -39,11 +39,13 @@ export interface ServiceConfigurationProps {
   /**
    * ARM resource ID of the connectivity endpoint target. Changing it
    * replaces the configuration.
+   * @default unset
    */
   resourceId?: string;
   /**
    * Port on the machine the service listens on (e.g. `22` for SSH,
    * `6516` for WAC).
+   * @default unset
    */
   port?: number;
 }
@@ -74,9 +76,10 @@ export interface ServiceConfiguration extends Resource<
 > {}
 
 /**
- * Enables a service (SSH or Windows Admin Center) on an Azure Arc hybrid
- * connectivity endpoint, so clients can reach that port on an Arc-enabled
- * server through Azure Relay.
+ * A service configuration on an Azure Arc hybrid connectivity endpoint
+ * (`Microsoft.HybridConnectivity/endpoints/serviceConfigurations`). It
+ * enables SSH or Windows Admin Center, so clients can reach that port on
+ * an Arc-enabled server through Azure Relay.
  *
  * Service configurations carry no tags or free-form fields, so Alchemy
  * cannot mark them; one found at the expected scope is treated as this
@@ -87,6 +90,7 @@ export interface ServiceConfiguration extends Resource<
  * ### Enabling SSH
  * **Example:** SSH on port 22
  * ```typescript
+ * const machine = yield* Azure.HybridCompute.Machine("Server");
  * const endpoint = yield* Azure.HybridConnectivity.Endpoint("Endpoint", {
  *   resourceUri: machine.machineId,
  * });
@@ -101,6 +105,10 @@ export interface ServiceConfiguration extends Resource<
  * ### Enabling Windows Admin Center
  * **Example:** WAC on port 6516
  * ```typescript
+ * const machine = yield* Azure.HybridCompute.Machine("Server");
+ * const endpoint = yield* Azure.HybridConnectivity.Endpoint("Endpoint", {
+ *   resourceUri: machine.machineId,
+ * });
  * yield* Azure.HybridConnectivity.ServiceConfiguration("Wac", {
  *   resourceUri: endpoint.resourceUri,
  *   endpointName: endpoint.endpointName,
@@ -108,6 +116,12 @@ export interface ServiceConfiguration extends Resource<
  *   port: 6516,
  * });
  * ```
+ *
+ * :::caution
+ * Changing `resourceUri`, `endpointName`, or `name` replaces the
+ * configuration. Changing `serviceName` or `resourceId` deletes it and
+ * creates it again.
+ * :::
  *
  * @resource
  */

@@ -24,6 +24,7 @@ export interface WorkloadGroupProps extends SqlPoolChildProps {
   /**
    * Group name (letters and digits). If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the group.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Resources (percent) reserved exclusively for the group. */
@@ -32,14 +33,20 @@ export interface WorkloadGroupProps extends SqlPoolChildProps {
   maxResourcePercent: number;
   /** Minimum resources (percent) granted to each request. */
   minResourcePercentPerRequest: number;
-  /** Maximum resources (percent) granted to each request. */
+  /**
+   * Maximum resources (percent) granted to each request.
+   * @default not set
+   */
   maxResourcePercentPerRequest?: number;
   /**
    * Default importance of the group's requests.
    * @default "normal"
    */
   importance?: "low" | "below_normal" | "normal" | "above_normal" | "high";
-  /** Seconds before a request is cancelled (0 = no timeout). */
+  /**
+   * Seconds before a request is cancelled (0 = no timeout).
+   * @default not set
+   */
   queryExecutionTimeout?: number;
 }
 
@@ -61,16 +68,39 @@ export interface WorkloadGroup extends Resource<
 > {}
 
 /**
- * A workload group of a dedicated SQL pool — workload isolation that
- * reserves and caps the pool's resources for a class of requests. Pair it
- * with `Azure.Synapse.WorkloadClassifier` to route requests into the group.
- * The pool must be online (not paused) to create or change groups.
+ * A workload group of a dedicated SQL pool
+ * (`Microsoft.Synapse/workspaces/sqlPools/workloadGroups`) — workload
+ * isolation that reserves and caps the pool's resources for a class of
+ * requests. Pair it with `Azure.Synapse.WorkloadClassifier` to route
+ * requests into the group. The pool must be online (not paused) to create or
+ * change groups.
+ *
+ * :::caution
+ * Changing `workspace`, `sqlPool`, `name`, or `resourceGroup` replaces the
+ * workload group.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/sql-data-warehouse/sql-data-warehouse-workload-isolation
  *
  * ### Isolating Workloads
  * **Example:** Reserve 20% of the pool for loads
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
+ * const pool = yield* Azure.Synapse.SqlPool("dw", {
+ *   workspace: workspace.workspaceName,
+ *   sku: "DW100c",
+ * });
  * const loads = yield* Azure.Synapse.WorkloadGroup("loads", {
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,

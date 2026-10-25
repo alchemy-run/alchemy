@@ -34,6 +34,7 @@ export interface LinkerProps extends ConnectionProps {
    * Linker name: letters, digits, `.` and `_`. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * linker.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
 }
@@ -64,23 +65,38 @@ export interface Linker extends Resource<
 > {}
 
 /**
- * A Service Connector linker — a managed connection from an App Service
- * site, Container App, or Spring Apps deployment to a target service.
+ * A Service Connector linker (`Microsoft.ServiceLinker/linkers`): a managed
+ * connection from an App Service site, Container App, or Spring Apps
+ * deployment to a target service. See the
+ * [Azure docs](https://learn.microsoft.com/azure/service-connector/overview).
  *
  * Service Connector writes the connection settings (endpoints, connection
- * strings, client IDs) into the source's app settings and, for identity
- * auth, enables the identity and grants RBAC roles on the target.
+ * strings, client IDs) into the source's app settings. For identity auth, it
+ * also turns on the identity and grants RBAC roles on the target.
  *
- * Linkers cannot be tagged. The generated name encodes the app, stage,
- * logical ID, and instance ID, which is how Alchemy recognises its own
- * linkers; a linker with a custom name found without state is reported as
+ * Linkers have no tags. The generated name encodes the app, stage, logical
+ * ID, and instance ID, and Alchemy uses it to recognise its own linkers.
+ * Alchemy reports a linker with a custom name that it finds without state as
  * unowned.
  *
- * @see https://learn.microsoft.com/azure/service-connector/overview
+ * :::caution
+ * Changing `source`, `name`, or the target (`targetService.type`,
+ * `targetService.id`, or `targetService.endpoint`) replaces the linker.
+ * Alchemy updates `authInfo`, `clientType`, and the other connection
+ * settings in place.
+ * :::
  *
  * ### Connecting a Web App to Storage
  * **Example:** Connection string in app settings
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("files");
+ * const plan = yield* Azure.Web.AppServicePlan("plan", {
+ *   sku: "B1",
+ * });
+ * const app = yield* Azure.Web.WebApp("site", {
+ *   serverFarmId: plan.appServicePlanId,
+ *   siteConfig: { linuxFxVersion: "NODE|20-lts" },
+ * });
  * yield* Azure.ServiceConnector.Linker("storage", {
  *   source: app.siteId,
  *   targetService: {
@@ -110,7 +126,10 @@ export interface Linker extends Resource<
  * ```typescript
  * yield* Azure.ServiceConnector.Linker("storage", {
  *   source: app.siteId,
- *   targetService: { type: "AzureResource", id: blobServiceId },
+ *   targetService: {
+ *     type: "AzureResource",
+ *     id: Output.interpolate`${account.storageAccountId}/blobServices/default`,
+ *   },
  *   authInfo: { authType: "secret" },
  *   configurationInfo: { deleteOrUpdateBehavior: "ForcedCleanup" },
  * });

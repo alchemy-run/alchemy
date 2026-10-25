@@ -47,7 +47,10 @@ export const isMonitorOwnedByStack = Effect.fn(function* (
 
 /** Location props shared by every monitor child. */
 export interface MonitorChildProps {
-  /** Resource group of the monitor. Changing it replaces the resource. */
+  /**
+   * Resource group of the monitor. Changing it replaces the resource.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Datadog monitor. Changing it replaces the resource. */
   monitor: string;
@@ -57,7 +60,10 @@ export interface MonitorChildProps {
 export interface DatadogFilteringTag {
   /** Tag name (key). */
   name: string;
-  /** Tag value. Omit to match any value. */
+  /**
+   * Tag value. Omit to match any value.
+   * @default matches any value
+   */
   value?: string;
   /**
    * Whether matching resources are included or excluded. Exclusion wins
@@ -116,11 +122,20 @@ export interface DatadogAgentRules {
 
 /** What a monitor (or a monitored subscription) sends to Datadog. */
 export interface DatadogTagRules {
-  /** Log collection rules. */
+  /**
+   * Log collection rules.
+   * @default unset (Datadog's default)
+   */
   logRules?: DatadogLogRules;
-  /** Metric collection rules. */
+  /**
+   * Metric collection rules.
+   * @default unset (Datadog's default)
+   */
   metricRules?: DatadogMetricRules;
-  /** Datadog agent management rules. */
+  /**
+   * Datadog agent management rules.
+   * @default unset (Datadog's default)
+   */
   agentRules?: DatadogAgentRules;
   /**
    * Mute Datadog monitors while Azure VMs are shut down.

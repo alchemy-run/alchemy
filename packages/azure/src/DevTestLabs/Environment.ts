@@ -21,7 +21,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, labLocation } from "./Common.ts";
 
 export interface EnvironmentProps {
-  /** Resource group of the lab. Changing it replaces the environment. */
+  /**
+   * Resource group of the lab. Changing it replaces the environment.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the lab. Changing it replaces the environment. */
   lab: string;
@@ -31,6 +34,7 @@ export interface EnvironmentProps {
    * Environment name (letters, digits, `-`, and `_`). If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the environment.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -39,13 +43,20 @@ export interface EnvironmentProps {
    * replaces the environment.
    */
   armTemplateId: string;
-  /** Template parameters. Changing them replaces the environment. */
+  /**
+   * Template parameters. Changing them replaces the environment.
+   * @default []
+   */
   parameters?: { name: string; value: string }[];
-  /** Display name of the template shown in the lab. */
+  /**
+   * Display name of the template shown in the lab.
+   * @default unset
+   */
   armTemplateDisplayName?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -78,19 +89,39 @@ export interface Environment extends Resource<
 > {}
 
 /**
- * A DevTest Labs environment — an ARM template from a lab artifact source
+ * A DevTest Labs environment (`Microsoft.DevTestLab/labs/users/environments`)
+ * — an ARM template from a lab artifact source
  * deployed into its own resource group on behalf of a lab user. Deleting
  * the environment deletes that resource group.
  *
+ * :::caution
+ * Changing `lab`, `user`, `name`, `armTemplateId`, `parameters`, or
+ * `resourceGroup` replaces the environment and its resource group.
+ * :::
+ *
+ * :::caution
  * The lab needs a `LabVirtualNetwork` with a subnet that allows VM
- * creation, even when the template creates no VMs; otherwise the
+ * creation, even when the template creates no VMs. Otherwise the
  * environment ends in `Failed` (`NoMatchingSubnetFoundAllowingVmCreation`).
+ * :::
  *
  * @see https://learn.microsoft.com/azure/devtest-labs/devtest-lab-create-environment-from-arm
  *
  * ### Deploying a Template
  * **Example:** Environment from a repository template
  * ```typescript
+ * const lab = yield* Azure.DevTestLabs.Lab("team-lab");
+ * const user = yield* Azure.DevTestLabs.User("alice", {
+ *   lab: lab.labName,
+ *   // Entra object ID of the lab user.
+ *   objectId: "00000000-0000-0000-0000-000000000000",
+ * });
+ * const source = yield* Azure.DevTestLabs.ArtifactSource("templates", {
+ *   lab: lab.labName,
+ *   uri: "https://github.com/acme/lab-artifacts.git",
+ *   sourceType: "GitHub",
+ *   armTemplateFolderPath: "/Environments",
+ * });
  * const env = yield* Azure.DevTestLabs.Environment("web", {
  *   lab: lab.labName,
  *   user: user.userName,

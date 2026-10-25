@@ -45,6 +45,7 @@ export interface ModuleProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -79,14 +80,21 @@ export interface Module extends Resource<
 /**
  * A PowerShell (5.1) module imported into an Azure Automation account, so
  * its runbooks can use the module's cmdlets.
+ * The ARM type is `Microsoft.Automation/automationAccounts/modules`.
  *
  * The import runs in the background; Alchemy waits until it succeeds.
+ *
+ * :::caution
+ * Changing `automationAccount`, `name`, or `resourceGroup` replaces the
+ * module.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/shared-resources/modules
  *
  * ### Importing a Module
  * **Example:** Module from the PowerShell Gallery
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const color = yield* Azure.Automation.Module("PSWriteColor", {
  *   automationAccount: account.automationAccountName,
  *   name: "PSWriteColor",

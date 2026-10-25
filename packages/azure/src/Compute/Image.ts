@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -213,9 +213,7 @@ export const ImageProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* compute
-        .ListImages({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListImages", page)));
+      const page = yield* collectAll(compute.ListImages, { subscriptionId });
       return page.value.flatMap((image) => {
         const resourceGroup = resourceGroupOf(image.id);
         return hasAnyAlchemyTag(image.tags) &&

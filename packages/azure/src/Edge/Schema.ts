@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -25,11 +25,15 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState } from "./EdgeShared.ts";
 
 export interface SchemaProps {
-  /** Resource group the schema is created in. Changing it replaces the schema. */
+  /**
+   * Resource group the schema is created in. Changing it replaces the schema.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /**
    * Name of the schema. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the schema.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -41,6 +45,7 @@ export interface SchemaProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -67,19 +72,21 @@ export interface Schema extends Resource<
 > {}
 
 /**
- * An Azure Arc workload orchestration schema. A schema declares the
- * configuration keys (type, required, who may edit them) that solution and
- * configuration templates validate against. The rules themselves live in
- * immutable `Azure.Edge.SchemaVersion` children.
+ * An Azure Arc workload orchestration schema (`Microsoft.Edge/schemas`). A
+ * schema declares the configuration keys (type, required, who may edit
+ * them) that solution and configuration templates validate against. The
+ * rules themselves live in immutable `Azure.Edge.SchemaVersion` children.
+ * See the
+ * [configuration model](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model).
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the schema and
+ * its versions.
+ * :::
  *
  * ### Creating a Schema
  * **Example:** Schema with a version
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("edge", {
- *   location: "eastus",
- * });
  * const schema = yield* Azure.Edge.Schema("app");
  * yield* Azure.Edge.SchemaVersion("app-v1", {
  *   schema: schema.schemaName,
@@ -122,9 +129,7 @@ export const SchemaProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* edge
-        .ListSchemaBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListSchemaBySubscription", page)));
+      const page = yield* collectAll(edge.ListSchemaBySubscription, { subscriptionId });
       return page.value.flatMap((schema) => {
         const group = resourceGroupOf(schema.id);
         return hasAnyAlchemyTag(schema.tags) && group !== undefined && schema.name !== undefined

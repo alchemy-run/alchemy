@@ -38,13 +38,19 @@ export interface AutomationRuleCondition {
 export interface AutomationRuleTriggeringLogic {
   /** Whether the rule is enabled. */
   isEnabled: boolean;
-  /** UTC time (ISO-8601) after which the rule is disabled automatically. */
+  /**
+   * UTC time (ISO-8601) after which the rule is disabled automatically.
+   * @default never expires
+   */
   expirationTimeUtc?: string;
   /** Object type that triggers the rule. */
   triggersOn: "Incidents" | "Alerts" | (string & {});
   /** Event that triggers the rule. */
   triggersWhen: "Created" | "Updated" | (string & {});
-  /** Conditions that must all match. */
+  /**
+   * Conditions that must all match.
+   * @default [] (every object matches)
+   */
   conditions?: AutomationRuleCondition[];
 }
 
@@ -62,7 +68,10 @@ export interface AutomationRuleAction {
 }
 
 export interface AutomationRuleProps {
-  /** Resource group of the Sentinel workspace. Changing it replaces the rule. */
+  /**
+   * Resource group of the Sentinel workspace. Changing it replaces the rule.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Sentinel-enabled Log Analytics workspace. Pass `OnboardingState.workspace`
@@ -72,6 +81,7 @@ export interface AutomationRuleProps {
   /**
    * Rule ID (a GUID). If omitted, a deterministic GUID is derived from the
    * app, stage, and logical ID. Changing it replaces the rule.
+   * @default a GUID derived from the app, stage, and logical ID
    */
   automationRuleId?: string;
   /** Display name of the rule. */
@@ -112,20 +122,32 @@ export interface AutomationRule extends Resource<
 > {}
 
 /**
- * A Microsoft Sentinel automation rule: runs actions (change incident
- * properties, add tasks, run a playbook) when incidents or alerts are
- * created or updated and match its conditions.
+ * A Microsoft Sentinel automation rule
+ * (`Microsoft.SecurityInsights/automationRules`): it runs actions (change
+ * incident properties, add tasks, run a playbook) when incidents or alerts
+ * are created or updated and match its conditions. See the
+ * [Azure docs](https://learn.microsoft.com/azure/sentinel/automate-incident-handling-with-automation-rules).
  *
- * @see https://learn.microsoft.com/azure/sentinel/automate-incident-handling-with-automation-rules
+ * :::caution
+ * Onboard the workspace first with `Azure.SecurityInsights.OnboardingState`,
+ * and pass its `workspace` attribute so Alchemy creates this resource after
+ * the onboarding and deletes it before.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, or `automationRuleId` replaces the
+ * rule. Alchemy updates `displayName`, `order`, `triggeringLogic`, and
+ * `actions` in place.
+ * :::
  *
  * ### Triaging Incidents
  * **Example:** Raise severity of matching incidents
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
  *   workspace: logs.workspaceName,
  * });
  * const rule = yield* Azure.SecurityInsights.AutomationRule("raise", {
- *   resourceGroup: sentinel.resourceGroup,
  *   workspace: sentinel.workspace,
  *   displayName: "Raise severity of ransomware incidents",
  *   order: 1,
@@ -158,7 +180,6 @@ export interface AutomationRule extends Resource<
  * **Example:** Add an investigation task to new incidents
  * ```typescript
  * yield* Azure.SecurityInsights.AutomationRule("task", {
- *   resourceGroup: sentinel.resourceGroup,
  *   workspace: sentinel.workspace,
  *   displayName: "Checklist",
  *   order: 2,
@@ -272,10 +293,7 @@ export const AutomationRuleProvider = () =>
       // Observe; the PUT is a synchronous upsert of the whole rule, sent
       // only when the observed rule differs.
       let observed = yield* getRule(subscriptionId, resourceGroup, workspace, ruleId);
-      if (
-        observed === undefined ||
-        !subsetEqual(desired, observed.properties)
-      ) {
+      if (observed === undefined || !subsetEqual(desired, observed.properties)) {
         observed = yield* securityinsights.AutomationRulesCreateOrUpdate({
           subscriptionId,
           resourceGroupName: resourceGroup,

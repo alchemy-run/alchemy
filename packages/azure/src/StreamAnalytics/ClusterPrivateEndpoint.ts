@@ -25,6 +25,7 @@ export interface ClusterPrivateEndpointProps {
   /**
    * Resource group of the cluster. Changing it replaces the private
    * endpoint.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /** Name of the Stream Analytics cluster. Changing it replaces the private endpoint. */
@@ -32,6 +33,7 @@ export interface ClusterPrivateEndpointProps {
   /**
    * Private endpoint name. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the private endpoint.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -75,12 +77,18 @@ export interface ClusterPrivateEndpoint extends Resource<
 
 /**
  * A managed private endpoint from a dedicated Stream Analytics cluster to
- * a resource in a virtual network (Event Hubs, Storage, SQL, Cosmos DB, ...).
+ * a resource in a virtual network (Event Hubs, Storage, SQL, Cosmos DB, ...)
+ * (`Microsoft.StreamAnalytics/clusters/privateEndpoints`).
  *
  * The connection stays `Pending` until it is approved on the target
  * resource (its private endpoint connections). The endpoint carries no
  * tags; Alchemy treats it as owned when its cluster carries this stack's
  * and stage's ownership tags.
+ *
+ * :::caution
+ * Changing `cluster`, `name`, `privateLinkServiceId`, `groupIds`, or
+ * `resourceGroup` replaces the private endpoint.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/stream-analytics/private-endpoints
  *
@@ -92,7 +100,8 @@ export interface ClusterPrivateEndpoint extends Resource<
  *   "events",
  *   {
  *     cluster: cluster.clusterName,
- *     privateLinkServiceId: namespace.namespaceId,
+ *     privateLinkServiceId:
+ *       "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/events/providers/Microsoft.EventHub/namespaces/telemetry",
  *     groupIds: ["namespace"],
  *   },
  * );

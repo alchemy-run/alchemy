@@ -44,15 +44,36 @@ export interface ProductApi extends Resource<
  * Adds an API to an API Management product, so subscriptions to the
  * product can call the API. The association has no settings; changing
  * the product or API replaces it.
+ * The ARM type is `Microsoft.ApiManagement/service/products/apis`.
  *
  * `products/{productId}/apiLinks` expresses the same relation; use one or
  * the other for a given product and API, not both.
+ *
+ * :::caution
+ * Changing `serviceName`, `productName`, `apiName`, or `resourceGroup`
+ * replaces the link.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-add-products
  *
  * ### Adding an API to a Product
  * **Example:** Publish an API through a product
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const product = yield* Azure.ApiManagement.Product("starter", {
+ *   serviceName: apim.serviceName,
+ *   displayName: "Starter",
+ *   subscriptionRequired: true,
+ *   state: "published",
+ * });
+ * const api = yield* Azure.ApiManagement.Api("orders", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * yield* Azure.ApiManagement.ProductApi("starter-hello", {
  *   serviceName: apim.serviceName,
  *   productName: product.productName,

@@ -29,7 +29,10 @@ import {
 export type VirtualMachineScheduleTaskType = "LabVmsShutdownTask" | "LabVmsStartupTask";
 
 export interface VirtualMachineScheduleProps extends ScheduleRecurrenceProps {
-  /** Resource group of the lab. Changing it replaces the schedule. */
+  /**
+   * Resource group of the lab. Changing it replaces the schedule.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the lab. Changing it replaces the schedule. */
   lab: string;
@@ -44,11 +47,13 @@ export interface VirtualMachineScheduleProps extends ScheduleRecurrenceProps {
    * Schedule name. Lab VMs only honour `LabVmsShutdown` (shutdown) and
    * `LabVmAutoStart` (startup), which are the defaults for the task type.
    * Changing it replaces the schedule.
+   * @default `LabVmsShutdown` or `LabVmAutoStart`, from `taskType`
    */
   name?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -69,15 +74,56 @@ export interface VirtualMachineSchedule extends Resource<
 > {}
 
 /**
- * A per-VM schedule that overrides a DevTest Lab's shutdown
+ * A per-VM schedule (`Microsoft.DevTestLab/labs/virtualmachines/schedules`)
+ * that overrides a DevTest Lab's shutdown
  * (`LabVmsShutdown`) or auto-start (`LabVmAutoStart`) schedule for one
  * lab VM.
+ *
+ * :::caution
+ * Changing `lab`, `virtualMachine`, `name`, `taskType`, or
+ * `resourceGroup` replaces the schedule.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/devtest-labs/devtest-lab-auto-shutdown
  *
  * ### Per-VM Auto-shutdown
  * **Example:** Shut one lab VM down at 22:00 UTC
  * ```typescript
+ * const lab = yield* Azure.DevTestLabs.Lab("team-lab");
+ * const vnet = yield* Azure.Network.VirtualNetwork("lab-vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("lab-vms", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const network = yield* Azure.DevTestLabs.LabVirtualNetwork("net", {
+ *   lab: lab.labName,
+ *   externalProviderResourceId: vnet.virtualNetworkId,
+ *   subnetOverrides: [
+ *     {
+ *       resourceId: subnet.subnetId,
+ *       labSubnetName: subnet.subnetName,
+ *       useInVmCreationPermission: "Allow",
+ *     },
+ *   ],
+ * });
+ * const publicKey = "ssh-ed25519 AAAAC3Nza... me@example.com";
+ * const vm = yield* Azure.DevTestLabs.VirtualMachine("dev", {
+ *   lab: lab.labName,
+ *   size: "Standard_B1s",
+ *   galleryImageReference: {
+ *     publisher: "Canonical",
+ *     offer: "0001-com-ubuntu-server-jammy",
+ *     sku: "22_04-lts-gen2",
+ *     osType: "Linux",
+ *   },
+ *   userName: "azureuser",
+ *   isAuthenticationWithSshKey: true,
+ *   sshKey: publicKey,
+ *   labVirtualNetworkId: network.labVirtualNetworkId,
+ *   labSubnetName: subnet.subnetName,
+ * });
  * const shutdown = yield* Azure.DevTestLabs.VirtualMachineSchedule("vm-off", {
  *   lab: lab.labName,
  *   virtualMachine: vm.virtualMachineName,

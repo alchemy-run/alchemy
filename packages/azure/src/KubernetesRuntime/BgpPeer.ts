@@ -26,9 +26,10 @@ export interface BgpPeerProps {
   /**
    * Name of the BGP peer (3-24 letters, digits and `-`). If omitted, a
    * unique lowercase name is generated. Changing it replaces the peer.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Autonomous system number the cluster's speakers announce. */
+  /** Autonomous system number the cluster's speakers announce. Required. */
   myAsn: number;
   /** Autonomous system number of the peer router. */
   peerAsn: number;
@@ -60,12 +61,11 @@ export interface BgpPeer extends Resource<
 > {}
 
 /**
- * A BGP peer of the MetalLB speakers on an Azure Arc-enabled Kubernetes
- * cluster, so `Azure.KubernetesRuntime.LoadBalancer` addresses can be
+ * A BGP peer (`Microsoft.KubernetesRuntime/bgpPeers`) of the MetalLB
+ * speakers on an Azure Arc-enabled Kubernetes cluster, so `Azure.KubernetesRuntime.LoadBalancer` addresses can be
  * advertised to an upstream router (AKS Arc / Azure Local networks).
  *
- * Requires a connected cluster with the `networking` service enabled; ARM
- * proxies every write to the cluster. Peers carry no tags, so a peer found
+ * ARM proxies every write to the cluster. Peers carry no tags, so a peer found
  * at the expected scope is only treated as owned when Alchemy created it.
  *
  * @see https://learn.microsoft.com/azure/aks/aksarc/networking
@@ -73,6 +73,8 @@ export interface BgpPeer extends Resource<
  * ### Peering with a Router
  * **Example:** Peer with a top-of-rack router
  * ```typescript
+ * const clusterId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.Kubernetes/connectedClusters/edge-cluster";
  * const networking = yield* Azure.KubernetesRuntime.Service("networking", {
  *   clusterId,
  *   serviceName: "networking",
@@ -84,6 +86,15 @@ export interface BgpPeer extends Resource<
  *   peerAddress: "10.0.0.1",
  * });
  * ```
+ *
+ * :::caution
+ * The cluster must be connected and have the `networking`
+ * `Azure.KubernetesRuntime.Service` enabled.
+ * :::
+ *
+ * :::caution
+ * Changing `clusterId` or `name` replaces the peer.
+ * :::
  *
  * @resource
  */

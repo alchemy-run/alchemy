@@ -30,7 +30,10 @@ import {
 import type { WebPubSubSkuName } from "./WebPubSub.ts";
 
 export interface ReplicaProps {
-  /** Resource group of the Web PubSub service. Changing it replaces the replica. */
+  /**
+   * Resource group of the Web PubSub service. Changing it replaces the replica.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Web PubSub service the replica belongs to. The service must use the
@@ -41,6 +44,7 @@ export interface ReplicaProps {
    * Replica name: 3-63 letters, digits, and hyphens, starting with a
    * letter. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the replica.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -73,6 +77,7 @@ export interface ReplicaProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -107,9 +112,15 @@ export interface Replica extends Resource<
 > {}
 
 /**
- * A geo-replica of a Premium Azure Web PubSub service. Clients connecting
+ * A geo-replica of a Premium Azure Web PubSub service
+ * (`Microsoft.SignalRService/webPubSub/replicas`). Clients connecting
  * to the service's endpoint are routed to the nearest healthy replica, and
  * the replica keeps serving if the primary region fails.
+ *
+ * :::caution
+ * Changing `webPubSub`, `name`, `location`, or `resourceGroup` replaces the
+ * replica.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-web-pubsub/howto-enable-geo-replication
  *

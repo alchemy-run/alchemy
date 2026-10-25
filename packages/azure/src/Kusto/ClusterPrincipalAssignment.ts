@@ -26,13 +26,17 @@ export type KustoClusterPrincipalRole = kusto.ClusterPrincipalRole;
 export type KustoPrincipalType = kusto.PrincipalType;
 
 export interface ClusterPrincipalAssignmentProps {
-  /** Resource group of the cluster. Changing it replaces the assignment. */
+  /**
+   * Resource group of the cluster. Changing it replaces the assignment.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the cluster. Changing it replaces the assignment. */
   cluster: string;
   /**
    * Assignment name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the assignment.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -81,13 +85,15 @@ export interface ClusterPrincipalAssignment extends Resource<
 /**
  * Grants a user, group, or application a cluster-wide role
  * (`AllDatabasesAdmin`, `AllDatabasesViewer`, `AllDatabasesMonitor`) on an
- * Azure Data Explorer (Kusto) cluster.
+ * Azure Data Explorer (Kusto) cluster
+ * (`Microsoft.Kusto/clusters/principalAssignments`).
  *
  * @see https://learn.microsoft.com/azure/data-explorer/manage-cluster-permissions
  *
  * ### Granting Cluster Access
  * **Example:** Viewer access for a managed identity
  * ```typescript
+ * const cluster = yield* Azure.Kusto.Cluster("adx");
  * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("reader");
  * yield* Azure.Kusto.ClusterPrincipalAssignment("reader", {
  *   cluster: cluster.clusterName,
@@ -96,6 +102,12 @@ export interface ClusterPrincipalAssignment extends Resource<
  *   role: "AllDatabasesViewer",
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `cluster`, `resourceGroup`, `principalId`,
+ * `principalType`, or `tenantId` replaces the assignment. `role` updates in
+ * place.
+ * :::
  *
  * @resource
  */

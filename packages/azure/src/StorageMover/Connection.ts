@@ -23,7 +23,10 @@ import {
 } from "./Common.ts";
 
 export interface ConnectionProps {
-  /** Resource group of the Storage Mover. Changing it replaces the connection. */
+  /**
+   * Resource group of the Storage Mover. Changing it replaces the connection.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Storage Mover that holds the connection. Changing it replaces the connection. */
   storageMover: string;
@@ -31,6 +34,7 @@ export interface ConnectionProps {
    * Name of the connection: 1-20 letters, digits, `-` and `_`, starting
    * with a letter or digit. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the connection.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -44,6 +48,7 @@ export interface ConnectionProps {
    * (`[alchemy <stack>/<stage>/<id>]`) because connections have no tags.
    * Azure ignores description changes on an existing connection, so
    * changing it replaces the connection.
+   * @default not set
    */
   description?: string;
 }
@@ -79,9 +84,10 @@ export interface Connection extends Resource<
 > {}
 
 /**
- * A Storage Mover connection — a managed private endpoint from the Storage
- * Mover service to a private link service, used by agentless cloud-to-cloud
- * jobs to reach sources over a private network.
+ * A Storage Mover connection
+ * (`Microsoft.StorageMover/storageMovers/connections`) — a managed private
+ * endpoint from the Storage Mover service to a private link service, used by
+ * agentless cloud-to-cloud jobs to reach sources over a private network.
  *
  * The private link service owner must approve the connection before jobs can
  * use it; pass `privateEndpointResourceId` to a
@@ -89,14 +95,21 @@ export interface Connection extends Resource<
  * stack. Connections have no tags, so Alchemy records ownership as a marker
  * at the end of the description.
  *
+ * :::caution
+ * Changing `storageMover`, `name`, `privateLinkServiceId`, `description`, or
+ * `resourceGroup` replaces the connection.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/storage-mover/service-overview
  *
  * ### Creating a Connection
  * **Example:** Connect to a private link service
  * ```typescript
+ * const mover = yield* Azure.StorageMover.StorageMover("mover");
  * const connection = yield* Azure.StorageMover.Connection("private", {
  *   storageMover: mover.storageMoverName,
- *   privateLinkServiceId: service.privateLinkServiceId,
+ *   privateLinkServiceId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nas/providers/Microsoft.Network/privateLinkServices/nas-pls",
  *   description: "Reach the on-premises NAS",
  * });
  * ```

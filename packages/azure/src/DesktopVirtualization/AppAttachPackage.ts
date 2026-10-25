@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -30,12 +30,16 @@ import { deltaOf, sameIdSet } from "./Common.ts";
 export type AppAttachPackageImage = desktopvirtualization.AppAttachPackageInfoProperties;
 
 export interface AppAttachPackageProps {
-  /** Resource group of the package. Changing it replaces the package. */
+  /**
+   * Resource group of the package. Changing it replaces the package.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Package name, 3-63 lowercase letters, digits, and single hyphens. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the package.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -51,13 +55,20 @@ export interface AppAttachPackageProps {
    * @default []
    */
   hostPoolIds?: string[];
-  /** Key Vault URL of the certificate that signed the package. */
+  /**
+   * Key Vault URL of the certificate that signed the package.
+   * @default unset
+   */
   keyVaultURL?: string;
-  /** Health-check behaviour when the package fails to stage on a session host. */
+  /**
+   * Health-check behaviour when the package fails to stage on a session host.
+   * @default unset (Azure's default)
+   */
   failHealthCheckOnStagingFailure?: "Unhealthy" | "NeedsAssistance" | "DoNotFail";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -88,7 +99,8 @@ export interface AppAttachPackage extends Resource<
 > {}
 
 /**
- * An Azure Virtual Desktop App Attach package — an MSIX or App-V
+ * An Azure Virtual Desktop App Attach package
+ * (`Microsoft.DesktopVirtualization/appAttachPackages`) — an MSIX or App-V
  * application image on a file share, attached to host pools so session
  * hosts mount it dynamically for users instead of installing it.
  *
@@ -96,11 +108,19 @@ export interface AppAttachPackage extends Resource<
  * name, version, applications) normally comes from the host pool's
  * `importAppAttachPackageInfo` action.
  *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the package.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/virtual-desktop/app-attach-overview
  *
  * ### Attaching a Package
  * **Example:** Attach an MSIX image to a host pool
  * ```typescript
+ * const pool = yield* Azure.DesktopVirtualization.HostPool("pool", {
+ *   hostPoolType: "Pooled",
+ *   loadBalancerType: "BreadthFirst",
+ * });
  * const pkg = yield* Azure.DesktopVirtualization.AppAttachPackage("notepadpp", {
  *   hostPoolIds: [pool.hostPoolId],
  *   failHealthCheckOnStagingFailure: "NeedsAssistance",
@@ -175,11 +195,9 @@ export const AppAttachPackageProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* desktopvirtualization
-        .ListAppAttachPackageBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListAppAttachPackageBySubscription", page)),
-        );
+      const page = yield* collectAll(desktopvirtualization.ListAppAttachPackageBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((pkg) => {
         const rg = resourceGroupOf(pkg.id);
         return hasAnyAlchemyTag(pkg.tags) && rg !== undefined && pkg.name !== undefined

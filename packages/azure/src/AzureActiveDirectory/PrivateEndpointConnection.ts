@@ -8,10 +8,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   stackAndStage,
   waitForProvisioned,
   waitUntilGone,
@@ -84,17 +84,31 @@ export interface PrivateEndpointConnection extends Resource<
 /**
  * Approval of a private endpoint's connection to a Private Link for
  * Microsoft Entra ID policy.
+ * The ARM type is
+ * `microsoft.aadiam/privateLinkForAzureAd/privateEndpointConnections`.
  *
  * Connections are not created directly: a private endpoint that targets the
  * policy (group `azuread`) with a *manual* connection leaves a `Pending`
  * request on it. This resource approves or rejects that request. Destroying
  * it removes the connection, which disconnects the private endpoint.
  *
+ * :::caution
+ * Changing `policy`, `privateEndpointId`, or `resourceGroup` replaces the
+ * connection.
+ * :::
+ *
  * @see https://learn.microsoft.com/entra/identity/devices/howto-manage-private-link
  *
  * ### Approving Connections
  * **Example:** Approve a manual private endpoint request
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("app", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
  * const policy = yield* Azure.AzureActiveDirectory.PrivateLinkPolicy("entra");
  * const endpoint = yield* Azure.Network.PrivateEndpoint("entra", {
  *   subnetId: subnet.subnetId,
@@ -111,6 +125,20 @@ export interface PrivateEndpointConnection extends Resource<
  *
  * **Example:** Reject a request
  * ```typescript
+ * const policy = yield* Azure.AzureActiveDirectory.PrivateLinkPolicy("entra");
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("app", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const endpoint = yield* Azure.Network.PrivateEndpoint("entra", {
+ *   subnetId: subnet.subnetId,
+ *   manualPrivateLinkServiceConnections: [
+ *     { privateLinkServiceId: policy.policyId, groupIds: ["azuread"] },
+ *   ],
+ * });
  * yield* Azure.AzureActiveDirectory.PrivateEndpointConnection("entra-approval", {
  *   policy: policy.policyName,
  *   privateEndpointId: endpoint.privateEndpointId,
@@ -160,17 +188,11 @@ const findConnection = Effect.fn(function* (
   privateEndpointId: string,
 ) {
   const page = yield* orUndefinedIfNotFound(
-    aad
-      .ListPrivateEndpointConnectionByPolicyName({
-        subscriptionId,
-        resourceGroupName,
-        policyName,
-      })
-      .pipe(
-        Effect.flatMap((page) =>
-          requireSinglePage("ListPrivateEndpointConnectionByPolicyName", page),
-        ),
-      ),
+    collectAll(aad.ListPrivateEndpointConnectionByPolicyName, {
+      subscriptionId,
+      resourceGroupName,
+      policyName,
+    }),
   ).pipe(Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)));
   return (page?.value ?? []).find((connection) =>
     sameId(connection.properties?.privateEndpoint?.id, privateEndpointId),

@@ -56,16 +56,48 @@ export interface WorkspaceApiOperationPolicy extends Resource<
 /**
  * The workspace-scoped counterpart of {@link ApiOperationPolicy}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/workspaces/apis/operations/policies`.
  *
  * The policy of a single API operation in an API Management service.
  * There is one per operation; deleting it reverts the operation to the
  * inherited (`<base />`) behavior.
+ *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `apiName`, `operationName`, or
+ * `resourceGroup` replaces the policy.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/set-edit-policies
  *
  * ### Setting an Operation Policy
  * **Example:** Mock the response of one operation
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
+ * const api = yield* Azure.ApiManagement.WorkspaceApi("orders", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
+ * const getOrder = yield* Azure.ApiManagement.WorkspaceApiOperation("get-order", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   apiName: api.apiName,
+ *   method: "GET",
+ *   urlTemplate: "/orders/{id}",
+ *   templateParameters: [{ name: "id", type: "string", required: true }],
+ * });
  * yield* Azure.ApiManagement.WorkspaceApiOperationPolicy("get-order-mock", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

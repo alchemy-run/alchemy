@@ -33,6 +33,7 @@ export interface EnterpriseMccCacheNodeProps {
   /**
    * Resource group that holds the parent customer. Changing it replaces the
    * cache node.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -43,6 +44,7 @@ export interface EnterpriseMccCacheNodeProps {
   /**
    * Cache node resource name. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the cache node.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -67,7 +69,10 @@ export interface EnterpriseMccCacheNodeProps {
    * @default [{ physicalPath: "/var/mcc", sizeInGb: 100, cacheNumber: 1 }]
    */
   driveConfiguration?: EnterpriseMccCacheNodeDrive[];
-  /** Maximum egress the cache node may serve, in Mbps. */
+  /**
+   * Maximum egress the cache node may serve, in Mbps.
+   * @default no limit
+   */
   maxAllowableEgressInMbps?: number;
   /**
    * Whether the cache node is enabled.
@@ -77,11 +82,13 @@ export interface EnterpriseMccCacheNodeProps {
   /**
    * HTTP proxy the cache node uses to reach the internet, as
    * `host:port` or `http://host:port`. Omit when no proxy is required.
+   * @default none (direct internet access)
    */
   proxyUrl?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -131,8 +138,10 @@ export interface EnterpriseMccCacheNode extends Resource<
 > {}
 
 /**
- * A Microsoft Connected Cache for Enterprise and Education cache node — the
- * ARM record of one customer-hosted server that caches Microsoft content.
+ * A Microsoft Connected Cache for Enterprise and Education cache node
+ * (`Microsoft.ConnectedCache/enterpriseMccCustomers/enterpriseMccCacheNodes`)
+ * — the ARM record of one customer-hosted server that caches Microsoft
+ * content.
  *
  * Creating the node registers its configuration (OS, cache drives, egress
  * limit, proxy); the node becomes active once the provisioning script from
@@ -142,7 +151,12 @@ export interface EnterpriseMccCacheNode extends Resource<
  * the node's tags are written on every reconcile and ownership is derived
  * from the parent customer's Alchemy tags.
  *
- * @see https://learn.microsoft.com/windows/deployment/do/mcc-ent-create-resource-and-cache
+ * :::caution
+ * Changing `resourceGroup`, `customer`, `name`, `location`, or `osType`
+ * replaces the cache node; the host server must then be provisioned again.
+ * :::
+ *
+ * See [Create an enterprise cache node](https://learn.microsoft.com/windows/deployment/do/mcc-ent-create-resource-and-cache).
  *
  * ### Creating a Cache Node
  * **Example:** Linux cache node with one cache drive
@@ -162,6 +176,9 @@ export interface EnterpriseMccCacheNode extends Resource<
  * ### Limiting Egress Behind a Proxy
  * **Example:** Enabled node with an egress cap and an HTTP proxy
  * ```typescript
+ * const customer = yield* Azure.ConnectedCache.EnterpriseMccCustomer("mcc", {
+ *   location: "westus",
+ * });
  * yield* Azure.ConnectedCache.EnterpriseMccCacheNode("branch", {
  *   customer: customer.customerResourceName,
  *   isEnabled: true,

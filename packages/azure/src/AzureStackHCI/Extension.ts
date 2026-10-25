@@ -39,20 +39,31 @@ export interface ExtensionProps {
    * replaces the extension.
    */
   type: string;
-  /** Version of the extension handler, e.g. `1.10`. */
+  /**
+   * Version of the extension handler, e.g. `1.10`.
+   * @default not set
+   */
   typeHandlerVersion?: string;
   /**
    * Whether the latest minor version is used at deployment time. Changing
    * it replaces the extension.
+   * @default not set (Azure's default applies)
    */
   autoUpgradeMinorVersion?: boolean;
-  /** Whether the platform upgrades the extension automatically when a new version is published. */
+  /**
+   * Whether the platform upgrades the extension automatically when a new version is published.
+   * @default not set (Azure's default applies)
+   */
   enableAutomaticUpgrade?: boolean;
-  /** Public JSON settings of the extension. */
+  /**
+   * Public JSON settings of the extension.
+   * @default not set
+   */
   settings?: Record<string, unknown>;
   /**
    * Protected JSON settings (encrypted at rest, never returned by Azure).
    * Re-sent only when they differ from the last deployed value.
+   * @default not set
    */
   protectedSettings?: Record<string, unknown>;
 }
@@ -90,18 +101,25 @@ export interface Extension extends Resource<
  * An Arc extension installed on every node of an Azure Local cluster
  * (e.g. Azure Monitor Agent), managed through the cluster's Arc setting.
  * Installation needs a registered cluster with Arc-connected nodes.
+ * The ARM type is `Microsoft.AzureStackHCI/clusters/arcSettings/extensions`.
  *
  * The extension has no tags; Alchemy treats it as owned when its parent
  * cluster carries this stack's ownership tags.
+ *
+ * :::caution
+ * Changing `cluster`, `arcSetting`, `name`, `publisher`, `type`,
+ * `autoUpgradeMinorVersion`, or `resourceGroup` replaces the extension.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/manage/arc-extension-management
  *
  * ### Installing an Extension
  * **Example:** Azure Monitor Agent on every node
  * ```typescript
+ * const cluster = yield* Azure.AzureStackHCI.Cluster("site-a");
  * const arc = yield* Azure.AzureStackHCI.ArcSetting("arc", {
  *   cluster: cluster.clusterName,
- *   arcInstanceResourceGroup: group.resourceGroupName,
+ *   arcInstanceResourceGroup: cluster.resourceGroup,
  * });
  * yield* Azure.AzureStackHCI.Extension("monitor", {
  *   cluster: cluster.clusterName,

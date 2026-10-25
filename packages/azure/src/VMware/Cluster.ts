@@ -24,13 +24,17 @@ import {
 } from "./common.ts";
 
 export interface ClusterProps {
-  /** Resource group of the private cloud. Changing it replaces the cluster. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the cluster.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the cluster. */
   privateCloud: string;
   /**
    * Name of the cluster. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the cluster.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -46,6 +50,7 @@ export interface ClusterProps {
   clusterSize?: number;
   /**
    * Name of the cluster's vSAN datastore. Changing it replaces the cluster.
+   * @default not set
    */
   vsanDatastoreName?: string;
 }
@@ -78,16 +83,28 @@ export interface Cluster extends Resource<
 > {}
 
 /**
- * An additional vSphere cluster in an Azure VMware Solution private cloud.
+ * An additional vSphere cluster in an Azure VMware Solution private cloud
+ * (`Microsoft.AVS/privateClouds/clusters`).
  *
  * Clusters add at least 3 dedicated hosts (~$8-11 per host-hour each) and
  * take about an hour to provision.
+ *
+ * :::caution
+ * Changing `privateCloud`, `name`, `sku`, `vsanDatastoreName`, or
+ * `resourceGroup` replaces the cluster. A new cluster takes about an hour to
+ * provision.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/concepts-private-clouds-clusters
  *
  * ### Adding a Cluster
  * **Example:** Three-host cluster
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
  * const cluster = yield* Azure.VMware.Cluster("workload", {
  *   privateCloud: cloud.privateCloudName,
  *   sku: "av36p",

@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -25,11 +25,15 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState } from "./EdgeShared.ts";
 
 export interface ConfigurationProps {
-  /** Resource group the configuration is created in. Changing it replaces the configuration. */
+  /**
+   * Resource group the configuration is created in. Changing it replaces the configuration.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /**
    * Name of the configuration. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the configuration.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -41,6 +45,7 @@ export interface ConfigurationProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -65,18 +70,20 @@ export interface Configuration extends Resource<
 > {}
 
 /**
- * An Azure Arc workload orchestration configuration. Configurations hold
- * the configuration values of a hierarchy entity (a site or target); they
- * are linked to it with an `Azure.Edge.ConfigurationReference`.
+ * An Azure Arc workload orchestration configuration
+ * (`Microsoft.Edge/configurations`). Configurations hold the configuration
+ * values of a hierarchy entity (a site or target); they are linked to it
+ * with an `Azure.Edge.ConfigurationReference`. See the
+ * [configuration model](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model).
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the
+ * configuration and its dynamic configurations.
+ * :::
  *
  * ### Creating a Configuration
  * **Example:** Configuration referenced by a site
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("edge", {
- *   location: "eastus",
- * });
  * const site = yield* Azure.Edge.Site("plant");
  * const configuration = yield* Azure.Edge.Configuration("plant-config");
  * yield* Azure.Edge.ConfigurationReference("plant-config-ref", {
@@ -122,9 +129,7 @@ export const ConfigurationProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* edge
-        .ListConfigurationBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListConfigurationBySubscription", page)));
+      const page = yield* collectAll(edge.ListConfigurationBySubscription, { subscriptionId });
       return page.value.flatMap((configuration) => {
         const group = resourceGroupOf(configuration.id);
         return hasAnyAlchemyTag(configuration.tags) &&

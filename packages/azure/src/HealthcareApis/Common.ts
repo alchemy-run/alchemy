@@ -150,7 +150,10 @@ export type HealthcareIdentityType =
 export interface HealthcareIdentity {
   /** Managed identity type. */
   type: HealthcareIdentityType;
-  /** ARM IDs of user-assigned managed identities to attach. */
+  /**
+   * ARM IDs of user-assigned managed identities to attach.
+   * @default []
+   */
   userAssignedIdentities?: string[];
 }
 

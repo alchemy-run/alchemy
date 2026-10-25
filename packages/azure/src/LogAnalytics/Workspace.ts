@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -350,9 +350,7 @@ export const WorkspaceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* operationalinsights
-        .ListWorkspaces({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListWorkspaces", page)));
+      const page = yield* collectAll(operationalinsights.ListWorkspaces, { subscriptionId });
       return (page.value ?? []).flatMap((workspace) => {
         const group = resourceGroupOf(workspace.id);
         return hasAnyAlchemyTag(workspace.tags) &&

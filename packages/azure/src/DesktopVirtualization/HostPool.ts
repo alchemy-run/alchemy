@@ -7,13 +7,13 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -52,21 +52,34 @@ export interface HostPoolMaintenanceWindow {
 export interface HostPoolAgentUpdate {
   /** `Default` lets Azure update at any time; `Scheduled` uses the windows. */
   type: "Default" | "Scheduled";
-  /** Interpret the windows in each session host's local time. */
+  /**
+   * Interpret the windows in each session host's local time.
+   * @default false
+   */
   useSessionHostLocalTime?: boolean;
-  /** Time zone of the windows when `useSessionHostLocalTime` is false. */
+  /**
+   * Time zone of the windows when `useSessionHostLocalTime` is false.
+   * @default unset
+   */
   maintenanceWindowTimeZone?: string;
-  /** Maintenance windows (up to two). */
+  /**
+   * Maintenance windows (up to two).
+   * @default []
+   */
   maintenanceWindows?: HostPoolMaintenanceWindow[];
 }
 
 export interface HostPoolProps {
-  /** Resource group of the host pool. Changing it replaces the host pool. */
+  /**
+   * Resource group of the host pool. Changing it replaces the host pool.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Host pool name, 3-64 letters, digits, `@`, `.`, `-`, `_`, or spaces. If
    * omitted, a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the host pool.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -84,6 +97,7 @@ export interface HostPoolProps {
   /**
    * How users of a `Personal` host pool get their session host. Changing it
    * replaces the host pool.
+   * @default unset (Azure's default)
    */
   personalDesktopAssignmentType?: "Automatic" | "Direct";
   /**
@@ -96,37 +110,64 @@ export interface HostPoolProps {
    * @default "Desktop"
    */
   preferredAppGroupType?: HostPoolPreferredAppGroupType;
-  /** Maximum number of sessions per session host (pooled host pools). */
+  /**
+   * Maximum number of sessions per session host (pooled host pools).
+   * @default unset (Azure's default)
+   */
   maxSessionLimit?: number;
-  /** Display name shown to users. */
+  /**
+   * Display name shown to users.
+   * @default unset
+   */
   friendlyName?: string;
-  /** Description of the host pool. */
+  /**
+   * Description of the host pool.
+   * @default unset
+   */
   description?: string;
-  /** RDP properties applied to every connection, e.g. `audiomode:i:0;`. */
+  /**
+   * RDP properties applied to every connection, e.g. `audiomode:i:0;`.
+   * @default unset
+   */
   customRdpProperty?: string;
-  /** Mark the host pool as a validation environment that gets updates first. */
+  /**
+   * Mark the host pool as a validation environment that gets updates first.
+   * @default false
+   */
   validationEnvironment?: boolean;
   /**
    * Start deallocated session hosts when a user connects. Needs the
    * `Desktop Virtualization Power On Contributor` role for the Azure
    * Virtual Desktop service principal.
+   * @default false
    */
   startVMOnConnect?: boolean;
-  /** Which traffic may use the public network. */
+  /**
+   * Which traffic may use the public network.
+   * @default Azure's default (`Enabled`)
+   */
   publicNetworkAccess?: HostPoolPublicNetworkAccess;
-  /** JSON template describing session hosts added to the pool. */
+  /**
+   * JSON template describing session hosts added to the pool.
+   * @default unset
+   */
   vmTemplate?: string;
-  /** Agent update schedule for session hosts. */
+  /**
+   * Agent update schedule for session hosts.
+   * @default Azure's default (`Default`)
+   */
   agentUpdate?: HostPoolAgentUpdate;
   /**
    * Lifetime, in hours (1-720), of the registration token session hosts use
    * to join the pool. When set, a token is issued if none is valid and
    * exposed as `registrationToken`; an existing valid token is reused.
+   * @default no registration token
    */
   registrationTokenTtlHours?: number;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -165,9 +206,16 @@ export interface HostPool extends Resource<
 > {}
 
 /**
- * An Azure Virtual Desktop host pool — a collection of session host VMs
- * that users connect to. The host pool itself is a free metadata object;
- * cost comes from the session host VMs that register with it.
+ * An Azure Virtual Desktop host pool
+ * (`Microsoft.DesktopVirtualization/hostPools`) — a collection of session
+ * host VMs that users connect to. The host pool itself is a free metadata
+ * object; cost comes from the session host VMs that register with it.
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `hostPoolType`, or
+ * `personalDesktopAssignmentType` replaces the host pool. Session hosts
+ * must register with the new pool again.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-desktop/terminology
  *
@@ -270,9 +318,7 @@ export const HostPoolProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* desktopvirtualization
-        .ListHostPools({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListHostPools", page)));
+      const page = yield* collectAll(desktopvirtualization.ListHostPools, { subscriptionId });
       return (page.value ?? []).flatMap((pool) => {
         const group = resourceGroupOf(pool.id);
         return hasAnyAlchemyTag(pool.tags) && group !== undefined && pool.name !== undefined

@@ -6,12 +6,12 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -288,9 +288,7 @@ export const ServerProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* sql
-        .ListServers({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListServers", page)));
+      const page = yield* collectAll(sql.ListServers, { subscriptionId });
       return (page.value ?? []).flatMap((server) => {
         const group = resourceGroupOf(server.id);
         return hasAnyAlchemyTag(server.tags) && group !== undefined && server.name !== undefined

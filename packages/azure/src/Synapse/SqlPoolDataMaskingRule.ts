@@ -28,6 +28,7 @@ export interface SqlPoolDataMaskingRuleProps extends SqlPoolChildProps {
   /**
    * Rule name. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the rule.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Schema of the masked column. */
@@ -41,17 +42,35 @@ export interface SqlPoolDataMaskingRuleProps extends SqlPoolChildProps {
    * `Number` (random number), `SSN`, or `Text` (custom string).
    */
   maskingFunction: "Default" | "CCN" | "Email" | "Number" | "SSN" | "Text";
-  /** Alias of the masked column. */
+  /**
+   * Alias of the masked column.
+   * @default not set
+   */
   aliasName?: string;
-  /** Lower bound of the random number (`Number` masking). */
+  /**
+   * Lower bound of the random number (`Number` masking).
+   * @default not set
+   */
   numberFrom?: string;
-  /** Upper bound of the random number (`Number` masking). */
+  /**
+   * Upper bound of the random number (`Number` masking).
+   * @default not set
+   */
   numberTo?: string;
-  /** Characters exposed at the start (`Text` masking). */
+  /**
+   * Characters exposed at the start (`Text` masking).
+   * @default not set
+   */
   prefixSize?: string;
-  /** Characters exposed at the end (`Text` masking). */
+  /**
+   * Characters exposed at the end (`Text` masking).
+   * @default not set
+   */
   suffixSize?: string;
-  /** Padding string between prefix and suffix (`Text` masking). */
+  /**
+   * Padding string between prefix and suffix (`Text` masking).
+   * @default not set
+   */
   replacementString?: string;
 }
 
@@ -71,7 +90,8 @@ export interface SqlPoolDataMaskingRule extends Resource<
 > {}
 
 /**
- * A dynamic data masking rule on a column of a dedicated SQL pool. The
+ * A dynamic data masking rule on a column of a dedicated SQL pool
+ * (`Microsoft.Synapse/workspaces/sqlPools/dataMaskingPolicies/rules`). The
  * column must exist (create the table first) and the pool's masking policy
  * (`Azure.Synapse.SqlPoolDataMaskingPolicy`) must be enabled. The pool must
  * be online.
@@ -79,11 +99,41 @@ export interface SqlPoolDataMaskingRule extends Resource<
  * ARM cannot delete masking rules, so destroying the resource disables the
  * rule instead.
  *
+ * :::caution
+ * Changing `workspace`, `sqlPool`, `name`, or `resourceGroup` replaces the
+ * rule.
+ * :::
+ *
+ * :::caution
+ * Create the table with T-SQL before you deploy the rule: the column must
+ * exist.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/azure-sql/database/dynamic-data-masking-overview
  *
  * ### Masking Columns
  * **Example:** Mask email addresses
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
+ * const pool = yield* Azure.Synapse.SqlPool("dw", {
+ *   workspace: workspace.workspaceName,
+ *   sku: "DW100c",
+ * });
+ * const masking = yield* Azure.Synapse.SqlPoolDataMaskingPolicy("masking", {
+ *   workspace: workspace.workspaceName,
+ *   sqlPool: pool.sqlPoolName,
+ * });
  * yield* Azure.Synapse.SqlPoolDataMaskingRule("email", {
  *   workspace: workspace.workspaceName,
  *   sqlPool: masking.sqlPoolName,

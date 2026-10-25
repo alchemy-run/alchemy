@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import { stableStringify } from "alchemy/Util/stable";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -73,6 +73,7 @@ export interface ApplicationDefinitionProps {
    * Name of the definition, 3-64 characters. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * definition.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -86,9 +87,15 @@ export interface ApplicationDefinitionProps {
    * @default "None"
    */
   lockLevel?: "None" | "CanNotDelete" | "ReadOnly";
-  /** Display name shown in the service catalog. */
+  /**
+   * Display name shown in the service catalog.
+   * @default none
+   */
   displayName?: string;
-  /** Description shown in the service catalog. */
+  /**
+   * Description shown in the service catalog.
+   * @default none
+   */
   description?: string;
   /**
    * Whether customers can deploy new applications from this definition.
@@ -98,49 +105,74 @@ export interface ApplicationDefinitionProps {
   /**
    * Principals the publisher grants access to each application's managed
    * resource group.
+   * @default none
    */
   authorizations?: ApplicationDefinitionAuthorization[];
   /**
    * URI of a `.zip` package containing `mainTemplate.json` and
    * `createUiDefinition.json`. Use either this or `mainTemplate` +
    * `createUiDefinition`.
+   * @default none
    */
   packageFileUri?: string;
   /**
    * Inline ARM template deployed into the managed resource group of each
    * application.
+   * @default none
    */
   mainTemplate?: Record<string, unknown>;
-  /** Inline `createUiDefinition.json` for the portal experience. */
+  /**
+   * Inline `createUiDefinition.json` for the portal experience.
+   * @default none
+   */
   createUiDefinition?: Record<string, unknown>;
-  /** Additional artifacts the portal uses. */
+  /**
+   * Additional artifacts the portal uses.
+   * @default none
+   */
   artifacts?: ApplicationDefinitionArtifact[];
-  /** Webhook URIs notified about application lifecycle events. */
+  /**
+   * Webhook URIs notified about application lifecycle events.
+   * @default none
+   */
   notificationEndpoints?: string[];
-  /** Actions excluded from the deny assignment on the managed resource group. */
+  /**
+   * Actions excluded from the deny assignment on the managed resource group.
+   * @default none
+   */
   lockingAllowedActions?: string[];
   /**
    * Data actions excluded from the deny assignment on the managed resource
    * group.
+   * @default none
    */
   lockingAllowedDataActions?: string[];
-  /** ARM deployment mode of the main template: `Incremental` or `Complete`. */
+  /**
+   * ARM deployment mode of the main template: `Incremental` or `Complete`.
+   * @default Azure's default
+   */
   deploymentMode?: "Incremental" | "Complete";
   /**
    * Publisher access to the managed resource group: `Managed` (publisher
    * manages it) or `Unmanaged`.
+   * @default Azure's default
    */
   managementMode?: "Managed" | "Unmanaged";
-  /** Azure Policies assigned on each managed resource group. */
+  /**
+   * Azure Policies assigned on each managed resource group.
+   * @default none
+   */
   policies?: ApplicationDefinitionPolicy[];
   /**
    * Resource ID of a storage account to hold the definition package (bring
    * your own storage). Changing it replaces the definition.
+   * @default none
    */
   storageAccountId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -182,7 +214,13 @@ export interface ApplicationDefinition extends Resource<
  * an ARM template (and portal UI) so applications can be deployed from it
  * into publisher-managed resource groups.
  *
- * @see https://learn.microsoft.com/azure/azure-resource-manager/managed-applications/overview
+ * ARM type: `Microsoft.Solutions/applicationDefinitions`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/azure-resource-manager/managed-applications/overview).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `storageAccountId` replaces
+ * the definition.
+ * :::
  *
  * ### Creating a Definition
  * **Example:** Definition with an inline template
@@ -343,13 +381,9 @@ export const ApplicationDefinitionProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* solutions
-        .ListApplicationDefinitionBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListApplicationDefinitionBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(solutions.ListApplicationDefinitionBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((definition) => {
         const group = resourceGroupOf(definition.id);
         return hasAnyAlchemyTag(definition.tags) &&

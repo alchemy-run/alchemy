@@ -21,30 +21,47 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, diverges, labLocation } from "./Common.ts";
 
 export interface ArtifactSourceProps {
-  /** Resource group of the lab. Changing it replaces the source. */
+  /**
+   * Resource group of the lab. Changing it replaces the source.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the lab. Changing it replaces the source. */
   lab: string;
   /**
    * Source name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the source.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name shown in the lab. */
+  /**
+   * Display name shown in the lab.
+   * @default unset
+   */
   displayName?: string;
   /** Clone URI of the Git repository. */
   uri: string;
   /** Repository host. */
   sourceType: "GitHub" | "VsoGit" | "StorageAccount";
-  /** Folder of artifact definitions, e.g. `"/Artifacts"`. */
+  /**
+   * Folder of artifact definitions, e.g. `"/Artifacts"`.
+   * @default unset
+   */
   folderPath?: string;
-  /** Folder of ARM environment templates, e.g. `"/Environments"`. */
+  /**
+   * Folder of ARM environment templates, e.g. `"/Environments"`.
+   * @default unset
+   */
   armTemplateFolderPath?: string;
-  /** Branch to read. */
+  /**
+   * Branch to read.
+   * @default the repository's default branch
+   */
   branchRef?: string;
   /**
    * Personal access token for the repository. Write-only: Azure never
    * returns it, so a change is detected against the previous deploy.
+   * @default unset (public repository)
    */
   securityToken?: Redacted.Redacted<string>;
   /**
@@ -55,6 +72,7 @@ export interface ArtifactSourceProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -85,14 +103,21 @@ export interface ArtifactSource extends Resource<
 > {}
 
 /**
- * A DevTest Labs artifact source — a Git repository of VM artifacts and
+ * A DevTest Labs artifact source (`Microsoft.DevTestLab/labs/artifactsources`)
+ * — a Git repository of VM artifacts and
  * ARM environment templates that lab users can apply.
+ *
+ * :::caution
+ * Changing `lab`, `name`, or `resourceGroup` replaces the artifact source.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/devtest-labs/add-artifact-repository
  *
  * ### Adding a Repository
  * **Example:** Private GitHub repository
  * ```typescript
+ * const lab = yield* Azure.DevTestLabs.Lab("team-lab");
+ * const githubToken = "<github-personal-access-token>";
  * const repo = yield* Azure.DevTestLabs.ArtifactSource("artifacts", {
  *   lab: lab.labName,
  *   displayName: "Team artifacts",

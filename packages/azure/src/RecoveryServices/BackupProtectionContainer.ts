@@ -27,33 +27,60 @@ import {
 export type BackupContainerType = "StorageContainer" | "VMAppContainer";
 
 export interface BackupProtectionContainerProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the container. */
+  /**
+   * Resource group of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the container.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the Recovery Services vault. Changing it replaces the container. */
+  /**
+   * Name of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the container.
+   * :::
+   */
   vault: string;
   /**
    * Kind of container: `StorageContainer` registers a storage account for
    * Azure Files backup, `VMAppContainer` registers a VM for SQL/SAP HANA
    * workload backup (the VM name and its resource group name must total
-   * at most 84 characters). Changing it replaces the container.
+   * at most 84 characters).
+   *
+   * :::caution
+   * Changing it replaces the container.
+   * :::
    * @default "StorageContainer"
    */
   containerType?: BackupContainerType;
   /**
    * ARM ID of the resource to register: the storage account (for
    * `StorageContainer`) or the virtual machine (for `VMAppContainer`).
+   *
+   * :::caution
    * Changing it replaces the container.
+   * :::
    */
   sourceResourceId: string;
   /**
-   * Container name. Derived from the source resource when omitted
+   * Container name.
+   *
+   * :::caution
+   * Changing it replaces the container.
+   * :::
+   * @default derived from the source resource
    * (`StorageContainer;Storage;<rg>;<account>` or
-   * `VMAppContainer;Compute;<rg>;<vm>`). Changing it replaces the container.
+   * `VMAppContainer;Compute;<rg>;<vm>`)
    */
   containerName?: string;
   /**
    * Workload type inside a `VMAppContainer`, e.g. `SQLDataBase` or
-   * `SAPHanaDatabase`. Changing it replaces the container.
+   * `SAPHanaDatabase`. Set it at creation: Alchemy does not replace the
+   * container when it changes.
+   * @default none
    */
   workloadType?: string;
   /**
@@ -92,7 +119,9 @@ export interface BackupProtectionContainer extends Resource<
 > {}
 
 /**
- * Registers a storage account (or a VM running SQL/SAP HANA) with a
+ * A backup protection container
+ * (`Microsoft.RecoveryServices/vaults/backupFabrics/protectionContainers`):
+ * registers a storage account (or a VM running SQL/SAP HANA) with a
  * Recovery Services vault so its file shares (or databases) can be backed
  * up with {@link BackupProtectedItem}.
  *
@@ -119,6 +148,8 @@ export interface BackupProtectionContainer extends Resource<
  *
  * **Example:** Register without the storage account delete lock
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault");
+ * const account = yield* Azure.Storage.StorageAccount("files");
  * yield* Azure.RecoveryServices.BackupProtectionContainer("files-container", {
  *   vault: vault.vaultName,
  *   sourceResourceId: account.storageAccountId,

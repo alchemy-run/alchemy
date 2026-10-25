@@ -50,12 +50,39 @@ export interface GraphQLApiResolverPolicy extends Resource<
  * The policy of a GraphQL API resolver in API Management. It defines the
  * resolver's data source (`http-data-source`, `sql-data-source`,
  * `cosmosdb-data-source`, ...). There is one per resolver.
+ * The ARM type is `Microsoft.ApiManagement/service/apis/resolvers/policies`.
+ *
+ * :::caution
+ * Changing `serviceName`, `apiName`, `resolverName`, or `resourceGroup`
+ * replaces the policy.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/configure-graphql-resolver
  *
  * ### Defining a Data Source
  * **Example:** Resolve a field from an HTTP backend
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const graphqlApi = yield* Azure.ApiManagement.Api("graph", {
+ *   serviceName: apim.serviceName,
+ *   path: "graphql",
+ *   type: "graphql",
+ *   protocols: ["https"],
+ * });
+ * yield* Azure.ApiManagement.ApiSchema("graph-schema", {
+ *   serviceName: apim.serviceName,
+ *   apiName: graphqlApi.apiName,
+ *   contentType: "application/vnd.ms-azure-apim.graphql.schema",
+ *   value: "type Query {\n  users: [String]\n}\n",
+ * });
+ * const resolver = yield* Azure.ApiManagement.GraphQLApiResolver("users", {
+ *   serviceName: apim.serviceName,
+ *   apiName: graphqlApi.apiName,
+ *   path: "Query/users",
+ * });
  * yield* Azure.ApiManagement.GraphQLApiResolverPolicy("users-policy", {
  *   serviceName: apim.serviceName,
  *   apiName: graphqlApi.apiName,

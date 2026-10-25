@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -176,13 +176,9 @@ export const ProximityPlacementGroupProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* compute
-        .ListProximityPlacementGroupBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListProximityPlacementGroupBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(compute.ListProximityPlacementGroupBySubscription, {
+        subscriptionId,
+      });
       return page.value.flatMap((group) => {
         const resourceGroup = resourceGroupOf(group.id);
         return hasAnyAlchemyTag(group.tags) &&

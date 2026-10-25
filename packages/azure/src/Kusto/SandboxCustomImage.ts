@@ -18,7 +18,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { isClusterOwnedByStack, lower, untilConverged, whileClusterBusy } from "./common.ts";
 
 export interface SandboxCustomImageProps {
-  /** Resource group of the cluster. Changing it replaces the image. */
+  /**
+   * Resource group of the cluster. Changing it replaces the image.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the cluster. Changing it replaces the image. */
   cluster: string;
@@ -27,6 +30,7 @@ export interface SandboxCustomImageProps {
    * at most 22 characters; Azure rejects hyphenated child names here) is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * image.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -37,11 +41,13 @@ export interface SandboxCustomImageProps {
   /**
    * Language version, e.g. `3.10.8`. Set either `languageVersion` or
    * `baseImageName`.
+   * @default unset
    */
   languageVersion?: string;
   /**
    * Base image to extend, e.g. `Python3_10_8` or another custom image's
    * name. Set either `languageVersion` or `baseImageName`.
+   * @default unset
    */
   baseImageName?: string;
   /**
@@ -49,6 +55,7 @@ export interface SandboxCustomImageProps {
    * per line. Azure fails the build with a bare "Internal Server Error" for
    * pins that conflict with the packages the base image already ships
    * (e.g. `six==1.16.0`), so prefer unpinned names.
+   * @default unset (no extra packages)
    */
   requirementsFileContent?: string;
 }
@@ -78,9 +85,9 @@ export interface SandboxCustomImage extends Resource<
 
 /**
  * A custom Python sandbox image for an Azure Data Explorer (Kusto)
- * cluster: a language version or base image plus extra pip packages, used
- * by the `python()` plugin. The cluster must have the Python language
- * extension enabled. Building an image takes several minutes.
+ * cluster (`Microsoft.Kusto/clusters/sandboxCustomImages`): a language
+ * version or base image plus extra pip packages, used by the `python()`
+ * plugin. Building an image takes several minutes.
  *
  * @see https://learn.microsoft.com/azure/data-explorer/language-extensions#create-a-custom-image
  *
@@ -88,6 +95,8 @@ export interface SandboxCustomImage extends Resource<
  * **Example:** Python image with extra packages
  * ```typescript
  * const cluster = yield* Azure.Kusto.Cluster("adx", {
+ *   // Sandboxes need a VM size with nested virtualization.
+ *   sku: { name: "Standard_E2ads_v5", tier: "Standard", capacity: 2 },
  *   languageExtensions: [{ name: "PYTHON", imageName: "Python3_10_8" }],
  * });
  * const image = yield* Azure.Kusto.SandboxCustomImage("ml", {
@@ -96,6 +105,16 @@ export interface SandboxCustomImage extends Resource<
  *   requirementsFileContent: "scikit-learn\nlightgbm",
  * });
  * ```
+ *
+ * :::caution
+ * The cluster must have the Python language extension enabled, on a SKU
+ * whose VM supports nested virtualization (e.g. `Standard_E2ads_v5`).
+ * :::
+ *
+ * :::caution
+ * Changing `name`, `cluster`, `resourceGroup`, or `language` replaces the
+ * image.
+ * :::
  *
  * @resource
  */

@@ -30,14 +30,30 @@ export type { AccessRight as RelayAccessRight };
 const ROOT_MANAGE_RULE = "RootManageSharedAccessKey";
 
 export interface NamespaceAuthorizationRuleProps {
-  /** Resource group of the namespace. Changing it replaces the rule. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Relay namespace the rule grants access to. Changing it replaces the rule. */
+  /**
+   * Relay namespace the rule grants access to.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   */
   namespace: string;
   /**
-   * Rule name: 1-50 letters, digits, `.`, `-`, and `_`. If omitted, a unique
-   * name is generated from the app, stage, and logical ID. Changing it
-   * replaces the rule.
+   * Rule name: 1-50 letters, digits, `.`, `-`, and `_`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -75,7 +91,8 @@ export interface NamespaceAuthorizationRule extends Resource<
 > {}
 
 /**
- * A shared access (SAS) authorization rule on an Azure Relay namespace. It
+ * A shared access (SAS) authorization rule on an Azure Relay namespace
+ * (`Microsoft.Relay/namespaces/authorizationRules`). It
  * grants `Listen`, `Send`, and/or `Manage` on every hybrid connection and
  * WCF relay in the namespace and exposes the rule's keys and connection
  * strings as secrets.
@@ -100,6 +117,7 @@ export interface NamespaceAuthorizationRule extends Resource<
  *
  * **Example:** Listen and send
  * ```typescript
+ * const ns = yield* Azure.Relay.Namespace("relay");
  * const app = yield* Azure.Relay.NamespaceAuthorizationRule("app", {
  *   namespace: ns.namespaceName,
  *   rights: ["Listen", "Send"],

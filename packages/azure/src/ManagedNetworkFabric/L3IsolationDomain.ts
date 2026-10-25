@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -38,6 +38,7 @@ export interface L3IsolationDomainProps {
   /**
    * Name of the L3 isolation domain. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the L3 isolation domain.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -52,29 +53,58 @@ export interface L3IsolationDomainProps {
   /**
    * Unique route distinguisher configuration. Changing it replaces the
    * domain.
+   * @default none
    */
   uniqueRdConfiguration?: mnf.L3IsolationDomainPropertiesInput["uniqueRdConfiguration"];
-  /** Advertise connected subnets (`True`/`False`). */
+  /**
+   * Advertise connected subnets (`True`/`False`).
+   * @default "True"
+   */
   redistributeConnectedSubnets?: mnf.L3IsolationDomainPropertiesInput["redistributeConnectedSubnets"];
-  /** Advertise static routes (`True`/`False`). */
+  /**
+   * Advertise static routes (`True`/`False`).
+   * @default "False"
+   */
   redistributeStaticRoutes?: mnf.L3IsolationDomainPropertiesInput["redistributeStaticRoutes"];
-  /** IPv4/IPv6 aggregate routes. */
+  /**
+   * IPv4/IPv6 aggregate routes.
+   * @default none
+   */
   aggregateRouteConfiguration?: mnf.L3IsolationDomainPropertiesInput["aggregateRouteConfiguration"];
-  /** Route policy applied to connected subnets. */
+  /**
+   * Route policy applied to connected subnets.
+   * @default none
+   */
   connectedSubnetRoutePolicy?: mnf.L3IsolationDomainPropertiesInput["connectedSubnetRoutePolicy"];
-  /** Route policy applied to static routes. */
+  /**
+   * Route policy applied to static routes.
+   * @default none
+   */
   staticRouteRoutePolicy?: mnf.L3IsolationDomainPropertiesInput["staticRouteRoutePolicy"];
-  /** IPv4 route prefix limit. */
+  /**
+   * IPv4 route prefix limit.
+   * @default none
+   */
   v4routePrefixLimit?: mnf.L3IsolationDomainPropertiesInput["v4routePrefixLimit"];
-  /** IPv6 route prefix limit. */
+  /**
+   * IPv6 route prefix limit.
+   * @default none
+   */
   v6routePrefixLimit?: mnf.L3IsolationDomainPropertiesInput["v6routePrefixLimit"];
-  /** BMP export policy configuration. */
+  /**
+   * BMP export policy configuration.
+   * @default none
+   */
   exportPolicyConfiguration?: mnf.L3IsolationDomainPropertiesInput["exportPolicyConfiguration"];
-  /** Free-form description. */
+  /**
+   * Free-form description.
+   * @default none
+   */
   annotation?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -111,7 +141,13 @@ export interface L3IsolationDomain extends Resource<
  * Fabric that hosts internal networks (workload subnets) and external networks
  * (peering to provider edge routers). Needs an Operator Nexus Network Fabric.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-configure-isolation-domain
+ * ARM type: `Microsoft.ManagedNetworkFabric/l3IsolationDomains`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-configure-isolation-domain).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `networkFabricId`, or
+ * `uniqueRdConfiguration` replaces the domain.
+ * :::
  *
  * ### Creating an L3 Isolation Domain
  * **Example:** Domain that advertises connected subnets
@@ -172,11 +208,7 @@ export const L3IsolationDomainProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mnf
-        .ListL3IsolationDomainBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListL3IsolationDomainBySubscription", page)),
-        );
+      const page = yield* collectAll(mnf.ListL3IsolationDomainBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

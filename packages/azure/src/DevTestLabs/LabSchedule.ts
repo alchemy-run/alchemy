@@ -29,7 +29,10 @@ import {
 export type LabScheduleTaskType = "LabVmsShutdownTask" | "LabVmsStartupTask";
 
 export interface LabScheduleProps extends ScheduleRecurrenceProps {
-  /** Resource group of the lab. Changing it replaces the schedule. */
+  /**
+   * Resource group of the lab. Changing it replaces the schedule.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the lab. Changing it replaces the schedule. */
   lab: string;
@@ -42,11 +45,13 @@ export interface LabScheduleProps extends ScheduleRecurrenceProps {
    * Schedule name. Labs only honour `LabVmsShutdown` (shutdown) and
    * `LabVmAutoStart` (startup), which are the defaults for the task type.
    * Changing it replaces the schedule.
+   * @default `LabVmsShutdown` or `LabVmAutoStart`, from `taskType`
    */
   name?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -65,14 +70,21 @@ export interface LabSchedule extends Resource<
 > {}
 
 /**
- * A lab-wide schedule that shuts down (`LabVmsShutdown`) or starts
+ * A lab-wide schedule (`Microsoft.DevTestLab/labs/schedules`) that shuts
+ * down (`LabVmsShutdown`) or starts
  * (`LabVmAutoStart`) every VM in a DevTest Lab.
+ *
+ * :::caution
+ * Changing `lab`, `name`, `taskType`, or `resourceGroup` replaces the
+ * schedule.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/devtest-labs/devtest-lab-set-lab-policy#set-auto-shutdown
  *
  * ### Lab Auto-shutdown
  * **Example:** Shut lab VMs down at 19:00 UTC
  * ```typescript
+ * const lab = yield* Azure.DevTestLabs.Lab("team-lab");
  * const shutdown = yield* Azure.DevTestLabs.LabSchedule("shutdown", {
  *   lab: lab.labName,
  *   dailyRecurrence: { time: "1900" },

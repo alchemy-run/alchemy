@@ -23,7 +23,10 @@ import {
 } from "./internal.ts";
 
 export interface AuthenticationSettingProps {
-  /** Resource group of the health model. Changing it replaces the setting. */
+  /**
+   * Resource group of the health model. Changing it replaces the setting.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Health model that holds the setting. Changing it replaces the setting. */
   healthModel: string;
@@ -31,9 +34,13 @@ export interface AuthenticationSettingProps {
    * Setting name: 3-260 letters, digits, and hyphens, starting and ending
    * with a letter or digit. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the setting.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name shown in the portal. */
+  /**
+   * Display name shown in the portal.
+   * @default none
+   */
   displayName?: string;
   /**
    * Managed identity the health model uses to query data sources:
@@ -79,7 +86,12 @@ export interface AuthenticationSetting extends Resource<
  * Authentication settings have no tags; a setting is owned by the stack
  * that owns its health model.
  *
- * @see https://learn.microsoft.com/azure/azure-monitor/health-models/overview
+ * :::caution
+ * Changing `name`, `healthModel`, or `resourceGroup` replaces the
+ * authentication setting.
+ * :::
+ *
+ * See [Azure Monitor health models](https://learn.microsoft.com/azure/azure-monitor/health-models/overview).
  *
  * ### Creating an Authentication Setting
  * **Example:** Use the model's system-assigned identity
@@ -106,11 +118,6 @@ export interface AuthenticationSetting extends Resource<
  *   managedIdentityName: identity.identityId,
  * });
  * ```
- *
- * :::caution
- * Changing `name`, `healthModel`, or `resourceGroup` replaces the
- * authentication setting.
- * :::
  *
  * @resource
  */

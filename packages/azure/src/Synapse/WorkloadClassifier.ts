@@ -27,19 +27,35 @@ export interface WorkloadClassifierProps extends SqlPoolChildProps {
    * Classifier name (letters and digits). If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * classifier.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Database user, role, Entra login, or group the classifier matches. */
   memberName: string;
-  /** Query label (`OPTION (LABEL = '...')`) the classifier matches. */
+  /**
+   * Query label (`OPTION (LABEL = '...')`) the classifier matches.
+   * @default not set
+   */
   label?: string;
-  /** Session context value the classifier matches. */
+  /**
+   * Session context value the classifier matches.
+   * @default not set
+   */
   context?: string;
-  /** Start of the daily time window (`HH:MM`, UTC). */
+  /**
+   * Start of the daily time window (`HH:MM`, UTC).
+   * @default not set
+   */
   startTime?: string;
-  /** End of the daily time window (`HH:MM`, UTC). */
+  /**
+   * End of the daily time window (`HH:MM`, UTC).
+   * @default not set
+   */
   endTime?: string;
-  /** Importance of matched requests. */
+  /**
+   * Importance of matched requests.
+   * @default not set
+   */
   importance?: "low" | "below_normal" | "normal" | "above_normal" | "high";
 }
 
@@ -63,15 +79,44 @@ export interface WorkloadClassifier extends Resource<
 > {}
 
 /**
- * A workload classifier of a dedicated SQL pool — routes requests from a
- * user, role, or label into a workload group and sets their importance.
- * The pool must be online (not paused) to create or change classifiers.
+ * A workload classifier of a dedicated SQL pool (`Microsoft.Synapse/workspac
+ * es/sqlPools/workloadGroups/workloadClassifiers`) — routes requests from a
+ * user, role, or label into a workload group and sets their importance. The
+ * pool must be online (not paused) to create or change classifiers.
+ *
+ * :::caution
+ * Changing `workspace`, `sqlPool`, `workloadGroup`, `name`, or
+ * `resourceGroup` replaces the classifier.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/sql-data-warehouse/sql-data-warehouse-workload-classification
  *
  * ### Classifying Requests
  * **Example:** Route the loader user into the loads group
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
+ * const pool = yield* Azure.Synapse.SqlPool("dw", {
+ *   workspace: workspace.workspaceName,
+ *   sku: "DW100c",
+ * });
+ * const loads = yield* Azure.Synapse.WorkloadGroup("loads", {
+ *   workspace: workspace.workspaceName,
+ *   sqlPool: pool.sqlPoolName,
+ *   minResourcePercent: 20,
+ *   maxResourcePercent: 100,
+ *   minResourcePercentPerRequest: 5,
+ * });
  * yield* Azure.Synapse.WorkloadClassifier("loader", {
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,

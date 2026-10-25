@@ -31,14 +31,30 @@ export type BackupProtectionIntentItemType =
   | "AzureResourceItem";
 
 export interface BackupProtectionIntentProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the intent. */
+  /**
+   * Resource group of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the intent.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the Recovery Services vault. Changing it replaces the intent. */
+  /**
+   * Name of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the intent.
+   * :::
+   */
   vault: string;
   /**
-   * Intent object name, e.g. the workload item name. If omitted, a unique
-   * name is generated from the app, stage, and logical ID. Changing it
-   * replaces the intent.
+   * Intent object name, e.g. the workload item name.
+   *
+   * :::caution
+   * Changing it replaces the intent.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -46,7 +62,10 @@ export interface BackupProtectionIntentProps {
    * instance (or availability group) as `itemId` auto-protects every
    * current and future database in it; Azure Backup rejects the other
    * kinds for SQL auto-protection with `BMSUserErrorInvalidInput`.
+   *
+   * :::caution
    * Changing it replaces the intent.
+   * :::
    * @default "RecoveryServiceVaultItem"
    */
   protectionIntentItemType?: BackupProtectionIntentItemType;
@@ -57,15 +76,32 @@ export interface BackupProtectionIntentProps {
   backupManagementType?: "AzureWorkload" | "AzureIaasVM";
   /**
    * ARM ID of the source (the VM hosting the workload). Not needed for
-   * `RecoveryServiceVaultItem` intents. Changing it replaces the intent.
+   * `RecoveryServiceVaultItem` intents.
+   *
+   * :::caution
+   * Changing it replaces the intent.
+   * :::
+   * @default none
    */
   sourceResourceId?: string;
   /**
    * ID of the item to auto-protect, e.g. the protectable SQL instance's
-   * ARM ID. Changing it replaces the intent.
+   * ARM ID.
+   *
+   * :::caution
+   * Changing it replaces the intent.
+   * :::
+   * @default none
    */
   itemId?: string;
-  /** Workload item type to auto-protect, e.g. `SQLInstance`. Changing it replaces the intent. */
+  /**
+   * Workload item type to auto-protect, e.g. `SQLInstance`.
+   *
+   * :::caution
+   * Changing it replaces the intent.
+   * :::
+   * @default none
+   */
   workloadItemType?: string;
   /** ARM ID of the {@link BackupPolicy} applied to auto-protected items. */
   policyId: string;
@@ -93,7 +129,9 @@ export interface BackupProtectionIntent extends Resource<
 > {}
 
 /**
- * A backup protection intent: auto-protects workloads (for example every
+ * A backup protection intent
+ * (`Microsoft.RecoveryServices/vaults/backupFabrics/backupProtectionIntent`):
+ * auto-protects workloads (for example every
  * current and future database of a SQL Server instance in an Azure VM)
  * with a {@link BackupPolicy}.
  *
@@ -112,11 +150,35 @@ export interface BackupProtectionIntent extends Resource<
  * **Example:** Auto-protect a SQL instance
  * ```typescript
  * const vault = yield* Azure.RecoveryServices.Vault("backup-vault");
- * // The VM is registered with BackupProtectionContainer; the SQL instance
+ * const sqlPolicy = yield* Azure.RecoveryServices.BackupPolicy("sql-daily", {
+ *   vault: vault.vaultName,
+ *   backupManagementType: "AzureWorkload",
+ *   workLoadType: "SQLDataBase",
+ *   settings: { timeZone: "UTC", issqlcompression: false },
+ *   subProtectionPolicy: [
+ *     {
+ *       policyType: "Full",
+ *       schedulePolicy: {
+ *         schedulePolicyType: "SimpleSchedulePolicy",
+ *         scheduleRunFrequency: "Daily",
+ *         scheduleRunTimes: ["2026-01-01T23:00:00Z"],
+ *       },
+ *       retentionPolicy: {
+ *         retentionPolicyType: "LongTermRetentionPolicy",
+ *         dailySchedule: {
+ *           retentionTimes: ["2026-01-01T23:00:00Z"],
+ *           retentionDuration: { count: 30, durationType: "Days" },
+ *         },
+ *       },
+ *     },
+ *   ],
+ * });
+ * // Register the VM with BackupProtectionContainer first. The SQL instance
  * // ID comes from the vault's protectable items after an inquiry.
  * yield* Azure.RecoveryServices.BackupProtectionIntent("sql-auto", {
  *   vault: vault.vaultName,
- *   itemId: sqlInstanceItemId,
+ *   itemId:
+ *     "/Subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/sql/providers/Microsoft.RecoveryServices/vaults/backup-vault/backupFabrics/Azure/protectionContainers/VMAppContainer;compute;sql;sql-vm/protectableItems/SQLInstance;MSSQLSERVER",
  *   policyId: sqlPolicy.policyId,
  * });
  * ```

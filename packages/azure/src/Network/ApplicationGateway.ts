@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -660,9 +660,7 @@ export const ApplicationGatewayProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* network
-        .ListApplicationGatewayAll({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListApplicationGatewayAll", page)));
+      const page = yield* collectAll(network.ListApplicationGatewayAll, { subscriptionId });
       return page.value.flatMap((gateway) => {
         const group = resourceGroupOf(gateway.id);
         return hasAnyAlchemyTag(gateway.tags) && group !== undefined && gateway.name !== undefined

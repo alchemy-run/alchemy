@@ -20,7 +20,10 @@ import {
 export type CredentialType = "ManagedIdentity" | "ServicePrincipal";
 
 export interface CredentialProps {
-  /** Resource group of the factory. Changing it replaces the credential. */
+  /**
+   * Resource group of the factory. Changing it replaces the credential.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the factory that holds the credential. Changing it replaces the credential. */
   factoryName: string;
@@ -29,6 +32,7 @@ export interface CredentialProps {
    * ending with a letter, digit, or `_`. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * credential.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -40,19 +44,25 @@ export interface CredentialProps {
    * ARM resource ID of the user-assigned identity (`ManagedIdentity`
    * credentials). The identity must also be attached to the factory via
    * `identity.userAssignedIdentities`.
+   * @default none
    */
   resourceId?: string;
   /**
    * Other type-specific properties, e.g. `servicePrincipalId` and
    * `servicePrincipalKey` (a Key Vault secret reference) for
    * `ServicePrincipal` credentials. Merged with `resourceId`.
+   * @default {}
    */
   typeProperties?: Record<string, unknown>;
-  /** Credential description. */
+  /**
+   * Credential description.
+   * @default none
+   */
   description?: string;
   /**
    * Annotations shown in the authoring UI. Alchemy appends an ownership
    * annotation (`alchemy:<stack>/<stage>/<id>`).
+   * @default []
    */
   annotations?: string[];
 }
@@ -81,11 +91,17 @@ export interface Credential extends Resource<
 > {}
 
 /**
- * A Data Factory credential — a user-assigned managed identity or service
- * principal that linked services authenticate as, referenced by name from
- * a linked service's `credential` property.
+ * A Data Factory credential (`Microsoft.DataFactory/factories/credentials`)
+ * — a user-assigned managed identity or service principal that linked
+ * services authenticate as, referenced by name from a linked service's
+ * `credential` property.
  *
- * @see https://learn.microsoft.com/azure/data-factory/credentials
+ * :::caution
+ * Changing `resourceGroup`, `factoryName`, `name`, or `type` replaces the
+ * credential.
+ * :::
+ *
+ * See [Data Factory credentials](https://learn.microsoft.com/azure/data-factory/credentials).
  *
  * ### Managed Identity Credentials
  * **Example:** Credential for a user-assigned identity
@@ -105,11 +121,12 @@ export interface Credential extends Resource<
  *
  * **Example:** Linked service that authenticates with the credential
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("lake");
  * yield* Azure.DataFactory.LinkedService("blob", {
  *   factoryName: factory.factoryName,
  *   type: "AzureBlobStorage",
  *   typeProperties: {
- *     serviceEndpoint: "https://myaccount.blob.core.windows.net/",
+ *     serviceEndpoint: account.primaryEndpoints.blob,
  *     credential: {
  *       referenceName: credential.credentialName,
  *       type: "CredentialReference",

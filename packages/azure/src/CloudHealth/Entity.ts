@@ -34,7 +34,10 @@ export type EntityIcon = cloudhealth.IconDefinition;
 export type EntityImpact = "Standard" | "Limited" | "Suppressed";
 
 export interface EntityProps {
-  /** Resource group of the health model. Changing it replaces the entity. */
+  /**
+   * Resource group of the health model. Changing it replaces the entity.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Health model that holds the entity. Changing it replaces the entity. */
   healthModel: string;
@@ -42,15 +45,25 @@ export interface EntityProps {
    * Entity name: 3-260 letters, digits, and hyphens, starting and ending
    * with a letter or digit. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the entity.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name shown on the model canvas. */
+  /**
+   * Display name shown on the model canvas.
+   * @default none
+   */
   displayName?: string;
-  /** Position on the model canvas. */
+  /**
+   * Position on the model canvas.
+   * @default none
+   */
   canvasPosition?: EntityCoordinates;
   /** Icon on the model canvas. @default a built-in icon */
   icon?: EntityIcon;
-  /** Health objective: the percentage of time the entity should be healthy. */
+  /**
+   * Health objective: the percentage of time the entity should be healthy.
+   * @default none
+   */
   healthObjective?: number;
   /**
    * Impact of the entity on its parents' health.
@@ -60,15 +73,23 @@ export interface EntityProps {
   /**
    * Signals that compute the entity's health: Azure resource metrics, Log
    * Analytics queries, Prometheus queries, and how children roll up.
+   * @default none (no signals)
    */
   signalGroups?: EntitySignalGroups;
-  /** Aggregation groups over the entity's signals. */
+  /**
+   * Aggregation groups over the entity's signals.
+   * @default none
+   */
   signalAggregationGroups?: EntitySignalAggregationGroup[];
-  /** Alerts raised when the entity turns degraded or unhealthy. */
+  /**
+   * Alerts raised when the entity turns degraded or unhealthy.
+   * @default none (no alerts)
+   */
   alerts?: EntityAlerts;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -110,7 +131,12 @@ export interface Entity extends Resource<
  * `SignalDefinition`s for shared thresholds. Alchemy records ownership in
  * the entity's own tags.
  *
- * @see https://learn.microsoft.com/azure/azure-monitor/health-models/overview
+ * :::caution
+ * Changing `name`, `healthModel`, or `resourceGroup` replaces the entity
+ * and removes its relationships.
+ * :::
+ *
+ * See [Azure Monitor health models](https://learn.microsoft.com/azure/azure-monitor/health-models/overview).
  *
  * ### Creating an Entity
  * **Example:** Entity with a storage availability signal
@@ -158,11 +184,6 @@ export interface Entity extends Resource<
  *   signalGroups: { dependencies: { aggregationType: "WorstOf" } },
  * });
  * ```
- *
- * :::caution
- * Changing `name`, `healthModel`, or `resourceGroup` replaces the entity
- * and removes its relationships.
- * :::
  *
  * @resource
  */

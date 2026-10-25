@@ -22,6 +22,7 @@ export interface CloudEndpointProps {
   /**
    * Resource group of the Storage Sync Service. Changing it replaces the
    * cloud endpoint.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -34,6 +35,7 @@ export interface CloudEndpointProps {
   /**
    * Name of the cloud endpoint. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the cloud endpoint.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -102,10 +104,11 @@ export interface CloudEndpoint extends Resource<
 > {}
 
 /**
- * An Azure File Sync cloud endpoint — attaches an Azure file share to a
- * sync group so registered servers in the group sync with it. Each sync
- * group has exactly one cloud endpoint, and a file share can back only one
- * cloud endpoint.
+ * An Azure File Sync cloud endpoint
+ * (`Microsoft.StorageSync/storageSyncServices/syncGroups/cloudEndpoints`) —
+ * attaches an Azure file share to a sync group so registered servers in the
+ * group sync with it. Each sync group has exactly one cloud endpoint, and a
+ * file share can back only one cloud endpoint.
  *
  * Azure File Sync must be able to reach the storage account. Either grant
  * the `Microsoft.StorageSync` first-party service principal *Reader and
@@ -114,6 +117,18 @@ export interface CloudEndpoint extends Resource<
  * grant it *Reader and Data Access*, *Storage Account Contributor*, and
  * *Storage File Data Privileged Contributor* on the account. The
  * storage account must allow SMB 3.1.1, NTLMv2, and AES-128-GCM.
+ *
+ * :::caution
+ * Changing `storageSyncService`, `syncGroup`, `name`,
+ * `storageAccountResourceId`, `azureFileShareName`,
+ * `storageAccountTenantId`, `friendlyName`, or `resourceGroup` replaces the
+ * cloud endpoint.
+ * :::
+ *
+ * :::caution
+ * Azure File Sync must be able to reach the storage account. Grant its roles
+ * on the account before you create the endpoint, as the example does.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/storage/file-sync/file-sync-deployment-guide
  *

@@ -25,13 +25,17 @@ import {
 } from "./common.ts";
 
 export interface HcxEnterpriseSiteProps {
-  /** Resource group of the private cloud. Changing it replaces the site. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the site.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the site. */
   privateCloud: string;
   /**
    * Name of the HCX enterprise site. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the site.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
 }
@@ -60,15 +64,26 @@ export interface HcxEnterpriseSite extends Resource<
 > {}
 
 /**
- * An HCX enterprise site on an Azure VMware Solution private cloud — issues
+ * An HCX enterprise site on an Azure VMware Solution private cloud
+ * (`Microsoft.AVS/privateClouds/hcxEnterpriseSites`) — issues
  * an activation key for an on-premises HCX Connector. Requires the HCX
  * add-on (`Azure.VMware.Addon` with `addonType: "HCX"`).
+ *
+ * :::caution
+ * Changing `privateCloud`, `name`, or `resourceGroup` replaces the site. The
+ * new site has a new activation key.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/install-vmware-hcx
  *
  * ### Activating HCX On-Premises
  * **Example:** Issue an HCX activation key
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
  * const hcx = yield* Azure.VMware.Addon("hcx", {
  *   privateCloud: cloud.privateCloudName,
  *   addonType: "HCX",

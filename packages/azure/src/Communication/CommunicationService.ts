@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -42,6 +42,7 @@ export interface CommunicationServiceProps {
   /**
    * Resource group the communication service is created in. Changing it
    * replaces the service.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -49,6 +50,7 @@ export interface CommunicationServiceProps {
    * `{name}.communication.azure.com`): 1-63 letters, digits, and hyphens.
    * If omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the service.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -81,11 +83,16 @@ export interface CommunicationServiceProps {
    * @default false
    */
   disableLocalAuth?: boolean;
-  /** Managed identity of the service. */
+  /**
+   * Managed identity of the service. Updated in place. When omitted, the
+   * observed identity is left untouched.
+   * @default no identity on create; unchanged on update
+   */
   identity?: CommunicationServiceIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -138,13 +145,19 @@ export interface CommunicationService extends Resource<
 > {}
 
 /**
- * An Azure Communication Services resource — the endpoint for sending email
- * and SMS, chat, and voice/video calling.
+ * An Azure Communication Services resource
+ * (`Microsoft.Communication/communicationServices`) — the endpoint for
+ * sending email and SMS, chat, and voice/video calling.
  *
  * Email is sent from the email domains listed in `linkedDomains`; they must
  * be in the same `dataLocation` as the service.
  *
- * @see https://learn.microsoft.com/azure/communication-services/overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `dataLocation` replaces
+ * the service. The new service has a new endpoint and new access keys.
+ * :::
+ *
+ * See [Azure Communication Services overview](https://learn.microsoft.com/azure/communication-services/overview).
  *
  * ### Creating a Communication Service
  * **Example:** Communication service with data in the United States
@@ -329,13 +342,9 @@ export const CommunicationServiceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* communication
-        .ListCommunicationServiceBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListCommunicationServiceBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(communication.ListCommunicationServiceBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((service) => {
         const group = resourceGroupOf(service.id);
         return hasAnyAlchemyTag(service.tags) && group !== undefined && service.name !== undefined

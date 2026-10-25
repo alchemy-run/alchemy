@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -34,9 +34,15 @@ import {
 
 /** Options of an API flow. */
 export interface FlowApiOptions {
-  /** Unique CNAME representing the API flow instance. */
+  /**
+   * Unique CNAME representing the API flow instance.
+   * @default unset
+   */
   cname?: string;
-  /** How the API flow is invoked: through the SDK or an endpoint. */
+  /**
+   * How the API flow is invoked: through the SDK or an endpoint.
+   * @default unset (Azure's default)
+   */
   apiMode?: "SDK" | "Endpoint";
 }
 
@@ -48,14 +54,23 @@ export interface FlowPlan {
   publisher: string;
   /** Product (offer ID) of the plan. */
   product: string;
-  /** Promotion code. */
+  /**
+   * Promotion code.
+   * @default unset
+   */
   promotionCode?: string;
-  /** Version of the product. */
+  /**
+   * Version of the product.
+   * @default unset
+   */
   version?: string;
 }
 
 export interface FlowProps {
-  /** Resource group of the connection. Changing it replaces the flow. */
+  /**
+   * Resource group of the connection. Changing it replaces the flow.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the connection that owns the flow. Changing it replaces the flow. */
   connection: string;
@@ -63,6 +78,7 @@ export interface FlowProps {
    * Name of the flow, 3-64 letters, digits, and `-`. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the flow.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -73,56 +89,118 @@ export interface FlowProps {
   /**
    * Flow type (e.g. `Mission`, `Messaging`, `StreamingVideo`, `API`).
    * Changing it replaces the flow.
+   * @default unset (Azure's default)
    */
   flowType?: string;
-  /** Type of data transferred (`Blob` or `Table`). Changing it replaces the flow. */
+  /**
+   * Type of data transferred (`Blob` or `Table`). Changing it replaces the flow.
+   * @default unset
+   */
   dataType?: "Blob" | "Table";
-  /** ARM ID of the destination storage account. Changing it replaces the flow. */
+  /**
+   * ARM ID of the destination storage account. Changing it replaces the flow.
+   * @default unset
+   */
   storageAccountId?: string;
-  /** Destination storage container. Changing it replaces the flow. */
+  /**
+   * Destination storage container. Changing it replaces the flow.
+   * @default unset
+   */
   storageContainerName?: string;
-  /** Destination storage table. Changing it replaces the flow. */
+  /**
+   * Destination storage table. Changing it replaces the flow.
+   * @default unset
+   */
   storageTableName?: string;
-  /** ARM ID of the destination Service Bus queue. Changing it replaces the flow. */
+  /**
+   * ARM ID of the destination Service Bus queue. Changing it replaces the flow.
+   * @default unset
+   */
   serviceBusQueueId?: string;
-  /** ARM ID of the destination Event Hub. Changing it replaces the flow. */
+  /**
+   * ARM ID of the destination Event Hub. Changing it replaces the flow.
+   * @default unset
+   */
   eventHubId?: string;
-  /** Event Hub consumer group. Changing it replaces the flow. */
+  /**
+   * Event Hub consumer group. Changing it replaces the flow.
+   * @default unset
+   */
   consumerGroup?: string;
-  /** URI of a Key Vault secret holding a SAS token. Changing it replaces the flow. */
+  /**
+   * URI of a Key Vault secret holding a SAS token. Changing it replaces the flow.
+   * @default unset
+   */
   keyVaultUri?: string;
-  /** URI of the customer-managed key. Changing it replaces the flow. */
+  /**
+   * URI of the customer-managed key. Changing it replaces the flow.
+   * @default unset (Microsoft-managed keys)
+   */
   customerManagedKeyVaultUri?: string;
-  /** Billing tier of a messaging flow. Changing it replaces the flow. */
+  /**
+   * Billing tier of a messaging flow. Changing it replaces the flow.
+   * @default unset (Azure's default)
+   */
   billingTier?: "BlobTransport" | "Standard" | "Premium";
-  /** API flow options. Changing them replaces the flow. */
+  /**
+   * API flow options. Changing them replaces the flow.
+   * @default unset
+   */
   apiFlowOptions?: FlowApiOptions;
-  /** Stream identifier. Changing it replaces the flow. */
+  /**
+   * Stream identifier. Changing it replaces the flow.
+   * @default unset
+   */
   streamId?: string;
-  /** Stream protocol. Changing it replaces the flow. */
+  /**
+   * Stream protocol. Changing it replaces the flow.
+   * @default unset
+   */
   streamProtocol?: "UDP" | "SRT" | "RTP";
-  /** Stream latency in milliseconds. Changing it replaces the flow. */
+  /**
+   * Stream latency in milliseconds. Changing it replaces the flow.
+   * @default unset
+   */
   streamLatency?: number;
-  /** Passphrase for SRT streams (non-secret). Updated in place. */
+  /**
+   * Passphrase for SRT streams (non-secret). Updated in place.
+   * @default unset
+   */
   passphrase?: string;
-  /** Source IP addresses or CIDR ranges of the stream. Updated in place. */
+  /**
+   * Source IP addresses or CIDR ranges of the stream. Updated in place.
+   * @default []
+   */
   sourceAddresses?: string[];
-  /** Destination endpoints of the stream. Updated in place. */
+  /**
+   * Destination endpoints of the stream. Updated in place.
+   * @default []
+   */
   destinationEndpoints?: string[];
-  /** Destination endpoint ports of the stream. Updated in place. */
+  /**
+   * Destination endpoint ports of the stream. Updated in place.
+   * @default []
+   */
   destinationEndpointPorts?: number[];
   /**
    * Whether the flow moves data. Driven by the enable/disable actions.
    * @default left as Azure sets it
    */
   status?: "Enabled" | "Disabled";
-  /** Marketplace plan of the flow. Changing it replaces the flow. */
+  /**
+   * Marketplace plan of the flow. Changing it replaces the flow.
+   * @default no plan
+   */
   plan?: FlowPlan;
-  /** Managed identity of the flow. Omit to leave it unmanaged. */
+  /**
+   * Managed identity of the flow. Omit to leave it unmanaged.
+   * @default unmanaged
+   */
   identity?: DataTransferIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -165,22 +243,41 @@ export interface Flow extends Resource<
 > {}
 
 /**
- * An Azure Data Transfer flow — moves data of one type through an
- * approved connection into a destination (storage container or table,
- * Service Bus queue, Event Hub, stream, or API).
+ * An Azure Data Transfer flow
+ * (`Microsoft.AzureDataTransfer/connections/flows`) — moves data of one
+ * type through an approved connection into a destination (storage
+ * container or table, Service Bus queue, Event Hub, stream, or API).
  *
- * Flows can only be created on a connection the pipeline owner approved;
- * otherwise Azure rejects the create with
- * `DataTransferConnectionNotApproved`. Status is driven by the
- * enable/disable actions, stream addresses, endpoints, ports, and
- * passphrase by their set actions, and tags and identity are patched;
- * every other property replaces the flow.
+ * Status is driven by the enable/disable actions, stream addresses,
+ * endpoints, ports, and passphrase by their set actions, and tags and
+ * identity are patched.
+ *
+ * :::caution
+ * Changing any other prop replaces the flow: `connection`, `name`,
+ * `location`, `resourceGroup`, `flowType`, `dataType`, `storageAccountId`,
+ * `storageContainerName`, `storageTableName`, `serviceBusQueueId`,
+ * `eventHubId`, `consumerGroup`, `keyVaultUri`,
+ * `customerManagedKeyVaultUri`, `billingTier`, `apiFlowOptions`,
+ * `streamId`, `streamProtocol`, `streamLatency`, or `plan`.
+ * :::
+ *
+ * :::caution
+ * Flows can only be created on a connection the pipeline owner approved.
+ * Otherwise Azure rejects the create with
+ * `DataTransferConnectionNotApproved`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-data-transfer/
  *
  * ### Creating a Flow
  * **Example:** Blob flow into a storage container
  * ```typescript
+ * const connection = yield* Azure.DataTransfer.Connection("outbound", {
+ *   pipeline: "mission-pipeline",
+ *   direction: "Send",
+ *   flowTypes: ["Mission"],
+ * });
+ * const account = yield* Azure.Storage.StorageAccount("landing");
  * const flow = yield* Azure.DataTransfer.Flow("telemetry", {
  *   connection: connection.connectionName,
  *   flowType: "Mission",
@@ -272,23 +369,18 @@ export const FlowProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const connections = yield* adt
-        .ListConnectionBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListConnectionBySubscription", page)));
+      const connections = yield* collectAll(adt.ListConnectionBySubscription, { subscriptionId });
       const found: Flow["Attributes"][] = [];
       for (const connection of connections.value ?? []) {
         const group = resourceGroupOf(connection.id);
         if (group === undefined || connection.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          adt.ListFlowByConnection({
+          collectAll(adt.ListFlowByConnection, {
             subscriptionId,
             resourceGroupName: group,
             connectionName: connection.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListFlowByConnection", page);
-        }
         for (const flow of page?.value ?? []) {
           if (hasAnyAlchemyTag(flow.tags) && flow.name !== undefined) {
             found.push(toAttrs(group, connection.name, flow.name, flow));

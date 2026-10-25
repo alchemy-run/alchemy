@@ -75,6 +75,7 @@ export interface ScheduleProps {
   /**
    * Schedule name. If omitted, a unique name is generated from the logical
    * ID. Changing it replaces the schedule.
+   * @default a unique name generated from the logical ID
    */
   name?: string;
   /** What runs when the schedule fires. */
@@ -86,13 +87,20 @@ export interface ScheduleProps {
    * @default true
    */
   isEnabled?: boolean;
-  /** Display name. */
+  /**
+   * Display name.
+   * @default none
+   */
   displayName?: string;
-  /** Description of the schedule. */
+  /**
+   * Description of the schedule.
+   * @default none
+   */
   description?: string;
   /**
    * User tags (stored in the schedule body). Alchemy ownership tags are
    * merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -123,11 +131,27 @@ export interface Schedule extends Resource<
  * invokes a batch endpoint, or runs a model monitor on a cron or
  * recurrence trigger.
  *
- * @see https://learn.microsoft.com/azure/machine-learning/how-to-schedule-pipeline-job
+ * ARM type: `Microsoft.MachineLearningServices/workspaces/schedules`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/how-to-schedule-pipeline-job).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, or `name` replaces the schedule.
+ * :::
  *
  * ### Scheduling a Job
  * **Example:** Nightly command job on serverless compute
  * ```typescript
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const hub = yield* Azure.MachineLearning.Workspace("hub", {
+ *   kind: "Hub",
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ * });
+ * const workspace = yield* Azure.MachineLearning.Workspace("project", {
+ *   kind: "Project",
+ *   hubResourceId: hub.workspaceId,
+ * });
  * const nightly = yield* Azure.MachineLearning.Schedule("nightly", {
  *   workspace: workspace.workspaceName,
  *   trigger: { triggerType: "Cron", expression: "0 2 * * *" },

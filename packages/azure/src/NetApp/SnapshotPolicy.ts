@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -81,15 +81,28 @@ export interface SnapshotPolicyProps {
   /**
    * Policy name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the policy.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Hourly schedule. */
+  /**
+   * Hourly schedule.
+   * @default none
+   */
   hourlySchedule?: SnapshotPolicyHourlySchedule;
-  /** Daily schedule. */
+  /**
+   * Daily schedule.
+   * @default none
+   */
   dailySchedule?: SnapshotPolicyDailySchedule;
-  /** Weekly schedule. */
+  /**
+   * Weekly schedule.
+   * @default none
+   */
   weeklySchedule?: SnapshotPolicyWeeklySchedule;
-  /** Monthly schedule. */
+  /**
+   * Monthly schedule.
+   * @default none
+   */
   monthlySchedule?: SnapshotPolicyMonthlySchedule;
   /**
    * Whether the policy takes snapshots.
@@ -99,6 +112,7 @@ export interface SnapshotPolicyProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -131,11 +145,17 @@ export interface SnapshotPolicy extends Resource<
  * monthly schedules that take and rotate snapshots of the volumes it is
  * assigned to. Free.
  *
- * @see https://learn.microsoft.com/azure/azure-netapp-files/snapshots-manage-policy
+ * ARM type: `Microsoft.NetApp/netAppAccounts/snapshotPolicies`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/azure-netapp-files/snapshots-manage-policy).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `account`, or `name` replaces the policy.
+ * :::
  *
  * ### Creating a Snapshot Policy
  * **Example:** Daily and weekly snapshots
  * ```typescript
+ * const account = yield* Azure.NetApp.Account("files");
  * const policy = yield* Azure.NetApp.SnapshotPolicy("nightly", {
  *   account: account.accountName,
  *   dailySchedule: { snapshotsToKeep: 7, hour: 2, minute: 0 },
@@ -200,13 +220,11 @@ export const SnapshotPolicyProvider = () =>
         accountRefs(accounts),
         ({ resourceGroup, accountName }) =>
           orUndefinedIfNotFound(
-            netapp
-              .ListSnapshotPolicies({
-                subscriptionId,
-                resourceGroupName: resourceGroup,
-                accountName,
-              })
-              .pipe(Effect.flatMap((page) => requireSinglePage("ListSnapshotPolicies", page))),
+            collectAll(netapp.ListSnapshotPolicies, {
+              subscriptionId,
+              resourceGroupName: resourceGroup,
+              accountName,
+            }),
           ).pipe(Effect.map((page) => page?.value ?? [])),
       );
       return policies.flat().flatMap((policy) => {

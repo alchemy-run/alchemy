@@ -26,7 +26,10 @@ import {
 export type KustoDatabasePrincipalRole = kusto.DatabasePrincipalRole;
 
 export interface DatabasePrincipalAssignmentProps {
-  /** Resource group of the cluster. Changing it replaces the assignment. */
+  /**
+   * Resource group of the cluster. Changing it replaces the assignment.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the cluster. Changing it replaces the assignment. */
   cluster: string;
@@ -35,6 +38,7 @@ export interface DatabasePrincipalAssignmentProps {
   /**
    * Assignment name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the assignment.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -88,13 +92,18 @@ export interface DatabasePrincipalAssignment extends Resource<
 /**
  * Grants a user, group, or application a role (`Admin`, `Ingestor`,
  * `Monitor`, `User`, `UnrestrictedViewer`, `Viewer`) on one database of an
- * Azure Data Explorer (Kusto) cluster.
+ * Azure Data Explorer (Kusto) cluster
+ * (`Microsoft.Kusto/clusters/databases/principalAssignments`).
  *
  * @see https://learn.microsoft.com/azure/data-explorer/manage-database-permissions
  *
  * ### Granting Database Access
  * **Example:** Ingestor access for a managed identity
  * ```typescript
+ * const cluster = yield* Azure.Kusto.Cluster("adx");
+ * const db = yield* Azure.Kusto.Database("telemetry", {
+ *   cluster: cluster.clusterName,
+ * });
  * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("reader");
  * yield* Azure.Kusto.DatabasePrincipalAssignment("reader", {
  *   cluster: cluster.clusterName,
@@ -104,6 +113,12 @@ export interface DatabasePrincipalAssignment extends Resource<
  *   role: "Ingestor",
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `cluster`, `database`, `resourceGroup`, `principalId`,
+ * `principalType`, or `tenantId` replaces the assignment. `role` updates in
+ * place.
+ * :::
  *
  * @resource
  */

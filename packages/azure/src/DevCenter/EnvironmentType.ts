@@ -21,7 +21,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDevCenterName, sameArm } from "./Common.ts";
 
 export interface EnvironmentTypeProps {
-  /** Resource group of the dev center. Changing it replaces the environment type. */
+  /**
+   * Resource group of the dev center. Changing it replaces the environment type.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the dev center. Changing it replaces the environment type. */
   devCenter: string;
@@ -31,13 +34,18 @@ export interface EnvironmentTypeProps {
    * environment type by creating a `ProjectEnvironmentType` with the same
    * name. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the environment type.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name of the environment type. */
+  /**
+   * Display name of the environment type.
+   * @default unset
+   */
   displayName?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -64,16 +72,23 @@ export interface EnvironmentType extends Resource<
 > {}
 
 /**
- * A dev center environment type — a named deployment stage (such as
+ * A dev center environment type
+ * (`Microsoft.DevCenter/devcenters/environmentTypes`) — a named deployment stage (such as
  * `dev`, `test`, or `prod`) for Azure Deployment Environments. Projects
  * opt in to an environment type with a `ProjectEnvironmentType` of the
  * same name, which decides the target subscription and role assignments.
+ *
+ * :::caution
+ * Changing `devCenter`, `name`, or `resourceGroup` replaces the
+ * environment type.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/deployment-environments/how-to-configure-devcenter-environment-types
  *
  * ### Creating an Environment Type
  * **Example:** A `dev` environment type
  * ```typescript
+ * const center = yield* Azure.DevCenter.DevCenter("center");
  * const dev = yield* Azure.DevCenter.EnvironmentType("dev", {
  *   devCenter: center.devCenterName,
  *   name: "dev",

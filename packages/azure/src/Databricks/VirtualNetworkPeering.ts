@@ -22,6 +22,7 @@ export interface VirtualNetworkPeeringProps {
   /**
    * Resource group of the Databricks workspace. Changing it replaces the
    * peering.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -32,6 +33,7 @@ export interface VirtualNetworkPeeringProps {
   /**
    * Name of the peering. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the peering.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -103,16 +105,27 @@ export interface VirtualNetworkPeering extends Resource<
 
 /**
  * A virtual network peering from an Azure Databricks workspace's managed
- * VNet to another virtual network in the same region. Peering only connects
- * once the remote VNet has the reverse `Azure.Network.VirtualNetworkPeering`
- * pointing at `databricksVirtualNetworkId`. Only workspaces that do not use
- * VNet injection can be peered this way.
+ * VNet to another virtual network in the same region
+ * (`Microsoft.Databricks/workspaces/virtualNetworkPeerings`). Peering only
+ * connects once the remote VNet has the reverse
+ * `Azure.Network.VirtualNetworkPeering` pointing at
+ * `databricksVirtualNetworkId`. Only workspaces that do not use VNet
+ * injection can be peered this way.
+ *
+ * :::caution
+ * Changing `workspace`, `name`, `remoteVirtualNetworkId`,
+ * `remoteAddressPrefixes`, or `resourceGroup` replaces the peering.
+ * Alchemy deletes the old peering first, because a VNet holds one peering
+ * per remote VNet. Traffic between the networks stops until the new
+ * peering connects.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/databricks/security/network/classic/vnet-peering
  *
  * ### Peering a Workspace
  * **Example:** Peer the workspace VNet with a hub VNet, both directions
  * ```typescript
+ * const workspace = yield* Azure.Databricks.Workspace("analytics");
  * const hub = yield* Azure.Network.VirtualNetwork("hub", {
  *   addressPrefixes: ["10.20.0.0/16"],
  * });

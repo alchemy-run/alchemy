@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,12 +32,14 @@ export interface CertificateOrderProps {
   /**
    * Resource group the order is created in. Changing it replaces the
    * order (and cancels the purchased certificate).
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the certificate order, up to 30 letters, digits, and `-`. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the order.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,6 +57,7 @@ export interface CertificateOrderProps {
   /**
    * Certificate distinguished name, e.g. `CN=www.example.com` (or
    * `CN=*.example.com` for a wildcard). Changing it replaces the order.
+   * @default none
    */
   distinguishedName?: string;
   /**
@@ -71,6 +74,7 @@ export interface CertificateOrderProps {
   /**
    * Certificate signing request to use instead of an Azure-generated key.
    * Changing it replaces the order.
+   * @default none (Azure generates the key)
    */
   csr?: string;
   /**
@@ -82,6 +86,7 @@ export interface CertificateOrderProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -131,16 +136,23 @@ export interface CertificateOrder extends Resource<
 > {}
 
 /**
- * An App Service Certificate order — a domain-validated TLS certificate
- * purchased through Azure (issued by GoDaddy) that can be stored in Key
- * Vault and bound to App Service apps.
+ * An App Service Certificate order
+ * (`Microsoft.CertificateRegistration/certificateOrders`) — a
+ * domain-validated TLS certificate purchased through Azure (issued by
+ * GoDaddy) that can be stored in Key Vault and bound to App Service apps.
  *
  * Creating an order is a real, up-front purchase (~$69.99/year standard,
  * ~$299.99/year wildcard). Deleting the order cancels it; refunds are only
  * possible within the cancellation window. Free-trial subscriptions cannot
  * purchase App Service certificates.
  *
- * @see https://learn.microsoft.com/azure/app-service/configure-ssl-app-service-certificate
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `productType`,
+ * `distinguishedName`, `keySize`, `validityInYears`, or `csr` replaces the
+ * order: Alchemy cancels the old order and buys a new certificate.
+ * :::
+ *
+ * See [App Service certificates](https://learn.microsoft.com/azure/app-service/configure-ssl-app-service-certificate).
  *
  * ### Ordering a Certificate
  * **Example:** Single-domain certificate
@@ -163,6 +175,13 @@ export interface CertificateOrder extends Resource<
  * ### Verifying the Domain
  * **Example:** Publish the domain verification token as a TXT record
  * ```typescript
+ * const zone = yield* Azure.Dns.Zone("example", {
+ *   name: "example.com",
+ * });
+ * const order = yield* Azure.CertificateRegistration.CertificateOrder("www", {
+ *   productType: "StandardDomainValidatedSsl",
+ *   distinguishedName: "CN=www.example.com",
+ * });
  * yield* Azure.Dns.RecordSet("asuid", {
  *   zoneName: zone.zoneName,
  *   name: "@",
@@ -231,9 +250,9 @@ export const CertificateOrderProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* certificateregistration
-        .ListAppServiceCertificateOrders({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListAppServiceCertificateOrders", page)));
+      const page = yield* collectAll(certificateregistration.ListAppServiceCertificateOrders, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((order) => {
         const group = resourceGroupOf(order.id);
         return hasAnyAlchemyTag(order.tags) && group !== undefined && order.name !== undefined

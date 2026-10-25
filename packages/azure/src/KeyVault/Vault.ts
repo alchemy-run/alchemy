@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -318,9 +318,7 @@ export const VaultProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* keyvault
-        .ListVaultBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListVaultBySubscription", page)));
+      const page = yield* collectAll(keyvault.ListVaultBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((vault) => {
         const group = resourceGroupOf(vault.id);
         return hasAnyAlchemyTag(vault.tags) && group !== undefined && vault.name !== undefined

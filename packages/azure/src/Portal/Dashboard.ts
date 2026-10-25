@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -35,7 +35,10 @@ export interface DashboardPartPosition {
   rowSpan: number;
   /** Number of grid columns the part spans. */
   colSpan: number;
-  /** Free-form position metadata. */
+  /**
+   * Free-form position metadata.
+   * @default none
+   */
   metadata?: Record<string, unknown>;
 }
 
@@ -55,7 +58,10 @@ export interface DashboardPartMetadata {
 export interface DashboardPart {
   /** Where the part sits on the grid. */
   position: DashboardPartPosition;
-  /** What the part renders. */
+  /**
+   * What the part renders.
+   * @default an empty part
+   */
   metadata?: DashboardPartMetadata;
 }
 
@@ -65,24 +71,38 @@ export interface DashboardLens {
   order: number;
   /** Parts shown on the lens. */
   parts: DashboardPart[];
-  /** Free-form lens metadata. */
+  /**
+   * Free-form lens metadata.
+   * @default none
+   */
   metadata?: Record<string, unknown>;
 }
 
 export interface DashboardProps {
   /**
-   * Resource group the dashboard is created in. Changing it replaces the
-   * dashboard.
+   * Resource group the dashboard is created in.
+   *
+   * :::caution
+   * Changing it replaces the dashboard.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
-   * ARM name of the dashboard (letters, digits, `-` and `_`). If omitted, a
-   * unique name is generated from the app, stage, and logical ID. Changing it
-   * replaces the dashboard.
+   * ARM name of the dashboard (letters, digits, `-` and `_`).
+   *
+   * :::caution
+   * Changing it replaces the dashboard.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the dashboard. Changing it replaces the dashboard.
+   * Azure location of the dashboard.
+   *
+   * :::caution
+   * Changing it replaces the dashboard.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
@@ -100,11 +120,13 @@ export interface DashboardProps {
   /**
    * Dashboard-level metadata, e.g. the shared time range and filters
    * (`{ model: { timeRange: ..., filterLocale: ..., filters: ... } }`).
+   * @default none
    */
   metadata?: Record<string, unknown>;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) and the `hidden-title` tag are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -133,9 +155,9 @@ export interface Dashboard extends Resource<
 > {}
 
 /**
- * A shared Azure portal dashboard — a grid of tiles (Markdown, metrics
- * charts, resource views) stored as an ARM resource so a team can version
- * it next to the infrastructure it shows.
+ * A shared Azure portal dashboard (`Microsoft.Portal/dashboards`) — a grid
+ * of tiles (Markdown, metrics charts, resource views) stored as an ARM
+ * resource so a team can version it next to the infrastructure it shows.
  *
  * @see https://learn.microsoft.com/azure/azure-portal/azure-portal-dashboards-structure
  *
@@ -230,9 +252,7 @@ export const DashboardProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* portal
-        .ListDashboardBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDashboardBySubscription", page)));
+      const page = yield* collectAll(portal.ListDashboardBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((dashboard) => {
         const group = resourceGroupOf(dashboard.id);
         return hasAnyAlchemyTag(dashboard.tags) &&

@@ -21,6 +21,7 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 export interface OuContainerProps {
   /**
    * Resource group of the managed domain. Changing it replaces the OU.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
@@ -32,6 +33,7 @@ export interface OuContainerProps {
    * Name of the organizational unit: letters, digits, and `-`. If omitted,
    * a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the OU.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -87,23 +89,43 @@ export interface OuContainer extends Resource<
 
 /**
  * A custom organizational unit (OU) inside a Microsoft Entra Domain
- * Services managed domain, with a service account. Custom OUs hold
- * accounts, groups, and computers that are not synchronized from
- * Microsoft Entra ID.
+ * Services managed domain
+ * (`Microsoft.Aad/domainServices/ouContainer`), with a service account.
+ * Custom OUs hold accounts, groups, and computers that are not
+ * synchronized from Microsoft Entra ID. See
+ * [create an OU](https://learn.microsoft.com/entra/identity/domain-services/create-ou).
  *
  * OU containers carry no tags; ownership follows the parent managed
  * domain's Alchemy tags.
  *
- * @see https://learn.microsoft.com/entra/identity/domain-services/create-ou
+ * :::caution
+ * The OU needs a running `Azure.DomainServices.DomainService`, which takes
+ * 45-60 minutes to provision.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `domainService`, or `name` replaces the OU.
+ * :::
  *
  * ### Creating an Organizational Unit
  * **Example:** OU with a service account
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("identity", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("aadds", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.0.0/24",
+ * });
+ * const domain = yield* Azure.DomainServices.DomainService("domain", {
+ *   domainName: "aaddscontoso.com",
+ *   replicaSets: [{ subnetId: subnet.subnetId }],
+ * });
  * const ou = yield* Azure.DomainServices.OuContainer("apps", {
  *   domainService: domain.domainServiceName,
  *   accountName: "svc-apps",
  *   spn: "http/apps.aaddscontoso.com",
- *   password: Redacted.make(servicePassword),
+ *   password: Redacted.make("<service-account-password>"),
  * });
  * ```
  *

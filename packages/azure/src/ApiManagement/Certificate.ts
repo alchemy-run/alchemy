@@ -40,16 +40,24 @@ export interface CertificateProps {
    * Certificate identifier (1-80 characters). If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces
    * the certificate.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Base64-encoded PKCS#12 (PFX) certificate with its private key.
    * Exactly one of `data` and `keyVault` must be set.
+   * @default not set
    */
   data?: string | Redacted.Redacted<string>;
-  /** Password of the PFX in `data`. */
+  /**
+   * Password of the PFX in `data`.
+   * @default no password
+   */
   password?: string | Redacted.Redacted<string>;
-  /** Key Vault reference; the service identity needs `get` access to the secret. */
+  /**
+   * Key Vault reference; the service identity needs `get` access to the secret.
+   * @default not set
+   */
   keyVault?: CertificateKeyVault;
 }
 
@@ -81,22 +89,36 @@ export interface Certificate extends Resource<
  * mutual TLS to backends (`Backend.credentials.certificateIds`) and for
  * self-hosted gateway hostnames. A service stores each certificate
  * (thumbprint) only once.
+ * The ARM type is `Microsoft.ApiManagement/service/certificates`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the
+ * certificate.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-mutual-certificates
  *
  * ### Uploading a Certificate
  * **Example:** PFX certificate with a password
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const cert = yield* Azure.ApiManagement.Certificate("backend-client", {
  *   serviceName: apim.serviceName,
- *   data: Redacted.make(pfxBase64),
- *   password: Redacted.make(pfxPassword),
+ *   data: yield* Config.redacted("CERT_PFX_BASE64"),
+ *   password: yield* Config.redacted("CERT_PFX_PASSWORD"),
  * });
  * ```
  *
  * ### Key Vault References
  * **Example:** Certificate read from Key Vault
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const cert = yield* Azure.ApiManagement.Certificate("backend-client", {
  *   serviceName: apim.serviceName,
  *   keyVault: {

@@ -32,18 +32,21 @@ export interface AgentPoolProps {
   /**
    * ARM ID of the Arc-enabled Kubernetes cluster whose
    * `Azure.HybridContainerService.ProvisionedCluster` the pool belongs to
-   * (its `connectedClusterId` attribute). Changing it replaces the pool.
+   * (its `connectedClusterId` attribute). Required. Changing it replaces
+   * the pool.
    */
   connectedClusterId: string;
   /**
    * Name of the pool: lowercase letters and digits, starting with a letter,
    * at most 12 characters (6 for Windows pools). If omitted, a unique name
    * is generated. Changing it replaces the pool.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Arc custom location of the Azure Local cluster the node VMs run on;
    * usually the provisioned cluster's. Changing it replaces the pool.
+   * @default unset (the observed custom location is kept)
    */
   extendedLocation?: HybridAksExtendedLocation;
   /**
@@ -59,10 +62,12 @@ export interface AgentPoolProps {
   /**
    * VM size of the nodes, e.g. `Standard_A4_v2`. Changing it replaces the
    * pool.
+   * @default Azure's default node size
    */
   vmSize?: string;
   /**
    * Maximum number of pods per node. Changing it replaces the pool.
+   * @default Azure's default
    */
   maxPods?: number;
   /**
@@ -75,17 +80,30 @@ export interface AgentPoolProps {
    * @default false
    */
   enableAutoScaling?: boolean;
-  /** Minimum node count when autoscaling. Mutable. */
+  /**
+   * Minimum node count when autoscaling. Mutable.
+   * @default unset
+   */
   minCount?: number;
-  /** Maximum node count when autoscaling. Mutable. */
+  /**
+   * Maximum node count when autoscaling. Mutable.
+   * @default unset
+   */
   maxCount?: number;
-  /** Kubernetes labels applied to every node. Mutable. */
+  /**
+   * Kubernetes labels applied to every node. Mutable.
+   * @default {}
+   */
   nodeLabels?: Record<string, string>;
-  /** Taints applied to every node, e.g. `key=value:NoSchedule`. Mutable. */
+  /**
+   * Taints applied to every node, e.g. `key=value:NoSchedule`. Mutable.
+   * @default []
+   */
   nodeTaints?: string[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -118,15 +136,23 @@ export interface AgentPool extends Resource<
 > {}
 
 /**
- * A node pool of an AKS cluster on Azure Local (AKS enabled by Azure Arc):
- * a group of Linux or Windows node VMs of one size, with optional
- * autoscaling, labels and taints.
+ * A node pool of an AKS cluster on Azure Local, also called AKS enabled by
+ * Azure Arc (`Microsoft.HybridContainerService/provisionedClusterInstances/agentPools`).
+ * It is a group of Linux or Windows node VMs of one size, with optional
+ * autoscaling, labels, and taints.
  *
  * @see https://learn.microsoft.com/azure/aks/aksarc/manage-node-pools
  *
  * ### Creating a Node Pool
  * **Example:** Linux pool
  * ```typescript
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hci/providers/Microsoft.ExtendedLocation/customLocations/hci-location";
+ * const cluster = yield* Azure.HybridContainerService.ProvisionedCluster("aks", {
+ *   connectedClusterId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hci/providers/Microsoft.Kubernetes/connectedClusters/aks",
+ *   extendedLocation: { name: customLocationId },
+ * });
  * const pool = yield* Azure.HybridContainerService.AgentPool("pool", {
  *   connectedClusterId: cluster.connectedClusterId,
  *   extendedLocation: { name: customLocationId },
@@ -139,6 +165,7 @@ export interface AgentPool extends Resource<
  * ### Scaling and Scheduling
  * **Example:** Autoscaling pool with labels and taints
  * ```typescript
+ * // same customLocationId and cluster as the example above
  * yield* Azure.HybridContainerService.AgentPool("gpu", {
  *   connectedClusterId: cluster.connectedClusterId,
  *   extendedLocation: { name: customLocationId },
@@ -150,6 +177,11 @@ export interface AgentPool extends Resource<
  *   tags: { team: "data" },
  * });
  * ```
+ *
+ * :::caution
+ * Changing `connectedClusterId`, `name`, `extendedLocation`, `osType`,
+ * `osSKU`, `vmSize`, or `maxPods` replaces the pool and its node VMs.
+ * :::
  *
  * @resource
  */

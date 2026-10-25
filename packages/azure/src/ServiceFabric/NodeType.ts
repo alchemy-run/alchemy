@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -34,7 +34,10 @@ export interface NodeTypePortRange {
 }
 
 export interface NodeTypeProps {
-  /** Resource group of the cluster. Changing it replaces the node type. */
+  /**
+   * Resource group of the cluster. Changing it replaces the node type.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the managed cluster. Changing it replaces the node type. */
   cluster: string;
@@ -43,6 +46,7 @@ export interface NodeTypeProps {
    * prefix, so keep it to 9 characters starting with a letter. If omitted,
    * a unique 9-character name is generated. Changing it replaces the node
    * type.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -92,41 +96,90 @@ export interface NodeTypeProps {
    * @default "StandardSSD_LRS"
    */
   dataDiskType?: NodeTypeDataDiskType;
-  /** Drive letter of the data disk (not `C` or `D`). Changing it replaces the node type. */
+  /**
+   * Drive letter of the data disk (not `C` or `D`). Changing it replaces the node type.
+   * @default Azure's default
+   */
   dataDiskLetter?: string;
-  /** Placement tags of the nodes, used by placement constraints. */
+  /**
+   * Placement tags of the nodes, used by placement constraints.
+   * @default {}
+   */
   placementProperties?: Record<string, string>;
-  /** Capacity tags of the nodes, used by the cluster resource manager. */
+  /**
+   * Capacity tags of the nodes, used by the cluster resource manager.
+   * @default {}
+   */
   capacities?: Record<string, string>;
-  /** Port range the cluster assigns to applications. */
+  /**
+   * Port range the cluster assigns to applications.
+   * @default Azure's default
+   */
   applicationPorts?: NodeTypePortRange;
-  /** Ephemeral port range of the nodes. */
+  /**
+   * Ephemeral port range of the nodes.
+   * @default Azure's default
+   */
   ephemeralPorts?: NodeTypePortRange;
-  /** Host only stateless workloads. Changing it replaces the node type. */
+  /**
+   * Host only stateless workloads. Changing it replaces the node type.
+   * @default false
+   */
   isStateless?: boolean;
-  /** Allow the scale set to span multiple placement groups. Changing it replaces the node type. */
+  /**
+   * Allow the scale set to span multiple placement groups. Changing it replaces the node type.
+   * @default false
+   */
   multiplePlacementGroups?: boolean;
-  /** Availability zones of the nodes. Changing it replaces the node type. */
+  /**
+   * Availability zones of the nodes. Changing it replaces the node type.
+   * @default no zones
+   */
   zones?: string[];
-  /** Use the temporary disk instead of a managed data disk (stateless only). Changing it replaces the node type. */
+  /**
+   * Use the temporary disk instead of a managed data disk (stateless only). Changing it replaces the node type.
+   * @default false
+   */
   useTempDataDisk?: boolean;
-  /** Use an ephemeral OS disk. Changing it replaces the node type. */
+  /**
+   * Use an ephemeral OS disk. Changing it replaces the node type.
+   * @default false
+   */
   useEphemeralOSDisk?: boolean;
-  /** Encrypt all disks at the host. Changing it replaces the node type. */
+  /**
+   * Encrypt all disks at the host. Changing it replaces the node type.
+   * @default false
+   */
   enableEncryptionAtHost?: boolean;
-  /** Security type (`Standard`, `TrustedLaunch`, `ConfidentialVM`). Changing it replaces the node type. */
+  /**
+   * Security type (`Standard`, `TrustedLaunch`, `ConfidentialVM`). Changing it replaces the node type.
+   * @default Azure's default
+   */
   securityType?: NodeTypeSecurityType;
-  /** Use Spot VMs. Changing it replaces the node type. */
+  /**
+   * Use Spot VMs. Changing it replaces the node type.
+   * @default false
+   */
   isSpotVM?: boolean;
-  /** Subnet of the node type (custom VNet clusters). Changing it replaces the node type. */
+  /**
+   * Subnet of the node type (custom VNet clusters). Changing it replaces the node type.
+   * @default the cluster's subnet
+   */
   subnetId?: string;
-  /** Enable accelerated networking on the nodes' NICs. */
+  /**
+   * Enable accelerated networking on the nodes' NICs.
+   * @default Azure's default
+   */
   enableAcceleratedNetworking?: boolean;
-  /** VM computer-name prefix (up to 9 characters); allows longer node type names. Changing it replaces the node type. */
+  /**
+   * VM computer-name prefix (up to 9 characters); allows longer node type names. Changing it replaces the node type.
+   * @default the node type name
+   */
   computerNamePrefix?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -157,18 +210,35 @@ export interface NodeType extends Resource<
 > {}
 
 /**
- * A node type of an Azure Service Fabric managed cluster — a virtual
- * machine scale set of identical nodes. Every cluster needs exactly one
- * primary node type, which hosts the Service Fabric system services.
+ * A node type of an Azure Service Fabric managed cluster
+ * (`Microsoft.ServiceFabric/managedClusters/nodeTypes`): a virtual machine
+ * scale set of identical nodes. Every cluster needs exactly one primary node
+ * type, which hosts the Service Fabric system services. See the
+ * [Azure docs](https://learn.microsoft.com/azure/service-fabric/how-to-managed-cluster-modify-node-type).
  *
+ * :::caution
  * A primary node type needs at least 3 nodes on a Basic cluster and 5 on a
- * Standard cluster, each with 2+ vCPUs.
+ * Standard cluster, each with 2 or more vCPUs. Without `computerNamePrefix`,
+ * the name is also the VM name prefix, so keep it to 9 characters that start
+ * with a letter.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/service-fabric/how-to-managed-cluster-modify-node-type
+ * :::caution
+ * Changing `resourceGroup`, `cluster`, `name`, `isPrimary`, `dataDiskType`,
+ * `dataDiskLetter`, `isStateless`, `multiplePlacementGroups`, `zones`,
+ * `useTempDataDisk`, `useEphemeralOSDisk`, `enableEncryptionAtHost`,
+ * `securityType`, `isSpotVM`, `subnetId`, or `computerNamePrefix` replaces
+ * the node type and its VMs. Alchemy updates every other prop in place.
+ * :::
  *
  * ### Creating Node Types
  * **Example:** Primary node type of a Basic cluster
  * ```typescript
+ * const password = yield* Config.redacted("SF_ADMIN_PASSWORD");
+ * const cluster = yield* Azure.ServiceFabric.ManagedCluster("cluster", {
+ *   adminUserName: "sfadmin",
+ *   adminPassword: password,
+ * });
  * const primary = yield* Azure.ServiceFabric.NodeType("primary", {
  *   cluster: cluster.managedClusterName,
  *   isPrimary: true,
@@ -264,25 +334,18 @@ export const NodeTypeProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const clusters = yield* sf
-        .ListManagedClusterBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListManagedClusterBySubscription", page)),
-        );
+      const clusters = yield* collectAll(sf.ListManagedClusterBySubscription, { subscriptionId });
       const found: NodeType["Attributes"][] = [];
       for (const cluster of clusters.value ?? []) {
         const group = resourceGroupOf(cluster.id);
         if (group === undefined || cluster.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          sf.ListNodeTypeByManagedClusters({
+          collectAll(sf.ListNodeTypeByManagedClusters, {
             subscriptionId,
             resourceGroupName: group,
             clusterName: cluster.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListNodeTypeByManagedClusters", page);
-        }
         for (const nodeType of page?.value ?? []) {
           if (hasAnyAlchemyTag(nodeType.tags) && nodeType.name !== undefined) {
             found.push(toAttrs(group, cluster.name, nodeType.name, nodeType));

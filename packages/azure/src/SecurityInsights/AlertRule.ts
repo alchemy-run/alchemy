@@ -28,7 +28,10 @@ export type AlertRuleKind =
   | (string & {});
 
 export interface AlertRuleProps {
-  /** Resource group of the Sentinel workspace. Changing it replaces the rule. */
+  /**
+   * Resource group of the Sentinel workspace. Changing it replaces the rule.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Sentinel-enabled Log Analytics workspace. Pass `OnboardingState.workspace`
@@ -38,6 +41,7 @@ export interface AlertRuleProps {
   /**
    * Rule ID (a GUID). If omitted, a deterministic GUID is derived from the
    * app, stage, and logical ID. Changing it replaces the rule.
+   * @default a GUID derived from the app, stage, and logical ID
    */
   ruleId?: string;
   /**
@@ -45,11 +49,15 @@ export interface AlertRuleProps {
    * @default "Scheduled"
    */
   kind?: AlertRuleKind;
-  /** Display name (required for `Scheduled` and `MicrosoftSecurityIncidentCreation`). */
+  /**
+   * Display name (required for `Scheduled` and `MicrosoftSecurityIncidentCreation`).
+   * @default not set
+   */
   displayName?: string;
   /**
    * Description of the rule. An Alchemy ownership marker is appended for
    * kinds that accept a description (all but `Fusion`).
+   * @default only the Alchemy ownership marker
    */
   description?: string;
   /**
@@ -57,13 +65,25 @@ export interface AlertRuleProps {
    * @default true
    */
   enabled?: boolean;
-  /** KQL query of a `Scheduled` rule. Tables must exist in the workspace. */
+  /**
+   * KQL query of a `Scheduled` rule. Tables must exist in the workspace.
+   * @default not set
+   */
   query?: string;
-  /** How often a `Scheduled` rule runs (ISO-8601 duration, e.g. `PT1H`). */
+  /**
+   * How often a `Scheduled` rule runs (ISO-8601 duration, e.g. `PT1H`).
+   * @default not set
+   */
   queryFrequency?: string;
-  /** Time window a `Scheduled` rule queries (ISO-8601 duration, e.g. `PT1H`). */
+  /**
+   * Time window a `Scheduled` rule queries (ISO-8601 duration, e.g. `PT1H`).
+   * @default not set
+   */
   queryPeriod?: string;
-  /** Severity of alerts: `High`, `Medium`, `Low`, or `Informational`. */
+  /**
+   * Severity of alerts: `High`, `Medium`, `Low`, or `Informational`.
+   * @default not set
+   */
   severity?: "High" | "Medium" | "Low" | "Informational" | (string & {});
   /**
    * Operator comparing the result count to `triggerThreshold` (`Scheduled`).
@@ -85,31 +105,70 @@ export interface AlertRuleProps {
    * @default "PT5H"
    */
   suppressionDuration?: string;
-  /** MITRE ATT&CK tactics, e.g. `["InitialAccess"]`. */
+  /**
+   * MITRE ATT&CK tactics, e.g. `["InitialAccess"]`.
+   * @default not set
+   */
   tactics?: string[];
-  /** MITRE ATT&CK techniques, e.g. `["T1078"]`. */
+  /**
+   * MITRE ATT&CK techniques, e.g. `["T1078"]`.
+   * @default not set
+   */
   techniques?: string[];
-  /** Name of the rule template the rule was created from. Changing it replaces the rule. */
+  /**
+   * Name of the rule template the rule was created from. Changing it replaces the rule.
+   * @default not set
+   */
   alertRuleTemplateName?: string;
-  /** Version of the rule template. */
+  /**
+   * Version of the rule template.
+   * @default not set
+   */
   templateVersion?: string;
-  /** Incident creation and grouping settings (`Scheduled`). */
+  /**
+   * Incident creation and grouping settings (`Scheduled`).
+   * @default not set
+   */
   incidentConfiguration?: Record<string, unknown>;
-  /** Event grouping settings, e.g. `{ aggregationKind: "SingleAlert" }`. */
+  /**
+   * Event grouping settings, e.g. `{ aggregationKind: "SingleAlert" }`.
+   * @default not set
+   */
   eventGroupingSettings?: Record<string, unknown>;
-  /** Custom details surfaced on alerts (column name by key). */
+  /**
+   * Custom details surfaced on alerts (column name by key).
+   * @default not set
+   */
   customDetails?: Record<string, string>;
-  /** Entity mappings of query columns to entity identifiers. */
+  /**
+   * Entity mappings of query columns to entity identifiers.
+   * @default not set
+   */
   entityMappings?: Record<string, unknown>[];
-  /** Overrides of alert display name/description/severity from query columns. */
+  /**
+   * Overrides of alert display name/description/severity from query columns.
+   * @default not set
+   */
   alertDetailsOverride?: Record<string, unknown>;
-  /** Product filter of a `MicrosoftSecurityIncidentCreation` rule, e.g. `Microsoft Cloud App Security`. */
+  /**
+   * Product filter of a `MicrosoftSecurityIncidentCreation` rule, e.g. `Microsoft Cloud App Security`.
+   * @default not set
+   */
   productFilter?: string;
-  /** Severities filter of a `MicrosoftSecurityIncidentCreation` rule. */
+  /**
+   * Severities filter of a `MicrosoftSecurityIncidentCreation` rule.
+   * @default not set
+   */
   severitiesFilter?: string[];
-  /** Alert names that must be included (`MicrosoftSecurityIncidentCreation`). */
+  /**
+   * Alert names that must be included (`MicrosoftSecurityIncidentCreation`).
+   * @default not set
+   */
   displayNamesFilter?: string[];
-  /** Alert names that must be excluded (`MicrosoftSecurityIncidentCreation`). */
+  /**
+   * Alert names that must be excluded (`MicrosoftSecurityIncidentCreation`).
+   * @default not set
+   */
   displayNamesExcludeFilter?: string[];
 }
 
@@ -141,22 +200,35 @@ export interface AlertRule extends Resource<
 > {}
 
 /**
- * A Microsoft Sentinel analytics rule: a scheduled or near-real-time KQL
- * query that raises alerts and incidents, the Fusion correlation engine, or
- * a rule creating incidents from Microsoft security product alerts.
- * (Near-real-time `NRT` rules are not supported by the API version the
- * SDK targets.)
+ * A Microsoft Sentinel analytics rule
+ * (`Microsoft.SecurityInsights/alertRules`): a scheduled KQL query that
+ * raises alerts and incidents, the Fusion correlation engine, or a rule that
+ * creates incidents from Microsoft security product alerts. See the
+ * [Azure docs](https://learn.microsoft.com/azure/sentinel/create-analytics-rules).
  *
- * @see https://learn.microsoft.com/azure/sentinel/create-analytics-rules
+ * Near-real-time (`NRT`) rules are not supported by the API version the SDK
+ * targets.
+ *
+ * :::caution
+ * Onboard the workspace first with `Azure.SecurityInsights.OnboardingState`,
+ * and pass its `workspace` attribute so Alchemy creates this resource after
+ * the onboarding and deletes it before.
+ * :::
+ *
+ * :::caution
+ * A `Scheduled` rule's query tables must exist in the workspace. Changing
+ * `resourceGroup`, `workspace`, `kind`, `ruleId`, or `alertRuleTemplateName`
+ * replaces the rule. Alchemy updates every other prop in place.
+ * :::
  *
  * ### Scheduled Query Rules
  * **Example:** Alert on failed heartbeats
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
  *   workspace: logs.workspaceName,
  * });
  * const rule = yield* Azure.SecurityInsights.AlertRule("heartbeat", {
- *   resourceGroup: sentinel.resourceGroup,
  *   workspace: sentinel.workspace,
  *   displayName: "Missing heartbeat",
  *   severity: "Medium",
@@ -171,7 +243,6 @@ export interface AlertRule extends Resource<
  * **Example:** Create incidents from Defender for Cloud alerts
  * ```typescript
  * yield* Azure.SecurityInsights.AlertRule("defender-incidents", {
- *   resourceGroup: sentinel.resourceGroup,
  *   workspace: sentinel.workspace,
  *   kind: "MicrosoftSecurityIncidentCreation",
  *   displayName: "Defender for Cloud incidents",

@@ -24,18 +24,28 @@ import {
 } from "./common.ts";
 
 export interface WorkloadNetworkVMGroupProps {
-  /** Resource group of the private cloud. Changing it replaces the VM group. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the VM group.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the VM group. */
   privateCloud: string;
   /**
    * NSX ID of the VM group. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the VM group.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name of the VM group. */
+  /**
+   * Display name of the VM group.
+   * @default not set
+   */
   displayName?: string;
-  /** NSX virtual machine IDs in the group. */
+  /**
+   * NSX virtual machine IDs in the group.
+   * @default not set
+   */
   members?: string[];
 }
 
@@ -63,18 +73,31 @@ export interface WorkloadNetworkVMGroup extends Resource<
 > {}
 
 /**
- * An NSX-T VM group in an Azure VMware Solution private cloud, used as the
+ * An NSX-T VM group in an Azure VMware Solution private cloud
+ * (`Microsoft.AVS/privateClouds/workloadNetworks/vmGroups`), used as the
  * source or destination of port mirroring and in distributed firewall rules.
+ *
+ * :::caution
+ * Changing `privateCloud`, `name`, or `resourceGroup` replaces the VM group.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/configure-port-mirroring-azure-vmware-solution
  *
  * ### Grouping VMs
  * **Example:** VM group with two members
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
  * yield* Azure.VMware.WorkloadNetworkVMGroup("web", {
  *   privateCloud: cloud.privateCloudName,
  *   displayName: "web-servers",
- *   members: [vm1NsxId, vm2NsxId],
+ *   members: [
+ *     "50326c6d-1f2a-4b3c-8d4e-5f6a7b8c9d01",
+ *     "50326c6d-1f2a-4b3c-8d4e-5f6a7b8c9d02",
+ *   ],
  * });
  * ```
  *

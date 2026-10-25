@@ -49,18 +49,24 @@ export interface SchemaReference extends Resource<
 > {}
 
 /**
- * Links an Azure Arc workload orchestration schema to a hierarchy entity
- * (a site or a target). It is an extension resource that lives under the
- * entity's ARM ID.
+ * A workload orchestration schema reference
+ * (`Microsoft.Edge/schemaReferences`). It links an Azure Arc workload
+ * orchestration schema to a hierarchy entity (a site or a target), as an
+ * extension resource under the entity's ARM ID. See the
+ * [configuration model](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model).
  *
  * References carry no tags or free-form fields, so Alchemy cannot mark
  * them; one found at the expected scope is treated as this resource.
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model
+ * :::caution
+ * Changing `resourceUri` or `name` replaces the reference.
+ * :::
  *
  * ### Linking a Schema
  * **Example:** Schema for a site
  * ```typescript
+ * const site = yield* Azure.Edge.Site("plant");
+ * const schema = yield* Azure.Edge.Schema("app");
  * yield* Azure.Edge.SchemaReference("plant-schema-ref", {
  *   resourceUri: site.siteId,
  *   schemaId: schema.schemaId,

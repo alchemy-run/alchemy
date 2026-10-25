@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -26,12 +26,16 @@ import { createStandbyPoolName, lower, sameLocation } from "./common.ts";
 export type StandbyVirtualMachineState = "Running" | "Deallocated" | "Hibernated" | "Mix";
 
 export interface VirtualMachinePoolProps {
-  /** Resource group the pool is created in. Changing it replaces the pool. */
+  /**
+   * Resource group the pool is created in. Changing it replaces the pool.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Pool name: 3-24 letters, digits, and hyphens. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the pool.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -43,6 +47,7 @@ export interface VirtualMachinePoolProps {
   /**
    * ARM ID of the Flexible-orchestration virtual machine scale set the pool
    * feeds, e.g. `scaleSet.virtualMachineScaleSetId`.
+   * @default not attached
    */
   attachedVirtualMachineScaleSetId?: string;
   /**
@@ -51,24 +56,38 @@ export interface VirtualMachinePoolProps {
    * @default "Deallocated"
    */
   virtualMachineState?: StandbyVirtualMachineState;
-  /** Percentages of standby VMs per state; only with `virtualMachineState: "Mix"`. */
+  /**
+   * Percentages of standby VMs per state; only with `virtualMachineState: "Mix"`.
+   * @default not set
+   */
   vmStateDistribution?: {
-    /** Percentage of VMs kept running. */
+    /**
+     * Percentage of VMs kept running.
+     * @default 0
+     */
     runningPercent?: number;
-    /** Percentage of VMs kept deallocated. */
+    /**
+     * Percentage of VMs kept deallocated.
+     * @default 0
+     */
     deallocatedPercent?: number;
-    /** Percentage of VMs kept hibernated. */
+    /**
+     * Percentage of VMs kept hibernated.
+     * @default 0
+     */
     hibernatedPercent?: number;
   };
   /** Maximum number of standby VMs in the pool. */
   maxReadyCapacity: number;
   /**
    * Desired minimum number of standby VMs; cannot exceed `maxReadyCapacity`.
+   * @default Azure's default
    */
   minReadyCapacity?: number;
   /**
    * Delay after VM provisioning before the VM is available, as an ISO 8601
    * duration (e.g. `PT2S`).
+   * @default no delay
    */
   postProvisioningDelay?: string;
   /**
@@ -79,6 +98,7 @@ export interface VirtualMachinePoolProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -112,28 +132,44 @@ export interface VirtualMachinePool extends Resource<
 
 /**
  * An Azure standby virtual machine pool
- * (`Microsoft.StandbyPool/standbyVirtualMachinePools`) — keeps
+ * (`Microsoft.StandbyPool/standbyVirtualMachinePools`). It keeps
  * pre-provisioned VMs ready (running, deallocated, or hibernated) for a
- * Flexible-orchestration scale set, so scale-out picks up a warm VM
- * instead of provisioning one.
+ * Flexible-orchestration scale set, so scale-out picks up a warm VM instead
+ * of creating one. See the
+ * [Azure docs](https://learn.microsoft.com/azure/virtual-machine-scale-sets/standby-pools-overview).
  *
- * The pool itself is free; standby VMs bill like scale-set VMs
- * (`Deallocated` ones only for their disks). The "Standby Pool Resource
- * Provider" service principal needs `Virtual Machine Contributor`,
- * `Network Contributor`, and `Managed Identity Operator` on the resource
- * group to fill the pool.
+ * The pool itself is free. Standby VMs bill like scale-set VMs, and
+ * `Deallocated` ones only bill for their disks.
  *
- * @see https://learn.microsoft.com/azure/virtual-machine-scale-sets/standby-pools-overview
+ * :::caution
+ * The "Standby Pool Resource Provider" service principal needs `Virtual
+ * Machine Contributor`, `Network Contributor`, and `Managed Identity
+ * Operator` on the resource group to fill the pool.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the pool. A scale
+ * set attaches to one standby pool at a time, so Alchemy deletes the old pool
+ * first when the scale set stays the same. Alchemy updates every other prop
+ * in place.
+ * :::
  *
  * ### Creating a Pool
  * **Example:** Keep two deallocated VMs ready
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("vms", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
  * const scaleSet = yield* Azure.Compute.VirtualMachineScaleSet("web", {
  *   vmSize: "Standard_F1als_v7",
  *   capacity: 1,
  *   subnetId: subnet.subnetId,
  *   adminUsername: "azureuser",
- *   sshPublicKeys: [publicKey],
+ *   sshPublicKeys: ["ssh-ed25519 AAAAC3Nza... me@example.com"],
  * });
  * const pool = yield* Azure.StandbyPool.VirtualMachinePool("web-pool", {
  *   attachedVirtualMachineScaleSetId: scaleSet.virtualMachineScaleSetId,
@@ -256,13 +292,9 @@ export const VirtualMachinePoolProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* standbypool
-        .ListStandbyVirtualMachinePoolBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListStandbyVirtualMachinePoolBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(standbypool.ListStandbyVirtualMachinePoolBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((observed) => {
         const group = resourceGroupOf(observed.id);
         return hasAnyAlchemyTag(observed.tags) && group !== undefined && observed.name !== undefined

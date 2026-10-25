@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -140,13 +140,9 @@ export const PartnerRegistrationProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* eventgrid
-        .ListPartnerRegistrationBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListPartnerRegistrationBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(eventgrid.ListPartnerRegistrationBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((registration) => {
         const group = resourceGroupOf(registration.id);
         return hasAnyAlchemyTag(registration.tags) &&

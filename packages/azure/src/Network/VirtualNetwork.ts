@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -202,9 +202,7 @@ export const VirtualNetworkProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* network
-        .ListVirtualNetworkAll({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListVirtualNetworkAll", page)));
+      const page = yield* collectAll(network.ListVirtualNetworkAll, { subscriptionId });
       return page.value.flatMap((vnet) => {
         const group = resourceGroupOf(vnet.id);
         return hasAnyAlchemyTag(vnet.tags) && group !== undefined && vnet.name !== undefined

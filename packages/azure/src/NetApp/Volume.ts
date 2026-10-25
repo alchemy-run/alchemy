@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -49,6 +49,7 @@ export interface VolumeProps {
    * Volume name: 1-64 letters, digits, `-` and `_`, starting with a letter.
    * If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the volume.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -73,7 +74,10 @@ export interface VolumeProps {
    * @default ["NFSv3"]
    */
   protocolTypes?: NetAppProtocolType[];
-  /** Export policy rules (NFS client access). */
+  /**
+   * Export policy rules (NFS client access).
+   * @default Azure's default
+   */
   exportPolicy?: NetAppExportPolicyRule[];
   /**
    * Network features. `Standard` enables the full VNet feature set.
@@ -81,59 +85,135 @@ export interface VolumeProps {
    * @default "Standard"
    */
   networkFeatures?: "Basic" | "Standard";
-  /** Availability zone to place the volume in. Changing it replaces the volume. */
+  /**
+   * Availability zone to place the volume in. Changing it replaces the volume.
+   * @default none
+   */
   zones?: string[];
-  /** Create the volume from this snapshot (ARM ID or UUID). Changing it replaces the volume. */
+  /**
+   * Create the volume from this snapshot (ARM ID or UUID). Changing it replaces the volume.
+   * @default none
+   */
   snapshotId?: string;
-  /** Create the volume from this backup (ARM ID). Changing it replaces the volume. */
+  /**
+   * Create the volume from this backup (ARM ID). Changing it replaces the volume.
+   * @default none
+   */
   backupId?: string;
-  /** Security style of a dual-protocol or NFSv4.1 volume. Changing it replaces the volume. */
+  /**
+   * Security style of a dual-protocol or NFSv4.1 volume. Changing it replaces the volume.
+   * @default "unix" (`"ntfs"` for SMB and dual-protocol volumes)
+   */
   securityStyle?: "ntfs" | "unix";
-  /** Show the `.snapshot` directory to clients. */
+  /**
+   * Show the `.snapshot` directory to clients.
+   * @default true
+   */
   snapshotDirectoryVisible?: boolean;
-  /** UNIX permissions of the volume root in octal, e.g. `0770`. */
+  /**
+   * UNIX permissions of the volume root in octal, e.g. `0770`.
+   * @default none
+   */
   unixPermissions?: string;
-  /** Throughput in MiB/s (manual-QoS pools only). */
+  /**
+   * Throughput in MiB/s (manual-QoS pools only).
+   * @default Azure's default
+   */
   throughputMibps?: number;
-  /** Enable default user/group quotas. */
+  /**
+   * Enable default user/group quotas.
+   * @default false
+   */
   isDefaultQuotaEnabled?: boolean;
-  /** Default user quota in KiB. */
+  /**
+   * Default user quota in KiB.
+   * @default 0
+   */
   defaultUserQuotaInKiBs?: number;
-  /** Default group quota in KiB. */
+  /**
+   * Default group quota in KiB.
+   * @default 0
+   */
   defaultGroupQuotaInKiBs?: number;
-  /** Tier cold data to cool storage (cool-access pools only). */
+  /**
+   * Tier cold data to cool storage (cool-access pools only).
+   * @default false
+   */
   coolAccess?: boolean;
-  /** Days after which unaccessed data is cooled (2-183). */
+  /**
+   * Days after which unaccessed data is cooled (2-183).
+   * @default Azure's default
+   */
   coolnessPeriod?: number;
-  /** When cooled data is read back to the hot tier. */
+  /**
+   * When cooled data is read back to the hot tier.
+   * @default Azure's default
+   */
   coolAccessRetrievalPolicy?: "Default" | "OnRead" | "Never";
-  /** Which data is tiered. */
+  /**
+   * Which data is tiered.
+   * @default Azure's default
+   */
   coolAccessTieringPolicy?: "Auto" | "SnapshotOnly";
-  /** SMB access-based enumeration. */
+  /**
+   * SMB access-based enumeration.
+   * @default Azure's default
+   */
   smbAccessBasedEnumeration?: "Disabled" | "Enabled";
-  /** Hide the SMB share from browse lists. */
+  /**
+   * Hide the SMB share from browse lists.
+   * @default Azure's default
+   */
   smbNonBrowsable?: "Disabled" | "Enabled";
-  /** ARM ID of a snapshot policy applied to the volume. */
+  /**
+   * ARM ID of a snapshot policy applied to the volume.
+   * @default none
+   */
   snapshotPolicyId?: string;
-  /** ARM ID of a backup policy applied to the volume. */
+  /**
+   * ARM ID of a backup policy applied to the volume.
+   * @default none
+   */
   backupPolicyId?: string;
-  /** ARM ID of the backup vault storing the volume's backups. */
+  /**
+   * ARM ID of the backup vault storing the volume's backups.
+   * @default none
+   */
   backupVaultId?: string;
-  /** Whether the backup policy is enforced. */
+  /**
+   * Whether the backup policy is enforced.
+   * @default Azure's default
+   */
   backupPolicyEnforced?: boolean;
-  /** Enable Kerberos. Changing it replaces the volume. */
+  /**
+   * Enable Kerberos. Changing it replaces the volume.
+   * @default false
+   */
   kerberosEnabled?: boolean;
-  /** Enable LDAP for NFS. Changing it replaces the volume. */
+  /**
+   * Enable LDAP for NFS. Changing it replaces the volume.
+   * @default false
+   */
   ldapEnabled?: boolean;
-  /** Require SMB3 encryption. Changing it replaces the volume. */
+  /**
+   * Require SMB3 encryption. Changing it replaces the volume.
+   * @default false
+   */
   smbEncryption?: boolean;
-  /** SMB continuous availability. Changing it replaces the volume. */
+  /**
+   * SMB continuous availability. Changing it replaces the volume.
+   * @default false
+   */
   smbContinuouslyAvailable?: boolean;
-  /** Create a large volume (up to 1 PiB). Changing it replaces the volume. */
+  /**
+   * Create a large volume (up to 1 PiB). Changing it replaces the volume.
+   * @default false
+   */
   isLargeVolume?: boolean;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -186,11 +266,24 @@ export interface Volume extends Resource<
  * capacity pool and mounted from a subnet delegated to
  * `Microsoft.NetApp/volumes`. Volumes add no cost beyond their pool.
  *
- * @see https://learn.microsoft.com/azure/azure-netapp-files/azure-netapp-files-create-volumes
+ * See the [Azure documentation](https://learn.microsoft.com/azure/azure-netapp-files/azure-netapp-files-create-volumes).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `account`, `pool`, `name`, `creationToken`,
+ * `subnetId`, `protocolTypes`, `networkFeatures`, `zones`, `securityStyle`,
+ * `kerberosEnabled`, `ldapEnabled`, `smbEncryption`,
+ * `smbContinuouslyAvailable`, `isLargeVolume`, `snapshotId`, or `backupId`
+ * replaces the volume.
+ * A replacement deletes the old volume and its data.
+ * :::
  *
  * ### Creating a Volume
  * **Example:** NFSv3 volume
  * ```typescript
+ * const account = yield* Azure.NetApp.Account("files");
+ * const pool = yield* Azure.NetApp.CapacityPool("pool", {
+ *   account: account.accountName,
+ * });
  * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
  *   addressPrefixes: ["10.0.0.0/16"],
  * });
@@ -340,14 +433,12 @@ export const VolumeProvider = () =>
       const pools = yield* listAllPools(subscriptionId);
       const volumes = yield* Effect.forEach(poolRefs(pools), ({ resourceGroup, account, name }) =>
         orUndefinedIfNotFound(
-          netapp
-            .ListVolumes({
-              subscriptionId,
-              resourceGroupName: resourceGroup,
-              accountName: account,
-              poolName: name,
-            })
-            .pipe(Effect.flatMap((page) => requireSinglePage("ListVolumes", page))),
+          collectAll(netapp.ListVolumes, {
+            subscriptionId,
+            resourceGroupName: resourceGroup,
+            accountName: account,
+            poolName: name,
+          }),
         ).pipe(Effect.map((page) => page?.value ?? [])),
       );
       return volumes.flat().flatMap((volume) => {

@@ -42,12 +42,32 @@ export interface ProductTagLink extends Resource<
  * filter products by tag. The assignment has no settings; changing the
  * product or tag replaces it. {@link TagProductLink} expresses the same
  * relation from the tag side; use one or the other.
+ * The ARM type is `Microsoft.ApiManagement/service/products/tags`.
+ *
+ * :::caution
+ * Changing `serviceName`, `productName`, `tagName`, or `resourceGroup`
+ * replaces the link.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/apimanagement/tag/assign-to-product
  *
  * ### Tagging a Product
  * **Example:** Tag a product as free
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const product = yield* Azure.ApiManagement.Product("starter", {
+ *   serviceName: apim.serviceName,
+ *   displayName: "Starter",
+ *   subscriptionRequired: true,
+ *   state: "published",
+ * });
+ * const free = yield* Azure.ApiManagement.Tag("free", {
+ *   serviceName: apim.serviceName,
+ *   displayName: "Free",
+ * });
  * yield* Azure.ApiManagement.ProductTagLink("starter-free", {
  *   serviceName: apim.serviceName,
  *   productName: product.productName,

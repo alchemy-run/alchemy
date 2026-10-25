@@ -18,7 +18,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDevCenterName, devCenterOwnedByStage, sameArm } from "./Common.ts";
 
 export interface GalleryProps {
-  /** Resource group of the dev center. Changing it replaces the gallery attachment. */
+  /**
+   * Resource group of the dev center. Changing it replaces the gallery attachment.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the dev center. Changing it replaces the gallery attachment. */
   devCenter: string;
@@ -27,6 +30,7 @@ export interface GalleryProps {
    * built-in marketplace gallery). If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the
    * attachment.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -57,25 +61,37 @@ export interface Gallery extends Resource<
 > {}
 
 /**
- * Attaches an Azure Compute Gallery to a dev center so dev box
- * definitions can use its custom images
+ * Attaches an Azure Compute Gallery to a dev center
+ * (`Microsoft.DevCenter/devcenters/galleries`) so dev box definitions can use its custom images
  * (`{devCenterId}/galleries/{name}/images/{image}`).
  *
  * Galleries have no tags; Alchemy treats one as owned when its dev
  * center carries this stack's ownership tags.
+ *
+ * :::caution
+ * Changing `devCenter`, `name`, `galleryResourceId`, or `resourceGroup`
+ * replaces the attachment.
+ * :::
+ *
+ * :::caution
+ * The dev center identity needs a role on the gallery (e.g.
+ * Contributor) before the attachment succeeds.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/dev-box/how-to-configure-azure-compute-gallery
  *
  * ### Attaching a Compute Gallery
  * **Example:** Grant the dev center access, then attach the gallery
  * ```typescript
+ * // ARM ID of an existing Azure Compute Gallery.
+ * const computeGalleryId =
+ *   "/subscriptions/<subscription-id>/resourceGroups/images/providers/Microsoft.Compute/galleries/devbox";
  * const center = yield* Azure.DevCenter.DevCenter("center", {
  *   identity: { type: "SystemAssigned" },
  * });
  * const access = yield* Azure.Authorization.RoleAssignment("gallery-access", {
  *   scope: computeGalleryId,
- *   // Contributor
- *   roleDefinitionId: "b24988ac-6180-42a0-ab88-20f7382dd24c",
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.Contributor,
  *   principalId: center.principalId,
  *   principalType: "ServicePrincipal",
  * });

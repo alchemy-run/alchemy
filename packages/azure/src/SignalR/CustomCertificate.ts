@@ -25,7 +25,10 @@ import {
 } from "./internal.ts";
 
 export interface CustomCertificateProps {
-  /** Resource group of the SignalR service. Changing it replaces the certificate. */
+  /**
+   * Resource group of the SignalR service. Changing it replaces the certificate.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * SignalR service that serves the certificate. Needs the `Premium_P1`
@@ -36,6 +39,7 @@ export interface CustomCertificateProps {
   /**
    * Name of the certificate. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the certificate.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -53,6 +57,7 @@ export interface CustomCertificateProps {
    * Version of the secret. If omitted, the service tracks the latest
    * version. Azure does not allow updating it, so changing it replaces the
    * certificate.
+   * @default the latest version
    */
   keyVaultSecretVersion?: string;
 }
@@ -81,14 +86,26 @@ export interface CustomCertificate extends Resource<
 > {}
 
 /**
- * A TLS certificate of an Azure SignalR Service, loaded from Key Vault with
- * the service's managed identity. Custom domains reference it by ID.
+ * A TLS certificate of an Azure SignalR Service
+ * (`Microsoft.SignalRService/signalR/customCertificates`). The service loads
+ * it from Key Vault with its managed identity. Custom domains reference it by
+ * ID. See the
+ * [Azure docs](https://learn.microsoft.com/azure/azure-signalr/howto-custom-domain).
  *
- * @see https://learn.microsoft.com/azure/azure-signalr/howto-custom-domain
+ * :::caution
+ * The service needs the `Premium_P1` tier or higher, and a managed identity
+ * that can read the certificate's secret in Key Vault.
+ * :::
+ *
+ * :::caution
+ * Azure has no update for certificates. Changing any prop replaces the
+ * certificate.
+ * :::
  *
  * ### Importing a Certificate from Key Vault
  * **Example:** Certificate read with the service's system identity
  * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("certs");
  * const signalR = yield* Azure.SignalR.SignalR("realtime", {
  *   sku: "Premium_P1",
  *   identity: { type: "SystemAssigned" },
@@ -96,7 +113,7 @@ export interface CustomCertificate extends Resource<
  * yield* Azure.Authorization.RoleAssignment("SignalRReadsSecrets", {
  *   scope: vault.vaultId,
  *   principalId: signalR.principalId!,
- *   roleDefinitionId: "4633458b-17de-408a-b874-0445c86b69e6", // Key Vault Secrets User
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.KeyVaultSecretsUser,
  *   principalType: "ServicePrincipal",
  * });
  * const certificate = yield* Azure.SignalR.CustomCertificate("tls", {

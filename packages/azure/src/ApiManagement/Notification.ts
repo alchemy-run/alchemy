@@ -50,12 +50,26 @@ export interface Notification extends Resource<
  * ensures the notification and exposes it so recipients can be attached
  * with {@link NotificationRecipientEmail} and
  * {@link NotificationRecipientUser}. Not available on the Consumption tier.
+ * The ARM type is `Microsoft.ApiManagement/service/notifications`.
+ *
+ * :::caution
+ * Changing `serviceName`, `notificationName`, or `resourceGroup` replaces
+ * the notification.
+ *
+ * Notifications are not available on the Consumption tier ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-configure-notifications
  *
  * ### Managing Notifications
  * **Example:** BCC every developer email to the API team
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const bcc = yield* Azure.ApiManagement.Notification("bcc", {
  *   serviceName: apim.serviceName,
  *   notificationName: "BCC",

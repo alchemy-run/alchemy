@@ -36,6 +36,8 @@ export interface FeaturestoreEntityContainer extends Resource<
  * columns feature sets join on) in a `FeatureStore` workspace. Register
  * versions with {@link FeaturestoreEntityVersion}.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/concept-what-is-managed-feature-store).
+ *
  * The container has nothing mutable: Azure rejects tags, a description,
  * and properties on it and ignores the archive flag (set them on the
  * versions). The feature store workspace's stack/stage tags mark Alchemy
@@ -47,11 +49,20 @@ export interface FeaturestoreEntityContainer extends Resource<
  * store entity.
  * :::
  *
- * @see https://learn.microsoft.com/azure/machine-learning/concept-what-is-managed-feature-store
- *
  * ### Creating a Feature store entity
  * **Example:** Feature store entity in a workspace
  * ```typescript
+ * // An existing Application Insights component for workspace telemetry.
+ * const insightsId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/monitoring/providers/Microsoft.Insights/components/ml-insights";
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const featureStore = yield* Azure.MachineLearning.Workspace("featureStore", {
+ *   kind: "FeatureStore",
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ *   applicationInsights: insightsId,
+ * });
  * const featurestoreEntityContainer = yield* Azure.MachineLearning.FeaturestoreEntityContainer("account", {
  *   workspace: featureStore.workspaceName,
  * });

@@ -8,12 +8,12 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -223,12 +223,10 @@ export const ResourceGroupProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* resources
-        .ListResourceGroups({
-          subscriptionId,
-          _filter: "tagName eq 'alchemy::stack'",
-        })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListResourceGroups", page)));
+      const page = yield* collectAll(resources.ListResourceGroups, {
+        subscriptionId,
+        _filter: "tagName eq 'alchemy::stack'",
+      });
       return (page.value ?? [])
         .filter((group) => hasAnyAlchemyTag(group.tags))
         .flatMap((group) =>

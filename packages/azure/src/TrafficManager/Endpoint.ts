@@ -6,10 +6,10 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   waitUntilGone,
 } from "../Arm.ts";
@@ -25,6 +25,7 @@ export interface EndpointProps {
   /**
    * Resource group of the parent profile. Changing it replaces the
    * endpoint.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /** Name of the parent Traffic Manager profile. Changing it replaces the endpoint. */
@@ -39,16 +40,19 @@ export interface EndpointProps {
   /**
    * Name of the endpoint. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the endpoint.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * FQDN or IP address returned in DNS responses. Required for
    * `ExternalEndpoints`; derived by Azure for the other types.
+   * @default not set
    */
   target?: string;
   /**
    * ARM resource ID of the target: a public IP / App Service / Cloud
    * Service for `AzureEndpoints`, a child profile for `NestedEndpoints`.
+   * @default not set
    */
   targetResourceId?: string;
   /**
@@ -56,30 +60,74 @@ export interface EndpointProps {
    * @default "Enabled"
    */
   endpointStatus?: "Enabled" | "Disabled";
-  /** Weight (1-1000) under `Weighted` routing. */
+  /**
+   * Weight (1-1000) under `Weighted` routing.
+   * @default not set
+   */
   weight?: number;
   /**
    * Priority (1-1000, lower wins, unique per profile) under `Priority`
    * routing. Azure assigns one if omitted.
+   * @default a priority Azure assigns
    */
   priority?: number;
   /**
    * Azure region of an external or nested endpoint, required under
    * `Performance` routing (e.g. `"East US"`).
+   * @default not set
    */
   endpointLocation?: string;
-  /** Minimum healthy endpoints in the child profile (`NestedEndpoints` only). */
+  /**
+   * Minimum healthy endpoints in the child profile (`NestedEndpoints` only).
+   * @default not set
+   */
   minChildEndpoints?: number;
-  /** Minimum healthy IPv4 endpoints in the child profile (`NestedEndpoints` only). */
+  /**
+   * Minimum healthy IPv4 endpoints in the child profile (`NestedEndpoints` only).
+   * @default not set
+   */
   minChildEndpointsIPv4?: number;
-  /** Minimum healthy IPv6 endpoints in the child profile (`NestedEndpoints` only). */
+  /**
+   * Minimum healthy IPv6 endpoints in the child profile (`NestedEndpoints` only).
+   * @default not set
+   */
   minChildEndpointsIPv6?: number;
-  /** Countries/regions mapped to the endpoint under `Geographic` routing (e.g. `["US", "GEO-EU"]`). */
+  /**
+   * Countries/regions mapped to the endpoint under `Geographic` routing (e.g. `["US", "GEO-EU"]`).
+   * @default not set
+   */
   geoMapping?: string[];
-  /** Client subnets mapped to the endpoint under `Subnet` routing. */
-  subnets?: { first?: string; last?: string; scope?: number }[];
-  /** Custom headers sent with this endpoint's health probes. */
-  customHeaders?: { name: string; value: string }[];
+  /**
+   * Client subnets mapped to the endpoint under `Subnet` routing.
+   * @default not set
+   */
+  subnets?: {
+    /**
+     * First IP address of the subnet.
+     * @default not set
+     */
+    first?: string;
+    /**
+     * Last IP address of the subnet.
+     * @default not set
+     */
+    last?: string;
+    /**
+     * Prefix length of the subnet, used instead of `last`.
+     * @default not set
+     */
+    scope?: number;
+  }[];
+  /**
+   * Custom headers sent with this endpoint's health probes.
+   * @default not set
+   */
+  customHeaders?: {
+    /** Header name. */
+    name: string;
+    /** Header value. */
+    value: string;
+  }[];
   /**
    * When `Enabled`, health probing is skipped and the endpoint is always
    * included in routing.
@@ -120,13 +168,21 @@ export interface Endpoint extends Resource<
 > {}
 
 /**
- * An endpoint of an Azure Traffic Manager profile: an external FQDN/IP, an
+ * An endpoint of an Azure Traffic Manager profile
+ * (`Microsoft.Network/trafficManagerProfiles/externalEndpoints`,
+ * `azureEndpoints`, or `nestedEndpoints`): an external FQDN/IP, an
  * Azure resource (public IP with a DNS label, App Service, ...), or a
  * nested profile that DNS queries can be routed to.
  *
  * Endpoints carry no tags. Alchemy treats one as owned when its parent
  * profile carries this stack's and stage's ownership markers. Deleting the
  * profile deletes its endpoints.
+ *
+ * :::caution
+ * Changing `profile`, `endpointType`, `name`, or `resourceGroup` replaces
+ * the endpoint. Inside the same profile, Alchemy deletes the old endpoint
+ * first, so it stops serving traffic until the new one is created.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/traffic-manager/traffic-manager-endpoint-types
  *
@@ -265,9 +321,7 @@ export const EndpointProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* trafficmanager
-        .ListProfileBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListProfileBySubscription", page)));
+      const page = yield* collectAll(trafficmanager.ListProfileBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((profile) => {
         const group = resourceGroupOf(profile.id);
         if (

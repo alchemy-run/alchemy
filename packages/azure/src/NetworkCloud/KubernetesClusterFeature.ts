@@ -47,11 +47,15 @@ export interface KubernetesClusterFeatureProps {
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
-  /** Feature configuration options as key/value pairs. */
+  /**
+   * Feature configuration options as key/value pairs.
+   * @default none
+   */
   options?: NexusKeyValuePair[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -96,14 +100,20 @@ export interface KubernetesClusterFeature extends Resource<
  * and are adopted rather than created. Needs a deployed Operator Nexus
  * cluster.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-kubernetes-cluster-features
+ * ARM type: `Microsoft.NetworkCloud/kubernetesClusters/features`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-kubernetes-cluster-features).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `kubernetesClusterName`, `name`, or `location`
+ * replaces the feature.
+ * :::
  *
  * ### Enabling a Feature
  * **Example:** Azure Monitor agent
  * ```typescript
+ * // An existing Nexus Kubernetes cluster, "naks", in the stack's resource group.
  * const monitor = yield* Azure.NetworkCloud.KubernetesClusterFeature("monitor", {
- *   resourceGroup: naks.resourceGroup,
- *   kubernetesClusterName: naks.kubernetesClusterName,
+ *   kubernetesClusterName: "naks",
  *   name: "azureMonitorAgent",
  *   options: [{ key: "logLevel", value: "info" }],
  * });

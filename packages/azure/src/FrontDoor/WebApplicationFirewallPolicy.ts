@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -291,9 +291,7 @@ export const WebApplicationFirewallPolicyProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* frontdoor
-        .ListPolicyBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPolicyBySubscription", page)));
+      const page = yield* collectAll(frontdoor.ListPolicyBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((policy) => {
         const group = resourceGroupOf(policy.id);
         return hasAnyAlchemyTag(policy.tags) && group !== undefined && policy.name !== undefined

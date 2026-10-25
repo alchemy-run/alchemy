@@ -25,7 +25,10 @@ import {
 } from "./Common.ts";
 
 export interface OutputProps {
-  /** Resource group of the streaming job. Changing it replaces the output. */
+  /**
+   * Resource group of the streaming job. Changing it replaces the output.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the streaming job. Changing it replaces the output. */
   streamingJob: string;
@@ -33,6 +36,7 @@ export interface OutputProps {
    * Output name, referenced from the job's query (`INTO [name]`). If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the output.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -48,14 +52,19 @@ export interface OutputProps {
    * How events are serialized, e.g. `{ type: "Json", properties: {
    * encoding: "UTF8", format: "LineSeparated" } }`. Required by sinks that
    * write files or messages (Blob, Event Hubs, Service Bus).
+   * @default not set
    */
   serialization?: TypedDocument;
   /**
    * Maximum time window a batch may span, e.g. `00:05:00` (Blob and Data
    * Lake outputs).
+   * @default not set
    */
   timeWindow?: string;
-  /** Minimum number of rows per batch (Blob and Data Lake outputs). */
+  /**
+   * Minimum number of rows per batch (Blob and Data Lake outputs).
+   * @default not set
+   */
   sizeWindow?: number;
 }
 
@@ -81,7 +90,8 @@ export interface Output extends Resource<
 > {}
 
 /**
- * An output of an Azure Stream Analytics streaming job — the sink (Blob
+ * An output of an Azure Stream Analytics streaming job
+ * (`Microsoft.StreamAnalytics/streamingjobs/outputs`) — the sink (Blob
  * storage, Event Hubs, Service Bus, Cosmos DB, SQL, ...) the job's query
  * writes `INTO`.
  *
@@ -89,11 +99,19 @@ export interface Output extends Resource<
  * job carries this stack's and stage's ownership tags. Changes are rejected
  * while the job is running.
  *
+ * :::caution
+ * Changing `streamingJob`, `name`, or `resourceGroup` replaces the output.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/stream-analytics/stream-analytics-define-outputs
  *
  * ### Writing to Storage
  * **Example:** JSON lines to Blob storage with the job's managed identity
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("telemetry");
+ * const job = yield* Azure.StreamAnalytics.StreamingJob("telemetry", {
+ *   identity: "SystemAssigned",
+ * });
  * const archive = yield* Azure.StreamAnalytics.Output("archive", {
  *   streamingJob: job.jobName,
  *   name: "archive",

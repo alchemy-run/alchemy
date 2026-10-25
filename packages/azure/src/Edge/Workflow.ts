@@ -17,7 +17,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState } from "./EdgeShared.ts";
 
 export interface WorkflowProps {
-  /** Resource group of the context. Changing it replaces the workflow. */
+  /**
+   * Resource group of the context. Changing it replaces the workflow.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Name of the parent context. Changing it replaces the workflow. */
   context: string;
@@ -25,6 +28,7 @@ export interface WorkflowProps {
    * Name of the workflow: 3-61 letters, digits, `-`, and `.`, not starting
    * with `v-`. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the workflow.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
 }
@@ -52,7 +56,8 @@ export interface Workflow extends Resource<
  * An Azure Arc workload orchestration workflow
  * (`Microsoft.Edge/contexts/workflows`): a named container in a context
  * for the `Azure.Edge.WorkflowVersion` stage definitions that solution
- * deployments run through.
+ * deployments run through. See the
+ * [workload orchestration overview](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview).
  *
  * Workflows carry no tags or settable fields, so Alchemy cannot mark them;
  * one found under the expected name is treated as this resource.
@@ -62,11 +67,13 @@ export interface Workflow extends Resource<
  * deletes its versions.
  * :::
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview
- *
  * ### Creating a Workflow
  * **Example:** Workflow in the context
  * ```typescript
+ * const context = yield* Azure.Edge.Context("context", {
+ *   capabilities: [{ name: "soap", description: "Soap production" }],
+ *   hierarchies: [{ name: "factory", description: "Factory" }],
+ * });
  * const workflow = yield* Azure.Edge.Workflow("rollout", {
  *   context: context.contextName,
  * });

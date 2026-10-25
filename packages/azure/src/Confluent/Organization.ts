@@ -7,12 +7,12 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -77,12 +77,14 @@ export interface OrganizationProps {
   /**
    * Resource group the organization is created in. Changing it replaces the
    * organization.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the organization resource, 1-50 letters, digits, `-`, `_`, and
    * `.`. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the organization.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -105,11 +107,13 @@ export interface OrganizationProps {
   /**
    * Confluent Cloud auth token that links an existing Confluent organization
    * instead of creating a new one. Changing it replaces the organization.
+   * @default none (Azure creates a new Confluent organization)
    */
   linkOrganizationToken?: Redacted.Redacted<string>;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -154,7 +158,14 @@ export interface Organization extends Resource<
  * Marketplace terms. Environments, clusters, topics, and connectors are
  * managed as children of the organization.
  *
- * @see https://learn.microsoft.com/azure/partner-solutions/apache-kafka-confluent-cloud/overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `offerDetail`,
+ * `userDetail`, or `linkOrganizationToken` replaces the organization: the
+ * SaaS subscription is cancelled and every environment, cluster, topic,
+ * and connector in it is deleted.
+ * :::
+ *
+ * See [Apache Kafka & Apache Flink on Confluent Cloud](https://learn.microsoft.com/azure/partner-solutions/apache-kafka-confluent-cloud/overview).
  *
  * ### Creating an Organization
  * **Example:** Pay-as-you-go organization
@@ -168,7 +179,7 @@ export interface Organization extends Resource<
  * ```typescript
  * const org = yield* Azure.Confluent.Organization("kafka", {
  *   userDetail: { emailAddress: "platform@example.com" },
- *   linkOrganizationToken: Redacted.make(process.env.CONFLUENT_LINK_TOKEN!),
+ *   linkOrganizationToken: yield* Config.redacted("CONFLUENT_LINK_TOKEN"),
  * });
  * ```
  *
@@ -228,9 +239,7 @@ export const OrganizationProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* confluent
-        .ListOrganizationBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListOrganizationBySubscription", page)));
+      const page = yield* collectAll(confluent.ListOrganizationBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((org) => {
         const group = resourceGroupOf(org.id);
         return hasAnyAlchemyTag(org.tags) && group !== undefined && org.name !== undefined

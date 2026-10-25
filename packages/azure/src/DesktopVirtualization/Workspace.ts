@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -23,12 +23,16 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createAvdName, deltaOf, sameIdSet } from "./Common.ts";
 
 export interface WorkspaceProps {
-  /** Resource group of the workspace. Changing it replaces the workspace. */
+  /**
+   * Resource group of the workspace. Changing it replaces the workspace.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Workspace name, 3-64 letters, digits, `@`, `.`, `-`, `_`, or spaces. If
    * omitted, a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the workspace.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -43,15 +47,25 @@ export interface WorkspaceProps {
    * @default []
    */
   applicationGroupIds?: string[];
-  /** Display name shown to users. */
+  /**
+   * Display name shown to users.
+   * @default unset
+   */
   friendlyName?: string;
-  /** Description of the workspace. */
+  /**
+   * Description of the workspace.
+   * @default unset
+   */
   description?: string;
-  /** Whether the workspace feed is reachable from the public network. */
+  /**
+   * Whether the workspace feed is reachable from the public network.
+   * @default Azure's default (`Enabled`)
+   */
   publicNetworkAccess?: "Enabled" | "Disabled";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -80,15 +94,28 @@ export interface Workspace extends Resource<
 > {}
 
 /**
- * An Azure Virtual Desktop workspace — the feed users subscribe to. It
- * publishes a set of application groups; users see the desktops and
+ * An Azure Virtual Desktop workspace
+ * (`Microsoft.DesktopVirtualization/workspaces`) — the feed users subscribe
+ * to. It publishes a set of application groups; users see the desktops and
  * RemoteApps of every group they are assigned to.
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the workspace.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-desktop/terminology#workspaces
  *
  * ### Creating a Workspace
  * **Example:** Publish a desktop application group
  * ```typescript
+ * const pool = yield* Azure.DesktopVirtualization.HostPool("pool", {
+ *   hostPoolType: "Pooled",
+ *   loadBalancerType: "BreadthFirst",
+ * });
+ * const desktops = yield* Azure.DesktopVirtualization.ApplicationGroup("desktops", {
+ *   hostPoolId: pool.hostPoolId,
+ *   applicationGroupType: "Desktop",
+ * });
  * const workspace = yield* Azure.DesktopVirtualization.Workspace("feed", {
  *   friendlyName: "Contoso",
  *   applicationGroupIds: [desktops.applicationGroupId],
@@ -137,9 +164,9 @@ export const WorkspaceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* desktopvirtualization
-        .ListWorkspaceBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListWorkspaceBySubscription", page)));
+      const page = yield* collectAll(desktopvirtualization.ListWorkspaceBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((workspace) => {
         const rg = resourceGroupOf(workspace.id);
         return hasAnyAlchemyTag(workspace.tags) && rg !== undefined && workspace.name !== undefined

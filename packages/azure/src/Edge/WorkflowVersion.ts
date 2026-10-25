@@ -19,7 +19,10 @@ import { EDGE_WAIT, edgeState, sameJson } from "./EdgeShared.ts";
 export interface WorkflowTask {
   /** Name of the task. */
   name: string;
-  /** ARM resource ID of the `Azure.Edge.Target` the task runs against. */
+  /**
+   * ARM resource ID of the `Azure.Edge.Target` the task runs against.
+   * @default none
+   */
   targetId?: string;
   /** Task specification (free-form JSON). */
   specification: Record<string, unknown>;
@@ -29,32 +32,50 @@ export interface WorkflowTask {
 export interface WorkflowStage {
   /** Name of the stage. */
   name: string;
-  /** Stage specification (free-form JSON). */
+  /**
+   * Stage specification (free-form JSON).
+   * @default none
+   */
   specification?: Record<string, unknown>;
-  /** Tasks the stage runs. */
+  /**
+   * Tasks the stage runs.
+   * @default []
+   */
   tasks?: WorkflowTask[];
-  /** How the stage runs its tasks. */
+  /**
+   * How the stage runs its tasks.
+   * @default Azure's default (one task at a time, stop on any failure)
+   */
   taskOption?: {
     /**
      * Number of tasks that run in parallel (1-8).
      * @default 1
      */
     concurrency?: number;
-    /** What the stage does when a task fails. */
+    /**
+     * What the stage does when a task fails.
+     * @default Azure's default (`stopOnAnyFailure`)
+     */
     errorAction?: {
       /**
        * Error mode.
        * @default "stopOnAnyFailure"
        */
       mode?: "stopOnAnyFailure" | "stopOnNFailures" | "silentlyContinue";
-      /** Failures tolerated before the stage stops (with `stopOnNFailures`). */
+      /**
+       * Failures tolerated before the stage stops (with `stopOnNFailures`).
+       * @default Azure's default
+       */
       maxToleratedFailures?: number;
     };
   };
 }
 
 export interface WorkflowVersionProps {
-  /** Resource group of the context. Changing it replaces the version. */
+  /**
+   * Resource group of the context. Changing it replaces the version.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Name of the context that holds the workflow. Changing it replaces the version. */
   context: string;
@@ -67,7 +88,10 @@ export interface WorkflowVersionProps {
   version: string;
   /** Stages the workflow runs, in order. */
   stages: WorkflowStage[];
-  /** Execution specification (free-form JSON). */
+  /**
+   * Execution specification (free-form JSON).
+   * @default none
+   */
   specification?: Record<string, unknown>;
 }
 
@@ -99,7 +123,8 @@ export interface WorkflowVersion extends Resource<
 /**
  * A version of an Azure Arc workload orchestration workflow
  * (`Microsoft.Edge/contexts/workflows/versions`): the ordered stages, and
- * the tasks in each stage, that a rollout goes through.
+ * the tasks in each stage, that a rollout goes through. See the
+ * [workload orchestration overview](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview).
  *
  * Versions carry no tags or free-form fields that Alchemy can mark; a
  * version found under the expected name is treated as this resource.
@@ -109,11 +134,16 @@ export interface WorkflowVersion extends Resource<
  * the version. `stages` and `specification` update in place.
  * :::
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview
- *
  * ### Defining Stages
  * **Example:** Two-stage workflow version
  * ```typescript
+ * const context = yield* Azure.Edge.Context("context", {
+ *   capabilities: [{ name: "soap", description: "Soap production" }],
+ *   hierarchies: [{ name: "factory", description: "Factory" }],
+ * });
+ * const workflow = yield* Azure.Edge.Workflow("rollout", {
+ *   context: context.contextName,
+ * });
  * yield* Azure.Edge.WorkflowVersion("rollout-v1", {
  *   context: context.contextName,
  *   workflow: workflow.workflowName,

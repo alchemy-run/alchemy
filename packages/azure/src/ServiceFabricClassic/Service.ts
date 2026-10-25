@@ -22,7 +22,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, delta, listClusters, lower } from "./Common.ts";
 
 export interface ServiceProps {
-  /** Resource group of the cluster. Changing it replaces the service. */
+  /**
+   * Resource group of the cluster. Changing it replaces the service.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the classic Service Fabric cluster. Changing it replaces the service. */
   cluster: string;
@@ -33,6 +36,7 @@ export interface ServiceProps {
    * `fabric:/<application>/<name>`; the ARM resource is named
    * `<application>~<name>`). If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the service.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** `Stateless` or `Stateful`. Changing it replaces the service. */
@@ -47,42 +51,85 @@ export interface ServiceProps {
    * @default { partitionScheme: "Singleton" }
    */
   partitionDescription?: servicefabric.PartitionSchemeDescription;
-  /** `SharedProcess` or `ExclusiveProcess`. Changing it replaces the service. */
+  /**
+   * `SharedProcess` or `ExclusiveProcess`. Changing it replaces the service.
+   * @default Azure's default
+   */
   servicePackageActivationMode?: "SharedProcess" | "ExclusiveProcess";
-  /** DNS name of the service (requires the DNS add-on). Changing it replaces the service. */
+  /**
+   * DNS name of the service (requires the DNS add-on). Changing it replaces the service.
+   * @default no DNS name
+   */
   serviceDnsName?: string;
   /**
    * Stateless: instances per partition (`-1` places one on every node).
    * @default 1 for stateless services
    */
   instanceCount?: number;
-  /** Stateless: delay before closing instances during an upgrade (ISO 8601 duration). */
+  /**
+   * Stateless: delay before closing instances during an upgrade (ISO 8601 duration).
+   * @default Azure's default
+   */
   instanceCloseDelayDuration?: string;
-  /** Stateful: target replica set size. */
+  /**
+   * Stateful: target replica set size.
+   * @default Azure's default
+   */
   targetReplicaSetSize?: number;
-  /** Stateful: minimum replica set size. */
+  /**
+   * Stateful: minimum replica set size.
+   * @default Azure's default
+   */
   minReplicaSetSize?: number;
-  /** Stateful: whether replicas persist state on local disk. Changing it replaces the service. */
+  /**
+   * Stateful: whether replicas persist state on local disk. Changing it replaces the service.
+   * @default false
+   */
   hasPersistedState?: boolean;
-  /** Stateful: wait before replacing a down replica (ISO 8601 duration). */
+  /**
+   * Stateful: wait before replacing a down replica (ISO 8601 duration).
+   * @default Azure's default
+   */
   replicaRestartWaitDuration?: string;
-  /** Stateful: maximum time a partition may stay in quorum loss (ISO 8601 duration). */
+  /**
+   * Stateful: maximum time a partition may stay in quorum loss (ISO 8601 duration).
+   * @default Azure's default
+   */
   quorumLossWaitDuration?: string;
-  /** Stateful: how long standby replicas are kept (ISO 8601 duration). */
+  /**
+   * Stateful: how long standby replicas are kept (ISO 8601 duration).
+   * @default Azure's default
+   */
   standByReplicaKeepDuration?: string;
-  /** Placement constraints, e.g. `NodeType == nt1`. */
+  /**
+   * Placement constraints, e.g. `NodeType == nt1`.
+   * @default no constraints
+   */
   placementConstraints?: string;
-  /** Correlations with other services. */
+  /**
+   * Correlations with other services.
+   * @default []
+   */
   correlationScheme?: servicefabric.ServiceCorrelationDescription[];
-  /** Load metrics used for balancing. */
+  /**
+   * Load metrics used for balancing.
+   * @default []
+   */
   serviceLoadMetrics?: servicefabric.ServiceLoadMetricDescription[];
-  /** Placement policies. */
+  /**
+   * Placement policies.
+   * @default []
+   */
   servicePlacementPolicies?: servicefabric.ServicePlacementPolicyDescription[];
-  /** Default move cost (`Zero`, `Low`, `Medium`, `High`). */
+  /**
+   * Default move cost (`Zero`, `Low`, `Medium`, `High`).
+   * @default Azure's default
+   */
   defaultMoveCost?: servicefabric.MoveCost;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -115,17 +162,54 @@ export interface Service extends Resource<
 > {}
 
 /**
- * A service of an application on a classic Service Fabric cluster.
+ * A service of an application on a classic Service Fabric cluster
+ * (`Microsoft.ServiceFabric/clusters/applications/services`): a running
+ * instance of a service type that the application manifest declares. See the
+ * [Azure docs](https://learn.microsoft.com/azure/service-fabric/service-fabric-application-arm-resource).
  *
- * Instance and replica counts, placement, load metrics, and move cost
- * change in place; kind, type, partitioning, and DNS name replace the
- * service.
+ * :::caution
+ * `serviceDnsName` needs the cluster's `DnsService` add-on.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/service-fabric/service-fabric-application-arm-resource
+ * :::caution
+ * Changing `resourceGroup`, `cluster`, `application`, `name`, `serviceKind`,
+ * or `serviceTypeName` replaces the service. Alchemy changes instance and
+ * replica counts, placement, load metrics, and move cost in place.
+ * :::
  *
  * ### Creating Services
  * **Example:** Stateless service on every node
  * ```typescript
+ * const cluster = yield* Azure.ServiceFabricClassic.Cluster("sf", {
+ *   reliabilityLevel: "None",
+ *   nodeTypes: [
+ *     {
+ *       name: "nt1",
+ *       isPrimary: true,
+ *       vmInstanceCount: 1,
+ *       clientConnectionEndpointPort: 19000,
+ *       httpGatewayEndpointPort: 19080,
+ *       applicationPorts: { startPort: 20000, endPort: 30000 },
+ *       ephemeralPorts: { startPort: 49152, endPort: 65534 },
+ *     },
+ *   ],
+ * });
+ * const appType = yield* Azure.ServiceFabricClassic.ApplicationType("voting-type", {
+ *   cluster: cluster.clusterName,
+ *   name: "VotingType",
+ * });
+ * const v1 = yield* Azure.ServiceFabricClassic.ApplicationTypeVersion("voting-v1", {
+ *   cluster: cluster.clusterName,
+ *   applicationType: appType.applicationTypeName,
+ *   version: "1.0.0",
+ *   appPackageUrl: "https://<account>.blob.core.windows.net/apps/Voting.sfpkg?<sas>",
+ * });
+ * const app = yield* Azure.ServiceFabricClassic.Application("voting", {
+ *   cluster: cluster.clusterName,
+ *   typeName: appType.applicationTypeName,
+ *   typeVersion: v1.version,
+ *   parameters: { VotingWeb_InstanceCount: "1" },
+ * });
  * const web = yield* Azure.ServiceFabricClassic.Service("web", {
  *   cluster: cluster.clusterName,
  *   application: app.applicationName,

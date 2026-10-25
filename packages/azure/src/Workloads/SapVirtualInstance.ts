@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -25,15 +25,20 @@ import { identityBlock, identityIds, lower, withRecordedError } from "./Common.t
 
 /** Register an existing SAP system with Azure Center for SAP solutions. */
 export interface SapDiscoveryConfiguration {
+  /** Configuration type: register an existing SAP system. */
   configurationType: "Discovery";
   /** ARM ID of the VM running the system's ABAP central services. */
   centralServerVmId: string;
-  /** Custom name of the storage account created in the managed resource group. */
+  /**
+   * Custom name of the storage account created in the managed resource group.
+   * @default not set
+   */
   managedRgStorageAccountName?: string;
 }
 
 /** Deploy SAP infrastructure (and optionally install SAP software). */
 export interface SapDeploymentConfiguration {
+  /** Configuration type: `DeploymentWithOSConfig` also applies `osSapConfiguration`. */
   configurationType: "Deployment" | "DeploymentWithOSConfig";
   /** Region the SAP system is deployed to. */
   appLocation: string;
@@ -45,9 +50,13 @@ export interface SapDeploymentConfiguration {
   /**
    * Software configuration (`SAPInstallWithoutOSConfig`, `External`,
    * `ServiceInitiated`), in the ARM wire format of `softwareConfiguration`.
+   * @default not set
    */
   softwareConfiguration?: Record<string, unknown>;
-  /** OS and SAP configuration, for `DeploymentWithOSConfig`. */
+  /**
+   * OS and SAP configuration, for `DeploymentWithOSConfig`.
+   * @default not set
+   */
   osSapConfiguration?: Record<string, unknown>;
 }
 
@@ -57,7 +66,10 @@ export type SapVirtualInstanceConfiguration =
   | SapDeploymentConfiguration;
 
 export interface SapVirtualInstanceProps {
-  /** Resource group of the instance. Changing it replaces the instance. */
+  /**
+   * Resource group of the instance. Changing it replaces the instance.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * SAP system ID (SID): three characters, an uppercase letter followed by
@@ -99,6 +111,7 @@ export interface SapVirtualInstanceProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -143,7 +156,8 @@ export interface SapVirtualInstance extends Resource<
 > {}
 
 /**
- * A Virtual Instance for SAP solutions (VIS) — the Azure Center for SAP
+ * A Virtual Instance for SAP solutions (VIS)
+ * (`Microsoft.Workloads/sapVirtualInstances`) — the Azure Center for SAP
  * solutions representation of an SAP system. Either register an existing
  * system running on Azure VMs (`Discovery`), or have Azure deploy the
  * infrastructure and optionally install SAP software (`Deployment`).
@@ -153,18 +167,25 @@ export interface SapVirtualInstance extends Resource<
  * waits up to 30 minutes for the instance to finish provisioning, so long
  * software deployments should be driven outside a single deploy.
  *
+ * :::caution
+ * Changing `name`, `location`, `environment`, `sapProduct`, `configuration`,
+ * `managedResourceGroupName`, or `resourceGroup` replaces the instance.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/sap/center-sap-solutions/overview
  *
  * ### Registering an Existing System
  * **Example:** Discover an SAP system by its central services VM
  * ```typescript
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("sap");
  * const vis = yield* Azure.Workloads.SapVirtualInstance("s4h", {
  *   name: "S4H",
  *   environment: "NonProd",
  *   sapProduct: "S4HANA",
  *   configuration: {
  *     configurationType: "Discovery",
- *     centralServerVmId: ascsVm.vmId,
+ *     centralServerVmId:
+ *       "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/sap/providers/Microsoft.Compute/virtualMachines/s4h-ascs",
  *   },
  *   userAssignedIdentityIds: [identity.identityId],
  * });
@@ -259,11 +280,9 @@ export const SapVirtualInstanceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* workloads
-        .ListSapVirtualInstanceBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListSapVirtualInstanceBySubscription", page)),
-        );
+      const page = yield* collectAll(workloads.ListSapVirtualInstanceBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((instance) => {
         const group = resourceGroupOf(instance.id);
         return hasAnyAlchemyTag(instance.tags) && group !== undefined && instance.name !== undefined

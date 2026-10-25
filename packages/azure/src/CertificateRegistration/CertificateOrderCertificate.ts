@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -27,6 +27,7 @@ export interface CertificateOrderCertificateProps {
   /**
    * Resource group of the certificate order. Changing it replaces the
    * certificate.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -38,6 +39,7 @@ export interface CertificateOrderCertificateProps {
    * Name of the certificate within the order, up to 64 letters, digits,
    * and `-`. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the certificate.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -60,6 +62,7 @@ export interface CertificateOrderCertificateProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -95,15 +98,24 @@ export interface CertificateOrderCertificate extends Resource<
 > {}
 
 /**
- * Links an App Service Certificate order to a Key Vault secret, so the
- * issued certificate is stored (and renewed) in your vault and can be
- * imported into App Service apps.
+ * An App Service Certificate order certificate
+ * (`Microsoft.CertificateRegistration/certificateOrders/certificates`).
+ * It links an order to a Key Vault secret, so the issued certificate is
+ * stored (and renewed) in your vault and can be imported into App Service
+ * apps.
  *
+ * :::caution
  * Grant the `Microsoft.Azure.CertificateRegistration` service principal
  * secret get/set access on the vault first, otherwise the certificate
  * reports `AzureServiceUnauthorizedToAccessKeyVault`.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/app-service/configure-ssl-app-service-certificate#store-certificate-in-azure-key-vault
+ * :::caution
+ * Changing `resourceGroup`, `certificateOrder`, `name`, or `location`
+ * replaces the certificate.
+ * :::
+ *
+ * See [Store the certificate in Key Vault](https://learn.microsoft.com/azure/app-service/configure-ssl-app-service-certificate#store-certificate-in-azure-key-vault).
  *
  * ### Storing a Certificate in Key Vault
  * **Example:** Store the issued certificate in a vault
@@ -201,9 +213,9 @@ export const CertificateOrderCertificateProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const orders = yield* certificateregistration
-        .ListAppServiceCertificateOrders({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListAppServiceCertificateOrders", page)));
+      const orders = yield* collectAll(certificateregistration.ListAppServiceCertificateOrders, {
+        subscriptionId,
+      });
       const owned = (orders.value ?? []).flatMap((order) => {
         const group = resourceGroupOf(order.id);
         return hasAnyAlchemyTag(order.tags) && group !== undefined && order.name !== undefined
@@ -212,17 +224,11 @@ export const CertificateOrderCertificateProvider = () =>
       });
       const perOrder = yield* Effect.forEach(owned, ({ group, orderName }) =>
         orUndefinedIfNotFound(
-          certificateregistration
-            .ListAppServiceCertificateOrderCertificates({
-              subscriptionId,
-              resourceGroupName: group,
-              certificateOrderName: orderName,
-            })
-            .pipe(
-              Effect.flatMap((page) =>
-                requireSinglePage("ListAppServiceCertificateOrderCertificates", page),
-              ),
-            ),
+          collectAll(certificateregistration.ListAppServiceCertificateOrderCertificates, {
+            subscriptionId,
+            resourceGroupName: group,
+            certificateOrderName: orderName,
+          }),
         ).pipe(
           Effect.map((page) =>
             (page?.value ?? []).flatMap((certificate) =>

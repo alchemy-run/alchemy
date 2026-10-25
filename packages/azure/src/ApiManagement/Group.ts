@@ -19,6 +19,7 @@ export interface GroupProps {
    * Group identifier (1-256 characters). If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces
    * the group.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -26,7 +27,10 @@ export interface GroupProps {
    * @default the group identifier
    */
   displayName?: string;
-  /** Description; may contain HTML. */
+  /**
+   * Description; may contain HTML.
+   * @default no description
+   */
   description?: string;
   /**
    * `custom` for a group managed in APIM, or `external` for a group that
@@ -38,6 +42,7 @@ export interface GroupProps {
    * Identity-provider group id for `external` groups, e.g.
    * `aad://contoso.onmicrosoft.com/groups/{objectId}`. Changing it replaces
    * the group.
+   * @default not set
    */
   externalId?: string;
 }
@@ -66,12 +71,25 @@ export interface Group extends Resource<
 /**
  * An API Management group of developer-portal users, used to control
  * product visibility. Groups are not available on the Consumption tier.
+ * The ARM type is `Microsoft.ApiManagement/service/groups`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, `type`, `externalId`, or `resourceGroup`
+ * replaces the group.
+ *
+ * Groups are not available on the Consumption tier.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-create-groups
  *
  * ### Creating a Group
  * **Example:** Custom group
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "Developer", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const partners = yield* Azure.ApiManagement.Group("partners", {
  *   serviceName: apim.serviceName,
  *   displayName: "Partners",
@@ -81,6 +99,11 @@ export interface Group extends Resource<
  *
  * **Example:** Group mirroring a Microsoft Entra group
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "Developer", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const staff = yield* Azure.ApiManagement.Group("staff", {
  *   serviceName: apim.serviceName,
  *   displayName: "Staff",

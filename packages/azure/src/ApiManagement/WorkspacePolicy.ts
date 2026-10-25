@@ -27,12 +27,29 @@ export interface WorkspacePolicy extends Resource<
  * The workspace-scoped counterpart of {@link ServicePolicy}: the workspace-wide policy (applies to every API in the workspace) inside an API
  * Management {@link Workspace} (Premium and v2 tiers). Props and
  * attributes match {@link ServicePolicy} plus `workspaceName`.
+ * The ARM type is `Microsoft.ApiManagement/service/workspaces/policies`.
+ *
+ * :::caution
+ * Changing `workspaceName`, `serviceName`, or `resourceGroup` replaces the
+ * policy.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/workspaces-overview
  *
  * ### Workspace Policy
  * **Example:** Add a header to every workspace API
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
  * yield* Azure.ApiManagement.WorkspacePolicy("workspace-policy", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

@@ -49,18 +49,24 @@ export interface ConfigurationReference extends Resource<
 > {}
 
 /**
- * Links an Azure Arc workload orchestration configuration to a hierarchy
- * entity (a site or a target). It is an extension resource that lives
- * under the entity's ARM ID.
+ * A workload orchestration configuration reference
+ * (`Microsoft.Edge/configurationReferences`). It links an Azure Arc
+ * workload orchestration configuration to a hierarchy entity (a site or a
+ * target), as an extension resource under the entity's ARM ID. See the
+ * [configuration model](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model).
  *
  * References carry no tags or free-form fields, so Alchemy cannot mark
  * them; one found at the expected scope is treated as this resource.
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model
+ * :::caution
+ * Changing `resourceUri` or `name` replaces the reference.
+ * :::
  *
  * ### Linking a Configuration
  * **Example:** Configuration for a site
  * ```typescript
+ * const site = yield* Azure.Edge.Site("plant");
+ * const configuration = yield* Azure.Edge.Configuration("plant-config");
  * yield* Azure.Edge.ConfigurationReference("plant-config-ref", {
  *   resourceUri: site.siteId,
  *   configurationResourceId: configuration.configurationId,

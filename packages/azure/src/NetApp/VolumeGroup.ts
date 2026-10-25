@@ -87,15 +87,22 @@ export interface VolumeGroupProps {
   /**
    * Volume group name. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the group.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Application the group is laid out for. Changing it replaces the group. */
   applicationType: "SAP-HANA" | "ORACLE";
   /** Application identifier, e.g. the SAP SID. Changing it replaces the group. */
   applicationIdentifier: string;
-  /** Description of the group. Changing it replaces the group. */
+  /**
+   * Description of the group. Changing it replaces the group.
+   * @default none
+   */
   groupDescription?: string;
-  /** Application-specific placement rules. Changing them replaces the group. */
+  /**
+   * Application-specific placement rules. Changing them replaces the group.
+   * @default none
+   */
   globalPlacementRules?: { key: string; value: string }[];
   /**
    * The group's volumes, created in one deployment. Changing the list
@@ -105,6 +112,7 @@ export interface VolumeGroupProps {
   /**
    * User tags applied to every volume of the group. Alchemy ownership tags
    * are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -137,17 +145,37 @@ export interface VolumeGroup extends Resource<
  * volumes for an SAP HANA system or an Oracle database, created in one
  * deployment with application-aware placement.
  *
+ * ARM type: `Microsoft.NetApp/netAppAccounts/volumeGroups`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/azure-netapp-files/application-volume-group-introduction).
+ *
  * Volume groups have no tags; Alchemy treats a group as owned when its
  * account carries this stack's ownership tags. Deleting the group deletes
  * its volumes first.
  *
- * @see https://learn.microsoft.com/azure/azure-netapp-files/application-volume-group-introduction
+ * :::caution
+ * Changing `resourceGroup`, `account`, `name`, `applicationType`,
+ * `applicationIdentifier`, `groupDescription`, `globalPlacementRules`, or
+ * `volumes` replaces the group.
+ * Alchemy deletes the old group, with its volumes, before it creates the new
+ * one.
+ * :::
  *
  * ### Oracle
  * **Example:** Oracle data and log volumes
  * ```typescript
+ * const account = yield* Azure.NetApp.Account("files");
+ * const pool = yield* Azure.NetApp.CapacityPool("pool", {
+ *   account: account.accountName,
+ * });
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("anf", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ *   delegations: [{ serviceName: "Microsoft.NetApp/volumes" }],
+ * });
  * const group = yield* Azure.NetApp.VolumeGroup("ora1", {
- *   resourceGroup: rg.resourceGroupName,
  *   account: account.accountName,
  *   applicationType: "ORACLE",
  *   applicationIdentifier: "ORA1",
@@ -174,7 +202,6 @@ export interface VolumeGroup extends Resource<
  * **Example:** HANA data volume pinned to a proximity placement group
  * ```typescript
  * const group = yield* Azure.NetApp.VolumeGroup("sh1", {
- *   resourceGroup: rg.resourceGroupName,
  *   account: account.accountName,
  *   applicationType: "SAP-HANA",
  *   applicationIdentifier: "SH1",

@@ -22,11 +22,20 @@ export interface WorkspaceGlobalSchemaProps {
   name?: string;
   /** Schema language: `json` (JSON Schema) or `xml` (XSD). */
   schemaType: "json" | "xml";
-  /** Description of the schema. */
+  /**
+   * Description of the schema.
+   * @default no description
+   */
   description?: string;
-  /** XSD document (when `schemaType` is `xml`). */
+  /**
+   * XSD document (when `schemaType` is `xml`).
+   * @default not set
+   */
   value?: string;
-  /** JSON Schema document (when `schemaType` is `json`). */
+  /**
+   * JSON Schema document (when `schemaType` is `json`).
+   * @default not set
+   */
   document?: Record<string, unknown>;
 }
 
@@ -54,16 +63,33 @@ export interface WorkspaceGlobalSchema extends Resource<
 /**
  * The workspace-scoped counterpart of {@link GlobalSchema}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is `Microsoft.ApiManagement/service/workspaces/schemas`.
  *
  * A service-wide schema (JSON Schema or XSD) of an API Management service.
  * The `validate-content` policy references it by identifier to validate
  * request and response bodies of any API.
+ *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `name`, or `resourceGroup`
+ * replaces the schema.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/validate-content-policy
  *
  * ### Validating Payloads
  * **Example:** A JSON Schema for order payloads
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
  * const schema = yield* Azure.ApiManagement.WorkspaceGlobalSchema("order", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

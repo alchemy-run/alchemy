@@ -17,19 +17,38 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createPeeringName, peeringOwnedByStage } from "./Common.ts";
 
 export interface RegisteredPrefixProps {
-  /** Resource group of the peering. Changing it replaces the registered prefix. */
+  /**
+   * Resource group of the peering.
+   *
+   * :::caution
+   * Changing it replaces the registered prefix.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Peering the prefix is registered on. Changing it replaces the registered prefix. */
+  /**
+   * Name of the peering the prefix is registered on.
+   *
+   * :::caution
+   * Changing it replaces the registered prefix.
+   * :::
+   */
   peering: string;
   /**
-   * Name of the registered prefix. If omitted, a unique name is generated
-   * from the app, stage, and logical ID. Changing it replaces the
-   * registered prefix.
+   * Name of the registered prefix.
+   *
+   * :::caution
+   * Changing it replaces the registered prefix.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Customer IP prefix in CIDR notation, e.g. `203.0.113.0/24`. Changing it
-   * replaces the registered prefix.
+   * Customer IP prefix in CIDR notation, e.g. `203.0.113.0/24`.
+   *
+   * :::caution
+   * Changing it replaces the registered prefix.
+   * :::
    */
   prefix: string;
 }
@@ -65,10 +84,11 @@ export interface RegisteredPrefix extends Resource<
 > {}
 
 /**
- * A customer IP prefix registered on a Peering Service provider's
- * peering. Microsoft validates that the prefix is announced over the
- * peering and issues a `peeringServicePrefixKey` the customer uses on their
- * own `Azure.Peering.PeeringServicePrefix`.
+ * A customer IP prefix registered on a Peering Service provider's peering
+ * (`Microsoft.Peering/peerings/registeredPrefixes`). Microsoft validates
+ * that the prefix is announced over the peering and issues a
+ * `peeringServicePrefixKey` the customer uses on their own
+ * `Azure.Peering.PeeringServicePrefix`.
  *
  * Registered prefixes have no tags; Alchemy treats one as owned when its
  * peering carries this stack's ownership tags.
@@ -78,6 +98,25 @@ export interface RegisteredPrefix extends Resource<
  * ### Registering a Customer Prefix
  * **Example:** Register a customer's prefix on a peering
  * ```typescript
+ * const asn = yield* Azure.Peering.PeerAsn("provider", {
+ *   peerAsn: 65000,
+ *   peerName: "Contoso Networks",
+ *   peerContactDetail: [{ role: "Noc", email: "noc@contoso.com" }],
+ * });
+ * const exchange = yield* Azure.Peering.Peering("seattle-ix", {
+ *   kind: "Exchange",
+ *   sku: "Basic_Exchange_Free",
+ *   peeringLocation: "Seattle",
+ *   exchange: {
+ *     peerAsnId: asn.peerAsnId,
+ *     connections: [
+ *       {
+ *         peeringDBFacilityId: 26,
+ *         bgpSession: { peerSessionIPv4Address: "198.32.134.10" },
+ *       },
+ *     ],
+ *   },
+ * });
  * const prefix = yield* Azure.Peering.RegisteredPrefix("customer-a-v4", {
  *   peering: exchange.peeringName,
  *   prefix: "203.0.113.0/24",

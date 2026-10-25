@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -40,20 +40,30 @@ export interface ApplicationManagedIdentity {
 }
 
 export interface ApplicationIdentity {
-  /** Identity type (`None`, `SystemAssigned`, `UserAssigned`, `SystemAssigned, UserAssigned`). */
+  /**
+   * Identity type (`None`, `SystemAssigned`, `UserAssigned`, `SystemAssigned, UserAssigned`).
+   * @default "None"
+   */
   type?: sf.ManagedIdentityType;
-  /** ARM IDs of user-assigned identities to attach. */
+  /**
+   * ARM IDs of user-assigned identities to attach.
+   * @default []
+   */
   userAssignedIdentities?: string[];
 }
 
 export interface ApplicationProps {
-  /** Resource group of the cluster. Changing it replaces the application. */
+  /**
+   * Resource group of the cluster. Changing it replaces the application.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the managed cluster. Changing it replaces the application. */
   cluster: string;
   /**
    * Application name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the application.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -61,17 +71,30 @@ export interface ApplicationProps {
    * it starts a rolling upgrade of the application.
    */
   version: string;
-  /** Overrides of application parameters declared in the manifest. */
+  /**
+   * Overrides of application parameters declared in the manifest.
+   * @default {} (the manifest defaults)
+   */
   parameters?: Record<string, string>;
-  /** Policy for rolling upgrades triggered by version or parameter changes. */
+  /**
+   * Policy for rolling upgrades triggered by version or parameter changes.
+   * @default Azure's default upgrade policy
+   */
   upgradePolicy?: ApplicationUpgradePolicy;
-  /** User-assigned identities, each mapped to a friendly name used by the manifest. */
+  /**
+   * User-assigned identities, each mapped to a friendly name used by the manifest.
+   * @default []
+   */
   managedIdentities?: ApplicationManagedIdentity[];
-  /** Managed identities of the application resource. */
+  /**
+   * Managed identities of the application resource.
+   * @default no managed identity
+   */
   identity?: ApplicationIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -102,15 +125,46 @@ export interface Application extends Resource<
 > {}
 
 /**
- * An application instance on an Azure Service Fabric managed cluster,
- * created from a registered {@link ApplicationTypeVersion}. Changing
- * `version` or `parameters` performs a rolling upgrade.
+ * An application on an Azure Service Fabric managed cluster
+ * (`Microsoft.ServiceFabric/managedClusters/applications`), created from a
+ * registered `Azure.ServiceFabric.ApplicationTypeVersion`. See the
+ * [Azure docs](https://learn.microsoft.com/azure/service-fabric/how-to-managed-cluster-app-deployment-template).
  *
- * @see https://learn.microsoft.com/azure/service-fabric/how-to-managed-cluster-app-deployment-template
+ * Changing `version` or `parameters` runs a rolling upgrade under
+ * `upgradePolicy`.
+ *
+ * :::caution
+ * Changing `resourceGroup`, `cluster`, or `name` replaces the application
+ * and its services. Alchemy updates every other prop in place.
+ * :::
  *
  * ### Deploying an Application
  * **Example:** Application running version 1.0.0
  * ```typescript
+ * const password = yield* Config.redacted("SF_ADMIN_PASSWORD");
+ * const cluster = yield* Azure.ServiceFabric.ManagedCluster("cluster", {
+ *   adminUserName: "sfadmin",
+ *   adminPassword: password,
+ *   clients: [
+ *     { isAdmin: true, thumbprint: "0123456789ABCDEF0123456789ABCDEF01234567" },
+ *   ],
+ * });
+ * const primary = yield* Azure.ServiceFabric.NodeType("primary", {
+ *   cluster: cluster.managedClusterName,
+ *   isPrimary: true,
+ *   vmInstanceCount: 3,
+ * });
+ * const appType = yield* Azure.ServiceFabric.ApplicationType("voting", {
+ *   cluster: cluster.managedClusterName,
+ *   name: "VotingType",
+ * });
+ * const packageSasUrl = yield* Config.string("VOTING_SFPKG_URL");
+ * const v1 = yield* Azure.ServiceFabric.ApplicationTypeVersion("voting-v1", {
+ *   cluster: cluster.managedClusterName,
+ *   applicationType: appType.applicationTypeName,
+ *   version: "1.0.0",
+ *   appPackageUrl: packageSasUrl,
+ * });
  * const app = yield* Azure.ServiceFabric.Application("voting", {
  *   cluster: cluster.managedClusterName,
  *   version: v1.applicationTypeVersionId,
@@ -207,25 +261,18 @@ export const ApplicationProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const clusters = yield* sf
-        .ListManagedClusterBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListManagedClusterBySubscription", page)),
-        );
+      const clusters = yield* collectAll(sf.ListManagedClusterBySubscription, { subscriptionId });
       const found: Application["Attributes"][] = [];
       for (const cluster of clusters.value ?? []) {
         const group = resourceGroupOf(cluster.id);
         if (group === undefined || cluster.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          sf.ListApplications({
+          collectAll(sf.ListApplications, {
             subscriptionId,
             resourceGroupName: group,
             clusterName: cluster.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListApplications", page);
-        }
         for (const app of page?.value ?? []) {
           if (hasAnyAlchemyTag(app.tags) && app.name !== undefined) {
             found.push(toAttrs(group, cluster.name, app.name, app));

@@ -9,13 +9,13 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -38,6 +38,7 @@ export interface VaultIdentity {
   /**
    * ARM resource IDs of user-assigned identities attached to the vault.
    * Required when `type` includes `UserAssigned`.
+   * @default []
    */
   userAssignedIdentities?: string[];
 }
@@ -47,15 +48,30 @@ export type VaultStorageRedundancy = "LocallyRedundant" | "GeoRedundant" | "Zone
 export type VaultAlertsState = "Enabled" | "Disabled";
 
 export interface VaultMonitoringSettings {
-  /** Built-in Azure Monitor alerts for all backup job failures. */
+  /**
+   * Built-in Azure Monitor alerts for all backup job failures.
+   * @default Azure's default
+   */
   alertsForAllJobFailures?: VaultAlertsState;
-  /** Built-in Azure Monitor alerts for all Site Recovery replication issues. */
+  /**
+   * Built-in Azure Monitor alerts for all Site Recovery replication issues.
+   * @default Azure's default
+   */
   alertsForAllReplicationIssues?: VaultAlertsState;
-  /** Built-in Azure Monitor alerts for all Site Recovery failover issues. */
+  /**
+   * Built-in Azure Monitor alerts for all Site Recovery failover issues.
+   * @default Azure's default
+   */
   alertsForAllFailoverIssues?: VaultAlertsState;
-  /** Classic (legacy) alerts for critical operations. */
+  /**
+   * Classic (legacy) alerts for critical operations.
+   * @default Azure's default
+   */
   classicAlertsForCriticalOperations?: VaultAlertsState;
-  /** Classic e-mail notifications for Site Recovery. */
+  /**
+   * Classic e-mail notifications for Site Recovery.
+   * @default Azure's default
+   */
   emailNotificationsForSiteRecovery?: VaultAlertsState;
 }
 
@@ -65,6 +81,7 @@ export interface VaultEncryption {
   /**
    * ARM resource ID of the user-assigned identity used to access the key.
    * If omitted, the vault's system-assigned identity is used.
+   * @default the vault's system-assigned identity
    */
   userAssignedIdentity?: string;
   /**
@@ -76,21 +93,36 @@ export interface VaultEncryption {
 
 export interface VaultProps {
   /**
-   * Resource group the vault is created in. Changing it replaces the vault.
+   * Resource group the vault is created in.
+   *
+   * :::caution
+   * Changing it replaces the vault.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Vault name: 2-50 letters, digits, and hyphens, starting with a letter.
-   * If omitted, a unique name is generated from the app, stage, and logical
-   * ID. Changing it replaces the vault.
+   *
+   * :::caution
+   * Changing it replaces the vault.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the vault. Changing it replaces the vault.
+   * Azure location of the vault.
+   *
+   * :::caution
+   * Changing it replaces the vault.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
-  /** Managed identity of the vault. */
+  /**
+   * Managed identity of the vault.
+   * @default no identity
+   */
   identity?: VaultIdentity;
   /**
    * Whether the vault accepts traffic from public networks.
@@ -106,11 +138,13 @@ export interface VaultProps {
   /**
    * Cross Region Restore for geo-redundant vaults. Once items are
    * protected it can be enabled but not disabled.
+   * @default Azure's default
    */
   crossRegionRestore?: "Enabled" | "Disabled";
   /**
    * Restoring backups into other subscriptions. `PermanentlyDisabled` is
    * irreversible.
+   * @default Azure's default
    */
   crossSubscriptionRestore?: "Enabled" | "Disabled" | "PermanentlyDisabled";
   /**
@@ -122,13 +156,24 @@ export interface VaultProps {
   softDeleteRetentionPeriodInDays?: number;
   /**
    * Immutability of recovery points. `Locked` is irreversible.
+   * @default Azure's default
    */
   immutability?: "Disabled" | "Unlocked" | "Locked";
-  /** Alert and notification settings. */
+  /**
+   * Alert and notification settings.
+   * @default Azure's defaults
+   */
   monitoringSettings?: VaultMonitoringSettings;
-  /** Customer-managed-key encryption of backup data. */
+  /**
+   * Customer-managed-key encryption of backup data.
+   * @default platform-managed keys
+   */
   encryption?: VaultEncryption;
-  /** Resource tags. */
+  /**
+   * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
+   * `alchemy::id`) are merged in automatically.
+   * @default {}
+   */
   tags?: Record<string, string>;
 }
 
@@ -177,9 +222,10 @@ export interface Vault extends Resource<
 > {}
 
 /**
- * An Azure Recovery Services vault — the container for Azure Backup
- * policies, protected items, and Site Recovery replication. An empty vault
- * is free; you pay for protected instances and backup storage.
+ * An Azure Recovery Services vault (`Microsoft.RecoveryServices/vaults`) —
+ * the container for Azure Backup policies, protected items, and Site
+ * Recovery replication. An empty vault is free; you pay for protected
+ * instances and backup storage.
  *
  * @see https://learn.microsoft.com/azure/backup/backup-azure-recovery-services-vault-overview
  *
@@ -534,9 +580,9 @@ export const VaultProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* recoveryservices
-        .ListVaultBySubscriptionId({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListVaultBySubscriptionId", page)));
+      const page = yield* collectAll(recoveryservices.ListVaultBySubscriptionId, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((vault) => {
         const group = resourceGroupOf(vault.id);
         return hasAnyAlchemyTag(vault.tags) && group !== undefined && vault.name !== undefined

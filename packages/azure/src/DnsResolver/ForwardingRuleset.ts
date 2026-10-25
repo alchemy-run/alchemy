@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -33,12 +33,14 @@ export interface ForwardingRulesetProps {
   /**
    * Resource group the ruleset is created in. The DNS resolver API rejects resource group names
    * longer than 80 characters. Changing it replaces the ruleset.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
    * Ruleset name: 1-80 letters, digits, `_`, and `-`. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the ruleset.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,6 +57,7 @@ export interface ForwardingRulesetProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -83,18 +86,38 @@ export interface ForwardingRuleset extends Resource<
 > {}
 
 /**
- * An Azure DNS forwarding ruleset — a set of conditional forwarding rules
- * that DNS Private Resolver outbound endpoints apply to queries from the
- * virtual networks linked to the ruleset.
+ * An Azure DNS forwarding ruleset (`Microsoft.Network/dnsForwardingRulesets`)
+ * — a set of conditional forwarding rules that DNS Private Resolver
+ * outbound endpoints apply to queries from the virtual networks linked to
+ * the ruleset. See
+ * [endpoints and rulesets](https://learn.microsoft.com/azure/dns/private-resolver-endpoints-rulesets).
  *
  * Add rules with `Azure.DnsResolver.ForwardingRule` and link virtual
  * networks with `Azure.DnsResolver.ForwardingRulesetVirtualNetworkLink`.
  *
- * @see https://learn.microsoft.com/azure/dns/private-resolver-endpoints-rulesets
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the ruleset and
+ * its rules and links.
+ * :::
  *
  * ### Creating a Ruleset
  * **Example:** Ruleset on one outbound endpoint
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const outboundSubnet = yield* Azure.Network.Subnet("outbound", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/28",
+ *   delegations: [{ serviceName: "Microsoft.Network/dnsResolvers" }],
+ * });
+ * const resolver = yield* Azure.DnsResolver.DnsResolver("resolver", {
+ *   virtualNetworkId: vnet.virtualNetworkId,
+ * });
+ * const outbound = yield* Azure.DnsResolver.OutboundEndpoint("outbound", {
+ *   dnsResolver: resolver.dnsResolverName,
+ *   subnetId: outboundSubnet.subnetId,
+ * });
  * const ruleset = yield* Azure.DnsResolver.ForwardingRuleset("rules", {
  *   outboundEndpointIds: [outbound.outboundEndpointId],
  * });
@@ -157,9 +180,7 @@ export const ForwardingRulesetProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* dnsresolver
-        .ListDnsForwardingRulesets({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDnsForwardingRulesets", page)));
+      const page = yield* collectAll(dnsresolver.ListDnsForwardingRulesets, { subscriptionId });
       return (page.value ?? []).flatMap((ruleset) => {
         const group = resourceGroupOf(ruleset.id);
         return hasAnyAlchemyTag(ruleset.tags) && group !== undefined && ruleset.name !== undefined

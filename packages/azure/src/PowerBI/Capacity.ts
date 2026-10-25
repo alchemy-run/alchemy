@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -31,18 +31,30 @@ export type CapacityMode = "Gen1" | "Gen2";
 
 export interface CapacityProps {
   /**
-   * Resource group the capacity is created in. Changing it replaces the
-   * capacity.
+   * Resource group the capacity is created in.
+   *
+   * :::caution
+   * Changing it replaces the capacity.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Capacity name: 3-63 lowercase letters and digits, starting with a
-   * letter, unique per region. If omitted, a unique name is generated from
-   * the app, stage, and logical ID. Changing it replaces the capacity.
+   * letter, unique per region.
+   *
+   * :::caution
+   * Changing it replaces the capacity.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the capacity. Changing it replaces the capacity.
+   * Azure location of the capacity.
+   *
+   * :::caution
+   * Changing it replaces the capacity.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
@@ -57,7 +69,11 @@ export interface CapacityProps {
    */
   administrators: string[];
   /**
-   * Power BI Embedded generation. Changing it replaces the capacity.
+   * Power BI Embedded generation.
+   *
+   * :::caution
+   * Changing it replaces the capacity.
+   * :::
    * @default "Gen2"
    */
   mode?: CapacityMode;
@@ -70,6 +86,7 @@ export interface CapacityProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -104,9 +121,10 @@ export interface Capacity extends Resource<
 > {}
 
 /**
- * A Power BI Embedded (A-SKU) capacity — dedicated compute for embedding
- * Power BI reports in applications. Billed per hour while running; set
- * `suspended: true` to pause billing without deleting the capacity.
+ * A Power BI Embedded (A-SKU) capacity
+ * (`Microsoft.PowerBIDedicated/capacities`) — dedicated compute for
+ * embedding Power BI reports in applications. Billed per hour while running;
+ * set `suspended: true` to pause billing without deleting the capacity.
  *
  * @see https://learn.microsoft.com/power-bi/developer/embedded/azure-pbie-what-is-power-bi-embedded
  *
@@ -211,9 +229,7 @@ export const CapacityProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* powerbidedicated
-        .ListCapacities({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListCapacities", page)));
+      const page = yield* collectAll(powerbidedicated.ListCapacities, { subscriptionId });
       return (page.value ?? []).flatMap((capacity) => {
         const group = resourceGroupOf(capacity.id);
         return hasAnyAlchemyTag(capacity.tags) && group !== undefined && capacity.name !== undefined

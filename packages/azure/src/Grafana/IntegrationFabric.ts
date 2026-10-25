@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -27,6 +27,7 @@ export interface IntegrationFabricProps {
   /**
    * Resource group of the Grafana workspace. Changing it replaces the
    * integration fabric.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
@@ -38,6 +39,7 @@ export interface IntegrationFabricProps {
    * Integration fabric name. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the integration
    * fabric.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -51,6 +53,7 @@ export interface IntegrationFabricProps {
    * fabric (target type `NoneType`); Azure currently accepts only the
    * workspace's bundled Azure Monitor workspace (fabric name `bundled-amw`)
    * or an SRE agent as a target. Changing it replaces the integration fabric.
+   * @default none (a data-source-only fabric)
    */
   targetResourceId?: string;
   /**
@@ -62,11 +65,13 @@ export interface IntegrationFabricProps {
   /**
    * Integration scenarios to enable. For an Azure Monitor workspace data
    * source without a target, Azure accepts `aks` and `istio`.
+   * @default none (scenarios left unmanaged when omitted)
    */
   scenarios?: string[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -99,15 +104,25 @@ export interface IntegrationFabric extends Resource<
 > {}
 
 /**
- * An integration fabric of an Azure Managed Grafana workspace — wires an
- * Azure Monitor workspace data source into Grafana for integration
- * scenarios (e.g. `aks`, `istio`) so Grafana ships curated dashboards for it.
+ * An integration fabric of an Azure Managed Grafana workspace
+ * (`Microsoft.Dashboard/grafana/integrationFabrics`) — wires an Azure
+ * Monitor workspace data source into Grafana for integration scenarios
+ * (e.g. `aks`, `istio`) so Grafana ships curated dashboards for it. See the
+ * [Managed Grafana overview](https://learn.microsoft.com/azure/managed-grafana/overview).
  *
- * @see https://learn.microsoft.com/azure/managed-grafana/overview
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `name`, `location`,
+ * `targetResourceId`, or `dataSourceResourceId` replaces the integration
+ * fabric.
+ * :::
  *
  * ### Integrating AKS Dashboards
  * **Example:** AKS and Istio dashboards over an Azure Monitor workspace
  * ```typescript
+ * const metrics = yield* Azure.Monitor.Workspace("metrics");
+ * const grafana = yield* Azure.Grafana.Workspace("grafana", {
+ *   identity: { type: "SystemAssigned" },
+ * });
  * const fabric = yield* Azure.Grafana.IntegrationFabric("aks", {
  *   workspace: grafana.workspaceName,
  *   dataSourceResourceId: metrics.workspaceId,
@@ -180,22 +195,22 @@ export const IntegrationFabricProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const workspaces = yield* orUndefinedIfNotFound(dashboard.ListGrafana({ subscriptionId }));
+      const workspaces = yield* orUndefinedIfNotFound(
+        collectAll(dashboard.ListGrafana, { subscriptionId }),
+      );
       if (workspaces === undefined) return [];
-      yield* requireSinglePage("ListGrafana", workspaces);
       const found: IntegrationFabric["Attributes"][] = [];
       for (const grafana of workspaces.value ?? []) {
         const group = resourceGroupOf(grafana.id);
         if (group === undefined || grafana.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          dashboard.ListIntegrationFabrics({
+          collectAll(dashboard.ListIntegrationFabrics, {
             subscriptionId,
             resourceGroupName: group,
             workspaceName: grafana.name,
           }),
         );
         if (page === undefined) continue;
-        yield* requireSinglePage("ListIntegrationFabrics", page);
         for (const fabric of page.value ?? []) {
           if (hasAnyAlchemyTag(fabric.tags) && fabric.name !== undefined) {
             found.push(toAttrs(group, grafana.name, fabric.name, fabric));

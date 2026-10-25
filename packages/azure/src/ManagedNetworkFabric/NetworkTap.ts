@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -38,6 +38,7 @@ export interface NetworkTapProps {
   /**
    * Name of the network tap. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the network tap.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -57,13 +58,20 @@ export interface NetworkTapProps {
    * networks, each with an optional tap rule.
    */
   destinations: mnf.NetworkTapPropertiesInput["destinations"];
-  /** How tap rules are refreshed (`Pull` or `Push`). */
+  /**
+   * How tap rules are refreshed (`Pull` or `Push`).
+   * @default "Pull"
+   */
   pollingType?: mnf.NetworkTapPropertiesInput["pollingType"];
-  /** Free-form description. */
+  /**
+   * Free-form description.
+   * @default none
+   */
   annotation?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -102,13 +110,38 @@ export interface NetworkTap extends Resource<
  * packet broker to neighbor groups or isolation-domain networks, filtered by
  * network tap rules. Needs a Network Fabric with packet broker hardware.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-configure-network-tap
+ * ARM type: `Microsoft.ManagedNetworkFabric/networkTaps`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-configure-network-tap).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `networkPacketBrokerId`
+ * replaces the tap.
+ * :::
  *
  * ### Creating a Network Tap
  * **Example:** Tap to a neighbor group
  * ```typescript
+ * // The packet broker and the fabric come with the Operator Nexus racks.
+ * const fabricId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/networkFabrics/fab1";
+ * const packetBrokerId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/networkPacketBrokers/fab1-npb";
+ * const collectors = yield* Azure.ManagedNetworkFabric.NeighborGroup("collectors", {
+ *   destination: { ipv4Addresses: ["10.10.10.10"] },
+ * });
+ * const rule = yield* Azure.ManagedNetworkFabric.NetworkTapRule("mirror", {
+ *   configurationType: "Inline",
+ *   matchConfigurations: [
+ *     {
+ *       matchConfigurationName: "all",
+ *       sequenceNumber: 10,
+ *       ipAddressType: "IPv4",
+ *       matchConditions: [{ protocolTypes: ["TCP"] }],
+ *       actions: [{ type: "Count" }],
+ *     },
+ *   ],
+ * });
  * const tap = yield* Azure.ManagedNetworkFabric.NetworkTap("tap", {
- *   // Packet brokers are created with the fabric's hardware.
  *   networkPacketBrokerId: packetBrokerId,
  *   destinations: [
  *     {
@@ -156,9 +189,7 @@ export const NetworkTapProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mnf
-        .ListNetworkTapBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListNetworkTapBySubscription", page)));
+      const page = yield* collectAll(mnf.ListNetworkTapBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

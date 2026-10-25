@@ -1,7 +1,7 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
-import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
+import { collectAll, orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { networkProvider } from "./generic.ts";
@@ -100,7 +100,7 @@ export const NetworkWatcherProvider = () =>
           networkWatcherName: path.name,
           tags,
         }),
-      listAll: (subscriptionId) => network.ListNetworkWatcherAll({ subscriptionId }),
+      listAll: (subscriptionId) => collectAll(network.ListNetworkWatcherAll, { subscriptionId }),
       body: (_news, { location, tags }) => ({ location, tags, properties: {} }),
       drifted: () => false,
       toAttrs: (path, observed) => ({

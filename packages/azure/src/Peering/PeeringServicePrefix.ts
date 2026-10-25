@@ -17,20 +17,46 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createPeeringName, peeringServiceOwnedByStage } from "./Common.ts";
 
 export interface PeeringServicePrefixProps {
-  /** Resource group of the peering service. Changing it replaces the prefix. */
+  /**
+   * Resource group of the peering service.
+   *
+   * :::caution
+   * Changing it replaces the prefix.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Peering service the prefix is registered on. Changing it replaces the prefix. */
+  /**
+   * Name of the peering service the prefix is registered on.
+   *
+   * :::caution
+   * Changing it replaces the prefix.
+   * :::
+   */
   peeringService: string;
   /**
-   * Name of the prefix resource. If omitted, a unique name is generated
-   * from the app, stage, and logical ID. Changing it replaces the prefix.
+   * Name of the prefix resource.
+   *
+   * :::caution
+   * Changing it replaces the prefix.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** IP prefix in CIDR notation, e.g. `203.0.113.0/24`. Changing it replaces the prefix. */
+  /**
+   * IP prefix in CIDR notation, e.g. `203.0.113.0/24`.
+   *
+   * :::caution
+   * Changing it replaces the prefix.
+   * :::
+   */
   prefix: string;
   /**
    * Prefix key issued by the Peering Service provider for this prefix.
+   *
+   * :::caution
    * Changing it replaces the prefix.
+   * :::
    */
   peeringServicePrefixKey: string;
 }
@@ -63,7 +89,8 @@ export interface PeeringServicePrefix extends Resource<
 > {}
 
 /**
- * An IP prefix registered on an Azure Peering Service. Azure validates the
+ * An IP prefix registered on an Azure Peering Service
+ * (`Microsoft.Peering/peeringServices/prefixes`). Azure validates the
  * prefix against the provider-issued prefix key; registration fails with
  * `PeeringServicePrefixKeyInvalid` or `PeeringServicePrefixValidationFailed`
  * when the provider has not provisioned the prefix for you.
@@ -76,10 +103,15 @@ export interface PeeringServicePrefix extends Resource<
  * ### Registering a Prefix
  * **Example:** Prefix with a provider key
  * ```typescript
+ * const service = yield* Azure.Peering.PeeringService("office", {
+ *   peeringServiceLocation: "Washington",
+ *   peeringServiceProvider: "T-Mobile USA",
+ * });
  * const prefix = yield* Azure.Peering.PeeringServicePrefix("office-v4", {
  *   peeringService: service.peeringServiceName,
  *   prefix: "203.0.113.0/24",
- *   peeringServicePrefixKey: providerPrefixKey,
+ *   // the key your Peering Service provider issued for the prefix
+ *   peeringServicePrefixKey: "00000000-0000-0000-0000-000000000000",
  * });
  * ```
  *

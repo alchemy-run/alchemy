@@ -6,7 +6,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 
 export interface DataflowProfileProps {
-  /** Resource group of the IoT Operations instance. Changing it replaces the profile. */
+  /**
+   * Resource group of the IoT Operations instance. Changing it replaces the profile.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** IoT Operations instance that holds the profile. Changing it replaces the profile. */
   instanceName: string;
@@ -15,6 +18,7 @@ export interface DataflowProfileProps {
    * unique name is generated from the app, stage, and logical ID. IoT
    * Operations creates a profile named `default`. Changing it replaces the
    * profile.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -22,7 +26,10 @@ export interface DataflowProfileProps {
    * @default 1
    */
   instanceCount?: number;
-  /** Log level and Prometheus metrics port of the dataflow runtime. */
+  /**
+   * Log level and Prometheus metrics port of the dataflow runtime.
+   * @default Azure's defaults
+   */
   diagnostics?: iot.ProfileDiagnostics;
 }
 
@@ -48,7 +55,8 @@ export interface DataflowProfile extends Resource<
 > {}
 
 /**
- * A dataflow profile of an Azure IoT Operations instance: the scaling and
+ * A dataflow profile of an Azure IoT Operations instance
+ * (`Microsoft.IoTOperations/instances/dataflowProfiles`): the scaling and
  * diagnostics settings of the runtime that executes its dataflows and
  * dataflow graphs.
  *
@@ -57,12 +65,23 @@ export interface DataflowProfile extends Resource<
  * ### Creating a Profile
  * **Example:** Profile with two runtime instances
  * ```typescript
+ * const instance = yield* Azure.IoTOperations.Instance("aio", {
+ *   customLocationId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/aio-location",
+ *   schemaRegistryId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.DeviceRegistry/schemaRegistries/aio-schemas",
+ * });
  * const profile = yield* Azure.IoTOperations.DataflowProfile("profile", {
  *   instanceName: instance.instanceName,
  *   instanceCount: 2,
  *   diagnostics: { logs: { level: "info" } },
  * });
  * ```
+ *
+ * :::caution
+ * Changing `resourceGroup`, `instanceName`, or `name` replaces the
+ * profile.
+ * :::
  *
  * @resource
  */

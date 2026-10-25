@@ -5,13 +5,13 @@ import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -289,9 +289,7 @@ export const makeSiteLifecycle = <P extends SiteProps>(spec: SiteKind<P>) => {
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* web
-        .ListWebApps({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListWebApps", page)));
+      const page = yield* collectAll(web.ListWebApps, { subscriptionId });
       return (page.value ?? []).flatMap((site) => {
         const group = resourceGroupOf(site.id);
         return hasAnyAlchemyTag(site.tags) &&

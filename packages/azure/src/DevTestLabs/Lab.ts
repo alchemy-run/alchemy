@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -41,12 +41,16 @@ export interface LabSupport {
 }
 
 export interface LabProps {
-  /** Resource group of the lab. Changing it replaces the lab. */
+  /**
+   * Resource group of the lab. Changing it replaces the lab.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Lab name: 1-50 letters, digits, `_`, and `-`. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the lab.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -69,19 +73,35 @@ export interface LabProps {
    * @default "Reader"
    */
   environmentPermission?: "Reader" | "Contributor";
-  /** Artifact IDs applied to every new Linux VM, in order. */
+  /**
+   * Artifact IDs applied to every new Linux VM, in order.
+   * @default []
+   */
   mandatoryArtifactsResourceIdsLinux?: string[];
-  /** Artifact IDs applied to every new Windows VM, in order. */
+  /**
+   * Artifact IDs applied to every new Windows VM, in order.
+   * @default []
+   */
   mandatoryArtifactsResourceIdsWindows?: string[];
-  /** Announcement banner shown to lab users. */
+  /**
+   * Announcement banner shown to lab users.
+   * @default no banner
+   */
   announcement?: LabAnnouncement;
-  /** Support banner shown to lab users. */
+  /**
+   * Support banner shown to lab users.
+   * @default no banner
+   */
   support?: LabSupport;
-  /** Extended properties for experimental features. */
+  /**
+   * Extended properties for experimental features.
+   * @default {}
+   */
   extendedProperties?: Record<string, string>;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -130,12 +150,18 @@ export interface Lab extends Resource<
 > {}
 
 /**
- * An Azure DevTest Lab — a managed workspace that lets teams create
+ * An Azure DevTest Lab (`Microsoft.DevTestLab/labs`) — a managed workspace that lets teams create
  * self-service VMs and environments under cost, size, and shutdown
  * policies.
  *
  * Creating a lab also creates its storage accounts, Key Vault, and default
  * virtual network; deleting it deletes them and every lab VM.
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the lab. The
+ * old lab's VMs, storage accounts, Key Vault, and virtual network are
+ * deleted with it.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/devtest-labs/devtest-lab-overview
  *
@@ -196,9 +222,7 @@ export const LabProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* devtestlabs
-        .ListLabBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListLabBySubscription", page)));
+      const page = yield* collectAll(devtestlabs.ListLabBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((lab) => {
         const group = resourceGroupOf(lab.id);
         return hasAnyAlchemyTag(lab.tags) && group !== undefined && lab.name !== undefined

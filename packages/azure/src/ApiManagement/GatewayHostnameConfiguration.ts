@@ -74,12 +74,35 @@ export interface GatewayHostnameConfiguration extends Resource<
  * A hostname (and its TLS certificate and protocol settings) served by a
  * self-hosted API Management {@link Gateway}. Self-hosted gateways require
  * the Developer or Premium tier.
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/gateways/hostnameConfigurations`.
+ *
+ * :::caution
+ * Changing `serviceName`, `gatewayName`, `name`, or `resourceGroup` replaces
+ * the configuration.
+ *
+ * Self-hosted gateways need a Developer or Premium service.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/apimanagement/gateway-hostname-configuration
  *
  * ### Serving a Custom Hostname
  * **Example:** Serve api.contoso.com with HTTP/2
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "Developer", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const gateway = yield* Azure.ApiManagement.Gateway("dc1", {
+ *   serviceName: apim.serviceName,
+ *   locationData: { name: "dc1", city: "Seattle", countryOrRegion: "US" },
+ * });
+ * const tlsCert = yield* Azure.ApiManagement.Certificate("contoso-tls", {
+ *   serviceName: apim.serviceName,
+ *   data: yield* Config.redacted("CONTOSO_TLS_PFX_BASE64"),
+ *   password: yield* Config.redacted("CONTOSO_TLS_PFX_PASSWORD"),
+ * });
  * yield* Azure.ApiManagement.GatewayHostnameConfiguration("contoso", {
  *   serviceName: apim.serviceName,
  *   gatewayName: gateway.gatewayName,

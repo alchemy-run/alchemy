@@ -7,10 +7,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -147,13 +147,11 @@ const findConnection = Effect.fn(function* (
   privateEndpointId: string,
 ) {
   const page = yield* orUndefinedIfNotFound(
-    storage
-      .ListPrivateEndpointConnections({
-        subscriptionId,
-        resourceGroupName,
-        accountName,
-      })
-      .pipe(Effect.flatMap((page) => requireSinglePage("ListPrivateEndpointConnections", page))),
+    collectAll(storage.ListPrivateEndpointConnections, {
+      subscriptionId,
+      resourceGroupName,
+      accountName,
+    }),
   );
   return (page?.value ?? []).find((connection) =>
     sameId(connection.properties?.privateEndpoint?.id, privateEndpointId),

@@ -12,11 +12,12 @@ export interface SettingsProps {
   /**
    * Resource group of the Arc resource the settings apply to. Changing it
    * replaces the settings.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the Arc resource (usually an Arc machine) the settings apply
-   * to. Changing it replaces the settings.
+   * to. Required. Changing it replaces the settings.
    */
   machineName: string;
   /**
@@ -33,6 +34,7 @@ export interface SettingsProps {
   /**
    * ARM ID of the `HybridCompute.Gateway` the machine routes its Azure Arc
    * traffic through. Omit to route traffic directly.
+   * @default unset (no gateway)
    */
   gatewayResourceId?: string;
 }
@@ -61,9 +63,10 @@ export interface Settings extends Resource<
 > {}
 
 /**
- * Azure Arc settings of an Arc-enabled server — currently the association
+ * Azure Arc settings of an Arc-enabled server
+ * (`Microsoft.HybridCompute/settings`), which today hold the association
  * with an Azure Arc `Gateway`. Every machine has exactly one settings
- * resource (`default`); declaring it configures it, and destroying it
+ * resource (`default`). Declaring it configures it, and destroying it
  * clears the gateway association.
  *
  * @see https://learn.microsoft.com/azure/azure-arc/servers/arc-gateway
@@ -71,12 +74,22 @@ export interface Settings extends Resource<
  * ### Associating a Gateway
  * **Example:** Route a machine through an Arc gateway
  * ```typescript
+ * const machine = yield* Azure.HybridCompute.Machine("web-01", {
+ *   vmId: "3f2c1a9e-5b7d-4e8a-9c21-7d6e5f4a3b2c",
+ *   clientPublicKey: "MIIBCgKCAQEAw3k9...",
+ * });
  * const gateway = yield* Azure.HybridCompute.Gateway("arc-gateway");
  * yield* Azure.HybridCompute.Settings("web-01-settings", {
  *   machineName: machine.machineName,
  *   gatewayResourceId: gateway.gatewayResourceId,
  * });
  * ```
+ *
+ * :::caution
+ * Changing `machineName`, `resourceGroup`, `baseProvider`, or
+ * `baseResourceType` replaces the settings: the old machine loses its
+ * gateway association.
+ * :::
  *
  * @resource
  */

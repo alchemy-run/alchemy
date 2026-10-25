@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -191,9 +191,7 @@ export const SchedulerProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* durabletask
-        .ListSchedulerBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListSchedulerBySubscription", page)));
+      const page = yield* collectAll(durabletask.ListSchedulerBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((scheduler) => {
         const group = resourceGroupOf(scheduler.id);
         return hasAnyAlchemyTag(scheduler.tags) &&

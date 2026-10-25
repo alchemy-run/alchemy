@@ -26,7 +26,10 @@ export interface ApiCenterSpecification {
    * `wsdl`, `wadl`.
    */
   name: string;
-  /** Specification language version, e.g. `3.0.1`. */
+  /**
+   * Specification language version, e.g. `3.0.1`.
+   * @default not set
+   */
   version?: string;
 }
 
@@ -43,6 +46,7 @@ export interface ApiDefinitionProps {
    * Definition name: 3-90 letters, digits, and hyphens (e.g. `openapi`). If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the definition.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -50,7 +54,10 @@ export interface ApiDefinitionProps {
    * @default the definition name
    */
   title?: string;
-  /** Description of the definition. */
+  /**
+   * Description of the definition.
+   * @default no description
+   */
   description?: string;
   /**
    * Specification document to import into the definition. It is
@@ -97,17 +104,33 @@ export interface ApiDefinition extends Resource<
 
 /**
  * An API definition (e.g. an OpenAPI document) attached to an API version
- * in Azure API Center.
+ * in Azure API Center
+ * (`Microsoft.ApiCenter/services/workspaces/apis/versions/definitions`).
  *
  * The definition entity is created first; a `specification`, when given,
  * is then imported with the `importSpecification` action and re-imported
  * whenever it changes.
+ *
+ * :::caution
+ * Changing `serviceName`, `apiName`, `versionName`, `name`, or
+ * `resourceGroup` replaces the definition.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-center/register-apis#add-an-api-definition
  *
  * ### Adding Definitions
  * **Example:** Inline OpenAPI document
  * ```typescript
+ * const center = yield* Azure.ApiCenter.Service("catalog", {});
+ * const api = yield* Azure.ApiCenter.Api("orders", {
+ *   serviceName: center.serviceName,
+ *   kind: "rest",
+ * });
+ * const v1 = yield* Azure.ApiCenter.ApiVersion("orders-v1", {
+ *   serviceName: center.serviceName,
+ *   apiName: api.apiName,
+ *   lifecycleStage: "production",
+ * });
  * const definition = yield* Azure.ApiCenter.ApiDefinition("orders-openapi", {
  *   serviceName: center.serviceName,
  *   apiName: api.apiName,
@@ -128,6 +151,16 @@ export interface ApiDefinition extends Resource<
  *
  * **Example:** Specification fetched from a URL
  * ```typescript
+ * const center = yield* Azure.ApiCenter.Service("catalog", {});
+ * const api = yield* Azure.ApiCenter.Api("petstore", {
+ *   serviceName: center.serviceName,
+ *   kind: "rest",
+ * });
+ * const v1 = yield* Azure.ApiCenter.ApiVersion("petstore-v1", {
+ *   serviceName: center.serviceName,
+ *   apiName: api.apiName,
+ *   lifecycleStage: "production",
+ * });
  * const definition = yield* Azure.ApiCenter.ApiDefinition("petstore", {
  *   serviceName: center.serviceName,
  *   apiName: api.apiName,

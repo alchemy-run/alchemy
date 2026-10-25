@@ -47,11 +47,13 @@ export interface ProductProps {
    * :::caution
    * Changing it replaces the product.
    * :::
+   * @default an alphanumeric name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Description of the product, at most 77 characters: Azure Sphere stores
    * at most 100, and Alchemy appends a 23-character ownership marker.
+   * @default no description
    */
   description?: string;
 }
@@ -83,6 +85,10 @@ export interface Product extends Resource<
  * Products have no tags, so Alchemy records ownership as a
  * `[alchemy <hash>]` marker (a hash of the stack, stage, and logical ID)
  * at the end of `description`.
+ *
+ * :::caution
+ * Changing `catalog`, `name`, or `resourceGroup` replaces the product.
+ * :::
  *
  * @see https://learn.microsoft.com/azure-sphere/deployment/deployment-concepts
  *

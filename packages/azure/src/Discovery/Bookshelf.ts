@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -46,12 +46,16 @@ export interface BookshelfKeyVaultKey {
 }
 
 export interface BookshelfProps {
-  /** Resource group the bookshelf is created in. Changing it replaces the bookshelf. */
+  /**
+   * Resource group the bookshelf is created in. Changing it replaces the bookshelf.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Bookshelf name: 3-24 letters, digits, and hyphens. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the bookshelf.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -62,6 +66,7 @@ export interface BookshelfProps {
   /**
    * ARM IDs of user-assigned identities used by the knowledge-base
    * workloads. Changing them replaces the bookshelf.
+   * @default []
    */
   workloadIdentities?: string[];
   /**
@@ -70,11 +75,15 @@ export interface BookshelfProps {
    * @default "Disabled"
    */
   customerManagedKeys?: "Enabled" | "Disabled";
-  /** Customer-managed key, required when `customerManagedKeys` is `Enabled`. */
+  /**
+   * Customer-managed key, required when `customerManagedKeys` is `Enabled`.
+   * @default unset
+   */
   keyVaultProperties?: BookshelfKeyVaultKey;
   /**
    * Log Analytics cluster for debug logs (required with customer-managed
    * keys). Changing it replaces the bookshelf.
+   * @default unset
    */
   logAnalyticsClusterId?: string;
   /**
@@ -82,13 +91,20 @@ export interface BookshelfProps {
    * @default Azure's default (`Disabled`)
    */
   publicNetworkAccess?: "Enabled" | "Disabled";
-  /** Subnet for private endpoint connections. Changing it replaces the bookshelf. */
+  /**
+   * Subnet for private endpoint connections. Changing it replaces the bookshelf.
+   * @default unset
+   */
   privateEndpointSubnetId?: string;
-  /** Subnet for the search resources. Changing it replaces the bookshelf. */
+  /**
+   * Subnet for the search resources. Changing it replaces the bookshelf.
+   * @default unset
+   */
   searchSubnetId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -123,8 +139,16 @@ export interface Bookshelf extends Resource<
  * knowledge base that indexes scientific literature and data for Discovery
  * agents, backed by Azure-managed search and storage.
  *
- * Microsoft Discovery is a gated preview: on subscriptions without the
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `workloadIdentities`,
+ * `customerManagedKeys`, `keyVaultProperties`, `logAnalyticsClusterId`,
+ * `privateEndpointSubnetId`, or `searchSubnetId` replaces the bookshelf.
+ * :::
+ *
+ * :::caution
+ * Microsoft Discovery is a gated preview. On subscriptions without the
  * preview, ARM rejects the resource type with `InvalidResourceType`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/microsoft-discovery/
  *
@@ -186,10 +210,9 @@ export const BookshelfProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* discovery.ListBookshelveBySubscription({ subscriptionId }).pipe(
-        Effect.flatMap((page) => requireSinglePage("ListBookshelveBySubscription", page)),
-        Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)),
-      );
+      const page = yield* collectAll(discovery.ListBookshelveBySubscription, {
+        subscriptionId,
+      }).pipe(Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)));
       return (page?.value ?? []).flatMap((observed) => {
         const group = resourceGroupOf(observed.id);
         return hasAnyAlchemyTag(observed.tags) && group !== undefined && observed.name !== undefined

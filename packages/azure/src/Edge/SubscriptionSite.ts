@@ -7,13 +7,13 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -31,18 +31,29 @@ export interface SubscriptionSiteProps {
    * omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the site.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name of the site. */
+  /**
+   * Display name of the site.
+   * @default none
+   */
   displayName?: string;
-  /** Description of the site. */
+  /**
+   * Description of the site.
+   * @default none
+   */
   description?: string;
-  /** Physical address of the site. */
+  /**
+   * Physical address of the site.
+   * @default none
+   */
   siteAddress?: SiteAddress;
   /**
    * User labels. Sites have no ARM tags, so Alchemy ownership markers
    * (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) are merged into the
    * labels.
+   * @default {}
    */
   labels?: Record<string, string>;
 }
@@ -71,14 +82,17 @@ export interface SubscriptionSite extends Resource<
 > {}
 
 /**
- * An Azure Arc site manager site at subscription scope. It groups every
- * Arc resource in the subscription under one physical location.
+ * An Azure Arc site manager site at subscription scope
+ * (`Microsoft.Edge/sites`). It groups every Arc resource in the
+ * subscription under one physical location. See the
+ * [site manager overview](https://learn.microsoft.com/azure/azure-arc/site-manager/overview).
  *
- * Azure allows one site per subscription scope, so renaming the site
- * deletes the old one before creating the new one. Sites have no ARM
- * tags; Alchemy records ownership in the site's labels.
+ * Sites have no ARM tags; Alchemy records ownership in the site's labels.
  *
- * @see https://learn.microsoft.com/azure/azure-arc/site-manager/overview
+ * :::caution
+ * Changing `name` replaces the site. Azure allows one site per
+ * subscription scope, so a rename deletes the old site first.
+ * :::
  *
  * ### Creating a Site
  * **Example:** Subscription-wide site
@@ -117,9 +131,7 @@ export const SubscriptionSiteProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* edge
-        .ListSitesBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListSitesBySubscription", page)));
+      const page = yield* collectAll(edge.ListSitesBySubscription, { subscriptionId });
       return page.value.flatMap((site) =>
         site.name !== undefined &&
         !/\/resourceGroups\//i.test(site.id ?? "") &&

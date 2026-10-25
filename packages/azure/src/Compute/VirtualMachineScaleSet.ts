@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -288,13 +288,11 @@ const getScaleSet = (subscriptionId: string, resourceGroupName: string, vmScaleS
 const listInstanceIds = (subscriptionId: string, resourceGroupName: string, set: Observed) =>
   Effect.gen(function* () {
     if (set.properties?.orchestrationMode !== "Uniform" || set.name === undefined) return [];
-    const page = yield* compute
-      .ListVirtualMachineScaleSetVMs({
-        subscriptionId,
-        resourceGroupName,
-        virtualMachineScaleSetName: set.name,
-      })
-      .pipe(Effect.flatMap((page) => requireSinglePage("ListVirtualMachineScaleSetVMs", page)));
+    const page = yield* collectAll(compute.ListVirtualMachineScaleSetVMs, {
+      subscriptionId,
+      resourceGroupName,
+      virtualMachineScaleSetName: set.name,
+    });
     return page.value
       .flatMap((vm) => (vm.instanceId === undefined ? [] : [vm.instanceId]))
       .sort((a, b) => Number(a) - Number(b));
@@ -391,9 +389,7 @@ export const VirtualMachineScaleSetProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* compute
-        .ListVirtualMachineScaleSetAll({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListVirtualMachineScaleSetAll", page)));
+      const page = yield* collectAll(compute.ListVirtualMachineScaleSetAll, { subscriptionId });
       return page.value.flatMap((set) => {
         const resourceGroup = resourceGroupOf(set.id);
         return hasAnyAlchemyTag(set.tags) && resourceGroup !== undefined && set.name !== undefined

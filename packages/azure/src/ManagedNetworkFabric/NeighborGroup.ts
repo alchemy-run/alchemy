@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -37,6 +37,7 @@ export interface NeighborGroupProps {
   /**
    * Name of the neighbor group. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the neighbor group.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -48,11 +49,15 @@ export interface NeighborGroupProps {
   location?: string;
   /** Destination addresses, e.g. `{ ipv4Addresses: ["10.10.10.10"] }`. */
   destination: mnf.NeighborGroupPropertiesInput["destination"];
-  /** Free-form description. */
+  /**
+   * Free-form description.
+   * @default none
+   */
   annotation?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -90,7 +95,12 @@ export interface NeighborGroup extends Resource<
  * An Azure Operator Nexus neighbor group — a named set of IPv4/IPv6
  * destinations that network tap rules and ACL actions forward traffic to.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-configure-network-tap
+ * ARM type: `Microsoft.ManagedNetworkFabric/neighborGroups`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-configure-network-tap).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the group.
+ * :::
  *
  * ### Creating a Neighbor Group
  * **Example:** Group of collector addresses
@@ -147,9 +157,7 @@ export const NeighborGroupProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mnf
-        .ListNeighborGroupBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListNeighborGroupBySubscription", page)));
+      const page = yield* collectAll(mnf.ListNeighborGroupBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

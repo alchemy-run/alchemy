@@ -21,7 +21,10 @@ import {
 } from "./SharedPrivateLinkResource.ts";
 
 export interface ReplicaSharedPrivateLinkResourceProps {
-  /** Resource group of the Web PubSub service. Changing it replaces the link. */
+  /**
+   * Resource group of the Web PubSub service. Changing it replaces the link.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Web PubSub service that owns the replica. Changing it replaces the link. */
   webPubSub: string;
@@ -44,6 +47,7 @@ export interface ReplicaSharedPrivateLinkResourceProps {
   /**
    * Message shown to the target's owner when approving the connection.
    * Changing it replaces the link.
+   * @default ""
    */
   requestMessage?: string;
 }
@@ -80,7 +84,8 @@ export interface ReplicaSharedPrivateLinkResource extends Resource<
 > {}
 
 /**
- * The replica copy of a Web PubSub shared private link resource. Azure does
+ * The replica copy of a Web PubSub shared private link resource (`Microsoft.
+ * SignalRService/webPubSub/replicas/sharedPrivateLinkResources`). Azure does
  * not create replica links directly: each link of the primary service is
  * replicated to every replica under the same name once the target's owner
  * approves the primary link's private endpoint connection, and the replica
@@ -92,11 +97,26 @@ export interface ReplicaSharedPrivateLinkResource extends Resource<
  * resource only forgets it, and the copy is removed together with the
  * primary link or the replica.
  *
+ * :::caution
+ * Changing `webPubSub`, `replica`, `sharedPrivateLinkResource`, `groupId`,
+ * `privateLinkResourceId`, `requestMessage`, or `resourceGroup` replaces
+ * this resource.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/azure-web-pubsub/howto-enable-geo-replication
  *
  * ### Tracking a Replicated Link
  * **Example:** Primary link and its copy on a replica
  * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("secrets");
+ * const webPubSub = yield* Azure.WebPubSub.WebPubSub("realtime", {
+ *   location: "eastus",
+ *   sku: "Premium_P1",
+ * });
+ * const replica = yield* Azure.WebPubSub.Replica("west", {
+ *   webPubSub: webPubSub.webPubSubName,
+ *   location: "westus2",
+ * });
  * const link = yield* Azure.WebPubSub.SharedPrivateLinkResource("vault", {
  *   webPubSub: webPubSub.webPubSubName,
  *   groupId: "vault",

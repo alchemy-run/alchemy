@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -53,6 +53,7 @@ export interface LedgerProps {
    * resource group names longer than 63 characters (the generated default
    * of `Azure.Resources.ResourceGroup` can be up to 90, so set its `name`).
    * Changing it replaces the ledger.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -60,6 +61,7 @@ export interface LedgerProps {
    * with a letter); it becomes `{name}.confidential-ledger.azure.com`. If
    * omitted, a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the ledger.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -92,10 +94,12 @@ export interface LedgerProps {
    * but the service applies principal changes through the ledger's data
    * plane as the caller, so the deploying identity must itself be listed
    * as an `Administrator` for later changes to succeed.
+   * @default []
    */
   aadBasedSecurityPrincipals?: LedgerAadPrincipal[];
   /**
    * Certificate-based principals and their ledger roles. Updated in place.
+   * @default []
    */
   certBasedSecurityPrincipals?: LedgerCertPrincipal[];
   /**
@@ -107,23 +111,43 @@ export interface LedgerProps {
   /**
    * CCF logging level for the untrusted host: `Trace`, `Debug`, `Info`,
    * `Fail`, `Fatal`. Updated in place.
+   * @default Azure's default
    */
   hostLevel?: string;
-  /** CCF maximum HTTP request body size in MB (1, 5 or 10). Updated in place. */
+  /**
+   * CCF maximum HTTP request body size in MB (1, 5 or 10). Updated in place.
+   * @default Azure's default
+   */
   maxBodySizeInMb?: number;
-  /** CCF subject name for the node certificate (e.g. `CN=CCF Node`). Updated in place. */
+  /**
+   * CCF subject name for the node certificate (e.g. `CN=CCF Node`). Updated in place.
+   * @default Azure's default
+   */
   subjectName?: string;
-  /** Number of CCF nodes. Updated in place. */
+  /**
+   * Number of CCF nodes. Updated in place.
+   * @default Azure's default
+   */
   nodeCount?: number;
-  /** Prefix for the write load balancer address (e.g. `write`). Updated in place. */
+  /**
+   * Prefix for the write load balancer address (e.g. `write`). Updated in place.
+   * @default Azure's default
+   */
   writeLBAddressPrefix?: string;
-  /** Additional enclave worker threads processing client requests. Updated in place. */
+  /**
+   * Additional enclave worker threads processing client requests. Updated in place.
+   * @default Azure's default
+   */
   workerThreads?: number;
-  /** SCITT configuration (CodeTransparency ledgers). Updated in place. */
+  /**
+   * SCITT configuration (CodeTransparency ledgers). Updated in place.
+   * @default none
+   */
   scittConfiguration?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -166,22 +190,31 @@ export interface Ledger extends Resource<
 > {}
 
 /**
- * An Azure Confidential Ledger — a tamper-proof, append-only ledger running
- * in hardware-backed secure enclaves (Confidential Consortium Framework).
+ * An Azure Confidential Ledger (`Microsoft.ConfidentialLedger/ledgers`) — a
+ * tamper-proof, append-only ledger running in hardware-backed secure
+ * enclaves (Confidential Consortium Framework).
  *
  * Ledger names are globally unique and are retained for a while after
  * deletion, so re-creating a ledger with the same name right after deleting
  * it can fail with a name conflict.
  *
- * @see https://learn.microsoft.com/azure/confidential-ledger/overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `ledgerType`, `ledgerSku`,
+ * or `applicationType` replaces the ledger and deletes every transaction in
+ * it.
+ * :::
+ *
+ * :::caution
+ * Confidential Ledger rejects resource group names longer than 63
+ * characters. Keep the stack's `<stack>-<stage>` group name short, or set
+ * `resourceGroup`.
+ * :::
+ *
+ * See [Azure confidential ledger overview](https://learn.microsoft.com/azure/confidential-ledger/overview).
  *
  * ### Creating a Ledger
  * **Example:** Public ledger administered by a managed identity
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("ledger", {
- *   name: "ledger-rg", // ledger requires a group name of <= 63 characters
- *   location: "eastus",
- * });
  * const admin = yield* Azure.ManagedIdentity.UserAssignedIdentity("admin");
  * const ledger = yield* Azure.ConfidentialLedger.Ledger("audit", {
  *   aadBasedSecurityPrincipals: [
@@ -204,6 +237,9 @@ export interface Ledger extends Resource<
  * ### Managing Access
  * **Example:** Add a reader and a certificate administrator
  * ```typescript
+ * const admin = yield* Azure.ManagedIdentity.UserAssignedIdentity("admin");
+ * const auditor = yield* Azure.ManagedIdentity.UserAssignedIdentity("auditor");
+ * const adminCertPem = yield* Config.string("LEDGER_ADMIN_CERT_PEM");
  * const ledger = yield* Azure.ConfidentialLedger.Ledger("audit", {
  *   aadBasedSecurityPrincipals: [
  *     { principalId: admin.principalId, ledgerRoleName: "Administrator" },
@@ -302,9 +338,9 @@ export const LedgerProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* confidentialledger
-        .ListLedgerBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListLedgerBySubscription", page)));
+      const page = yield* collectAll(confidentialledger.ListLedgerBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((ledger) => {
         const group = resourceGroupOf(ledger.id);
         return hasAnyAlchemyTag(ledger.tags) && group !== undefined && ledger.name !== undefined

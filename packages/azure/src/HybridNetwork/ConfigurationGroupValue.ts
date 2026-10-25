@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -33,12 +33,16 @@ import {
 } from "./Common.ts";
 
 export interface ConfigurationGroupValueProps {
-  /** Resource group the value is created in. Changing it replaces the value. */
+  /**
+   * Resource group the value is created in. Changing it replaces the value.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Value name: 1-64 letters, digits, `_`, and `-`. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the value.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,6 +59,7 @@ export interface ConfigurationGroupValueProps {
   /**
    * Configuration values as a JSON string (an `Open` configuration).
    * Updated in place. Mutually exclusive with `secretConfigurationValue`.
+   * @default unset
    */
   configurationValue?: string;
   /**
@@ -62,11 +67,13 @@ export interface ConfigurationGroupValueProps {
    * configuration). Azure never returns it, so changes are detected by
    * hash. Switching between an open and a secret value replaces the
    * resource.
+   * @default unset
    */
   secretConfigurationValue?: string | Redacted.Redacted<string>;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -105,9 +112,10 @@ export interface ConfigurationGroupValue extends Resource<
 > {}
 
 /**
- * An Azure Operator Service Manager configuration group value — the
- * concrete configuration an operator supplies for a publisher's
- * configuration group schema when deploying a site network service.
+ * An Azure Operator Service Manager configuration group value
+ * (`Microsoft.HybridNetwork/configurationGroupValues`): the concrete
+ * configuration an operator supplies for a publisher's configuration group
+ * schema when deploying a site network service.
  *
  * Configuration group values are free metadata resources.
  *
@@ -116,6 +124,15 @@ export interface ConfigurationGroupValue extends Resource<
  * ### Creating a Value
  * **Example:** Open configuration values
  * ```typescript
+ * const publisher = yield* Azure.HybridNetwork.Publisher("publisher");
+ * const schema = yield* Azure.HybridNetwork.ConfigurationGroupSchema("schema", {
+ *   publisher: publisher.publisherName,
+ *   schemaDefinition: JSON.stringify({
+ *     type: "object",
+ *     properties: { region: { type: "string" } },
+ *   }),
+ *   versionState: "Active",
+ * });
  * const values = yield* Azure.HybridNetwork.ConfigurationGroupValue("values", {
  *   configurationGroupSchemaId: schema.configurationGroupSchemaId,
  *   configurationValue: JSON.stringify({ region: "eastus" }),
@@ -124,6 +141,7 @@ export interface ConfigurationGroupValue extends Resource<
  *
  * **Example:** Secret configuration values
  * ```typescript
+ * // schema: an Azure.HybridNetwork.ConfigurationGroupSchema, as above
  * const secrets = yield* Azure.HybridNetwork.ConfigurationGroupValue("secrets", {
  *   configurationGroupSchemaId: schema.configurationGroupSchemaId,
  *   secretConfigurationValue: Redacted.make(
@@ -131,6 +149,13 @@ export interface ConfigurationGroupValue extends Resource<
  *   ),
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, or
+ * `configurationGroupSchemaId`, or switching between `configurationValue`
+ * and `secretConfigurationValue`, replaces the value. With a fixed `name`,
+ * the old value is deleted first.
+ * :::
  *
  * @resource
  */
@@ -200,13 +225,9 @@ export const ConfigurationGroupValueProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* hybridnetwork
-        .ListConfigurationGroupValueBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListConfigurationGroupValueBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(hybridnetwork.ListConfigurationGroupValueBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((value) => {
         const group = resourceGroupOf(value.id);
         return hasAnyAlchemyTag(value.tags) && group !== undefined && value.name !== undefined

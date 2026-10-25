@@ -22,13 +22,17 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDevCenterName, sameArm } from "./Common.ts";
 
 export interface DevBoxDefinitionProps {
-  /** Resource group of the dev center. Changing it replaces the definition. */
+  /**
+   * Resource group of the dev center. Changing it replaces the definition.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the dev center. Changing it replaces the definition. */
   devCenter: string;
   /**
    * Definition name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the definition.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -44,7 +48,10 @@ export interface DevBoxDefinitionProps {
   imageReferenceId: string;
   /** Dev Box SKU name, e.g. `general_i_8c32gb256ssd_v2`. */
   skuName: string;
-  /** OS disk storage type, e.g. `ssd_256gb`. */
+  /**
+   * OS disk storage type, e.g. `ssd_256gb`.
+   * @default unset (Azure's default)
+   */
   osStorageType?: string;
   /**
    * Whether dev boxes of this definition support hibernation.
@@ -54,6 +61,7 @@ export interface DevBoxDefinitionProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -88,15 +96,22 @@ export interface DevBoxDefinition extends Resource<
 > {}
 
 /**
- * A dev box definition — the image, compute SKU, and OS disk that dev
+ * A dev box definition (`Microsoft.DevCenter/devcenters/devboxdefinitions`)
+ * — the image, compute SKU, and OS disk that dev
  * boxes of a pool are created from. Creating a definition is free; dev
  * boxes are billed per hour once developers create them.
+ *
+ * :::caution
+ * Changing `devCenter`, `name`, `location`, or `resourceGroup` replaces
+ * the definition.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/dev-box/how-to-manage-dev-box-definitions
  *
  * ### Creating a Dev Box Definition
  * **Example:** Windows 11 Enterprise on 8 vCPU / 32 GB
  * ```typescript
+ * const center = yield* Azure.DevCenter.DevCenter("center");
  * const definition = yield* Azure.DevCenter.DevBoxDefinition("win11", {
  *   devCenter: center.devCenterName,
  *   imageReferenceId: Output.interpolate`${center.devCenterId}/galleries/default/images/microsoftwindowsdesktop_windows-ent-cpc_win11-24h2-ent-cpc`,

@@ -35,6 +35,7 @@ export interface ProjectProps {
   /**
    * Resource group of the classic migration service. Changing it replaces
    * the project.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -53,6 +54,7 @@ export interface ProjectProps {
    * :::caution
    * Changing the name replaces the project.
    * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -74,6 +76,7 @@ export interface ProjectProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -113,11 +116,23 @@ export interface Project extends Resource<
  * source engine and the target Azure database; migration tasks run inside
  * it. Projects are free.
  *
- * @see https://learn.microsoft.com/azure/dms/tutorial-postgresql-azure-postgresql-online
+ * :::caution
+ * Changing `resourceGroup`, `service`, `name`, `sourcePlatform`, or
+ * `targetPlatform` replaces the project.
+ * :::
+ *
+ * See [Migrate PostgreSQL online](https://learn.microsoft.com/azure/dms/tutorial-postgresql-azure-postgresql-online).
  *
  * ### Creating a Project
  * **Example:** PostgreSQL to Azure Database for PostgreSQL
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("dms-vnet", {
+ *   addressPrefixes: ["10.20.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("dms-subnet", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.20.1.0/24",
+ * });
  * const dms = yield* Azure.DataMigration.ClassicMigrationService("dms", {
  *   virtualSubnetId: subnet.subnetId,
  * });

@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -27,12 +27,14 @@ export interface StorageMoverProps {
   /**
    * Resource group the Storage Mover is created in. Changing it replaces
    * the Storage Mover.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the Storage Mover: 1-64 letters, digits, `-` and `_`, starting
    * with a letter or digit. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the Storage Mover.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -41,11 +43,15 @@ export interface StorageMoverProps {
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
-  /** Description of the Storage Mover. */
+  /**
+   * Description of the Storage Mover.
+   * @default ""
+   */
   description?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -74,9 +80,15 @@ export interface StorageMover extends Resource<
 > {}
 
 /**
- * An Azure Storage Mover — the top-level resource that holds the projects,
- * endpoints, and job definitions used to migrate files from on-premises
- * shares or other clouds into Azure Storage.
+ * An Azure Storage Mover (`Microsoft.StorageMover/storageMovers`) — the
+ * top-level resource that holds the projects, endpoints, and job definitions
+ * used to migrate files from on-premises shares or other clouds into Azure
+ * Storage.
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the Storage Mover
+ * and deletes its projects, endpoints, and job definitions.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/storage-mover/service-overview
  *
@@ -131,11 +143,7 @@ export const StorageMoverProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        storagemover
-          .ListStorageMoverBySubscription({ subscriptionId })
-          .pipe(
-            Effect.flatMap((page) => requireSinglePage("ListStorageMoverBySubscription", page)),
-          ),
+        collectAll(storagemover.ListStorageMoverBySubscription, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((mover) => {
         const group = resourceGroupOf(mover.id);

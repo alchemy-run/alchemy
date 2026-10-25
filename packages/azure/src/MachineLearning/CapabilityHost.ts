@@ -26,6 +26,7 @@ export interface CapabilityHostProps {
   /**
    * Capability host name. If omitted, a unique name is generated from the
    * logical ID. Changing it replaces the capability host.
+   * @default a unique name generated from the logical ID
    */
   name?: string;
   /**
@@ -37,34 +38,43 @@ export interface CapabilityHostProps {
   /**
    * ARM resource ID of a subnet for network-injected agents. Changing it
    * replaces the capability host.
+   * @default none
    */
   customerSubnet?: string;
   /**
    * Connection names of Azure AI Services / Azure OpenAI used by agents.
    * Changing them replaces the capability host.
+   * @default none
    */
   aiServicesConnections?: string[];
   /**
    * Connection names of storage accounts for agent files. Changing them
    * replaces the capability host.
+   * @default none
    */
   storageConnections?: string[];
   /**
    * Connection names of Cosmos DB accounts for agent threads. Changing them
    * replaces the capability host.
+   * @default none
    */
   threadStorageConnections?: string[];
   /**
    * Connection names of AI Search services for vector stores. Changing them
    * replaces the capability host.
+   * @default none
    */
   vectorStoreConnections?: string[];
   /**
    * Connection names of Container Apps environments. Changing them replaces
    * the capability host.
+   * @default none
    */
   acaEnvironmentConnections?: string[];
-  /** Description of the capability host. Changing it replaces the capability host. */
+  /**
+   * Description of the capability host. Changing it replaces the capability host.
+   * @default none
+   */
   description?: string;
 }
 
@@ -94,10 +104,32 @@ export interface CapabilityHost extends Resource<
  * Search). The service rejects updates, so every change replaces it, and
  * it drops tags, so ownership is tracked only in Alchemy state.
  *
- * @see https://learn.microsoft.com/azure/ai-foundry/agents/concepts/capability-hosts
+ * ARM type: `Microsoft.MachineLearningServices/workspaces/capabilityHosts`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/ai-foundry/agents/concepts/capability-hosts).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, or `name` replaces the capability
+ * host.
+ * Azure rejects updates, so changing any other prop also replaces it.
+ * :::
  *
  * ### Agents
- * **Example:** Standard agent setup on a project
+ * **Example:** Agents host with Microsoft-managed storage
+ * ```typescript
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const hub = yield* Azure.MachineLearning.Workspace("hub", {
+ *   kind: "Hub",
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ * });
+ * const host = yield* Azure.MachineLearning.CapabilityHost("agents", {
+ *   workspace: hub.workspaceName,
+ *   description: "agents",
+ * });
+ * ```
+ *
+ * **Example:** Standard agent setup on a project with your own connections
  * ```typescript
  * const host = yield* Azure.MachineLearning.CapabilityHost("agents", {
  *   workspace: project.workspaceName,

@@ -23,9 +23,22 @@ import {
 export type SoftDeleteFeatureState = "Enabled" | "Disabled" | "AlwaysON";
 
 export interface BackupVaultConfigProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the config. */
+  /**
+   * Resource group of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the config.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the Recovery Services vault. Changing it replaces the config. */
+  /**
+   * Name of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the config.
+   * :::
+   */
   vault: string;
   /**
    * Soft delete of backup data. `Disabled` lets deleted protected items be
@@ -73,7 +86,8 @@ export interface BackupVaultConfig extends Resource<
 
 /**
  * The backup settings of a Recovery Services vault
- * (`backupconfig/vaultconfig`): soft delete and enhanced security.
+ * (`Microsoft.RecoveryServices/vaults/backupconfig/vaultconfig`): soft
+ * delete and enhanced security.
  *
  * This is a singleton: every vault has exactly one. Only the settings you
  * specify are managed. Destroying the resource restores Azure's defaults
@@ -83,10 +97,14 @@ export interface BackupVaultConfig extends Resource<
  * Vaults created with current API versions start with soft delete
  * `AlwaysON` set through the vault API, and Azure Backup rejects changes
  * through the legacy `backupconfig` API for them; Alchemy then applies the
- * change through the vault API instead. Leaving `AlwaysON` is impossible
- * and fails with the typed `BackupConfigManagedByVaultApi` error, but the
- * retention period stays editable. Settings that already match converge
- * without a write.
+ * change through the vault API instead. Settings that already match
+ * converge without a write.
+ *
+ * :::caution
+ * Leaving `AlwaysON` is impossible and fails with the typed
+ * `BackupConfigManagedByVaultApi` error. The retention period stays
+ * editable.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/backup/backup-azure-security-feature-cloud
  *
@@ -102,8 +120,9 @@ export interface BackupVaultConfig extends Resource<
  *
  * **Example:** Disable soft delete on a vault that is not `AlwaysON`
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault");
  * yield* Azure.RecoveryServices.BackupVaultConfig("vault-config", {
- *   vault: legacyVaultName,
+ *   vault: vault.vaultName,
  *   softDeleteFeatureState: "Disabled",
  * });
  * ```

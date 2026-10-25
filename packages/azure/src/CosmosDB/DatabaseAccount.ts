@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -482,9 +482,7 @@ export const DatabaseAccountProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* cosmos
-        .ListDatabaseAccounts({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDatabaseAccounts", page)));
+      const page = yield* collectAll(cosmos.ListDatabaseAccounts, { subscriptionId });
       return (page.value ?? []).flatMap((account) => {
         const group = resourceGroupOf(account.id);
         return hasAnyAlchemyTag(account.tags) && group !== undefined && account.name !== undefined

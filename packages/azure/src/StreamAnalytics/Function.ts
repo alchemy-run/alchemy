@@ -38,7 +38,10 @@ export interface FunctionParameter {
 }
 
 export interface FunctionProps {
-  /** Resource group of the streaming job. Changing it replaces the function. */
+  /**
+   * Resource group of the streaming job. Changing it replaces the function.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the streaming job. Changing it replaces the function. */
   streamingJob: string;
@@ -46,6 +49,7 @@ export interface FunctionProps {
    * Function name, called from the job's query as `udf.<name>(...)`. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the function.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -54,10 +58,16 @@ export interface FunctionProps {
    * @default "Scalar"
    */
   type?: "Scalar" | "Aggregate";
-  /** Input parameters, in order. */
+  /**
+   * Input parameters, in order.
+   * @default not set
+   */
   inputs?: FunctionParameter[];
   /** Data type of the return value, e.g. `bigint`. */
-  output: { dataType: string };
+  output: {
+    /** Stream Analytics data type of the return value, e.g. `bigint`. */
+    dataType: string;
+  };
   /**
    * Implementation, e.g. `{ type: "Microsoft.StreamAnalytics/JavascriptUdf",
    * properties: { script: "function (x) { return x * 2; }" } }`, or an Azure
@@ -92,7 +102,8 @@ export interface Function extends Resource<
 > {}
 
 /**
- * A user-defined function of an Azure Stream Analytics streaming job — a
+ * A user-defined function of an Azure Stream Analytics streaming job
+ * (`Microsoft.StreamAnalytics/streamingjobs/functions`) — a
  * JavaScript UDF or UDA, or an Azure Machine Learning endpoint — callable
  * from the job's query as `udf.<name>(...)`.
  *
@@ -100,11 +111,17 @@ export interface Function extends Resource<
  * job carries this stack's and stage's ownership tags. Changes are rejected
  * while the job is running.
  *
+ * :::caution
+ * Changing `streamingJob`, `name`, `type`, or `resourceGroup` replaces the
+ * function.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/stream-analytics/javascript-user-defined-functions
  *
  * ### JavaScript Functions
  * **Example:** Scalar JavaScript UDF
  * ```typescript
+ * const job = yield* Azure.StreamAnalytics.StreamingJob("telemetry");
  * const double = yield* Azure.StreamAnalytics.Function("double", {
  *   streamingJob: job.jobName,
  *   name: "double",

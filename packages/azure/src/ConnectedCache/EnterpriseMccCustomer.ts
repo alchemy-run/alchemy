@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -27,11 +27,13 @@ export interface EnterpriseMccCustomerProps {
   /**
    * Resource group the customer is created in. Changing it replaces the
    * customer.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Customer resource name. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the customer.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -44,17 +46,28 @@ export interface EnterpriseMccCustomerProps {
   /**
    * Display name of the customer (organization) in the Connected Cache
    * portal.
+   * @default none
    */
   customerName?: string;
-  /** Email address of the customer's Connected Cache contact. */
+  /**
+   * Email address of the customer's Connected Cache contact.
+   * @default none
+   */
   contactEmail?: string;
-  /** Full name of the customer's Connected Cache contact. */
+  /**
+   * Full name of the customer's Connected Cache contact.
+   * @default none
+   */
   contactName?: string;
-  /** Phone number of the customer's Connected Cache contact. */
+  /**
+   * Phone number of the customer's Connected Cache contact.
+   * @default none
+   */
   contactPhone?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -95,16 +108,22 @@ export interface EnterpriseMccCustomer extends Resource<
 > {}
 
 /**
- * A Microsoft Connected Cache for Enterprise and Education customer — the
- * top-level "Connected Cache resource" that groups the cache nodes a
- * company runs on its own servers to cache Windows Update, Intune, and
- * Microsoft Store content.
+ * A Microsoft Connected Cache for Enterprise and Education customer
+ * (`Microsoft.ConnectedCache/enterpriseMccCustomers`) — the top-level
+ * "Connected Cache resource" that groups the cache nodes a company runs on
+ * its own servers to cache Windows Update, Intune, and Microsoft Store
+ * content.
  *
  * The ARM resource itself is free; caching happens on customer-hosted
  * servers registered against `Azure.ConnectedCache.EnterpriseMccCacheNode`
  * resources.
  *
- * @see https://learn.microsoft.com/windows/deployment/do/mcc-ent-edu-overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the customer and
+ * deletes its cache nodes.
+ * :::
+ *
+ * See [Connected Cache for Enterprise and Education](https://learn.microsoft.com/windows/deployment/do/mcc-ent-edu-overview).
  *
  * ### Creating a Customer
  * **Example:** Connected Cache customer with a contact
@@ -119,6 +138,9 @@ export interface EnterpriseMccCustomer extends Resource<
  * ### Adding Cache Nodes
  * **Example:** Linux cache node under the customer
  * ```typescript
+ * const customer = yield* Azure.ConnectedCache.EnterpriseMccCustomer("mcc", {
+ *   location: "westus",
+ * });
  * yield* Azure.ConnectedCache.EnterpriseMccCacheNode("node", {
  *   customer: customer.customerResourceName,
  *   location: customer.location,
@@ -189,13 +211,9 @@ export const EnterpriseMccCustomerProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* connectedcache
-        .ListEnterpriseMccCustomerBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListEnterpriseMccCustomerBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(connectedcache.ListEnterpriseMccCustomerBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((customer) => {
         const group = resourceGroupOf(customer.id);
         return hasAnyAlchemyTag(customer.tags) && group !== undefined && customer.name !== undefined

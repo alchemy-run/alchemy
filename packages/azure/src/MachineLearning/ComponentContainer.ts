@@ -38,6 +38,8 @@ export interface ComponentContainer extends Resource<
  * (`Microsoft.MachineLearningServices/registries/components`) — the named container that groups the versions of a reusable pipeline step shared across workspaces.
  * Register versions with {@link ComponentVersion}.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/how-to-share-models-pipelines-across-workspaces-with-registries).
+ *
  * Workspace component containers (`workspaces/components`)
  * reject tags and descriptions and cannot be deleted; Azure creates them
  * when you register a {@link ComponentVersion} in a workspace.
@@ -48,11 +50,10 @@ export interface ComponentContainer extends Resource<
  * Changing `resourceGroup`, `registry`, or `name` replaces the component.
  * :::
  *
- * @see https://learn.microsoft.com/azure/machine-learning/how-to-share-models-pipelines-across-workspaces-with-registries
- *
  * ### Creating a Shared Component
  * **Example:** Component in a registry
  * ```typescript
+ * const registry = yield* Azure.MachineLearning.Registry("shared");
  * const shared = yield* Azure.MachineLearning.ComponentContainer("prep", {
  *   registry: registry.registryName,
  *   description: "Data preparation step",

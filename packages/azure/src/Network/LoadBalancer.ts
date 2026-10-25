@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -527,9 +527,7 @@ export const LoadBalancerProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* network
-        .ListLoadBalancerAll({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListLoadBalancerAll", page)));
+      const page = yield* collectAll(network.ListLoadBalancerAll, { subscriptionId });
       return page.value.flatMap((lb) => {
         const group = resourceGroupOf(lb.id);
         return hasAnyAlchemyTag(lb.tags) && group !== undefined && lb.name !== undefined

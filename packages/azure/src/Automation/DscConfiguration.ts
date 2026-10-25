@@ -32,7 +32,10 @@ export interface DscConfigurationProps {
   name: string;
   /** PowerShell DSC configuration script. */
   script: string;
-  /** Description of the configuration. */
+  /**
+   * Description of the configuration.
+   * @default no description
+   */
   description?: string;
   /**
    * Write verbose records when compiling.
@@ -47,6 +50,7 @@ export interface DscConfigurationProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -80,15 +84,22 @@ export interface DscConfiguration extends Resource<
  * A PowerShell DSC configuration in an Azure Automation account (Azure
  * Automation State Configuration). Compile it into node configurations
  * with {@link DscNodeConfiguration}.
+ * The ARM type is `Microsoft.Automation/automationAccounts/configurations`.
  *
  * Azure Automation State Configuration retires in September 2027 in favor
  * of Azure Machine Configuration.
+ *
+ * :::caution
+ * Changing `automationAccount`, `name`, or `resourceGroup` replaces the
+ * configuration.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/automation-dsc-overview
  *
  * ### Uploading a Configuration
  * **Example:** Configuration from an inline script
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const web = yield* Azure.Automation.DscConfiguration("WebServer", {
  *   automationAccount: account.automationAccountName,
  *   name: "WebServer",

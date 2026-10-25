@@ -24,7 +24,10 @@ import {
 export interface DatadogMonitoredSubscription {
   /** ID of the Azure subscription (requires Owner on it). */
   subscriptionId: string;
-  /** What the subscription sends to Datadog. */
+  /**
+   * What the subscription sends to Datadog.
+   * @default unset (Datadog's default)
+   */
   tagRules?: DatadogTagRules;
 }
 
@@ -66,12 +69,25 @@ export interface MonitoredSubscriptions extends Resource<
  * Additional Azure subscriptions monitored by a Datadog monitor's
  * organization (`Microsoft.Datadog/monitors/monitoredSubscriptions`,
  * singleton `default`). Lets one Datadog organization collect metrics and
- * logs from several subscriptions; the deploying identity needs Owner on
- * each of them.
+ * logs from several subscriptions.
+ *
+ * :::caution
+ * Changing `monitor` or `resourceGroup` replaces the configuration.
+ * :::
+ *
+ * :::caution
+ * The deploying identity needs Owner on each listed subscription.
+ * :::
+ *
+ * @see https://learn.microsoft.com/azure/partner-solutions/datadog/manage
  *
  * ### Monitoring More Subscriptions
  * **Example:** Monitor a second subscription
  * ```typescript
+ * const monitor = yield* Azure.Datadog.Monitor("datadog", {
+ *   location: "westus2",
+ *   userInfo: { emailAddress: "platform@example.com" },
+ * });
  * const monitored = yield* Azure.Datadog.MonitoredSubscriptions("monitored", {
  *   monitor: monitor.monitorName,
  *   subscriptions: [

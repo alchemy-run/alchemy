@@ -74,6 +74,11 @@ export interface ContentItem extends Resource<
  * ### Creating Content Items
  * **Example:** A link in the developer portal
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * yield* Azure.ApiManagement.ContentItem("docs-link", {
  *   serviceName: apim.serviceName,
  *   contentTypeName: "url",
@@ -90,6 +95,23 @@ export interface ContentItem extends Resource<
  *
  * **Example:** An entry of a custom content type
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const faq = yield* Azure.ApiManagement.ContentType("faq", {
+ *   serviceName: apim.serviceName,
+ *   name: "c-faq",
+ *   displayName: "FAQ entry",
+ *   schema: {
+ *     type: "object",
+ *     properties: {
+ *       question: { type: "string" },
+ *       answer: { type: "string" },
+ *     },
+ *   },
+ * });
  * yield* Azure.ApiManagement.ContentItem("faq-keys", {
  *   serviceName: apim.serviceName,
  *   contentTypeName: faq.contentTypeName,

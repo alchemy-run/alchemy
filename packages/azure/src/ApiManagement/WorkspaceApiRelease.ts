@@ -28,7 +28,10 @@ export interface WorkspaceApiReleaseProps {
    * @default the API's current revision
    */
   apiRevision?: string;
-  /** Release notes shown in the developer portal change log. */
+  /**
+   * Release notes shown in the developer portal change log.
+   * @default no notes
+   */
   notes?: string;
 }
 
@@ -60,16 +63,34 @@ export interface WorkspaceApiRelease extends Resource<
 /**
  * The workspace-scoped counterpart of {@link ApiRelease}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/workspaces/apis/releases`.
  *
  * A release of an API in API Management. Releasing an API revision makes
  * it the current revision and records an entry (with notes) in the API's
  * change log.
+ *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `apiName`, `name`, `apiRevision`,
+ * or `resourceGroup` replaces the release.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-revisions
  *
  * ### Releasing Revisions
  * **Example:** Make revision 2 current with release notes
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
  * yield* Azure.ApiManagement.WorkspaceApiRelease("orders-r2", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -273,9 +273,7 @@ export const NetworkInterfaceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* network
-        .ListNetworkInterfaceAll({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListNetworkInterfaceAll", page)));
+      const page = yield* collectAll(network.ListNetworkInterfaceAll, { subscriptionId });
       return page.value.flatMap((nic) => {
         const group = resourceGroupOf(nic.id);
         return hasAnyAlchemyTag(nic.tags) && group !== undefined && nic.name !== undefined

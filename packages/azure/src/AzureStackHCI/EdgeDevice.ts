@@ -18,28 +18,58 @@ import { HCI_NAMESPACE, isMachineStackOwned, sameId, sameValue } from "./Common.
 export interface EdgeDeviceNic {
   /** Name of the network adapter. */
   adapterName: string;
-  /** Interface description of the adapter. */
+  /**
+   * Interface description of the adapter.
+   * @default not set
+   */
   interfaceDescription?: string;
-  /** Component ID of the adapter. */
+  /**
+   * Component ID of the adapter.
+   * @default not set
+   */
   componentId?: string;
-  /** Driver version of the adapter. */
+  /**
+   * Driver version of the adapter.
+   * @default not set
+   */
   driverVersion?: string;
-  /** IPv4 address of the adapter. */
+  /**
+   * IPv4 address of the adapter.
+   * @default not set
+   */
   ip4Address?: string;
-  /** Subnet mask of the adapter. */
+  /**
+   * Subnet mask of the adapter.
+   * @default not set
+   */
   subnetMask?: string;
-  /** Default gateway of the adapter. */
+  /**
+   * Default gateway of the adapter.
+   * @default not set
+   */
   defaultGateway?: string;
-  /** DNS servers of the adapter. */
+  /**
+   * DNS servers of the adapter.
+   * @default none
+   */
   dnsServers?: string[];
-  /** Default isolation (VLAN) ID of the management adapter. */
+  /**
+   * Default isolation (VLAN) ID of the management adapter.
+   * @default not set
+   */
   defaultIsolationId?: string;
 }
 
 export interface EdgeDeviceConfiguration {
-  /** Network adapters of the device. */
+  /**
+   * Network adapters of the device.
+   * @default none
+   */
   nicDetails?: EdgeDeviceNic[];
-  /** Device metadata. */
+  /**
+   * Device metadata.
+   * @default not set
+   */
   deviceMetadata?: string;
 }
 
@@ -55,7 +85,10 @@ export interface EdgeDeviceProps {
    * @default "default"
    */
   name?: string;
-  /** Network configuration of the device. */
+  /**
+   * Network configuration of the device.
+   * @default not set
+   */
   deviceConfiguration?: EdgeDeviceConfiguration;
 }
 
@@ -83,15 +116,23 @@ export interface EdgeDevice extends Resource<
  * server that will become a cluster node, carrying its network adapter
  * configuration for deployment. The Arc machine must be a real Azure Local
  * node reporting a supported OS SKU.
+ * The ARM type is `Microsoft.AzureStackHCI/edgeDevices`, an extension
+ * resource on the Arc-enabled server.
  *
  * The device has no tags; Alchemy treats it as owned when its Arc machine
  * carries this stack's ownership tags.
+ *
+ * :::caution
+ * Changing `machineId` or `name` replaces the device.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/deploy/deployment-arc-register-server-permissions
  *
  * ### Describing a Node
  * **Example:** Edge device with its management adapter
  * ```typescript
+ * // ARM ID of the Arc-enabled server (Microsoft.HybridCompute/machines).
+ * const arcServerId = yield* Config.string("ARC_SERVER_ID");
  * yield* Azure.AzureStackHCI.EdgeDevice("node-1", {
  *   machineId: arcServerId,
  *   deviceConfiguration: {

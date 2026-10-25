@@ -53,12 +53,16 @@ export interface ResourceGroupConfiguration extends Resource<
  * the configuration to Azure's default (`exclude: false`). Ownership is
  * inherited from the resource group's Alchemy tags.
  *
+ * :::caution
+ * Changing `resourceGroup` replaces the configuration resource: the old
+ * group's configuration is reset to `exclude: false`.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/advisor/advisor-get-started#configure-advisor
  *
  * ### Excluding a Resource Group
- * **Example:** Exclude a sandbox resource group from Advisor
+ * **Example:** Exclude the stack's resource group from Advisor
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("sandbox", {});
  * yield* Azure.Advisor.ResourceGroupConfiguration("sandbox-advisor", {
  *   exclude: true,
  * });

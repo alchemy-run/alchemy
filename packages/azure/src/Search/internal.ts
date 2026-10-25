@@ -4,9 +4,9 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   stackAndStage,
   waitUntilGone,
 } from "../Arm.ts";
@@ -122,15 +122,11 @@ export const deleteAllSharedPrivateLinks = Effect.fn(function* (
   searchServiceName: string,
 ) {
   const page = yield* orUndefinedIfNotFound(
-    search
-      .ListSharedPrivateLinkResourceByService({
-        subscriptionId,
-        resourceGroupName,
-        searchServiceName,
-      })
-      .pipe(
-        Effect.flatMap((page) => requireSinglePage("ListSharedPrivateLinkResourceByService", page)),
-      ),
+    collectAll(search.ListSharedPrivateLinkResourceByService, {
+      subscriptionId,
+      resourceGroupName,
+      searchServiceName,
+    }),
   );
   for (const link of page?.value ?? []) {
     if (link.name === undefined) continue;

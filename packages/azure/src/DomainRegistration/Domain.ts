@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -27,7 +27,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 export interface DomainContactAddress {
   /** First line of the address. */
   address1: string;
-  /** Second line of the address. */
+  /**
+   * Second line of the address.
+   * @default none
+   */
   address2?: string;
   /** City. */
   city: string;
@@ -44,21 +47,36 @@ export interface DomainContactAddress {
  * in the WHOIS directory as required by ICANN.
  */
 export interface DomainContact {
-  /** Mailing address. */
+  /**
+   * Mailing address.
+   * @default none
+   */
   addressMailing?: DomainContactAddress;
   /** Email address. */
   email: string;
-  /** Fax number. */
+  /**
+   * Fax number.
+   * @default none
+   */
   fax?: string;
-  /** Job title. */
+  /**
+   * Job title.
+   * @default none
+   */
   jobTitle?: string;
   /** First name. */
   nameFirst: string;
   /** Last name. */
   nameLast: string;
-  /** Middle name. */
+  /**
+   * Middle name.
+   * @default none
+   */
   nameMiddle?: string;
-  /** Organization the contact belongs to. */
+  /**
+   * Organization the contact belongs to.
+   * @default none
+   */
   organization?: string;
   /** Phone number in `+<country>.<number>` form, e.g. `+1.4255550100`. */
   phone: string;
@@ -74,12 +92,14 @@ export interface DomainConsent {
   /**
    * ISO-8601 timestamp the agreements were accepted. If omitted, the time of
    * purchase is used.
+   * @default the time of purchase
    */
   agreedAt?: string;
   /**
    * Keys of the accepted legal agreements. If omitted, every agreement
    * returned by the TLD's `listAgreements` API (including the privacy
    * agreement when `privacy` is enabled) is accepted.
+   * @default every agreement the TLD's `listAgreements` API returns
    */
   agreementKeys?: string[];
 }
@@ -91,6 +111,7 @@ export interface DomainProps {
   /**
    * Resource group the domain is created in. Changing it replaces the
    * domain (and purchases a new registration).
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
@@ -142,6 +163,7 @@ export interface DomainProps {
   /**
    * ARM resource ID of the Azure DNS zone that hosts the domain. Updated in
    * place.
+   * @default none (the domain is not hosted in Azure DNS)
    */
   dnsZoneId?: string;
   /**
@@ -154,6 +176,7 @@ export interface DomainProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -198,21 +221,28 @@ export interface Domain extends Resource<
 > {}
 
 /**
- * An App Service Domain — a real DNS domain registration purchased through
- * Azure (registered via GoDaddy) and optionally hosted in Azure DNS.
+ * An App Service Domain (`Microsoft.DomainRegistration/domains`) — a real
+ * DNS domain registration purchased through Azure (registered via GoDaddy)
+ * and optionally hosted in Azure DNS. See
+ * [buy an App Service domain](https://learn.microsoft.com/azure/app-service/manage-custom-dns-buy-domain).
  *
+ * :::caution
  * Creating a domain is a real, non-refundable purchase billed yearly
  * (~$12/year for `.com`, more for premium TLDs). Free-trial and
  * spending-limit subscriptions cannot purchase App Service Domains.
  * Deleting the resource releases the registration without a refund.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/app-service/manage-custom-dns-buy-domain
+ * :::caution
+ * Changing `resourceGroup` or `domainName` replaces the domain: Alchemy
+ * buys a new registration and releases the old one.
+ * :::
  *
  * ### Buying a Domain
  * **Example:** Register a domain hosted in Azure DNS
  * ```typescript
  * const zone = yield* Azure.Dns.Zone("example", {
- *   zoneName: "example.com",
+ *   name: "example.com",
  * });
  * const domain = yield* Azure.DomainRegistration.Domain("example", {
  *   domainName: "example.com",
@@ -340,9 +370,7 @@ export const DomainProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* domainregistration
-        .ListDomains({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDomains", page)));
+      const page = yield* collectAll(domainregistration.ListDomains, { subscriptionId });
       return (page.value ?? []).flatMap((domain) => {
         const group = resourceGroupOf(domain.id);
         return hasAnyAlchemyTag(domain.tags) && group !== undefined && domain.name !== undefined
@@ -403,17 +431,14 @@ export const DomainProvider = () =>
       if (observed === undefined) {
         const agreementKeys =
           news.consent.agreementKeys ??
-          (yield* domainregistration
-            .ListTopLevelDomainAgreements({
-              subscriptionId,
-              name: topLevelDomainOf(name),
-              includePrivacy: privacy,
-              forTransfer: false,
-            })
-            .pipe(
-              Effect.flatMap((page) => requireSinglePage("ListTopLevelDomainAgreements", page)),
-              Effect.map((page) => (page.value ?? []).map((agreement) => agreement.agreementKey)),
-            ));
+          (yield* collectAll(domainregistration.ListTopLevelDomainAgreements, {
+            subscriptionId,
+            name: topLevelDomainOf(name),
+            includePrivacy: privacy,
+            forTransfer: false,
+          }).pipe(
+            Effect.map((page) => (page.value ?? []).map((agreement) => agreement.agreementKey)),
+          ));
         const agreedAt =
           news.consent.agreedAt ?? new Date(yield* Clock.currentTimeMillis).toISOString();
         yield* domainregistration.DomainsCreateOrUpdate({

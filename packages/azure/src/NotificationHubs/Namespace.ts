@@ -8,13 +8,13 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -47,6 +47,7 @@ export interface NamespaceProps {
    * letters, digits, and hyphens, starting with a letter and ending with a
    * letter or digit. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the namespace.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -62,6 +63,7 @@ export interface NamespaceProps {
   sku?: NotificationHubsSkuName;
   /**
    * Scale units (`Standard` only).
+   * @default Azure's default
    */
   capacity?: number;
   /**
@@ -82,17 +84,20 @@ export interface NamespaceProps {
   publicNetworkAccess?: "Enabled" | "Disabled";
   /**
    * IP rules and the default public-network rule (`Standard` only).
+   * @default not managed
    */
   networkAcls?: NotificationHubsNetworkAcls;
   /**
    * Namespace-level push notification service credentials, shared by every
    * hub in the namespace. Secret fields accept `Redacted` values. Removing
    * this prop leaves the credentials in place.
+   * @default none
    */
   pnsCredentials?: PnsCredentials;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -145,11 +150,17 @@ export interface Namespace extends Resource<
  * Hubs fan push notifications out to iOS (APNs), Android (FCM), Windows
  * (WNS), and browsers (Web Push) from a single API.
  *
+ * ARM type: `Microsoft.NotificationHubs/namespaces`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/notification-hubs/notification-hubs-push-notification-overview).
+ *
  * The `Free` tier (default) costs nothing. The connection string of the
  * built-in `RootManageSharedAccessKey` rule is exposed as a secret; prefer
  * least-privilege authorization rules for applications.
  *
- * @see https://learn.microsoft.com/azure/notification-hubs/notification-hubs-push-notification-overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `zoneRedundancy` replaces
+ * the namespace.
+ * :::
  *
  * ### Creating a Namespace
  * **Example:** Free namespace
@@ -282,9 +293,7 @@ export const NamespaceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* notificationhubs
-        .ListNamespaceAll({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListNamespaceAll", page)));
+      const page = yield* collectAll(notificationhubs.ListNamespaceAll, { subscriptionId });
       return (page.value ?? []).flatMap((ns) => {
         const group = resourceGroupOf(ns.id);
         return hasAnyAlchemyTag(ns.tags) && group !== undefined && ns.name !== undefined

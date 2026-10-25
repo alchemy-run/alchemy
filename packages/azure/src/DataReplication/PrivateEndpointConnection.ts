@@ -6,10 +6,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -26,7 +26,10 @@ export class PrivateEndpointConnectionMissing extends Data.TaggedError(
 }> {}
 
 export interface PrivateEndpointConnectionProps {
-  /** Resource group of the vault. Changing it replaces the resource. */
+  /**
+   * Resource group of the vault. Changing it replaces the resource.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Data replication vault the private endpoint targets. Changing it replaces the resource. */
   vault: string;
@@ -34,12 +37,14 @@ export interface PrivateEndpointConnectionProps {
    * ARM resource ID of the private endpoint whose connection is managed —
    * typically `Azure.Network.PrivateEndpoint(...).privateEndpointId`. The
    * connection is looked up by this ID. Changing it replaces the resource.
+   * @default unset; `name` identifies the connection
    */
   privateEndpointId?: string;
   /**
    * Name of the connection, when known (Azure generates it when the
    * private endpoint is created). Either `name` or `privateEndpointId` is
    * required. Changing it replaces the resource.
+   * @default looked up from `privateEndpointId`
    */
   name?: string;
   /**
@@ -47,7 +52,10 @@ export interface PrivateEndpointConnectionProps {
    * @default "Approved"
    */
   status?: "Approved" | "Rejected";
-  /** Reason shown to the private endpoint owner. */
+  /**
+   * Reason shown to the private endpoint owner.
+   * @default no description
+   */
   description?: string;
 }
 
@@ -76,8 +84,10 @@ export interface PrivateEndpointConnection extends Resource<
 
 /**
  * Approves (or rejects) a private endpoint connection to an Azure Site
- * Recovery data replication vault. The connection itself is created by
- * the private endpoint (`Azure.Network.PrivateEndpoint` with
+ * Recovery data replication vault
+ * (`Microsoft.DataReplication/replicationVaults/privateEndpointConnections`).
+ * The connection itself is created by the private endpoint
+ * (`Azure.Network.PrivateEndpoint` with
  * `manualPrivateLinkServiceConnections` and group ID `DataReplication`);
  * this resource takes it over and drives its approval state. Deleting it
  * removes the connection, which disconnects the endpoint.
@@ -85,12 +95,24 @@ export interface PrivateEndpointConnection extends Resource<
  * The connection is identified by the private endpoint you reference, so
  * Alchemy treats it as owned without tags.
  *
+ * :::caution
+ * Changing `vault`, `name`, `privateEndpointId`, or `resourceGroup`
+ * replaces the resource.
+ * :::
+ *
  * @see https://learn.microsoft.com/rest/api/datareplication/private-endpoint-connections
  *
  * ### Approving a Private Endpoint
  * **Example:** Manual-approval endpoint, approved by the vault owner
  * ```typescript
  * const vault = yield* Azure.DataReplication.Vault("vault");
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("endpoints", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
  * const endpoint = yield* Azure.Network.PrivateEndpoint("vault-pe", {
  *   subnetId: subnet.subnetId,
  *   manualPrivateLinkServiceConnections: [
@@ -134,9 +156,7 @@ const findConnection = (
     if (name !== undefined) return yield* getConnection(parent, name);
     if (privateEndpointId === undefined) return undefined;
     const page = yield* orUndefinedIfNotFound(
-      dr
-        .ListPrivateEndpointConnections(parent)
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPrivateEndpointConnections", page))),
+      collectAll(dr.ListPrivateEndpointConnections, parent),
     );
     return (page?.value ?? []).find((connection) =>
       sameName(connection.properties?.privateEndpoint?.id, privateEndpointId),

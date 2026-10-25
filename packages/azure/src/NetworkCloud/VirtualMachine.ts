@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -44,6 +44,7 @@ export interface VirtualMachineProps {
   /**
    * Name of the virtual machine. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the virtual machine.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -75,36 +76,69 @@ export interface VirtualMachineProps {
   /**
    * Credentials of the registry hosting `vmImage` (password may be
    * `Redacted`). Updated in place.
+   * @default none
    */
   vmImageRepositoryCredentials?: nc.ImageRepositoryCredentials;
-  /** Workload network attachments. Changing them replaces the virtual machine. */
+  /**
+   * Workload network attachments. Changing them replaces the virtual machine.
+   * @default none
+   */
   networkAttachments?: nc.NetworkAttachmentInput[];
-  /** Base64 cloud-init network data. Changing it replaces the virtual machine. */
+  /**
+   * Base64 cloud-init network data. Changing it replaces the virtual machine.
+   * @default none
+   */
   networkDataContent?: string;
-  /** Base64 cloud-init user data. Changing it replaces the virtual machine. */
+  /**
+   * Base64 cloud-init user data. Changing it replaces the virtual machine.
+   * @default none
+   */
   userDataContent?: string;
-  /** Scheduling hints (affinity to racks/machines). Changing them replaces the virtual machine. */
+  /**
+   * Scheduling hints (affinity to racks/machines). Changing them replaces the virtual machine.
+   * @default none
+   */
   placementHints?: nc.VirtualMachinePlacementHint[];
-  /** SSH public keys of the admin user. Changing them replaces the virtual machine. */
+  /**
+   * SSH public keys of the admin user. Changing them replaces the virtual machine.
+   * @default none
+   */
   sshPublicKeys?: NexusSshPublicKey[];
-  /** Boot method: `UEFI` or `BIOS`. Changing it replaces the virtual machine. */
+  /**
+   * Boot method: `UEFI` or `BIOS`. Changing it replaces the virtual machine.
+   * @default "UEFI"
+   */
   bootMethod?: "BIOS" | "UEFI";
-  /** Pin the emulator thread to a dedicated core (`True`/`False`). Changing it replaces the virtual machine. */
+  /**
+   * Pin the emulator thread to a dedicated core (`True`/`False`). Changing it replaces the virtual machine.
+   * @default "True"
+   */
   isolateEmulatorThread?: "True" | "False";
-  /** Virtio interface mode: `Modern` or `Transitional`. Changing it replaces the virtual machine. */
+  /**
+   * Virtio interface mode: `Modern` or `Transitional`. Changing it replaces the virtual machine.
+   * @default "Modern"
+   */
   virtioInterface?: "Modern" | "Transitional";
-  /** Virtual hardware model: `T1`, `T2`, or `T3`. Changing it replaces the virtual machine. */
+  /**
+   * Virtual hardware model: `T1`, `T2`, or `T3`. Changing it replaces the virtual machine.
+   * @default "T2"
+   */
   vmDeviceModel?: "T1" | "T2" | "T3";
   /**
    * Custom location of the cluster manager used for console access.
    * Changing it replaces the virtual machine.
+   * @default none
    */
   consoleCustomLocationId?: string;
-  /** Managed identity of the virtual machine. */
+  /**
+   * Managed identity of the virtual machine.
+   * @default none
+   */
   identity?: NexusIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -153,13 +187,33 @@ export interface VirtualMachine extends Resource<
  * tags, identity, and the image registry credentials update in place.
  * Needs a deployed Operator Nexus cluster.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/quickstarts-tenant-workload-deployment
+ * ARM type: `Microsoft.NetworkCloud/virtualMachines`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/quickstarts-tenant-workload-deployment).
+ *
+ * :::caution
+ * Changing any prop except `vmImageRepositoryCredentials`, `identity`, or
+ * `tags` replaces the virtual machine.
+ * :::
  *
  * ### Creating a Virtual Machine
  * **Example:** VM on an L3 network
  * ```typescript
+ * // An existing Operator Nexus cluster, "site1", in the stack's resource group.
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ExtendedLocation/customLocations/site1-cl";
+ * const csn = yield* Azure.NetworkCloud.CloudServicesNetwork("csn", {
+ *   customLocationId,
+ *   enableDefaultEgressEndpoints: "True",
+ * });
+ * const l3 = yield* Azure.NetworkCloud.L3Network("workload", {
+ *   customLocationId,
+ *   l3IsolationDomainId: "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/l3IsolationDomains/tenant",
+ *   vlan: 1002,
+ *   ipAllocationType: "IPV4",
+ *   ipv4ConnectedPrefix: "10.20.0.0/24",
+ * });
  * const vm = yield* Azure.NetworkCloud.VirtualMachine("vnf", {
- *   customLocationId: cluster.clusterExtendedLocationId,
+ *   customLocationId,
  *   adminUsername: "azureuser",
  *   cloudServicesNetworkAttachment: {
  *     attachedNetworkId: csn.cloudServicesNetworkId,
@@ -231,11 +285,7 @@ export const VirtualMachineProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* nc
-        .ListVirtualMachineBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListVirtualMachineBySubscription", page)),
-        );
+      const page = yield* collectAll(nc.ListVirtualMachineBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

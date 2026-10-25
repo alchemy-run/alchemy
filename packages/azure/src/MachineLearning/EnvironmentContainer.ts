@@ -38,6 +38,8 @@ export interface EnvironmentContainer extends Resource<
  * (`Microsoft.MachineLearningServices/registries/environments`) — the named container that groups the versions of a Docker image and Conda specification shared across workspaces.
  * Register versions with {@link EnvironmentVersion}.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/how-to-share-models-pipelines-across-workspaces-with-registries).
+ *
  * Workspace environment containers (`workspaces/environments`)
  * reject tags and descriptions and cannot be deleted; Azure creates them
  * when you register a {@link EnvironmentVersion} in a workspace.
@@ -48,11 +50,10 @@ export interface EnvironmentContainer extends Resource<
  * Changing `resourceGroup`, `registry`, or `name` replaces the environment.
  * :::
  *
- * @see https://learn.microsoft.com/azure/machine-learning/how-to-share-models-pipelines-across-workspaces-with-registries
- *
  * ### Creating a Shared Environment
  * **Example:** Environment in a registry
  * ```typescript
+ * const registry = yield* Azure.MachineLearning.Registry("shared");
  * const shared = yield* Azure.MachineLearning.EnvironmentContainer("sklearn", {
  *   registry: registry.registryName,
  *   description: "scikit-learn runtime",

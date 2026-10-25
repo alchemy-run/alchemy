@@ -17,14 +17,30 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createPeeringName, peeringServiceOwnedByStage } from "./Common.ts";
 
 export interface ConnectionMonitorTestProps {
-  /** Resource group of the peering service. Changing it replaces the test. */
+  /**
+   * Resource group of the peering service.
+   *
+   * :::caution
+   * Changing it replaces the test.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Peering service the test belongs to. Changing it replaces the test. */
+  /**
+   * Name of the peering service the test belongs to.
+   *
+   * :::caution
+   * Changing it replaces the test.
+   * :::
+   */
   peeringService: string;
   /**
-   * Name of the connection monitor test. If omitted, a unique name is
-   * generated from the app, stage, and logical ID. Changing it replaces the
-   * test.
+   * Name of the connection monitor test.
+   *
+   * :::caution
+   * Changing it replaces the test.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Connection Monitor source agent (the Log Analytics agent name) the test runs from. */
@@ -72,12 +88,16 @@ export interface ConnectionMonitorTest extends Resource<
 > {}
 
 /**
- * A Connection Monitor test on an Azure Peering Service: measures latency
- * and reachability from a Log Analytics agent to a destination over the
- * peering service. The peering service must have Connection Monitor
- * initialized with a Log Analytics workspace; otherwise Azure accepts the
- * request but stores nothing, and the reconcile times out waiting for the
- * test.
+ * A Connection Monitor test on an Azure Peering Service
+ * (`Microsoft.Peering/peeringServices/connectionMonitorTests`). It measures
+ * latency and reachability from a Log Analytics agent to a destination over
+ * the peering service.
+ *
+ * :::caution
+ * The peering service must have Connection Monitor initialized with a Log
+ * Analytics workspace. Otherwise Azure accepts the request but stores
+ * nothing, and the deploy times out waiting for the test.
+ * :::
  *
  * Tests have no tags; Alchemy treats a test as owned when its peering
  * service carries this stack's ownership tags.
@@ -87,6 +107,10 @@ export interface ConnectionMonitorTest extends Resource<
  * ### Creating a Test
  * **Example:** Probe an HTTPS endpoint every 30 seconds
  * ```typescript
+ * const service = yield* Azure.Peering.PeeringService("office", {
+ *   peeringServiceLocation: "Washington",
+ *   peeringServiceProvider: "T-Mobile USA",
+ * });
  * const test = yield* Azure.Peering.ConnectionMonitorTest("office-to-web", {
  *   peeringService: service.peeringServiceName,
  *   sourceAgent: "office-agent-01",
@@ -97,6 +121,10 @@ export interface ConnectionMonitorTest extends Resource<
  *
  * **Example:** Lower test frequency
  * ```typescript
+ * const service = yield* Azure.Peering.PeeringService("office", {
+ *   peeringServiceLocation: "Washington",
+ *   peeringServiceProvider: "T-Mobile USA",
+ * });
  * const test = yield* Azure.Peering.ConnectionMonitorTest("office-to-dns", {
  *   peeringService: service.peeringServiceName,
  *   sourceAgent: "office-agent-01",

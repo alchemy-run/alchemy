@@ -16,7 +16,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, payloadText } from "./EdgeShared.ts";
 
 export interface DynamicConfigurationVersionProps {
-  /** Resource group of the configuration. Changing it replaces the version. */
+  /**
+   * Resource group of the configuration. Changing it replaces the version.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Name of the configuration that holds the dynamic configuration. Changing it replaces the version. */
   configuration: string;
@@ -66,12 +69,18 @@ export interface DynamicConfigurationVersion extends Resource<
  *
  * Versions carry no tags or free-form fields, so Alchemy cannot mark them;
  * a version found under the expected name is treated as this resource.
+ * See the
+ * [configuration model](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model).
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model
+ * :::caution
+ * Changing `resourceGroup`, `configuration`, `dynamicConfiguration`, or
+ * `version` replaces the version. `values` update in place.
+ * :::
  *
  * ### Publishing Values
  * **Example:** Configuration values for a template
  * ```typescript
+ * // `dynamic` is an `Azure.Edge.DynamicConfiguration` (see its page)
  * yield* Azure.Edge.DynamicConfigurationVersion("app-values-v1", {
  *   configuration: configuration.configurationName,
  *   dynamicConfiguration: dynamic.dynamicConfigurationName,

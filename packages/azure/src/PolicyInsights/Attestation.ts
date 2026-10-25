@@ -8,12 +8,12 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   waitForProvisioned,
   waitUntilGone,
@@ -33,9 +33,15 @@ export type AttestationComplianceState = "Compliant" | "NonCompliant" | "Unknown
 
 /** A piece of evidence supporting an attestation. */
 export interface AttestationEvidence {
-  /** Description of the evidence. */
+  /**
+   * Description of the evidence.
+   * @default none
+   */
   description?: string;
-  /** URI where the evidence is stored, e.g. a document in a storage account. */
+  /**
+   * URI where the evidence is stored, e.g. a document in a storage account.
+   * @default none
+   */
   sourceUri?: string;
 }
 
@@ -43,24 +49,41 @@ export interface AttestationProps {
   /**
    * ARM ID of the scope being attested — a subscription
    * (`/subscriptions/{id}`), a resource group (`group.resourceGroupId`), or a
-   * single resource. Must lie within the policy assignment's scope. Changing
-   * it replaces the attestation.
+   * single resource. Must lie within the policy assignment's scope.
+   *
+   * :::caution
+   * Changing it replaces the attestation.
+   * :::
    */
   scope: string;
   /**
-   * Name of the attestation. If omitted, a unique name is generated from the
-   * app, stage, and logical ID. Changing it replaces the attestation.
+   * Name of the attestation.
+   *
+   * :::caution
+   * Changing it replaces the attestation. Azure allows one attestation per
+   * scope and assignment, so the old one is deleted first.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * ARM ID of the policy assignment whose compliance state is attested,
    * e.g. `assignment.policyAssignmentId`. The assigned policy must use the
-   * `manual` effect. Changing it replaces the attestation.
+   * `manual` effect.
+   *
+   * :::caution
+   * Changing it replaces the attestation.
+   * :::
    */
   policyAssignmentId: string;
   /**
    * Member of an assigned policy set (initiative) the attestation applies
-   * to. Omit to attest the whole set. Changing it replaces the attestation.
+   * to. Omit to attest the whole set.
+   *
+   * :::caution
+   * Changing it replaces the attestation.
+   * :::
+   * @default the whole set
    */
   policyDefinitionReferenceId?: string;
   /**
@@ -68,22 +91,36 @@ export interface AttestationProps {
    * @default "Unknown"
    */
   complianceState?: AttestationComplianceState;
-  /** ISO 8601 time at which the compliance state expires. */
+  /**
+   * ISO 8601 time at which the compliance state expires.
+   * @default never expires
+   */
   expiresOn?: string;
   /**
    * Person responsible for the attestation, typically a Microsoft Entra
    * object ID.
+   * @default none
    */
   owner?: string;
-  /** Comments describing why the attestation was made. */
+  /**
+   * Comments describing why the attestation was made.
+   * @default none
+   */
   comments?: string;
-  /** Evidence supporting the compliance state. */
+  /**
+   * Evidence supporting the compliance state.
+   * @default []
+   */
   evidence?: AttestationEvidence[];
-  /** ISO 8601 time at which the evidence was assessed. */
+  /**
+   * ISO 8601 time at which the evidence was assessed.
+   * @default none
+   */
   assessmentDate?: string;
   /**
    * Free-form metadata. Alchemy merges ownership entries (`alchemy::stack`,
    * `alchemy::stage`, `alchemy::id`) in because attestations have no tags.
+   * @default {} (plus the ownership entries)
    */
   metadata?: Record<string, unknown>;
 }
@@ -114,14 +151,16 @@ export interface Attestation extends Resource<
 > {}
 
 /**
- * An Azure Policy attestation — records the compliance state of a
- * subscription, resource group, or resource for a policy assignment whose
- * definition uses the `manual` effect (e.g. regulatory controls that need
- * human verification).
+ * An Azure Policy attestation (`Microsoft.PolicyInsights/attestations`) —
+ * records the compliance state of a subscription, resource group, or
+ * resource for a policy assignment whose definition uses the `manual`
+ * effect (e.g. regulatory controls that need human verification).
  *
+ * :::caution
  * Azure only accepts an attestation once a compliance scan has produced
  * state for the scope under the assignment. New assignments are scanned
  * within about 30 minutes; trigger an on-demand scan to speed this up.
+ * :::
  *
  * Azure allows one attestation per scope, assignment, and policy
  * definition reference ID. Deletes are accepted immediately but Azure
@@ -136,6 +175,7 @@ export interface Attestation extends Resource<
  * ### Attesting a Manual Policy
  * **Example:** Mark a resource group compliant with evidence
  * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
  * const definition = yield* Azure.Policy.PolicyDefinition("manual-review", {
  *   mode: "All",
  *   policyRule: {
@@ -164,6 +204,18 @@ export interface Attestation extends Resource<
  * ### Expiring Attestations
  * **Example:** Attest until a fixed date
  * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
+ * const definition = yield* Azure.Policy.PolicyDefinition("manual-review", {
+ *   mode: "All",
+ *   policyRule: {
+ *     if: { field: "type", equals: "Microsoft.Resources/subscriptions/resourceGroups" },
+ *     then: { effect: "manual", details: { defaultState: "Unknown" } },
+ *   },
+ * });
+ * const assignment = yield* Azure.Policy.PolicyAssignment("manual-review", {
+ *   scope: group.resourceGroupId,
+ *   policyDefinitionId: definition.policyDefinitionId,
+ * });
  * yield* Azure.PolicyInsights.Attestation("quarterly", {
  *   scope: group.resourceGroupId,
  *   policyAssignmentId: assignment.policyAssignmentId,
@@ -221,9 +273,9 @@ export const AttestationProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* policyinsights
-        .ListAttestationForSubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListAttestationForSubscription", page)));
+      const page = yield* collectAll(policyinsights.ListAttestationForSubscription, {
+        subscriptionId,
+      });
       // Azure keeps attestation records after their scope's resource group
       // is deleted, and a DELETE on them returns ResourceGroupNotFound, so
       // attestations whose resource group is gone are already torn down.

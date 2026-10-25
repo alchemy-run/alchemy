@@ -21,6 +21,7 @@ export interface ProductProps {
    * Product identifier (1-256 characters). If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces
    * the product.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -28,9 +29,15 @@ export interface ProductProps {
    * @default the product identifier
    */
   displayName?: string;
-  /** Description; may contain HTML. */
+  /**
+   * Description; may contain HTML.
+   * @default no description
+   */
   description?: string;
-  /** Terms of use developers must accept before subscribing. */
+  /**
+   * Terms of use developers must accept before subscribing.
+   * @default not set
+   */
   terms?: string;
   /**
    * Whether a subscription key is required to call the product's APIs.
@@ -40,11 +47,13 @@ export interface ProductProps {
   /**
    * Whether subscription requests need administrator approval. Only valid
    * when `subscriptionRequired` is `true`.
+   * @default not set (Azure's default applies)
    */
   approvalRequired?: boolean;
   /**
    * Maximum number of subscriptions per user. Only valid when
    * `subscriptionRequired` is `true`.
+   * @default not set (Azure's default applies)
    */
   subscriptionsLimit?: number;
   /**
@@ -80,12 +89,21 @@ export interface Product extends Resource<
 /**
  * An API Management product — a bundle of APIs that developers subscribe
  * to. Deleting the product also deletes its subscriptions.
+ * The ARM type is `Microsoft.ApiManagement/service/products`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the product.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-add-products
  *
  * ### Creating a Product
  * **Example:** Published product that requires a subscription
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const product = yield* Azure.ApiManagement.Product("starter", {
  *   serviceName: apim.serviceName,
  *   displayName: "Starter",
@@ -96,6 +114,10 @@ export interface Product extends Resource<
  *
  * **Example:** Open product (no subscription key)
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const open = yield* Azure.ApiManagement.Product("open", {
  *   serviceName: apim.serviceName,
  *   subscriptionRequired: false,

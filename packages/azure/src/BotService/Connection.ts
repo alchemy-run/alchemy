@@ -9,12 +9,12 @@ import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   DeleteTimedOut,
   ensureRegistered,
   hasAnyAlchemyTag,
   NOT_FOUND_TAGS,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
@@ -31,6 +31,7 @@ export interface ConnectionProps {
    * Connection name: letters, digits, `-`, and `_`. Bot code requests user
    * tokens by this name. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the connection.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -45,11 +46,15 @@ export interface ConnectionProps {
   clientId: string;
   /** OAuth client secret. */
   clientSecret: Redacted.Redacted<string>;
-  /** Space-separated OAuth scopes. */
+  /**
+   * Space-separated OAuth scopes.
+   * @default not set
+   */
   scopes?: string;
   /**
    * Provider-specific parameters, e.g. `{ tenantID: "...", tokenExchangeUrl: "..." }`
    * for `Aadv2`, or the authorization/token URLs for `oauth2generic`.
+   * @default no parameters
    */
   parameters?: Record<string, string>;
   /**
@@ -96,20 +101,33 @@ export interface Connection extends Resource<
  * users in and obtain tokens for an identity provider (Microsoft Entra ID,
  * GitHub, a generic OAuth 2 server, ...) through the Bot Framework token
  * service.
+ * The ARM type is `Microsoft.BotService/botServices/connections`.
  *
  * Connections cannot be tagged (Azure reports the bot's tags): a connection
  * is owned by whoever owns its bot.
+ *
+ * :::caution
+ * Changing `bot`, `name`, `serviceProvider`, `location`, or `resourceGroup`
+ * replaces the connection.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/bot-service/bot-builder-concept-authentication
  *
  * ### Creating a Connection
  * **Example:** Microsoft Entra ID (AADv2) connection
  * ```typescript
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("bot-id");
+ * const bot = yield* Azure.BotService.Bot("support", {
+ *   msaAppId: identity.clientId,
+ *   msaAppTenantId: identity.tenantId,
+ *   msaAppMSIResourceId: identity.identityId,
+ *   endpoint: "https://support.example.com/api/messages",
+ * });
  * const connection = yield* Azure.BotService.Connection("graph", {
  *   bot: bot.botName,
  *   serviceProvider: "Aadv2",
  *   clientId: "00000000-0000-0000-0000-000000000000",
- *   clientSecret: Redacted.make(process.env.GRAPH_CLIENT_SECRET!),
+ *   clientSecret: yield* Config.redacted("GRAPH_CLIENT_SECRET"),
  *   scopes: "openid profile User.Read",
  *   parameters: { tenantID: "common" },
  * });
@@ -117,11 +135,18 @@ export interface Connection extends Resource<
  *
  * **Example:** GitHub connection
  * ```typescript
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("bot-id");
+ * const bot = yield* Azure.BotService.Bot("support", {
+ *   msaAppId: identity.clientId,
+ *   msaAppTenantId: identity.tenantId,
+ *   msaAppMSIResourceId: identity.identityId,
+ *   endpoint: "https://support.example.com/api/messages",
+ * });
  * yield* Azure.BotService.Connection("github", {
  *   bot: bot.botName,
  *   serviceProvider: "GitHub",
- *   clientId: githubClientId,
- *   clientSecret: githubClientSecret,
+ *   clientId: yield* Config.string("GITHUB_CLIENT_ID"),
+ *   clientSecret: yield* Config.redacted("GITHUB_CLIENT_SECRET"),
  *   scopes: "repo",
  * });
  * ```
@@ -220,23 +245,18 @@ export const ConnectionProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const bots = yield* botservice
-        .ListBots({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListBots", page)));
+      const bots = yield* collectAll(botservice.ListBots, { subscriptionId });
       const found: Connection["Attributes"][] = [];
       for (const bot of bots.value ?? []) {
         const group = resourceGroupOf(bot.id);
         if (group === undefined || bot.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          botservice.ListBotConnectionByBotService({
+          collectAll(botservice.ListBotConnectionByBotService, {
             subscriptionId,
             resourceGroupName: group,
             resourceName: bot.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListBotConnectionByBotService", page);
-        }
         for (const connection of page?.value ?? []) {
           const name = connection.name?.split("/").pop();
           if (hasAnyAlchemyTag(bot.tags) && name !== undefined) {

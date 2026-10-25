@@ -22,7 +22,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { listClusters, lower } from "./Common.ts";
 
 export interface ApplicationTypeVersionProps {
-  /** Resource group of the cluster. Changing it replaces the version. */
+  /**
+   * Resource group of the cluster. Changing it replaces the version.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the classic Service Fabric cluster. Changing it replaces the version. */
   cluster: string;
@@ -43,6 +46,7 @@ export interface ApplicationTypeVersionProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -75,17 +79,45 @@ export interface ApplicationTypeVersion extends Resource<
 > {}
 
 /**
- * A version of an application type on a classic Service Fabric cluster:
- * registers (provisions) an `.sfpkg` application package with the cluster.
+ * A version of an application type on a classic Service Fabric cluster
+ * (`Microsoft.ServiceFabric/clusters/applicationTypes/versions`). It
+ * registers an `.sfpkg` application package with the cluster. See the
+ * [Azure docs](https://learn.microsoft.com/azure/service-fabric/service-fabric-application-arm-resource).
  *
- * The cluster must be `Ready`, and the package URL must be reachable from
- * the cluster (e.g. a blob SAS URL).
+ * :::caution
+ * The cluster must be `Ready`: its node scale sets are deployed with the
+ * `ServiceFabricNode` extension and have joined the cluster.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/service-fabric/service-fabric-application-arm-resource
+ * The cluster must also reach `appPackageUrl`, for example through a blob
+ * SAS URL.
+ *
+ * :::caution
+ * Changing `resourceGroup`, `cluster`, `applicationType`, `version`, or
+ * `appPackageUrl` replaces the version.
+ * :::
  *
  * ### Registering a Package
  * **Example:** Version 1.0.0 from a blob SAS URL
  * ```typescript
+ * const cluster = yield* Azure.ServiceFabricClassic.Cluster("sf", {
+ *   reliabilityLevel: "None",
+ *   nodeTypes: [
+ *     {
+ *       name: "nt1",
+ *       isPrimary: true,
+ *       vmInstanceCount: 1,
+ *       clientConnectionEndpointPort: 19000,
+ *       httpGatewayEndpointPort: 19080,
+ *       applicationPorts: { startPort: 20000, endPort: 30000 },
+ *       ephemeralPorts: { startPort: 49152, endPort: 65534 },
+ *     },
+ *   ],
+ * });
+ * const appType = yield* Azure.ServiceFabricClassic.ApplicationType("voting-type", {
+ *   cluster: cluster.clusterName,
+ *   name: "VotingType",
+ * });
  * const v1 = yield* Azure.ServiceFabricClassic.ApplicationTypeVersion("voting-v1", {
  *   cluster: cluster.clusterName,
  *   applicationType: appType.applicationTypeName,

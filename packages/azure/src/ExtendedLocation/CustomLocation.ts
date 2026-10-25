@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -34,6 +34,7 @@ export interface CustomLocationProps {
   /**
    * Resource group the custom location is created in. Changing it replaces
    * the custom location.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
@@ -41,6 +42,7 @@ export interface CustomLocationProps {
    * starting and ending with a letter or digit. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the custom location.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -74,12 +76,16 @@ export interface CustomLocationProps {
    * extension.
    */
   clusterExtensionIds: string[];
-  /** Display name of the custom location. */
+  /**
+   * Display name of the custom location.
+   * @default none
+   */
   displayName?: string;
   /**
    * Credential the resource provider uses to create the namespace, e.g. a
    * kubeconfig. Azure never returns it, so it is sent on create and
    * whenever it changes.
+   * @default none
    */
   authentication?: CustomLocationAuthentication;
   /**
@@ -90,6 +96,7 @@ export interface CustomLocationProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -133,23 +140,37 @@ export interface CustomLocation extends Resource<
 > {}
 
 /**
- * An Azure Arc custom location — a named target location backed by a
- * namespace on an Arc-enabled Kubernetes cluster. Services such as App
- * Service, Container Apps, Arc data services, and Event Grid deploy onto
- * the cluster by using the custom location as their `extendedLocation`.
+ * An Azure Arc custom location
+ * (`Microsoft.ExtendedLocation/customLocations`) — a named target location
+ * backed by a namespace on an Arc-enabled Kubernetes cluster. Services
+ * such as App Service, Container Apps, Arc data services, and Event Grid
+ * deploy onto the cluster by using the custom location as their
+ * `extendedLocation`. See
+ * [custom locations](https://learn.microsoft.com/azure/azure-arc/platform/conceptual-custom-locations).
  *
+ * :::caution
  * The host cluster must be connected (its Arc agents running) and have the
- * custom locations feature and the referenced cluster extensions installed.
+ * custom locations feature and the referenced cluster extensions
+ * installed.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/azure-arc/platform/conceptual-custom-locations
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `hostResourceId`,
+ * `hostType`, or `namespace` replaces the custom location. Resources
+ * deployed onto it must be redeployed.
+ * :::
  *
  * ### Creating a Custom Location
  * **Example:** Custom location over an Arc cluster extension
  * ```typescript
+ * const clusterId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/arc/providers/Microsoft.Kubernetes/connectedClusters/factory";
  * const location = yield* Azure.ExtendedLocation.CustomLocation("site", {
- *   hostResourceId: cluster.clusterId,
+ *   hostResourceId: clusterId,
  *   namespace: "appservice-ns",
- *   clusterExtensionIds: [extension.extensionId],
+ *   clusterExtensionIds: [
+ *     `${clusterId}/providers/Microsoft.KubernetesConfiguration/extensions/appservice`,
+ *   ],
  *   displayName: "Factory floor",
  * });
  * ```
@@ -158,9 +179,11 @@ export interface CustomLocation extends Resource<
  * **Example:** Custom location with a system-assigned identity
  * ```typescript
  * const location = yield* Azure.ExtendedLocation.CustomLocation("site", {
- *   hostResourceId: cluster.clusterId,
+ *   hostResourceId: clusterId,
  *   namespace: "arc-data",
- *   clusterExtensionIds: [extension.extensionId],
+ *   clusterExtensionIds: [
+ *     `${clusterId}/providers/Microsoft.KubernetesConfiguration/extensions/arcdata`,
+ *   ],
  *   identityType: "SystemAssigned",
  * });
  * ```
@@ -229,11 +252,9 @@ export const CustomLocationProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* extendedlocation
-        .ListCustomLocationBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListCustomLocationBySubscription", page)),
-        );
+      const page = yield* collectAll(extendedlocation.ListCustomLocationBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((location) => {
         const group = resourceGroupOf(location.id);
         return hasAnyAlchemyTag(location.tags) && group !== undefined && location.name !== undefined

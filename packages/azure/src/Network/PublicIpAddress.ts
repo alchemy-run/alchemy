@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -236,9 +236,7 @@ export const PublicIpAddressProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* network
-        .ListPublicIPAddressAll({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPublicIPAddressAll", page)));
+      const page = yield* collectAll(network.ListPublicIPAddressAll, { subscriptionId });
       return page.value.flatMap((ip) => {
         const group = resourceGroupOf(ip.id);
         return hasAnyAlchemyTag(ip.tags) && group !== undefined && ip.name !== undefined

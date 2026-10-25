@@ -5,10 +5,10 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   stackAndStage,
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
@@ -116,13 +116,9 @@ export const NetworkManagerConnectionProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* network
-        .ListSubscriptionNetworkManagerConnections({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListSubscriptionNetworkManagerConnections", page),
-          ),
-        );
+      const page = yield* collectAll(network.ListSubscriptionNetworkManagerConnections, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((connection) =>
         connection.name !== undefined &&
         connection.properties?.description?.includes("alchemy:") === true

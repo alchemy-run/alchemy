@@ -5,10 +5,10 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   waitForProvisioned,
   waitUntilGone,
@@ -33,15 +33,15 @@ export interface WorkspaceProps {
   /**
    * Resource group the workspace is created in. Changing it replaces the
    * workspace.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Globally unique workspace name: 3-24 lowercase letters and digits,
    * starting with a letter. It prefixes the host names of the workspace's
    * FHIR and DICOM services, whose full resource IDs must stay within 253
-   * characters. If omitted, a unique 16-character name is
-   * generated from the app, stage, and logical ID. Changing it replaces
-   * the workspace.
+   * characters. Changing it replaces the workspace.
+   * @default a unique 16-character name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -54,6 +54,7 @@ export interface WorkspaceProps {
    * User tags. Alchemy ownership markers (`alchemy_stack`, `alchemy_stage`,
    * `alchemy_id`) are merged in automatically; this resource provider
    * rejects `:` in tag names.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -83,14 +84,15 @@ export interface Workspace extends Resource<
 > {}
 
 /**
- * An Azure Health Data Services workspace — the logical container for FHIR
- * and DICOM services that share a location, network and compliance
+ * An Azure Health Data Services workspace
+ * (`Microsoft.HealthcareApis/workspaces`): the logical container for FHIR
+ * and DICOM services that share a location, network, and compliance
  * boundary. A workspace itself is free; you pay for the services in it.
  *
  * @see https://learn.microsoft.com/azure/healthcare-apis/workspace-overview
  *
  * ### Creating a Workspace
- * **Example:** Workspace in a resource group
+ * **Example:** Workspace in the stack's resource group
  * ```typescript
  * const workspace = yield* Azure.HealthcareApis.Workspace("workspace");
  * ```
@@ -107,10 +109,17 @@ export interface Workspace extends Resource<
  * ### Adding Services
  * **Example:** Workspace with a FHIR R4 service
  * ```typescript
+ * const workspace = yield* Azure.HealthcareApis.Workspace("workspace");
  * const fhir = yield* Azure.HealthcareApis.FhirService("fhir", {
  *   workspace: workspace.workspaceName,
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the workspace.
+ * A FHIR or DICOM service whose `workspace` or `resourceGroup` changes with
+ * it is replaced too, and its data is lost.
+ * :::
  *
  * @resource
  */
@@ -146,9 +155,9 @@ export const WorkspaceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* healthcareapis
-        .ListWorkspaceBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListWorkspaceBySubscription", page)));
+      const page = yield* collectAll(healthcareapis.ListWorkspaceBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((workspace) => {
         const group = resourceGroupOf(workspace.id);
         return hasAnyMarker(workspace.tags) && group !== undefined && workspace.name !== undefined

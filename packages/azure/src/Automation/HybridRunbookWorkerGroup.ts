@@ -24,11 +24,13 @@ export interface HybridRunbookWorkerGroupProps {
   /**
    * Group name. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the group.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Name of a {@link Credential} the group's jobs run as. Omit to run jobs
    * as the worker's local system account.
+   * @default not set (jobs run as the worker's local system account)
    */
   credential?: string;
 }
@@ -59,16 +61,24 @@ export interface HybridRunbookWorkerGroup extends Resource<
  * machines (Azure VMs or Arc servers) that run runbooks inside your own
  * network. Pass its name as `runOn` of a {@link JobSchedule} or
  * {@link Webhook}.
+ * The ARM type is
+ * `Microsoft.Automation/automationAccounts/hybridRunbookWorkerGroups`.
+ *
+ * :::caution
+ * Changing `automationAccount`, `name`, or `resourceGroup` replaces the
+ * group.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/automation-hybrid-runbook-worker
  *
  * ### Creating a Worker Group
  * **Example:** Group that runs jobs as a credential
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const runAs = yield* Azure.Automation.Credential("run-as", {
  *   automationAccount: account.automationAccountName,
  *   userName: "svc-runbooks",
- *   password: Redacted.make(password),
+ *   password: yield* Config.redacted("RUNBOOK_SVC_PASSWORD"),
  * });
  * const workers = yield* Azure.Automation.HybridRunbookWorkerGroup("onprem", {
  *   automationAccount: account.automationAccountName,

@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -27,6 +27,7 @@ export interface ForwardingRulesetVirtualNetworkLinkProps {
   /**
    * Resource group of the ruleset. The DNS resolver API rejects resource group names
    * longer than 80 characters. Changing it replaces the link.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /** Name of the DNS forwarding ruleset to link. Changing it replaces the link. */
@@ -35,6 +36,7 @@ export interface ForwardingRulesetVirtualNetworkLinkProps {
    * Link name: 1-80 letters, digits, `_`, and `-`. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the link.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -46,6 +48,7 @@ export interface ForwardingRulesetVirtualNetworkLinkProps {
    * User metadata. Alchemy ownership markers (`alchemy::stack`,
    * `alchemy::stage`, `alchemy::id`) are merged in because links have no
    * tags.
+   * @default {}
    */
   metadata?: Record<string, string>;
 }
@@ -72,22 +75,31 @@ export interface ForwardingRulesetVirtualNetworkLink extends Resource<
 > {}
 
 /**
- * Links a virtual network to an Azure DNS forwarding ruleset so the
- * ruleset's forwarding rules apply to DNS queries from that network.
+ * Links a virtual network to an Azure DNS forwarding ruleset
+ * (`Microsoft.Network/dnsForwardingRulesets/virtualNetworkLinks`) so the
+ * ruleset's forwarding rules apply to DNS queries from that network. See
+ * [ruleset links](https://learn.microsoft.com/azure/dns/private-resolver-endpoints-rulesets#ruleset-links).
  *
  * Links cannot be tagged, so Alchemy records ownership in the link's
  * metadata.
  *
- * @see https://learn.microsoft.com/azure/dns/private-resolver-endpoints-rulesets#ruleset-links
+ * :::caution
+ * Changing `resourceGroup`, `dnsForwardingRuleset`, `name`, or
+ * `virtualNetworkId` replaces the link. A network links to a ruleset only
+ * once, so a rename on the same network deletes the old link first.
+ * :::
  *
  * ### Linking a Virtual Network
  * **Example:** Apply a ruleset to a spoke network
  * ```typescript
+ * const spoke = yield* Azure.Network.VirtualNetwork("spoke", {
+ *   addressPrefixes: ["10.1.0.0/16"],
+ * });
  * const link = yield* Azure.DnsResolver.ForwardingRulesetVirtualNetworkLink(
  *   "spoke",
  *   {
  *     dnsForwardingRuleset: ruleset.dnsForwardingRulesetName,
- *     virtualNetworkId: spokeVnetId,
+ *     virtualNetworkId: spoke.virtualNetworkId,
  *   },
  * );
  * ```
@@ -140,23 +152,18 @@ export const ForwardingRulesetVirtualNetworkLinkProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const rulesets = yield* dnsresolver
-        .ListDnsForwardingRulesets({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDnsForwardingRulesets", page)));
+      const rulesets = yield* collectAll(dnsresolver.ListDnsForwardingRulesets, { subscriptionId });
       const found: ForwardingRulesetVirtualNetworkLink["Attributes"][] = [];
       for (const ruleset of rulesets.value ?? []) {
         const group = resourceGroupOf(ruleset.id);
         if (group === undefined || ruleset.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          dnsresolver.ListVirtualNetworkLinks({
+          collectAll(dnsresolver.ListVirtualNetworkLinks, {
             subscriptionId,
             resourceGroupName: group,
             dnsForwardingRulesetName: ruleset.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListVirtualNetworkLinks", page);
-        }
         for (const link of page?.value ?? []) {
           if (hasAnyAlchemyTag(link.properties.metadata) && link.name !== undefined) {
             found.push(toAttrs(group, ruleset.name, link.name, link));

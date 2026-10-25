@@ -45,7 +45,10 @@ export interface DatastorePureStorageVolume {
 }
 
 export interface DatastoreProps {
-  /** Resource group of the private cloud. Changing it replaces the datastore. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the datastore.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the datastore. */
   privateCloud: string;
@@ -54,18 +57,29 @@ export interface DatastoreProps {
   /**
    * Name of the datastore. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the datastore.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Azure NetApp Files volume ID. Set exactly one backing volume; changing
    * it replaces the datastore.
+   * @default not set
    */
   netAppVolumeId?: string;
-  /** iSCSI (disk pool) volume. Changing it replaces the datastore. */
+  /**
+   * iSCSI (disk pool) volume. Changing it replaces the datastore.
+   * @default not set
+   */
   diskPoolVolume?: DatastoreDiskPoolVolume;
-  /** Elastic SAN volume ID. Changing it replaces the datastore. */
+  /**
+   * Elastic SAN volume ID. Changing it replaces the datastore.
+   * @default not set
+   */
   elasticSanVolumeId?: string;
-  /** Pure Storage volume. Changing it replaces the datastore. */
+  /**
+   * Pure Storage volume. Changing it replaces the datastore.
+   * @default not set
+   */
   pureStorageVolume?: DatastorePureStorageVolume;
 }
 
@@ -93,19 +107,31 @@ export interface Datastore extends Resource<
 > {}
 
 /**
- * A datastore attached to an Azure VMware Solution cluster, backed by an
+ * A datastore attached to an Azure VMware Solution cluster
+ * (`Microsoft.AVS/privateClouds/clusters/datastores`), backed by an
  * Azure NetApp Files volume, an Elastic SAN volume, an iSCSI LUN, or a
  * Pure Storage volume.
+ *
+ * :::caution
+ * Changing `privateCloud`, `cluster`, `name`, the backing volume
+ * (`netAppVolumeId`, `diskPoolVolume`, `elasticSanVolumeId`, or
+ * `pureStorageVolume`), or `resourceGroup` replaces the datastore.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/attach-azure-netapp-files-to-azure-vmware-solution-hosts
  *
  * ### Attaching Storage
  * **Example:** Azure NetApp Files datastore
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
  * const datastore = yield* Azure.VMware.Datastore("anf", {
  *   privateCloud: cloud.privateCloudName,
  *   cluster: "Cluster-1",
- *   netAppVolumeId: volumeId,
+ *   netAppVolumeId: `/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/storage/providers/Microsoft.NetApp/netAppAccounts/anf/capacityPools/pool/volumes/avs`,
  * });
  * ```
  *
@@ -114,7 +140,7 @@ export interface Datastore extends Resource<
  * const datastore = yield* Azure.VMware.Datastore("esan", {
  *   privateCloud: cloud.privateCloudName,
  *   cluster: "Cluster-1",
- *   elasticSanVolumeId: elasticSanVolumeId,
+ *   elasticSanVolumeId: `/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/storage/providers/Microsoft.ElasticSan/elasticSans/san/volumegroups/avs/volumes/ds1`,
  * });
  * ```
  *

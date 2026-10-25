@@ -6,12 +6,12 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -49,7 +49,10 @@ export interface SignalRFeature {
    * `"true"`/`"false"` for the others.
    */
   value: string;
-  /** Optional properties of the feature. */
+  /**
+   * Optional properties of the feature.
+   * @default no properties
+   */
   properties?: Record<string, string>;
 }
 
@@ -63,7 +66,10 @@ export interface SignalRLogCategory {
 export interface SignalRLiveTrace {
   /** Whether live trace clients may connect to the service. */
   enabled: boolean;
-  /** Per-category live trace switches. */
+  /**
+   * Per-category live trace switches.
+   * @default Azure's default categories
+   */
   categories?: SignalRLogCategory[];
 }
 
@@ -73,28 +79,47 @@ export interface SignalRUpstreamTemplate {
    * placeholders, e.g. `https://example.com/{hub}/api/{event}`.
    */
   urlTemplate: string;
-  /** Hub name pattern (`*`, `hub1,hub2`, or `hub1`). Matches any hub if omitted. */
+  /**
+   * Hub name pattern (`*`, `hub1,hub2`, or `hub1`). Matches any hub if omitted.
+   * @default any hub
+   */
   hubPattern?: string;
-  /** Event name pattern. Matches any event if omitted. */
+  /**
+   * Event name pattern. Matches any event if omitted.
+   * @default any event
+   */
   eventPattern?: string;
-  /** Category pattern (`connections`, `messages`). Matches any category if omitted. */
+  /**
+   * Category pattern (`connections`, `messages`). Matches any category if omitted.
+   * @default any category
+   */
   categoryPattern?: string;
   /**
    * Upstream authentication: managed identity tokens for the given App ID
    * URI (`resource`). No auth if omitted.
+   * @default no auth
    */
   auth?: {
     /** `None` or `ManagedIdentity`. */
     type: "None" | "ManagedIdentity";
-    /** App ID URI placed in the token's `aud` claim (with `ManagedIdentity`). */
+    /**
+     * App ID URI placed in the token's `aud` claim (with `ManagedIdentity`).
+     * @default not set
+     */
     resource?: string;
   };
 }
 
 export interface SignalRNetworkAcl {
-  /** Request types allowed through this ACL. */
+  /**
+   * Request types allowed through this ACL.
+   * @default []
+   */
   allow?: SignalRRequestType[];
-  /** Request types denied by this ACL. */
+  /**
+   * Request types denied by this ACL.
+   * @default []
+   */
   deny?: SignalRRequestType[];
 }
 
@@ -113,29 +138,45 @@ export interface SignalRIpRule {
 export interface SignalRNetworkAcls {
   /** Action applied to requests no ACL matches. */
   defaultAction: "Allow" | "Deny";
-  /** ACL for requests from the public network. */
+  /**
+   * ACL for requests from the public network.
+   * @default no public network ACL
+   */
   publicNetwork?: SignalRNetworkAcl;
-  /** ACLs for requests from private endpoints. */
+  /**
+   * ACLs for requests from private endpoints.
+   * @default []
+   */
   privateEndpoints?: SignalRPrivateEndpointAcl[];
-  /** IP rules filtering public traffic. */
+  /**
+   * IP rules filtering public traffic.
+   * @default []
+   */
   ipRules?: SignalRIpRule[];
 }
 
 export interface SignalRIdentity {
   /** Identity type. `None` removes the identity. */
   type: "None" | "SystemAssigned" | "UserAssigned";
-  /** ARM resource IDs of user-assigned identities (with `UserAssigned`). */
+  /**
+   * ARM resource IDs of user-assigned identities (with `UserAssigned`).
+   * @default []
+   */
   userAssignedIdentities?: string[];
 }
 
 export interface SignalRProps {
-  /** Resource group the service is created in. Changing it replaces the service. */
+  /**
+   * Resource group the service is created in. Changing it replaces the service.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Globally unique service name (it becomes `{name}.service.signalr.net`):
    * 3-63 letters, digits, and hyphens, starting with a letter. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the service.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -172,6 +213,7 @@ export interface SignalRProps {
   /**
    * Feature flags. Flags left out are not modified, so removing a flag
    * from this list keeps its last value.
+   * @default [] (existing flags keep their values)
    */
   features?: SignalRFeature[];
   /**
@@ -183,6 +225,7 @@ export interface SignalRProps {
   /**
    * Upstream URL templates for serverless mode. Order matters; the first
    * matching template wins.
+   * @default Azure's default (none)
    */
   upstreamTemplates?: SignalRUpstreamTemplate[];
   /**
@@ -197,11 +240,20 @@ export interface SignalRProps {
    * @default Azure's default (`false`)
    */
   clientCertEnabled?: boolean;
-  /** Live trace settings. */
+  /**
+   * Live trace settings.
+   * @default Azure's default (disabled)
+   */
   liveTrace?: SignalRLiveTrace;
-  /** Resource log categories sent to diagnostic settings. */
+  /**
+   * Resource log categories sent to diagnostic settings.
+   * @default Azure's default
+   */
   resourceLogCategories?: SignalRLogCategory[];
-  /** Network ACLs for public and private endpoint traffic. */
+  /**
+   * Network ACLs for public and private endpoint traffic.
+   * @default Azure's default (allow all)
+   */
   networkAcls?: SignalRNetworkAcls;
   /**
    * Whether the public endpoint accepts traffic. When disabled, private
@@ -232,11 +284,15 @@ export interface SignalRProps {
    * @default Azure's default (`false`)
    */
   resourceStopped?: boolean;
-  /** Managed identity of the service, e.g. for upstream auth or Key Vault certificates. */
+  /**
+   * Managed identity of the service, e.g. for upstream auth or Key Vault certificates.
+   * @default no managed identity
+   */
   identity?: SignalRIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -291,11 +347,23 @@ export interface SignalR extends Resource<
 > {}
 
 /**
- * An Azure SignalR Service — a managed real-time messaging service for
- * ASP.NET Core SignalR and raw WebSocket clients. The access keys and
- * connection strings are exposed as redacted attributes.
+ * An Azure SignalR Service (`Microsoft.SignalRService/signalR`): a managed
+ * real-time messaging service for ASP.NET Core SignalR and raw WebSocket
+ * clients. The access keys and connection strings are redacted attributes.
+ * See the
+ * [Azure docs](https://learn.microsoft.com/azure/azure-signalr/signalr-overview).
  *
- * @see https://learn.microsoft.com/azure/azure-signalr/signalr-overview
+ * :::caution
+ * A subscription can hold one `Free_F1` service per region. Replicas, custom
+ * certificates, and custom domains need `Premium_P1` or `Premium_P2`. Shared
+ * private links need `Standard_S1` or higher.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `kind` replaces the
+ * service, and clients get a new endpoint and new keys. Alchemy updates every
+ * other prop in place.
+ * :::
  *
  * ### Creating a Service
  * **Example:** Free tier service
@@ -636,9 +704,7 @@ export const SignalRProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* signalr
-        .ListSignalRBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListSignalRBySubscription", page)));
+      const page = yield* collectAll(signalr.ListSignalRBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((service) => {
         const group = resourceGroupOf(service.id);
         return hasAnyAlchemyTag(service.tags) && group !== undefined && service.name !== undefined

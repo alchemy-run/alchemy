@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,6 +32,7 @@ export interface NetworkPacketBrokerProps {
    * Name of the network packet broker. If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the network
    * packet broker.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -50,6 +51,7 @@ export interface NetworkPacketBrokerProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -92,22 +94,30 @@ export interface NetworkPacketBroker extends Resource<
  * Network Fabric's packet-broker (NPB) devices, which mirror traffic to
  * `NetworkTap` destinations.
  *
+ * ARM type: `Microsoft.ManagedNetworkFabric/networkPacketBrokers`.
+ * See the [Azure documentation](https://learn.microsoft.com/rest/api/managednetworkfabric/network-packet-brokers).
+ *
  * The resource provider creates packet brokers itself when a Network Fabric
  * with NPB devices is provisioned and rejects a user PUT (`Network Packet
  * Broker resource PUT not allowed`). Manage an existing broker by passing
  * its `name` and adopting it; Alchemy then syncs its tags, and deleting the
  * resource deletes the broker.
  *
- * @see https://learn.microsoft.com/rest/api/managednetworkfabric/network-packet-brokers
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `networkFabricId` replaces
+ * the broker.
+ * :::
  *
  * ### Managing a Network Packet Broker
  * **Example:** Tag the fabric's packet broker
  * ```typescript
+ * // The fabric "fab1" and its packet broker are in the stack's resource group,
+ * // here "my-app-dev".
+ * const fabricId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/my-app-dev/providers/Microsoft.ManagedNetworkFabric/networkFabrics/fab1";
  * const broker = yield* Azure.ManagedNetworkFabric.NetworkPacketBroker("npb", {
- *   resourceGroup: "nexus",
  *   name: "fab1-npb",
- *   networkFabricId:
- *     "/subscriptions/.../resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/networkFabrics/fab1",
+ *   networkFabricId: fabricId,
  *   tags: { team: "network" },
  * }).pipe(AdoptPolicy.adopt());
  * ```
@@ -116,7 +126,6 @@ export interface NetworkPacketBroker extends Resource<
  * **Example:** Network tap on the broker
  * ```typescript
  * const tap = yield* Azure.ManagedNetworkFabric.NetworkTap("tap", {
- *   resourceGroup: "nexus",
  *   networkPacketBrokerId: broker.networkPacketBrokerId,
  *   destinations: [
  *     {
@@ -184,13 +193,7 @@ export const NetworkPacketBrokerProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mnf
-        .ListNetworkPacketBrokerBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListNetworkPacketBrokerBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(mnf.ListNetworkPacketBrokerBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

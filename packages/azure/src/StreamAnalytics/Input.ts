@@ -25,7 +25,10 @@ import {
 } from "./Common.ts";
 
 export interface InputProps {
-  /** Resource group of the streaming job. Changing it replaces the input. */
+  /**
+   * Resource group of the streaming job. Changing it replaces the input.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the streaming job. Changing it replaces the input. */
   streamingJob: string;
@@ -33,6 +36,7 @@ export interface InputProps {
    * Input name, referenced from the job's query (`FROM [name]`). If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the input.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -61,7 +65,10 @@ export interface InputProps {
    * @default Azure's default (`None`)
    */
   compression?: "None" | "GZip" | "Deflate";
-  /** Key in the input data used to partition it. */
+  /**
+   * Key in the input data used to partition it.
+   * @default not set
+   */
   partitionKey?: string;
 }
 
@@ -87,7 +94,8 @@ export interface Input extends Resource<
 > {}
 
 /**
- * An input of an Azure Stream Analytics streaming job — the stream (Event
+ * An input of an Azure Stream Analytics streaming job
+ * (`Microsoft.StreamAnalytics/streamingjobs/inputs`) — the stream (Event
  * Hubs, IoT Hub, Blob storage) or reference data the job's query reads
  * `FROM`.
  *
@@ -95,11 +103,17 @@ export interface Input extends Resource<
  * carries this stack's and stage's ownership tags. Changes are rejected
  * while the job is running.
  *
+ * :::caution
+ * Changing `streamingJob`, `name`, `type`, or `resourceGroup` replaces the
+ * input.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/stream-analytics/stream-analytics-add-inputs
  *
  * ### Stream Inputs
  * **Example:** Blob storage stream read with the job's managed identity
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("telemetry");
  * const job = yield* Azure.StreamAnalytics.StreamingJob("telemetry", {
  *   identity: "SystemAssigned",
  * });

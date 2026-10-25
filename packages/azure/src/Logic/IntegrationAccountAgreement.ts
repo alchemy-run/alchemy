@@ -39,6 +39,7 @@ export interface IntegrationAccountAgreementProps {
    * Agreement name: 1-80 letters, digits, `-`, `_`, `.`, `(`, `)`. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the agreement.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Message protocol. Changing it replaces the agreement. */
@@ -59,6 +60,7 @@ export interface IntegrationAccountAgreementProps {
   /**
    * User metadata. Alchemy adds `alchemy::*` ownership and hash keys
    * because artifacts do not return tags.
+   * @default none
    */
   metadata?: Record<string, unknown>;
 }
@@ -95,27 +97,95 @@ export interface IntegrationAccountAgreement extends Resource<
  * integration account. It carries the AS2, X12, or EDIFACT settings the
  * B2B encode/decode actions apply to messages exchanged by the partners.
  *
+ * ARM type: `Microsoft.Logic/integrationAccounts/agreements`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-agreements).
+ *
  * :::caution
  * Changing `name`, `agreementType`, `integrationAccount`, or
  * `resourceGroup` replaces the agreement.
  * :::
  *
- * @see https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-agreements
- *
  * ### Creating an Agreement
  * **Example:** AS2 agreement between two partners
  * ```typescript
+ * const account = yield* Azure.Logic.IntegrationAccount("b2b");
+ * const contoso = yield* Azure.Logic.IntegrationAccountPartner("contoso", {
+ *   integrationAccount: account.integrationAccountName,
+ *   businessIdentities: [{ qualifier: "ZZ", value: "CONTOSO" }],
+ * });
+ * const fabrikam = yield* Azure.Logic.IntegrationAccountPartner("fabrikam", {
+ *   integrationAccount: account.integrationAccountName,
+ *   businessIdentities: [{ qualifier: "ZZ", value: "FABRIKAM" }],
+ * });
+ * // Unsigned, unencrypted AS2 settings for both directions.
+ * const connection = {
+ *   ignoreCertificateNameMismatch: false,
+ *   supportHttpStatusCodeContinue: true,
+ *   keepHttpConnectionAlive: true,
+ *   unfoldHttpHeaders: true,
+ * };
+ * const protocolSettings = {
+ *   messageConnectionSettings: connection,
+ *   acknowledgementConnectionSettings: connection,
+ *   mdnSettings: {
+ *     needMDN: false,
+ *     signMDN: false,
+ *     sendMDNAsynchronously: false,
+ *     signOutboundMDNIfOptional: false,
+ *     sendInboundMDNToMessageBox: true,
+ *     micHashingAlgorithm: "SHA1",
+ *   },
+ *   securitySettings: {
+ *     overrideGroupSigningCertificate: false,
+ *     enableNRRForInboundEncodedMessages: false,
+ *     enableNRRForInboundDecodedMessages: false,
+ *     enableNRRForOutboundMDN: false,
+ *     enableNRRForOutboundEncodedMessages: false,
+ *     enableNRRForOutboundDecodedMessages: false,
+ *     enableNRRForInboundMDN: false,
+ *   },
+ *   validationSettings: {
+ *     overrideMessageProperties: false,
+ *     encryptMessage: false,
+ *     signMessage: false,
+ *     compressMessage: false,
+ *     checkDuplicateMessage: true,
+ *     interchangeDuplicatesValidityDays: 5,
+ *     checkCertificateRevocationListOnSend: false,
+ *     checkCertificateRevocationListOnReceive: false,
+ *     encryptionAlgorithm: "DES3",
+ *     signingAlgorithm: "Default",
+ *   },
+ *   envelopeSettings: {
+ *     messageContentType: "text/plain",
+ *     transmitFileNameInMimeHeader: false,
+ *     fileNameTemplate: "%FILE().ReceivedFileName%",
+ *     suspendMessageOnFileNameGenerationError: true,
+ *     autogenerateFileName: false,
+ *   },
+ *   errorSettings: { suspendDuplicateMessage: false, resendIfMDNNotReceived: false },
+ * };
+ * const host = { qualifier: "ZZ", value: "CONTOSO" };
+ * const guest = { qualifier: "ZZ", value: "FABRIKAM" };
  * const agreement = yield* Azure.Logic.IntegrationAccountAgreement("as2", {
  *   integrationAccount: account.integrationAccountName,
  *   agreementType: "AS2",
  *   hostPartner: contoso.partnerName,
  *   guestPartner: fabrikam.partnerName,
- *   hostIdentity: { qualifier: "ZZ", value: "CONTOSO" },
- *   guestIdentity: { qualifier: "ZZ", value: "FABRIKAM" },
+ *   hostIdentity: host,
+ *   guestIdentity: guest,
  *   content: {
  *     aS2: {
- *       receiveAgreement: { senderBusinessIdentity, receiverBusinessIdentity, protocolSettings },
- *       sendAgreement: { senderBusinessIdentity, receiverBusinessIdentity, protocolSettings },
+ *       receiveAgreement: {
+ *       senderBusinessIdentity: guest,
+ *       receiverBusinessIdentity: host,
+ *       protocolSettings,
+ *     },
+ *       sendAgreement: {
+ *       senderBusinessIdentity: host,
+ *       receiverBusinessIdentity: guest,
+ *       protocolSettings,
+ *     },
  *     },
  *   },
  * });

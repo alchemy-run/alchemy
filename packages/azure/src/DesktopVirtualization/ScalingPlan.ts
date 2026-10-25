@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -36,12 +36,16 @@ export interface ScalingPlanHostPoolReference {
 }
 
 export interface ScalingPlanProps {
-  /** Resource group of the scaling plan. Changing it replaces the plan. */
+  /**
+   * Resource group of the scaling plan. Changing it replaces the plan.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Scaling plan name, 3-64 letters, digits, `@`, `.`, `-`, `_`, or spaces.
    * If omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the plan.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -59,11 +63,20 @@ export interface ScalingPlanProps {
    * @default "Pooled"
    */
   hostPoolType?: "Pooled" | "Personal";
-  /** Session hosts carrying this tag name are excluded from scaling. */
+  /**
+   * Session hosts carrying this tag name are excluded from scaling.
+   * @default unset (no host is excluded)
+   */
   exclusionTag?: string;
-  /** Display name of the plan. */
+  /**
+   * Display name of the plan.
+   * @default unset
+   */
   friendlyName?: string;
-  /** Description of the plan. */
+  /**
+   * Description of the plan.
+   * @default unset
+   */
   description?: string;
   /**
    * Host pools the plan is assigned to. A host pool can be assigned to one
@@ -74,6 +87,7 @@ export interface ScalingPlanProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -102,10 +116,22 @@ export interface ScalingPlan extends Resource<
 > {}
 
 /**
- * An Azure Virtual Desktop scaling plan (autoscale) — starts and stops
+ * An Azure Virtual Desktop scaling plan (autoscale,
+ * `Microsoft.DesktopVirtualization/scalingPlans`) — starts and stops
  * session hosts on a schedule to match demand. Define its schedules with
  * `ScalingPlanPooledSchedule` or `ScalingPlanPersonalSchedule` and assign
  * it to host pools with `hostPoolReferences`.
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, or `hostPoolType` replaces
+ * the plan.
+ * :::
+ *
+ * :::caution
+ * Setting `scalingPlanEnabled: true` needs the `Desktop Virtualization
+ * Power On Off Contributor` role for the Azure Virtual Desktop service
+ * principal.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-desktop/autoscale-scaling-plan
  *
@@ -121,6 +147,10 @@ export interface ScalingPlan extends Resource<
  * ### Assigning Host Pools
  * **Example:** Assign a host pool without enabling scaling yet
  * ```typescript
+ * const pool = yield* Azure.DesktopVirtualization.HostPool("pool", {
+ *   hostPoolType: "Pooled",
+ *   loadBalancerType: "BreadthFirst",
+ * });
  * const plan = yield* Azure.DesktopVirtualization.ScalingPlan("autoscale", {
  *   timeZone: "UTC",
  *   hostPoolReferences: [
@@ -181,9 +211,9 @@ export const ScalingPlanProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* desktopvirtualization
-        .ListScalingPlanBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListScalingPlanBySubscription", page)));
+      const page = yield* collectAll(desktopvirtualization.ListScalingPlanBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((plan) => {
         const rg = resourceGroupOf(plan.id);
         return hasAnyAlchemyTag(plan.tags) && rg !== undefined && plan.name !== undefined

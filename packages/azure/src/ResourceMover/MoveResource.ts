@@ -25,9 +25,15 @@ export interface MoveResourceSettings {
    * `Microsoft.Compute/virtualMachines`.
    */
   resourceType: string;
-  /** Name of the resource in the target region. */
+  /**
+   * Name of the resource in the target region.
+   * @default Azure's default (the source name)
+   */
   targetResourceName?: string;
-  /** Resource group of the resource in the target region. */
+  /**
+   * Resource group of the resource in the target region.
+   * @default Azure's default
+   */
   targetResourceGroupName?: string;
 }
 
@@ -44,30 +50,59 @@ export interface MoveResourceDependencyOverride {
 
 export interface MoveResourceProps {
   /**
-   * Resource group of the move collection. Changing it replaces the move
-   * resource.
+   * Resource group of the move collection.
+   *
+   * :::caution
+   * Changing it replaces the move resource.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
-  /** Move collection that holds the resource. Changing it replaces the move resource. */
+  /**
+   * Move collection that holds the resource.
+   *
+   * :::caution
+   * Changing it replaces the move resource.
+   * :::
+   */
   moveCollection: string;
   /**
-   * Name of the move resource. If omitted, a unique name is generated from
-   * the app, stage, and logical ID. Changing it replaces the move resource.
+   * Name of the move resource.
+   *
+   * :::caution
+   * Changing it replaces the move resource.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * ARM ID of the resource to move. It must live in the collection's source
-   * region. Changing it replaces the move resource.
+   * region.
+   *
+   * :::caution
+   * Changing it replaces the move resource.
+   * :::
    */
   sourceId: string;
   /**
-   * ARM ID of an existing resource in the target region to move into
-   * instead of creating a new one. Changing it replaces the move resource.
+   * ARM ID of an existing resource in the target region to move into instead of
+   * creating a new one.
+   *
+   * :::caution
+   * Changing it replaces the move resource.
+   * :::
+   * @default none (Resource Mover creates a new target resource)
    */
   existingTargetId?: string;
-  /** Target settings (name and resource group in the target region). */
+  /**
+   * Target settings (name and resource group in the target region).
+   * @default Azure's defaults
+   */
   resourceSettings?: MoveResourceSettings;
-  /** Overrides for the targets of the resource's dependencies. */
+  /**
+   * Overrides for the targets of the resource's dependencies.
+   * @default []
+   */
   dependsOnOverrides?: MoveResourceDependencyOverride[];
 }
 
@@ -106,18 +141,22 @@ export interface MoveResource extends Resource<
 > {}
 
 /**
- * A resource added to an Azure Resource Mover move collection.
+ * A resource added to an Azure Resource Mover move collection
+ * (`Microsoft.Migrate/moveCollections/moveResources`).
  *
  * Adding a resource only registers it for the move; preparing, moving and
  * committing it are imperative actions outside the IaC lifecycle. Move
  * resources have no tags, so Alchemy treats one as owned when its move
  * collection carries this stack's ownership tags.
  *
+ * :::caution
  * Azure adds the resource with the collection's managed identity, which
  * reads the source and writes a resource link onto it, so that identity
  * needs Contributor on the source resource (and Contributor plus User Access
- * Administrator on the subscription to later prepare and move it). Alchemy
- * re-sends the add while a fresh role assignment propagates.
+ * Administrator on the subscription to later prepare and move it).
+ * :::
+ *
+ * Alchemy re-sends the add while a fresh role assignment propagates.
  *
  * @see https://learn.microsoft.com/azure/resource-mover/overview
  *
@@ -128,15 +167,15 @@ export interface MoveResource extends Resource<
  *   sourceRegion: "eastus",
  *   targetRegion: "westus2",
  * });
- * // Let the collection's identity read and link the resources to move.
+ * const nsg = yield* Azure.Network.NetworkSecurityGroup("web", {
+ *   location: "eastus",
+ * });
+ * // Let the collection's identity read and link the resource to move.
  * const grant = yield* Azure.Authorization.RoleAssignment("moverContributor", {
- *   scope: group.resourceGroupId,
+ *   scope: nsg.networkSecurityGroupId,
  *   roleDefinitionId: Azure.Authorization.BuiltInRole.Contributor,
  *   principalId: collection.principalId,
  *   principalType: "ServicePrincipal",
- * });
- * const nsg = yield* Azure.Network.NetworkSecurityGroup("web", {
- *   location: "eastus",
  * });
  * yield* Azure.ResourceMover.MoveResource("webNsg", {
  *   // Order after the grant so it exists for the add and outlives the delete.
@@ -155,6 +194,26 @@ export interface MoveResource extends Resource<
  * ### Overriding Dependencies
  * **Example:** Point a dependency at an existing target resource
  * ```typescript
+ * const collection = yield* Azure.ResourceMover.MoveCollection("eastToWest", {
+ *   sourceRegion: "eastus",
+ *   targetRegion: "westus2",
+ * });
+ * const vnet = yield* Azure.Network.VirtualNetwork("web", {
+ *   location: "eastus",
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("web", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const nsg = yield* Azure.Network.NetworkSecurityGroup("web", {
+ *   location: "eastus",
+ * });
+ * const nic = yield* Azure.Network.NetworkInterface("web", {
+ *   location: "eastus",
+ *   ipConfigurations: [{ subnetId: subnet.subnetId }],
+ *   networkSecurityGroupId: nsg.networkSecurityGroupId,
+ * });
  * yield* Azure.ResourceMover.MoveResource("webNic", {
  *   moveCollection: collection.moveCollectionName,
  *   sourceId: nic.networkInterfaceId,
@@ -162,7 +221,12 @@ export interface MoveResource extends Resource<
  *     resourceType: "Microsoft.Network/networkInterfaces",
  *   },
  *   dependsOnOverrides: [
- *     { id: nsg.networkSecurityGroupId, targetId: existingTargetNsgId },
+ *     {
+ *       id: nsg.networkSecurityGroupId,
+ *       // an NSG that already exists in westus2
+ *       targetId:
+ *         "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/web-westus2/providers/Microsoft.Network/networkSecurityGroups/web",
+ *     },
  *   ],
  * });
  * ```

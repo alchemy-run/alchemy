@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -39,6 +39,7 @@ export interface StorageTaskOperation {
   name: StorageTaskOperationName;
   /**
    * Operation parameters, e.g. `{ tier: "Cool" }` for `SetBlobTier`.
+   * @default no parameters
    */
   parameters?: Record<string, string>;
   /**
@@ -65,7 +66,10 @@ export interface StorageTaskAction {
     /** Operations run when the condition is true. */
     operations: StorageTaskOperation[];
   };
-  /** Operations run on objects that do not match the condition. */
+  /**
+   * Operations run on objects that do not match the condition.
+   * @default no operations for non-matching objects
+   */
   else?: {
     /** Operations run when the condition is false. */
     operations: StorageTaskOperation[];
@@ -76,7 +80,10 @@ export interface StorageTaskAction {
 export interface StorageTaskIdentity {
   /** Identity type. */
   type: "None" | "SystemAssigned" | "UserAssigned" | "SystemAssigned,UserAssigned";
-  /** ARM resource IDs of user-assigned identities to attach. */
+  /**
+   * ARM resource IDs of user-assigned identities to attach.
+   * @default []
+   */
   userAssignedIdentities?: string[];
 }
 
@@ -84,12 +91,13 @@ export interface StorageTaskProps {
   /**
    * Resource group the storage task is created in. Changing it replaces the
    * task.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
-   * Name of the storage task, 3-18 lowercase letters and digits. If omitted,
-   * a unique name is generated from the app, stage, and logical ID. Changing
+   * Name of the storage task, 3-18 lowercase letters and digits. Changing
    * it replaces the task.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -118,6 +126,7 @@ export interface StorageTaskProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -164,15 +173,21 @@ export interface StorageTask extends Resource<
 > {}
 
 /**
- * An Azure Storage Actions storage task — a serverless, declarative
- * condition/operation program (if/else over blob properties → set tier,
- * set tags, delete, ...) that runs against the storage accounts it is
- * assigned to with a storage task assignment.
+ * An Azure Storage Actions storage task
+ * (`Microsoft.StorageActions/storageTasks`): a serverless, declarative
+ * condition and operation program. It runs if/else rules over blob
+ * properties (set tier, set tags, delete) against each storage account you
+ * assign it to. See the
+ * [Azure docs](https://learn.microsoft.com/azure/storage-actions/overview).
  *
- * An unassigned task costs nothing; billing is per task run and objects
+ * An unassigned task costs nothing. Billing is per task run and per object
  * scanned.
  *
- * @see https://learn.microsoft.com/azure/storage-actions/overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the task. Alchemy
+ * updates `enabled`, `description`, `action`, `identity`, and `tags` in
+ * place.
+ * :::
  *
  * ### Creating a Storage Task
  * **Example:** Move hot blobs to the cool tier
@@ -208,11 +223,29 @@ export interface StorageTask extends Resource<
  * ### Assigning a Task to a Storage Account
  * **Example:** Grant the task's identity access and assign it
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("files");
+ * const reports = yield* Azure.Storage.BlobContainer("reports", {
+ *   storageAccount: account.storageAccountName,
+ * });
+ * const task = yield* Azure.StorageActions.StorageTask("tiering", {
+ *   action: {
+ *     if: {
+ *       condition: "[[equals(AccessTier, 'Hot')]]",
+ *       operations: [{ name: "SetBlobTier", parameters: { tier: "Cool" } }],
+ *     },
+ *   },
+ * });
  * yield* Azure.Authorization.RoleAssignment("task-access", {
  *   scope: account.storageAccountId,
  *   roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataOwner,
  *   principalId: task.principalId,
  *   principalType: "ServicePrincipal",
+ * });
+ * yield* Azure.Storage.StorageTaskAssignment("tiering", {
+ *   storageAccount: account.storageAccountName,
+ *   taskId: task.storageTaskId,
+ *   reportPrefix: reports.containerName,
+ *   trigger: { type: "RunOnce", startOn: "2030-01-01T00:00:00Z" },
  * });
  * ```
  *
@@ -339,9 +372,9 @@ export const StorageTaskProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* storageactions
-        .ListStorageTaskBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListStorageTaskBySubscription", page)));
+      const page = yield* collectAll(storageactions.ListStorageTaskBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((task) => {
         const group = resourceGroupOf(task.id);
         return hasAnyAlchemyTag(task.tags) && group !== undefined && task.name !== undefined

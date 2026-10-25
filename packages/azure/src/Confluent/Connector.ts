@@ -76,6 +76,7 @@ export interface ConnectorProps extends OrganizationChildProps {
    * Connector name, 1-64 letters, digits, `-`, and `_`. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the connector.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Whether the connector is a sink or a source. Changing it replaces the connector. */
@@ -127,21 +128,41 @@ export interface Connector extends Resource<
 > {}
 
 /**
- * A fully managed Kafka Connect connector in a Confluent Cloud cluster of an
- * Azure-managed Confluent organization, moving data between Kafka topics
- * and Azure Blob Storage, Cosmos DB, or Synapse Analytics.
+ * A fully managed Kafka Connect connector
+ * (`Microsoft.Confluent/organizations/environments/clusters/connectors`) in
+ * a Confluent Cloud cluster of an Azure-managed Confluent organization,
+ * moving data between Kafka topics and Azure Blob Storage, Cosmos DB, or
+ * Synapse Analytics.
  *
  * Connectors carry no tags, so Alchemy ownership is inherited from the
  * organization's tags. The Azure and Kafka settings are write-only and are
  * re-applied whenever they change.
  *
- * @see https://learn.microsoft.com/azure/partner-solutions/apache-kafka-confluent-cloud/add-connectors
+ * :::caution
+ * Changing `resourceGroup`, `organization`, `environment`, `cluster`,
+ * `name`, `connectorType`, or `connectorClass` replaces the connector.
+ * :::
+ *
+ * See [Add Confluent connectors](https://learn.microsoft.com/azure/partner-solutions/apache-kafka-confluent-cloud/add-connectors).
  *
  * ### Creating a Connector
  * **Example:** Sink a topic into Blob Storage
  * ```typescript
+ * const org = yield* Azure.Confluent.Organization("kafka", {
+ *   userDetail: { emailAddress: "platform@example.com" },
+ * });
+ * const environment = yield* Azure.Confluent.Environment("dev", {
+ *   organization: org.organizationName,
+ * });
+ * const cluster = yield* Azure.Confluent.Cluster("events", {
+ *   organization: org.organizationName,
+ *   environment: environment.environmentId,
+ * });
+ * const account = yield* Azure.Storage.StorageAccount("archive");
+ * const storageKey = yield* Config.string("ARCHIVE_STORAGE_KEY");
+ * const apiKey = yield* Config.string("CONFLUENT_API_KEY");
+ * const apiSecret = yield* Config.string("CONFLUENT_API_SECRET");
  * const connector = yield* Azure.Confluent.Connector("orders-to-blob", {
- *   resourceGroup: org.resourceGroup,
  *   organization: org.organizationName,
  *   environment: environment.environmentId,
  *   cluster: cluster.clusterId,

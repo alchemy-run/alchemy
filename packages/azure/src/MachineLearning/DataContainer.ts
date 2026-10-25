@@ -33,6 +33,8 @@ export interface DataContainer extends Resource<
  * — the named container that groups the versions of a file, folder, or
  * MLTable that jobs consume. Register versions with {@link DataVersion}.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/concept-data).
+ *
  * Description, properties, tags, and the archive flag update in place.
  *
  * :::caution
@@ -48,11 +50,19 @@ export interface DataContainer extends Resource<
  * data asset.
  * :::
  *
- * @see https://learn.microsoft.com/azure/machine-learning/concept-data
- *
  * ### Creating a Data asset
  * **Example:** Data asset in a workspace
  * ```typescript
+ * // An existing Application Insights component for workspace telemetry.
+ * const insightsId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/monitoring/providers/Microsoft.Insights/components/ml-insights";
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const workspace = yield* Azure.MachineLearning.Workspace("ml", {
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ *   applicationInsights: insightsId,
+ * });
  * const dataContainer = yield* Azure.MachineLearning.DataContainer("taxi-trips", {
  *   workspace: workspace.workspaceName,
  *   description: "NYC taxi trips",

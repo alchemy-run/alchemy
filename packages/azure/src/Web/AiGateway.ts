@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -111,8 +111,7 @@ export const AiGatewayProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* web.ListAiGatewayBySubscription({ subscriptionId }).pipe(
-        Effect.flatMap((page) => requireSinglePage("ListAiGatewayBySubscription", page)),
+      const page = yield* collectAll(web.ListAiGatewayBySubscription, { subscriptionId }).pipe(
         Effect.catchTag("InvalidResourceType", () =>
           Effect.succeed({ value: [] as web.AiGatewayListResult["value"] }),
         ),

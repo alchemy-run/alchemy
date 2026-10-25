@@ -29,7 +29,10 @@ import {
 export type ServiceFabricScheduleTaskType = "LabVmsShutdownTask" | "LabVmsStartupTask";
 
 export interface ServiceFabricScheduleProps extends ScheduleRecurrenceProps {
-  /** Resource group of the lab. Changing it replaces the schedule. */
+  /**
+   * Resource group of the lab. Changing it replaces the schedule.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the lab. Changing it replaces the schedule. */
   lab: string;
@@ -47,11 +50,13 @@ export interface ServiceFabricScheduleProps extends ScheduleRecurrenceProps {
    * Schedule name. Labs only honour `LabVmsShutdown` (shutdown) and
    * `LabVmAutoStart` (startup), which are the defaults for the task type.
    * Changing it replaces the schedule.
+   * @default `LabVmsShutdown` or `LabVmAutoStart`, from `taskType`
    */
   name?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -75,13 +80,30 @@ export interface ServiceFabricSchedule extends Resource<
 
 /**
  * A shutdown (`LabVmsShutdown`) or auto-start (`LabVmAutoStart`) schedule
- * for a Service Fabric cluster registered with a DevTest Labs user.
+ * (`Microsoft.DevTestLab/labs/users/servicefabrics/schedules`) for a
+ * Service Fabric cluster registered with a DevTest Labs user.
+ *
+ * :::caution
+ * Changing `lab`, `user`, `serviceFabric`, `name`, `taskType`, or
+ * `resourceGroup` replaces the schedule.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/devtest-labs/create-environment-service-fabric-cluster
  *
  * ### Cluster Auto-shutdown
  * **Example:** Stop the cluster every evening
  * ```typescript
+ * const lab = yield* Azure.DevTestLabs.Lab("team-lab");
+ * const user = yield* Azure.DevTestLabs.User("alice", {
+ *   lab: lab.labName,
+ *   // Entra object ID of the lab user.
+ *   objectId: "00000000-0000-0000-0000-000000000000",
+ * });
+ * const fabric = yield* Azure.DevTestLabs.ServiceFabric("cluster", {
+ *   lab: lab.labName,
+ *   user: user.userName,
+ *   externalServiceFabricId: "<service-fabric-cluster-arm-id>",
+ * });
  * const shutdown = yield* Azure.DevTestLabs.ServiceFabricSchedule("off", {
  *   lab: lab.labName,
  *   user: user.userName,

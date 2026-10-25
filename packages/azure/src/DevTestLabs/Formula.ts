@@ -85,29 +85,44 @@ export interface FormulaVmSettings {
 }
 
 export interface FormulaProps {
-  /** Resource group of the lab. Changing it replaces the formula. */
+  /**
+   * Resource group of the lab. Changing it replaces the formula.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the lab. Changing it replaces the formula. */
   lab: string;
   /**
    * Formula name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the formula.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Description of the formula. */
+  /**
+   * Description of the formula.
+   * @default unset
+   */
   description?: string;
-  /** OS type of VMs created from the formula (`Linux` or `Windows`). */
+  /**
+   * OS type of VMs created from the formula (`Linux` or `Windows`).
+   * @default unset
+   */
   osType?: string;
-  /** VM settings of the formula. */
+  /**
+   * VM settings of the formula.
+   * @default unset
+   */
   formulaContent?: FormulaVmSettings;
   /**
    * ARM ID of an existing lab VM to capture the formula from. Changing it
    * replaces the formula.
+   * @default unset
    */
   labVmId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -140,14 +155,22 @@ export interface Formula extends Resource<
 > {}
 
 /**
- * A DevTest Labs formula — a reusable template of VM settings (image,
+ * A DevTest Labs formula (`Microsoft.DevTestLab/labs/formulas`) — a
+ * reusable template of VM settings (image,
  * size, network, artifacts) that lab users create VMs from.
+ *
+ * :::caution
+ * Changing `lab`, `name`, `labVmId`, or `resourceGroup` replaces the
+ * formula.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/devtest-labs/devtest-lab-manage-formulas
  *
  * ### Creating a Formula
  * **Example:** Ubuntu VM formula
  * ```typescript
+ * const lab = yield* Azure.DevTestLabs.Lab("team-lab");
+ * const publicKey = "ssh-ed25519 AAAAC3Nza... me@example.com";
  * const formula = yield* Azure.DevTestLabs.Formula("ubuntu", {
  *   lab: lab.labName,
  *   description: "Ubuntu 22.04 dev box",

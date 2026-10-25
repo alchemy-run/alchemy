@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -50,36 +50,77 @@ export interface ExchangePeeringProps {
 }
 
 export interface PeeringProps {
-  /** Resource group the peering is created in. Changing it replaces the peering. */
+  /**
+   * Resource group the peering is created in.
+   *
+   * :::caution
+   * Changing it replaces the peering.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
-   * Name of the peering. If omitted, a unique name is generated from the
-   * app, stage, and logical ID. Changing it replaces the peering.
+   * Name of the peering.
+   *
+   * :::caution
+   * Changing it replaces the peering.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the ARM resource. Changing it replaces the peering.
+   * Azure location of the ARM resource.
+   *
+   * :::caution
+   * Changing it replaces the peering.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
-  /** Kind of peering. Changing it replaces the peering. */
+  /**
+   * Kind of peering: `Direct` or `Exchange`.
+   *
+   * :::caution
+   * Changing it replaces the peering.
+   * :::
+   */
   kind: PeeringKind;
-  /** SKU of the peering; must match `kind`. Changing it replaces the peering. */
+  /**
+   * SKU of the peering; must match `kind` (`Basic_Exchange_Free` for `Exchange`).
+   *
+   * :::caution
+   * Changing it replaces the peering.
+   * :::
+   */
   sku: PeeringSkuName;
   /**
    * Peering location (metro) as returned by `ListPeeringLocations`, e.g.
-   * `Seattle`. Changing it replaces the peering.
+   * `Seattle`.
+   *
+   * :::caution
+   * Changing it replaces the peering.
+   * :::
    */
   peeringLocation: string;
-  /** Direct peering settings; required when `kind` is `Direct`. */
+  /**
+   * Direct peering settings; required when `kind` is `Direct`.
+   * @default none
+   */
   direct?: DirectPeeringProps;
-  /** Exchange peering settings; required when `kind` is `Exchange`. */
+  /**
+   * Exchange peering settings; required when `kind` is `Exchange`.
+   * @default none
+   */
   exchange?: ExchangePeeringProps;
-  /** Connectivity probes Microsoft runs against the peer's network. */
+  /**
+   * Connectivity probes Microsoft runs against the peer's network.
+   * @default no probes
+   */
   connectivityProbes?: peering.ConnectivityProbeInput[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -116,16 +157,25 @@ export interface Peering extends Resource<
 > {}
 
 /**
- * A Direct or Exchange peering between a network operator and Microsoft
- * (AS8075). Requires a `PeerAsn` that Microsoft has approved for the
- * subscription and physical presence at the peering facility; otherwise
- * Azure rejects the peering with `PeeringPeerAsnNotApproved`.
+ * A Direct or Exchange peering (`Microsoft.Peering/peerings`) between a
+ * network operator and Microsoft (AS8075).
+ *
+ * :::caution
+ * The peering needs a `PeerAsn` that Microsoft has approved for the
+ * subscription and physical presence at the peering facility. Otherwise
+ * Azure rejects it with `PeeringPeerAsnNotApproved`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/internet-peering/overview
  *
  * ### Creating a Peering
  * **Example:** Exchange peering at an Internet exchange
  * ```typescript
+ * const asn = yield* Azure.Peering.PeerAsn("contoso", {
+ *   peerAsn: 65000,
+ *   peerName: "Contoso Networks",
+ *   peerContactDetail: [{ role: "Noc", email: "noc@contoso.com" }],
+ * });
  * const peering = yield* Azure.Peering.Peering("seattle-ix", {
  *   kind: "Exchange",
  *   sku: "Basic_Exchange_Free",
@@ -147,6 +197,11 @@ export interface Peering extends Resource<
  *
  * **Example:** Direct peering
  * ```typescript
+ * const asn = yield* Azure.Peering.PeerAsn("contoso", {
+ *   peerAsn: 65000,
+ *   peerName: "Contoso Networks",
+ *   peerContactDetail: [{ role: "Noc", email: "noc@contoso.com" }],
+ * });
  * const peering = yield* Azure.Peering.Peering("ashburn-direct", {
  *   kind: "Direct",
  *   sku: "Basic_Direct_Free",
@@ -243,9 +298,7 @@ export const PeeringProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* peering
-        .ListPeeringBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPeeringBySubscription", page)));
+      const page = yield* collectAll(peering.ListPeeringBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

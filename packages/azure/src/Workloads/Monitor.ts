@@ -6,12 +6,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -27,11 +27,13 @@ export interface MonitorProps {
   /**
    * Resource group the monitor is created in. Changing it replaces the
    * monitor.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Monitor name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the monitor.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -87,6 +89,7 @@ export interface MonitorProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -131,7 +134,8 @@ export interface Monitor extends Resource<
 > {}
 
 /**
- * An Azure Monitor for SAP solutions (AMS) monitor. It deploys a function
+ * An Azure Monitor for SAP solutions (AMS) monitor
+ * (`Microsoft.Workloads/monitors`). It deploys a function
  * app, storage account, key vault, and (optionally) Log Analytics workspace
  * into a managed resource group and collects telemetry from SAP systems
  * reachable from its subnet. Add {@link ProviderInstance}s to point it at
@@ -140,12 +144,24 @@ export interface Monitor extends Resource<
  * Creating a monitor takes 10–20 minutes and bills the managed
  * infrastructure while it exists.
  *
+ * :::caution
+ * Changing `name`, `location`, `appLocation`, `monitorSubnet`,
+ * `routingPreference`, `zoneRedundancyPreference`,
+ * `managedResourceGroupName`, `logAnalyticsWorkspaceArmId`, or
+ * `resourceGroup` replaces the monitor. A new monitor takes 10–20 minutes to
+ * create.
+ * :::
+ *
+ * :::caution
+ * Delegate `monitorSubnet` to `Microsoft.Web/serverFarms` and give it
+ * outbound access to the SAP systems before you create the monitor.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/sap/monitor/about-azure-monitor-sap-solutions
  *
  * ### Creating a Monitor
  * **Example:** Monitor in a delegated subnet
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("sap", {});
  * const vnet = yield* Azure.Network.VirtualNetwork("sap-vnet", {
  *   addressPrefixes: ["10.0.0.0/16"],
  * });
@@ -229,9 +245,7 @@ export const MonitorProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* workloads
-        .ListMonitors({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListMonitors", page)));
+      const page = yield* collectAll(workloads.ListMonitors, { subscriptionId });
       return (page.value ?? []).flatMap((monitor) => {
         const group = resourceGroupOf(monitor.id);
         return hasAnyAlchemyTag(monitor.tags) && group !== undefined && monitor.name !== undefined

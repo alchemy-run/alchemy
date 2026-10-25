@@ -23,7 +23,10 @@ import {
 } from "./Shared.ts";
 
 export interface PolicyProps {
-  /** Resource group of the vault. Changing it replaces the policy. */
+  /**
+   * Resource group of the vault. Changing it replaces the policy.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the data replication vault. Changing it replaces the policy. */
   vault: string;
@@ -31,6 +34,7 @@ export interface PolicyProps {
    * Name of the policy: letters and digits only. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the policy.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -66,13 +70,19 @@ export interface Policy extends Resource<
 > {}
 
 /**
- * A replication policy in an Azure Site Recovery data replication vault:
- * how often crash- and app-consistent recovery points are taken and how
- * long they are kept for Hyper-V or VMware machines replicating to Azure
- * Local (Azure Stack HCI).
+ * A replication policy in an Azure Site Recovery data replication vault
+ * (`Microsoft.DataReplication/replicationVaults/replicationPolicies`): how
+ * often crash- and app-consistent recovery points are taken and how long
+ * they are kept for Hyper-V or VMware machines replicating to Azure Local
+ * (Azure Stack HCI).
  *
  * Policies cannot be tagged; Alchemy treats one as owned when its vault is
  * tagged for the current stack and stage.
+ *
+ * :::caution
+ * Changing `vault`, `name`, `customProperties`, or `resourceGroup`
+ * replaces the policy. The service ignores a re-PUT of an existing policy.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/datareplication/policy/create
  *

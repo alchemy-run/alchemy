@@ -53,12 +53,35 @@ export interface ApiOperationPolicy extends Resource<
  * The policy of a single API operation in an API Management service.
  * There is one per operation; deleting it reverts the operation to the
  * inherited (`<base />`) behavior.
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/apis/operations/policies`.
+ *
+ * :::caution
+ * Changing `serviceName`, `apiName`, `operationName`, or `resourceGroup`
+ * replaces the policy.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/set-edit-policies
  *
  * ### Setting an Operation Policy
  * **Example:** Mock the response of one operation
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const api = yield* Azure.ApiManagement.Api("orders", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
+ * const getOrder = yield* Azure.ApiManagement.ApiOperation("get-order", {
+ *   serviceName: apim.serviceName,
+ *   apiName: api.apiName,
+ *   method: "GET",
+ *   urlTemplate: "/orders/{id}",
+ *   templateParameters: [{ name: "id", type: "string", required: true }],
+ * });
  * yield* Azure.ApiManagement.ApiOperationPolicy("get-order-mock", {
  *   serviceName: apim.serviceName,
  *   apiName: api.apiName,

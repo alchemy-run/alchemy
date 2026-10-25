@@ -28,6 +28,7 @@ export interface MarketplaceSubscriptionProps {
    * Subscription name: letters, digits, and hyphens, starting with a
    * letter. If omitted, a unique name is generated from the logical ID.
    * Changing it replaces the subscription.
+   * @default a unique name generated from the logical ID
    */
   name?: string;
   /**
@@ -72,11 +73,30 @@ export interface MarketplaceSubscription extends Resource<
  * subscription has no tags, so the deterministic name is its ownership
  * marker.
  *
- * @see https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-serverless
+ * ARM type:
+ * `Microsoft.MachineLearningServices/workspaces/marketplaceSubscriptions`. See
+ * the [Azure
+ * documentation](https://learn.microsoft.com/azure/ai-foundry/how-to/deploy-models-serverless).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `name`, or `modelId` replaces the
+ * subscription.
+ * :::
  *
  * ### Subscribing to a Model
  * **Example:** Marketplace subscription for a catalog model
  * ```typescript
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const hub = yield* Azure.MachineLearning.Workspace("hub", {
+ *   kind: "Hub",
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ * });
+ * const project = yield* Azure.MachineLearning.Workspace("project", {
+ *   kind: "Project",
+ *   hubResourceId: hub.workspaceId,
+ * });
  * const subscription = yield* Azure.MachineLearning.MarketplaceSubscription(
  *   "llama",
  *   {

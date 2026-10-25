@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -26,11 +26,15 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, sameJson } from "./EdgeShared.ts";
 
 export interface SolutionTemplateProps {
-  /** Resource group the solution template is created in. Changing it replaces the solution template. */
+  /**
+   * Resource group the solution template is created in. Changing it replaces the solution template.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /**
    * Name of the solution template. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the solution template.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -60,6 +64,7 @@ export interface SolutionTemplateProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -96,14 +101,22 @@ export interface SolutionTemplate extends Resource<
 > {}
 
 /**
- * An Azure Arc workload orchestration solution template. A solution
- * template describes an application (Helm chart plus configuration
- * schema) that can be deployed to targets offering the template's
- * capabilities. Every capability must be declared on the subscription's
- * `Azure.Edge.Context`. The chart and YAML live in immutable
- * `Azure.Edge.SolutionTemplateVersion` children.
+ * An Azure Arc workload orchestration solution template
+ * (`Microsoft.Edge/solutionTemplates`). A solution template describes an
+ * application (Helm chart plus configuration schema) that can be deployed
+ * to targets offering the template's capabilities. The chart and YAML
+ * live in immutable `Azure.Edge.SolutionTemplateVersion` children. See the
+ * [workload orchestration overview](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview).
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview
+ * :::caution
+ * Every capability must be declared on the subscription's
+ * `Azure.Edge.Context`.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the solution
+ * template and its versions.
+ * :::
  *
  * ### Creating a Solution Template
  * **Example:** Solution template for a context capability
@@ -170,11 +183,7 @@ export const SolutionTemplateProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* edge
-        .ListSolutionTemplateBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListSolutionTemplateBySubscription", page)),
-        );
+      const page = yield* collectAll(edge.ListSolutionTemplateBySubscription, { subscriptionId });
       return page.value.flatMap((solutionTemplate) => {
         const group = resourceGroupOf(solutionTemplate.id);
         return hasAnyAlchemyTag(solutionTemplate.tags) &&

@@ -32,29 +32,50 @@ export interface WorkspaceApiDiagnosticProps {
   name?: "applicationinsights" | "azuremonitor";
   /** ARM resource ID of the logger that receives the telemetry (`Logger.loggerId`). */
   loggerId: string;
-  /** Message types that bypass sampling (`allErrors`). */
+  /**
+   * Message types that bypass sampling (`allErrors`).
+   * @default not set (Azure's default applies)
+   */
   alwaysLog?: "allErrors";
-  /** Sampling settings, e.g. `{ samplingType: "fixed", percentage: 50 }`. */
+  /**
+   * Sampling settings, e.g. `{ samplingType: "fixed", percentage: 50 }`.
+   * @default not set (Azure's default applies)
+   */
   sampling?: DiagnosticSampling;
-  /** Headers and body bytes to log for requests/responses between client and gateway. */
+  /**
+   * Headers and body bytes to log for requests/responses between client and gateway.
+   * @default not set (Azure's default applies)
+   */
   frontend?: DiagnosticPipelineSettings;
-  /** Headers and body bytes to log for requests/responses between gateway and backend. */
+  /**
+   * Headers and body bytes to log for requests/responses between gateway and backend.
+   * @default not set (Azure's default applies)
+   */
   backend?: DiagnosticPipelineSettings;
   /**
    * Whether to log the client IP address.
    * @default false
    */
   logClientIp?: boolean;
-  /** Correlation header protocol used for Application Insights. */
+  /**
+   * Correlation header protocol used for Application Insights.
+   * @default not set (Azure's default applies)
+   */
   httpCorrelationProtocol?: DiagnosticCorrelationProtocol;
-  /** Verbosity applied to traces emitted by `trace` policies. */
+  /**
+   * Verbosity applied to traces emitted by `trace` policies.
+   * @default not set (Azure's default applies)
+   */
   verbosity?: DiagnosticVerbosity;
   /**
    * Operation name format in Application Insights telemetry.
    * @default "Name"
    */
   operationNameFormat?: DiagnosticOperationNameFormat;
-  /** Emit custom metrics via the `emit-metric` policy (Application Insights only). */
+  /**
+   * Emit custom metrics via the `emit-metric` policy (Application Insights only).
+   * @default not set (Azure's default applies)
+   */
   metrics?: boolean;
 }
 
@@ -84,16 +105,48 @@ export interface WorkspaceApiDiagnostic extends Resource<
 /**
  * The workspace-scoped counterpart of {@link ApiDiagnostic}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/workspaces/apis/diagnostics`.
  *
  * Diagnostic settings of a single API in an API Management service. It
  * overrides the service-wide {@link Diagnostic} for that API and sends its
  * request telemetry to a {@link Logger}.
+ *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `apiName`, `name`, or
+ * `resourceGroup` replaces the diagnostic.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-app-insights
  *
  * ### Logging One API
  * **Example:** Log every request of an API to Application Insights
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
+ * const api = yield* Azure.ApiManagement.WorkspaceApi("orders", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
+ * const logger = yield* Azure.ApiManagement.WorkspaceLogger("insights", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   loggerType: "applicationInsights",
+ *   credentials: {
+ *     connectionString: yield* Config.redacted("APPINSIGHTS_CONNECTION_STRING"),
+ *   },
+ * });
  * yield* Azure.ApiManagement.WorkspaceApiDiagnostic("orders-insights", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

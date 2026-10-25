@@ -39,105 +39,204 @@ interface ProviderTls {
 
 /** Linux OS metrics from a Prometheus `node_exporter`. */
 export interface PrometheusOsProviderSettings extends ProviderTls {
+  /** Provider type: Prometheus node exporter on an OS host. */
   providerType: "PrometheusOS";
   /** URL of the node exporter, e.g. `http://10.0.0.4:9100/metrics`. */
   prometheusUrl: string;
-  /** SID of the SAP system the host belongs to. */
+  /**
+   * SID of the SAP system the host belongs to.
+   * @default not set
+   */
   sapSid?: string;
 }
 
 /** Pacemaker cluster metrics from a Prometheus `ha_cluster_exporter`. */
 export interface PrometheusHaClusterProviderSettings extends ProviderTls {
+  /** Provider type: Prometheus HA cluster exporter. */
   providerType: "PrometheusHaCluster";
   /** URL of the HA cluster exporter, e.g. `http://10.0.0.4:9664/metrics`. */
   prometheusUrl: string;
-  /** Host name of the cluster node. */
+  /**
+   * Host name of the cluster node.
+   * @default not set
+   */
   hostname?: string;
-  /** SID of the cluster. */
+  /**
+   * SID of the cluster.
+   * @default not set
+   */
   sid?: string;
-  /** Name of the cluster. */
+  /**
+   * Name of the cluster.
+   * @default not set
+   */
   clusterName?: string;
 }
 
 /** SAP HANA database metrics. */
 export interface SapHanaProviderSettings extends ProviderTls {
+  /** Provider type: SAP HANA database. */
   providerType: "SapHana";
   /** Host name or IP address of the HANA instance. */
   hostname: string;
-  /** Database (tenant) name. */
+  /**
+   * Database (tenant) name.
+   * @default not set
+   */
   dbName?: string;
-  /** SQL port of the database. */
+  /**
+   * SQL port of the database.
+   * @default not set
+   */
   sqlPort?: string;
-  /** HANA instance number. */
+  /**
+   * HANA instance number.
+   * @default not set
+   */
   instanceNumber?: string;
-  /** Database user name. */
+  /**
+   * Database user name.
+   * @default not set
+   */
   dbUsername?: string;
-  /** Database password. Prefer `dbPasswordUri` (a Key Vault secret). */
+  /**
+   * Database password. Prefer `dbPasswordUri` (a Key Vault secret).
+   * @default not set
+   */
   dbPassword?: Redacted.Redacted<string>;
-  /** Key Vault secret URI of the database password. */
+  /**
+   * Key Vault secret URI of the database password.
+   * @default not set
+   */
   dbPasswordUri?: string;
-  /** Host name in the server's TLS certificate. */
+  /**
+   * Host name in the server's TLS certificate.
+   * @default not set
+   */
   sslHostNameInCertificate?: string;
-  /** SID of the SAP system. */
+  /**
+   * SID of the SAP system.
+   * @default not set
+   */
   sapSid?: string;
 }
 
 /** SAP NetWeaver application server metrics (SAP Control web service). */
 export interface SapNetWeaverProviderSettings extends ProviderTls {
+  /** Provider type: SAP NetWeaver application server. */
   providerType: "SapNetWeaver";
-  /** SID of the SAP system. */
+  /**
+   * SID of the SAP system.
+   * @default not set
+   */
   sapSid?: string;
   /** Host name or IP address of the application server. */
   sapHostname: string;
-  /** Instance number of the application server. */
+  /**
+   * Instance number of the application server.
+   * @default not set
+   */
   sapInstanceNr?: string;
-  /** `/etc/hosts`-style entries (`ip fqdn hostname`) for every instance. */
+  /**
+   * `/etc/hosts`-style entries (`ip fqdn hostname`) for every instance.
+   * @default not set
+   */
   sapHostFileEntries?: string[];
-  /** SAP user name. */
+  /**
+   * SAP user name.
+   * @default not set
+   */
   sapUsername?: string;
-  /** SAP password. Prefer `sapPasswordUri` (a Key Vault secret). */
+  /**
+   * SAP password. Prefer `sapPasswordUri` (a Key Vault secret).
+   * @default not set
+   */
   sapPassword?: Redacted.Redacted<string>;
-  /** Key Vault secret URI of the SAP password. */
+  /**
+   * Key Vault secret URI of the SAP password.
+   * @default not set
+   */
   sapPasswordUri?: string;
-  /** SAP client ID. */
+  /**
+   * SAP client ID.
+   * @default not set
+   */
   sapClientId?: string;
-  /** SAP HTTP port number. */
+  /**
+   * SAP HTTP port number.
+   * @default not set
+   */
   sapPortNumber?: string;
 }
 
 /** Microsoft SQL Server metrics. */
 export interface MsSqlServerProviderSettings extends ProviderTls {
+  /** Provider type: Microsoft SQL Server database. */
   providerType: "MsSqlServer";
   /** Host name or IP address of the SQL Server. */
   hostname: string;
-  /** SQL Server port. */
+  /**
+   * SQL Server port.
+   * @default not set
+   */
   dbPort?: string;
-  /** Database user name. */
+  /**
+   * Database user name.
+   * @default not set
+   */
   dbUsername?: string;
-  /** Database password. Prefer `dbPasswordUri` (a Key Vault secret). */
+  /**
+   * Database password. Prefer `dbPasswordUri` (a Key Vault secret).
+   * @default not set
+   */
   dbPassword?: Redacted.Redacted<string>;
-  /** Key Vault secret URI of the database password. */
+  /**
+   * Key Vault secret URI of the database password.
+   * @default not set
+   */
   dbPasswordUri?: string;
-  /** SID of the SAP system. */
+  /**
+   * SID of the SAP system.
+   * @default not set
+   */
   sapSid?: string;
 }
 
 /** IBM Db2 metrics. */
 export interface Db2ProviderSettings extends ProviderTls {
+  /** Provider type: IBM Db2 database. */
   providerType: "Db2";
   /** Host name or IP address of the Db2 server. */
   hostname: string;
-  /** Database name. */
+  /**
+   * Database name.
+   * @default not set
+   */
   dbName?: string;
-  /** Database port. */
+  /**
+   * Database port.
+   * @default not set
+   */
   dbPort?: string;
-  /** Database user name. */
+  /**
+   * Database user name.
+   * @default not set
+   */
   dbUsername?: string;
-  /** Database password. Prefer `dbPasswordUri` (a Key Vault secret). */
+  /**
+   * Database password. Prefer `dbPasswordUri` (a Key Vault secret).
+   * @default not set
+   */
   dbPassword?: Redacted.Redacted<string>;
-  /** Key Vault secret URI of the database password. */
+  /**
+   * Key Vault secret URI of the database password.
+   * @default not set
+   */
   dbPasswordUri?: string;
-  /** SID of the SAP system. */
+  /**
+   * SID of the SAP system.
+   * @default not set
+   */
   sapSid?: string;
 }
 
@@ -154,6 +253,7 @@ export interface ProviderInstanceProps {
   /**
    * Resource group of the monitor. Changing it replaces the provider
    * instance.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /** Name of the parent monitor. Changing it replaces the provider instance. */
@@ -162,6 +262,7 @@ export interface ProviderInstanceProps {
    * Provider instance name, 2-20 characters. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * provider instance.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -200,17 +301,27 @@ export interface ProviderInstance extends Resource<
 > {}
 
 /**
- * A provider instance of an Azure Monitor for SAP solutions
- * {@link Monitor}: one SAP HANA, NetWeaver, SQL Server, Db2, or Prometheus
- * endpoint the monitor collects telemetry from. The endpoint must be
- * reachable from the monitor's subnet; Azure validates connectivity when
- * the instance is created.
+ * A provider instance of an Azure Monitor for SAP solutions {@link Monitor}
+ * (`Microsoft.Workloads/monitors/providerInstances`): one SAP HANA,
+ * NetWeaver, SQL Server, Db2, or Prometheus endpoint the monitor collects
+ * telemetry from. The endpoint must be reachable from the monitor's subnet;
+ * Azure validates connectivity when the instance is created.
+ *
+ * :::caution
+ * Changing `monitor`, `name`, `providerSettings`, `userAssignedIdentityIds`,
+ * or `resourceGroup` replaces the provider instance. Azure has no update, so
+ * any settings change replaces it.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/sap/monitor/provider-linux
  *
  * ### Operating-System Metrics
  * **Example:** Prometheus node exporter on a SAP host
  * ```typescript
+ * const monitor = yield* Azure.Workloads.Monitor("ams", {
+ *   monitorSubnet:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/sap/providers/Microsoft.Network/virtualNetworks/sap-vnet/subnets/ams",
+ * });
  * const os = yield* Azure.Workloads.ProviderInstance("os", {
  *   monitor: monitor.monitorName,
  *   providerSettings: {

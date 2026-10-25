@@ -8,10 +8,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   stackAndStage,
   waitForProvisioned,
   waitUntilGone,
@@ -152,17 +152,11 @@ const findConnection = Effect.fn(function* (
   privateEndpointId: string,
 ) {
   const page = yield* orUndefinedIfNotFound(
-    cosmos
-      .ListPrivateEndpointConnectionByDatabaseAccount({
-        subscriptionId,
-        resourceGroupName,
-        accountName,
-      })
-      .pipe(
-        Effect.flatMap((page) =>
-          requireSinglePage("ListPrivateEndpointConnectionByDatabaseAccount", page),
-        ),
-      ),
+    collectAll(cosmos.ListPrivateEndpointConnectionByDatabaseAccount, {
+      subscriptionId,
+      resourceGroupName,
+      accountName,
+    }),
   );
   return (page?.value ?? []).find((connection) =>
     sameId(connection.properties?.privateEndpoint?.id, privateEndpointId),

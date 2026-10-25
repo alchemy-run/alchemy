@@ -23,7 +23,10 @@ export interface WorkspacePolicyFragmentProps {
   name?: string;
   /** Policy XML of the fragment, wrapped in a `<fragment>` element. */
   value: string;
-  /** Description of the fragment. */
+  /**
+   * Description of the fragment.
+   * @default no description
+   */
   description?: string;
   /**
    * Format of `value`. `rawxml` skips XML escaping of policy expressions.
@@ -56,16 +59,40 @@ export interface WorkspacePolicyFragment extends Resource<
 /**
  * The workspace-scoped counterpart of {@link PolicyFragment}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/workspaces/policyFragments`.
  *
  * A reusable policy fragment of an API Management service. Policies at
  * any scope include it with `<include-fragment fragment-id="..." />`.
  * Azure refuses to delete a fragment while a policy still references it.
+ *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `name`, or `resourceGroup`
+ * replaces the fragment.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/policy-fragments
  *
  * ### Sharing Policy Logic
  * **Example:** A fragment that stamps a response header
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
+ * const api = yield* Azure.ApiManagement.WorkspaceApi("orders", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * const fragment = yield* Azure.ApiManagement.WorkspacePolicyFragment("stamp", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

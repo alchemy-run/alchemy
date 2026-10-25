@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -82,11 +82,18 @@ export interface AmlFilesystemRootSquash {
    * (e.g. `"10.0.2.4@tcp;10.0.2.[6-8]@tcp"`). Required when `mode` is
    * `RootOnly` or `All`: the API rejects a missing or empty list with
    * `InvalidParameter` ("Required parameter 'noSquashNidLists' is missing").
+   * @default no trusted systems
    */
   noSquashNidLists?: string;
-  /** User ID to squash to. */
+  /**
+   * User ID to squash to.
+   * @default Azure's default
+   */
   squashUID?: number;
-  /** Group ID to squash to. */
+  /**
+   * Group ID to squash to.
+   * @default Azure's default
+   */
   squashGID?: number;
 }
 
@@ -103,12 +110,13 @@ export interface AmlFilesystemProps {
    * Resource group the file system is created in. Changing it replaces the
    * file system. Azure Managed Lustre rejects resource group names longer
    * than 80 characters.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the file system: 1-80 alphanumerics, `_` and `-`, starting and
-   * ending with an alphanumeric. If omitted, a unique name is generated from
-   * the app, stage, and logical ID. Changing it replaces the file system.
+   * ending with an alphanumeric. Changing it replaces the file system.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -120,6 +128,7 @@ export interface AmlFilesystemProps {
    * Availability zone (e.g. `["1"]`). Required in regions with availability
    * zones, where exactly one zone must be given. Changing it replaces the
    * file system.
+   * @default no zone (only valid in regions without availability zones)
    */
   zones?: string[];
   /**
@@ -147,20 +156,29 @@ export interface AmlFilesystemProps {
   /**
    * Blob integration settings. Set only at creation; changing them replaces
    * the file system.
+   * @default no blob integration
    */
   hsm?: AmlFilesystemHsm;
-  /** Root squash settings. */
+  /**
+   * Root squash settings.
+   * @default Azure's default (no squash)
+   */
   rootSquashSettings?: AmlFilesystemRootSquash;
   /**
    * Customer-managed key encryption. Requires a user-assigned identity with
    * access to the key (see {@link AmlFilesystemProps.userAssignedIdentityIds}).
+   * @default Microsoft-managed keys
    */
   encryptionSettings?: AmlFilesystemEncryption;
-  /** Resource IDs of user-assigned managed identities attached to the file system. */
+  /**
+   * Resource IDs of user-assigned managed identities attached to the file system.
+   * @default []
+   */
   userAssignedIdentityIds?: string[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -209,14 +227,29 @@ export interface AmlFilesystem extends Resource<
 > {}
 
 /**
- * An Azure Managed Lustre file system — a fully managed, high-throughput
- * Lustre parallel file system for HPC and AI workloads, optionally
- * integrated with a Blob Storage container for hydration and archiving.
+ * An Azure Managed Lustre file system
+ * (`Microsoft.StorageCache/amlFilesystems`): a fully managed, high-throughput
+ * Lustre parallel file system for HPC and AI workloads. It can hydrate from
+ * and archive to a Blob Storage container. See the
+ * [Azure docs](https://learn.microsoft.com/azure/azure-managed-lustre/amlfs-overview).
  *
- * Creation takes 10-30 minutes; the smallest file system (4 TiB of
+ * Creation takes 10-30 minutes. The smallest file system (4 TiB of
  * `AMLFS-Durable-Premium-500`) costs roughly $2-3 per hour.
  *
- * @see https://learn.microsoft.com/azure/azure-managed-lustre/amlfs-overview
+ * :::caution
+ * The file system subnet needs outbound access to Azure services
+ * (`defaultOutboundAccess: true`, a NAT gateway, or a firewall route). A
+ * private subnet fails creation with `InitialDeploymentTimeout`. In regions
+ * with availability zones, set exactly one zone in `zones`.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `zones`, `sku`,
+ * `storageCapacityTiB`, `filesystemSubnet`, or `hsm` replaces the file system
+ * and deletes its data. Alchemy updates `maintenanceWindow`,
+ * `rootSquashSettings`, `encryptionSettings`, `userAssignedIdentityIds`, and
+ * `tags` in place.
+ * :::
  *
  * ### Creating a File System
  * **Example:** 4 TiB Premium-500 file system in a dedicated subnet
@@ -227,8 +260,11 @@ export interface AmlFilesystem extends Resource<
  * const subnet = yield* Azure.Network.Subnet("lustre", {
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.0.0/24",
+ *   defaultOutboundAccess: true,
  * });
  * const fs = yield* Azure.StorageCache.AmlFilesystem("scratch", {
+ *   location: "eastus",
+ *   zones: ["1"],
  *   sku: "AMLFS-Durable-Premium-500",
  *   storageCapacityTiB: 4,
  *   filesystemSubnet: subnet.subnetId,
@@ -239,7 +275,15 @@ export interface AmlFilesystem extends Resource<
  * ### Blob Integration
  * **Example:** Hydrate from and archive to a blob container
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("lustredata");
+ * const data = yield* Azure.Storage.BlobContainer("data", {
+ *   storageAccount: account.storageAccountName,
+ * });
+ * const logs = yield* Azure.Storage.BlobContainer("logs", {
+ *   storageAccount: account.storageAccountName,
+ * });
  * const fs = yield* Azure.StorageCache.AmlFilesystem("scratch", {
+ *   zones: ["1"],
  *   sku: "AMLFS-Durable-Premium-500",
  *   storageCapacityTiB: 4,
  *   filesystemSubnet: subnet.subnetId,
@@ -255,11 +299,17 @@ export interface AmlFilesystem extends Resource<
  * **Example:** Squash root on untrusted clients
  * ```typescript
  * const fs = yield* Azure.StorageCache.AmlFilesystem("scratch", {
+ *   zones: ["1"],
  *   sku: "AMLFS-Durable-Premium-500",
  *   storageCapacityTiB: 4,
  *   filesystemSubnet: subnet.subnetId,
  *   maintenanceWindow: { dayOfWeek: "Sunday", timeOfDayUTC: "22:00" },
- *   rootSquashSettings: { mode: "RootOnly", squashUID: 65534, squashGID: 65534 },
+ *   rootSquashSettings: {
+ *     mode: "RootOnly",
+ *     noSquashNidLists: "10.0.0.4@tcp",
+ *     squashUID: 65534,
+ *     squashGID: 65534,
+ *   },
  * });
  * ```
  *
@@ -390,9 +440,7 @@ export const AmlFilesystemProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        storagecache
-          .ListAmlFilesystems({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListAmlFilesystems", page))),
+        collectAll(storagecache.ListAmlFilesystems, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((fs) => {
         const group = resourceGroupOf(fs.id);

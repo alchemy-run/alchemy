@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -37,6 +37,7 @@ export interface InternetGatewayRuleProps {
   /**
    * Name of the internet gateway rule. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the internet gateway rule.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,11 +56,13 @@ export interface InternetGatewayRuleProps {
   /**
    * Free-form description. Azure cannot update it in place, so changing
    * it replaces the resource.
+   * @default none
    */
   annotation?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -93,7 +96,13 @@ export interface InternetGatewayRule extends Resource<
  * An Azure Operator Nexus internet gateway rule — the allow/deny address
  * list an internet gateway of a Network Fabric Controller enforces.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/concepts-network-fabric-controller
+ * ARM type: `Microsoft.ManagedNetworkFabric/internetGatewayRules`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/concepts-network-fabric-controller).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `ruleProperties`, or
+ * `annotation` replaces the rule.
+ * :::
  *
  * ### Creating an Internet Gateway Rule
  * **Example:** Allow one address range
@@ -148,13 +157,7 @@ export const InternetGatewayRuleProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mnf
-        .ListInternetGatewayRuleBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListInternetGatewayRuleBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(mnf.ListInternetGatewayRuleBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

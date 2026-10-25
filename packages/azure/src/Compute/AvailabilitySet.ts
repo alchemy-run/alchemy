@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -173,11 +173,7 @@ export const AvailabilitySetProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* compute
-        .ListAvailabilitySetBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListAvailabilitySetBySubscription", page)),
-        );
+      const page = yield* collectAll(compute.ListAvailabilitySetBySubscription, { subscriptionId });
       return page.value.flatMap((set) => {
         const resourceGroup = resourceGroupOf(set.id);
         return hasAnyAlchemyTag(set.tags) && resourceGroup !== undefined && set.name !== undefined

@@ -16,7 +16,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, payloadText } from "./EdgeShared.ts";
 
 export interface SchemaVersionProps {
-  /** Resource group of the schema. Changing it replaces the version. */
+  /**
+   * Resource group of the schema. Changing it replaces the version.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Name of the parent schema. Changing it replaces the version. */
   schema: string;
@@ -52,18 +55,24 @@ export interface SchemaVersion extends Resource<
 > {}
 
 /**
- * An immutable version of an Azure Arc workload orchestration schema.
- * The YAML `value` declares the configuration keys, their types, and who
- * may edit them.
+ * An immutable version of an Azure Arc workload orchestration schema
+ * (`Microsoft.Edge/schemas/versions`). The YAML `value` declares the
+ * configuration keys, their types, and who may edit them. See the
+ * [configuration model](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model).
  *
  * Versions carry no tags or free-form fields, so Alchemy cannot mark them;
  * a version found under the expected name is treated as this resource.
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model
+ * :::caution
+ * Versions are immutable. Changing `resourceGroup`, `schema`, `version`,
+ * or `value` replaces the version. A new `value` under the same `version`
+ * deletes the old version first.
+ * :::
  *
  * ### Publishing a Version
  * **Example:** Schema rules
  * ```typescript
+ * const schema = yield* Azure.Edge.Schema("app");
  * const v1 = yield* Azure.Edge.SchemaVersion("app-v1", {
  *   schema: schema.schemaName,
  *   version: "1.0.0",

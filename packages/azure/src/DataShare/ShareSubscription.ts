@@ -17,7 +17,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { accountOwnedByStack, createChildName, immutableChanged } from "./internal.ts";
 
 export interface ShareSubscriptionProps {
-  /** Resource group of the consumer Data Share account. Changing it replaces the subscription. */
+  /**
+   * Resource group of the consumer Data Share account. Changing it replaces the subscription.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Consumer Data Share account that receives the share. Changing it replaces the subscription. */
   account: string;
@@ -25,6 +28,7 @@ export interface ShareSubscriptionProps {
    * Share subscription name: letters, digits, and `_`, starting with a
    * letter. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the subscription.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -41,6 +45,7 @@ export interface ShareSubscriptionProps {
   /**
    * ISO 8601 time after which the subscription expires. Changing it
    * replaces the subscription.
+   * @default no expiry
    */
   expirationDate?: string;
 }
@@ -77,19 +82,43 @@ export interface ShareSubscription extends Resource<
 > {}
 
 /**
- * A share subscription — the consumer side of Azure Data Share. Creating it
- * in your Data Share account accepts an invitation; map the received data
- * sets into your own stores with `Azure.DataShare.DataSetMapping` and
- * schedule snapshots with `Azure.DataShare.Trigger`. Deleting it stops
- * receiving the share.
+ * A share subscription (`Microsoft.DataShare/accounts/shareSubscriptions`)
+ * — the consumer side of Azure Data Share. Creating it in your Data Share
+ * account accepts an invitation; map the received data sets into your own
+ * stores with `Azure.DataShare.DataSetMapping` and schedule snapshots with
+ * `Azure.DataShare.Trigger`. Deleting it stops receiving the share.
+ *
+ * :::caution
+ * Share subscriptions are immutable. Changing any prop (`account`, `name`,
+ * `invitationId`, `sourceShareLocation`, `expirationDate`, or
+ * `resourceGroup`) replaces the subscription. Alchemy deletes the old
+ * subscription first, because one subscription accepts an invitation.
+ * :::
+ *
+ * :::caution
+ * The invitation must target the identity that deploys the stack.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/data-share/subscribe-to-data-share
  *
  * ### Accepting an Invitation
  * **Example:** Subscribe to a share
  * ```typescript
+ * const providerAccount = yield* Azure.DataShare.Account("sharing");
+ * const share = yield* Azure.DataShare.Share("sales", {
+ *   account: providerAccount.accountName,
+ * });
+ * const { tenantId } = yield* Azure.AzureEnvironment.current;
+ * // Object ID of the identity that deploys the consumer stack.
+ * const deployerObjectId = "00000000-0000-0000-0000-000000000000";
+ * const invitation = yield* Azure.DataShare.Invitation("inbound", {
+ *   account: providerAccount.accountName,
+ *   share: share.shareName,
+ *   targetActiveDirectoryId: tenantId,
+ *   targetObjectId: deployerObjectId,
+ * });
+ * const consumerAccount = yield* Azure.DataShare.Account("inbox");
  * const subscription = yield* Azure.DataShare.ShareSubscription("inbound", {
- *   resourceGroup: consumerGroup.resourceGroupName,
  *   account: consumerAccount.accountName,
  *   invitationId: invitation.invitationId,
  *   sourceShareLocation: providerAccount.location,

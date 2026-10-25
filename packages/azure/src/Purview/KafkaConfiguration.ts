@@ -25,19 +25,38 @@ export interface KafkaConfigurationCredentials {
    * system-assigned identity, or one of its user-assigned identities.
    */
   type: "SystemAssigned" | "UserAssigned";
-  /** ARM ID of the user-assigned identity (with `type: "UserAssigned"`). */
+  /**
+   * ARM ID of the user-assigned identity (with `type: "UserAssigned"`).
+   * @default none
+   */
   identityId?: string;
 }
 
 export interface KafkaConfigurationProps {
-  /** Resource group of the account. Changing it replaces the configuration. */
+  /**
+   * Resource group of the account.
+   *
+   * :::caution
+   * Changing it replaces the configuration.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the Purview account. Changing it replaces the configuration. */
+  /**
+   * Name of the Purview account.
+   *
+   * :::caution
+   * Changing it replaces the configuration.
+   * :::
+   */
   account: string;
   /**
-   * Configuration name: letters, digits, hyphens, and underscores. If
-   * omitted, a unique name is generated from the app, stage, and logical
-   * ID. Changing it replaces the configuration.
+   * Configuration name: letters, digits, hyphens, and underscores.
+   *
+   * :::caution
+   * Changing it replaces the configuration.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -51,7 +70,10 @@ export interface KafkaConfigurationProps {
    * hook messages from the event hub to create or update assets.
    */
   eventHubType: "Notification" | "Hook";
-  /** Consumer group Purview reads with. Required for a `Hook` event hub. */
+  /**
+   * Consumer group Purview reads with. Required for a `Hook` event hub.
+   * @default none
+   */
   consumerGroup?: string;
   /**
    * Partition Purview publishes notifications to.

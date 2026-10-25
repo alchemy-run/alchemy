@@ -34,6 +34,7 @@ export interface RuntimeEnvironmentProps {
   /**
    * Environment name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the environment.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Language of the environment. Changing it replaces the environment. */
@@ -45,14 +46,19 @@ export interface RuntimeEnvironmentProps {
   version: string;
   /**
    * Built-in packages and their versions, e.g. `{ Az: "12.3.0" }`.
+   * @default no packages
    */
   defaultPackages?: Record<string, string>;
-  /** Description of the environment. */
+  /**
+   * Description of the environment.
+   * @default no description
+   */
   description?: string;
   /**
    * User tags: at most 3, values up to 64 characters. Runtime environments
    * are too constrained for the Alchemy ownership tags, so ownership is
    * inferred from the parent account's tags instead.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -88,12 +94,20 @@ export interface RuntimeEnvironment extends Resource<
  * A runtime environment in an Azure Automation account: a language version
  * plus a set of packages that runbooks run with (pass its name as
  * `runtimeEnvironment` of a {@link Runbook}).
+ * The ARM type is
+ * `Microsoft.Automation/automationAccounts/runtimeEnvironments`.
+ *
+ * :::caution
+ * Changing `automationAccount`, `name`, `language`, `version`, or
+ * `resourceGroup` replaces the environment.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/runtime-environment-overview
  *
  * ### Creating a Runtime Environment
  * **Example:** PowerShell 7.4 with the Az modules
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const ps74 = yield* Azure.Automation.RuntimeEnvironment("ps74", {
  *   automationAccount: account.automationAccountName,
  *   language: "PowerShell",

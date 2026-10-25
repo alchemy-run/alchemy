@@ -23,31 +23,47 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface PrivateLinkServiceProps {
   /**
-   * Resource group the private link service is created in. Changing it
-   * replaces the service.
+   * Resource group the private link service is created in.
+   *
+   * :::caution
+   * Changing it replaces the service.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
-   * Name of the private link service. If omitted, a unique name is
-   * generated from the app, stage, and logical ID. Changing it replaces the
-   * service.
+   * Name of the private link service.
+   *
+   * :::caution
+   * Changing it replaces the service.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Azure location of the service. Power BI private link services are
-   * global resources. Changing it replaces the service.
+   * global resources.
+   *
+   * :::caution
+   * Changing it replaces the service.
+   * :::
    * @default "global"
    */
   location?: string;
   /**
    * Microsoft Entra tenant whose Power BI / Fabric tenant is exposed over
-   * Private Link. Changing it replaces the service.
+   * Private Link.
+   *
+   * :::caution
+   * Changing it replaces the service.
+   * :::
    * @default the tenant of the current Azure credentials
    */
   tenantId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -77,13 +93,16 @@ export interface PrivateLinkService extends Resource<
 > {}
 
 /**
- * A Power BI private link service (`privateLinkServicesForPowerBI`) — the
- * tenant-bound endpoint a private endpoint attaches to so a virtual network
- * reaches the Power BI / Fabric tenant privately.
+ * A Power BI private link service
+ * (`Microsoft.PowerBI/privateLinkServicesForPowerBI`) — the tenant-bound
+ * endpoint a private endpoint attaches to so a virtual network reaches the
+ * Power BI / Fabric tenant privately.
  *
+ * :::caution
  * A Power BI / Fabric administrator must first enable *Azure Private Link*
- * in the Fabric admin portal; until then the Power BI resource provider
+ * in the Fabric admin portal. Until then the Power BI resource provider
  * rejects every request.
+ * :::
  *
  * @see https://learn.microsoft.com/fabric/security/security-private-links-use
  *
@@ -96,6 +115,14 @@ export interface PrivateLinkService extends Resource<
  * ### Connecting a Virtual Network
  * **Example:** Private endpoint into the Power BI tenant
  * ```typescript
+ * const service = yield* Azure.PowerBI.PrivateLinkService("tenant");
+ * const vnet = yield* Azure.Network.VirtualNetwork("net", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("endpoints", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
  * const endpoint = yield* Azure.Network.PrivateEndpoint("powerbi", {
  *   subnetId: subnet.subnetId,
  *   privateLinkServiceConnections: [

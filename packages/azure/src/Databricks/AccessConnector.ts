@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -35,6 +35,7 @@ export interface AccessConnectorIdentity {
   /**
    * ARM resource IDs of user-assigned managed identities to attach. Required
    * when `type` includes `UserAssigned`.
+   * @default []
    */
   userAssignedIdentityIds?: string[];
 }
@@ -43,12 +44,14 @@ export interface AccessConnectorProps {
   /**
    * Resource group the connector is created in. Changing it replaces the
    * connector.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the connector, 3-64 characters of letters, digits, `-`, and
    * `_`. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the connector.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -65,6 +68,7 @@ export interface AccessConnectorProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -103,10 +107,17 @@ export interface AccessConnector extends Resource<
 > {}
 
 /**
- * An Azure Databricks access connector — a first-party resource that holds
- * a managed identity Azure Databricks uses to reach other Azure resources
- * (for example ADLS Gen2 storage behind a Unity Catalog metastore or
- * storage credential). Free; it has no running compute.
+ * An Azure Databricks access connector
+ * (`Microsoft.Databricks/accessConnectors`) — a first-party resource that
+ * holds a managed identity Azure Databricks uses to reach other Azure
+ * resources (for example ADLS Gen2 storage behind a Unity Catalog
+ * metastore or storage credential). Free; it has no running compute.
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the connector.
+ * A new system-assigned identity gets a new `principalId`, so Unity
+ * Catalog storage credentials that use the old connector stop working.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/databricks/connect/unity-catalog/cloud-storage/azure-managed-identities
  *
@@ -130,6 +141,10 @@ export interface AccessConnector extends Resource<
  * ### Granting Storage Access
  * **Example:** Let the connector read and write a data lake
  * ```typescript
+ * const connector = yield* Azure.Databricks.AccessConnector("uc");
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
  * yield* Azure.Authorization.RoleAssignment("uc-lake", {
  *   scope: lake.storageAccountId,
  *   roleDefinitionId:
@@ -195,11 +210,9 @@ export const AccessConnectorProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* databricks
-        .ListAccessConnectorBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListAccessConnectorBySubscription", page)),
-        );
+      const page = yield* collectAll(databricks.ListAccessConnectorBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((connector) => {
         const group = resourceGroupOf(connector.id);
         return hasAnyAlchemyTag(connector.tags) &&

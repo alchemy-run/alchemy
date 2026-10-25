@@ -24,7 +24,10 @@ import {
 } from "./common.ts";
 
 export interface ScriptProps {
-  /** Resource group of the cluster. Changing it replaces the script. */
+  /**
+   * Resource group of the cluster. Changing it replaces the script.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the cluster. Changing it replaces the script. */
   cluster: string;
@@ -33,6 +36,7 @@ export interface ScriptProps {
   /**
    * Script name. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the script.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -40,11 +44,18 @@ export interface ScriptProps {
    * `.create-merge table Events (Timestamp: datetime, Name: string)`.
    * Azure does not return the content on read; editing it re-runs the
    * script. Set either `content` or `scriptUrl`.
+   * @default unset
    */
   content?: string;
-  /** URL of a blob holding the script. Set either `content` or `scriptUrl`. */
+  /**
+   * URL of a blob holding the script. Set either `content` or `scriptUrl`.
+   * @default unset
+   */
   scriptUrl?: string;
-  /** SAS token granting read access to `scriptUrl`. */
+  /**
+   * SAS token granting read access to `scriptUrl`.
+   * @default unset
+   */
   scriptUrlSasToken?: string;
   /**
    * Changing this value re-runs the script.
@@ -65,11 +76,15 @@ export interface ScriptProps {
   /**
    * Whether the script's principal keeps its permissions after the script
    * completes.
+   * @default Azure's default on create; unchanged on update
    */
   principalPermissionsAction?:
     | "RetainPermissionOnScriptCompletion"
     | "RemovePermissionOnScriptCompletion";
-  /** Resource ID of the managed identity used to download `scriptUrl`. */
+  /**
+   * Resource ID of the managed identity used to download `scriptUrl`.
+   * @default unset
+   */
   managedIdentityResourceId?: string;
 }
 
@@ -98,7 +113,8 @@ export interface Script extends Resource<
 
 /**
  * A KQL script of control commands run against an Azure Data Explorer
- * (Kusto) database — the declarative way to create tables, ingestion
+ * (Kusto) database (`Microsoft.Kusto/clusters/databases/scripts`): the
+ * declarative way to create tables, ingestion
  * mappings, functions, and policies. The script re-runs whenever its
  * content changes. Deleting the script removes only the ARM record; the
  * objects it created stay in the database.
@@ -108,6 +124,10 @@ export interface Script extends Resource<
  * ### Creating Tables
  * **Example:** Create a table and a JSON ingestion mapping
  * ```typescript
+ * const cluster = yield* Azure.Kusto.Cluster("adx");
+ * const db = yield* Azure.Kusto.Database("telemetry", {
+ *   cluster: cluster.clusterName,
+ * });
  * const schema = yield* Azure.Kusto.Script("schema", {
  *   cluster: cluster.clusterName,
  *   database: db.databaseName,
@@ -117,6 +137,12 @@ export interface Script extends Resource<
  *   ].join("\n"),
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `cluster`, `database`, `resourceGroup`, or `scriptLevel`
+ * replaces the script and runs it again. The objects the old script
+ * created stay in the database.
+ * :::
  *
  * @resource
  */

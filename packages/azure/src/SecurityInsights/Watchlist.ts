@@ -22,7 +22,10 @@ import {
 } from "./Common.ts";
 
 export interface WatchlistProps {
-  /** Resource group of the Sentinel workspace. Changing it replaces the watchlist. */
+  /**
+   * Resource group of the Sentinel workspace. Changing it replaces the watchlist.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Sentinel-enabled Log Analytics workspace. Pass `OnboardingState.workspace`
@@ -33,6 +36,7 @@ export interface WatchlistProps {
    * Watchlist alias, used in KQL as `_GetWatchlist('<alias>')`. If omitted, a
    * unique alias is generated from the app, stage, and logical ID. Changing
    * it replaces the watchlist.
+   * @default a unique alias generated from the app, stage, and logical ID
    */
   watchlistAlias?: string;
   /** Display name of the watchlist. */
@@ -50,23 +54,35 @@ export interface WatchlistProps {
   /**
    * Source file name of the watchlist (e.g. `servers.csv`). Changing it
    * replaces the watchlist.
+   * @default not set
    */
   source?: string;
   /**
    * Source type: `Local` (inline `rawContent`) or `AzureStorage`. Changing
    * it replaces the watchlist.
+   * @default Azure's default
    */
   sourceType?: "Local" | "AzureStorage" | (string & {});
-  /** Description of the watchlist. An Alchemy ownership marker is appended. */
+  /**
+   * Description of the watchlist. An Alchemy ownership marker is appended.
+   * @default only the Alchemy ownership marker
+   */
   description?: string;
-  /** Labels of the watchlist. */
+  /**
+   * Labels of the watchlist.
+   * @default []
+   */
   labels?: string[];
-  /** Default time-to-live of watchlist items (ISO-8601 duration, e.g. `P1000Y`). */
+  /**
+   * Default time-to-live of watchlist items (ISO-8601 duration, e.g. `P1000Y`).
+   * @default Azure's default
+   */
   defaultDuration?: string;
   /**
    * CSV content of the watchlist (header row + data rows). Required for
    * `Local` watchlists. Changing it replaces the watchlist; manage individual
    * rows afterwards with `WatchlistItem`.
+   * @default no content
    */
   rawContent?: string;
   /**
@@ -110,20 +126,33 @@ export interface Watchlist extends Resource<
 > {}
 
 /**
- * A Microsoft Sentinel watchlist: a named lookup table (e.g. VIP users,
- * approved servers) that analytics rules and hunting queries join against
- * with `_GetWatchlist('<alias>')`.
+ * A Microsoft Sentinel watchlist
+ * (`Microsoft.SecurityInsights/watchlists`): a named lookup table, such as
+ * VIP users or approved servers, that analytics rules and hunting queries
+ * join against with `_GetWatchlist('<alias>')`. See the
+ * [Azure docs](https://learn.microsoft.com/azure/sentinel/watchlists).
  *
- * @see https://learn.microsoft.com/azure/sentinel/watchlists
+ * :::caution
+ * Onboard the workspace first with `Azure.SecurityInsights.OnboardingState`,
+ * and pass its `workspace` attribute so Alchemy creates this resource after
+ * the onboarding and deletes it before.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `watchlistAlias`, `itemsSearchKey`,
+ * `source`, `sourceType`, `rawContent`, or `numberOfLinesToSkip` replaces the
+ * watchlist. Manage single rows after creation with
+ * `Azure.SecurityInsights.WatchlistItem`.
+ * :::
  *
  * ### Creating Watchlists
  * **Example:** Watchlist from inline CSV
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
  *   workspace: logs.workspaceName,
  * });
  * const servers = yield* Azure.SecurityInsights.Watchlist("servers", {
- *   resourceGroup: sentinel.resourceGroup,
  *   workspace: sentinel.workspace,
  *   displayName: "Approved servers",
  *   itemsSearchKey: "Hostname",
@@ -135,7 +164,6 @@ export interface Watchlist extends Resource<
  * **Example:** Labelled watchlist with a default item lifetime
  * ```typescript
  * const vips = yield* Azure.SecurityInsights.Watchlist("vips", {
- *   resourceGroup: sentinel.resourceGroup,
  *   workspace: sentinel.workspace,
  *   displayName: "VIP users",
  *   itemsSearchKey: "UserPrincipalName",
@@ -268,10 +296,7 @@ export const WatchlistProvider = () =>
       // requires its content on every PUT, so content is re-sent with
       // metadata updates (content changes replace the watchlist).
       let observed = yield* getWatchlist(subscriptionId, resourceGroup, workspace, alias);
-      if (
-        observed === undefined ||
-        !subsetEqual(mutable, observed.properties)
-      ) {
+      if (observed === undefined || !subsetEqual(mutable, observed.properties)) {
         observed = yield* securityinsights.WatchlistsCreateOrUpdate({
           subscriptionId,
           resourceGroupName: resourceGroup,

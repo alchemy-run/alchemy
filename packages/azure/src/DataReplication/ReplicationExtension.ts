@@ -23,7 +23,10 @@ import {
 } from "./Shared.ts";
 
 export interface ReplicationExtensionProps {
-  /** Resource group of the vault. Changing it replaces the extension. */
+  /**
+   * Resource group of the vault. Changing it replaces the extension.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the data replication vault. Changing it replaces the extension. */
   vault: string;
@@ -31,6 +34,7 @@ export interface ReplicationExtensionProps {
    * Name of the extension: letters and digits only. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the extension.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -80,11 +84,41 @@ export interface ReplicationExtension extends Resource<
  * Extensions cannot be tagged; Alchemy treats one as owned when its vault
  * is tagged for the current stack and stage.
  *
+ * :::caution
+ * Changing `vault`, `name`, `customProperties`, or `resourceGroup`
+ * replaces the extension. The service ignores a re-PUT of an existing
+ * extension.
+ * :::
+ *
  * @see https://learn.microsoft.com/rest/api/datareplication/replication-extension/create
  *
  * ### Creating a Replication Extension
  * **Example:** Hyper-V to Azure Local
  * ```typescript
+ * // Migration solution and sites from the Azure Migrate project.
+ * const migrationSolutionId = "<migration-solution-arm-id>";
+ * const vault = yield* Azure.DataReplication.Vault("vault");
+ * const source = yield* Azure.DataReplication.Fabric("hyperv", {
+ *   customProperties: {
+ *     instanceType: "HyperVMigrate",
+ *     hyperVSiteId: "<hyperv-site-arm-id>",
+ *     migrationSolutionId,
+ *   },
+ * });
+ * const target = yield* Azure.DataReplication.Fabric("azlocal", {
+ *   customProperties: {
+ *     instanceType: "AzStackHCI",
+ *     azStackHciSiteId: "<azure-local-site-arm-id>",
+ *     migrationSolutionId,
+ *     cluster: {
+ *       clusterName: "hci-cluster",
+ *       resourceName: "hci-cluster",
+ *       storageAccountName: "hcistorage",
+ *       storageContainers: [],
+ *     },
+ *   },
+ * });
+ * const cache = yield* Azure.Storage.StorageAccount("cache");
  * const extension = yield* Azure.DataReplication.ReplicationExtension("ext", {
  *   vault: vault.vaultName,
  *   customProperties: {

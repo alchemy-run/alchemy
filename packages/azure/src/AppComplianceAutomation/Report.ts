@@ -22,16 +22,25 @@ export interface ReportResourceProps {
    * `account.storageAccountId`.
    */
   resourceId: string;
-  /** Resource type, e.g. `Microsoft.Storage/storageAccounts`. */
+  /**
+   * Resource type, e.g. `Microsoft.Storage/storageAccounts`.
+   * @default not set
+   */
   resourceType?: string;
-  /** Resource kind, e.g. a storage account's `StorageV2`. */
+  /**
+   * Resource kind, e.g. a storage account's `StorageV2`.
+   * @default not set
+   */
   resourceKind?: string;
   /**
    * Cloud that hosts the resource: `Azure`, `AWS`, or `GCP`.
    * @default "Azure"
    */
   resourceOrigin?: "Azure" | "AWS" | "GCP";
-  /** Account ID of a non-Azure resource, e.g. the AWS account ID. */
+  /**
+   * Account ID of a non-Azure resource, e.g. the AWS account ID.
+   * @default not set
+   */
   accountId?: string;
 }
 
@@ -52,6 +61,7 @@ export interface ReportProps {
    * Report name, unique in the tenant: 1-50 letters, digits, `-` and `_`.
    * If omitted, a unique name is generated from the app, stage, and logical
    * ID.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Resources the report assesses daily against the Microsoft 365 Certification controls. */
@@ -71,9 +81,13 @@ export interface ReportProps {
   /**
    * Comma-separated Partner Center offer GUIDs the report certifies, e.g.
    * `"00000000-0000-0000-0000-000000000001"`.
+   * @default not set
    */
   offerGuid?: string;
-  /** Storage account for the report's evidence files ("bring your own storage"). */
+  /**
+   * Storage account for the report's evidence files ("bring your own storage").
+   * @default not set
+   */
   storageInfo?: ReportStorageInfo;
 }
 

@@ -48,19 +48,42 @@ export interface SqlPoolSecurityAlertPolicy extends Resource<
 
 /**
  * The threat detection (Microsoft Defender for SQL alerts) policy of a
- * single dedicated SQL pool — alerts on SQL injection, anomalous access,
- * and data exfiltration.
+ * single dedicated SQL pool
+ * (`Microsoft.Synapse/workspaces/sqlPools/securityAlertPolicies`) — alerts
+ * on SQL injection, anomalous access, and data exfiltration.
  *
  * This is a singleton policy that always exists on a pool. Destroying the
  * resource disables pool-level threat detection.
+ *
+ * :::caution
+ * Changing `workspace`, `sqlPool`, or `resourceGroup` replaces the policy.
+ * Pass `resourceGroup` explicitly: this resource does not default to the
+ * stack's group.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-sql/database/threat-detection-configure
  *
  * ### Enabling Threat Detection
  * **Example:** Alert the security team
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
+ * const pool = yield* Azure.Synapse.SqlPool("dw", {
+ *   workspace: workspace.workspaceName,
+ *   sku: "DW100c",
+ * });
  * yield* Azure.Synapse.SqlPoolSecurityAlertPolicy("threats", {
- *   resourceGroup: group.resourceGroupName,
+ *   resourceGroup: workspace.resourceGroup,
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,
  *   emailAddresses: ["security@example.com"],

@@ -33,6 +33,7 @@ export interface ConnectionTypeProps {
   /**
    * Connection type name. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the connection type.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -72,14 +73,21 @@ export interface ConnectionType extends Resource<
 /**
  * A custom connection type in an Azure Automation account: the schema
  * (field names and types) of {@link Connection} assets.
+ * The ARM type is `Microsoft.Automation/automationAccounts/connectionTypes`.
  *
  * Connection types are immutable; any change replaces them.
+ *
+ * :::caution
+ * Changing `automationAccount`, `name`, `isGlobal`, or `resourceGroup`
+ * replaces the connection type.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/automation-connections
  *
  * ### Defining a Connection Type
  * **Example:** API endpoint with a secret key
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const apiType = yield* Azure.Automation.ConnectionType("api", {
  *   automationAccount: account.automationAccountName,
  *   fieldDefinitions: {

@@ -5,10 +5,10 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   waitForProvisioned,
   waitUntilGone,
@@ -35,16 +35,28 @@ import {
 import type { HealthcareCorsConfiguration } from "./FhirService.ts";
 
 export interface DicomStorageConfiguration {
-  /** ARM ID of a Data Lake Storage Gen2 account (hierarchical namespace enabled). */
+  /**
+   * ARM ID of a Data Lake Storage Gen2 account (hierarchical namespace
+   * enabled). Required. Changing it replaces the service.
+   */
   storageResourceId: string;
-  /** File system (container) in the account that holds the DICOM data. */
+  /**
+   * File system (container) in the account that holds the DICOM data.
+   * Required. Changing it replaces the service.
+   */
   fileSystemName: string;
 }
 
 export interface DicomServiceProps {
-  /** Resource group of the workspace. Changing it replaces the service. */
+  /**
+   * Resource group of the workspace. Changing it replaces the service.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the Health Data Services workspace. Changing it replaces the service. */
+  /**
+   * Name of the Health Data Services workspace. Required. Changing it
+   * replaces the service.
+   */
   workspace: string;
   /**
    * Service name: 3-24 lowercase letters and digits, starting with a
@@ -52,9 +64,9 @@ export interface DicomServiceProps {
    * characters: longer ones are accepted by ARM but end in provisioning
    * state `Failed`, so reconcile rejects them up front. Generated names
    * are shortened to fit. The service URL is
-   * `https://{workspace}-{name}.dicom.azurehealthcareapis.com`. If omitted,
-   * a unique name is generated from the app, stage, and logical ID.
-   * Changing it replaces the service.
+   * `https://{workspace}-{name}.dicom.azurehealthcareapis.com`. Changing it
+   * replaces the service.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -66,14 +78,19 @@ export interface DicomServiceProps {
   /**
    * Managed identity, e.g. `{ type: "SystemAssigned" }` (required for
    * external storage or customer-managed keys).
+   * @default no identity
    */
   identity?: HealthcareIdentity;
-  /** CORS settings for browser clients (e.g. DICOMweb viewers). */
+  /**
+   * CORS settings for browser clients (e.g. DICOMweb viewers).
+   * @default no CORS rules
+   */
   corsConfiguration?: HealthcareCorsConfiguration;
   /**
    * Store DICOM data in your own Data Lake Storage Gen2 account instead of
    * Microsoft-managed storage. Chosen at creation: changing it replaces the
    * service.
+   * @default Microsoft-managed storage
    */
   storageConfiguration?: DicomStorageConfiguration;
   /**
@@ -85,12 +102,14 @@ export interface DicomServiceProps {
   /**
    * Key Vault key URL for customer-managed key encryption. Chosen at
    * creation: changing it replaces the service.
+   * @default Microsoft-managed keys
    */
   keyEncryptionKeyUrl?: string;
   /**
    * User tags. Alchemy ownership markers (`alchemy_stack`, `alchemy_stage`,
    * `alchemy_id`) are merged in automatically; this resource provider
    * rejects `:` in tag names.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -129,8 +148,9 @@ export interface DicomService extends Resource<
 > {}
 
 /**
- * A DICOM service in an Azure Health Data Services workspace — a managed
- * DICOMweb API for storing, querying and retrieving medical imaging data.
+ * A DICOM service in an Azure Health Data Services workspace
+ * (`Microsoft.HealthcareApis/workspaces/dicomservices`): a managed DICOMweb
+ * API for storing, querying, and retrieving medical imaging data.
  * Billing is consumption based (storage and API calls); an empty service
  * costs next to nothing. Provisioning takes a few minutes.
  *
@@ -149,6 +169,7 @@ export interface DicomService extends Resource<
  * ### Browser Viewers
  * **Example:** DICOM service with CORS for a web viewer
  * ```typescript
+ * const workspace = yield* Azure.HealthcareApis.Workspace("workspace");
  * const dicom = yield* Azure.HealthcareApis.DicomService("dicom", {
  *   workspace: workspace.workspaceName,
  *   corsConfiguration: {
@@ -162,6 +183,10 @@ export interface DicomService extends Resource<
  * ### External Storage
  * **Example:** DICOM data in your own Data Lake account
  * ```typescript
+ * const workspace = yield* Azure.HealthcareApis.Workspace("workspace");
+ * const lake = yield* Azure.Storage.StorageAccount("dicomlake", {
+ *   isHnsEnabled: true,
+ * });
  * const dicom = yield* Azure.HealthcareApis.DicomService("dicom", {
  *   workspace: workspace.workspaceName,
  *   identity: { type: "SystemAssigned" },
@@ -171,6 +196,19 @@ export interface DicomService extends Resource<
  *   },
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `workspace`, `resourceGroup`, `location`,
+ * `enableDataPartitions`, `keyEncryptionKeyUrl`, or `storageConfiguration`
+ * replaces the service. With Microsoft-managed storage, the replacement
+ * deletes the stored images.
+ * :::
+ *
+ * :::caution
+ * The service's full ARM resource ID must be at most 253 characters.
+ * Reconcile fails with `Azure.HealthcareApis.ServiceIdTooLong` for longer
+ * IDs: shorten the resource group, workspace, or service name.
+ * :::
  *
  * @resource
  */
@@ -229,23 +267,20 @@ export const DicomServiceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const workspaces = yield* healthcareapis
-        .ListWorkspaceBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListWorkspaceBySubscription", page)));
+      const workspaces = yield* collectAll(healthcareapis.ListWorkspaceBySubscription, {
+        subscriptionId,
+      });
       const found: DicomService["Attributes"][] = [];
       for (const workspace of workspaces.value ?? []) {
         const group = resourceGroupOf(workspace.id);
         if (group === undefined || workspace.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          healthcareapis.ListDicomServiceByWorkspace({
+          collectAll(healthcareapis.ListDicomServiceByWorkspace, {
             subscriptionId,
             resourceGroupName: group,
             workspaceName: workspace.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListDicomServiceByWorkspace", page);
-        }
         for (const dicom of page?.value ?? []) {
           const name = lastSegment(dicom.name);
           if (hasAnyMarker(dicom.tags) && name !== undefined) {

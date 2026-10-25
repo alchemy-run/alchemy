@@ -19,7 +19,10 @@ import { accountOwnedByStack, createChildName, sameName } from "./internal.ts";
 export type ShareKind = "CopyBased" | "InPlace";
 
 export interface ShareProps {
-  /** Resource group of the Data Share account. Changing it replaces the share. */
+  /**
+   * Resource group of the Data Share account. Changing it replaces the share.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Data Share account that offers the share. Changing it replaces the share. */
   account: string;
@@ -27,6 +30,7 @@ export interface ShareProps {
    * Share name: letters, digits, and `_`, starting with a letter, at most
    * 90 characters. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the share.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -36,9 +40,15 @@ export interface ShareProps {
    * @default "CopyBased"
    */
   shareKind?: ShareKind;
-  /** Description shown to consumers. */
+  /**
+   * Description shown to consumers. Updated in place.
+   * @default no description
+   */
   description?: string;
-  /** Terms of use consumers must accept. */
+  /**
+   * Terms of use consumers must accept. Updated in place.
+   * @default no terms
+   */
   terms?: string;
 }
 
@@ -70,18 +80,25 @@ export interface Share extends Resource<
 > {}
 
 /**
- * A share in an Azure Data Share account — the unit of data a provider
+ * A share in an Azure Data Share account
+ * (`Microsoft.DataShare/accounts/shares`) — the unit of data a provider
  * offers to consumers. Add data sets and a synchronization schedule to the
  * share, then invite consumers with an invitation.
  *
  * Shares carry no tags; Alchemy treats a share as owned when its account
  * carries this stack's ownership tags.
  *
+ * :::caution
+ * Changing `account`, `name`, `shareKind`, or `resourceGroup` replaces the
+ * share.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/data-share/share-your-data
  *
  * ### Creating a Share
  * **Example:** Snapshot-based share
  * ```typescript
+ * const account = yield* Azure.DataShare.Account("sharing");
  * const share = yield* Azure.DataShare.Share("sales", {
  *   account: account.accountName,
  *   description: "Daily sales extracts",

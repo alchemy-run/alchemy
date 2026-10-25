@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -36,6 +36,7 @@ export interface VirtualHardDiskProps {
   /**
    * Name of the virtual hard disk. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the virtual hard disk.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -49,19 +50,40 @@ export interface VirtualHardDiskProps {
    * Changing it replaces the virtual hard disk.
    */
   extendedLocation: HciExtendedLocation;
-  /** Size of the disk in GB. Changing it replaces the disk. */
+  /**
+   * Size of the disk in GB. Changing it replaces the disk.
+   * @default not set
+   */
   diskSizeGB?: number;
-  /** Whether the disk is dynamically expanding. Changing it replaces the disk. */
+  /**
+   * Whether the disk is dynamically expanding. Changing it replaces the disk.
+   * @default not set (Azure's default applies)
+   */
   dynamic?: boolean;
-  /** Block size in bytes. Changing it replaces the disk. */
+  /**
+   * Block size in bytes. Changing it replaces the disk.
+   * @default not set
+   */
   blockSizeBytes?: number;
-  /** Logical sector size in bytes. Changing it replaces the disk. */
+  /**
+   * Logical sector size in bytes. Changing it replaces the disk.
+   * @default not set
+   */
   logicalSectorBytes?: number;
-  /** Physical sector size in bytes. Changing it replaces the disk. */
+  /**
+   * Physical sector size in bytes. Changing it replaces the disk.
+   * @default not set
+   */
   physicalSectorBytes?: number;
-  /** Hyper-V generation. Changing it replaces the disk. */
+  /**
+   * Hyper-V generation. Changing it replaces the disk.
+   * @default not set
+   */
   hyperVGeneration?: "V1" | "V2";
-  /** Disk file format. Changing it replaces the disk. */
+  /**
+   * Disk file format. Changing it replaces the disk.
+   * @default not set
+   */
   diskFileFormat?: "vhdx" | "vhd";
   /**
    * ARM ID of the storage container that stores the disk. Changing it
@@ -72,6 +94,7 @@ export interface VirtualHardDiskProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -105,12 +128,22 @@ export interface VirtualHardDisk extends Resource<
  * A data disk on an Azure Local cluster that can be attached to an Arc
  * VM. Needs an Arc custom location backed by the Arc Resource Bridge of a
  * deployed Azure Local cluster.
+ * The ARM type is `Microsoft.AzureStackHCI/virtualHardDisks`.
+ *
+ * :::caution
+ * Changing `name`, `location`, `extendedLocation`, `diskSizeGB`, `dynamic`,
+ * `blockSizeBytes`, `logicalSectorBytes`, `physicalSectorBytes`,
+ * `hyperVGeneration`, `diskFileFormat`, `containerId`, or `resourceGroup`
+ * replaces the disk.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/manage/manage-arc-virtual-machine-resources
  *
  * ### Creating a Data Disk
  * **Example:** Dynamically expanding 64 GB disk
  * ```typescript
+ * // Arc custom location of the Azure Local cluster.
+ * const customLocationId = yield* Config.string("HCI_CUSTOM_LOCATION_ID");
  * const disk = yield* Azure.AzureStackHCI.VirtualHardDisk("data", {
  *   extendedLocation: { name: customLocationId },
  *   diskSizeGB: 64,
@@ -172,9 +205,7 @@ export const VirtualHardDiskProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        hci
-          .ListVirtualHardDiskAll({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListVirtualHardDiskAll", page))),
+        collectAll(hci.ListVirtualHardDiskAll, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((value) => {
         const group = resourceGroupOf(value.id);

@@ -35,14 +35,19 @@ export interface FeaturesetVersionProps extends Omit<
    * Feature store entities the features join on, as
    * `azureml:<entity>:<version>` references. Changing them replaces the
    * version.
+   * @default none
    */
   entities?: string[];
   /**
    * Materialization settings (schedule, compute, store type). Changing them
    * replaces the version.
+   * @default none
    */
   materializationSettings?: FeaturesetMaterializationSettings;
-  /** Lifecycle stage label of the version (e.g. `Development`). */
+  /**
+   * Lifecycle stage label of the version (e.g. `Development`).
+   * @default none
+   */
   stage?: string;
 }
 
@@ -62,6 +67,8 @@ export interface FeaturesetVersion extends Resource<
  * joined on feature store entities. Azure creates the
  * {@link FeaturesetContainer} named by `name` if it does not exist.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/concept-what-is-managed-feature-store).
+ *
  * Versions are immutable: only the description, tags, and stage update in
  * place. Azure accepts at most 3 tags with keys of letters, digits, `.`,
  * `-`, and `_`, which rules out Alchemy's `alchemy::*` ownership tags, so
@@ -73,11 +80,20 @@ export interface FeaturesetVersion extends Resource<
  * old version is deleted before the new one is created.
  * :::
  *
- * @see https://learn.microsoft.com/azure/machine-learning/concept-what-is-managed-feature-store
- *
  * ### Registering a Feature set version
  * **Example:** Feature set version in a workspace
  * ```typescript
+ * // An existing Application Insights component for workspace telemetry.
+ * const insightsId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/monitoring/providers/Microsoft.Insights/components/ml-insights";
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const featureStore = yield* Azure.MachineLearning.Workspace("featureStore", {
+ *   kind: "FeatureStore",
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ *   applicationInsights: insightsId,
+ * });
  * const transactions = yield* Azure.MachineLearning.FeaturesetVersion("transactions-v1", {
  *   workspace: featureStore.workspaceName,
  *   name: "transactions",

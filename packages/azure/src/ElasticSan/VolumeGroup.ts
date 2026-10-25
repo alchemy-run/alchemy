@@ -22,18 +22,36 @@ export type VolumeGroupEncryption =
 
 /** Customer-managed key settings of a volume group. */
 export interface VolumeGroupEncryptionProperties {
-  /** Key Vault key used to encrypt the volumes. */
+  /**
+   * Key Vault key used to encrypt the volumes.
+   * @default none
+   */
   keyVaultProperties?: {
-    /** Name of the Key Vault key. */
+    /**
+     * Name of the Key Vault key.
+     * @default none
+     */
     keyName?: string;
-    /** Version of the key. Omit to follow the latest version. */
+    /**
+     * Version of the key. Omit to follow the latest version.
+     * @default the latest key version
+     */
     keyVersion?: string;
-    /** URI of the Key Vault, e.g. `https://my-vault.vault.azure.net/`. */
+    /**
+     * URI of the Key Vault, e.g. `https://my-vault.vault.azure.net/`.
+     * @default none
+     */
     keyVaultUri?: string;
   };
-  /** Identity used to access the key. */
+  /**
+   * Identity used to access the key.
+   * @default none
+   */
   identity?: {
-    /** Resource ID of a user-assigned identity attached to the group. */
+    /**
+     * Resource ID of a user-assigned identity attached to the group.
+     * @default none
+     */
     userAssignedIdentity?: string;
   };
 }
@@ -42,7 +60,10 @@ export interface VolumeGroupEncryptionProperties {
 export interface VolumeGroupIdentity {
   /** Identity type. */
   type: "None" | "SystemAssigned" | "UserAssigned";
-  /** Resource IDs of user-assigned identities (with `type: "UserAssigned"`). */
+  /**
+   * Resource IDs of user-assigned identities (with `type: "UserAssigned"`).
+   * @default []
+   */
   userAssignedIdentities?: string[];
 }
 
@@ -61,7 +82,10 @@ export interface VolumeGroupVirtualNetworkRule {
 }
 
 export interface VolumeGroupProps {
-  /** Resource group of the Elastic SAN. Changing it replaces the group. */
+  /**
+   * Resource group of the Elastic SAN. Changing it replaces the group.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Name of the parent Elastic SAN. Changing it replaces the group. */
   elasticSan: string;
@@ -70,6 +94,7 @@ export interface VolumeGroupProps {
    * underscores, starting and ending with a letter or digit. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the group.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -83,16 +108,26 @@ export interface VolumeGroupProps {
    * @default "EncryptionAtRestWithPlatformKey"
    */
   encryption?: VolumeGroupEncryption;
-  /** Customer-managed key settings (with `EncryptionAtRestWithCustomerManagedKey`). */
+  /**
+   * Customer-managed key settings (with `EncryptionAtRestWithCustomerManagedKey`).
+   * @default none
+   */
   encryptionProperties?: VolumeGroupEncryptionProperties;
-  /** Managed identity of the group (needed for customer-managed keys). */
+  /**
+   * Managed identity of the group (needed for customer-managed keys).
+   * @default none
+   */
   identity?: VolumeGroupIdentity;
   /**
    * Subnets allowed to reach the group's volumes. An empty list removes
    * every rule.
+   * @default Azure's default (rules left unmanaged when omitted)
    */
   virtualNetworkRules?: VolumeGroupVirtualNetworkRule[];
-  /** Enforce CRC data-integrity checks on iSCSI connections. */
+  /**
+   * Enforce CRC data-integrity checks on iSCSI connections.
+   * @default Azure's default
+   */
   enforceDataIntegrityCheckForIscsi?: boolean;
 }
 
@@ -124,13 +159,19 @@ export interface VolumeGroup extends Resource<
 > {}
 
 /**
- * A volume group in an Azure Elastic SAN. Volume groups hold volumes and
- * apply network rules, encryption, and protocol settings to all of them.
+ * A volume group in an Azure Elastic SAN
+ * (`Microsoft.ElasticSan/elasticSans/volumegroups`). Volume groups hold
+ * volumes and apply network rules, encryption, and protocol settings to
+ * all of them. See
+ * [create an Elastic SAN](https://learn.microsoft.com/azure/storage/elastic-san/elastic-san-create).
  *
  * Volume groups have no tags; Alchemy treats a group as owned when its
  * parent SAN carries this stack's ownership tags.
  *
- * @see https://learn.microsoft.com/azure/storage/elastic-san/elastic-san-create
+ * :::caution
+ * Changing `resourceGroup`, `elasticSan`, `name`, or `protocolType`
+ * replaces the group and deletes its volumes and snapshots.
+ * :::
  *
  * ### Creating a Volume Group
  * **Example:** iSCSI volume group with platform-managed keys
@@ -144,6 +185,14 @@ export interface VolumeGroup extends Resource<
  * ### Network Rules
  * **Example:** Allow a subnet with a storage service endpoint
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("iscsi", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ *   serviceEndpoints: [{ service: "Microsoft.Storage" }],
+ * });
  * const volumes = yield* Azure.ElasticSan.VolumeGroup("volumes", {
  *   elasticSan: san.elasticSanName,
  *   virtualNetworkRules: [{ id: subnet.subnetId }],

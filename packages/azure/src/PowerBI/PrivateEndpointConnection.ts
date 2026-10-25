@@ -8,10 +8,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   stackAndStage,
   waitForProvisioned,
   waitUntilGone,
@@ -23,18 +23,29 @@ import { getPowerBIPrivateLinkService } from "./PrivateLinkService.ts";
 
 export interface PrivateEndpointConnectionProps {
   /**
-   * Resource group of the Power BI private link service. Changing it
-   * replaces the connection.
+   * Resource group of the Power BI private link service.
+   *
+   * :::caution
+   * Changing it replaces the connection.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the Power BI private link service the private endpoint connects
-   * to. Changing it replaces the connection.
+   * to.
+   *
+   * :::caution
+   * Changing it replaces the connection.
+   * :::
    */
   privateLinkService: string;
   /**
    * ARM ID of the private endpoint whose connection request is managed.
+   *
+   * :::caution
    * Changing it replaces the connection.
+   * :::
    */
   privateEndpointId: string;
   /**
@@ -81,15 +92,17 @@ export interface PrivateEndpointConnection extends Resource<
 
 /**
  * Approval of a private endpoint's connection to a Power BI private link
- * service.
+ * service (`Microsoft.PowerBI/privateLinkServicesForPowerBI/privateEndpointConnections`).
  *
  * Connections are not created directly: a private endpoint that targets the
  * service (group `tenant`) with a *manual* connection leaves a `Pending`
  * request on it. This resource approves or rejects that request. Destroying
  * it removes the connection, which disconnects the private endpoint.
  *
+ * :::caution
  * Requires a Power BI / Fabric tenant with *Azure Private Link* enabled by
  * a tenant administrator.
+ * :::
  *
  * @see https://learn.microsoft.com/fabric/security/security-private-links-use
  *
@@ -97,6 +110,13 @@ export interface PrivateEndpointConnection extends Resource<
  * **Example:** Approve a manual private endpoint request
  * ```typescript
  * const service = yield* Azure.PowerBI.PrivateLinkService("tenant");
+ * const vnet = yield* Azure.Network.VirtualNetwork("net", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("endpoints", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
  * const endpoint = yield* Azure.Network.PrivateEndpoint("powerbi", {
  *   subnetId: subnet.subnetId,
  *   manualPrivateLinkServiceConnections: [
@@ -112,6 +132,20 @@ export interface PrivateEndpointConnection extends Resource<
  *
  * **Example:** Reject a request
  * ```typescript
+ * const service = yield* Azure.PowerBI.PrivateLinkService("tenant");
+ * const vnet = yield* Azure.Network.VirtualNetwork("net", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("endpoints", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const endpoint = yield* Azure.Network.PrivateEndpoint("powerbi", {
+ *   subnetId: subnet.subnetId,
+ *   manualPrivateLinkServiceConnections: [
+ *     { privateLinkServiceId: service.privateLinkServiceId, groupIds: ["tenant"] },
+ *   ],
+ * });
  * yield* Azure.PowerBI.PrivateEndpointConnection("powerbi-approval", {
  *   privateLinkService: service.privateLinkServiceName,
  *   privateEndpointId: endpoint.privateEndpointId,
@@ -157,17 +191,11 @@ const findConnection = Effect.fn(function* (
   privateEndpointId: string,
 ) {
   const page = yield* orUndefinedIfNotFound(
-    powerbi
-      .ListPrivateEndpointConnectionByResource({
-        subscriptionId,
-        resourceGroupName,
-        azureResourceName,
-      })
-      .pipe(
-        Effect.flatMap((page) =>
-          requireSinglePage("ListPrivateEndpointConnectionByResource", page),
-        ),
-      ),
+    collectAll(powerbi.ListPrivateEndpointConnectionByResource, {
+      subscriptionId,
+      resourceGroupName,
+      azureResourceName,
+    }),
   );
   return (page?.value ?? []).find((connection) =>
     sameId(connection.properties?.privateEndpoint?.id, privateEndpointId),

@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,13 +32,17 @@ import {
 } from "./Common.ts";
 
 export interface DedicatedHubProps {
-  /** Resource group of the community. Changing it replaces the hub. */
+  /**
+   * Resource group of the community. Changing it replaces the hub.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the parent community. Changing it replaces the hub. */
   community: string;
   /**
    * Dedicated hub name. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the hub.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -49,11 +53,13 @@ export interface DedicatedHubProps {
   /**
    * Whether the hub is shared by enclaves (`Pooled`) or reserved for
    * specific enclaves (`Reserved`).
+   * @default not set
    */
   designation?: "Pooled" | "Reserved";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -90,16 +96,26 @@ export interface DedicatedHub extends Resource<
 > {}
 
 /**
- * A dedicated hub — an additional Virtual WAN hub and Azure Firewall
- * allocated inside an Azure Virtual Enclaves {@link Community}. Enclaves
- * attach to it with `dedicatedHubId`. The hub and firewall bill hourly and
- * take 30+ minutes to provision.
+ * A dedicated hub (`Microsoft.Mission/communities/dedicatedHubs`) — an
+ * additional Virtual WAN hub and Azure Firewall allocated inside an Azure
+ * Virtual Enclaves {@link Community}. Enclaves attach to it with
+ * `dedicatedHubId`. The hub and firewall bill hourly and take 30+ minutes to
+ * provision.
+ *
+ * :::caution
+ * Changing `community`, `name`, `location`, or `resourceGroup` replaces the
+ * dedicated hub.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-enclaves/overview
  *
  * ### Creating a Dedicated Hub
  * **Example:** Reserved hub for a sensitive enclave
  * ```typescript
+ * const community = yield* Azure.VirtualEnclaves.Community("hub", {
+ *   addressSpace: "10.0.0.0/16",
+ *   firewallSku: "Basic",
+ * });
  * const hub = yield* Azure.VirtualEnclaves.DedicatedHub("reserved", {
  *   community: community.communityName,
  *   designation: "Reserved",
@@ -157,22 +173,21 @@ export const DedicatedHubProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const communities = yield* mission
-        .ListCommunityBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListCommunityBySubscription", page)));
+      const communities = yield* collectAll(mission.ListCommunityBySubscription, {
+        subscriptionId,
+      });
       const results: DedicatedHub["Attributes"][] = [];
       for (const community of communities.value) {
         const group = resourceGroupOf(community.id);
         if (group === undefined || community.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          mission.ListDedicatedHubByCommunityResource({
+          collectAll(mission.ListDedicatedHubByCommunityResource, {
             subscriptionId,
             resourceGroupName: group,
             communityName: community.name,
           }),
         );
         if (page === undefined) continue;
-        yield* requireSinglePage("ListDedicatedHubByCommunityResource", page);
         for (const hub of page.value) {
           if (hasAnyAlchemyTag(hub.tags) && hub.name !== undefined) {
             results.push(toAttrs(group, community.name, hub.name, hub));

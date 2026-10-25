@@ -14,7 +14,10 @@ import { isWorkspaceOwnedByStack, SENTINEL_NAMESPACE, sameText } from "./Common.
 const NAME = "default";
 
 export interface OnboardingStateProps {
-  /** Resource group of the Log Analytics workspace. Changing it replaces the onboarding. */
+  /**
+   * Resource group of the Log Analytics workspace. Changing it replaces the onboarding.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Log Analytics workspace to enable Microsoft Sentinel on. Changing it replaces the onboarding. */
   workspace: string;
@@ -49,14 +52,20 @@ export interface OnboardingState extends Resource<
 > {}
 
 /**
- * Enables Microsoft Sentinel on a Log Analytics workspace. Every other
- * `SecurityInsights` resource lives in an onboarded workspace: pass this
- * resource's `workspace` attribute to them so they are created after the
- * onboarding and deleted before it.
+ * A Microsoft Sentinel onboarding state
+ * (`Microsoft.SecurityInsights/onboardingStates`): it turns on Microsoft
+ * Sentinel for a Log Analytics workspace. Every other `SecurityInsights`
+ * resource lives in an onboarded workspace. Pass this resource's `workspace`
+ * attribute to them, so Alchemy creates them after the onboarding and
+ * deletes them before it. See the
+ * [Azure docs](https://learn.microsoft.com/azure/sentinel/quickstart-onboard).
  *
  * Deleting the onboarding state offboards Sentinel from the workspace.
  *
- * @see https://learn.microsoft.com/azure/sentinel/quickstart-onboard
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, or `customerManagedKey` replaces
+ * the onboarding. Alchemy offboards Sentinel and onboards it again.
+ * :::
  *
  * ### Enabling Microsoft Sentinel
  * **Example:** Onboard a workspace
@@ -69,8 +78,11 @@ export interface OnboardingState extends Resource<
  *
  * **Example:** Depend on the onboarding from Sentinel content
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
+ *   workspace: logs.workspaceName,
+ * });
  * const rule = yield* Azure.SecurityInsights.AutomationRule("triage", {
- *   resourceGroup: sentinel.resourceGroup,
  *   workspace: sentinel.workspace,
  *   displayName: "Raise severity",
  *   order: 1,

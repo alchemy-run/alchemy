@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -30,12 +30,16 @@ import {
 } from "./common.ts";
 
 export interface ToolProps {
-  /** Resource group the tool is created in. Changing it replaces the tool. */
+  /**
+   * Resource group the tool is created in. Changing it replaces the tool.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Tool name: 3-24 letters, digits, and hyphens. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the tool.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -50,11 +54,15 @@ export interface ToolProps {
    * outputs) as JSON.
    */
   definitionContent: Record<string, unknown>;
-  /** Environment variables made available to the tool. */
+  /**
+   * Environment variables made available to the tool.
+   * @default {}
+   */
   environmentVariables?: Record<string, string>;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -85,8 +93,14 @@ export interface Tool extends Resource<
  * capability that Discovery agents can invoke, described by a JSON tool
  * definition.
  *
- * Microsoft Discovery is a gated preview: on subscriptions without the
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the tool.
+ * :::
+ *
+ * :::caution
+ * Microsoft Discovery is a gated preview. On subscriptions without the
  * preview, ARM rejects the resource type with `InvalidResourceType`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/microsoft-discovery/
  *
@@ -145,8 +159,7 @@ export const ToolProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* discovery.ListToolBySubscription({ subscriptionId }).pipe(
-        Effect.flatMap((page) => requireSinglePage("ListToolBySubscription", page)),
+      const page = yield* collectAll(discovery.ListToolBySubscription, { subscriptionId }).pipe(
         Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)),
       );
       return (page?.value ?? []).flatMap((observed) => {

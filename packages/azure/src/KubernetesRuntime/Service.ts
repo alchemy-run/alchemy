@@ -60,7 +60,8 @@ export interface Service extends Resource<
 
 /**
  * Enables a Kubernetes runtime feature (`storageclass` or `networking`) on
- * an Azure Arc-enabled Kubernetes cluster. It is an extension resource of
+ * an Azure Arc-enabled Kubernetes cluster
+ * (`Microsoft.KubernetesRuntime/services`). It is an extension resource of
  * the connected cluster and a prerequisite for
  * `Azure.KubernetesRuntime.StorageClass`, `LoadBalancer` and `BgpPeer`.
  *
@@ -74,19 +75,31 @@ export interface Service extends Resource<
  * ### Enabling Features
  * **Example:** Enable Arc storage class management
  * ```typescript
+ * const clusterId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.Kubernetes/connectedClusters/edge-cluster";
  * yield* Azure.KubernetesRuntime.Service("storage", {
- *   clusterId: "/subscriptions/.../connectedClusters/edge-cluster",
+ *   clusterId,
  *   serviceName: "storageclass",
  * });
  * ```
  *
  * **Example:** Enable Arc networking (MetalLB)
  * ```typescript
+ * const clusterId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.Kubernetes/connectedClusters/edge-cluster";
  * const networking = yield* Azure.KubernetesRuntime.Service("networking", {
  *   clusterId,
  *   serviceName: "networking",
  * });
  * ```
+ *
+ * :::caution
+ * The cluster must be connected (Arc agents installed and reporting).
+ * :::
+ *
+ * :::caution
+ * Changing `clusterId` or `serviceName` replaces the service.
+ * :::
  *
  * @resource
  */

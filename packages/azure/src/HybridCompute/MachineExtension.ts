@@ -21,9 +21,14 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { machineLocation } from "./MachineCommon.ts";
 
 export interface MachineExtensionProps {
-  /** Resource group of the Arc machine. Changing it replaces the extension. */
+  /**
+   * Resource group of the Arc machine. Changing it replaces the extension.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the Arc machine. Changing it replaces the extension. */
+  /**
+   * Name of the Arc machine. Required. Changing it replaces the extension.
+   */
   machineName: string;
   /**
    * Name of the extension. Changing it replaces the extension.
@@ -46,33 +51,44 @@ export interface MachineExtensionProps {
    * `CustomScript`. Changing it replaces the extension.
    */
   type: string;
-  /** Version of the extension handler, e.g. `1.0`. */
+  /**
+   * Version of the extension handler, e.g. `1.0`.
+   * @default the latest version Azure offers
+   */
   typeHandlerVersion?: string;
   /**
    * Whether to use a newer minor version when one is available at
    * deployment time.
+   * @default Azure's default
    */
   autoUpgradeMinorVersion?: boolean;
   /**
    * Whether the platform upgrades the extension automatically when a newer
    * version is published.
+   * @default Azure's default
    */
   enableAutomaticUpgrade?: boolean;
-  /** Public JSON settings for the extension. */
+  /**
+   * Public JSON settings for the extension.
+   * @default no settings
+   */
   settings?: Record<string, unknown>;
   /**
    * Protected JSON settings, encrypted on the machine and never returned
    * by Azure.
+   * @default no protected settings
    */
   protectedSettings?: Record<string, unknown>;
   /**
    * Change this value to force the extension handler to re-run even if its
    * configuration is unchanged.
+   * @default unset
    */
   forceUpdateTag?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -107,11 +123,9 @@ export interface MachineExtension extends Resource<
 > {}
 
 /**
- * A VM extension installed on an Azure Arc-enabled server — for example
- * the Azure Monitor agent, Defender for Endpoint, or a custom script.
- *
- * The machine must be connected (`status: "Connected"`): the Connected
- * Machine agent downloads and runs the extension.
+ * A VM extension installed on an Azure Arc-enabled server
+ * (`Microsoft.HybridCompute/machines/extensions`), for example the Azure
+ * Monitor agent, Defender for Endpoint, or a custom script.
  *
  * @see https://learn.microsoft.com/azure/azure-arc/servers/manage-vm-extensions
  *
@@ -119,7 +133,6 @@ export interface MachineExtension extends Resource<
  * **Example:** Azure Monitor agent on a Linux server
  * ```typescript
  * yield* Azure.HybridCompute.MachineExtension("monitor", {
- *   resourceGroup: "arc",
  *   machineName: "web-01",
  *   publisher: "Microsoft.Azure.Monitor",
  *   type: "AzureMonitorLinuxAgent",
@@ -130,7 +143,6 @@ export interface MachineExtension extends Resource<
  * **Example:** Custom script
  * ```typescript
  * yield* Azure.HybridCompute.MachineExtension("bootstrap", {
- *   resourceGroup: "arc",
  *   machineName: "web-01",
  *   publisher: "Microsoft.Azure.Extensions",
  *   type: "CustomScript",
@@ -138,6 +150,18 @@ export interface MachineExtension extends Resource<
  *   settings: { commandToExecute: "echo hello > /tmp/hello" },
  * });
  * ```
+ *
+ * :::caution
+ * The machine must be a connected Arc-enabled server
+ * (`status: "Connected"`) in the same resource group: the Connected Machine
+ * agent downloads and runs the extension.
+ * :::
+ *
+ * :::caution
+ * Changing `name`, `machineName`, `location`, `resourceGroup`, `publisher`,
+ * or `type` replaces the extension: the old one is uninstalled from the
+ * machine.
+ * :::
  *
  * @resource
  */

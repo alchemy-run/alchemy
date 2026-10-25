@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -36,6 +36,7 @@ export interface MarketplaceGalleryImageProps {
   /**
    * Name of the marketplace gallery image. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the marketplace gallery image.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -57,20 +58,31 @@ export interface MarketplaceGalleryImageProps {
   containerId?: string;
   /** Operating system of the image. Changing it replaces the image. */
   osType: "Windows" | "Linux";
-  /** Cloud-init datasource of the image. Changing it replaces the image. */
+  /**
+   * Cloud-init datasource of the image. Changing it replaces the image.
+   * @default not set
+   */
   cloudInitDataSource?: "NoCloud" | "Azure";
-  /** Hyper-V generation of the image. Changing it replaces the image. */
+  /**
+   * Hyper-V generation of the image. Changing it replaces the image.
+   * @default not set
+   */
   hyperVGeneration?: "V1" | "V2";
   /**
    * Marketplace publisher/offer/SKU of the image. Changing it replaces the
    * image.
+   * @default not set
    */
   identifier?: hci.GalleryImageIdentifier;
-  /** Marketplace image version. Changing it replaces the image. */
+  /**
+   * Marketplace image version. Changing it replaces the image.
+   * @default not set
+   */
   version?: hci.GalleryImageVersionInput;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -106,12 +118,21 @@ export interface MarketplaceGalleryImage extends Resource<
  * An Azure Marketplace VM image downloaded to an Azure Local cluster for
  * creating Arc VMs. Needs an Arc custom location backed by the Arc Resource
  * Bridge of a deployed Azure Local cluster.
+ * The ARM type is `Microsoft.AzureStackHCI/marketplaceGalleryImages`.
+ *
+ * :::caution
+ * Changing `name`, `location`, `extendedLocation`, `containerId`, `osType`,
+ * `cloudInitDataSource`, `hyperVGeneration`, `identifier`, `version`, or
+ * `resourceGroup` replaces the image.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/manage/virtual-machine-image-azure-marketplace
  *
  * ### Downloading a Marketplace Image
  * **Example:** Windows Server image
  * ```typescript
+ * // Arc custom location of the Azure Local cluster.
+ * const customLocationId = yield* Config.string("HCI_CUSTOM_LOCATION_ID");
  * const image = yield* Azure.AzureStackHCI.MarketplaceGalleryImage("ws2022", {
  *   extendedLocation: { name: customLocationId },
  *   osType: "Windows",
@@ -183,11 +204,7 @@ export const MarketplaceGalleryImageProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        hci
-          .ListMarketplaceGalleryImageAll({ subscriptionId })
-          .pipe(
-            Effect.flatMap((page) => requireSinglePage("ListMarketplaceGalleryImageAll", page)),
-          ),
+        collectAll(hci.ListMarketplaceGalleryImageAll, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((value) => {
         const group = resourceGroupOf(value.id);

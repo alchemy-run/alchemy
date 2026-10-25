@@ -28,12 +28,36 @@ export interface WorkspaceApiOperation extends Resource<
  * The workspace-scoped counterpart of {@link ApiOperation}: an API operation inside an API
  * Management {@link Workspace} (Premium and v2 tiers). Props and
  * attributes match {@link ApiOperation} plus `workspaceName`.
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/workspaces/apis/operations`.
+ *
+ * :::caution
+ * Changing `workspaceName`, `serviceName`, `apiName`, `name`, or
+ * `resourceGroup` replaces the operation.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/workspaces-overview
  *
  * ### Workspace Operations
  * **Example:** GET /orders/{id}
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
+ * const api = yield* Azure.ApiManagement.WorkspaceApi("orders", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * yield* Azure.ApiManagement.WorkspaceApiOperation("get-order", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

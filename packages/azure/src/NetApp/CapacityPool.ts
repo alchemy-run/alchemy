@@ -42,6 +42,7 @@ export interface CapacityPoolProps {
    * Pool name: 1-64 letters, digits, `-` and `_`. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the pool.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -63,11 +64,15 @@ export interface CapacityPoolProps {
    * @default "Auto"
    */
   qosType?: "Auto" | "Manual";
-  /** Custom throughput of a `Flexible` pool, in MiB/s. */
+  /**
+   * Custom throughput of a `Flexible` pool, in MiB/s.
+   * @default Azure's default
+   */
   customThroughputMibps?: number;
   /**
    * Enable cool access (tiering of cold data). Can be enabled in place but
    * not disabled; disabling replaces the pool.
+   * @default false
    */
   coolAccess?: boolean;
   /**
@@ -78,6 +83,7 @@ export interface CapacityPoolProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -122,7 +128,15 @@ export interface CapacityPool extends Resource<
  * steps) at a service level from which volumes are carved. Billed hourly
  * on its provisioned size (Standard ≈ $0.20/hour per TiB).
  *
- * @see https://learn.microsoft.com/azure/azure-netapp-files/azure-netapp-files-set-up-capacity-pool
+ * ARM type: `Microsoft.NetApp/netAppAccounts/capacityPools`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/azure-netapp-files/azure-netapp-files-set-up-capacity-pool).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `account`, `name`, `serviceLevel`, or
+ * `encryptionType` replaces the pool.
+ * Switching `qosType` from `Manual` to `Auto`, or turning `coolAccess` off,
+ * also replaces it.
+ * :::
  *
  * ### Creating a Capacity Pool
  * **Example:** 1 TiB Standard pool

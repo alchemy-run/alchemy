@@ -80,6 +80,7 @@ export interface HybridNetworkIdentity {
   /**
    * ARM IDs of user-assigned managed identities (for `UserAssigned` and
    * `SystemAssigned,UserAssigned`).
+   * @default []
    */
   userAssignedIdentities?: string[];
 }

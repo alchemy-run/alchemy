@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -41,12 +41,16 @@ export interface DeviceRegistryMessagingEndpoint {
 }
 
 export interface NamespaceProps {
-  /** Resource group the namespace is created in. Changing it replaces the namespace. */
+  /**
+   * Resource group the namespace is created in. Changing it replaces the namespace.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Namespace name: 3-63 lowercase letters, digits, and hyphens. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the namespace.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -68,6 +72,7 @@ export interface NamespaceProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -98,9 +103,14 @@ export interface Namespace extends Resource<
 > {}
 
 /**
- * An Azure Device Registry namespace — the container for devices and
+ * An Azure Device Registry namespace (`Microsoft.DeviceRegistry/namespaces`)
+ * — the container for devices and
  * assets managed through Azure Device Registry (used by Azure IoT
  * Operations and IoT Hub integration).
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the namespace.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/iot-operations/discover-manage-assets/overview-manage-assets
  *
@@ -173,9 +183,7 @@ export const NamespaceProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        deviceregistry
-          .ListNamespaceBySubscription({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListNamespaceBySubscription", page))),
+        collectAll(deviceregistry.ListNamespaceBySubscription, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((ns) => {
         const group = resourceGroupOf(ns.id);

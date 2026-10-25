@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -41,6 +41,7 @@ export interface ClusterManagerProps {
   /**
    * Name of the cluster manager. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the cluster manager.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -57,19 +58,25 @@ export interface ClusterManagerProps {
   /**
    * ARM ID of the Log Analytics workspace that receives manager logs.
    * Changing it replaces the cluster manager.
+   * @default none
    */
   analyticsWorkspaceId?: string;
   /**
    * Availability zones of the manager's infrastructure. Changing them
    * replaces the cluster manager.
+   * @default none
    */
   availabilityZones?: string[];
   /**
    * Name and location of the managed resource group the manager creates.
    * Changing it replaces the cluster manager.
+   * @default none
    */
   managedResourceGroupConfiguration?: NexusManagedResourceGroupConfiguration;
-  /** VM size of the manager's infrastructure. Changing it replaces the cluster manager. */
+  /**
+   * VM size of the manager's infrastructure. Changing it replaces the cluster manager.
+   * @default none
+   */
   vmSize?: string;
   /**
    * Deployment kind: `Nexus` or `AzureLocal`. Changing it replaces the
@@ -77,11 +84,15 @@ export interface ClusterManagerProps {
    * @default "Nexus"
    */
   kind?: "Nexus" | "AzureLocal";
-  /** Managed identity of the cluster manager. */
+  /**
+   * Managed identity of the cluster manager.
+   * @default none
+   */
   identity?: NexusIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -125,13 +136,25 @@ export interface ClusterManager extends Resource<
  * paired with a Network Fabric controller and takes tens of minutes to
  * provision. Needs an Operator Nexus-onboarded subscription.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-cluster-manager
+ * ARM type: `Microsoft.NetworkCloud/clusterManagers`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-cluster-manager).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `fabricControllerId`,
+ * `analyticsWorkspaceId`, `availabilityZones`,
+ * `managedResourceGroupConfiguration`, `vmSize`, or `kind` replaces the cluster
+ * manager.
+ * :::
  *
  * ### Creating a Cluster Manager
  * **Example:** Manager paired with a fabric controller
  * ```typescript
+ * // An existing Network Fabric Controller.
+ * const controllerId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/networkFabricControllers/nfc1";
+ * const workspace = yield* Azure.LogAnalytics.Workspace("nexus-logs");
  * const manager = yield* Azure.NetworkCloud.ClusterManager("manager", {
- *   fabricControllerId: controller.networkFabricControllerId,
+ *   fabricControllerId: controllerId,
  *   analyticsWorkspaceId: workspace.workspaceId,
  *   identity: { type: "SystemAssigned" },
  * });
@@ -182,11 +205,7 @@ export const ClusterManagerProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* nc
-        .ListClusterManagerBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListClusterManagerBySubscription", page)),
-        );
+      const page = yield* collectAll(nc.ListClusterManagerBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

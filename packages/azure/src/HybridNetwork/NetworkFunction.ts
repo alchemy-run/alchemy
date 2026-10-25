@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -38,12 +38,16 @@ import {
 export type NetworkFunctionNfviType = "AzureCore" | "AzureArcKubernetes" | "AzureOperatorNexus";
 
 export interface NetworkFunctionProps {
-  /** Resource group the network function is created in. Changing it replaces the function. */
+  /**
+   * Resource group the network function is created in. Changing it replaces the function.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Network function name: 1-64 letters, digits, `_`, and `-`. If omitted,
    * a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the function.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -69,20 +73,26 @@ export interface NetworkFunctionProps {
    * Deployment values as a JSON string conforming to the definition's
    * `deployParameters`. Updated in place. Mutually exclusive with
    * `secretDeploymentValues`.
+   * @default unset
    */
   deploymentValues?: string;
   /**
    * Deployment values as a JSON string stored as a secret. Azure never
    * returns it, so changes are detected by hash. Switching between open and
    * secret values replaces the function.
+   * @default unset
    */
   secretDeploymentValues?: string | Redacted.Redacted<string>;
   /**
    * Whether software updates are allowed during deployment. AOSM requires
    * `true` to install or update the function.
+   * @default unset on create; unchanged on update
    */
   allowSoftwareUpdate?: boolean;
-  /** Role configuration override values (JSON strings). Updated in place. */
+  /**
+   * Role configuration override values (JSON strings). Updated in place.
+   * @default unset on create; unchanged on update
+   */
   roleOverrideValues?: string[];
   /**
    * Managed identity the network function deploys with (AOSM requires one).
@@ -92,6 +102,7 @@ export interface NetworkFunctionProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -130,12 +141,12 @@ export interface NetworkFunction extends Resource<
 > {}
 
 /**
- * An Azure Operator Service Manager network function — a deployment of a
- * published `NetworkFunctionDefinitionVersion` onto an NFVI (an Azure
- * resource group, an Arc-connected Kubernetes cluster, or Azure Operator
- * Nexus).
+ * An Azure Operator Service Manager network function
+ * (`Microsoft.HybridNetwork/networkFunctions`): a deployment of a published
+ * `NetworkFunctionDefinitionVersion` onto an NFVI (an Azure resource group,
+ * an Arc-connected Kubernetes cluster, or Azure Operator Nexus).
  *
- * Deployment values, role overrides, and identity update in place; the
+ * Deployment values, role overrides, and identity update in place. The
  * definition version and NFVI are fixed for the life of the function.
  *
  * @see https://learn.microsoft.com/azure/operator-service-manager/azure-operator-service-manager-overview
@@ -143,25 +154,43 @@ export interface NetworkFunction extends Resource<
  * ### Deploying a Network Function
  * **Example:** Virtual network function on Azure Core
  * ```typescript
+ * // a published Azure.HybridNetwork.NetworkFunctionDefinitionVersion
+ * const nfdvId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/aosm/providers/Microsoft.HybridNetwork/publishers/contoso/networkFunctionDefinitionGroups/firewall/networkFunctionDefinitionVersions/1.0.0";
+ * const targetGroupId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/firewall-target";
  * const nf = yield* Azure.HybridNetwork.NetworkFunction("firewall", {
- *   networkFunctionDefinitionVersionId: nfdv.networkFunctionDefinitionVersionId,
+ *   networkFunctionDefinitionVersionId: nfdvId,
  *   nfviType: "AzureCore",
- *   nfviId: target.resourceGroupId,
+ *   nfviId: targetGroupId,
+ *   allowSoftwareUpdate: true,
  *   deploymentValues: JSON.stringify({ vmSize: "Standard_B1s" }),
  * });
  * ```
  *
  * **Example:** Secret deployment values
  * ```typescript
+ * // nfdvId as above
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/edge-cluster";
  * const nf = yield* Azure.HybridNetwork.NetworkFunction("firewall", {
- *   networkFunctionDefinitionVersionId: nfdv.networkFunctionDefinitionVersionId,
+ *   networkFunctionDefinitionVersionId: nfdvId,
  *   nfviType: "AzureArcKubernetes",
- *   nfviId: customLocation.id,
+ *   nfviId: customLocationId,
+ *   allowSoftwareUpdate: true,
  *   secretDeploymentValues: Redacted.make(
  *     JSON.stringify({ adminPassword: process.env.ADMIN_PASSWORD }),
  *   ),
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`,
+ * `networkFunctionDefinitionVersionId`, `nfviType`, or `nfviId`, or
+ * switching between `deploymentValues` and `secretDeploymentValues`,
+ * replaces the function and redeploys it. With a fixed `name`, the old
+ * function is deleted first.
+ * :::
  *
  * @resource
  */
@@ -231,11 +260,9 @@ export const NetworkFunctionProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* hybridnetwork
-        .ListNetworkFunctionBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListNetworkFunctionBySubscription", page)),
-        );
+      const page = yield* collectAll(hybridnetwork.ListNetworkFunctionBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((fn) => {
         const group = resourceGroupOf(fn.id);
         return hasAnyAlchemyTag(fn.tags) && group !== undefined && fn.name !== undefined

@@ -6,7 +6,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { childLifecycle, type InstanceScope } from "./Common.ts";
 
 export interface AkriServiceProps {
-  /** Resource group of the IoT Operations instance. Changing it replaces the service. */
+  /**
+   * Resource group of the IoT Operations instance. Changing it replaces the service.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** IoT Operations instance that holds the service. Changing it replaces the service. */
   instanceName: string;
@@ -14,6 +17,7 @@ export interface AkriServiceProps {
    * Service name (lowercase letters, digits, and hyphens, 3-63
    * characters). If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the service.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
 }
@@ -57,6 +61,12 @@ export interface AkriService extends Resource<
  * ### Creating an Akri Service
  * **Example:** Akri service of an instance
  * ```typescript
+ * const instance = yield* Azure.IoTOperations.Instance("aio", {
+ *   customLocationId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/aio-location",
+ *   schemaRegistryId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.DeviceRegistry/schemaRegistries/aio-schemas",
+ * });
  * const akri = yield* Azure.IoTOperations.AkriService("akri", {
  *   instanceName: instance.instanceName,
  * });

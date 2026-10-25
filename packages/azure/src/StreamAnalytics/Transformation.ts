@@ -14,6 +14,7 @@ export interface TransformationProps {
   /**
    * Resource group of the streaming job. Changing it replaces the
    * transformation.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /** Name of the streaming job. Changing it replaces the transformation. */
@@ -64,21 +65,28 @@ export interface Transformation extends Resource<
 
 /**
  * The query of an Azure Stream Analytics streaming job, together with the
- * number of streaming units it runs on.
+ * number of streaming units it runs on
+ * (`Microsoft.StreamAnalytics/streamingjobs/transformations`).
  *
  * A job has exactly one transformation, and Azure has no API to delete it
  * on its own: destroying this resource leaves the query in place until its
  * streaming job is deleted. It carries no tags; Alchemy treats it as owned
  * when its streaming job carries this stack's and stage's ownership tags.
  *
+ * :::caution
+ * Changing `streamingJob`, `name`, or `resourceGroup` replaces the
+ * transformation.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/stream-analytics/stream-analytics-stream-analytics-query-patterns
  *
  * ### Defining the Query
  * **Example:** Pass-through query
  * ```typescript
+ * const job = yield* Azure.StreamAnalytics.StreamingJob("telemetry");
  * const query = yield* Azure.StreamAnalytics.Transformation("query", {
  *   streamingJob: job.jobName,
- *   query: `SELECT * INTO [${archive.outputName}] FROM [${events.inputName}]`,
+ *   query: "SELECT * INTO [archive] FROM [events]",
  * });
  * ```
  *

@@ -6,12 +6,12 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -35,13 +35,17 @@ export type DevCenterEncryption = devcenter.Encryption;
 export type DevCenterEnableStatus = "Enabled" | "Disabled";
 
 export interface DevCenterProps {
-  /** Resource group the dev center is created in. Changing it replaces the dev center. */
+  /**
+   * Resource group the dev center is created in. Changing it replaces the dev center.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Dev center name: 3-26 letters, digits, and hyphens. It is part of the
    * dev center's data-plane endpoint. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * dev center.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -52,11 +56,18 @@ export interface DevCenterProps {
   /**
    * Managed identity of the dev center. The identity reads catalog secrets
    * from Key Vault, attaches compute galleries, and deploys environments.
+   * @default no managed identity
    */
   identity?: DevCenterIdentity;
-  /** Display name of the dev center. */
+  /**
+   * Display name of the dev center.
+   * @default unset
+   */
   displayName?: string;
-  /** Customer-managed key encryption for proprietary content. */
+  /**
+   * Customer-managed key encryption for proprietary content.
+   * @default Microsoft-managed keys
+   */
   encryption?: DevCenterEncryption;
   /**
    * Whether projects of the dev center may attach their own catalogs.
@@ -77,6 +88,7 @@ export interface DevCenterProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -111,12 +123,18 @@ export interface DevCenter extends Resource<
 > {}
 
 /**
- * A Microsoft Dev Center — the top-level control plane for Microsoft Dev
+ * A Microsoft Dev Center (`Microsoft.DevCenter/devcenters`) — the
+ * top-level control plane for Microsoft Dev
  * Box and Azure Deployment Environments. Platform engineers attach
  * networks, galleries, catalogs, dev box definitions, and environment
  * types to a dev center, and group developers into projects. The dev
  * center itself is free; billing starts when developers create dev boxes
  * or environments.
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the dev
+ * center. The name is part of the data-plane endpoint (`devCenterUri`).
+ * :::
  *
  * @see https://learn.microsoft.com/azure/dev-box/concept-dev-box-concepts
  *
@@ -197,9 +215,7 @@ export const DevCenterProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* devcenter
-        .ListDevCenterBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDevCenterBySubscription", page)));
+      const page = yield* collectAll(devcenter.ListDevCenterBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((center) => {
         const group = resourceGroupOf(center.id);
         return hasAnyAlchemyTag(center.tags) && group !== undefined && center.name !== undefined

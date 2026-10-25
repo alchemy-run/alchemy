@@ -206,19 +206,30 @@ export interface AuditingSettingFields {
    * Blob endpoint of the audit storage account, e.g.
    * `https://{account}.blob.core.windows.net`. Required for storage
    * auditing unless `isAzureMonitorTargetEnabled` is set.
+   * @default not set
    */
   storageEndpoint?: string;
   /**
    * Access key of the audit storage account. Write-only: Azure never
    * returns it. Omit it to authenticate with the workspace managed
    * identity.
+   * @default the workspace managed identity
    */
   storageAccountAccessKey?: Redacted.Redacted<string>;
-  /** Subscription of the audit storage account. */
+  /**
+   * Subscription of the audit storage account.
+   * @default not set
+   */
   storageAccountSubscriptionId?: string;
-  /** Whether `storageAccountAccessKey` is the account's secondary key. */
+  /**
+   * Whether `storageAccountAccessKey` is the account's secondary key.
+   * @default not set
+   */
   isStorageSecondaryKeyInUse?: boolean;
-  /** Days to keep audit logs in storage (0 = unlimited). */
+  /**
+   * Days to keep audit logs in storage (0 = unlimited).
+   * @default not set
+   */
   retentionDays?: number;
   /**
    * Action groups and actions to audit, e.g.
@@ -229,9 +240,13 @@ export interface AuditingSettingFields {
   /**
    * Send audit events to Azure Monitor (configure a diagnostic setting
    * with the `SQLSecurityAuditEvents` category on the target).
+   * @default not set
    */
   isAzureMonitorTargetEnabled?: boolean;
-  /** Milliseconds before audit actions are forced to be processed. */
+  /**
+   * Milliseconds before audit actions are forced to be processed.
+   * @default not set
+   */
   queueDelayMs?: number;
 }
 
@@ -261,17 +276,33 @@ export interface SecurityAlertPolicyFields {
   /**
    * Alerts to suppress, e.g. `Sql_Injection`, `Sql_Injection_Vulnerability`,
    * `Access_Anomaly`, `Data_Exfiltration`, `Unsafe_Action`.
+   * @default not set
    */
   disabledAlerts?: string[];
-  /** Email addresses that receive alerts. */
+  /**
+   * Email addresses that receive alerts.
+   * @default not set
+   */
   emailAddresses?: string[];
-  /** Also email the subscription administrators. */
+  /**
+   * Also email the subscription administrators.
+   * @default not set
+   */
   emailAccountAdmins?: boolean;
-  /** Blob endpoint of a storage account that keeps threat detection logs. */
+  /**
+   * Blob endpoint of a storage account that keeps threat detection logs.
+   * @default not set
+   */
   storageEndpoint?: string;
-  /** Access key of that storage account. Write-only. */
+  /**
+   * Access key of that storage account. Write-only.
+   * @default not set
+   */
   storageAccountAccessKey?: Redacted.Redacted<string>;
-  /** Days to keep threat detection logs. */
+  /**
+   * Days to keep threat detection logs.
+   * @default not set
+   */
   retentionDays?: number;
 }
 
@@ -292,17 +323,35 @@ export interface VulnerabilityAssessmentFields {
    * `https://{account}.blob.core.windows.net/vulnerability-assessment`.
    */
   storageContainerPath: string;
-  /** SAS token with write access to the container. Write-only. */
+  /**
+   * SAS token with write access to the container. Write-only.
+   * @default not set
+   */
   storageContainerSasKey?: Redacted.Redacted<string>;
-  /** Access key of the storage account. Write-only. */
+  /**
+   * Access key of the storage account. Write-only.
+   * @default not set
+   */
   storageAccountAccessKey?: Redacted.Redacted<string>;
-  /** Recurring (weekly) scans. */
+  /**
+   * Recurring (weekly) scans.
+   * @default not set
+   */
   recurringScans?: {
-    /** Whether recurring scans are enabled. */
+    /**
+     * Whether recurring scans are enabled.
+     * @default not set
+     */
     isEnabled?: boolean;
-    /** Email scan reports to the subscription administrators. */
+    /**
+     * Email scan reports to the subscription administrators.
+     * @default not set
+     */
     emailSubscriptionAdmins?: boolean;
-    /** Email addresses that receive scan reports. */
+    /**
+     * Email addresses that receive scan reports.
+     * @default not set
+     */
     emails?: string[];
   };
 }
@@ -324,7 +373,12 @@ export const vulnerabilityAssessmentMatches = (
 
 /** Props locating a child of a dedicated SQL pool. */
 export interface SqlPoolChildProps {
-  /** Resource group of the workspace. Changing it replaces the resource. */
+  /**
+   * Resource group of the workspace. Changing it replaces the resource.
+   * Required on `SqlPoolSecurityAlertPolicy`, `SqlPoolExtendedAuditingSetting`,
+   * and `SqlPoolVulnerabilityAssessment`.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Synapse workspace. Changing it replaces the resource. */
   workspace: string;

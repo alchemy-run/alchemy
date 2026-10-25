@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -38,6 +38,7 @@ export interface InternetGatewayProps {
   /**
    * Name of the internet gateway. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the internet gateway.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -62,13 +63,18 @@ export interface InternetGatewayProps {
   /**
    * ARM ID of the internet gateway rule (allow-list of egress addresses)
    * applied to the gateway.
+   * @default none
    */
   internetGatewayRuleId?: string;
-  /** Free-form description. Changing it replaces the internet gateway. */
+  /**
+   * Free-form description. Changing it replaces the internet gateway.
+   * @default none
+   */
   annotation?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -108,29 +114,36 @@ export interface InternetGateway extends Resource<
  * workloads reach the internet through an allow-list
  * (`InternetGatewayRule`).
  *
+ * ARM type: `Microsoft.ManagedNetworkFabric/internetGateways`.
+ * See the [Azure documentation](https://learn.microsoft.com/rest/api/managednetworkfabric/internet-gateways).
+ *
  * The resource provider creates internet gateways itself when a Network
  * Fabric Controller is created and rejects a user PUT (`InternetGateways PUT
  * not allowed`). Manage an existing gateway by passing its `name` and
  * adopting it; Alchemy then syncs the applied rule and tags, and deleting
  * the resource deletes the gateway.
  *
- * @see https://learn.microsoft.com/rest/api/managednetworkfabric/internet-gateways
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `networkFabricControllerId`,
+ * `type`, or `annotation` replaces the gateway.
+ * :::
  *
  * ### Managing an Internet Gateway
  * **Example:** Attach an allow-list rule to the controller's gateway
  * ```typescript
+ * // The controller "nfc1" and its gateways are in the stack's resource group,
+ * // here "my-app-dev".
+ * const controllerId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/my-app-dev/providers/Microsoft.ManagedNetworkFabric/networkFabricControllers/nfc1";
  * const rule = yield* Azure.ManagedNetworkFabric.InternetGatewayRule("allow", {
- *   resourceGroup: "nexus",
  *   ruleProperties: {
  *     action: "Allow",
  *     addressList: ["10.10.10.10"],
  *   },
  * });
  * const gateway = yield* Azure.ManagedNetworkFabric.InternetGateway("egress", {
- *   resourceGroup: "nexus",
  *   name: "nfc1-workload-igw",
- *   networkFabricControllerId:
- *     "/subscriptions/.../resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/networkFabricControllers/nfc1",
+ *   networkFabricControllerId: controllerId,
  *   type: "Workload",
  *   internetGatewayRuleId: rule.internetGatewayRuleId,
  * }).pipe(AdoptPolicy.adopt());
@@ -183,11 +196,7 @@ export const InternetGatewayProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mnf
-        .ListInternetGatewayBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListInternetGatewayBySubscription", page)),
-        );
+      const page = yield* collectAll(mnf.ListInternetGatewayBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

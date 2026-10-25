@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -24,7 +24,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { APP_BUDGET, sameArm } from "./Common.ts";
 
 export interface ApplicationTypeVersionProps {
-  /** Resource group of the cluster. Changing it replaces the version. */
+  /**
+   * Resource group of the cluster. Changing it replaces the version.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the managed cluster. Changing it replaces the version. */
   cluster: string;
@@ -45,6 +48,7 @@ export interface ApplicationTypeVersionProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -78,15 +82,46 @@ export interface ApplicationTypeVersion extends Resource<
 > {}
 
 /**
- * A version of a Service Fabric application type on a managed cluster:
- * Azure downloads the `.sfpkg` package from `appPackageUrl` and provisions
- * it into the cluster's image store.
+ * A version of a Service Fabric application type on a managed cluster
+ * (`Microsoft.ServiceFabric/managedClusters/applicationTypes/versions`).
+ * Azure downloads the `.sfpkg` package from `appPackageUrl` and adds it to
+ * the cluster's image store. See the
+ * [Azure docs](https://learn.microsoft.com/azure/service-fabric/how-to-managed-cluster-app-deployment-template).
  *
- * @see https://learn.microsoft.com/azure/service-fabric/how-to-managed-cluster-app-deployment-template
+ * :::caution
+ * `version` must equal the `ApplicationTypeVersion` in the package's
+ * application manifest. Azure must be able to read `appPackageUrl`, so a
+ * private blob needs a read SAS token.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `cluster`, `applicationType`, or `version`
+ * replaces the version. Registered packages are immutable, so changing
+ * `appPackageUrl` also replaces it, and Alchemy deletes the old version
+ * first. Alchemy updates `tags` in place.
+ * :::
  *
  * ### Registering a Package Version
  * **Example:** Version from a blob with a SAS token
  * ```typescript
+ * const password = yield* Config.redacted("SF_ADMIN_PASSWORD");
+ * const cluster = yield* Azure.ServiceFabric.ManagedCluster("cluster", {
+ *   adminUserName: "sfadmin",
+ *   adminPassword: password,
+ *   clients: [
+ *     { isAdmin: true, thumbprint: "0123456789ABCDEF0123456789ABCDEF01234567" },
+ *   ],
+ * });
+ * const primary = yield* Azure.ServiceFabric.NodeType("primary", {
+ *   cluster: cluster.managedClusterName,
+ *   isPrimary: true,
+ *   vmInstanceCount: 3,
+ * });
+ * const appType = yield* Azure.ServiceFabric.ApplicationType("voting", {
+ *   cluster: cluster.managedClusterName,
+ *   name: "VotingType",
+ * });
+ * const packageSasUrl = yield* Config.string("VOTING_SFPKG_URL");
  * const v1 = yield* Azure.ServiceFabric.ApplicationTypeVersion("voting-v1", {
  *   cluster: cluster.managedClusterName,
  *   applicationType: appType.applicationTypeName,
@@ -154,38 +189,28 @@ export const ApplicationTypeVersionProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const clusters = yield* sf
-        .ListManagedClusterBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListManagedClusterBySubscription", page)),
-        );
+      const clusters = yield* collectAll(sf.ListManagedClusterBySubscription, { subscriptionId });
       const found: ApplicationTypeVersion["Attributes"][] = [];
       for (const cluster of clusters.value ?? []) {
         const group = resourceGroupOf(cluster.id);
         if (group === undefined || cluster.name === undefined) continue;
         const types = yield* orUndefinedIfNotFound(
-          sf.ListApplicationTypes({
+          collectAll(sf.ListApplicationTypes, {
             subscriptionId,
             resourceGroupName: group,
             clusterName: cluster.name,
           }),
         );
-        if (types !== undefined) {
-          yield* requireSinglePage("ListApplicationTypes", types);
-        }
         for (const appType of types?.value ?? []) {
           if (appType.name === undefined) continue;
           const page = yield* orUndefinedIfNotFound(
-            sf.ListApplicationTypeVersionByApplicationTypes({
+            collectAll(sf.ListApplicationTypeVersionByApplicationTypes, {
               subscriptionId,
               resourceGroupName: group,
               clusterName: cluster.name,
               applicationTypeName: appType.name,
             }),
           );
-          if (page !== undefined) {
-            yield* requireSinglePage("ListApplicationTypeVersionByApplicationTypes", page);
-          }
           for (const version of page?.value ?? []) {
             if (hasAnyAlchemyTag(version.tags) && version.name !== undefined) {
               found.push(toAttrs(group, cluster.name, appType.name, version.name, version));

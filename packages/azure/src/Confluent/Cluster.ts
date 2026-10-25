@@ -28,6 +28,7 @@ export interface ClusterProps extends OrganizationChildProps {
    * Cluster ID (the ARM resource name), 1-64 letters, digits, `-`, and `_`.
    * If omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the cluster.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -52,16 +53,21 @@ export interface ClusterProps extends OrganizationChildProps {
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   region?: string;
-  /** Availability zone of a single-zone cluster. Changing it replaces the cluster. */
+  /**
+   * Availability zone of a single-zone cluster. Changing it replaces the cluster.
+   * @default none (Confluent picks the zone)
+   */
   zone?: string;
   /**
    * Confluent network ID for a private-networking (Dedicated) cluster.
    * Changing it replaces the cluster.
+   * @default none (public networking)
    */
   networkId?: string;
   /**
    * Confluent BYOK key ID for a customer-managed-key (Dedicated) cluster.
    * Changing it replaces the cluster.
+   * @default none (Confluent-managed keys)
    */
   byokId?: string;
 }
@@ -104,20 +110,32 @@ export interface Cluster extends Resource<
 > {}
 
 /**
- * A Confluent Cloud Kafka cluster inside a Confluent environment of an
- * Azure-managed Confluent organization.
+ * A Confluent Cloud Kafka cluster
+ * (`Microsoft.Confluent/organizations/environments/clusters`) inside a
+ * Confluent environment of an Azure-managed Confluent organization.
  *
  * Clusters carry no tags, so Alchemy ownership is inherited from the
  * organization's tags. Reconcile waits until the cluster reaches the
  * `PROVISIONED` phase.
  *
- * @see https://docs.confluent.io/cloud/current/clusters/cluster-types.html
+ * :::caution
+ * Changing `resourceGroup`, `organization`, `environment`, `name`,
+ * `availability`, `kind`, or `region` replaces the cluster and deletes
+ * its topics and connectors.
+ * :::
+ *
+ * See [Confluent cluster types](https://docs.confluent.io/cloud/current/clusters/cluster-types.html).
  *
  * ### Creating a Cluster
  * **Example:** Basic single-zone cluster
  * ```typescript
+ * const org = yield* Azure.Confluent.Organization("kafka", {
+ *   userDetail: { emailAddress: "platform@example.com" },
+ * });
+ * const environment = yield* Azure.Confluent.Environment("dev", {
+ *   organization: org.organizationName,
+ * });
  * const cluster = yield* Azure.Confluent.Cluster("events", {
- *   resourceGroup: org.resourceGroup,
  *   organization: org.organizationName,
  *   environment: environment.environmentId,
  *   kind: "Basic",
@@ -128,7 +146,6 @@ export interface Cluster extends Resource<
  * **Example:** Multi-zone Standard cluster
  * ```typescript
  * const cluster = yield* Azure.Confluent.Cluster("events", {
- *   resourceGroup: org.resourceGroup,
  *   organization: org.organizationName,
  *   environment: environment.environmentId,
  *   kind: "Standard",

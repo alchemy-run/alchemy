@@ -33,6 +33,7 @@ export interface MetadataSchemaProps {
    * `customProperties` of APIs, environments, and deployments. If omitted,
    * a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the schema.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -68,13 +69,21 @@ export interface MetadataSchema extends Resource<
 
 /**
  * A custom metadata schema in Azure API Center. Assigned schemas define
- * the `customProperties` that APIs, environments, and deployments carry.
+ * the `customProperties` that APIs, environments, and deployments carry
+ * (`Microsoft.ApiCenter/services/metadataSchemas`).
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the schema.
+ * The `name` is the `customProperties` key, so a rename also changes the
+ * key on every entity.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-center/metadata
  *
  * ### Defining Metadata
  * **Example:** String property required on every API
  * ```typescript
+ * const center = yield* Azure.ApiCenter.Service("catalog", {});
  * const team = yield* Azure.ApiCenter.MetadataSchema("team", {
  *   serviceName: center.serviceName,
  *   name: "team",
@@ -85,6 +94,7 @@ export interface MetadataSchema extends Resource<
  *
  * **Example:** Enumerated property for environments
  * ```typescript
+ * const center = yield* Azure.ApiCenter.Service("catalog", {});
  * const tier = yield* Azure.ApiCenter.MetadataSchema("tier", {
  *   serviceName: center.serviceName,
  *   schema: { type: "string", enum: ["gold", "silver"] },

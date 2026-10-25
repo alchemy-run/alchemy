@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -269,9 +269,7 @@ export const AzureFirewallProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* network
-        .ListAzureFirewallAll({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListAzureFirewallAll", page)));
+      const page = yield* collectAll(network.ListAzureFirewallAll, { subscriptionId });
       return page.value.flatMap((firewall) => {
         const group = resourceGroupOf(firewall.id);
         return hasAnyAlchemyTag(firewall.tags) && group !== undefined && firewall.name !== undefined

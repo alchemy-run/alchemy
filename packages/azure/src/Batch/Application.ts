@@ -25,9 +25,13 @@ export interface ApplicationProps {
    * Application name: 1-64 letters, digits, hyphens, and underscores,
    * unique within the account. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the application.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name of the application. */
+  /**
+   * Display name of the application.
+   * @default no display name
+   */
   displayName?: string;
   /**
    * Whether packages of the application may be overwritten using the same
@@ -39,6 +43,7 @@ export interface ApplicationProps {
    * Package version used when a pool or task references the application
    * without a version. Must name an existing package of the application, so
    * set it after the package is deployed.
+   * @default not set
    */
   defaultVersion?: string;
 }
@@ -73,12 +78,21 @@ export interface Application extends Resource<
  * rejects the application with `BatchAccountNotEnabledForAutoStorage`.
  * Applications cannot be tagged; an application counts as owned when its
  * Batch account carries this stack's and stage's ownership tags.
+ * The ARM type is `Microsoft.Batch/batchAccounts/applications`.
+ *
+ * :::caution
+ * Changing `account`, `name`, or `resourceGroup` replaces the application.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/batch/batch-application-packages
  *
  * ### Creating an Application
  * **Example:** Application in a Batch account
  * ```typescript
+ * const storage = yield* Azure.Storage.StorageAccount("batchfiles");
+ * const account = yield* Azure.Batch.Account("jobs", {
+ *   autoStorage: { storageAccountId: storage.storageAccountId },
+ * });
  * const app = yield* Azure.Batch.Application("renderer", {
  *   account: account.accountName,
  *   displayName: "Frame renderer",
@@ -88,6 +102,10 @@ export interface Application extends Resource<
  *
  * **Example:** Pin the default version once a package exists
  * ```typescript
+ * const storage = yield* Azure.Storage.StorageAccount("batchfiles");
+ * const account = yield* Azure.Batch.Account("jobs", {
+ *   autoStorage: { storageAccountId: storage.storageAccountId },
+ * });
  * const app = yield* Azure.Batch.Application("renderer", {
  *   account: account.accountName,
  *   defaultVersion: "1.0.0",

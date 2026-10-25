@@ -29,7 +29,10 @@ export type SourceControlType = "GitHub" | "VsoGit" | "VsoTfvc";
 export interface SourceControlSecurityToken {
   /** Personal access token or OAuth access token for the repository. */
   accessToken: Redacted.Redacted<string>;
-  /** OAuth refresh token. */
+  /**
+   * OAuth refresh token.
+   * @default not set
+   */
   refreshToken?: Redacted.Redacted<string>;
   /** Kind of token. @default "PersonalAccessToken" */
   tokenType?: "PersonalAccessToken" | "Oauth";
@@ -43,13 +46,17 @@ export interface SourceControlProps {
   /**
    * Source control name. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the source control.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Repository URL. Changing it replaces the source control. */
   repoUrl: string;
   /** Repository host. Changing it replaces the source control. */
   sourceType: SourceControlType;
-  /** Branch to sync (Git repositories). */
+  /**
+   * Branch to sync (Git repositories).
+   * @default not set
+   */
   branch?: string;
   /** Folder of the repository that holds the runbooks. @default "/" */
   folderPath?: string;
@@ -66,7 +73,10 @@ export interface SourceControlProps {
    * detected against the previously deployed token.
    */
   securityToken: SourceControlSecurityToken;
-  /** Description of the source control. */
+  /**
+   * Description of the source control.
+   * @default no description
+   */
   description?: string;
 }
 
@@ -102,19 +112,26 @@ export interface SourceControl extends Resource<
 /**
  * Connects an Azure Automation account to a GitHub or Azure DevOps
  * repository so runbooks are synced from source control.
+ * The ARM type is `Microsoft.Automation/automationAccounts/sourceControls`.
+ *
+ * :::caution
+ * Changing `automationAccount`, `name`, `repoUrl`, `sourceType`, or
+ * `resourceGroup` replaces the source control.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/source-control-integration
  *
  * ### Syncing Runbooks from GitHub
  * **Example:** GitHub repository with a personal access token
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * yield* Azure.Automation.SourceControl("runbooks", {
  *   automationAccount: account.automationAccountName,
  *   repoUrl: "https://github.com/acme/runbooks.git",
  *   sourceType: "GitHub",
  *   branch: "main",
  *   folderPath: "/runbooks",
- *   securityToken: { accessToken: Redacted.make(process.env.GITHUB_PAT!) },
+ *   securityToken: { accessToken: yield* Config.redacted("GITHUB_PAT") },
  * });
  * ```
  *

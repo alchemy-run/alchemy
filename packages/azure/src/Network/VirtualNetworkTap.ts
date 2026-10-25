@@ -1,7 +1,7 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
-import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
+import { collectAll, orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { ref } from "./common.ts";
@@ -112,7 +112,7 @@ export const VirtualNetworkTapProvider = () =>
           tapName: path.name,
           tags,
         }),
-      listAll: (subscriptionId) => network.ListVirtualNetworkTapAll({ subscriptionId }),
+      listAll: (subscriptionId) => collectAll(network.ListVirtualNetworkTapAll, { subscriptionId }),
       body: (news, { location, tags }) => ({
         location,
         tags,

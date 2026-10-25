@@ -17,25 +17,47 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { isVaultOwnedByStack, RECOVERY_SERVICES_NAMESPACE, sameId } from "./BackupShared.ts";
 
 export interface BackupResourceGuardProxyProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the proxy. */
+  /**
+   * Resource group of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the proxy.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the Recovery Services vault. Changing it replaces the proxy. */
+  /**
+   * Name of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the proxy.
+   * :::
+   */
   vault: string;
   /**
    * ARM ID of the `Microsoft.DataProtection/resourceGuards` resource that
-   * protects the vault. A vault has a single proxy that cannot be
-   * re-pointed, so changing it removes the old association before creating
-   * the new one.
+   * protects the vault.
+   *
+   * :::caution
+   * Changing it replaces the proxy. A vault has a single proxy that cannot
+   * be re-pointed, so the old association is removed before the new one is
+   * created.
+   * :::
    */
   resourceGuardResourceId: string;
   /**
    * Proxy name. A vault has a single resource guard proxy.
+   *
+   * :::caution
+   * Changing it replaces the proxy.
+   * :::
    * @default "VaultProxy"
    */
   name?: string;
   /**
    * Description of the association. Azure Backup does not return it, so a
    * change is detected against the last deployed value.
+   * @default none
    */
   description?: string;
 }
@@ -62,7 +84,8 @@ export interface BackupResourceGuardProxy extends Resource<
 > {}
 
 /**
- * Associates a Recovery Services vault with a Resource Guard
+ * A resource guard proxy (`Microsoft.RecoveryServices/vaults/backupResourceGuardProxies`):
+ * associates a Recovery Services vault with a Resource Guard
  * (`Microsoft.DataProtection/resourceGuards`) to enable multi-user
  * authorization: critical operations on the vault (disabling soft delete,
  * reducing retention, stopping protection) then also need permission on
@@ -80,9 +103,10 @@ export interface BackupResourceGuardProxy extends Resource<
  * **Example:** Protect a vault with a resource guard
  * ```typescript
  * const vault = yield* Azure.RecoveryServices.Vault("backup-vault");
+ * const guard = yield* Azure.DataProtection.ResourceGuard("guard");
  * yield* Azure.RecoveryServices.BackupResourceGuardProxy("vault-guard", {
  *   vault: vault.vaultName,
- *   resourceGuardResourceId: guardId,
+ *   resourceGuardResourceId: guard.resourceGuardId,
  *   description: "Security team approval required",
  * });
  * ```

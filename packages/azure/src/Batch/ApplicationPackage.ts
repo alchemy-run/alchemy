@@ -38,6 +38,7 @@ export interface ApplicationPackageProps {
    * when omitted, the package stays `Pending` until you upload and activate
    * it yourself. Changing it re-uploads and re-activates the package, which
    * Azure only allows when the application has `allowUpdates` enabled.
+   * @default not set (the package stays pending)
    */
   content?: string;
 }
@@ -72,6 +73,7 @@ export interface ApplicationPackage extends Resource<
 /**
  * A version of a Batch application — a zip file Batch extracts onto
  * compute nodes that reference the application.
+ * The ARM type is `Microsoft.Batch/batchAccounts/applications/versions`.
  *
  * The Batch account needs `autoStorage`: packages are stored as blobs in
  * the auto-storage account. With `content`, the zip is uploaded and the
@@ -79,11 +81,24 @@ export interface ApplicationPackage extends Resource<
  * counts as owned when its Batch account carries this stack's and stage's
  * ownership tags.
  *
+ * :::caution
+ * Changing `account`, `application`, `version`, or `resourceGroup` replaces
+ * the package.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/batch/batch-application-packages
  *
  * ### Creating a Package
  * **Example:** Upload and activate a zip
  * ```typescript
+ * const fs = yield* FileSystem.FileSystem;
+ * const storage = yield* Azure.Storage.StorageAccount("batchfiles");
+ * const account = yield* Azure.Batch.Account("jobs", {
+ *   autoStorage: { storageAccountId: storage.storageAccountId },
+ * });
+ * const app = yield* Azure.Batch.Application("renderer", {
+ *   account: account.accountName,
+ * });
  * const zip = yield* fs.readFile("dist/renderer.zip");
  * const pkg = yield* Azure.Batch.ApplicationPackage("renderer-1", {
  *   account: account.accountName,
@@ -95,6 +110,13 @@ export interface ApplicationPackage extends Resource<
  *
  * **Example:** Pending package uploaded out of band
  * ```typescript
+ * const storage = yield* Azure.Storage.StorageAccount("batchfiles");
+ * const account = yield* Azure.Batch.Account("jobs", {
+ *   autoStorage: { storageAccountId: storage.storageAccountId },
+ * });
+ * const app = yield* Azure.Batch.Application("renderer", {
+ *   account: account.accountName,
+ * });
  * const pkg = yield* Azure.Batch.ApplicationPackage("renderer-2", {
  *   account: account.accountName,
  *   application: app.applicationName,

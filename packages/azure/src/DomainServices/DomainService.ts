@@ -7,13 +7,13 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -46,9 +46,13 @@ export interface DomainServiceLdapsSettings {
   /**
    * Base64-encoded PFX certificate for Secure LDAP. Write-only: Azure never
    * returns it, so a change is detected against the previous props.
+   * @default none (required when `ldaps` is `Enabled`)
    */
   pfxCertificate?: string | Redacted.Redacted<string>;
-  /** Password that decrypts `pfxCertificate`. Write-only. */
+  /**
+   * Password that decrypts `pfxCertificate`. Write-only.
+   * @default none
+   */
   pfxCertificatePassword?: string | Redacted.Redacted<string>;
   /**
    * Allow Secure LDAP access over the internet.
@@ -58,7 +62,10 @@ export interface DomainServiceLdapsSettings {
 }
 
 export interface DomainServiceSecuritySettings {
-  /** Allow NTLM v1 authentication. */
+  /**
+   * Allow NTLM v1 authentication.
+   * @default Azure's default
+   */
   ntlmV1?: DomainServiceToggle;
   /**
    * Allow TLS 1.0/1.1. Azure now rejects provisioning with it enabled
@@ -66,28 +73,58 @@ export interface DomainServiceSecuritySettings {
    * @default "Disabled"
    */
   tlsV1?: DomainServiceToggle;
-  /** Synchronize NTLM password hashes. */
+  /**
+   * Synchronize NTLM password hashes.
+   * @default Azure's default
+   */
   syncNtlmPasswords?: DomainServiceToggle;
-  /** Synchronize Kerberos password hashes. */
+  /**
+   * Synchronize Kerberos password hashes.
+   * @default Azure's default
+   */
   syncKerberosPasswords?: DomainServiceToggle;
-  /** Synchronize on-premises password hashes. */
+  /**
+   * Synchronize on-premises password hashes.
+   * @default Azure's default
+   */
   syncOnPremPasswords?: DomainServiceToggle;
-  /** Allow Kerberos RC4 encryption. */
+  /**
+   * Allow Kerberos RC4 encryption.
+   * @default Azure's default
+   */
   kerberosRc4Encryption?: DomainServiceToggle;
-  /** Enable Kerberos armoring (FAST). */
+  /**
+   * Enable Kerberos armoring (FAST).
+   * @default Azure's default
+   */
   kerberosArmoring?: DomainServiceToggle;
-  /** Require LDAP signing. */
+  /**
+   * Require LDAP signing.
+   * @default Azure's default
+   */
   ldapSigning?: DomainServiceToggle;
-  /** Require LDAP channel binding. */
+  /**
+   * Require LDAP channel binding.
+   * @default Azure's default
+   */
   channelBinding?: DomainServiceToggle;
 }
 
 export interface DomainServiceNotificationSettings {
-  /** Notify Microsoft Entra global administrators of alerts. */
+  /**
+   * Notify Microsoft Entra global administrators of alerts.
+   * @default Azure's default
+   */
   notifyGlobalAdmins?: DomainServiceToggle;
-  /** Notify members of the `AAD DC Administrators` group of alerts. */
+  /**
+   * Notify members of the `AAD DC Administrators` group of alerts.
+   * @default Azure's default
+   */
   notifyDcAdmins?: DomainServiceToggle;
-  /** Additional email recipients for alerts. */
+  /**
+   * Additional email recipients for alerts.
+   * @default []
+   */
   additionalRecipients?: string[];
 }
 
@@ -100,14 +137,23 @@ export interface DomainServiceForestTrust {
   friendlyName: string;
   /** Comma-separated DNS server IPs of the trusted domain. */
   remoteDnsIps: string;
-  /** Trust password. Write-only. */
+  /**
+   * Trust password. Write-only.
+   * @default none
+   */
   trustPassword?: string | Redacted.Redacted<string>;
 }
 
 export interface DomainServiceResourceForestSettings {
-  /** Resource forest name. */
+  /**
+   * Resource forest name.
+   * @default none
+   */
   resourceForest?: string;
-  /** Forest trusts. */
+  /**
+   * Forest trusts.
+   * @default []
+   */
   settings?: DomainServiceForestTrust[];
 }
 
@@ -115,6 +161,7 @@ export interface DomainServiceProps {
   /**
    * Resource group the managed domain is created in. Changing it replaces
    * the managed domain.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
@@ -161,17 +208,30 @@ export interface DomainServiceProps {
    * @default Azure's default (`All`)
    */
   syncScope?: "All" | "CloudOnly";
-  /** Secure LDAP settings. */
+  /**
+   * Secure LDAP settings.
+   * @default Secure LDAP disabled
+   */
   ldapsSettings?: DomainServiceLdapsSettings;
-  /** Domain security settings (NTLM, TLS, Kerberos, LDAP hardening). */
+  /**
+   * Domain security settings (NTLM, TLS, Kerberos, LDAP hardening).
+   * @default Azure's defaults, with `tlsV1` `Disabled`
+   */
   domainSecuritySettings?: DomainServiceSecuritySettings;
-  /** Alert notification settings. */
+  /**
+   * Alert notification settings.
+   * @default Azure's default
+   */
   notificationSettings?: DomainServiceNotificationSettings;
-  /** Resource forest trusts (Enterprise/Premium). */
+  /**
+   * Resource forest trusts (Enterprise/Premium).
+   * @default none
+   */
   resourceForestSettings?: DomainServiceResourceForestSettings;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -236,18 +296,28 @@ export interface DomainService extends Resource<
 > {}
 
 /**
- * Microsoft Entra Domain Services — a managed Active Directory domain
+ * A Microsoft Entra Domain Services managed domain
+ * (`Microsoft.AAD/domainServices`) — a managed Active Directory domain
  * (domain controllers, LDAP, Kerberos, NTLM, Group Policy) deployed into a
  * dedicated subnet of your virtual network and synchronized from Microsoft
- * Entra ID.
+ * Entra ID. See the
+ * [Domain Services overview](https://learn.microsoft.com/entra/identity/domain-services/overview).
  *
- * Only one managed domain can exist per Entra tenant, so every replacement
- * deletes the old domain before creating the new one. Provisioning takes
- * 45-60 minutes and deletion about 30; the Standard SKU costs about
- * $0.15/hour. The tenant must contain the "Domain Controller Services"
- * service principal (app ID `2565bd9d-da50-47d4-8b85-4c97f669dc36`).
+ * Provisioning takes 45-60 minutes and deletion about 30; the Standard SKU
+ * costs about $0.15/hour.
  *
- * @see https://learn.microsoft.com/entra/identity/domain-services/overview
+ * :::caution
+ * The tenant must contain the "Domain Controller Services" service
+ * principal (app ID `2565bd9d-da50-47d4-8b85-4c97f669dc36`). Only one
+ * managed domain can exist per Entra tenant.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `domainName`, `location`,
+ * `domainConfigurationType`, or the first replica set's `subnetId` replaces
+ * the managed domain. The old domain is deleted first (one per tenant), so
+ * the directory is down for over an hour.
+ * :::
  *
  * ### Creating a Managed Domain
  * **Example:** Standard managed domain in a dedicated subnet
@@ -387,9 +457,7 @@ export const DomainServiceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* domainservices
-        .ListDomainServices({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDomainServices", page)));
+      const page = yield* collectAll(domainservices.ListDomainServices, { subscriptionId });
       return (page.value ?? []).flatMap((service) => {
         const group = resourceGroupOf(service.id);
         return hasAnyAlchemyTag(service.tags) && group !== undefined && service.name !== undefined

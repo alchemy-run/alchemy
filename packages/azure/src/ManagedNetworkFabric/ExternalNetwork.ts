@@ -32,6 +32,7 @@ export interface ExternalNetworkProps {
   /**
    * Name of the external network. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the external network.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -39,17 +40,35 @@ export interface ExternalNetworkProps {
    * network.
    */
   peeringOption: mnf.ExternalNetworkPropertiesInput["peeringOption"];
-  /** Option A peering: VLAN, peer ASN, primary/secondary prefixes, BFD. */
+  /**
+   * Option A peering: VLAN, peer ASN, primary/secondary prefixes, BFD.
+   * @default none
+   */
   optionAProperties?: mnf.ExternalNetworkPropertiesInput["optionAProperties"];
-  /** Option B peering: import/export route targets. */
+  /**
+   * Option B peering: import/export route targets.
+   * @default none
+   */
   optionBProperties?: mnf.ExternalNetworkPropertiesInput["optionBProperties"];
-  /** Import route policies (IPv4/IPv6 route policy IDs). */
+  /**
+   * Import route policies (IPv4/IPv6 route policy IDs).
+   * @default none
+   */
   importRoutePolicy?: mnf.ExternalNetworkPropertiesInput["importRoutePolicy"];
-  /** Export route policies (IPv4/IPv6 route policy IDs). */
+  /**
+   * Export route policies (IPv4/IPv6 route policy IDs).
+   * @default none
+   */
   exportRoutePolicy?: mnf.ExternalNetworkPropertiesInput["exportRoutePolicy"];
-  /** Network-to-network interconnect used for the peering. */
+  /**
+   * Network-to-network interconnect used for the peering.
+   * @default none
+   */
   networkToNetworkInterconnectId?: string;
-  /** Static routes and BFD. */
+  /**
+   * Static routes and BFD.
+   * @default none
+   */
   staticRouteConfiguration?: mnf.ExternalNetworkPropertiesInput["staticRouteConfiguration"];
 }
 
@@ -82,11 +101,23 @@ export interface ExternalNetwork extends Resource<
  * marks ownership in `properties.annotation`. Needs an Operator Nexus Network
  * Fabric.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-configure-isolation-domain
+ * ARM type: `Microsoft.ManagedNetworkFabric/l3IsolationDomains/externalNetworks`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-configure-isolation-domain).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `l3IsolationDomain`, `name`, or `peeringOption`
+ * replaces the network.
+ * :::
  *
  * ### Creating an External Network
  * **Example:** Option B peering
  * ```typescript
+ * // The Network Fabric is provisioned on Operator Nexus racks.
+ * const fabricId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/networkFabrics/fab1";
+ * const l3 = yield* Azure.ManagedNetworkFabric.L3IsolationDomain("tenant", {
+ *   networkFabricId: fabricId,
+ * });
  * const external = yield* Azure.ManagedNetworkFabric.ExternalNetwork("pe", {
  *   l3IsolationDomain: l3.l3IsolationDomainName,
  *   peeringOption: "OptionB",

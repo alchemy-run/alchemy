@@ -72,13 +72,17 @@ export interface BackupInstanceDatasourceParameters {
 }
 
 export interface BackupInstanceProps {
-  /** Resource group of the Backup vault. Changing it replaces the instance. */
+  /**
+   * Resource group of the Backup vault. Changing it replaces the instance.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Backup vault. Changing it replaces the instance. */
   backupVault: string;
   /**
    * Backup instance name. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the instance.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Data source to protect. Changing it replaces the instance. */
@@ -87,13 +91,20 @@ export interface BackupInstanceProps {
    * Data source set (the parent resource), required by some data source
    * types such as PostgreSQL databases and AKS. Changing it replaces the
    * instance.
+   * @default none
    */
   dataSourceSet?: BackupInstanceDataSource;
   /** ARM ID of the {@link BackupPolicy} to protect the data source with. */
   policyId: string;
-  /** Datastore parameters (e.g. snapshot resource group for disks). */
+  /**
+   * Datastore parameters (e.g. snapshot resource group for disks).
+   * @default none
+   */
   dataStoreParameters?: BackupInstanceDataStoreParameters[];
-  /** Data source parameters (e.g. containers for vaulted blob backup). */
+  /**
+   * Data source parameters (e.g. containers for vaulted blob backup).
+   * @default none
+   */
   datasourceParameters?: BackupInstanceDatasourceParameters[];
   /**
    * Friendly name shown in the portal. Set at creation only: Azure ignores
@@ -104,11 +115,13 @@ export interface BackupInstanceProps {
   /**
    * ARM ID of a user-assigned identity of the vault to protect with. If
    * omitted, the vault's system-assigned identity is used.
+   * @default the vault's system-assigned identity
    */
   userAssignedIdentityId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -152,12 +165,19 @@ export interface BackupInstance extends Resource<
  * as soft-deleted (and blocks vault deletion) for the vault's soft-delete
  * retention period.
  *
- * @see https://learn.microsoft.com/azure/backup/blob-backup-configure-manage
+ * :::caution
+ * Changing `resourceGroup`, `backupVault`, `name`, or `dataSource.resourceID`
+ * replaces the instance: Azure stops protecting the old data source and
+ * deletes its backup data.
+ * :::
+ *
+ * See [Configure blob backup](https://learn.microsoft.com/azure/backup/blob-backup-configure-manage).
  *
  * ### Protecting Blobs
  * **Example:** Operational backup of a storage account's blobs
  * ```typescript
  * const vault = yield* Azure.DataProtection.BackupVault("vault");
+ * const account = yield* Azure.Storage.StorageAccount("data");
  * const access = yield* Azure.Authorization.RoleAssignment("vault-access", {
  *   scope: account.storageAccountId,
  *   roleDefinitionId: "e5e2a7ff-d759-4cd2-bb51-3152d37e2eb1", // Storage Account Backup Contributor

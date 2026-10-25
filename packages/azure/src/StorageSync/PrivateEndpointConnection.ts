@@ -7,10 +7,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -23,6 +23,7 @@ export interface PrivateEndpointConnectionProps {
   /**
    * Resource group of the Storage Sync Service. Changing it replaces the
    * connection.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -74,8 +75,9 @@ export interface PrivateEndpointConnection extends Resource<
 > {}
 
 /**
- * Approval of a private endpoint's connection to an Azure File Sync
- * Storage Sync Service.
+ * Approval of a private endpoint's connection to an Azure File Sync Storage
+ * Sync Service
+ * (`Microsoft.StorageSync/storageSyncServices/privateEndpointConnections`).
  *
  * Connections are not created directly: a private endpoint that targets
  * the service (group `afs`) with a *manual* connection — for example from
@@ -83,11 +85,24 @@ export interface PrivateEndpointConnection extends Resource<
  * This resource approves or rejects that request. Destroying it removes the
  * connection, which disconnects the private endpoint.
  *
+ * :::caution
+ * Changing `storageSyncService`, `privateEndpointId`, or `resourceGroup`
+ * replaces the approval. Destroying it disconnects the private endpoint.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/storage/file-sync/file-sync-networking-endpoints
  *
  * ### Approving Connections
  * **Example:** Approve a manual private endpoint request
  * ```typescript
+ * const sync = yield* Azure.StorageSync.StorageSyncService("sync");
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("endpoints", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
  * const endpoint = yield* Azure.Network.PrivateEndpoint("sync-afs", {
  *   subnetId: subnet.subnetId,
  *   manualPrivateLinkServiceConnections: [
@@ -148,17 +163,11 @@ const findConnection = Effect.fn(function* (
   privateEndpointId: string,
 ) {
   const page = yield* orUndefinedIfNotFound(
-    storagesync
-      .ListPrivateEndpointConnectionByStorageSyncService({
-        subscriptionId,
-        resourceGroupName,
-        storageSyncServiceName,
-      })
-      .pipe(
-        Effect.flatMap((page) =>
-          requireSinglePage("ListPrivateEndpointConnectionByStorageSyncService", page),
-        ),
-      ),
+    collectAll(storagesync.ListPrivateEndpointConnectionByStorageSyncService, {
+      subscriptionId,
+      resourceGroupName,
+      storageSyncServiceName,
+    }),
   );
   return (page?.value ?? []).find((connection) =>
     sameId(connection.properties?.privateEndpoint?.id, privateEndpointId),

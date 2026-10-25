@@ -51,19 +51,41 @@ export interface SqlPoolAuditingSetting extends Resource<
 > {}
 
 /**
- * Blob auditing of a single dedicated SQL pool — writes audit logs to a
- * storage account, Log Analytics, or Event Hubs (via Azure Monitor). The
- * workspace-level policy (`Azure.Synapse.WorkspaceAuditingSetting`)
- * applies to every pool in addition to this one.
+ * Blob auditing of a single dedicated SQL pool
+ * (`Microsoft.Synapse/workspaces/sqlPools/auditingSettings`) — writes audit
+ * logs to a storage account, Log Analytics, or Event Hubs (via Azure
+ * Monitor). The workspace-level policy
+ * (`Azure.Synapse.WorkspaceAuditingSetting`) applies to every pool in
+ * addition to this one.
  *
  * This is a singleton policy that always exists on a pool. Destroying the
  * resource disables pool-level auditing.
+ *
+ * :::caution
+ * Changing `workspace`, `sqlPool`, or `resourceGroup` replaces the setting.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-sql/database/auditing-overview
  *
  * ### Enabling Auditing
  * **Example:** Audit to Azure Monitor
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
+ * const pool = yield* Azure.Synapse.SqlPool("dw", {
+ *   workspace: workspace.workspaceName,
+ *   sku: "DW100c",
+ * });
  * yield* Azure.Synapse.SqlPoolAuditingSetting("audit", {
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,

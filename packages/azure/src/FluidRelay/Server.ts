@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -37,6 +37,7 @@ export interface ServerIdentity {
   /**
    * ARM IDs of user-assigned identities to attach (required for
    * `UserAssigned` types).
+   * @default []
    */
   userAssignedIdentityIds?: string[];
 }
@@ -58,6 +59,7 @@ export interface ServerCustomerManagedKeyEncryption {
    * ARM ID of the user-assigned identity used to reach the key vault, when
    * `identityType` is `UserAssigned`. It must also be listed in
    * `identity.userAssignedIdentityIds`.
+   * @default none
    */
   userAssignedIdentityResourceId?: string;
 }
@@ -66,12 +68,14 @@ export interface ServerProps {
   /**
    * Resource group the server is created in. Changing it replaces the
    * server.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
    * Name of the server, 1-50 letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the server.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -91,16 +95,19 @@ export interface ServerProps {
   /**
    * Managed identity of the server. Required for customer-managed key
    * encryption. Omit to leave the observed identity unchanged.
+   * @default unmanaged (no identity on a new server)
    */
   identity?: ServerIdentity;
   /**
    * Customer-managed key encryption. Omit to leave the observed encryption
    * settings unchanged (Microsoft-managed keys by default).
+   * @default unmanaged (Microsoft-managed keys on a new server)
    */
   customerManagedKeyEncryption?: ServerCustomerManagedKeyEncryption;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -149,12 +156,17 @@ export interface Server extends Resource<
 > {}
 
 /**
- * An Azure Fluid Relay server — a managed service that hosts the
- * real-time collaboration backend for Fluid Framework applications.
- * Clients connect to its service endpoint using the tenant ID and tokens
- * signed with the server's keys.
+ * An Azure Fluid Relay server (`Microsoft.FluidRelay/fluidRelayServers`)
+ * — a managed service that hosts the real-time collaboration backend for
+ * Fluid Framework applications. Clients connect to its service endpoint
+ * using the tenant ID and tokens signed with the server's keys. See the
+ * [Fluid Relay overview](https://learn.microsoft.com/azure/azure-fluid-relay/overview/overview).
  *
- * @see https://learn.microsoft.com/azure/azure-fluid-relay/overview/overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `storagesku` replaces
+ * the server. The new server has a new tenant ID, endpoints, and keys, and
+ * the old server's documents are deleted.
+ * :::
  *
  * ### Creating a Server
  * **Example:** Server in a resource group
@@ -310,11 +322,9 @@ export const ServerProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* fluidrelay
-        .ListFluidRelayServerBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListFluidRelayServerBySubscription", page)),
-        );
+      const page = yield* collectAll(fluidrelay.ListFluidRelayServerBySubscription, {
+        subscriptionId,
+      });
       return page.value.flatMap((server) => {
         const group = resourceGroupOf(server.id);
         return hasAnyAlchemyTag(server.tags) && group !== undefined && server.name !== undefined

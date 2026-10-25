@@ -45,7 +45,10 @@ export type DiscoveryRuleSpecification =
 export type DiscoveryRuleBehavior = "Enabled" | "Disabled";
 
 export interface DiscoveryRuleProps {
-  /** Resource group of the health model. Changing it replaces the rule. */
+  /**
+   * Resource group of the health model. Changing it replaces the rule.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Health model that holds the rule. Changing it replaces the rule. */
   healthModel: string;
@@ -53,9 +56,13 @@ export interface DiscoveryRuleProps {
    * Rule name: 3-260 letters, digits, and hyphens, starting and ending with
    * a letter or digit. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the rule.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name shown in the portal. */
+  /**
+   * Display name shown in the portal.
+   * @default none
+   */
   displayName?: string;
   /**
    * Name of the `AuthenticationSetting` used to run the discovery query.
@@ -123,7 +130,12 @@ export interface DiscoveryRule extends Resource<
  * health model. Entities and relationships the rule discovers are managed
  * by Azure and removed with the rule.
  *
- * @see https://learn.microsoft.com/azure/azure-monitor/health-models/overview
+ * :::caution
+ * Changing `name`, `healthModel`, or `resourceGroup` replaces the discovery
+ * rule and removes every entity it discovered.
+ * :::
+ *
+ * See [Azure Monitor health models](https://learn.microsoft.com/azure/azure-monitor/health-models/overview).
  *
  * ### Creating a Discovery Rule
  * **Example:** Discover every storage account in a resource group
@@ -146,11 +158,6 @@ export interface DiscoveryRule extends Resource<
  *   addRecommendedSignals: "Enabled",
  * });
  * ```
- *
- * :::caution
- * Changing `name`, `healthModel`, or `resourceGroup` replaces the discovery
- * rule and removes every entity it discovered.
- * :::
  *
  * @resource
  */

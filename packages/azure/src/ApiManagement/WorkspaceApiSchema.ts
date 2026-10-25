@@ -30,11 +30,20 @@ export interface WorkspaceApiSchemaProps {
    * `application/vnd.ms-azure-apim.graphql.schema` (GraphQL SDL).
    */
   contentType: string;
-  /** Schema document as a string (XSD, GraphQL SDL, or JSON text). */
+  /**
+   * Schema document as a string (XSD, GraphQL SDL, or JSON text).
+   * @default not set
+   */
   value?: string;
-  /** Swagger `definitions` object (Swagger content types). */
+  /**
+   * Swagger `definitions` object (Swagger content types).
+   * @default not set
+   */
   definitions?: Record<string, unknown>;
-  /** OpenAPI `components` object (OpenAPI content types). */
+  /**
+   * OpenAPI `components` object (OpenAPI content types).
+   * @default not set
+   */
   components?: Record<string, unknown>;
 }
 
@@ -64,16 +73,39 @@ export interface WorkspaceApiSchema extends Resource<
 /**
  * The workspace-scoped counterpart of {@link ApiSchema}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is `Microsoft.ApiManagement/service/workspaces/apis/schemas`.
  *
  * A schema document (OpenAPI components, Swagger definitions, XSD, or
  * GraphQL SDL) attached to an API in API Management. Operations reference
  * its types for request/response validation and the developer portal.
+ *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `apiName`, `name`, or
+ * `resourceGroup` replaces the schema.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/apimanagement/api-schema
  *
  * ### Attaching Schemas
  * **Example:** OpenAPI components for request validation
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
+ * const api = yield* Azure.ApiManagement.WorkspaceApi("orders", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * yield* Azure.ApiManagement.WorkspaceApiSchema("orders-schema", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
@@ -89,12 +121,30 @@ export interface WorkspaceApiSchema extends Resource<
  *
  * **Example:** XSD for a SOAP API
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
+ * const soapApi = yield* Azure.ApiManagement.WorkspaceApi("orders-soap", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   path: "orders-soap",
+ *   type: "soap",
+ *   serviceUrl: "https://orders.example.com/soap",
+ * });
  * yield* Azure.ApiManagement.WorkspaceApiSchema("soap-schema", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,
  *   apiName: soapApi.apiName,
  *   contentType: "application/vnd.ms-azure-apim.xsd+xml",
- *   value: xsdDocument,
+ *   value: `<?xml version="1.0" encoding="utf-8"?>
+ * <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+ *   <xs:element name="Order" type="xs:string" />
+ * </xs:schema>`,
  * });
  * ```
  *

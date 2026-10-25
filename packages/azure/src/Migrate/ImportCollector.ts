@@ -25,11 +25,13 @@ export interface ImportCollectorProps {
   /**
    * Name of the collector. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the collector.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * ARM ID of the discovery site the collector reads inventory from.
    * Changing it replaces the collector.
+   * @default none
    */
   discoverySiteId?: string;
 }
@@ -59,14 +61,22 @@ export interface ImportCollector extends Resource<
  * assessment project to an import site so machines imported from CSV can
  * be assessed. No appliance is involved.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/migrate/migrate-appliance-architecture).
+ *
  * Collectors cannot be tagged; Alchemy treats a collector as owned when its
  * assessment project carries this stack's and stage's ownership tags.
  *
- * @see https://learn.microsoft.com/azure/migrate/migrate-appliance-architecture
+ * :::caution
+ * Changing `resourceGroup`, `assessmentProject`, `name`, or `discoverySiteId`
+ * replaces the collector.
+ * :::
  *
  * ### Connecting an Import Site
  * **Example:** Collector for an import site
  * ```typescript
+ * const project = yield* Azure.Migrate.AssessmentProject("assess", {
+ *   location: "centralus",
+ * });
  * const site = yield* Azure.Migrate.ImportSite("imports-site", {
  *   location: "centralus",
  * });

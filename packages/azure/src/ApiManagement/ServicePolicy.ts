@@ -54,12 +54,21 @@ export interface ServicePolicy extends Resource<
 /**
  * The global (all APIs) policy of an API Management service. There is one
  * per service; deleting it restores the default policy.
+ * The ARM type is `Microsoft.ApiManagement/service/policies`.
+ *
+ * :::caution
+ * Changing `serviceName` or `resourceGroup` replaces the policy.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/set-edit-policies
  *
  * ### Setting the Global Policy
  * **Example:** Add a response header to every API
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * yield* Azure.ApiManagement.ServicePolicy("global", {
  *   serviceName: apim.serviceName,
  *   value: `<policies>

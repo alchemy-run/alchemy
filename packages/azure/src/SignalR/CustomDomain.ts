@@ -24,7 +24,10 @@ import {
 } from "./internal.ts";
 
 export interface CustomDomainProps {
-  /** Resource group of the SignalR service. Changing it replaces the domain. */
+  /**
+   * Resource group of the SignalR service. Changing it replaces the domain.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * SignalR service the domain points at. Needs the `Premium_P1` tier or
@@ -35,6 +38,7 @@ export interface CustomDomainProps {
    * Name of the custom domain resource. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * domain.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -72,15 +76,42 @@ export interface CustomDomain extends Resource<
 > {}
 
 /**
- * A custom domain of an Azure SignalR Service. Clients connect to
+ * A custom domain of an Azure SignalR Service
+ * (`Microsoft.SignalRService/signalR/customDomains`). Clients connect to
  * `https://{domainName}` with the TLS certificate from an
- * `Azure.SignalR.CustomCertificate`.
+ * `Azure.SignalR.CustomCertificate`. See the
+ * [Azure docs](https://learn.microsoft.com/azure/azure-signalr/howto-custom-domain).
  *
- * @see https://learn.microsoft.com/azure/azure-signalr/howto-custom-domain
+ * :::caution
+ * The service needs the `Premium_P1` tier or higher. A CNAME record
+ * `{domainName} → {signalRName}.service.signalr.net` must resolve publicly
+ * before you create the domain.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `signalR`, `name`, or `domainName` replaces the
+ * domain. Alchemy updates `customCertificateId` in place.
+ * :::
  *
  * ### Serving a Custom Domain
  * **Example:** Domain with a Key Vault certificate
  * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("certs");
+ * const signalR = yield* Azure.SignalR.SignalR("realtime", {
+ *   sku: "Premium_P1",
+ *   identity: { type: "SystemAssigned" },
+ * });
+ * yield* Azure.Authorization.RoleAssignment("SignalRReadsSecrets", {
+ *   scope: vault.vaultId,
+ *   principalId: signalR.principalId!,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.KeyVaultSecretsUser,
+ *   principalType: "ServicePrincipal",
+ * });
+ * const certificate = yield* Azure.SignalR.CustomCertificate("tls", {
+ *   signalR: signalR.signalRName,
+ *   keyVaultBaseUri: vault.vaultUri,
+ *   keyVaultSecretName: "realtime-example-com",
+ * });
  * // CNAME realtime.example.com -> {signalR.signalRName}.service.signalr.net
  * const domain = yield* Azure.SignalR.CustomDomain("realtime", {
  *   signalR: signalR.signalRName,

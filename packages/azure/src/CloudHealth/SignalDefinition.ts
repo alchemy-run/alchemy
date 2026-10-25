@@ -36,7 +36,10 @@ export type SignalMetricAggregation =
 export type SignalEvaluationRules = cloudhealth.EvaluationRule;
 
 export interface SignalDefinitionProps {
-  /** Resource group of the health model. Changing it replaces the definition. */
+  /**
+   * Resource group of the health model. Changing it replaces the definition.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Health model that holds the definition. Changing it replaces the definition. */
   healthModel: string;
@@ -45,9 +48,13 @@ export interface SignalDefinitionProps {
    * ending with a letter or digit. If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the
    * definition.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name. */
+  /**
+   * Display name.
+   * @default none
+   */
   displayName?: string;
   /**
    * Data source of the signal. Changing it replaces the definition.
@@ -59,15 +66,30 @@ export interface SignalDefinitionProps {
    *   `timeGrain`.
    */
   signalKind: SignalKind;
-  /** Metric namespace, e.g. `microsoft.storage/storageaccounts` (`AzureResourceMetric`). */
+  /**
+   * Metric namespace, e.g. `microsoft.storage/storageaccounts` (`AzureResourceMetric`).
+   * @default none
+   */
   metricNamespace?: string;
-  /** Metric name, e.g. `Availability` (`AzureResourceMetric`). */
+  /**
+   * Metric name, e.g. `Availability` (`AzureResourceMetric`).
+   * @default none
+   */
   metricName?: string;
-  /** Aggregation applied to the metric (`AzureResourceMetric`). */
+  /**
+   * Aggregation applied to the metric (`AzureResourceMetric`).
+   * @default none
+   */
   aggregationType?: SignalMetricAggregation;
-  /** Dimension filter applied to the metric (`AzureResourceMetric`). */
+  /**
+   * Dimension filter applied to the metric (`AzureResourceMetric`).
+   * @default none (no filter)
+   */
   dimensionFilter?: string;
-  /** Query text: KQL for `LogAnalyticsQuery`, PromQL for `PrometheusMetricsQuery`. */
+  /**
+   * Query text: KQL for `LogAnalyticsQuery`, PromQL for `PrometheusMetricsQuery`.
+   * @default none
+   */
   queryText?: string;
   /**
    * Numeric result column evaluated against the thresholds
@@ -75,20 +97,27 @@ export interface SignalDefinitionProps {
    * @default the first column
    */
   valueColumnName?: string;
-  /** Time range of the signal as an ISO 8601 duration, e.g. `PT5M`. */
+  /**
+   * Time range of the signal as an ISO 8601 duration, e.g. `PT5M`.
+   * @default none
+   */
   timeGrain?: string;
   /**
    * How often the signal is evaluated.
    * @default "PT1M"
    */
   refreshInterval?: SignalRefreshInterval;
-  /** Unit of the signal value, e.g. `Percent`, `Count`, `MilliSeconds`. */
+  /**
+   * Unit of the signal value, e.g. `Percent`, `Count`, `MilliSeconds`.
+   * @default none
+   */
   dataUnit?: string;
   /** Thresholds that turn the signal degraded or unhealthy. */
   evaluationRules: SignalEvaluationRules;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -129,7 +158,12 @@ export interface SignalDefinition extends Resource<
  *
  * Alchemy records ownership in the definition's own tags.
  *
- * @see https://learn.microsoft.com/azure/azure-monitor/health-models/overview
+ * :::caution
+ * Changing `name`, `signalKind`, `healthModel`, or `resourceGroup` replaces
+ * the signal definition.
+ * :::
+ *
+ * See [Azure Monitor health models](https://learn.microsoft.com/azure/azure-monitor/health-models/overview).
  *
  * ### Creating a Signal Definition
  * **Example:** Storage availability metric
@@ -166,11 +200,6 @@ export interface SignalDefinition extends Resource<
  *   },
  * });
  * ```
- *
- * :::caution
- * Changing `name`, `signalKind`, `healthModel`, or `resourceGroup` replaces
- * the signal definition.
- * :::
  *
  * @resource
  */

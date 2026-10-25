@@ -28,12 +28,29 @@ export interface WorkspaceProduct extends Resource<
  * The workspace-scoped counterpart of {@link Product}: a product inside an API
  * Management {@link Workspace} (Premium and v2 tiers). Props and
  * attributes match {@link Product} plus `workspaceName`.
+ * The ARM type is `Microsoft.ApiManagement/service/workspaces/products`.
+ *
+ * :::caution
+ * Changing `workspaceName`, `serviceName`, `name`, or `resourceGroup`
+ * replaces the product.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/workspaces-overview
  *
  * ### Workspace Products
  * **Example:** A published product
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
  * yield* Azure.ApiManagement.WorkspaceProduct("starter", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

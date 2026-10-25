@@ -18,7 +18,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { isGroupOwnedByStack, lower, matchesObserved } from "./common.ts";
 
 export interface AvailabilityGroupListenerProps {
-  /** Resource group of the SQL VM group. Changing it replaces the listener. */
+  /**
+   * Resource group of the SQL VM group. Changing it replaces the listener.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Name of the parent `SqlVirtualMachineGroup`. Changing it replaces the
@@ -29,6 +32,7 @@ export interface AvailabilityGroupListenerProps {
    * Listener name; also the DNS name clients connect to (at most 15
    * characters). If omitted, a unique name is generated. Changing it
    * replaces the listener.
+   * @default a unique name generated from the app, stage, and logical ID (at most 15 characters)
    */
   name?: string;
   /**
@@ -40,11 +44,13 @@ export interface AvailabilityGroupListenerProps {
    * Load balancer configurations (single-subnet clusters): the internal load
    * balancer, the listener's private IP, probe port, and the SQL VM
    * instances behind it. Set this or `multiSubnetIpConfigurations`.
+   * @default not set
    */
   loadBalancerConfigurations?: sqlvm.LoadBalancerConfiguration[];
   /**
    * One private IP per SQL VM instance (multi-subnet clusters, no load
    * balancer). Set this or `loadBalancerConfigurations`.
+   * @default not set
    */
   multiSubnetIpConfigurations?: sqlvm.MultiSubnetIpConfiguration[];
   /**
@@ -57,7 +63,10 @@ export interface AvailabilityGroupListenerProps {
    * @default 1433
    */
   port?: number;
-  /** Replica roles, commit and failover modes of the availability group. */
+  /**
+   * Replica roles, commit and failover modes of the availability group.
+   * @default Azure's default
+   */
   availabilityGroupConfiguration?: sqlvm.AgConfiguration;
 }
 
@@ -83,19 +92,39 @@ export interface AvailabilityGroupListener extends Resource<
 > {}
 
 /**
- * An availability group listener — the virtual network name and IP that
- * clients use to reach the primary replica of a SQL Server Always On
- * availability group running on the SQL VMs of a `SqlVirtualMachineGroup`.
+ * An availability group listener
+ * (`Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/availabilityGroupListeners`):
+ * the virtual network name and IP that clients use to reach the primary
+ * replica of a SQL Server Always On availability group. The availability
+ * group runs on the SQL VMs of an `Azure.SqlVirtualMachine.SqlVirtualMachineGroup`.
+ * See the
+ * [Azure docs](https://learn.microsoft.com/azure/azure-sql/virtual-machines/windows/availability-group-az-commandline-configure).
  *
- * Requires a group whose SQL VMs are domain-joined and registered with the
- * group, plus an internal load balancer (single subnet) or one IP per
- * replica subnet (multi-subnet).
+ * :::caution
+ * You need a group whose SQL VMs are domain-joined and registered with the
+ * group. A single-subnet cluster also needs an internal load balancer. A
+ * multi-subnet cluster needs one IP per replica subnet.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/azure-sql/virtual-machines/windows/availability-group-az-commandline-configure
+ * :::caution
+ * Changing `resourceGroup`, `sqlVirtualMachineGroup`, `name`, or
+ * `availabilityGroupName` replaces the listener. The name is also the DNS
+ * name clients connect to, so it has at most 15 characters.
+ * :::
  *
  * ### Creating a Listener
  * **Example:** Load-balanced listener for a single-subnet cluster
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("sql", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const ilb = yield* Azure.Network.LoadBalancer("sql-ag", {
+ *   frontendIpConfigurations: [{ name: "listener", subnetId: subnet.subnetId }],
+ * });
  * const listener = yield* Azure.SqlVirtualMachine.AvailabilityGroupListener("ag", {
  *   sqlVirtualMachineGroup: cluster.sqlVirtualMachineGroupName,
  *   availabilityGroupName: "ag1",

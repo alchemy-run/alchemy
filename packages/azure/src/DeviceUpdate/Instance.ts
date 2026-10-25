@@ -8,13 +8,13 @@ import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -38,7 +38,10 @@ export interface DeviceUpdateDiagnosticStorage {
 }
 
 export interface InstanceProps {
-  /** Resource group of the Device Update account. Changing it replaces the instance. */
+  /**
+   * Resource group of the Device Update account. Changing it replaces the instance.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the parent Device Update account. Changing it replaces the instance. */
   account: string;
@@ -46,6 +49,7 @@ export interface InstanceProps {
    * Instance name: 3-36 letters, digits, and single hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the instance.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -68,11 +72,15 @@ export interface InstanceProps {
    * @default Azure's default (`false`)
    */
   enableDiagnostics?: boolean;
-  /** Storage account that receives customer-initiated diagnostic logs. */
+  /**
+   * Storage account that receives customer-initiated diagnostic logs.
+   * @default unset
+   */
   diagnosticStorage?: DeviceUpdateDiagnosticStorage;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -105,14 +113,27 @@ export interface Instance extends Resource<
 > {}
 
 /**
- * A Device Update for IoT Hub instance — connects a Device Update account to
+ * A Device Update for IoT Hub instance
+ * (`Microsoft.DeviceUpdate/accounts/instances`) — connects a Device Update account to
  * one or more IoT Hubs so their devices can receive over-the-air updates.
+ *
+ * :::caution
+ * Changing `account`, `name`, `location`, or `resourceGroup` replaces the
+ * instance.
+ * :::
+ *
+ * :::caution
+ * The "Azure Device Update" service principal needs `IoT Hub Data
+ * Contributor` on every connected IoT Hub.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/iot-hub-device-update/create-device-update-account
  *
  * ### Creating an Instance
  * **Example:** Instance connected to an IoT Hub
  * ```typescript
+ * // Object ID of the "Azure Device Update" service principal in your tenant.
+ * const deviceUpdatePrincipalObjectId = "00000000-0000-0000-0000-000000000000";
  * const hub = yield* Azure.IoTHub.IotHub("devices");
  * // Let the "Azure Device Update" service principal manage the hub.
  * const grant = yield* Azure.Authorization.RoleAssignment("adu-hub", {
@@ -131,6 +152,10 @@ export interface Instance extends Resource<
  * ### Diagnostics
  * **Example:** Collect device diagnostic logs into a storage account
  * ```typescript
+ * const hub = yield* Azure.IoTHub.IotHub("devices");
+ * const account = yield* Azure.DeviceUpdate.Account("updates");
+ * // Connection string of the logs account, e.g. from a secret store.
+ * const logsConnectionString = Redacted.make("<storage-connection-string>");
  * const logs = yield* Azure.Storage.StorageAccount("logs");
  * const instance = yield* Azure.DeviceUpdate.Instance("fleet", {
  *   account: account.accountName,
@@ -229,21 +254,19 @@ export const InstanceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const accounts = yield* deviceupdate
-        .ListAccountBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListAccountBySubscription", page)));
+      const accounts = yield* collectAll(deviceupdate.ListAccountBySubscription, {
+        subscriptionId,
+      });
       const results: Instance["Attributes"][] = [];
       for (const account of accounts.value ?? []) {
         const group = resourceGroupOf(account.id);
         if (group === undefined || account.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          deviceupdate
-            .ListInstanceByAccount({
-              subscriptionId,
-              resourceGroupName: group,
-              accountName: account.name,
-            })
-            .pipe(Effect.flatMap((page) => requireSinglePage("ListInstanceByAccount", page))),
+          collectAll(deviceupdate.ListInstanceByAccount, {
+            subscriptionId,
+            resourceGroupName: group,
+            accountName: account.name,
+          }),
         );
         for (const instance of page?.value ?? []) {
           if (hasAnyAlchemyTag(instance.tags) && instance.name !== undefined) {

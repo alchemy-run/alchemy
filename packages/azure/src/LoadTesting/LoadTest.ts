@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -64,6 +64,7 @@ export interface LoadTestProps {
    * Name of the load test resource: letters, digits, hyphens, and
    * underscores. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the resource.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -73,7 +74,10 @@ export interface LoadTestProps {
    * @default the stack's Azure location
    */
   location?: string;
-  /** Description of the load test resource. */
+  /**
+   * Description of the load test resource.
+   * @default none
+   */
   description?: string;
   /**
    * Managed identity of the resource, used for customer-managed keys and
@@ -87,7 +91,10 @@ export interface LoadTestProps {
    * @default Microsoft-managed keys
    */
   encryption?: LoadTestEncryption;
-  /** User tags. Alchemy ownership tags are merged in. */
+  /**
+   * User tags. Alchemy ownership tags are merged in.
+   * @default {}
+   */
   tags?: Record<string, string>;
 }
 
@@ -124,7 +131,13 @@ export interface LoadTest extends Resource<
  * test runs, and their results. Billing is per virtual-user hour of test
  * runs, so an idle resource costs nothing.
  *
- * @see https://learn.microsoft.com/azure/load-testing/overview-what-is-azure-load-testing
+ * ARM type: `Microsoft.LoadTestService/loadTests`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/load-testing/overview-what-is-azure-load-testing).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the load test
+ * resource.
+ * :::
  *
  * ### Creating a Load Test Resource
  * **Example:** Load testing in East US
@@ -234,9 +247,9 @@ export const LoadTestProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* loadtestservice
-        .ListLoadTestBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListLoadTestBySubscription", page)));
+      const page = yield* collectAll(loadtestservice.ListLoadTestBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((loadTest) => {
         const group = resourceGroupOf(loadTest.id);
         return hasAnyAlchemyTag(loadTest.tags) && group !== undefined && loadTest.name !== undefined

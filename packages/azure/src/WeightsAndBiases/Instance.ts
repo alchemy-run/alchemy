@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -31,11 +31,20 @@ export interface WeightsAndBiasesOfferDetails {
   offerId: string;
   /** Marketplace plan ID, e.g. `wandb-payg`. */
   planId: string;
-  /** Display name of the plan. */
+  /**
+   * Display name of the plan.
+   * @default not set
+   */
   planName?: string;
-  /** Billing term unit of the plan, e.g. `P1M`. */
+  /**
+   * Billing term unit of the plan, e.g. `P1M`.
+   * @default not set
+   */
   termUnit?: string;
-  /** Billing term ID of the plan. */
+  /**
+   * Billing term ID of the plan.
+   * @default not set
+   */
   termId?: string;
 }
 
@@ -52,15 +61,27 @@ export interface WeightsAndBiasesMarketplace {
 
 /** The W&B organization owner. */
 export interface WeightsAndBiasesUser {
-  /** First name of the user. */
+  /**
+   * First name of the user.
+   * @default not set
+   */
   firstName?: string;
-  /** Last name of the user. */
+  /**
+   * Last name of the user.
+   * @default not set
+   */
   lastName?: string;
   /** Email address of the user. */
   emailAddress: string;
-  /** User principal name (Entra ID UPN) of the user. */
+  /**
+   * User principal name (Entra ID UPN) of the user.
+   * @default not set
+   */
   upn?: string;
-  /** Phone number of the user. */
+  /**
+   * Phone number of the user.
+   * @default not set
+   */
   phoneNumber?: string;
 }
 
@@ -73,11 +94,20 @@ export interface WeightsAndBiasesSingleSignOn {
    * @default "Enable"
    */
   state?: "Initial" | "Enable" | "Disable";
-  /** ID of the Entra ID enterprise application used for SSO. */
+  /**
+   * ID of the Entra ID enterprise application used for SSO.
+   * @default not set
+   */
   enterpriseAppId?: string;
-  /** URL W&B redirects users to for SSO. */
+  /**
+   * URL W&B redirects users to for SSO.
+   * @default not set
+   */
   url?: string;
-  /** Entra ID domains allowed to sign in. */
+  /**
+   * Entra ID domains allowed to sign in.
+   * @default not set
+   */
   aadDomains?: string[];
 }
 
@@ -85,7 +115,10 @@ export interface WeightsAndBiasesSingleSignOn {
 export interface WeightsAndBiasesIdentity {
   /** Kind of managed identity. */
   type: "None" | "SystemAssigned" | "UserAssigned" | "SystemAssigned,UserAssigned";
-  /** ARM resource IDs of user-assigned identities to attach. */
+  /**
+   * ARM resource IDs of user-assigned identities to attach.
+   * @default not set
+   */
   userAssignedIdentities?: string[];
 }
 
@@ -93,11 +126,13 @@ export interface InstanceProps {
   /**
    * Resource group the instance is created in. Changing it replaces the
    * instance.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the instance resource. If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the instance.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -126,7 +161,10 @@ export interface InstanceProps {
    * @default the lowercase instance name
    */
   subdomain?: string;
-  /** Single sign-on settings. */
+  /**
+   * Single sign-on settings.
+   * @default no single sign-on
+   */
   singleSignOn?: WeightsAndBiasesSingleSignOn;
   /**
    * Managed identity of the instance.
@@ -136,6 +174,7 @@ export interface InstanceProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -179,14 +218,23 @@ export interface Instance extends Resource<
  * sponsored subscriptions cannot) and have accepted the W&B Marketplace
  * terms.
  *
+ * :::caution
+ * Changing `name`, `location`, `region`, `subdomain`, `marketplace`, `user`,
+ * or `resourceGroup` replaces the instance. Replacing it cancels the
+ * Marketplace subscription and creates a new one.
+ * :::
+ *
+ * :::caution
+ * The subscription must allow Marketplace purchases and have accepted the
+ * W&B Marketplace terms. Free trial and sponsored subscriptions cannot
+ * create an instance.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/partner-solutions/weights-biases/overview
  *
  * ### Creating an Instance
  * **Example:** Pay-as-you-go W&B instance
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("ml", {
- *   location: "eastus",
- * });
  * const wandb = yield* Azure.WeightsAndBiases.Instance("wandb", {
  *   location: "eastus",
  *   marketplace: {
@@ -205,9 +253,18 @@ export interface Instance extends Resource<
  * **Example:** Entra ID SSO with a system-assigned identity
  * ```typescript
  * const wandb = yield* Azure.WeightsAndBiases.Instance("wandb", {
- *   marketplace,
+ *   marketplace: {
+ *     offerDetails: {
+ *       publisherId: "wandb",
+ *       offerId: "wandb-pay-as-you-go",
+ *       planId: "wandb-payg",
+ *     },
+ *   },
  *   user: { emailAddress: "ml-platform@example.com" },
- *   singleSignOn: { type: "OpenId", enterpriseAppId: appId },
+ *   singleSignOn: {
+ *     type: "OpenId",
+ *     enterpriseAppId: "8d3f6a2b-1c4e-4f7a-9b0d-5e6c7a8b9c0d",
+ *   },
  *   identity: { type: "SystemAssigned" },
  * });
  * ```
@@ -336,9 +393,7 @@ export const InstanceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* wandb
-        .ListInstanceBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListInstanceBySubscription", page)));
+      const page = yield* collectAll(wandb.ListInstanceBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((instance) => {
         const group = resourceGroupOf(instance.id);
         return hasAnyAlchemyTag(instance.tags) && group !== undefined && instance.name !== undefined

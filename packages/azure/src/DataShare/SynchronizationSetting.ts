@@ -25,7 +25,10 @@ import {
 export type RecurrenceInterval = "Hour" | "Day";
 
 export interface SynchronizationSettingProps {
-  /** Resource group of the Data Share account. Changing it replaces the setting. */
+  /**
+   * Resource group of the Data Share account. Changing it replaces the setting.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Data Share account that offers the share. Changing it replaces the setting. */
   account: string;
@@ -35,6 +38,7 @@ export interface SynchronizationSettingProps {
    * Setting name: letters, digits, and `_`, starting with a letter. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the setting.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** How often consumers may receive snapshots. Changing it replaces the setting. */
@@ -73,15 +77,27 @@ export interface SynchronizationSetting extends Resource<
 > {}
 
 /**
- * A snapshot schedule offered on an Azure Data Share share. Consumers can
- * enable a matching trigger on their share subscription to receive
- * snapshots on this schedule.
+ * A snapshot schedule offered on an Azure Data Share share
+ * (`Microsoft.DataShare/accounts/shares/synchronizationSettings`).
+ * Consumers can enable a matching trigger on their share subscription to
+ * receive snapshots on this schedule.
+ *
+ * :::caution
+ * Synchronization settings are immutable. Changing any prop (`account`,
+ * `share`, `name`, `recurrenceInterval`, `synchronizationTime`, or
+ * `resourceGroup`) replaces the setting. Alchemy deletes the old setting
+ * first, because a share holds one setting per kind.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/data-share/how-to-share-from-storage
  *
  * ### Offering a Snapshot Schedule
  * **Example:** Daily snapshots at 06:00 UTC
  * ```typescript
+ * const account = yield* Azure.DataShare.Account("sharing");
+ * const share = yield* Azure.DataShare.Share("sales", {
+ *   account: account.accountName,
+ * });
  * yield* Azure.DataShare.SynchronizationSetting("daily", {
  *   account: account.accountName,
  *   share: share.shareName,

@@ -30,13 +30,19 @@ export interface MachineRunCommandParameter {
 }
 
 export interface MachineRunCommandProps {
-  /** Resource group of the Arc machine. Changing it replaces the command. */
+  /**
+   * Resource group of the Arc machine. Changing it replaces the command.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the Arc machine. Changing it replaces the command. */
+  /**
+   * Name of the Arc machine. Required. Changing it replaces the command.
+   */
   machineName: string;
   /**
    * Name of the run command. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the command.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -45,19 +51,40 @@ export interface MachineRunCommandProps {
    * @default the machine's location
    */
   location?: string;
-  /** Inline script content. Set exactly one of `script`, `scriptUri`, `commandId`. */
+  /**
+   * Inline script content. Set exactly one of `script`, `scriptUri`, `commandId`.
+   * @default unset
+   */
   script?: string;
-  /** URI (public, or a storage SAS URI) of the script to download. */
+  /**
+   * URI (public, or a storage SAS URI) of the script to download.
+   * @default unset
+   */
   scriptUri?: string;
-  /** ID of a predefined built-in command. */
+  /**
+   * ID of a predefined built-in command.
+   * @default unset
+   */
   commandId?: string;
-  /** Parameters passed to the script. */
+  /**
+   * Parameters passed to the script.
+   * @default []
+   */
   parameters?: MachineRunCommandParameter[];
-  /** Secret parameters passed to the script; never returned by Azure. */
+  /**
+   * Secret parameters passed to the script; never returned by Azure.
+   * @default []
+   */
   protectedParameters?: MachineRunCommandParameter[];
-  /** Local user account the script runs as. */
+  /**
+   * Local user account the script runs as.
+   * @default the Connected Machine agent's account
+   */
   runAsUser?: string;
-  /** Password of `runAsUser`. */
+  /**
+   * Password of `runAsUser`.
+   * @default unset
+   */
   runAsPassword?: Redacted.Redacted<string>;
   /**
    * Whether provisioning completes as soon as the script starts instead
@@ -65,15 +92,25 @@ export interface MachineRunCommandProps {
    * @default false
    */
   asyncExecution?: boolean;
-  /** Timeout of the script in seconds. */
+  /**
+   * Timeout of the script in seconds.
+   * @default unset (Azure's default)
+   */
   timeoutInSeconds?: number;
-  /** Append blob SAS URI the script's standard output is uploaded to. */
+  /**
+   * Append blob SAS URI the script's standard output is uploaded to.
+   * @default unset (output stays in the `output` attribute)
+   */
   outputBlobUri?: string;
-  /** Append blob SAS URI the script's standard error is uploaded to. */
+  /**
+   * Append blob SAS URI the script's standard error is uploaded to.
+   * @default unset (errors stay in the `error` attribute)
+   */
   errorBlobUri?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -111,9 +148,8 @@ export interface MachineRunCommand extends Resource<
 
 /**
  * A script run on an Azure Arc-enabled server through the Connected
- * Machine agent. Changing any input re-runs the script.
- *
- * The machine must be connected (`status: "Connected"`).
+ * Machine agent (`Microsoft.HybridCompute/machines/runCommands`). Changing
+ * any input re-runs the script.
  *
  * @see https://learn.microsoft.com/azure/azure-arc/servers/run-command
  *
@@ -121,7 +157,6 @@ export interface MachineRunCommand extends Resource<
  * **Example:** Inline shell script
  * ```typescript
  * const run = yield* Azure.HybridCompute.MachineRunCommand("hostname", {
- *   resourceGroup: "arc",
  *   machineName: "web-01",
  *   script: "hostname",
  * });
@@ -131,13 +166,22 @@ export interface MachineRunCommand extends Resource<
  * **Example:** Script with parameters
  * ```typescript
  * yield* Azure.HybridCompute.MachineRunCommand("greet", {
- *   resourceGroup: "arc",
  *   machineName: "web-01",
  *   script: "echo Hello $NAME",
  *   parameters: [{ name: "NAME", value: "Arc" }],
  *   timeoutInSeconds: 120,
  * });
  * ```
+ *
+ * :::caution
+ * The machine must be a connected Arc-enabled server
+ * (`status: "Connected"`) in the same resource group.
+ * :::
+ *
+ * :::caution
+ * Changing `name`, `machineName`, `location`, or `resourceGroup` replaces
+ * the run command.
+ * :::
  *
  * @resource
  */

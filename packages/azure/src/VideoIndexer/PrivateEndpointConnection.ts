@@ -8,10 +8,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   stackAndStage,
   waitForProvisioned,
   waitUntilGone,
@@ -24,6 +24,7 @@ export interface PrivateEndpointConnectionProps {
   /**
    * Resource group of the Video Indexer account. Changing it replaces the
    * connection.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -74,7 +75,8 @@ export interface PrivateEndpointConnection extends Resource<
 > {}
 
 /**
- * Approval of a private endpoint's connection to a Video Indexer account.
+ * Approval of a private endpoint's connection to a Video Indexer account
+ * (`Microsoft.VideoIndexer/accounts/privateEndpointConnections`).
  *
  * A private endpoint that targets the account (group `account`) with a
  * *manual* connection leaves a `Pending` request on the account. This
@@ -83,14 +85,30 @@ export interface PrivateEndpointConnection extends Resource<
  *
  * The decision is made once: Video Indexer fails any later change to an
  * approved or rejected connection with
- * `HttpResponsePayloadAPISpecValidationFailed` and keeps the old state.
- * To change it, recreate the private endpoint.
+ * `HttpResponsePayloadAPISpecValidationFailed` and keeps the old state. To
+ * change it, recreate the private endpoint.
+ *
+ * :::caution
+ * Changing `account`, `privateEndpointId`, or `resourceGroup` replaces the
+ * approval. Destroying it disconnects the private endpoint.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-video-indexer/network-security
  *
  * ### Approving Connections
  * **Example:** Approve a manual private endpoint request
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("media", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("endpoints", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const indexer = yield* Azure.VideoIndexer.Account("indexer", {
+ *   storageAccountId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/media/providers/Microsoft.Storage/storageAccounts/media",
+ * });
  * const endpoint = yield* Azure.Network.PrivateEndpoint("indexer-pe", {
  *   subnetId: subnet.subnetId,
  *   manualPrivateLinkServiceConnections: [
@@ -154,15 +172,11 @@ const findConnection = Effect.fn(function* (
   privateEndpointId: string,
 ) {
   const page = yield* orUndefinedIfNotFound(
-    vi
-      .ListPrivateEndpointConnectionByAccount({
-        subscriptionId,
-        resourceGroupName,
-        accountName,
-      })
-      .pipe(
-        Effect.flatMap((page) => requireSinglePage("ListPrivateEndpointConnectionByAccount", page)),
-      ),
+    collectAll(vi.ListPrivateEndpointConnectionByAccount, {
+      subscriptionId,
+      resourceGroupName,
+      accountName,
+    }),
   );
   return (page?.value ?? []).find((connection) =>
     sameId(connection.properties?.privateEndpoint?.id, privateEndpointId),

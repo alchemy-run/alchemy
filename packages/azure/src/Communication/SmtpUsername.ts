@@ -18,6 +18,7 @@ export interface SmtpUsernameProps {
   /**
    * Resource group of the communication service. Changing it replaces the
    * SMTP username.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -29,6 +30,7 @@ export interface SmtpUsernameProps {
    * Resource name of the SMTP username. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * SMTP username.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -74,22 +76,30 @@ export interface SmtpUsername extends Resource<
 > {}
 
 /**
- * An SMTP username of an Azure Communication Services resource. SMTP
+ * An SMTP username of an Azure Communication Services resource
+ * (`Microsoft.Communication/communicationServices/smtpUsernames`). SMTP
  * clients authenticate to `smtp.azurecomm.net` with this username and the
  * client secret of the linked Entra ID application.
  *
  * SMTP usernames carry no tags, so ownership follows the parent
  * communication service.
  *
- * @see https://learn.microsoft.com/azure/communication-services/quickstarts/email/send-email-smtp/smtp-authentication
+ * :::caution
+ * Changing `resourceGroup`, `communicationService`, `name`, or `username`
+ * replaces the SMTP username, so SMTP clients must log in with the new one.
+ * :::
+ *
+ * See [SMTP authentication](https://learn.microsoft.com/azure/communication-services/quickstarts/email/send-email-smtp/smtp-authentication).
  *
  * ### Creating an SMTP Username
  * **Example:** SMTP login backed by an Entra ID app
  * ```typescript
+ * const acs = yield* Azure.Communication.CommunicationService("acs");
+ * const app = yield* Azure.Entra.Application("Mailer");
  * const smtp = yield* Azure.Communication.SmtpUsername("smtp", {
  *   communicationService: acs.communicationServiceName,
  *   username: "mailer@contoso.com",
- *   entraApplicationId: "00000000-0000-0000-0000-000000000000",
+ *   entraApplicationId: app.appId,
  * });
  * ```
  *

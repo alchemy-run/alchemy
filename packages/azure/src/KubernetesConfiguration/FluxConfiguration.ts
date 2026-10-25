@@ -26,13 +26,25 @@ import {
 
 /** Git reference to check out. The most specific one set wins. */
 export interface FluxRepositoryRef {
-  /** Branch to check out. */
+  /**
+   * Branch to check out.
+   * @default unset
+   */
   branch?: string;
-  /** Tag to check out (takes precedence over `branch`). */
+  /**
+   * Tag to check out (takes precedence over `branch`).
+   * @default unset
+   */
   tag?: string;
-  /** Semver range matched against tags (takes precedence over `tag`). */
+  /**
+   * Semver range matched against tags (takes precedence over `tag`).
+   * @default unset
+   */
   semver?: string;
-  /** Commit SHA; must be combined with `branch`. */
+  /**
+   * Commit SHA; must be combined with `branch`.
+   * @default unset
+   */
   commit?: string;
 }
 
@@ -40,7 +52,10 @@ export interface FluxRepositoryRef {
 export interface FluxGitRepository {
   /** Repository URL (`https://`, `http://` or `ssh://`). */
   url: string;
-  /** Reference to check out. */
+  /**
+   * Reference to check out.
+   * @default unset
+   */
   repositoryRef?: FluxRepositoryRef;
   /**
    * Maximum time to fetch the source, in seconds.
@@ -52,13 +67,25 @@ export interface FluxGitRepository {
    * @default 600
    */
   syncIntervalInSeconds?: number;
-  /** Base64-encoded `known_hosts` for SSH repositories. */
+  /**
+   * Base64-encoded `known_hosts` for SSH repositories.
+   * @default unset
+   */
   sshKnownHosts?: string;
-  /** HTTPS user for private repositories (the key goes in the `httpsKey` protected setting). */
+  /**
+   * HTTPS user for private repositories (the key goes in the `httpsKey` protected setting).
+   * @default unset
+   */
   httpsUser?: string;
-  /** Base64-encoded HTTPS CA certificate. */
+  /**
+   * Base64-encoded HTTPS CA certificate.
+   * @default unset
+   */
   httpsCACert?: string;
-  /** Name of a Kubernetes secret on the cluster holding the credentials. */
+  /**
+   * Name of a Kubernetes secret on the cluster holding the credentials.
+   * @default unset
+   */
   localAuthRef?: string;
 }
 
@@ -83,9 +110,15 @@ export interface FluxBucket {
    * @default 600
    */
   syncIntervalInSeconds?: number;
-  /** Access key ID (the secret goes in the `bucketSecretKey` protected setting). */
+  /**
+   * Access key ID (the secret goes in the `bucketSecretKey` protected setting).
+   * @default unset
+   */
   accessKey?: string;
-  /** Name of a Kubernetes secret on the cluster holding the credentials. */
+  /**
+   * Name of a Kubernetes secret on the cluster holding the credentials.
+   * @default unset
+   */
   localAuthRef?: string;
 }
 
@@ -105,22 +138,46 @@ export interface FluxAzureBlob {
    * @default 600
    */
   syncIntervalInSeconds?: number;
-  /** Storage account key. Never returned by Azure. */
+  /**
+   * Storage account key. Never returned by Azure.
+   * @default unset
+   */
   accountKey?: string | Redacted.Redacted<string>;
-  /** SAS token. Never returned by Azure. */
+  /**
+   * SAS token. Never returned by Azure.
+   * @default unset
+   */
   sasToken?: string | Redacted.Redacted<string>;
-  /** Client ID of a managed identity used to read the container. */
+  /**
+   * Client ID of a managed identity used to read the container.
+   * @default unset
+   */
   managedIdentityClientId?: string;
-  /** Service principal credentials. */
+  /**
+   * Service principal credentials.
+   * @default unset
+   */
   servicePrincipal?: {
-    /** Client ID. */
+    /**
+     * Client ID.
+     * @default unset
+     */
     clientId?: string;
-    /** Tenant ID. */
+    /**
+     * Tenant ID.
+     * @default unset
+     */
     tenantId?: string;
-    /** Client secret. Never returned by Azure. */
+    /**
+     * Client secret. Never returned by Azure.
+     * @default unset
+     */
     clientSecret?: string | Redacted.Redacted<string>;
   };
-  /** Name of a Kubernetes secret on the cluster holding the credentials. */
+  /**
+   * Name of a Kubernetes secret on the cluster holding the credentials.
+   * @default unset
+   */
   localAuthRef?: string;
 }
 
@@ -131,7 +188,10 @@ export interface FluxKustomization {
    * @default "" (repository root)
    */
   path?: string;
-  /** Names of Kustomizations in this configuration that must reconcile first. */
+  /**
+   * Names of Kustomizations in this configuration that must reconcile first.
+   * @default []
+   */
   dependsOn?: string[];
   /**
    * Maximum time to apply, in seconds.
@@ -143,7 +203,10 @@ export interface FluxKustomization {
    * @default 600
    */
   syncIntervalInSeconds?: number;
-  /** Retry interval after a failed apply, in seconds. */
+  /**
+   * Retry interval after a failed apply, in seconds.
+   * @default unset (Flux uses `syncIntervalInSeconds`)
+   */
   retryIntervalInSeconds?: number;
   /**
    * Delete objects removed from the source (and on deletion).
@@ -160,7 +223,10 @@ export interface FluxKustomization {
    * @default true
    */
   wait?: boolean;
-  /** Variables substituted after `kustomize build`. */
+  /**
+   * Variables substituted after `kustomize build`.
+   * @default {}
+   */
   postBuildSubstitute?: Record<string, string>;
 }
 
@@ -175,6 +241,7 @@ export interface FluxConfigurationProps {
    * Configuration name: lowercase letters, digits, `-` and `.`. If omitted,
    * a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the configuration.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -194,18 +261,31 @@ export interface FluxConfigurationProps {
    * @default "GitRepository"
    */
   sourceKind?: "GitRepository" | "Bucket" | "AzureBlob";
-  /** Git repository source (with `sourceKind: "GitRepository"`). */
+  /**
+   * Git repository source (with `sourceKind: "GitRepository"`).
+   * @default unset
+   */
   gitRepository?: FluxGitRepository;
-  /** S3-compatible bucket source (with `sourceKind: "Bucket"`). */
+  /**
+   * S3-compatible bucket source (with `sourceKind: "Bucket"`).
+   * @default unset
+   */
   bucket?: FluxBucket;
-  /** Azure Blob source (with `sourceKind: "AzureBlob"`). */
+  /**
+   * Azure Blob source (with `sourceKind: "AzureBlob"`).
+   * @default unset
+   */
   azureBlob?: FluxAzureBlob;
-  /** Kustomizations to apply, keyed by name. */
+  /**
+   * Kustomizations to apply, keyed by name.
+   * @default {}
+   */
   kustomizations?: Record<string, FluxKustomization>;
   /**
    * Sensitive settings, e.g. `sshPrivateKey`, `httpsKey`,
    * `bucketSecretKey`. Azure never returns them, so they are re-sent
    * whenever their values change from the last deploy.
+   * @default {}
    */
   configurationProtectedSettings?: Record<string, string | Redacted.Redacted<string>>;
   /**
@@ -222,6 +302,7 @@ export interface FluxConfigurationProps {
   /**
    * Maximum time to wait for reconciliation, as an ISO 8601 duration (e.g.
    * `PT10M`).
+   * @default unset (Azure's default)
    */
   reconciliationWaitDuration?: string;
 }
@@ -262,19 +343,22 @@ export interface FluxConfiguration extends Resource<
 > {}
 
 /**
- * A Flux v2 GitOps configuration: Flux on the cluster pulls manifests from
- * a Git repository, S3 bucket, or Azure Blob container and applies them
- * through Kustomizations.
+ * A Flux v2 GitOps configuration
+ * (`Microsoft.KubernetesConfiguration/fluxConfigurations`): Flux on the
+ * cluster pulls manifests from a Git repository, S3 bucket, or Azure Blob
+ * container and applies them through Kustomizations.
  *
- * Requires the `microsoft.flux` cluster extension
- * (`Azure.KubernetesConfiguration.Extension`). Configurations cannot be
- * tagged; ownership follows the hosting AKS cluster's Alchemy tags.
+ * Configurations cannot be tagged. Ownership follows the hosting cluster's
+ * Alchemy tags.
  *
  * @see https://learn.microsoft.com/azure/azure-arc/kubernetes/conceptual-gitops-flux2
  *
  * ### Syncing a Git Repository
  * **Example:** Apply a public repository to an AKS cluster
  * ```typescript
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+ *   defaultNodePool: { vmSize: "Standard_D2s_v7", count: 1 },
+ * });
  * const flux = yield* Azure.KubernetesConfiguration.Extension("Flux", {
  *   clusterId: cluster.clusterId,
  *   extensionType: "microsoft.flux",
@@ -296,6 +380,8 @@ export interface FluxConfiguration extends Resource<
  * ### Private Sources
  * **Example:** Authenticate over HTTPS
  * ```typescript
+ * // flux: the microsoft.flux Extension of the first example
+ * const githubToken = process.env.GITHUB_TOKEN ?? "";
  * yield* Azure.KubernetesConfiguration.FluxConfiguration("Private", {
  *   clusterId: flux.clusterId,
  *   gitRepository: {
@@ -313,13 +399,29 @@ export interface FluxConfiguration extends Resource<
  * ### Pausing Reconciliation
  * **Example:** Suspend a configuration
  * ```typescript
+ * // flux: the microsoft.flux Extension of the first example
  * yield* Azure.KubernetesConfiguration.FluxConfiguration("Apps", {
  *   clusterId: flux.clusterId,
- *   gitRepository: { url, repositoryRef: { branch: "main" } },
+ *   gitRepository: {
+ *     url: "https://github.com/Azure/gitops-flux2-kustomize-helm-mt",
+ *     repositoryRef: { branch: "main" },
+ *   },
  *   kustomizations: { app: { path: "./" } },
  *   suspend: true,
  * });
  * ```
+ *
+ * :::caution
+ * Install the `microsoft.flux` cluster extension
+ * (`Azure.KubernetesConfiguration.Extension`) first. Pass the extension's
+ * `clusterId` so the configuration waits for it.
+ * :::
+ *
+ * :::caution
+ * Changing `clusterId`, `name`, `scope`, or `namespace` replaces the
+ * configuration. With `prune: true`, Flux deletes the objects the old
+ * configuration applied.
+ * :::
  *
  * @resource
  */

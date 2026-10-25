@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -37,6 +37,7 @@ export interface NetworkFabricControllerProps {
   /**
    * Name of the network fabric controller. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the network fabric controller.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -49,47 +50,56 @@ export interface NetworkFabricControllerProps {
   /**
    * Controller SKU (`Basic`, `Standard`, `HighPerformance`). Changing it
    * replaces the controller.
+   * @default "Standard"
    */
   nfcSku?: mnf.NetworkFabricControllerPropertiesInput["nfcSku"];
   /**
    * IPv4 address space of the controller's managed network, e.g.
    * `10.0.0.0/19`. Changing it replaces the controller.
+   * @default "10.0.0.0/19"
    */
   ipv4AddressSpace?: string;
   /**
    * IPv6 address space of the controller's managed network. Changing it
    * replaces the controller.
+   * @default "FC00::/59"
    */
   ipv6AddressSpace?: string;
   /**
    * Name and location of the managed resource group the controller
    * creates. Changing it replaces the controller.
+   * @default none
    */
   managedResourceGroupConfiguration?: mnf.NetworkFabricControllerPropertiesInput["managedResourceGroupConfiguration"];
   /**
    * Whether the workload management network is enabled (`True`/`False`).
    * Changing it replaces the controller.
+   * @default "True"
    */
   isWorkloadManagementNetworkEnabled?: mnf.NetworkFabricControllerPropertiesInput["isWorkloadManagementNetworkEnabled"];
   /**
    * ExpressRoute circuits (ID + authorization key) for infrastructure
    * traffic. Authorization keys are not returned by Azure, so changes are
    * detected against the previous props.
+   * @default none
    */
   infrastructureExpressRouteConnections?: mnf.NetworkFabricControllerPropertiesInput["infrastructureExpressRouteConnections"];
   /**
    * ExpressRoute circuits (ID + authorization key) for workload traffic.
    * Changes are detected against the previous props.
+   * @default none
    */
   workloadExpressRouteConnections?: mnf.NetworkFabricControllerPropertiesInput["workloadExpressRouteConnections"];
   /**
    * Free-form description. Azure cannot update it in place, so changing
    * it replaces the resource.
+   * @default none
    */
   annotation?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -127,11 +137,27 @@ export interface NetworkFabricController extends Resource<
  * dedicated ExpressRoute circuits. Provisioning takes 45-90 minutes and needs
  * ExpressRoute circuits connected to an Operator Nexus site.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/concepts-network-fabric-controller
+ * ARM type: `Microsoft.ManagedNetworkFabric/networkFabricControllers`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/concepts-network-fabric-controller).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `nfcSku`, `ipv4AddressSpace`,
+ * `ipv6AddressSpace`, `managedResourceGroupConfiguration`,
+ * `isWorkloadManagementNetworkEnabled`, or `annotation` replaces the
+ * controller.
+ * :::
  *
  * ### Creating a Controller
  * **Example:** Controller over two ExpressRoute circuits
  * ```typescript
+ * // ExpressRoute circuits connected to the Operator Nexus site, and their
+ * // authorization keys.
+ * const circuits =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/circuits/providers/Microsoft.Network/expressRouteCircuits";
+ * const infraCircuitId = `${circuits}/nexus-infra`;
+ * const workloadCircuitId = `${circuits}/nexus-workload`;
+ * const infraKey = yield* Config.redacted("INFRA_CIRCUIT_AUTH_KEY");
+ * const workloadKey = yield* Config.redacted("WORKLOAD_CIRCUIT_AUTH_KEY");
  * const nfc = yield* Azure.ManagedNetworkFabric.NetworkFabricController("nfc", {
  *   ipv4AddressSpace: "10.0.0.0/19",
  *   nfcSku: "Standard",
@@ -195,13 +221,9 @@ export const NetworkFabricControllerProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mnf
-        .ListNetworkFabricControllerBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListNetworkFabricControllerBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(mnf.ListNetworkFabricControllerBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

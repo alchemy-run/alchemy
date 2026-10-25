@@ -32,6 +32,7 @@ export interface ConnectionProps {
   /**
    * Connection name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the connection.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -43,9 +44,13 @@ export interface ConnectionProps {
   /**
    * Field values keyed by field name. Encrypted fields are write-only, so
    * changes to them are detected against the previously deployed values.
+   * @default no field values
    */
   fieldDefinitionValues?: Record<string, string | Redacted.Redacted<string>>;
-  /** Description of the connection. */
+  /**
+   * Description of the connection.
+   * @default no description
+   */
   description?: string;
 }
 
@@ -74,12 +79,19 @@ export interface Connection extends Resource<
  * A connection asset in an Azure Automation account: the values needed to
  * reach an external system, shaped by a connection type and read by
  * runbooks with `Get-AutomationConnection`.
+ * The ARM type is `Microsoft.Automation/automationAccounts/connections`.
+ *
+ * :::caution
+ * Changing `automationAccount`, `name`, `connectionType`, or `resourceGroup`
+ * replaces the connection.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/automation-connections
  *
  * ### Creating a Connection
  * **Example:** Connection of a custom type
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const apiType = yield* Azure.Automation.ConnectionType("api", {
  *   automationAccount: account.automationAccountName,
  *   fieldDefinitions: { Endpoint: { type: "System.String" } },

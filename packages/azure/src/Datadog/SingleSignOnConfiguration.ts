@@ -31,6 +31,7 @@ export interface SingleSignOnConfigurationProps extends MonitorChildProps {
   /**
    * ID of the Microsoft Entra ID enterprise application (the Datadog SAML
    * gallery app) used for single sign-on.
+   * @default unset
    */
   enterpriseAppId?: string;
 }
@@ -67,9 +68,19 @@ export interface SingleSignOnConfiguration extends Resource<
  * gallery app. There is no DELETE API; deleting the resource sets the state
  * to `Disable`.
  *
+ * :::caution
+ * Changing `monitor` or `resourceGroup` replaces the configuration.
+ * :::
+ *
+ * @see https://learn.microsoft.com/azure/partner-solutions/datadog/manage
+ *
  * ### Enabling Single Sign-On
  * **Example:** Enable SAML SSO through an enterprise app
  * ```typescript
+ * const monitor = yield* Azure.Datadog.Monitor("datadog", {
+ *   location: "westus2",
+ *   userInfo: { emailAddress: "platform@example.com" },
+ * });
  * const sso = yield* Azure.Datadog.SingleSignOnConfiguration("sso", {
  *   monitor: monitor.monitorName,
  *   singleSignOnState: "Enable",

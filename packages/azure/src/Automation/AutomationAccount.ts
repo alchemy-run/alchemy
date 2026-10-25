@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -33,14 +33,20 @@ export type AutomationIdentityType =
 export interface AutomationAccountIdentity {
   /** Managed identity type. */
   type: AutomationIdentityType;
-  /** ARM resource IDs of user-assigned identities to attach. */
+  /**
+   * ARM resource IDs of user-assigned identities to attach.
+   * @default none
+   */
   userAssignedIdentities?: string[];
 }
 
 export interface AutomationAccountEncryption {
   /** Who manages the encryption key. */
   keySource: "Microsoft.Automation" | "Microsoft.Keyvault";
-  /** Key Vault key used when `keySource` is `Microsoft.Keyvault`. */
+  /**
+   * Key Vault key used when `keySource` is `Microsoft.Keyvault`.
+   * @default not set
+   */
   keyVaultProperties?: {
     /** URI of the key vault. */
     keyvaultUri?: string;
@@ -49,7 +55,10 @@ export interface AutomationAccountEncryption {
     /** Version of the key. */
     keyVersion?: string;
   };
-  /** ARM resource ID of the user-assigned identity that reads the key. */
+  /**
+   * ARM resource ID of the user-assigned identity that reads the key.
+   * @default not set
+   */
   userAssignedIdentity?: string;
 }
 
@@ -60,6 +69,7 @@ export interface AutomationAccountProps {
    * Account name: 6-50 letters, digits, and hyphens, starting with a letter
    * and ending with a letter or digit. If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the account.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -84,13 +94,20 @@ export interface AutomationAccountProps {
    * @default Azure's default (`false`)
    */
   disableLocalAuth?: boolean;
-  /** Encryption settings (customer-managed keys). */
+  /**
+   * Encryption settings (customer-managed keys).
+   * @default not set (Microsoft-managed keys)
+   */
   encryption?: AutomationAccountEncryption;
-  /** Managed identity of the account. */
+  /**
+   * Managed identity of the account.
+   * @default no managed identity
+   */
   identity?: AutomationAccountIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -134,11 +151,16 @@ export interface AutomationAccount extends Resource<
  * An Azure Automation account — the container for runbooks, schedules,
  * shared assets (variables, credentials, certificates, connections),
  * modules, and hybrid worker groups.
+ * The ARM type is `Microsoft.Automation/automationAccounts`.
  *
  * Deleted accounts are soft-deleted for 30 days. Creating an account with
  * the name and resource group of a soft-deleted one recovers it (with its
  * runbooks and assets) instead of failing — free-trial subscriptions allow
  * only one account per region and count soft-deleted accounts against it.
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the account.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/overview
  *
@@ -238,9 +260,7 @@ export const AutomationAccountProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* automation
-        .ListAutomationAccount({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListAutomationAccount", page)));
+      const page = yield* collectAll(automation.ListAutomationAccount, { subscriptionId });
       return (page.value ?? []).flatMap((account) => {
         const group = resourceGroupOf(account.id);
         return hasAnyAlchemyTag(account.tags) && group !== undefined && account.name !== undefined

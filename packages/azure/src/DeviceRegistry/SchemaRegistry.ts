@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -30,12 +30,16 @@ import {
 } from "./DeviceRegistryShared.ts";
 
 export interface SchemaRegistryProps {
-  /** Resource group the registry is created in. Changing it replaces the registry. */
+  /**
+   * Resource group the registry is created in. Changing it replaces the registry.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Registry name: 3-63 letters, digits, and hyphens. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the registry.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -57,9 +61,15 @@ export interface SchemaRegistryProps {
    * to write schemas. Changing it replaces the registry.
    */
   storageAccountContainerUrl: string;
-  /** Human-readable display name. */
+  /**
+   * Human-readable display name.
+   * @default unset
+   */
   displayName?: string;
-  /** Human-readable description. */
+  /**
+   * Human-readable description.
+   * @default unset
+   */
   description?: string;
   /**
    * Enable a system-assigned managed identity (used to write schemas to
@@ -70,6 +80,7 @@ export interface SchemaRegistryProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -106,10 +117,17 @@ export interface SchemaRegistry extends Resource<
 > {}
 
 /**
- * An Azure Device Registry schema registry — a store of message schemas
+ * An Azure Device Registry schema registry
+ * (`Microsoft.DeviceRegistry/schemaRegistries`) — a store of message schemas
  * (JSON Schema or Delta) used by Azure IoT Operations data flows. Schemas
  * are persisted in a blob container the registry writes to with its
  * managed identity.
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `namespace`, or
+ * `storageAccountContainerUrl` replaces the registry, with a new managed
+ * identity (`principalId`).
+ * :::
  *
  * @see https://learn.microsoft.com/azure/iot-operations/connect-to-cloud/concept-schema-registry
  *
@@ -129,6 +147,13 @@ export interface SchemaRegistry extends Resource<
  * ### Granting Storage Access
  * **Example:** Let the registry write schemas to the container
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("schemas");
+ * const container = yield* Azure.Storage.BlobContainer("schemas", {
+ *   storageAccount: account.storageAccountName,
+ * });
+ * const registry = yield* Azure.DeviceRegistry.SchemaRegistry("registry", {
+ *   storageAccountContainerUrl: Output.interpolate`${account.primaryEndpoints.blob}${container.containerName}`,
+ * });
  * yield* Azure.Authorization.RoleAssignment("registry-blob", {
  *   scope: container.containerId,
  *   roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataContributor,
@@ -191,11 +216,7 @@ export const SchemaRegistryProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        deviceregistry
-          .ListSchemaRegistryBySubscription({ subscriptionId })
-          .pipe(
-            Effect.flatMap((page) => requireSinglePage("ListSchemaRegistryBySubscription", page)),
-          ),
+        collectAll(deviceregistry.ListSchemaRegistryBySubscription, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((registry) => {
         const group = resourceGroupOf(registry.id);

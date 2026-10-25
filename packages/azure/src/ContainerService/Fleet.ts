@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -213,9 +213,7 @@ export const FleetProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* cs
-        .ListFleetBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListFleetBySubscription", page)));
+      const page = yield* collectAll(cs.ListFleetBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((fleet) => {
         const group = resourceGroupOf(fleet.id);
         return hasAnyAlchemyTag(fleet.tags) && group !== undefined && fleet.name !== undefined

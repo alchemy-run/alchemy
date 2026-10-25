@@ -40,16 +40,19 @@ export interface EnvironmentVersionProps extends AssetVersionProps {
   /**
    * Base image, e.g. `mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04`.
    * Set `image` or `build`. Changing it replaces the version.
+   * @default none
    */
   image?: string;
   /**
    * Docker build context Azure builds the image from. Set `image` or
    * `build`. Changing it replaces the version.
+   * @default none
    */
   build?: EnvironmentBuildContext;
   /**
    * Conda environment specification (the YAML text) installed on top of
    * `image`. Changing it replaces the version.
+   * @default none
    */
   condaFile?: string;
   /**
@@ -66,9 +69,13 @@ export interface EnvironmentVersionProps extends AssetVersionProps {
   /**
    * Routes of an inference server image. Changing them replaces the
    * version.
+   * @default none
    */
   inferenceConfig?: EnvironmentInferenceConfig;
-  /** Lifecycle stage label of the version (e.g. `Development`). */
+  /**
+   * Lifecycle stage label of the version (e.g. `Development`).
+   * @default none
+   */
   stage?: string;
 }
 
@@ -89,6 +96,8 @@ export interface EnvironmentVersion extends Resource<
  * by `name` if it does not exist; in a registry, declare one to manage its
  * description and tags (workspace containers accept neither).
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/concept-environments).
+ *
  * Versions are immutable: only the description, tags, archive flag, and
  * stage update in place.
  *
@@ -98,11 +107,19 @@ export interface EnvironmentVersion extends Resource<
  * same, the old version is deleted before the new one is created.
  * :::
  *
- * @see https://learn.microsoft.com/azure/machine-learning/concept-environments
- *
  * ### Registering a Environment version
  * **Example:** Environment version in a workspace
  * ```typescript
+ * // An existing Application Insights component for workspace telemetry.
+ * const insightsId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/monitoring/providers/Microsoft.Insights/components/ml-insights";
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const workspace = yield* Azure.MachineLearning.Workspace("ml", {
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ *   applicationInsights: insightsId,
+ * });
  * const sklearn = yield* Azure.MachineLearning.EnvironmentVersion("sklearn-v1", {
  *   workspace: workspace.workspaceName,
  *   name: "sklearn",

@@ -23,6 +23,7 @@ export interface ApiVersionProps {
    * Version name: 3-90 letters, digits, and hyphens (e.g. `v1`). If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the version.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -58,13 +59,24 @@ export interface ApiVersion extends Resource<
 > {}
 
 /**
- * A version of an API registered in Azure API Center.
+ * A version of an API registered in Azure API Center
+ * (`Microsoft.ApiCenter/services/workspaces/apis/versions`).
+ *
+ * :::caution
+ * Changing `serviceName`, `apiName`, `name`, or `resourceGroup` replaces
+ * the version and deletes its definitions.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-center/key-concepts#api-version
  *
  * ### Versioning APIs
  * **Example:** Production version
  * ```typescript
+ * const center = yield* Azure.ApiCenter.Service("catalog", {});
+ * const api = yield* Azure.ApiCenter.Api("orders", {
+ *   serviceName: center.serviceName,
+ *   kind: "rest",
+ * });
  * const v1 = yield* Azure.ApiCenter.ApiVersion("orders-v1", {
  *   serviceName: center.serviceName,
  *   apiName: api.apiName,

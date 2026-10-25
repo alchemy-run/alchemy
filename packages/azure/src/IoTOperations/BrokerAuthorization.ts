@@ -8,7 +8,10 @@ import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 type BrokerScope = InstanceScope & { readonly brokerName: string };
 
 export interface BrokerAuthorizationProps {
-  /** Resource group of the IoT Operations instance. Changing it replaces the authorization. */
+  /**
+   * Resource group of the IoT Operations instance. Changing it replaces the authorization.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** IoT Operations instance that holds the broker. Changing it replaces the authorization. */
   instanceName: string;
@@ -21,6 +24,7 @@ export interface BrokerAuthorizationProps {
    * Authorization name (lowercase letters, digits, and hyphens). If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the authorization.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -56,14 +60,21 @@ export interface BrokerAuthorization extends Resource<
 > {}
 
 /**
- * Client authorization policy of an Azure IoT Operations MQTT broker.
- * Broker listener ports reference it by name via `authorizationRef`.
+ * Client authorization policy of an Azure IoT Operations MQTT broker
+ * (`Microsoft.IoTOperations/instances/brokers/authorizations`). Broker
+ * listener ports reference it by name via `authorizationRef`.
  *
  * @see https://learn.microsoft.com/azure/iot-operations/manage-mqtt-broker/howto-configure-authorization
  *
  * ### Authorizing Clients
  * **Example:** Allow sensors to publish telemetry
  * ```typescript
+ * const instance = yield* Azure.IoTOperations.Instance("aio", {
+ *   customLocationId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/aio-location",
+ *   schemaRegistryId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.DeviceRegistry/schemaRegistries/aio-schemas",
+ * });
  * const authz = yield* Azure.IoTOperations.BrokerAuthorization("sensors", {
  *   instanceName: instance.instanceName,
  *   authorizationPolicies: {
@@ -80,6 +91,12 @@ export interface BrokerAuthorization extends Resource<
  *   },
  * });
  * ```
+ *
+ * :::caution
+ * Changing `resourceGroup`, `instanceName`, `brokerName`, or `name`
+ * replaces the policy. Listener ports that reference it by name must
+ * follow.
+ * :::
  *
  * @resource
  */

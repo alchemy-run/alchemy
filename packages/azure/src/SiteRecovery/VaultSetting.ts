@@ -18,7 +18,10 @@ import {
 export const DEFAULT_VAULT_SETTING = "default";
 
 export interface VaultSettingProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the setting. */
+  /**
+   * Resource group of the Recovery Services vault. Changing it replaces the setting.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Recovery Services vault. Changing it replaces the setting. */
   vault: string;
@@ -32,12 +35,14 @@ export interface VaultSettingProps {
    * ARM ID of the Azure Migrate server migration solution
    * (`Microsoft.Migrate/migrateProjects/solutions`) the vault reports to.
    * Omit to leave the observed value unchanged.
+   * @default the observed value
    */
   migrationSolutionId?: string;
   /**
    * VMware-to-Azure replication provider of the vault, e.g. `VMwareCbt`
    * (agentless) or `InMageRcm` (modernized agent-based). Omit to leave the
    * observed value unchanged.
+   * @default the observed value
    */
   vmwareToAzureProviderType?: string;
 }
@@ -65,25 +70,28 @@ export interface VaultSetting extends Resource<
 
 /**
  * Azure Site Recovery vault settings
- * (`Microsoft.RecoveryServices/vaults/replicationVaultSettings`): the
- * Azure Migrate hub connection and VMware-to-Azure provider type of a
- * Recovery Services vault.
+ * (`Microsoft.RecoveryServices/vaults/replicationVaultSettings`): the Azure
+ * Migrate hub connection and the VMware-to-Azure provider type of a Recovery
+ * Services vault. See the
+ * [Azure docs](https://learn.microsoft.com/rest/api/site-recovery/replication-vault-setting/create).
  *
  * Every vault has exactly one vault setting (`default`), so this resource
- * manages that singleton; Alchemy treats it as owned when its vault is
- * tagged for the current stack and stage. Only the fields you set are
- * written. There is no delete API: destroying the resource leaves the
- * setting as it is, and it goes away with its vault.
+ * manages that singleton. Alchemy treats it as owned when its vault carries this stack's ownership tags. Alchemy
+ * only writes the fields you set. There is no delete API: destroying the
+ * resource leaves the setting as it is, and it goes away with its vault.
  *
  * :::caution
  * Changing `resourceGroup`, `vault`, or `name` replaces the vault setting.
+ * Alchemy updates `migrationSolutionId` and `vmwareToAzureProviderType` in
+ * place.
  * :::
- *
- * @see https://learn.microsoft.com/rest/api/site-recovery/replication-vault-setting/create
  *
  * ### Azure Migrate
  * **Example:** Link a vault to an Azure Migrate server migration tool
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("dr-vault", {
+ *   location: "westus2",
+ * });
  * const hub = yield* Azure.Migrate.MigrateProject("hub", {
  *   location: "centralus",
  * });

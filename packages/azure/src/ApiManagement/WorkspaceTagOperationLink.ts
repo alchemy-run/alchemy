@@ -56,16 +56,53 @@ export interface WorkspaceTagOperationLink extends Resource<
 /**
  * The workspace-scoped counterpart of {@link TagOperationLink}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/workspaces/tags/operationLinks`.
  *
  * Assigns an API Management {@link Tag} to an API operation through a
  * named link entity (`tags/{tagId}/operationLinks/{linkId}`). It expresses
  * the same relation as {@link ApiOperationTagLink}; use one or the other.
+ *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `tagName`, `apiName`,
+ * `operationName`, `name`, or `resourceGroup` replaces the link.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/apimanagement/tag-operation-link
  *
  * ### Tagging Operations from the Tag Side
  * **Example:** Mark an operation as deprecated
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
+ * const deprecated = yield* Azure.ApiManagement.WorkspaceTag("deprecated", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   displayName: "Deprecated",
+ * });
+ * const orders = yield* Azure.ApiManagement.WorkspaceApi("orders", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
+ * const getOrder = yield* Azure.ApiManagement.WorkspaceApiOperation("get-order", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   apiName: orders.apiName,
+ *   method: "GET",
+ *   urlTemplate: "/orders/{id}",
+ *   templateParameters: [{ name: "id", type: "string", required: true }],
+ * });
  * yield* Azure.ApiManagement.WorkspaceTagOperationLink("deprecated-get-order", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -33,6 +33,7 @@ export interface WorkspaceAccessConnector {
   /**
    * ARM ID of the user-assigned identity to use. Required when
    * `identityType` is `UserAssigned`.
+   * @default unset
    */
   userAssignedIdentityId?: string;
 }
@@ -41,12 +42,14 @@ export interface WorkspaceProps {
   /**
    * Resource group the workspace is created in. Changing it replaces the
    * workspace.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the workspace, 3-64 characters of letters, digits, `-`, and
    * `_`. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the workspace.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -85,56 +88,67 @@ export interface WorkspaceProps {
   /**
    * ARM ID of your own virtual network to deploy clusters into (VNet
    * injection). Hybrid only. Changing it replaces the workspace.
+   * @default unset (Azure creates a managed VNet)
    */
   customVirtualNetworkId?: string;
   /**
    * Name of the host (public) subnet in `customVirtualNetworkId`, delegated
    * to `Microsoft.Databricks/workspaces`.
+   * @default unset
    */
   customPublicSubnetName?: string;
   /**
    * Name of the container (private) subnet in `customVirtualNetworkId`,
    * delegated to `Microsoft.Databricks/workspaces`.
+   * @default unset
    */
   customPrivateSubnetName?: string;
   /**
    * Address prefix (first two octets, e.g. `10.139`) of the managed VNet.
    * Hybrid only. Changing it replaces the workspace.
+   * @default Azure's default (`10.139`)
    */
   vnetAddressPrefix?: string;
   /**
    * Name of the default DBFS storage account. Hybrid only. Changing it
    * replaces the workspace.
+   * @default a name Azure generates
    */
   storageAccountName?: string;
   /**
    * SKU of the default DBFS storage account, e.g. `Standard_LRS`,
    * `Standard_GRS`. Hybrid only. Changing it replaces the workspace.
+   * @default Azure's default (`Standard_GRS`)
    */
   storageAccountSkuName?: string;
   /**
    * Enable double encryption (infrastructure encryption) on the DBFS root.
    * Hybrid only. Changing it replaces the workspace.
+   * @default false
    */
   requireInfrastructureEncryption?: boolean;
   /**
    * Enable a managed identity on the DBFS storage account so a
    * customer-managed key can be configured later. Hybrid only.
+   * @default false
    */
   prepareEncryption?: boolean;
   /**
    * Whether the workspace's web app and REST API are reachable from the
    * public internet. `Disabled` requires private endpoints.
+   * @default Azure's default (`Enabled`)
    */
   publicNetworkAccess?: "Enabled" | "Disabled";
   /**
    * Which NSG rules Azure Databricks manages for back-end private link.
    * Hybrid only.
+   * @default Azure's default (`AllRules`)
    */
   requiredNsgRules?: "AllRules" | "NoAzureDatabricksRules";
   /**
    * Initial default catalog type (`UnityCatalog` or `HiveMetastore`) and
    * name. Only applied at creation; changing it replaces the workspace.
+   * @default unset (Azure picks the catalog type)
    */
   defaultCatalog?: {
     initialType?: "HiveMetastore" | "UnityCatalog";
@@ -143,20 +157,24 @@ export interface WorkspaceProps {
   /**
    * Access connector whose identity accesses the workspace's default
    * storage. Hybrid only.
+   * @default unset
    */
   accessConnector?: WorkspaceAccessConnector;
   /**
    * Firewall on the default storage account. `Enabled` requires
    * `accessConnector`. Hybrid only.
+   * @default Azure's default (`Disabled`)
    */
   defaultStorageFirewall?: "Enabled" | "Disabled";
   /**
    * Customer-managed keys for managed services and managed disks (premium).
+   * @default Microsoft-managed keys
    */
   encryption?: databricks.WorkspacePropertiesEncryption;
   /**
    * Enhanced Security and Compliance add-on settings (premium; billed
    * separately).
+   * @default add-on disabled
    */
   enhancedSecurityCompliance?: databricks.EnhancedSecurityComplianceDefinition;
   /**
@@ -169,6 +187,7 @@ export interface WorkspaceProps {
    * User tags, also propagated to the resources in the managed resource
    * group. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -215,13 +234,23 @@ export interface Workspace extends Resource<
 > {}
 
 /**
- * An Azure Databricks workspace — the Databricks control-plane account plus
- * (in `Hybrid` mode) a locked managed resource group holding the DBFS
- * storage account and the cluster network. The workspace itself is free
- * until clusters or SQL warehouses run.
+ * An Azure Databricks workspace (`Microsoft.Databricks/workspaces`) — the
+ * Databricks control-plane account plus (in `Hybrid` mode) a locked
+ * managed resource group holding the DBFS storage account and the cluster
+ * network. The workspace itself is free until clusters or SQL warehouses
+ * run.
  *
  * Creation takes 3-6 minutes; deletion up to 15 minutes, after which Azure
  * removes the managed resource group.
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `computeMode`,
+ * `managedResourceGroupName`, `customVirtualNetworkId`,
+ * `vnetAddressPrefix`, `storageAccountName`, `storageAccountSkuName`,
+ * `requireInfrastructureEncryption`, or `defaultCatalog` replaces the
+ * workspace. The old workspace's notebooks, jobs, and DBFS data are
+ * deleted with it.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/databricks/getting-started/
  *
@@ -245,6 +274,24 @@ export interface Workspace extends Resource<
  * ### Networking
  * **Example:** VNet-injected workspace
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("databricks", {
+ *   addressPrefixes: ["10.30.0.0/16"],
+ * });
+ * const nsg = yield* Azure.Network.NetworkSecurityGroup("databricks");
+ * yield* Azure.Network.Subnet("databricks-host", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   name: "databricks-host",
+ *   addressPrefix: "10.30.1.0/24",
+ *   networkSecurityGroupId: nsg.networkSecurityGroupId,
+ *   delegations: [{ serviceName: "Microsoft.Databricks/workspaces" }],
+ * });
+ * yield* Azure.Network.Subnet("databricks-container", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   name: "databricks-container",
+ *   addressPrefix: "10.30.2.0/24",
+ *   networkSecurityGroupId: nsg.networkSecurityGroupId,
+ *   delegations: [{ serviceName: "Microsoft.Databricks/workspaces" }],
+ * });
  * const workspace = yield* Azure.Databricks.Workspace("injected", {
  *   customVirtualNetworkId: vnet.virtualNetworkId,
  *   customPublicSubnetName: "databricks-host",
@@ -362,9 +409,7 @@ export const WorkspaceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* databricks
-        .ListWorkspaceBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListWorkspaceBySubscription", page)));
+      const page = yield* collectAll(databricks.ListWorkspaceBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((workspace) => {
         const group = resourceGroupOf(workspace.id);
         return hasAnyAlchemyTag(workspace.tags) &&

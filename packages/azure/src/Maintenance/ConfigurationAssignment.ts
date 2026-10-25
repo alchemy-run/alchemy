@@ -13,7 +13,6 @@ import {
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
-  ListIncomplete,
   orUndefinedIfNotFound,
   waitForProvisioned,
   waitUntilGone,
@@ -68,6 +67,7 @@ export interface ConfigurationAssignmentProps {
   /**
    * Name of the assignment. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the assignment.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -79,6 +79,7 @@ export interface ConfigurationAssignmentProps {
   location?: string;
   /**
    * Dynamic-scope filter (subscription and resource-group scopes only).
+   * @default none
    */
   filter?: ConfigurationAssignmentFilter;
 }
@@ -109,14 +110,35 @@ export interface ConfigurationAssignment extends Resource<
  * (a VM, scale set, or dedicated host), or — as a dynamic scope — to every
  * resource in a subscription or resource group that matches a filter.
  *
+ * ARM type: `Microsoft.Maintenance/configurationAssignments`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/update-manager/dynamic-scope-overview).
+ *
  * Assignments cannot be tagged; Alchemy names them deterministically from
  * the stack, stage, and logical ID and gates adoption of an existing one.
  *
- * @see https://learn.microsoft.com/azure/update-manager/dynamic-scope-overview
+ * :::caution
+ * Changing `scope`, `maintenanceConfigurationId`, `name`, or `location`
+ * replaces the assignment.
+ * :::
  *
  * ### Dynamic Scopes
  * **Example:** Patch every tagged Linux VM in a resource group
  * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("vms");
+ * const patching = yield* Azure.Maintenance.MaintenanceConfiguration("patching", {
+ *   maintenanceScope: "InGuestPatch",
+ *   extensionProperties: { InGuestPatchMode: "User" },
+ *   maintenanceWindow: {
+ *     startDateTime: "2030-01-01 02:00",
+ *     duration: "03:55",
+ *     timeZone: "UTC",
+ *     recurEvery: "Day",
+ *   },
+ *   installPatches: {
+ *     rebootSetting: "IfRequired",
+ *     linuxParameters: { classificationsToInclude: ["Critical", "Security"] },
+ *   },
+ * });
  * yield* Azure.Maintenance.ConfigurationAssignment("linux-vms", {
  *   scope: group.resourceGroupId,
  *   maintenanceConfigurationId: patching.maintenanceConfigurationId,
@@ -479,19 +501,20 @@ export const ConfigurationAssignmentProvider = () =>
         ),
       );
       if (owned.size === 0) return [];
-      const result = yield* resourcegraph.Resources({
-        subscriptions: [subscriptionId],
-        query:
-          "maintenanceresources | where type =~ 'microsoft.maintenance/configurationassignments' | project id, name, location, properties",
-      });
-      if (result.resultTruncated === "true" || result._skipToken) {
-        return yield* new ListIncomplete({
-          operation: "maintenanceresources",
-          message:
-            "Resource Graph returned more than one page of configuration assignments; paging is not supported yet",
+      // Resource Graph pages with `$skipToken` (up to 1,000 rows a page).
+      const rows: Array<(typeof GraphAssignments.Type)[number]> = [];
+      let skipToken: string | undefined;
+      do {
+        const result = yield* resourcegraph.Resources({
+          subscriptions: [subscriptionId],
+          query:
+            "maintenanceresources | where type =~ 'microsoft.maintenance/configurationassignments' | project id, name, location, properties",
+          options: skipToken === undefined ? undefined : { _skipToken: skipToken },
         });
-      }
-      const rows = yield* Schema.decodeUnknownEffect(GraphAssignments)(result.data);
+        const page = yield* Schema.decodeUnknownEffect(GraphAssignments)(result.data);
+        rows.push(...page);
+        skipToken = result._skipToken;
+      } while (skipToken !== undefined);
       return rows.flatMap((row) => {
         const configId = row.properties?.maintenanceConfigurationId?.toLowerCase();
         return configId !== undefined && owned.has(configId)

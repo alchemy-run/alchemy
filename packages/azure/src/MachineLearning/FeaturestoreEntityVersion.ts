@@ -29,7 +29,10 @@ export interface FeaturestoreEntityVersionProps extends Omit<
 > {
   /** Index columns of the entity. Changing them replaces the version. */
   indexColumns: FeaturestoreIndexColumn[];
-  /** Lifecycle stage label of the version (e.g. `Development`). */
+  /**
+   * Lifecycle stage label of the version (e.g. `Development`).
+   * @default none
+   */
   stage?: string;
 }
 
@@ -49,6 +52,8 @@ export interface FeaturestoreEntityVersion extends Resource<
  * creates the {@link FeaturestoreEntityContainer} named by `name` if it does
  * not exist.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/concept-what-is-managed-feature-store).
+ *
  * Versions are immutable: only the description, tags, and stage update in
  * place. Azure accepts at most 3 tags with keys of letters, digits, `.`,
  * `-`, and `_`, which rules out Alchemy's `alchemy::*` ownership tags, so
@@ -62,11 +67,20 @@ export interface FeaturestoreEntityVersion extends Resource<
  * ("Asset ... was deleted").
  * :::
  *
- * @see https://learn.microsoft.com/azure/machine-learning/concept-what-is-managed-feature-store
- *
  * ### Registering a Feature store entity version
  * **Example:** Feature store entity version in a workspace
  * ```typescript
+ * // An existing Application Insights component for workspace telemetry.
+ * const insightsId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/monitoring/providers/Microsoft.Insights/components/ml-insights";
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const featureStore = yield* Azure.MachineLearning.Workspace("featureStore", {
+ *   kind: "FeatureStore",
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ *   applicationInsights: insightsId,
+ * });
  * const account = yield* Azure.MachineLearning.FeaturestoreEntityVersion("account-v1", {
  *   workspace: featureStore.workspaceName,
  *   name: "account",

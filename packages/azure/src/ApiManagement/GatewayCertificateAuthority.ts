@@ -47,12 +47,35 @@ export interface GatewayCertificateAuthority extends Resource<
  * Adds a CA certificate to a self-hosted API Management {@link Gateway}
  * so it can validate client and backend certificates issued by that CA.
  * Self-hosted gateways require the Developer or Premium tier.
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/gateways/certificateAuthorities`.
+ *
+ * :::caution
+ * Changing `serviceName`, `gatewayName`, `certificateName`, or
+ * `resourceGroup` replaces the authority.
+ *
+ * Self-hosted gateways need a Developer or Premium service.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-ca-certificates
  *
  * ### Trusting a CA
  * **Example:** Trust an internal CA on a self-hosted gateway
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "Developer", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const gateway = yield* Azure.ApiManagement.Gateway("dc1", {
+ *   serviceName: apim.serviceName,
+ *   locationData: { name: "dc1", city: "Seattle", countryOrRegion: "US" },
+ * });
+ * const caCert = yield* Azure.ApiManagement.Certificate("internal-ca", {
+ *   serviceName: apim.serviceName,
+ *   data: yield* Config.redacted("INTERNAL_CA_PFX_BASE64"),
+ *   password: yield* Config.redacted("INTERNAL_CA_PFX_PASSWORD"),
+ * });
  * yield* Azure.ApiManagement.GatewayCertificateAuthority("internal-ca", {
  *   serviceName: apim.serviceName,
  *   gatewayName: gateway.gatewayName,

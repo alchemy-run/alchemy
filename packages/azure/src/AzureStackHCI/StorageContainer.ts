@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -36,6 +36,7 @@ export interface StorageContainerProps {
   /**
    * Name of the storage container. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the storage container.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -58,6 +59,7 @@ export interface StorageContainerProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -93,12 +95,20 @@ export interface StorageContainer extends Resource<
  * A storage path on an Azure Local cluster's shared volumes where Arc VM
  * images and virtual hard disks are stored. Needs an Arc custom location
  * backed by the Arc Resource Bridge of a deployed Azure Local cluster.
+ * The ARM type is `Microsoft.AzureStackHCI/storageContainers`.
+ *
+ * :::caution
+ * Changing `name`, `location`, `extendedLocation`, `path`, or
+ * `resourceGroup` replaces the storage container.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/manage/create-storage-path
  *
  * ### Creating a Storage Path
  * **Example:** Storage path on a cluster shared volume
  * ```typescript
+ * // Arc custom location of the Azure Local cluster.
+ * const customLocationId = yield* Config.string("HCI_CUSTOM_LOCATION_ID");
  * const storage = yield* Azure.AzureStackHCI.StorageContainer("images", {
  *   extendedLocation: { name: customLocationId },
  *   path: "C:\\ClusterStorage\\UserStorage_1\\images",
@@ -151,9 +161,7 @@ export const StorageContainerProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        hci
-          .ListStorageContainerAll({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListStorageContainerAll", page))),
+        collectAll(hci.ListStorageContainerAll, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((value) => {
         const group = resourceGroupOf(value.id);

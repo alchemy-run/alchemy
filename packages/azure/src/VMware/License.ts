@@ -26,7 +26,10 @@ import {
 } from "./common.ts";
 
 export interface LicenseProps {
-  /** Resource group of the private cloud. Changing it replaces the license. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the license.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the license. */
   privateCloud: string;
@@ -40,9 +43,15 @@ export interface LicenseProps {
   licenseKey: Redacted.Redacted<string>;
   /** ISO 8601 date-time when the license expires. */
   endDate: string;
-  /** Broadcom site ID of the license. */
+  /**
+   * Broadcom site ID of the license.
+   * @default not set
+   */
   broadcomSiteId?: string;
-  /** Broadcom contract number of the license. */
+  /**
+   * Broadcom contract number of the license.
+   * @default not set
+   */
   broadcomContractNumber?: string;
 }
 
@@ -72,17 +81,27 @@ export interface License extends Resource<
 > {}
 
 /**
- * A VMware license applied to an Azure VMware Solution private cloud, e.g.
- * the VMware vDefend (NSX distributed) firewall license.
+ * A VMware license applied to an Azure VMware Solution private cloud
+ * (`Microsoft.AVS/privateClouds/licenses`), e.g. the VMware vDefend (NSX
+ * distributed) firewall license.
+ *
+ * :::caution
+ * Changing `privateCloud`, `kind`, or `resourceGroup` replaces the license.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/vmware-firewall
  *
  * ### Applying a Firewall License
  * **Example:** VMware Firewall license
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
  * yield* Azure.VMware.License("firewall", {
  *   privateCloud: cloud.privateCloudName,
- *   licenseKey: Redacted.make(firewallLicenseKey),
+ *   licenseKey: yield* Config.redacted("VMWARE_FIREWALL_LICENSE_KEY"),
  *   endDate: "2027-12-31T00:00:00Z",
  *   broadcomSiteId: "123456",
  * });

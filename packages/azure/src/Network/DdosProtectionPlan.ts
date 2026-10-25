@@ -1,7 +1,7 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
-import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
+import { collectAll, orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { idsOf, networkProvider } from "./generic.ts";
@@ -104,7 +104,7 @@ export const DdosProtectionPlanProvider = () =>
           ddosProtectionPlanName: path.name,
           tags,
         }),
-      listAll: (subscriptionId) => network.ListDdosProtectionPlans({ subscriptionId }),
+      listAll: (subscriptionId) => collectAll(network.ListDdosProtectionPlans, { subscriptionId }),
       body: (_news, { location, tags }) => ({ location, tags }),
       drifted: () => false,
       toAttrs: (path, observed) => ({

@@ -22,7 +22,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, delta, listClusters, lower, matches } from "./Common.ts";
 
 export interface ApplicationProps {
-  /** Resource group of the cluster. Changing it replaces the application. */
+  /**
+   * Resource group of the cluster. Changing it replaces the application.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the classic Service Fabric cluster. Changing it replaces the application. */
   cluster: string;
@@ -30,6 +33,7 @@ export interface ApplicationProps {
    * Application name (the application is addressed as `fabric:/<name>`).
    * If omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the application.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Application type name. Changing it replaces the application. */
@@ -39,25 +43,50 @@ export interface ApplicationProps {
    * rolling application upgrade.
    */
   typeVersion: string;
-  /** Application parameters overriding the manifest defaults. */
+  /**
+   * Application parameters overriding the manifest defaults.
+   * @default {} (the manifest defaults)
+   */
   parameters?: Record<string, string>;
-  /** Policy for application upgrades (rolling mode, health checks). */
+  /**
+   * Policy for application upgrades (rolling mode, health checks).
+   * @default Azure's default
+   */
   upgradePolicy?: servicefabric.ApplicationUpgradePolicy;
-  /** Minimum number of nodes on which capacity is reserved for the application. */
+  /**
+   * Minimum number of nodes on which capacity is reserved for the application.
+   * @default Azure's default
+   */
   minimumNodes?: number;
-  /** Maximum number of nodes the application's services may be placed on. */
+  /**
+   * Maximum number of nodes the application's services may be placed on.
+   * @default Azure's default
+   */
   maximumNodes?: number;
-  /** Remove the current application capacity settings. */
+  /**
+   * Remove the current application capacity settings.
+   * @default Azure's default
+   */
   removeApplicationCapacity?: boolean;
-  /** Application capacity metrics. */
+  /**
+   * Application capacity metrics.
+   * @default []
+   */
   metrics?: servicefabric.ApplicationMetricDescription[];
-  /** User-assigned identities of the application, each mapped to a friendly name used in the manifest. */
+  /**
+   * User-assigned identities of the application, each mapped to a friendly name used in the manifest.
+   * @default []
+   */
   managedIdentities?: servicefabric.ApplicationUserAssignedIdentity[];
-  /** Managed identity of the application resource. */
+  /**
+   * Managed identity of the application resource.
+   * @default no managed identity
+   */
   identity?: servicefabric.ManagedIdentityInput;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -90,18 +119,51 @@ export interface Application extends Resource<
 > {}
 
 /**
- * An application on a classic Service Fabric cluster — a running instance
- * of a registered application type version.
+ * An application on a classic Service Fabric cluster
+ * (`Microsoft.ServiceFabric/clusters/applications`): a running instance of a
+ * registered application type version. See the
+ * [Azure docs](https://learn.microsoft.com/azure/service-fabric/service-fabric-application-arm-resource).
  *
- * Changing `typeVersion`, `parameters`, or the capacity settings performs a
- * rolling application upgrade governed by `upgradePolicy`. The cluster must
- * be `Ready` (its node scale sets deployed and joined).
+ * Changing `typeVersion`, `parameters`, or the capacity settings runs a
+ * rolling application upgrade under `upgradePolicy`.
  *
- * @see https://learn.microsoft.com/azure/service-fabric/service-fabric-application-arm-resource
+ * :::caution
+ * The cluster must be `Ready`: its node scale sets are deployed with the
+ * `ServiceFabricNode` extension and have joined the cluster.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `cluster`, `name`, or `typeName` replaces the
+ * application and its services. Alchemy updates every other prop in place.
+ * :::
  *
  * ### Deploying an Application
  * **Example:** Application from a registered version
  * ```typescript
+ * const cluster = yield* Azure.ServiceFabricClassic.Cluster("sf", {
+ *   reliabilityLevel: "None",
+ *   nodeTypes: [
+ *     {
+ *       name: "nt1",
+ *       isPrimary: true,
+ *       vmInstanceCount: 1,
+ *       clientConnectionEndpointPort: 19000,
+ *       httpGatewayEndpointPort: 19080,
+ *       applicationPorts: { startPort: 20000, endPort: 30000 },
+ *       ephemeralPorts: { startPort: 49152, endPort: 65534 },
+ *     },
+ *   ],
+ * });
+ * const appType = yield* Azure.ServiceFabricClassic.ApplicationType("voting-type", {
+ *   cluster: cluster.clusterName,
+ *   name: "VotingType",
+ * });
+ * const v1 = yield* Azure.ServiceFabricClassic.ApplicationTypeVersion("voting-v1", {
+ *   cluster: cluster.clusterName,
+ *   applicationType: appType.applicationTypeName,
+ *   version: "1.0.0",
+ *   appPackageUrl: "https://<account>.blob.core.windows.net/apps/Voting.sfpkg?<sas>",
+ * });
  * const app = yield* Azure.ServiceFabricClassic.Application("voting", {
  *   cluster: cluster.clusterName,
  *   typeName: appType.applicationTypeName,

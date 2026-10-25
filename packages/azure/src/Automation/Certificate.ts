@@ -32,6 +32,7 @@ export interface CertificateProps {
   /**
    * Certificate name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the certificate.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -42,6 +43,7 @@ export interface CertificateProps {
   /**
    * Thumbprint of the certificate; Azure computes it when omitted.
    * Changing it replaces the certificate.
+   * @default computed by Azure
    */
   thumbprint?: string;
   /**
@@ -50,7 +52,10 @@ export interface CertificateProps {
    * @default false
    */
   isExportable?: boolean;
-  /** Description of the certificate. */
+  /**
+   * Description of the certificate.
+   * @default no description
+   */
   description?: string;
 }
 
@@ -82,15 +87,22 @@ export interface Certificate extends Resource<
 /**
  * A certificate asset in an Azure Automation account, read by runbooks and
  * DSC configurations with `Get-AutomationCertificate`.
+ * The ARM type is `Microsoft.Automation/automationAccounts/certificates`.
+ *
+ * :::caution
+ * Changing `automationAccount`, `name`, `base64Value`, `thumbprint`,
+ * `isExportable`, or `resourceGroup` replaces the certificate.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/shared-resources/certificates
  *
  * ### Uploading a Certificate
  * **Example:** Public certificate
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const cert = yield* Azure.Automation.Certificate("partner-ca", {
  *   automationAccount: account.automationAccountName,
- *   base64Value: Redacted.make(partnerCaBase64),
+ *   base64Value: yield* Config.redacted("PARTNER_CA_CER_BASE64"),
  *   description: "Partner CA",
  * });
  * ```

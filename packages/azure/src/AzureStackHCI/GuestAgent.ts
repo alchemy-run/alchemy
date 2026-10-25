@@ -22,9 +22,15 @@ export interface GuestAgentProps {
    * The VM instance must already exist. Changing it replaces the agent.
    */
   machineId: string;
-  /** Guest OS user name used to install the agent. */
+  /**
+   * Guest OS user name used to install the agent.
+   * @default not set
+   */
   username?: string;
-  /** Guest OS password used to install the agent. Never returned by Azure. */
+  /**
+   * Guest OS password used to install the agent. Never returned by Azure.
+   * @default not set
+   */
   password?: string | Redacted.Redacted<string>;
   /**
    * Action to perform on the agent.
@@ -56,19 +62,57 @@ export interface GuestAgent extends Resource<
  * The Arc guest agent of an Azure Local Arc VM (the singleton
  * `virtualMachineInstances/default/guestAgents/default`). Installing it
  * enables guest management (extensions, run commands) for the VM.
+ * The ARM type is
+ * `Microsoft.AzureStackHCI/virtualMachineInstances/guestAgents`.
  *
  * The agent has no tags; Alchemy treats it as owned when the VM's Arc
  * machine carries this stack's ownership tags.
+ *
+ * :::caution
+ * Changing `machineId` replaces the agent.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/manage/manage-arc-virtual-machines
  *
  * ### Enabling Guest Management
  * **Example:** Install the guest agent on an Arc VM
  * ```typescript
+ * // ARM ID of the Arc-enabled server (Microsoft.HybridCompute/machines).
+ * const arcMachineId = yield* Config.string("ARC_SERVER_ID");
+ * // Arc custom location of the Azure Local cluster.
+ * const customLocationId = yield* Config.string("HCI_CUSTOM_LOCATION_ID");
+ * const image = yield* Azure.AzureStackHCI.GalleryImage("ubuntu", {
+ *   extendedLocation: { name: customLocationId },
+ *   imagePath: "https://account.blob.core.windows.net/images/ubuntu.vhdx",
+ *   osType: "Linux",
+ * });
+ * const lnet = yield* Azure.AzureStackHCI.LogicalNetwork("lan", {
+ *   extendedLocation: { name: customLocationId },
+ *   vmSwitchName: "ConvergedSwitch(management_compute_storage)",
+ *   subnets: [{ name: "lan", properties: { ipAllocationMethod: "Dynamic" } }],
+ * });
+ * const nic = yield* Azure.AzureStackHCI.NetworkInterface("vm-nic", {
+ *   extendedLocation: { name: customLocationId },
+ *   ipConfigurations: [
+ *     { name: "ipconfig", properties: { subnet: { id: lnet.logicalNetworkId } } },
+ *   ],
+ * });
+ * const vm = yield* Azure.AzureStackHCI.VirtualMachineInstance("web", {
+ *   machineId: arcMachineId,
+ *   extendedLocation: { name: customLocationId },
+ *   hardwareProfile: { vmSize: "Custom", processors: 2, memoryMB: 4096 },
+ *   imageId: image.galleryImageId,
+ *   networkInterfaceIds: [nic.networkInterfaceId],
+ *   osProfile: {
+ *     computerName: "web",
+ *     adminUsername: "azureuser",
+ *     linuxConfiguration: { disablePasswordAuthentication: true },
+ *   },
+ * });
  * yield* Azure.AzureStackHCI.GuestAgent("agent", {
  *   machineId: vm.machineId,
  *   username: "azureuser",
- *   password: Redacted.make(adminPassword),
+ *   password: yield* Config.redacted("HCI_VM_ADMIN_PASSWORD"),
  * });
  * ```
  *

@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -31,6 +31,7 @@ export interface AssessmentProjectProps {
    * from the app, stage, and logical ID (at most 40 characters — Azure
    * Migrate fails with an internal server error on long names under long
    * resource group names). Changing it replaces the project.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -47,17 +48,30 @@ export interface AssessmentProjectProps {
    * @default "Enabled"
    */
   publicNetworkAccess?: "Enabled" | "Disabled";
-  /** ARM ID of the `Migrate.Solution` that tracks this assessment project. */
+  /**
+   * ARM ID of the `Migrate.Solution` that tracks this assessment project.
+   * @default none
+   */
   assessmentSolutionId?: string;
-  /** ARM ID of a Log Analytics workspace used for dependency visualization. */
+  /**
+   * ARM ID of a Log Analytics workspace used for dependency visualization.
+   * @default none
+   */
   customerWorkspaceId?: string;
-  /** Location of the Log Analytics workspace in `customerWorkspaceId`. */
+  /**
+   * Location of the Log Analytics workspace in `customerWorkspaceId`.
+   * @default none
+   */
   customerWorkspaceLocation?: string;
-  /** ARM ID of the storage account used when public access is disabled. */
+  /**
+   * ARM ID of the storage account used when public access is disabled.
+   * @default none
+   */
   customerStorageAccountArmId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -95,7 +109,11 @@ export interface AssessmentProject extends Resource<
  * — the container for assessment groups, assessments, and the appliance
  * collectors that feed discovered machines into them.
  *
- * @see https://learn.microsoft.com/azure/migrate/create-manage-projects
+ * See the [Azure documentation](https://learn.microsoft.com/azure/migrate/create-manage-projects).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the project.
+ * :::
  *
  * ### Creating a Project
  * **Example:** Assessment project
@@ -175,13 +193,9 @@ export const AssessmentProjectProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* migrate
-        .ListAssessmentProjectsOperationBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListAssessmentProjectsOperationBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(migrate.ListAssessmentProjectsOperationBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((project) => {
         const group = resourceGroupOf(project.id);
         return hasAnyAlchemyTag(project.tags) && group !== undefined && project.name !== undefined

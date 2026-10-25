@@ -18,11 +18,13 @@ import { RUNTIME_WAIT, runtimeObjectName, runtimeState, sameId, sameList } from 
 
 /** Native storage class of the cluster (no backing configuration). */
 export interface NativeStorageClassType {
+  /** Backing storage kind. */
   type: "Native";
 }
 
 /** ReadWriteMany storage layered on another storage class. */
 export interface RwxStorageClassType {
+  /** Backing storage kind. */
   type: "RWX";
   /** Kubernetes storage class backing the new RWX class. */
   backingStorageClassName: string;
@@ -30,6 +32,7 @@ export interface RwxStorageClassType {
 
 /** Azure Blob storage via the blob CSI driver. */
 export interface BlobStorageClassType {
+  /** Backing storage kind. */
   type: "Blob";
   /** Azure Storage account name. */
   azureStorageAccountName: string;
@@ -39,12 +42,16 @@ export interface BlobStorageClassType {
 
 /** An NFS share. */
 export interface NfsStorageClassType {
+  /** Backing storage kind. */
   type: "NFS";
   /** NFS server address. */
   server: string;
   /** NFS share path. */
   share: string;
-  /** Sub directory under the share; created by the driver if missing. */
+  /**
+   * Sub directory under the share; created by the driver if missing.
+   * @default unset (the share root)
+   */
   subDir?: string;
   /**
    * Mounted folder permissions (e.g. `"0777"`). Non-zero makes the driver
@@ -61,16 +68,29 @@ export interface NfsStorageClassType {
 
 /** An SMB share. */
 export interface SmbStorageClassType {
+  /** Backing storage kind. */
   type: "SMB";
   /** SMB source, e.g. `//server/share`. */
   source: string;
-  /** Sub directory under the share; created by the driver if missing. */
+  /**
+   * Sub directory under the share; created by the driver if missing.
+   * @default unset (the share root)
+   */
   subDir?: string;
-  /** Server username. */
+  /**
+   * Server username.
+   * @default unset
+   */
   username?: string;
-  /** Server password. Never read back from Azure. */
+  /**
+   * Server password. Never read back from Azure.
+   * @default unset
+   */
   password?: Redacted.Redacted<string>;
-  /** Server domain. */
+  /**
+   * Server domain.
+   * @default unset
+   */
   domain?: string;
 }
 
@@ -94,6 +114,7 @@ export interface StorageClassProps {
    * Name of the storage class (3-24 letters, digits and `-`). If omitted,
    * a unique lowercase name is generated. Changing it replaces the storage
    * class.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -101,30 +122,56 @@ export interface StorageClassProps {
    * fields are updated in place.
    */
   typeProperties: StorageClassType;
-  /** CSI provisioner name. Changing it replaces the storage class. */
+  /**
+   * CSI provisioner name. Changing it replaces the storage class.
+   * @default Azure's default
+   */
   provisioner?: string;
   /**
    * When volumes are bound: `Immediate` or `WaitForFirstConsumer`.
    * Changing it replaces the storage class.
+   * @default Azure's default
    */
   volumeBindingMode?: kr.VolumeBindingMode;
-  /** Whether volumes can be expanded: `Allow` or `Disallow`. */
+  /**
+   * Whether volumes can be expanded: `Allow` or `Disallow`.
+   * @default Azure's default
+   */
   allowVolumeExpansion?: kr.VolumeExpansion;
-  /** Additional mount options. */
+  /**
+   * Additional mount options.
+   * @default []
+   */
   mountOptions?: string[];
-  /** Supported access modes (`ReadWriteOnce`, `ReadWriteMany`). */
+  /**
+   * Supported access modes (`ReadWriteOnce`, `ReadWriteMany`).
+   * @default Azure's default
+   */
   accessModes?: kr.AccessMode[];
-  /** Whether the class survives a single data node failure. */
+  /**
+   * Whether the class survives a single data node failure.
+   * @default Azure's default
+   */
   dataResilience?: kr.DataResilienceTier;
-  /** Failover speed: `NotAvailable`, `Slow`, `Fast` or `Super`. */
+  /**
+   * Failover speed: `NotAvailable`, `Slow`, `Fast` or `Super`.
+   * @default Azure's default
+   */
   failoverSpeed?: kr.FailoverTier;
-  /** Free-form limitations of the class. */
+  /**
+   * Free-form limitations of the class.
+   * @default []
+   */
   limitations?: string[];
-  /** Performance tier: `Basic`, `Standard`, `Premium`, `Ultra`. */
+  /**
+   * Performance tier: `Basic`, `Standard`, `Premium`, `Ultra`.
+   * @default Azure's default
+   */
   performance?: kr.PerformanceTier;
   /**
    * Selection priority when several classes match; `0` is highest, `-1`
    * means never select automatically.
+   * @default Azure's default
    */
   priority?: number;
 }
@@ -160,10 +207,9 @@ export interface StorageClass extends Resource<
 
 /**
  * A Kubernetes storage class on an Azure Arc-enabled Kubernetes cluster,
- * managed through ARM: native, ReadWriteMany layered on another class,
- * Azure Blob, NFS or SMB.
+ * managed through ARM (`Microsoft.KubernetesRuntime/storageClasses`):
+ * native, ReadWriteMany layered on another class, Azure Blob, NFS, or SMB.
  *
- * Requires a connected cluster with the `storageclass` service enabled;
  * ARM proxies every write to the cluster. Storage classes carry no tags,
  * so one found at the expected scope is only treated as owned when Alchemy
  * created it.
@@ -173,6 +219,8 @@ export interface StorageClass extends Resource<
  * ### Storage Classes
  * **Example:** NFS storage class
  * ```typescript
+ * const clusterId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.Kubernetes/connectedClusters/edge-cluster";
  * const storage = yield* Azure.KubernetesRuntime.Service("storage", {
  *   clusterId,
  *   serviceName: "storageclass",
@@ -192,6 +240,9 @@ export interface StorageClass extends Resource<
  *
  * **Example:** Blob storage class
  * ```typescript
+ * // storage: the Service of the first example
+ * const account = yield* Azure.Storage.StorageAccount("volumes");
+ * const key = process.env.STORAGE_ACCOUNT_KEY ?? "";
  * yield* Azure.KubernetesRuntime.StorageClass("blob", {
  *   clusterId: storage.clusterId,
  *   typeProperties: {
@@ -201,6 +252,16 @@ export interface StorageClass extends Resource<
  *   },
  * });
  * ```
+ *
+ * :::caution
+ * The cluster must be connected and have the `storageclass`
+ * `Azure.KubernetesRuntime.Service` enabled.
+ * :::
+ *
+ * :::caution
+ * Changing `clusterId`, `name`, `typeProperties.type`, `provisioner`, or
+ * `volumeBindingMode` replaces the storage class.
+ * :::
  *
  * @resource
  */

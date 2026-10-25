@@ -20,7 +20,10 @@ import { canonical, clusterOwnedByStage, lower, reveal } from "./Common.ts";
 export type AzureMonitorSelectedConfigurations = hdinsight.AzureMonitorSelectedConfigurations;
 
 export interface AzureMonitorIntegrationProps {
-  /** Resource group of the cluster. Changing it replaces the integration. */
+  /**
+   * Resource group of the cluster. Changing it replaces the integration.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Cluster to monitor. Changing it replaces the integration. */
   cluster: string;
@@ -31,6 +34,7 @@ export interface AzureMonitorIntegrationProps {
   /**
    * Tables and global settings to collect. Omit to collect HDInsight's
    * default selection.
+   * @default HDInsight's default selection
    */
   selectedConfigurations?: AzureMonitorSelectedConfigurations;
 }
@@ -55,24 +59,30 @@ export interface AzureMonitorIntegration extends Resource<
 > {}
 
 /**
- * The Azure Monitor integration of an HDInsight cluster — sends the
+ * The Azure Monitor integration of an HDInsight cluster
+ * (`Microsoft.HDInsight/clusters/extensions/azureMonitor`) — sends the
  * cluster's logs and metrics to a Log Analytics workspace. There is one
  * per cluster: creating it enables the integration, deleting it disables
- * it. The workspace, key, and selection are updated in place.
+ * it. The workspace, key, and selection are updated in place. See
+ * [use Azure Monitor logs](https://learn.microsoft.com/azure/hdinsight/hdinsight-hadoop-oms-log-analytics-tutorial).
  *
  * Enabling or reconfiguring the integration touches every node and takes
  * several minutes. It carries no tags; Alchemy treats it as owned when its
  * cluster carries this stack's ownership tags.
  *
- * @see https://learn.microsoft.com/azure/hdinsight/hdinsight-hadoop-oms-log-analytics-tutorial
+ * :::caution
+ * Changing `resourceGroup` or `cluster` replaces the integration.
+ * :::
  *
  * ### Enabling Azure Monitor
  * **Example:** Send cluster logs to a workspace
  * ```typescript
+ * // `cluster` is an `Azure.HDInsight.Cluster` (see its page)
+ * const workspace = yield* Azure.LogAnalytics.Workspace("logs");
  * const monitor = yield* Azure.HDInsight.AzureMonitorIntegration("monitor", {
  *   cluster: cluster.clusterName,
  *   workspaceId: workspace.customerId,
- *   primaryKey: workspaceKey,
+ *   primaryKey: workspace.primarySharedKey.as<Redacted.Redacted<string>>(),
  * });
  * ```
  *

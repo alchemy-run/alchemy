@@ -62,13 +62,17 @@ export interface HierarchySettings extends Resource<
  * subscriptions land, and whether creating management groups under the
  * root needs permission.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/governance/management-groups/how-to/protect-resource-hierarchy).
+ *
  * The settings are a tenant-wide singleton on the tenant root group.
  * Deleting this resource resets both settings to the Azure defaults (new
  * subscriptions go to the root group; anyone can create groups). The
  * deploying identity needs `Microsoft.Management/managementGroups/settings/write`
  * on the root group, for example the Hierarchy Settings Administrator role.
  *
- * @see https://learn.microsoft.com/azure/governance/management-groups/how-to/protect-resource-hierarchy
+ * :::caution
+ * Changing `managementGroupId` replaces the settings.
+ * :::
  *
  * ### Protecting the Hierarchy
  * **Example:** Put new subscriptions in a sandbox group

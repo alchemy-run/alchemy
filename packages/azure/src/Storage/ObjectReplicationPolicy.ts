@@ -7,10 +7,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitUntilGone,
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
@@ -213,13 +213,11 @@ const findPolicy = Effect.fn(function* (
   sourceAccount: string,
 ) {
   const page = yield* orUndefinedIfNotFound(
-    storage
-      .ListObjectReplicationPolicies({
-        subscriptionId,
-        resourceGroupName,
-        accountName,
-      })
-      .pipe(Effect.flatMap((page) => requireSinglePage("ListObjectReplicationPolicies", page))),
+    collectAll(storage.ListObjectReplicationPolicies, {
+      subscriptionId,
+      resourceGroupName,
+      accountName,
+    }),
   );
   return (page?.value ?? []).find((policy) =>
     sameAccount(policy.properties?.sourceAccount, sourceAccount),

@@ -41,12 +41,18 @@ export interface SparkConfigFile {
   content: string;
   /** File name, e.g. `spark.conf`. */
   filename: string;
-  /** Whether the content is a file or an artifact reference. */
+  /**
+   * Whether the content is a file or an artifact reference.
+   * @default not set
+   */
   configurationType?: "File" | "Artifact";
 }
 
 export interface BigDataPoolProps {
-  /** Resource group of the workspace. Changing it replaces the pool. */
+  /**
+   * Resource group of the workspace. Changing it replaces the pool.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Synapse workspace. Changing it replaces the pool. */
   workspace: string;
@@ -54,6 +60,7 @@ export interface BigDataPoolProps {
    * Pool name: 1-15 letters and digits, starting with a letter. If omitted,
    * a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the pool.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -77,29 +84,53 @@ export interface BigDataPoolProps {
    * @default 3
    */
   nodeCount?: number;
-  /** Autoscale between a minimum and maximum number of nodes. */
+  /**
+   * Autoscale between a minimum and maximum number of nodes.
+   * @default not set
+   */
   autoScale?: {
     /** Whether autoscale is enabled. */
     enabled: boolean;
-    /** Minimum number of nodes (≥ 3). */
+    /**
+     * Minimum number of nodes (≥ 3).
+     * @default not set
+     */
     minNodeCount?: number;
-    /** Maximum number of nodes. */
+    /**
+     * Maximum number of nodes.
+     * @default not set
+     */
     maxNodeCount?: number;
   };
-  /** Pause the cluster after a period of inactivity. */
+  /**
+   * Pause the cluster after a period of inactivity.
+   * @default not set
+   */
   autoPause?: {
     /** Whether auto-pause is enabled. */
     enabled: boolean;
-    /** Idle minutes before pausing. */
+    /**
+     * Idle minutes before pausing.
+     * @default not set
+     */
     delayInMinutes?: number;
   };
-  /** Dynamically allocate executors within a session. */
+  /**
+   * Dynamically allocate executors within a session.
+   * @default not set
+   */
   dynamicExecutorAllocation?: {
     /** Whether dynamic executor allocation is enabled. */
     enabled: boolean;
-    /** Minimum number of executors. */
+    /**
+     * Minimum number of executors.
+     * @default not set
+     */
     minExecutors?: number;
-    /** Maximum number of executors. */
+    /**
+     * Maximum number of executors.
+     * @default not set
+     */
     maxExecutors?: number;
   };
   /**
@@ -107,25 +138,50 @@ export interface BigDataPoolProps {
    * @default "3.4"
    */
   sparkVersion?: string;
-  /** Run on isolated compute (only some node sizes and regions). */
+  /**
+   * Run on isolated compute (only some node sizes and regions).
+   * @default not set
+   */
   isComputeIsolationEnabled?: boolean;
-  /** Enable Spark autotune. */
+  /**
+   * Enable Spark autotune.
+   * @default not set
+   */
   isAutotuneEnabled?: boolean;
-  /** Allow session-level packages. */
+  /**
+   * Allow session-level packages.
+   * @default not set
+   */
   sessionLevelPackagesEnabled?: boolean;
-  /** Cache size in percent. */
+  /**
+   * Cache size in percent.
+   * @default not set
+   */
   cacheSize?: number;
-  /** Library requirements installed into every session. */
+  /**
+   * Library requirements installed into every session.
+   * @default not set
+   */
   libraryRequirements?: SparkRequirementsFile;
-  /** Spark configuration applied to every session. */
+  /**
+   * Spark configuration applied to every session.
+   * @default not set
+   */
   sparkConfigProperties?: SparkConfigFile;
-  /** Default folder for Spark logs. */
+  /**
+   * Default folder for Spark logs.
+   * @default not set
+   */
   defaultSparkLogFolder?: string;
-  /** Folder for Spark events. */
+  /**
+   * Folder for Spark events.
+   * @default not set
+   */
   sparkEventsFolder?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -160,15 +216,33 @@ export interface BigDataPool extends Resource<
 > {}
 
 /**
- * An Apache Spark pool in a Synapse workspace. The pool is only a
- * definition: compute is allocated (and billed) only while a Spark
- * session runs, and auto-pause releases it after idle time.
+ * An Apache Spark pool in a Synapse workspace
+ * (`Microsoft.Synapse/workspaces/bigDataPools`). The pool is only a
+ * definition: compute is allocated (and billed) only while a Spark session
+ * runs, and auto-pause releases it after idle time.
+ *
+ * :::caution
+ * Changing `workspace`, `name`, `location`, `nodeSizeFamily`, or
+ * `resourceGroup` replaces the pool.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/spark/apache-spark-pool-configurations
  *
  * ### Creating a Spark Pool
  * **Example:** Small autoscaling pool with auto-pause
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
  * const spark = yield* Azure.Synapse.BigDataPool("spark", {
  *   workspace: workspace.workspaceName,
  *   nodeSize: "Small",

@@ -22,6 +22,7 @@ export interface DeploymentProps {
    * Deployment name: 3-90 letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the deployment.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -29,7 +30,10 @@ export interface DeploymentProps {
    * @default the deployment name
    */
   title?: string;
-  /** Description of the deployment. */
+  /**
+   * Description of the deployment.
+   * @default no description
+   */
   description?: string;
   /**
    * Service-scoped ID of the target environment,
@@ -50,11 +54,15 @@ export interface DeploymentProps {
    * @default "active"
    */
   state?: "active" | "inactive";
-  /** Base runtime URLs where the API is served. */
+  /**
+   * Base runtime URLs where the API is served.
+   * @default no runtime URLs
+   */
   runtimeUri?: string[];
   /**
    * Custom metadata values, keyed by {@link MetadataSchema} name. Values
    * are validated against the schemas assigned to `deployment`.
+   * @default no custom properties
    */
   customProperties?: Record<string, unknown>;
 }
@@ -84,13 +92,38 @@ export interface Deployment extends Resource<
 
 /**
  * A deployment recording where (which {@link Environment}) and as what
- * ({@link ApiDefinition}) an API from an Azure API Center inventory runs.
+ * ({@link ApiDefinition}) an API from an Azure API Center inventory runs
+ * (`Microsoft.ApiCenter/services/workspaces/apis/deployments`).
+ *
+ * :::caution
+ * Changing `serviceName`, `apiName`, `name`, or `resourceGroup` replaces
+ * the deployment.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-center/configure-environments-deployments
  *
  * ### Recording Deployments
  * **Example:** API deployed to production
  * ```typescript
+ * const center = yield* Azure.ApiCenter.Service("catalog", {});
+ * const api = yield* Azure.ApiCenter.Api("orders", {
+ *   serviceName: center.serviceName,
+ *   kind: "rest",
+ * });
+ * const v1 = yield* Azure.ApiCenter.ApiVersion("orders-v1", {
+ *   serviceName: center.serviceName,
+ *   apiName: api.apiName,
+ *   lifecycleStage: "production",
+ * });
+ * const definition = yield* Azure.ApiCenter.ApiDefinition("orders-openapi", {
+ *   serviceName: center.serviceName,
+ *   apiName: api.apiName,
+ *   versionName: v1.versionName,
+ * });
+ * const prod = yield* Azure.ApiCenter.Environment("prod", {
+ *   serviceName: center.serviceName,
+ *   kind: "production",
+ * });
  * const deployment = yield* Azure.ApiCenter.Deployment("orders-prod", {
  *   serviceName: center.serviceName,
  *   apiName: api.apiName,

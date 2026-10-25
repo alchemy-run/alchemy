@@ -58,12 +58,26 @@ export interface ApiPolicy extends Resource<
  * The policy of a single API in an API Management service. There is one
  * per API; deleting it reverts the API to the inherited (`<base />`)
  * behavior.
+ * The ARM type is `Microsoft.ApiManagement/service/apis/policies`.
+ *
+ * :::caution
+ * Changing `serviceName`, `apiName`, or `resourceGroup` replaces the policy.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/set-edit-policies
  *
  * ### Setting an API Policy
  * **Example:** Return a fixed response without calling the backend
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const api = yield* Azure.ApiManagement.Api("orders", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * yield* Azure.ApiManagement.ApiPolicy("hello-policy", {
  *   serviceName: apim.serviceName,
  *   apiName: api.apiName,
@@ -84,6 +98,20 @@ export interface ApiPolicy extends Resource<
  *
  * **Example:** Route the API to a named backend
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const api = yield* Azure.ApiManagement.Api("orders", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
+ * const backend = yield* Azure.ApiManagement.Backend("orders", {
+ *   serviceName: apim.serviceName,
+ *   url: "https://orders.example.com",
+ *   protocol: "http",
+ * });
  * yield* Azure.ApiManagement.ApiPolicy("route", {
  *   serviceName: apim.serviceName,
  *   apiName: api.apiName,

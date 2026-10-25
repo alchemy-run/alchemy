@@ -6,9 +6,9 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -193,11 +193,9 @@ export const RoleAssignmentProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* authorization
-        .ListRoleAssignmentForSubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListRoleAssignmentForSubscription", page)),
-        );
+      const page = yield* collectAll(authorization.ListRoleAssignmentForSubscription, {
+        subscriptionId,
+      });
       return page.value.flatMap((assignment) =>
         MARKER.test(assignment.properties?.description ?? "") &&
         assignment.name !== undefined &&

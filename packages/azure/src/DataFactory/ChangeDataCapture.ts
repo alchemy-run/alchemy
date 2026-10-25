@@ -32,7 +32,10 @@ export interface ChangeDataCapturePolicy {
 }
 
 export interface ChangeDataCaptureProps {
-  /** Resource group of the factory. Changing it replaces the CDC. */
+  /**
+   * Resource group of the factory. Changing it replaces the CDC.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the factory. Changing it replaces the CDC. */
   factoryName: string;
@@ -40,6 +43,7 @@ export interface ChangeDataCaptureProps {
    * CDC name: letters, digits, and `_`, at most 127 characters. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the CDC.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -54,13 +58,20 @@ export interface ChangeDataCaptureProps {
   targetConnectionsInfo: ChangeDataCaptureTargetConnection[];
   /** Run policy (mode and batch recurrence). */
   policy: ChangeDataCapturePolicy;
-  /** Whether the CDC may override the factory's VNet configuration. */
+  /**
+   * Whether the CDC may override the factory's VNet configuration.
+   * @default Azure's default
+   */
   allowVNetOverride?: boolean;
-  /** Folder shown in the authoring UI. */
+  /**
+   * Folder shown in the authoring UI.
+   * @default none (the root folder)
+   */
   folder?: string;
   /**
    * CDC description. Alchemy appends an ownership marker
    * (`[alchemy <stack>/<stage>/<id>]`).
+   * @default none
    */
   description?: string;
   /**
@@ -96,18 +107,41 @@ export interface ChangeDataCapture extends Resource<
 > {}
 
 /**
- * A Data Factory change data capture (CDC) resource — a continuously or
+ * A Data Factory change data capture (CDC) resource
+ * (`Microsoft.DataFactory/factories/adfcdcs`) — a continuously or
  * micro-batch running process that copies changed rows from source tables
  * to target tables without pipelines.
+ *
+ * :::caution
+ * Changing `resourceGroup`, `factoryName`, or `name` replaces the CDC.
+ * :::
  *
  * Defining a CDC is free; a running CDC bills a data flow cluster. Leave
  * `started` unset to manage only the definition.
  *
- * @see https://learn.microsoft.com/azure/data-factory/concepts-change-data-capture-resource
+ * See [Change data capture in Data Factory](https://learn.microsoft.com/azure/data-factory/concepts-change-data-capture-resource).
  *
  * ### Defining a CDC
  * **Example:** Micro-batch CDC between two linked services
  * ```typescript
+ * const factory = yield* Azure.DataFactory.Factory("etl", {
+ *   identity: { type: "SystemAssigned" },
+ * });
+ * const sql = yield* Azure.DataFactory.LinkedService("sql", {
+ *   factoryName: factory.factoryName,
+ *   type: "AzureSqlDatabase",
+ *   typeProperties: {
+ *     connectionString: "Data Source=tcp:shop.database.windows.net,1433;Initial Catalog=shop;",
+ *   },
+ * });
+ * const account = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const lake = yield* Azure.DataFactory.LinkedService("lake", {
+ *   factoryName: factory.factoryName,
+ *   type: "AzureBlobFS",
+ *   typeProperties: { url: account.primaryEndpoints.dfs },
+ * });
  * yield* Azure.DataFactory.ChangeDataCapture("orders", {
  *   factoryName: factory.factoryName,
  *   sourceConnectionsInfo: [{
@@ -139,16 +173,9 @@ export interface ChangeDataCapture extends Resource<
  * ```
  *
  * ### Running a CDC
- * **Example:** Start the CDC after deployment
- * ```typescript
- * yield* Azure.DataFactory.ChangeDataCapture("orders", {
- *   factoryName: factory.factoryName,
- *   sourceConnectionsInfo,
- *   targetConnectionsInfo,
- *   policy: { mode: "Microbatch", recurrence: { frequency: "Hour", interval: 1 } },
- *   started: true,
- * });
- * ```
+ * Add `started: true` to the declaration to start the CDC on deploy. A
+ * running CDC bills a data flow cluster. Set `started` to `false`, or omit
+ * it, to stop the CDC.
  *
  * @resource
  */

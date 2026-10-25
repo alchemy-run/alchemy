@@ -33,11 +33,13 @@ export interface AssessmentProps {
   /**
    * Name of the assessment. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the assessment.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Assessment settings. Changing any of them re-computes the assessment
    * in place. Fields left out take the service defaults.
+   * @default {} (service defaults)
    */
   settings?: AssessmentSettings;
 }
@@ -68,17 +70,28 @@ export interface Assessment extends Resource<
  * (`Microsoft.Migrate/assessmentProjects/groups/assessments`) — computes
  * Azure VM sizing, readiness, and monthly cost for the group's machines.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/migrate/how-to-create-assessment).
+ *
  * The group must contain discovered or imported machines that support this
  * assessment type; Azure rejects an assessment of an empty group with
  * `MigrateAssessmentTypeNotSupported`. Assessments cannot be tagged;
  * Alchemy treats an assessment as owned when its assessment project
  * carries this stack's and stage's ownership tags.
  *
- * @see https://learn.microsoft.com/azure/migrate/how-to-create-assessment
+ * :::caution
+ * Changing `resourceGroup`, `assessmentProject`, `group`, or `name` replaces
+ * the assessment.
+ * :::
  *
  * ### Assessing a Group
  * **Example:** Azure VM assessment
  * ```typescript
+ * const project = yield* Azure.Migrate.AssessmentProject("assess", {
+ *   location: "centralus",
+ * });
+ * const machines = yield* Azure.Migrate.Group("web-tier", {
+ *   assessmentProject: project.projectName,
+ * });
  * const assessment = yield* Azure.Migrate.Assessment("assessment", {
  *   assessmentProject: project.projectName,
  *   group: machines.groupName,

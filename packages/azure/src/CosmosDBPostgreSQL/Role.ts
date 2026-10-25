@@ -27,7 +27,10 @@ import {
 } from "./common.ts";
 
 export interface RoleProps {
-  /** Resource group of the cluster. Changing it replaces the role. */
+  /**
+   * Resource group of the cluster. Changing it replaces the role.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the cluster. Changing it replaces the role. */
   cluster: string;
@@ -36,12 +39,14 @@ export interface RoleProps {
    * characters, not starting with `pg_` or `citus`). If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the role.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Password of the role. If omitted, a random password is generated on
    * create and exposed as an attribute. Changing it updates the role in
    * place.
+   * @default a random password generated on create
    */
   password?: Redacted.Redacted<string>;
 }
@@ -70,16 +75,21 @@ export interface Role extends Resource<
 
 /**
  * A PostgreSQL login role on every server of an Azure Cosmos DB for
- * PostgreSQL cluster.
+ * PostgreSQL cluster (`Microsoft.DBforPostgreSQL/serverGroupsv2/roles`).
  *
  * Roles created through the API can log in with a password and are members
  * of `azure_pg_admin`; grant them table privileges with SQL.
  *
- * @see https://learn.microsoft.com/azure/cosmos-db/postgresql/howto-create-users
+ * :::caution
+ * Changing `resourceGroup`, `cluster`, or `name` replaces the role.
+ * :::
+ *
+ * See [Create users in Cosmos DB for PostgreSQL](https://learn.microsoft.com/azure/cosmos-db/postgresql/howto-create-users).
  *
  * ### Creating Roles
  * **Example:** Role with a generated password
  * ```typescript
+ * const cluster = yield* Azure.CosmosDBPostgreSQL.Cluster("db");
  * const app = yield* Azure.CosmosDBPostgreSQL.Role("app", {
  *   cluster: cluster.clusterName,
  * });

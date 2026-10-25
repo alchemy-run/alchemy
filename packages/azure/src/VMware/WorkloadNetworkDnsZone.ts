@@ -24,22 +24,32 @@ import {
 } from "./common.ts";
 
 export interface WorkloadNetworkDnsZoneProps {
-  /** Resource group of the private cloud. Changing it replaces the DNS zone. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the DNS zone.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the DNS zone. */
   privateCloud: string;
   /**
    * NSX ID of the DNS zone. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the DNS zone.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name of the DNS zone. */
+  /**
+   * Display name of the DNS zone.
+   * @default not set
+   */
   displayName?: string;
   /** Domain names forwarded by the zone (empty for a default zone). */
   domain: string[];
   /** Upstream DNS server IPs. */
   dnsServerIps: string[];
-  /** Source IP of DNS queries sent upstream. */
+  /**
+   * Source IP of DNS queries sent upstream.
+   * @default not set
+   */
   sourceIp?: string;
 }
 
@@ -66,13 +76,23 @@ export interface WorkloadNetworkDnsZone extends Resource<
 
 /**
  * A DNS zone (default or FQDN conditional-forwarding zone) for the NSX-T
- * DNS service of an Azure VMware Solution private cloud.
+ * DNS service of an Azure VMware Solution private cloud
+ * (`Microsoft.AVS/privateClouds/workloadNetworks/dnsZones`).
+ *
+ * :::caution
+ * Changing `privateCloud`, `name`, or `resourceGroup` replaces the DNS zone.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/configure-dns-azure-vmware-solution
  *
  * ### Conditional Forwarding
  * **Example:** Forward a corporate domain
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
  * yield* Azure.VMware.WorkloadNetworkDnsZone("corp", {
  *   privateCloud: cloud.privateCloudName,
  *   domain: ["corp.example.com"],

@@ -101,7 +101,10 @@ export interface DataSetSource {
 }
 
 export interface DataSetProps {
-  /** Resource group of the Data Share account. Changing it replaces the data set. */
+  /**
+   * Resource group of the Data Share account. Changing it replaces the data set.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Data Share account that offers the share. Changing it replaces the data set. */
   account: string;
@@ -111,6 +114,7 @@ export interface DataSetProps {
    * Data set name: letters, digits, and `_`, starting with a letter. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the data set.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Kind of source. Changing it replaces the data set. */
@@ -149,23 +153,39 @@ export interface DataSet extends Resource<
 > {}
 
 /**
- * A data set in an Azure Data Share share — a pointer to the storage
- * container, folder, file, Azure Data Explorer database, or SQL table
- * being shared. Data sets are immutable; any change replaces them.
+ * A data set in an Azure Data Share share
+ * (`Microsoft.DataShare/accounts/shares/dataSets`) — a pointer to the
+ * storage container, folder, file, Azure Data Explorer database, or SQL
+ * table being shared.
  *
  * Snapshots need the share's account managed identity to read the source
  * (e.g. `Storage Blob Data Reader` on the storage account).
+ *
+ * :::caution
+ * Data sets are immutable. Changing any prop (`account`, `share`, `name`,
+ * `kind`, `source`, or `resourceGroup`) replaces the data set, and
+ * consumers must map the new `dataSetId` again.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/data-share/how-to-share-from-storage
  *
  * ### Sharing Storage
  * **Example:** Share a blob container
  * ```typescript
- * const reader = yield* Azure.Authorization.RoleAssignment("share-reads", {
+ * const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+ * const storage = yield* Azure.Storage.StorageAccount("exports");
+ * const container = yield* Azure.Storage.BlobContainer("daily", {
+ *   storageAccount: storage.storageAccountName,
+ * });
+ * const account = yield* Azure.DataShare.Account("sharing");
+ * yield* Azure.Authorization.RoleAssignment("share-reads", {
  *   scope: storage.storageAccountId,
  *   roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataReader,
  *   principalId: account.principalId,
  *   principalType: "ServicePrincipal",
+ * });
+ * const share = yield* Azure.DataShare.Share("sales", {
+ *   account: account.accountName,
  * });
  * const dataSet = yield* Azure.DataShare.DataSet("exports", {
  *   account: account.accountName,
@@ -173,6 +193,7 @@ export interface DataSet extends Resource<
  *   kind: "Container",
  *   source: {
  *     subscriptionId,
+ *     resourceGroup: storage.resourceGroup,
  *     storageAccountName: storage.storageAccountName,
  *     containerName: container.containerName,
  *   },
@@ -187,6 +208,7 @@ export interface DataSet extends Resource<
  *   kind: "BlobFolder",
  *   source: {
  *     subscriptionId,
+ *     resourceGroup: storage.resourceGroup,
  *     storageAccountName: storage.storageAccountName,
  *     containerName: container.containerName,
  *     prefix: "daily/",

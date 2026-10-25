@@ -23,7 +23,10 @@ export interface WorkspaceProps {
    * @default the workspace identifier
    */
   displayName?: string;
-  /** Description of the workspace. */
+  /**
+   * Description of the workspace.
+   * @default no description
+   */
   description?: string;
 }
 
@@ -50,12 +53,25 @@ export interface Workspace extends Resource<
  * A workspace of an API Management service: an isolated area where a team
  * manages its own APIs, products, subscriptions, backends, and policies
  * (the `Workspace*` resources). Requires the Premium or a v2 tier.
+ * The ARM type is `Microsoft.ApiManagement/service/workspaces`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the workspace.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/workspaces-overview
  *
  * ### Creating Workspaces
  * **Example:** A workspace for one team
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
  *   serviceName: apim.serviceName,
  *   displayName: "Payments team",

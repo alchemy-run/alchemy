@@ -24,7 +24,10 @@ import {
 export interface ElasticMonitoredSubscription {
   /** ID of the Azure subscription (requires Owner on it). */
   subscriptionId: string;
-  /** Which logs of the subscription are sent to Elastic. */
+  /**
+   * Which logs of the subscription are sent to Elastic.
+   * @default no logs are sent
+   */
   logRules?: ElasticLogRules;
 }
 
@@ -66,11 +69,23 @@ export interface MonitoredSubscriptions extends Resource<
  * Additional Azure subscriptions monitored by an Elastic monitor
  * (`Microsoft.Elastic/monitors/monitoredSubscriptions`, singleton
  * `default`). Lets one Elastic deployment collect logs from several
- * subscriptions; the deploying identity needs Owner on each of them.
+ * subscriptions. See
+ * the [Elastic on Azure overview](https://learn.microsoft.com/azure/partner-solutions/elastic/overview).
+ *
+ * :::caution
+ * The deploying identity needs Owner on each listed subscription.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup` or `monitor` replaces the configuration.
+ * :::
  *
  * ### Monitoring More Subscriptions
  * **Example:** Monitor a second subscription
  * ```typescript
+ * const monitor = yield* Azure.Elastic.Monitor("elastic", {
+ *   userInfo: { emailAddress: "platform@example.com" },
+ * });
  * const monitored = yield* Azure.Elastic.MonitoredSubscriptions("monitored", {
  *   monitor: monitor.monitorName,
  *   subscriptions: [

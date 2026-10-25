@@ -32,6 +32,7 @@ export interface SolutionConfigurationProps {
    * :::caution
    * Changing it replaces the solution configuration.
    * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -112,6 +113,11 @@ export interface SolutionConfiguration extends Resource<
  *   },
  * });
  * ```
+ *
+ * :::caution
+ * Changing `resourceUri`, `name`, or `solutionType` replaces the solution
+ * configuration.
+ * :::
  *
  * @resource
  */

@@ -69,14 +69,22 @@ export interface RuntimeEnvironmentPackage extends Resource<
 /**
  * A package imported into an Automation {@link RuntimeEnvironment}, on top
  * of its default packages.
+ * The ARM type is
+ * `Microsoft.Automation/automationAccounts/runtimeEnvironments/packages`.
  *
  * The import runs in the background; Alchemy waits until it succeeds.
+ *
+ * :::caution
+ * Changing `automationAccount`, `runtimeEnvironment`, `name`, or
+ * `resourceGroup` replaces the package.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/manage-runtime-environment
  *
  * ### Adding a Package
  * **Example:** PowerShell Gallery module in a PowerShell 7.4 environment
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const ps74 = yield* Azure.Automation.RuntimeEnvironment("ps74", {
  *   automationAccount: account.automationAccountName,
  *   language: "PowerShell",

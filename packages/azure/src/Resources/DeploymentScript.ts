@@ -8,13 +8,13 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -296,11 +296,9 @@ export const DeploymentScriptProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* resources
-        .ListDeploymentScriptBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListDeploymentScriptBySubscription", page)),
-        );
+      const page = yield* collectAll(resources.ListDeploymentScriptBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((script) => {
         const group = resourceGroupOf(script.id);
         return script.name !== undefined && group !== undefined && hasAnyAlchemyTag(script.tags)

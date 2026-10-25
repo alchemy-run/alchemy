@@ -23,7 +23,10 @@ import { createBatchChildName, matches, sameValue } from "./Common.ts";
 export interface BatchPoolIdentityProps {
   /** Identity type. */
   type: "UserAssigned" | "None";
-  /** ARM resource IDs of the user-assigned identities. */
+  /**
+   * ARM resource IDs of the user-assigned identities.
+   * @default none
+   */
   userAssignedIdentityIds?: string[];
 }
 
@@ -36,9 +39,13 @@ export interface PoolProps {
    * Pool name: 1-64 letters, digits, hyphens, and underscores, unique
    * within the account. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the pool.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name of the pool (up to 1024 characters). */
+  /**
+   * Display name of the pool (up to 1024 characters).
+   * @default no display name
+   */
   displayName?: string;
   /**
    * VM size of the compute nodes, e.g. `Standard_D2s_v3`. Changing it
@@ -55,7 +62,10 @@ export interface PoolProps {
    * @default fixed scale with 0 dedicated nodes
    */
   scaleSettings?: batch.ScaleSettings;
-  /** Virtual network and public IP configuration. Changing it replaces the pool. */
+  /**
+   * Virtual network and public IP configuration. Changing it replaces the pool.
+   * @default not set
+   */
   networkConfiguration?: batch.NetworkConfiguration;
   /**
    * Whether nodes may communicate directly with each other (multi-instance
@@ -68,25 +78,50 @@ export interface PoolProps {
    * @default 1
    */
   taskSlotsPerNode?: number;
-  /** How tasks are distributed across nodes. */
+  /**
+   * How tasks are distributed across nodes.
+   * @default not set
+   */
   taskSchedulingPolicy?: batch.TaskSchedulingPolicy;
-  /** User accounts created on each node. Changing it replaces the pool. */
+  /**
+   * User accounts created on each node. Changing it replaces the pool.
+   * @default none
+   */
   userAccounts?: batch.UserAccount[];
-  /** File systems mounted on each node. Changing it replaces the pool. */
+  /**
+   * File systems mounted on each node. Changing it replaces the pool.
+   * @default none
+   */
   mountConfiguration?: batch.MountConfiguration[];
-  /** Free-form name/value metadata for your own use. */
+  /**
+   * Free-form name/value metadata for your own use.
+   * @default no metadata
+   */
   metadata?: Record<string, string>;
-  /** Task each node runs when it joins the pool (or reboots/reimages). */
+  /**
+   * Task each node runs when it joins the pool (or reboots/reimages).
+   * @default no start task
+   */
   startTask?: batch.StartTask;
-  /** Application packages installed on each new node (up to 10). */
+  /**
+   * Application packages installed on each new node (up to 10).
+   * @default none
+   */
   applicationPackages?: batch.ApplicationPackageReference[];
-  /** OS upgrade policy of the nodes. */
+  /**
+   * OS upgrade policy of the nodes.
+   * @default not set
+   */
   upgradePolicy?: batch.UpgradePolicy;
-  /** User-assigned identities of the nodes. */
+  /**
+   * User-assigned identities of the nodes.
+   * @default no managed identity
+   */
   identity?: BatchPoolIdentityProps;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -125,16 +160,28 @@ export interface Pool extends Resource<
 /**
  * A Batch pool — a set of compute nodes (VMs) that run Batch tasks. Nodes
  * bill as VMs; a pool with zero target nodes is free.
+ * The ARM type is `Microsoft.Batch/batchAccounts/pools`.
  *
  * Reconcile waits until the pool's allocation settles (`Steady`). A resize
  * that Azure cannot satisfy (e.g. insufficient core quota) settles with
  * `resizeError` set rather than failing the deploy.
+ *
+ * :::caution
+ * Changing `account`, `name`, `vmSize`, `virtualMachineConfiguration`,
+ * `networkConfiguration`, `interNodeCommunication`, `taskSlotsPerNode`,
+ * `userAccounts`, `mountConfiguration`, or `resourceGroup` replaces the
+ * pool.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/batch/nodes-and-pools
  *
  * ### Creating a Pool
  * **Example:** Empty Ubuntu pool
  * ```typescript
+ * const storage = yield* Azure.Storage.StorageAccount("batchfiles");
+ * const account = yield* Azure.Batch.Account("jobs", {
+ *   autoStorage: { storageAccountId: storage.storageAccountId },
+ * });
  * const pool = yield* Azure.Batch.Pool("workers", {
  *   account: account.accountName,
  *   vmSize: "Standard_D2s_v3",
@@ -153,6 +200,18 @@ export interface Pool extends Resource<
  * ### Autoscaling
  * **Example:** Scale on pending tasks
  * ```typescript
+ * const storage = yield* Azure.Storage.StorageAccount("batchfiles");
+ * const account = yield* Azure.Batch.Account("jobs", {
+ *   autoStorage: { storageAccountId: storage.storageAccountId },
+ * });
+ * const virtualMachineConfiguration = {
+ *   imageReference: {
+ *     publisher: "canonical",
+ *     offer: "0001-com-ubuntu-server-jammy",
+ *     sku: "22_04-lts",
+ *   },
+ *   nodeAgentSkuId: "batch.node.ubuntu 22.04",
+ * };
  * const pool = yield* Azure.Batch.Pool("workers", {
  *   account: account.accountName,
  *   vmSize: "Standard_D2s_v3",
@@ -169,6 +228,21 @@ export interface Pool extends Resource<
  * ### Start Tasks and Application Packages
  * **Example:** Install an application on every node
  * ```typescript
+ * const storage = yield* Azure.Storage.StorageAccount("batchfiles");
+ * const account = yield* Azure.Batch.Account("jobs", {
+ *   autoStorage: { storageAccountId: storage.storageAccountId },
+ * });
+ * const app = yield* Azure.Batch.Application("renderer", {
+ *   account: account.accountName,
+ * });
+ * const virtualMachineConfiguration = {
+ *   imageReference: {
+ *     publisher: "canonical",
+ *     offer: "0001-com-ubuntu-server-jammy",
+ *     sku: "22_04-lts",
+ *   },
+ *   nodeAgentSkuId: "batch.node.ubuntu 22.04",
+ * };
  * const pool = yield* Azure.Batch.Pool("workers", {
  *   account: account.accountName,
  *   vmSize: "Standard_D2s_v3",

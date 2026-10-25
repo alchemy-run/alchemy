@@ -26,7 +26,10 @@ export class EncryptionProtectorUnavailable extends Data.TaggedError(
 )<{ readonly message: string }> {}
 
 export interface EncryptionProtectorProps {
-  /** Resource group of the workspace. Changing it replaces the protector. */
+  /**
+   * Resource group of the workspace. Changing it replaces the protector.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Synapse workspace. Changing it replaces the protector. */
   workspace: string;
@@ -38,6 +41,7 @@ export interface EncryptionProtectorProps {
   /**
    * Name of the workspace key for `AzureKeyVault`, in the form
    * `{vault}_{key}_{version}`.
+   * @default not set
    */
   serverKeyName?: string;
 }
@@ -64,7 +68,8 @@ export interface EncryptionProtector extends Resource<
 > {}
 
 /**
- * The TDE protector of a Synapse workspace's dedicated SQL pools — the key
+ * The TDE protector of a Synapse workspace's dedicated SQL pools
+ * (`Microsoft.Synapse/workspaces/encryptionProtector`) — the key
  * that wraps every pool's database encryption key. Requires a workspace
  * created with a customer-managed key. Azure currently answers the
  * protector endpoint with an empty 404 even on activated CMK workspaces
@@ -76,11 +81,37 @@ export interface EncryptionProtector extends Resource<
  * key in place (switching a CMK workspace back to a service-managed key is
  * not supported).
  *
+ * :::caution
+ * Changing `workspace` or `resourceGroup` replaces the protector.
+ * :::
+ *
+ * :::caution
+ * The workspace must be created with `customerManagedKey`. Azure currently
+ * answers the protector endpoint with an empty 404, so reconcile fails with
+ * `EncryptionProtectorUnavailable`.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/synapse-analytics/security/workspaces-encryption
  *
  * ### Configuring the Protector
  * **Example:** Protect TDE keys with a Key Vault key
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ *   customerManagedKey: {
+ *     keyName: "cmk",
+ *     keyVaultUrl: "https://myvault.vault.azure.net/keys/cmk",
+ *   },
+ * });
  * yield* Azure.Synapse.EncryptionProtector("tde-protector", {
  *   workspace: workspace.workspaceName,
  *   serverKeyType: "AzureKeyVault",

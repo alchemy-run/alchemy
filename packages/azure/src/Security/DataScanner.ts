@@ -14,13 +14,14 @@ export interface DataScannerProps {
    * Resource group the scanner is scoped to. If omitted, the scanner is
    * scoped to the whole subscription, which holds at most one
    * subscription-scoped scanner. Changing it replaces the scanner.
+   * @default the subscription
    */
   resourceGroup?: string;
   /**
    * Name of the scanner, letters, digits, and `-`. The API documents up
    * to 260 characters, but names longer than 90 fail with an internal
-   * server error. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the scanner.
+   * server error. Changing it replaces the scanner.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
 }
@@ -53,14 +54,21 @@ export interface DataScanner extends Resource<
 > {}
 
 /**
- * A Microsoft Defender for Cloud data scanner — an identity-only resource
+ * A Microsoft Defender for Cloud data scanner
+ * (`Microsoft.Security/dataScanners`): an identity-only resource that
  * Defender for Storage uses to scan data for malware and sensitive
- * information. The scanner is defined solely by its system-assigned
- * managed identity (the only identity type the API accepts); grant that
- * identity access to the data it should scan. A subscription holds at most
- * one subscription-scoped scanner; resource groups may hold several.
+ * information. See the
+ * [Azure docs](https://learn.microsoft.com/azure/defender-for-cloud/defender-for-storage-introduction).
  *
- * @see https://learn.microsoft.com/azure/defender-for-cloud/defender-for-storage-introduction
+ * The scanner is only its system-assigned managed identity, the one identity
+ * type the API accepts. Grant that identity access to the data it scans. A
+ * subscription holds at most one subscription-scoped scanner. A resource
+ * group can hold several.
+ *
+ * :::caution
+ * Changing `resourceGroup` or `name` replaces the scanner. At subscription
+ * scope, Alchemy deletes the old scanner before it creates the new one.
+ * :::
  *
  * ### Creating a Data Scanner
  * **Example:** Scanner scoped to a resource group
@@ -79,6 +87,8 @@ export interface DataScanner extends Resource<
  * ### Granting Access
  * **Example:** Let the scanner read blobs in a storage account
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("files");
+ * const scanner = yield* Azure.Security.DataScanner("scanner", {});
  * yield* Azure.Authorization.RoleAssignment("scanner-reads-files", {
  *   scope: account.storageAccountId,
  *   roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataReader,

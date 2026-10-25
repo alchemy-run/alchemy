@@ -17,7 +17,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { DEVICE_REGISTRY_RP, DEVICE_REGISTRY_WAIT, sameName } from "./DeviceRegistryShared.ts";
 
 export interface SchemaVersionProps {
-  /** Resource group of the schema registry. Changing it replaces the version. */
+  /**
+   * Resource group of the schema registry. Changing it replaces the version.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the schema registry. Changing it replaces the version. */
   schemaRegistry: string;
@@ -37,6 +40,7 @@ export interface SchemaVersionProps {
   /**
    * Human-readable description of the version. Changing it replaces the
    * version.
+   * @default unset
    */
   description?: string;
 }
@@ -70,7 +74,7 @@ export interface SchemaVersion extends Resource<
 
 /**
  * An immutable version of a message schema in an Azure Device Registry
- * schema registry. The registry writes the content to its blob container
+ * schema registry (`Microsoft.DeviceRegistry/schemaRegistries/schemas/schemaVersions`). The registry writes the content to its blob container
  * with its managed identity, so the identity needs
  * `Storage Blob Data Contributor` on the container first (a fresh role
  * assignment is retried for up to five minutes while it propagates).
@@ -78,11 +82,29 @@ export interface SchemaVersion extends Resource<
  * Versions carry no tags or free-form fields, so Alchemy cannot mark them;
  * a version found under the expected name is treated as this resource.
  *
+ * :::caution
+ * Versions are immutable. Changing `schemaRegistry`, `schema`, `version`,
+ * `schemaContent`, `description`, or `resourceGroup` replaces the version.
+ * For a content change under the same `version`, Alchemy deletes the old
+ * version first.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/iot-operations/connect-to-cloud/concept-schema-registry
  *
  * ### Publishing a Version
  * **Example:** JSON Schema version
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("schemas");
+ * const container = yield* Azure.Storage.BlobContainer("schemas", {
+ *   storageAccount: account.storageAccountName,
+ * });
+ * const registry = yield* Azure.DeviceRegistry.SchemaRegistry("registry", {
+ *   storageAccountContainerUrl: Output.interpolate`${account.primaryEndpoints.blob}${container.containerName}`,
+ * });
+ * const schema = yield* Azure.DeviceRegistry.Schema("telemetry", {
+ *   schemaRegistry: registry.schemaRegistryName,
+ *   format: "JsonSchema/draft-07",
+ * });
  * const v1 = yield* Azure.DeviceRegistry.SchemaVersion("telemetry-v1", {
  *   schemaRegistry: registry.schemaRegistryName,
  *   schema: schema.schemaName,

@@ -30,12 +30,16 @@ export interface VolumeCreationData {
   /**
    * ARM resource ID of the source (an Elastic SAN snapshot, a managed disk,
    * a disk snapshot, or a disk restore point).
+   * @default none (required unless `createSource` is `None`)
    */
   sourceId?: string;
 }
 
 export interface VolumeProps {
-  /** Resource group of the Elastic SAN. Changing it replaces the volume. */
+  /**
+   * Resource group of the Elastic SAN. Changing it replaces the volume.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Name of the Elastic SAN. Changing it replaces the volume. */
   elasticSan: string;
@@ -46,6 +50,7 @@ export interface VolumeProps {
    * starting and ending with a letter or digit. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the volume.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -104,19 +109,29 @@ export interface Volume extends Resource<
 > {}
 
 /**
- * A block volume in an Azure Elastic SAN volume group, served over iSCSI.
- * Volumes can be empty or restored from an Elastic SAN snapshot or a
- * managed disk / disk snapshot.
+ * A block volume in an Azure Elastic SAN volume group
+ * (`Microsoft.ElasticSan/elasticSans/volumegroups/volumes`), served over
+ * iSCSI. Volumes can be empty or restored from an Elastic SAN snapshot or
+ * a managed disk / disk snapshot. See
+ * [create an Elastic SAN](https://learn.microsoft.com/azure/storage/elastic-san/elastic-san-create).
  *
  * Volumes have no tags; Alchemy treats a volume as owned when its parent
  * SAN carries this stack's ownership tags. Deleting a volume also deletes
  * its snapshots and disconnects active iSCSI sessions.
  *
- * @see https://learn.microsoft.com/azure/storage/elastic-san/elastic-san-create
+ * :::caution
+ * Changing `resourceGroup`, `elasticSan`, `volumeGroup`, `name`, or
+ * `creationData`, or lowering `sizeGiB`, replaces the volume and loses its
+ * data. An unchanged explicit `name` deletes the old volume first.
+ * :::
  *
  * ### Creating a Volume
  * **Example:** Empty 100 GiB volume
  * ```typescript
+ * const san = yield* Azure.ElasticSan.ElasticSan("san");
+ * const volumes = yield* Azure.ElasticSan.VolumeGroup("volumes", {
+ *   elasticSan: san.elasticSanName,
+ * });
  * const volume = yield* Azure.ElasticSan.Volume("data", {
  *   elasticSan: san.elasticSanName,
  *   volumeGroup: volumes.volumeGroupName,

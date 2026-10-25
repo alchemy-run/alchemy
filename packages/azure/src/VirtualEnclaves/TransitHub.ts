@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -33,22 +33,35 @@ import {
 
 /** How the transit hub connects the community to external networks. */
 export interface TransitHubOption {
-  /** Connection type: `ExpressRoute`, `Gateway` (VPN) or `Peering`. */
+  /**
+   * Connection type: `ExpressRoute`, `Gateway` (VPN) or `Peering`.
+   * @default not set
+   */
   type?: "ExpressRoute" | "Gateway" | "Peering";
-  /** Scale units of the gateway. */
+  /**
+   * Scale units of the gateway.
+   * @default not set
+   */
   scaleUnits?: number;
-  /** ARM ID of the remote virtual network (for `Peering`). */
+  /**
+   * ARM ID of the remote virtual network (for `Peering`).
+   * @default not set
+   */
   remoteVirtualNetworkId?: string;
 }
 
 export interface TransitHubProps {
-  /** Resource group of the community. Changing it replaces the transit hub. */
+  /**
+   * Resource group of the community. Changing it replaces the transit hub.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the parent community. Changing it replaces the transit hub. */
   community: string;
   /**
    * Transit hub name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the transit hub.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -56,15 +69,25 @@ export interface TransitHubProps {
    * @default the community's location
    */
   location?: string;
-  /** Requested state, e.g. `"PendingApproval"` or `"Approved"`. */
+  /**
+   * Requested state, e.g. `"PendingApproval"` or `"Approved"`.
+   * @default not set
+   */
   state?: "PendingApproval" | "Approved" | "PendingUpdate" | "Active" | "Failed";
-  /** How the hub connects to external networks. */
+  /**
+   * How the hub connects to external networks.
+   * @default not set
+   */
   transitOption?: TransitHubOption;
-  /** Security provider inspecting transit traffic: `None` or `AzureFirewall`. */
+  /**
+   * Security provider inspecting transit traffic: `None` or `AzureFirewall`.
+   * @default not set
+   */
   securityProvider?: "None" | "AzureFirewall";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -97,15 +120,28 @@ export interface TransitHub extends Resource<
 > {}
 
 /**
- * A transit hub — connects an Azure Virtual Enclaves {@link Community} to
- * on-premises or external networks over ExpressRoute, a VPN gateway, or
- * VNet peering. Gateways bill hourly.
+ * A transit hub (`Microsoft.Mission/communities/transitHubs`) — connects an
+ * Azure Virtual Enclaves {@link Community} to on-premises or external
+ * networks over ExpressRoute, a VPN gateway, or VNet peering. Gateways bill
+ * hourly.
+ *
+ * :::caution
+ * Changing `community`, `name`, `location`, or `resourceGroup` replaces the
+ * transit hub.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-enclaves/overview
  *
  * ### Creating a Transit Hub
  * **Example:** Peer the community with an external virtual network
  * ```typescript
+ * const community = yield* Azure.VirtualEnclaves.Community("hub", {
+ *   addressSpace: "10.0.0.0/16",
+ *   firewallSku: "Basic",
+ * });
+ * const network = yield* Azure.Network.VirtualNetwork("partner", {
+ *   addressPrefixes: ["10.50.0.0/16"],
+ * });
  * const transit = yield* Azure.VirtualEnclaves.TransitHub("transit", {
  *   community: community.communityName,
  *   transitOption: {
@@ -159,22 +195,21 @@ export const TransitHubProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const communities = yield* mission
-        .ListCommunityBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListCommunityBySubscription", page)));
+      const communities = yield* collectAll(mission.ListCommunityBySubscription, {
+        subscriptionId,
+      });
       const results: TransitHub["Attributes"][] = [];
       for (const community of communities.value) {
         const group = resourceGroupOf(community.id);
         if (group === undefined || community.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          mission.ListTransitHubByCommunityResource({
+          collectAll(mission.ListTransitHubByCommunityResource, {
             subscriptionId,
             resourceGroupName: group,
             communityName: community.name,
           }),
         );
         if (page === undefined) continue;
-        yield* requireSinglePage("ListTransitHubByCommunityResource", page);
         for (const hub of page.value) {
           if (hasAnyAlchemyTag(hub.tags) && hub.name !== undefined) {
             results.push(toAttrs(group, community.name, hub.name, hub));

@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -25,12 +25,16 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { lower } from "./common.ts";
 
 export interface PrivateLinkHubProps {
-  /** Resource group the hub is created in. Changing it replaces the hub. */
+  /**
+   * Resource group the hub is created in. Changing it replaces the hub.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Hub name: 1-45 lowercase letters and digits. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the hub.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -41,6 +45,7 @@ export interface PrivateLinkHubProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -65,9 +70,14 @@ export interface PrivateLinkHub extends Resource<
 > {}
 
 /**
- * A Synapse Private Link Hub — the target for a private endpoint
- * (sub-resource `web`) that serves Synapse Studio over a private network.
- * Free; one hub can serve every workspace in a region.
+ * A Synapse Private Link Hub (`Microsoft.Synapse/privateLinkHubs`) — the
+ * target for a private endpoint (sub-resource `web`) that serves Synapse
+ * Studio over a private network. Free; one hub can serve every workspace in
+ * a region.
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the hub.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/security/synapse-private-link-hubs
  *
@@ -127,9 +137,7 @@ export const PrivateLinkHubProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* synapse
-        .ListPrivateLinkHubs({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPrivateLinkHubs", page)));
+      const page = yield* collectAll(synapse.ListPrivateLinkHubs, { subscriptionId });
       return (page.value ?? []).flatMap((hub) => {
         const group = resourceGroupOf(hub.id);
         return hasAnyAlchemyTag(hub.tags) && group !== undefined && hub.name !== undefined

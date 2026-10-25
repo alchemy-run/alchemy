@@ -29,28 +29,69 @@ export type JobDefinitionJobType = "OnPremToCloud" | "CloudToCloud" | "OnPremToC
 export type JobDefinitionDataIntegrityValidation = "SaveVerifyFileMD5" | "SaveFileMD5" | "None";
 
 export interface JobDefinitionSchedule {
-  /** How often the job runs. */
+  /**
+   * How often the job runs.
+   * @default not set
+   */
   frequency?: "Monthly" | "Weekly" | "Daily" | "Onetime" | "None" | "Hourly";
-  /** Whether the schedule is active. */
+  /**
+   * Whether the schedule is active.
+   * @default not set
+   */
   isActive?: boolean;
-  /** Time of day to run (`hour` 0-24, `minute` 0 or 30). */
-  executionTime?: { hour?: number; minute?: number };
-  /** Start date and time (ISO 8601, UTC). */
+  /**
+   * Time of day to run (`hour` 0-24, `minute` 0 or 30).
+   * @default not set
+   */
+  executionTime?: {
+    /**
+     * Hour of the day, 0-24.
+     * @default not set
+     */
+    hour?: number;
+    /**
+     * Minute of the hour, 0 or 30.
+     * @default not set
+     */
+    minute?: number;
+  };
+  /**
+   * Start date and time (ISO 8601, UTC).
+   * @default not set
+   */
   startDate?: string;
-  /** End date and time (ISO 8601, UTC). */
+  /**
+   * End date and time (ISO 8601, UTC).
+   * @default not set
+   */
   endDate?: string;
-  /** Days of the week for weekly schedules, e.g. `["Monday"]`. */
+  /**
+   * Days of the week for weekly schedules, e.g. `["Monday"]`.
+   * @default not set
+   */
   daysOfWeek?: string[];
-  /** Days of the month for monthly schedules. */
+  /**
+   * Days of the month for monthly schedules.
+   * @default not set
+   */
   daysOfMonth?: number[];
-  /** CRON expression for advanced scheduling. */
+  /**
+   * CRON expression for advanced scheduling.
+   * @default not set
+   */
   cronExpression?: string;
-  /** Repeat interval for sub-daily schedules (ISO 8601 duration). */
+  /**
+   * Repeat interval for sub-daily schedules (ISO 8601 duration).
+   * @default not set
+   */
   repeatInterval?: string;
 }
 
 export interface JobDefinitionProps {
-  /** Resource group of the Storage Mover. Changing it replaces the job definition. */
+  /**
+   * Resource group of the Storage Mover. Changing it replaces the job definition.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Storage Mover that holds the project. Changing it replaces the job definition. */
   storageMover: string;
@@ -60,6 +101,7 @@ export interface JobDefinitionProps {
    * Name of the job definition: 1-64 letters, digits, `-` and `_`, starting
    * with a letter or digit. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the job definition.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -69,37 +111,68 @@ export interface JobDefinitionProps {
   copyMode: JobDefinitionCopyMode;
   /** Name of the source endpoint. Changing it replaces the job definition. */
   sourceName: string;
-  /** Subpath to read from the source endpoint. Changing it replaces the job definition. */
+  /**
+   * Subpath to read from the source endpoint. Changing it replaces the job definition.
+   * @default not set
+   */
   sourceSubpath?: string;
   /** Name of the target endpoint. Changing it replaces the job definition. */
   targetName: string;
-  /** Subpath to write to in the target endpoint. Changing it replaces the job definition. */
+  /**
+   * Subpath to write to in the target endpoint. Changing it replaces the job definition.
+   * @default not set
+   */
   targetSubpath?: string;
   /**
    * Migration type. Changing it replaces the job definition.
    * @default "OnPremToCloud"
    */
   jobType?: JobDefinitionJobType;
-  /** Whether to preserve file permissions. Changing it replaces the job definition. */
+  /**
+   * Whether to preserve file permissions. Changing it replaces the job definition.
+   * @default not set
+   */
   preservePermissions?: boolean;
-  /** Whether the counterpart endpoint lives in another tenant. Changing it replaces the job definition. */
+  /**
+   * Whether the counterpart endpoint lives in another tenant. Changing it replaces the job definition.
+   * @default not set
+   */
   isCrossTenantJob?: boolean;
-  /** Tenant ID of the cross-tenant endpoint. Changing it replaces the job definition. */
+  /**
+   * Tenant ID of the cross-tenant endpoint. Changing it replaces the job definition.
+   * @default not set
+   */
   crossTenantEndpointTenantId?: string;
-  /** ARM ID of the cross-tenant endpoint. Changing it replaces the job definition. */
+  /**
+   * ARM ID of the cross-tenant endpoint. Changing it replaces the job definition.
+   * @default not set
+   */
   crossTenantEndpointResourceId?: string;
   /**
    * Description of the job definition. Alchemy appends an ownership marker
    * (`[alchemy <stack>/<stage>/<id>]`) because job definitions have no tags.
+   * @default not set
    */
   description?: string;
-  /** Name of the agent that runs new job runs. Only needed to start a job. */
+  /**
+   * Name of the agent that runs new job runs. Only needed to start a job.
+   * @default not set
+   */
   agentName?: string;
-  /** ARM IDs of Storage Mover connections the job uses. */
+  /**
+   * ARM IDs of Storage Mover connections the job uses.
+   * @default not set
+   */
   connections?: string[];
-  /** Schedule for recurring job runs. */
+  /**
+   * Schedule for recurring job runs.
+   * @default not set
+   */
   schedule?: JobDefinitionSchedule;
-  /** Checksum validation mode. */
+  /**
+   * Checksum validation mode.
+   * @default not set
+   */
   dataIntegrityValidation?: JobDefinitionDataIntegrityValidation;
 }
 
@@ -137,18 +210,48 @@ export interface JobDefinition extends Resource<
 > {}
 
 /**
- * A Storage Mover job definition — what to copy (a source endpoint and
- * subpath), where to (a target endpoint and subpath), and how (copy mode,
- * schedule, integrity validation). Starting a job run also needs an agent.
+ * A Storage Mover job definition
+ * (`Microsoft.StorageMover/storageMovers/projects/jobDefinitions`) — what to
+ * copy (a source endpoint and subpath), where to (a target endpoint and
+ * subpath), and how (copy mode, schedule, integrity validation). Starting a
+ * job run also needs an agent.
  *
  * Job definitions have no tags, so Alchemy records ownership as a marker at
  * the end of the description.
+ *
+ * :::caution
+ * Changing `storageMover`, `project`, `name`, or `resourceGroup` replaces
+ * the job definition. So does changing `sourceName`, `sourceSubpath`,
+ * `targetName`, `targetSubpath`, `jobType`, `preservePermissions`,
+ * `isCrossTenantJob`, `crossTenantEndpointTenantId`, or
+ * `crossTenantEndpointResourceId`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/storage-mover/job-definition-create
  *
  * ### Creating a Job Definition
  * **Example:** Copy an NFS share into a blob container
  * ```typescript
+ * const mover = yield* Azure.StorageMover.StorageMover("mover");
+ * const project = yield* Azure.StorageMover.Project("file-servers", {
+ *   storageMover: mover.storageMoverName,
+ * });
+ * const source = yield* Azure.StorageMover.Endpoint("source", {
+ *   storageMover: mover.storageMoverName,
+ *   endpointType: "NfsMount",
+ *   host: "10.0.0.4",
+ *   export: "/exports/data",
+ * });
+ * const account = yield* Azure.Storage.StorageAccount("files");
+ * const container = yield* Azure.Storage.BlobContainer("imported", {
+ *   storageAccount: account.storageAccountName,
+ * });
+ * const target = yield* Azure.StorageMover.Endpoint("target", {
+ *   storageMover: mover.storageMoverName,
+ *   endpointType: "AzureStorageBlobContainer",
+ *   storageAccountId: account.storageAccountId,
+ *   blobContainerName: container.containerName,
+ * });
  * const job = yield* Azure.StorageMover.JobDefinition("copy-data", {
  *   storageMover: mover.storageMoverName,
  *   project: project.projectName,

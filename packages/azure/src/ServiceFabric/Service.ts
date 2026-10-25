@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -54,7 +54,10 @@ export type ServicePartition =
     };
 
 export interface ServiceProps {
-  /** Resource group of the cluster. Changing it replaces the service. */
+  /**
+   * Resource group of the cluster. Changing it replaces the service.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the managed cluster. Changing it replaces the service. */
   cluster: string;
@@ -63,6 +66,7 @@ export interface ServiceProps {
   /**
    * Service name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the service.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** `Stateless` or `Stateful`. Changing it replaces the service. */
@@ -71,45 +75,100 @@ export interface ServiceProps {
   serviceTypeName: string;
   /** How the service is partitioned. Changing it replaces the service. */
   partitionDescription: ServicePartition;
-  /** Service package activation mode. Changing it replaces the service. */
+  /**
+   * Service package activation mode. Changing it replaces the service.
+   * @default Azure's default
+   */
   servicePackageActivationMode?: ServicePackageActivationMode;
-  /** DNS name of the service (needs the cluster's `DnsService` add-on). Changing it replaces the service. */
+  /**
+   * DNS name of the service (needs the cluster's `DnsService` add-on). Changing it replaces the service.
+   * @default no DNS name
+   */
   serviceDnsName?: string;
-  /** Stateless: instances per partition (`-1` = one on every node). */
+  /**
+   * Stateless: instances per partition (`-1` = one on every node).
+   * @default Azure's default
+   */
   instanceCount?: number;
-  /** Stateless: minimum instance count. */
+  /**
+   * Stateless: minimum instance count.
+   * @default Azure's default
+   */
   minInstanceCount?: number;
-  /** Stateless: minimum instance percentage. */
+  /**
+   * Stateless: minimum instance percentage.
+   * @default Azure's default
+   */
   minInstancePercentage?: number;
-  /** Stateful: target replica set size. */
+  /**
+   * Stateful: target replica set size.
+   * @default Azure's default
+   */
   targetReplicaSetSize?: number;
-  /** Stateful: minimum replica set size. */
+  /**
+   * Stateful: minimum replica set size.
+   * @default Azure's default
+   */
   minReplicaSetSize?: number;
-  /** Stateful: whether the service persists state on local disk. Changing it replaces the service. */
+  /**
+   * Stateful: whether the service persists state on local disk. Changing it replaces the service.
+   * @default false
+   */
   hasPersistedState?: boolean;
-  /** Stateful: replica restart wait duration (ISO 8601, e.g. `PT1M`). */
+  /**
+   * Stateful: replica restart wait duration (ISO 8601, e.g. `PT1M`).
+   * @default Azure's default
+   */
   replicaRestartWaitDuration?: string;
-  /** Stateful: quorum loss wait duration (ISO 8601). */
+  /**
+   * Stateful: quorum loss wait duration (ISO 8601).
+   * @default Azure's default
+   */
   quorumLossWaitDuration?: string;
-  /** Stateful: standby replica keep duration (ISO 8601). */
+  /**
+   * Stateful: standby replica keep duration (ISO 8601).
+   * @default Azure's default
+   */
   standByReplicaKeepDuration?: string;
-  /** Stateful: service placement time limit (ISO 8601). */
+  /**
+   * Stateful: service placement time limit (ISO 8601).
+   * @default Azure's default
+   */
   servicePlacementTimeLimit?: string;
-  /** Placement constraints, e.g. `NodeType == web`. */
+  /**
+   * Placement constraints, e.g. `NodeType == web`.
+   * @default no constraints
+   */
   placementConstraints?: string;
-  /** Correlations with other services. */
+  /**
+   * Correlations with other services.
+   * @default []
+   */
   correlationScheme?: ServiceCorrelation[];
-  /** Load metrics used to balance the service. */
+  /**
+   * Load metrics used to balance the service.
+   * @default []
+   */
   serviceLoadMetrics?: ServiceLoadMetric[];
-  /** Placement policies. */
+  /**
+   * Placement policies.
+   * @default []
+   */
   servicePlacementPolicies?: ServicePlacementPolicy[];
-  /** Default move cost (`Zero`, `Low`, `Medium`, `High`). */
+  /**
+   * Default move cost (`Zero`, `Low`, `Medium`, `High`).
+   * @default Azure's default
+   */
   defaultMoveCost?: ServiceMoveCost;
-  /** Auto-scaling policies. */
+  /**
+   * Auto-scaling policies.
+   * @default []
+   */
   scalingPolicies?: ServiceScalingPolicy[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -142,15 +201,56 @@ export interface Service extends Resource<
 > {}
 
 /**
- * A service of a Service Fabric application on a managed cluster — a
- * running instance of a service type declared in the application's
- * manifest.
+ * A service of a Service Fabric application on a managed cluster
+ * (`Microsoft.ServiceFabric/managedClusters/applications/services`): a
+ * running instance of a service type that the application's manifest
+ * declares. See the
+ * [Azure docs](https://learn.microsoft.com/azure/service-fabric/how-to-managed-cluster-app-deployment-template).
  *
- * @see https://learn.microsoft.com/azure/service-fabric/how-to-managed-cluster-app-deployment-template
+ * :::caution
+ * `serviceDnsName` needs the cluster's `DnsService` add-on.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `cluster`, `application`, `name`, `serviceKind`,
+ * `serviceTypeName`, `partitionDescription`, `servicePackageActivationMode`,
+ * `serviceDnsName`, or `hasPersistedState` replaces the service. Alchemy
+ * updates instance counts, replica sizes, placement, load metrics, and
+ * scaling in place.
+ * :::
  *
  * ### Stateless Services
  * **Example:** Front-end service on every node
  * ```typescript
+ * const password = yield* Config.redacted("SF_ADMIN_PASSWORD");
+ * const cluster = yield* Azure.ServiceFabric.ManagedCluster("cluster", {
+ *   adminUserName: "sfadmin",
+ *   adminPassword: password,
+ *   clients: [
+ *     { isAdmin: true, thumbprint: "0123456789ABCDEF0123456789ABCDEF01234567" },
+ *   ],
+ * });
+ * const primary = yield* Azure.ServiceFabric.NodeType("primary", {
+ *   cluster: cluster.managedClusterName,
+ *   isPrimary: true,
+ *   vmInstanceCount: 3,
+ * });
+ * const appType = yield* Azure.ServiceFabric.ApplicationType("voting", {
+ *   cluster: cluster.managedClusterName,
+ *   name: "VotingType",
+ * });
+ * const packageSasUrl = yield* Config.string("VOTING_SFPKG_URL");
+ * const v1 = yield* Azure.ServiceFabric.ApplicationTypeVersion("voting-v1", {
+ *   cluster: cluster.managedClusterName,
+ *   applicationType: appType.applicationTypeName,
+ *   version: "1.0.0",
+ *   appPackageUrl: packageSasUrl,
+ * });
+ * const app = yield* Azure.ServiceFabric.Application("voting", {
+ *   cluster: cluster.managedClusterName,
+ *   version: v1.applicationTypeVersionId,
+ *   parameters: { VotingWeb_InstanceCount: "-1" },
+ * });
  * const web = yield* Azure.ServiceFabric.Service("web", {
  *   cluster: cluster.managedClusterName,
  *   application: app.applicationName,
@@ -266,38 +366,28 @@ export const ServiceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const clusters = yield* sf
-        .ListManagedClusterBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListManagedClusterBySubscription", page)),
-        );
+      const clusters = yield* collectAll(sf.ListManagedClusterBySubscription, { subscriptionId });
       const found: Service["Attributes"][] = [];
       for (const cluster of clusters.value ?? []) {
         const group = resourceGroupOf(cluster.id);
         if (group === undefined || cluster.name === undefined) continue;
         const apps = yield* orUndefinedIfNotFound(
-          sf.ListApplications({
+          collectAll(sf.ListApplications, {
             subscriptionId,
             resourceGroupName: group,
             clusterName: cluster.name,
           }),
         );
-        if (apps !== undefined) {
-          yield* requireSinglePage("ListApplications", apps);
-        }
         for (const app of apps?.value ?? []) {
           if (app.name === undefined) continue;
           const page = yield* orUndefinedIfNotFound(
-            sf.ListServiceByApplications({
+            collectAll(sf.ListServiceByApplications, {
               subscriptionId,
               resourceGroupName: group,
               clusterName: cluster.name,
               applicationName: app.name,
             }),
           );
-          if (page !== undefined) {
-            yield* requireSinglePage("ListServiceByApplications", page);
-          }
           for (const service of page?.value ?? []) {
             if (hasAnyAlchemyTag(service.tags) && service.name !== undefined) {
               found.push(toAttrs(group, cluster.name, app.name, service.name, service));

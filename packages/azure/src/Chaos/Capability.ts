@@ -50,18 +50,24 @@ export interface Capability extends Resource<
 > {}
 
 /**
- * Enables a fault (capability) on an Azure Chaos Studio target.
+ * An Azure Chaos Studio capability (`Microsoft.Chaos/targets/capabilities`)
+ * — enables one fault on a Chaos Studio target.
  *
  * Experiments can only run faults whose capability is enabled on the
  * target. The capability's `urn` is the `name` of the experiment action
  * that runs the fault. Capabilities have no settings and no tags; deleting
  * the target deletes its capabilities.
  *
- * @see https://learn.microsoft.com/azure/chaos-studio/chaos-studio-fault-library
+ * :::caution
+ * Changing `targetId` or `capabilityType` replaces the capability.
+ * :::
+ *
+ * See the [Chaos Studio fault library](https://learn.microsoft.com/azure/chaos-studio/chaos-studio-fault-library).
  *
  * ### Enabling a Fault
  * **Example:** Allow the NSG security-rule fault on a target
  * ```typescript
+ * const nsg = yield* Azure.Network.NetworkSecurityGroup("web-nsg");
  * const target = yield* Azure.Chaos.Target("web-nsg-target", {
  *   parentResourceId: nsg.networkSecurityGroupId,
  *   targetType: "Microsoft-NetworkSecurityGroup",

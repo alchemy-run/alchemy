@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -424,9 +424,7 @@ export const CacheProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* redis
-        .ListRedisBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListRedisBySubscription", page)));
+      const page = yield* collectAll(redis.ListRedisBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((cache) => {
         const group = resourceGroupOf(cache.id);
         return hasAnyAlchemyTag(cache.tags) && group !== undefined && cache.name !== undefined

@@ -71,9 +71,14 @@ export interface SecuritySetting extends Resource<
  * The security baseline of an Azure Local cluster record (the singleton
  * `securitySettings/default`): secured-core, WDAC, and SMB encryption
  * compliance assignments.
+ * The ARM type is `Microsoft.AzureStackHCI/clusters/securitySettings`.
  *
  * The setting has no tags; Alchemy treats it as owned when its parent
  * cluster carries this stack's ownership tags.
+ *
+ * :::caution
+ * Changing `cluster` or `resourceGroup` replaces the setting.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/manage/manage-secure-baseline
  *

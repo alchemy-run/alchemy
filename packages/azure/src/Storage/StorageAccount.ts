@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -292,9 +292,7 @@ export const StorageAccountProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* storage
-        .ListStorageAccounts({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListStorageAccounts", page)));
+      const page = yield* collectAll(storage.ListStorageAccounts, { subscriptionId });
       return (page.value ?? []).flatMap((account) => {
         const group = resourceGroupOf(account.id);
         return hasAnyAlchemyTag(account.tags) && group !== undefined && account.name !== undefined

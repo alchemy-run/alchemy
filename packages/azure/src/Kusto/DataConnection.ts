@@ -27,7 +27,10 @@ import {
 export type KustoDataConnectionKind = "EventHub" | "EventGrid" | "IotHub" | "CosmosDb";
 
 export interface DataConnectionProps {
-  /** Resource group of the cluster. Changing it replaces the connection. */
+  /**
+   * Resource group of the cluster. Changing it replaces the connection.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the cluster. Changing it replaces the connection. */
   cluster: string;
@@ -37,6 +40,7 @@ export interface DataConnectionProps {
    * Connection name. If omitted, a unique name is generated from the app,
    * stage, and logical ID (at most 40 characters). Changing it replaces
    * the connection.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -50,52 +54,101 @@ export interface DataConnectionProps {
    * Resource ID of the event hub to read from (`EventHub`), or that
    * receives the Event Grid notifications (`EventGrid`). Changing it
    * replaces the connection.
+   * @default unset
    */
   eventHubResourceId?: string;
   /**
    * Event hub / IoT hub consumer group to read with. Changing it replaces
    * the connection.
+   * @default unset
    */
   consumerGroup?: string;
-  /** Table the data is ingested into (can come from message properties instead). */
+  /**
+   * Table the data is ingested into (can come from message properties instead).
+   * @default unset (the table comes from message properties)
+   */
   tableName?: string;
-  /** Ingestion mapping used to map messages to columns. */
+  /**
+   * Ingestion mapping used to map messages to columns.
+   * @default unset
+   */
   mappingRuleName?: string;
-  /** Message format, e.g. `JSON`, `MULTIJSON`, `CSV`, `PARQUET`. */
+  /**
+   * Message format, e.g. `JSON`, `MULTIJSON`, `CSV`, `PARQUET`.
+   * @default unset (the format comes from message properties)
+   */
   dataFormat?: string;
-  /** Message compression (`None` or `GZip`, EventHub only). */
+  /**
+   * Message compression (`None` or `GZip`, EventHub only).
+   * @default "None"
+   */
   compression?: "None" | "GZip";
-  /** Event hub / IoT hub system properties to ingest with each message. */
+  /**
+   * Event hub / IoT hub system properties to ingest with each message.
+   * @default []
+   */
   eventSystemProperties?: string[];
-  /** Resource ID of the managed identity used to read the source. */
+  /**
+   * Resource ID of the managed identity used to read the source.
+   * @default unset
+   */
   managedIdentityResourceId?: string;
   /**
    * `Single` ingests into `database` only; `Multi` lets messages override
    * the target database. Changing it replaces the connection.
+   * @default "Single"
    */
   databaseRouting?: "Single" | "Multi";
   /**
    * Ingest only events enqueued after this time (ISO-8601). Changing it
    * replaces the connection.
+   * @default unset (events enqueued after creation)
    */
   retrievalStartDate?: string;
-  /** Storage account whose blob events are ingested (`EventGrid`). Changing it replaces the connection. */
+  /**
+   * Storage account whose blob events are ingested (`EventGrid`). Changing it replaces the connection.
+   * @default unset
+   */
   storageAccountResourceId?: string;
-  /** Event Grid subscription resource ID (`EventGrid`). Changing it replaces the connection. */
+  /**
+   * Event Grid subscription resource ID (`EventGrid`). Changing it replaces the connection.
+   * @default unset
+   */
   eventGridResourceId?: string;
-  /** Ignore the first record of every blob (`EventGrid`). */
+  /**
+   * Ignore the first record of every blob (`EventGrid`).
+   * @default false
+   */
   ignoreFirstRecord?: boolean;
-  /** Blob event type that triggers ingestion (`EventGrid`). */
+  /**
+   * Blob event type that triggers ingestion (`EventGrid`).
+   * @default "Microsoft.Storage.BlobCreated"
+   */
   blobStorageEventType?: "Microsoft.Storage.BlobCreated" | "Microsoft.Storage.BlobRenamed";
-  /** IoT hub resource ID (`IotHub`). Changing it replaces the connection. */
+  /**
+   * IoT hub resource ID (`IotHub`). Changing it replaces the connection.
+   * @default unset
+   */
   iotHubResourceId?: string;
-  /** IoT hub shared access policy name (`IotHub`). */
+  /**
+   * IoT hub shared access policy name (`IotHub`).
+   * @default unset
+   */
   sharedAccessPolicyName?: string;
-  /** Cosmos DB account resource ID (`CosmosDb`). Changing it replaces the connection. */
+  /**
+   * Cosmos DB account resource ID (`CosmosDb`). Changing it replaces the connection.
+   * @default unset
+   */
   cosmosDbAccountResourceId?: string;
-  /** Cosmos DB database (`CosmosDb`). Changing it replaces the connection. */
+  /**
+   * Cosmos DB database (`CosmosDb`). Changing it replaces the connection.
+   * @default unset
+   */
   cosmosDbDatabase?: string;
-  /** Cosmos DB container (`CosmosDb`). Changing it replaces the connection. */
+  /**
+   * Cosmos DB container (`CosmosDb`). Changing it replaces the connection.
+   * @default unset
+   */
   cosmosDbContainer?: string;
 }
 
@@ -131,16 +184,24 @@ export interface DataConnection extends Resource<
 > {}
 
 /**
- * Continuously ingests data into an Azure Data Explorer (Kusto) database
- * from an Event Hub, Event Grid (blob notifications), IoT Hub, or Cosmos DB
- * change feed. The target table and ingestion mapping must exist first —
- * create them with an `Azure.Kusto.Script`.
+ * A data connection (`Microsoft.Kusto/clusters/databases/dataConnections`)
+ * that continuously ingests data into an Azure Data Explorer (Kusto)
+ * database from an Event Hub, Event Grid (blob notifications), IoT Hub, or
+ * Cosmos DB change feed.
  *
  * @see https://learn.microsoft.com/azure/data-explorer/ingest-data-event-hub-overview
  *
  * ### Ingesting from Event Hubs
  * **Example:** Event Hub data connection
  * ```typescript
+ * const cluster = yield* Azure.Kusto.Cluster("adx");
+ * const db = yield* Azure.Kusto.Database("telemetry", {
+ *   cluster: cluster.clusterName,
+ * });
+ * const namespace = yield* Azure.EventHub.Namespace("events");
+ * const hub = yield* Azure.EventHub.EventHub("events", {
+ *   namespace: namespace.namespaceName,
+ * });
  * const schema = yield* Azure.Kusto.Script("schema", {
  *   cluster: cluster.clusterName,
  *   database: db.databaseName,
@@ -156,6 +217,20 @@ export interface DataConnection extends Resource<
  *   dataFormat: "JSON",
  * });
  * ```
+ *
+ * :::caution
+ * The target table and ingestion mapping must exist first. Create them
+ * with an `Azure.Kusto.Script`.
+ * :::
+ *
+ * :::caution
+ * Changing `name`, `cluster`, `database`, `kind`, `location`,
+ * `resourceGroup`, or any source field (`eventHubResourceId`,
+ * `consumerGroup`, `databaseRouting`, `retrievalStartDate`,
+ * `storageAccountResourceId`, `eventGridResourceId`, `iotHubResourceId`,
+ * `cosmosDbAccountResourceId`, `cosmosDbDatabase`, `cosmosDbContainer`)
+ * replaces the connection.
+ * :::
  *
  * @resource
  */

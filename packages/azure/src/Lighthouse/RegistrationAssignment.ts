@@ -8,10 +8,10 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -36,6 +36,7 @@ export interface RegistrationAssignmentProps {
    * GUID naming the assignment. If omitted, a deterministic GUID is derived
    * from the app, stage, logical ID, and instance ID. Changing it replaces
    * the assignment.
+   * @default a GUID derived from the app, stage, logical ID, and instance ID
    */
   registrationAssignmentId?: string;
 }
@@ -66,11 +67,17 @@ export interface RegistrationAssignment extends Resource<
  * the definition's `authorizations` can work on the scope from their own
  * tenant.
  *
+ * ARM type: `Microsoft.ManagedServices/registrationAssignments`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/lighthouse/how-to/onboard-customer).
+ *
  * Assignments have no tags or description, so the assignment name is a GUID
  * derived from the stack, stage, logical ID, and instance ID; an assignment
  * with any other name is reported as unowned.
  *
- * @see https://learn.microsoft.com/azure/lighthouse/how-to/onboard-customer
+ * :::caution
+ * Changing `scope`, `registrationDefinitionId`, or `registrationAssignmentId`
+ * replaces the assignment.
+ * :::
  *
  * ### Delegating a Resource Group
  * **Example:** Delegate one resource group to a managing tenant
@@ -147,12 +154,10 @@ export const RegistrationAssignmentProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const scope = `/subscriptions/${subscriptionId}`;
-      const page = yield* managedservices
-        .ListRegistrationAssignments({
-          scope,
-          _expandRegistrationDefinition: true,
-        })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListRegistrationAssignments", page)));
+      const page = yield* collectAll(managedservices.ListRegistrationAssignments, {
+        scope,
+        _expandRegistrationDefinition: true,
+      });
       return (page.value ?? []).flatMap((assignment) => {
         const id = assignment.id;
         const name = assignment.name;

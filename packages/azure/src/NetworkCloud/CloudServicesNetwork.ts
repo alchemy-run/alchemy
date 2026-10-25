@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -39,6 +39,7 @@ export interface CloudServicesNetworkProps {
   /**
    * Name of the cloud services network. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the cloud services network.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -52,18 +53,25 @@ export interface CloudServicesNetworkProps {
    * Changing it replaces the cloud services network.
    */
   customLocationId: string;
-  /** Extra egress endpoints (by category) the network may reach. */
+  /**
+   * Extra egress endpoints (by category) the network may reach.
+   * @default none
+   */
   additionalEgressEndpoints?: nc.EgressEndpoint[];
   /**
    * Allow egress to the platform's default endpoints (`True`/`False`).
    * @default "False"
    */
   enableDefaultEgressEndpoints?: "True" | "False";
-  /** Shared storage options for workloads on the network. */
+  /**
+   * Shared storage options for workloads on the network.
+   * @default none
+   */
   storageOptions?: nc.CloudServicesNetworkStorageOptions;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -106,13 +114,22 @@ export interface CloudServicesNetwork extends Resource<
  * Nexus virtual machines and Kubernetes clusters DNS, NTP, and proxied
  * egress to allow-listed endpoints. Needs a deployed Operator Nexus cluster.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/quickstarts-tenant-workload-prerequisites
+ * ARM type: `Microsoft.NetworkCloud/cloudServicesNetworks`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/quickstarts-tenant-workload-prerequisites).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `customLocationId` replaces
+ * the network.
+ * :::
  *
  * ### Creating a Cloud Services Network
  * **Example:** Egress to the default endpoints plus one extra
  * ```typescript
+ * // An existing Operator Nexus cluster, "site1", in the stack's resource group.
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ExtendedLocation/customLocations/site1-cl";
  * const csn = yield* Azure.NetworkCloud.CloudServicesNetwork("csn", {
- *   customLocationId: cluster.clusterExtendedLocationId,
+ *   customLocationId,
  *   enableDefaultEgressEndpoints: "True",
  *   additionalEgressEndpoints: [
  *     {
@@ -174,13 +191,7 @@ export const CloudServicesNetworkProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* nc
-        .ListCloudServicesNetworkBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListCloudServicesNetworkBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(nc.ListCloudServicesNetworkBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

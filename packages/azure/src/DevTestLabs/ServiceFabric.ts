@@ -21,7 +21,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, labLocation } from "./Common.ts";
 
 export interface ServiceFabricProps {
-  /** Resource group of the lab. Changing it replaces the registration. */
+  /**
+   * Resource group of the lab. Changing it replaces the registration.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the lab. Changing it replaces the registration. */
   lab: string;
@@ -30,6 +33,7 @@ export interface ServiceFabricProps {
   /**
    * Registration name. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the registration.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -40,11 +44,13 @@ export interface ServiceFabricProps {
   /**
    * ARM ID of the lab environment the cluster was deployed by, if any.
    * Changing it replaces the registration.
+   * @default unset
    */
   environmentId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -75,14 +81,28 @@ export interface ServiceFabric extends Resource<
 > {}
 
 /**
- * Registers an existing Service Fabric cluster with a DevTest Labs user so
- * the lab can start, stop, and schedule it.
+ * Registers an existing Service Fabric cluster with a DevTest Labs user
+ * (`Microsoft.DevTestLab/labs/users/servicefabrics`) so the lab can start,
+ * stop, and schedule it.
+ *
+ * :::caution
+ * Changing `lab`, `user`, `name`, `externalServiceFabricId`,
+ * `environmentId`, or `resourceGroup` replaces the registration.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/devtest-labs/create-environment-service-fabric-cluster
  *
  * ### Registering a Cluster
  * **Example:** Lab-managed Service Fabric cluster
  * ```typescript
+ * const lab = yield* Azure.DevTestLabs.Lab("team-lab");
+ * const user = yield* Azure.DevTestLabs.User("alice", {
+ *   lab: lab.labName,
+ *   // Entra object ID of the lab user.
+ *   objectId: "00000000-0000-0000-0000-000000000000",
+ * });
+ * // ARM ID of an existing Service Fabric cluster.
+ * const clusterId = "<service-fabric-cluster-arm-id>";
  * const fabric = yield* Azure.DevTestLabs.ServiceFabric("cluster", {
  *   lab: lab.labName,
  *   user: user.userName,

@@ -25,6 +25,7 @@ export interface StorageAssetProps {
   /**
    * Resource group of the parent storage container. Changing it replaces
    * the storage asset.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /** Name of the parent storage container. Changing it replaces the storage asset. */
@@ -33,6 +34,7 @@ export interface StorageAssetProps {
    * Storage asset name: 3-24 letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the storage asset.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -45,11 +47,13 @@ export interface StorageAssetProps {
   /**
    * Path of the data relative to the root of the parent storage container.
    * Changing it replaces the storage asset.
+   * @default unset
    */
   path?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -82,14 +86,28 @@ export interface StorageAsset extends Resource<
  * (`Microsoft.Discovery/storageContainers/storageAssets`) — a described path
  * of data inside a Discovery storage container.
  *
- * Microsoft Discovery is a gated preview: on subscriptions without the
+ * :::caution
+ * Changing `storageContainer`, `name`, `location`, `resourceGroup`, or
+ * `path` replaces the asset.
+ * :::
+ *
+ * :::caution
+ * Microsoft Discovery is a gated preview. On subscriptions without the
  * preview, ARM rejects the resource type with `InvalidResourceType`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/microsoft-discovery/
  *
  * ### Creating a Storage Asset
  * **Example:** Dataset folder in a storage container
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("data");
+ * const container = yield* Azure.Discovery.StorageContainer("data", {
+ *   storageStore: {
+ *     kind: "AzureStorageBlob",
+ *     storageAccountId: account.storageAccountId,
+ *   },
+ * });
  * const asset = yield* Azure.Discovery.StorageAsset("molecules", {
  *   storageContainer: container.storageContainerName,
  *   description: "Candidate molecule library",

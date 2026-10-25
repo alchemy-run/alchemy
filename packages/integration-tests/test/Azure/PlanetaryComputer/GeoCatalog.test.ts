@@ -1,5 +1,5 @@
 import * as Azure from "@alchemy.run/azure";
-import * as orbitalplanetarycomputer from "@distilled.cloud/azure/orbitalplanetarycomputer";
+import * as planetarycomputer from "@distilled.cloud/azure/planetarycomputer";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
@@ -14,7 +14,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 const getCatalog = (resourceGroupName: string, catalogName: string) =>
   Effect.gen(function* () {
     const { subscriptionId } = yield* Azure.AzureEnvironment.current;
-    return yield* orbitalplanetarycomputer.GetGeoCatalog({
+    return yield* planetarycomputer.GetGeoCatalog({
       subscriptionId,
       resourceGroupName,
       catalogName,

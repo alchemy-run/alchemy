@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -37,6 +37,7 @@ export interface EdgeMachineProps {
   /**
    * Name of the edge machine. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the machine.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -52,24 +53,39 @@ export interface EdgeMachineProps {
   /**
    * ARM ID of the Arc-enabled server (`Microsoft.HybridCompute/machines`)
    * running an Azure Local OS that backs this machine.
+   * @default not set
    */
   arcMachineResourceId?: string;
   /**
    * ARM ID of the resource group the Arc machine is created in. Changing
    * it replaces the machine.
+   * @default not set
    */
   arcMachineResourceGroupId?: string;
-  /** ARM ID of the Arc gateway the machine connects through. */
+  /**
+   * ARM ID of the Arc gateway the machine connects through.
+   * @default not set
+   */
   arcGatewayResourceId?: string;
-  /** Site and target device configuration. */
+  /**
+   * Site and target device configuration.
+   * @default not set
+   */
   siteDetails?: EdgeMachineSiteDetails;
-  /** Ownership voucher used to claim the hardware. */
+  /**
+   * Ownership voucher used to claim the hardware.
+   * @default not set
+   */
   ownershipVoucherDetails?: EdgeMachineOwnershipVoucher;
-  /** OS provisioning profile. */
+  /**
+   * OS provisioning profile.
+   * @default not set
+   */
   provisioningDetails?: EdgeMachineProvisioningDetails;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -111,12 +127,20 @@ export interface EdgeMachine extends Resource<
  * bound to the Arc-enabled server running Azure Local's Linux-based OS.
  * Creation is validated against that Arc machine's reported OS SKU, so it
  * needs real Azure Local hardware.
+ * The ARM type is `Microsoft.AzureStackHCI/edgeMachines`.
+ *
+ * :::caution
+ * Changing `name`, `location`, `edgeMachineKind`,
+ * `arcMachineResourceGroupId`, or `resourceGroup` replaces the machine.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/overview
  *
  * ### Registering a Machine
  * **Example:** Edge machine backed by an Arc-enabled server
  * ```typescript
+ * // ARM ID of the Arc-enabled server (Microsoft.HybridCompute/machines).
+ * const arcServerId = yield* Config.string("ARC_SERVER_ID");
  * const machine = yield* Azure.AzureStackHCI.EdgeMachine("node-1", {
  *   arcMachineResourceId: arcServerId,
  *   tags: { rack: "r1" },
@@ -161,9 +185,7 @@ export const EdgeMachineProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        hci
-          .ListEdgeMachineBySubscription({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListEdgeMachineBySubscription", page))),
+        collectAll(hci.ListEdgeMachineBySubscription, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((machine) => {
         const group = resourceGroupOf(machine.id);

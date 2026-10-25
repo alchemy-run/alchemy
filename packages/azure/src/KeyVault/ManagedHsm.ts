@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -240,9 +240,7 @@ export const ManagedHsmProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* keyvault
-        .ListManagedHsmBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListManagedHsmBySubscription", page)));
+      const page = yield* collectAll(keyvault.ListManagedHsmBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((hsm) => {
         const group = resourceGroupOf(hsm.id);
         return hasAnyAlchemyTag(hsm.tags) && group !== undefined && hsm.name !== undefined

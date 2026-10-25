@@ -28,7 +28,7 @@ import {
 export interface Python3PackageProps {
   /** Resource group of the Automation account. Changing it replaces the package. */
   resourceGroup: string;
-  /** Automation account that holds the package. */
+  /** Automation account that holds the package. Changing it replaces the package. */
   automationAccount: string;
   /**
    * Package name; must match the name of the Python package. Changing it
@@ -43,6 +43,7 @@ export interface Python3PackageProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -75,14 +76,21 @@ export interface Python3Package extends Resource<
 /**
  * A Python 3 package imported into an Azure Automation account, so its
  * Python 3 runbooks can import it.
+ * The ARM type is `Microsoft.Automation/automationAccounts/python3Packages`.
  *
  * The import runs in the background; Alchemy waits until it succeeds.
+ *
+ * :::caution
+ * Changing `automationAccount`, `name`, or `resourceGroup` replaces the
+ * package.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/python-3-packages
  *
  * ### Importing a Package
  * **Example:** Wheel from PyPI
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const six = yield* Azure.Automation.Python3Package("six", {
  *   automationAccount: account.automationAccountName,
  *   name: "six",

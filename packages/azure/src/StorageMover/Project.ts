@@ -23,7 +23,10 @@ import {
 } from "./Common.ts";
 
 export interface ProjectProps {
-  /** Resource group of the Storage Mover. Changing it replaces the project. */
+  /**
+   * Resource group of the Storage Mover. Changing it replaces the project.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Storage Mover that holds the project. Changing it replaces the project. */
   storageMover: string;
@@ -31,11 +34,13 @@ export interface ProjectProps {
    * Name of the project: 1-64 letters, digits, `-` and `_`, starting with a
    * letter or digit. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the project.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Description of the project. Alchemy appends an ownership marker
    * (`[alchemy <stack>/<stage>/<id>]`) because projects have no tags.
+   * @default not set
    */
   description?: string;
 }
@@ -60,11 +65,16 @@ export interface Project extends Resource<
 > {}
 
 /**
- * A Storage Mover project — a group of job definitions that migrate related
- * data, e.g. one per source server or workload.
+ * A Storage Mover project (`Microsoft.StorageMover/storageMovers/projects`)
+ * — a group of job definitions that migrate related data, e.g. one per
+ * source server or workload.
  *
  * Projects have no tags, so Alchemy records ownership as a marker at the end
  * of the description.
+ *
+ * :::caution
+ * Changing `storageMover`, `name`, or `resourceGroup` replaces the project.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/storage-mover/project-manage
  *

@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -176,9 +176,7 @@ export const CertificateProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* web
-        .ListCertificates({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListCertificates", page)));
+      const page = yield* collectAll(web.ListCertificates, { subscriptionId });
       return (page.value ?? []).flatMap((cert) => {
         const group = resourceGroupOf(cert.id);
         return hasAnyAlchemyTag(cert.tags) && group !== undefined && cert.name !== undefined

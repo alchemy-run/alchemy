@@ -17,7 +17,10 @@ import {
 } from "./Common.ts";
 
 export interface AlertRuleActionProps {
-  /** Resource group of the Sentinel workspace. Changing it replaces the action. */
+  /**
+   * Resource group of the Sentinel workspace. Changing it replaces the action.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Sentinel workspace of the alert rule. Changing it replaces the action. */
   workspace: string;
@@ -26,6 +29,7 @@ export interface AlertRuleActionProps {
   /**
    * Action ID. If omitted, a deterministic GUID is derived from the app,
    * stage, and logical ID. Changing it replaces the action.
+   * @default a GUID derived from the app, stage, and logical ID
    */
   actionId?: string;
   /** ARM resource ID of the Logic App playbook (`Logic.Workflow.workflowId`). */
@@ -63,29 +67,67 @@ export interface AlertRuleAction extends Resource<
 > {}
 
 /**
- * Runs a Logic App playbook whenever a Microsoft Sentinel analytics rule
- * raises an alert. The playbook must start with the Microsoft Sentinel
- * alert trigger; pass its callback URL as `triggerUri`.
+ * A Microsoft Sentinel alert rule action
+ * (`Microsoft.SecurityInsights/alertRules/actions`): it runs a Logic App
+ * playbook whenever a Sentinel analytics rule raises an alert. The playbook
+ * must start with the Microsoft Sentinel alert trigger. Pass its callback URL
+ * as `triggerUri`. See the
+ * [Azure docs](https://learn.microsoft.com/azure/sentinel/automate-responses-with-playbooks).
  *
- * **Deprecated by Microsoft:** the alert rule actions API now rejects
- * every call with `SentinelRuleActionsDeprecated` ("Rules Actions API has
- * been deprecated and is no longer available"). Use an `AutomationRule`
+ * :::caution
+ * Microsoft deprecated this API. It now rejects every call with
+ * `SentinelRuleActionsDeprecated` ("Rules Actions API has been deprecated and
+ * is no longer available"). Use an `Azure.SecurityInsights.AutomationRule`
  * with a `RunPlaybook` action instead.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/sentinel/automate-responses-with-playbooks
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `ruleId`, or `actionId` replaces
+ * the action. Alchemy updates `logicAppResourceId` and `triggerUri` in
+ * place.
+ * :::
  *
  * ### Running Playbooks
  * **Example:** Run a playbook on every alert of a rule
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
+ *   workspace: logs.workspaceName,
+ * });
+ * const rule = yield* Azure.SecurityInsights.AlertRule("heartbeat", {
+ *   workspace: sentinel.workspace,
+ *   displayName: "Missing heartbeat",
+ *   severity: "Medium",
+ *   query: "Heartbeat | summarize LastSeen = max(TimeGenerated) by Computer",
+ *   queryFrequency: "PT1H",
+ *   queryPeriod: "PT1H",
+ * });
+ * const callbackUrl = yield* Config.redacted("PLAYBOOK_CALLBACK_URL");
  * const playbook = yield* Azure.Logic.Workflow("notify", {
- *   definition: sentinelAlertPlaybookDefinition,
+ *   definition: {
+ *     $schema:
+ *       "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+ *     contentVersion: "1.0.0.0",
+ *     triggers: {
+ *       Microsoft_Sentinel_alert: {
+ *         type: "ApiConnectionWebhook",
+ *         inputs: {
+ *           host: {
+ *             connection: { name: "@parameters('$connections')['azuresentinel']['connectionId']" },
+ *           },
+ *           body: { callback_url: "@{listCallbackUrl()}" },
+ *           path: "/subscribe",
+ *         },
+ *       },
+ *     },
+ *     actions: {},
+ *   },
  * });
  * yield* Azure.SecurityInsights.AlertRuleAction("notify-on-alert", {
- *   resourceGroup: rule.resourceGroup,
  *   workspace: rule.workspace,
  *   ruleId: rule.ruleId,
  *   logicAppResourceId: playbook.workflowId,
- *   triggerUri: Redacted.make(callbackUrl),
+ *   triggerUri: callbackUrl,
  * });
  * ```
  *

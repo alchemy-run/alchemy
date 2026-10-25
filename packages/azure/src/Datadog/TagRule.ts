@@ -26,11 +26,20 @@ import {
 } from "./common.ts";
 
 export interface TagRuleProps extends MonitorChildProps {
-  /** Log collection rules. Omitted rules send no logs. */
+  /**
+   * Log collection rules. Omitted rules send no logs.
+   * @default no logs sent
+   */
   logRules?: DatadogLogRules;
-  /** Metric collection rules. Omitted rules collect every resource. */
+  /**
+   * Metric collection rules. Omitted rules collect every resource.
+   * @default metrics from every resource
+   */
   metricRules?: DatadogMetricRules;
-  /** Datadog agent management rules. */
+  /**
+   * Datadog agent management rules.
+   * @default agent not managed
+   */
   agentRules?: DatadogAgentRules;
   /**
    * Mute Datadog monitors while Azure VMs are shut down.
@@ -72,9 +81,19 @@ export interface TagRule extends Resource<
  * The rule set always exists while its monitor exists; deleting the
  * resource resets it to the defaults (no logs, every resource's metrics).
  *
+ * :::caution
+ * Changing `monitor` or `resourceGroup` replaces the rule set.
+ * :::
+ *
+ * @see https://learn.microsoft.com/azure/partner-solutions/datadog/manage
+ *
  * ### Sending Logs and Metrics
  * **Example:** Send resource logs for tagged resources
  * ```typescript
+ * const monitor = yield* Azure.Datadog.Monitor("datadog", {
+ *   location: "westus2",
+ *   userInfo: { emailAddress: "platform@example.com" },
+ * });
  * const rules = yield* Azure.Datadog.TagRule("rules", {
  *   monitor: monitor.monitorName,
  *   logRules: {

@@ -11,7 +11,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { accountOwnedByStack, createChildName, immutableChanged } from "./internal.ts";
 
 export interface InvitationProps {
-  /** Resource group of the Data Share account. Changing it replaces the invitation. */
+  /**
+   * Resource group of the Data Share account. Changing it replaces the invitation.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Data Share account that offers the share. Changing it replaces the invitation. */
   account: string;
@@ -21,28 +24,33 @@ export interface InvitationProps {
    * Invitation name: letters, digits, and `_`, starting with a letter. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the invitation.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Email address the invitation is sent to. Mutually exclusive with
    * `targetActiveDirectoryId`/`targetObjectId`. Changing it replaces the
    * invitation.
+   * @default unset; set it or `targetActiveDirectoryId` + `targetObjectId`
    */
   targetEmail?: string;
   /**
    * Microsoft Entra tenant of the recipient. Set together with
    * `targetObjectId` to invite a user or service principal without
    * sending an email. Changing it replaces the invitation.
+   * @default unset
    */
   targetActiveDirectoryId?: string;
   /**
    * Object ID of the user or service principal invited. Requires
    * `targetActiveDirectoryId`. Changing it replaces the invitation.
+   * @default unset
    */
   targetObjectId?: string;
   /**
    * ISO 8601 time after which the invitation and any share subscription
    * created from it expire. Changing it replaces the invitation.
+   * @default no expiry
    */
   expirationDate?: string;
 }
@@ -76,15 +84,29 @@ export interface Invitation extends Resource<
 > {}
 
 /**
- * An invitation to an Azure Data Share share. The recipient accepts it by
- * creating a share subscription in their own Data Share account with the
- * invitation's `invitationId`. Deleting a pending invitation revokes it.
+ * An invitation to an Azure Data Share share
+ * (`Microsoft.DataShare/accounts/shares/invitations`). The recipient
+ * accepts it by creating a share subscription in their own Data Share
+ * account with the invitation's `invitationId`. Deleting a pending
+ * invitation revokes it.
+ *
+ * :::caution
+ * Invitations are immutable. Changing any prop (`account`, `share`, `name`,
+ * `targetEmail`, `targetActiveDirectoryId`, `targetObjectId`,
+ * `expirationDate`, or `resourceGroup`) replaces the invitation with a new
+ * `invitationId`. Alchemy deletes the old invitation first, because a share
+ * holds one pending invitation per recipient.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/data-share/share-your-data#create-a-share
  *
  * ### Inviting a Consumer
  * **Example:** Invite by email
  * ```typescript
+ * const account = yield* Azure.DataShare.Account("sharing");
+ * const share = yield* Azure.DataShare.Share("sales", {
+ *   account: account.accountName,
+ * });
  * yield* Azure.DataShare.Invitation("partner", {
  *   account: account.accountName,
  *   share: share.shareName,
@@ -94,6 +116,9 @@ export interface Invitation extends Resource<
  *
  * **Example:** Invite a service principal without email
  * ```typescript
+ * const { tenantId } = yield* Azure.AzureEnvironment.current;
+ * // Object ID of the consumer's service principal.
+ * const pipelinePrincipalId = "00000000-0000-0000-0000-000000000000";
  * const invitation = yield* Azure.DataShare.Invitation("pipeline", {
  *   account: account.accountName,
  *   share: share.shareName,

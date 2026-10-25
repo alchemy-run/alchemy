@@ -6,12 +6,12 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -38,16 +38,24 @@ export interface PolicySetMember {
    * Unique ID of this member within the set, used by
    * `nonComplianceMessages` and overrides. Required when one definition is
    * included more than once.
+   * @default an ID Azure generates
    */
   policyDefinitionReferenceId?: string;
   /**
    * Parameter values passed to the member definition, e.g.
    * `{ tagName: "[parameters('tagName')]" }` to forward a set parameter.
+   * @default {}
    */
   parameters?: Record<string, unknown>;
-  /** Names of `policyDefinitionGroups` this member belongs to. */
+  /**
+   * Names of `policyDefinitionGroups` this member belongs to.
+   * @default []
+   */
   groupNames?: string[];
-  /** Version of the member definition to use, e.g. `1.*.*`. */
+  /**
+   * Version of the member definition to use, e.g. `1.*.*`.
+   * @default Azure's default
+   */
   definitionVersion?: string;
 }
 
@@ -55,38 +63,67 @@ export interface PolicySetMember {
 export interface PolicySetGroup {
   /** Group name referenced from `PolicySetMember.groupNames`. */
   name: string;
-  /** Display name of the group. */
+  /**
+   * Display name of the group.
+   * @default none
+   */
   displayName?: string;
-  /** Category of the group. */
+  /**
+   * Category of the group.
+   * @default none
+   */
   category?: string;
-  /** Description of the group. */
+  /**
+   * Description of the group.
+   * @default none
+   */
   description?: string;
 }
 
 export interface PolicySetDefinitionProps {
   /**
    * Name of the policy set definition. At most 64 characters, without
-   * `<>*%&:\?.+/`. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the set.
+   * `<>*%&:\?.+/`.
+   *
+   * :::caution
+   * Changing it replaces the set.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name shown in the portal. */
+  /**
+   * Display name shown in the portal.
+   * @default none
+   */
   displayName?: string;
-  /** Description of the policy set. */
+  /**
+   * Description of the policy set.
+   * @default none
+   */
   description?: string;
   /** The policy definitions the set bundles. */
   policyDefinitions: PolicySetMember[];
-  /** Groups that categorise the members. */
+  /**
+   * Groups that categorise the members.
+   * @default []
+   */
   policyDefinitionGroups?: PolicySetGroup[];
-  /** Parameter definitions of the set, forwarded to members. */
+  /**
+   * Parameter definitions of the set, forwarded to members.
+   * @default {}
+   */
   parameters?: Record<string, PolicyParameterDefinition>;
   /**
    * Metadata such as `{ category: "Tags" }`. Alchemy merges ownership
    * entries (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) in because
    * policy sets have no tags.
+   * @default {} (plus the ownership entries)
    */
   metadata?: Record<string, unknown>;
-  /** Semantic version of the set, e.g. `1.0.0`. */
+  /**
+   * Semantic version of the set, e.g. `1.0.0`.
+   * @default no version
+   */
   version?: string;
 }
 
@@ -115,7 +152,8 @@ export interface PolicySetDefinition extends Resource<
 > {}
 
 /**
- * A custom Azure Policy set definition (initiative) at subscription scope —
+ * A custom Azure Policy set definition, or initiative
+ * (`Microsoft.Authorization/policySetDefinitions`), at subscription scope —
  * bundles several policy definitions so they can be assigned together.
  *
  * Policy sets cannot be tagged, so Alchemy records ownership as
@@ -126,6 +164,12 @@ export interface PolicySetDefinition extends Resource<
  * ### Defining an Initiative
  * **Example:** Bundle a custom and a built-in definition
  * ```typescript
+ * const definition = yield* Azure.Policy.PolicyDefinition("audit-owner-tag", {
+ *   policyRule: {
+ *     if: { field: "tags['owner']", exists: "false" },
+ *     then: { effect: "audit" },
+ *   },
+ * });
  * const set = yield* Azure.Policy.PolicySetDefinition("baseline", {
  *   displayName: "Baseline",
  *   policyDefinitions: [
@@ -143,6 +187,16 @@ export interface PolicySetDefinition extends Resource<
  * ### Assigning an Initiative
  * **Example:** Assign the set to a resource group
  * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
+ * const definition = yield* Azure.Policy.PolicyDefinition("audit-owner-tag", {
+ *   policyRule: {
+ *     if: { field: "tags['owner']", exists: "false" },
+ *     then: { effect: "audit" },
+ *   },
+ * });
+ * const set = yield* Azure.Policy.PolicySetDefinition("baseline", {
+ *   policyDefinitions: [{ policyDefinitionId: definition.policyDefinitionId }],
+ * });
  * yield* Azure.Policy.PolicyAssignment("baseline", {
  *   scope: group.resourceGroupId,
  *   policyDefinitionId: set.policySetDefinitionId,
@@ -189,12 +243,10 @@ export const PolicySetDefinitionProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* resources
-        .ListPolicySetDefinitions({
-          subscriptionId,
-          _filter: "policyType eq 'Custom'",
-        })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPolicySetDefinitions", page)));
+      const page = yield* collectAll(resources.ListPolicySetDefinitions, {
+        subscriptionId,
+        _filter: "policyType eq 'Custom'",
+      });
       return (page.value ?? []).flatMap((set) =>
         set.name !== undefined && hasAnyAlchemyTag(metadataTags(set.properties?.metadata))
           ? [toAttrs(subscriptionId, set.name, set)]

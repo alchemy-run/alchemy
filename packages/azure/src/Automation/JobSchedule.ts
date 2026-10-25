@@ -26,11 +26,15 @@ export interface JobScheduleProps {
   runbook: string;
   /** {@link Schedule} that triggers the runbook. Changing it replaces the link. */
   schedule: string;
-  /** Runbook parameters for every scheduled job. Changing them replaces the link. */
+  /**
+   * Runbook parameters for every scheduled job. Changing them replaces the link.
+   * @default no parameters
+   */
   parameters?: Record<string, string>;
   /**
    * Name of a {@link HybridRunbookWorkerGroup} to run the jobs on. Omit to
    * run them in Azure. Changing it replaces the link.
+   * @default not set (jobs run in Azure)
    */
   runOn?: string;
 }
@@ -61,12 +65,24 @@ export interface JobSchedule extends Resource<
  * runbook. A runbook/schedule pair can be linked only once, and links
  * cannot be updated: any change deletes the old link before creating the
  * new one.
+ * The ARM type is `Microsoft.Automation/automationAccounts/jobSchedules`.
+ *
+ * :::caution
+ * Changing `automationAccount`, `runbook`, `schedule`, `parameters`,
+ * `runOn`, or `resourceGroup` replaces the link.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/shared-resources/schedules#link-a-schedule-to-a-runbook
  *
  * ### Scheduling a Runbook
  * **Example:** Run a runbook nightly
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
+ * const cleanup = yield* Azure.Automation.Runbook("cleanup", {
+ *   automationAccount: account.automationAccountName,
+ *   runbookType: "PowerShell72",
+ *   content: 'Write-Output "cleaning up"',
+ * });
  * const nightly = yield* Azure.Automation.Schedule("nightly", {
  *   automationAccount: account.automationAccountName,
  *   startTime: "2030-01-01T02:00:00Z",

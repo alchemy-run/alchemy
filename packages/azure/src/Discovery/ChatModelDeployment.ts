@@ -22,7 +22,10 @@ import { createDiscoveryName, DISCOVERY_NAMESPACE, lower, sameLocation } from ".
 import { getWorkspace } from "./Workspace.ts";
 
 export interface ChatModelDeploymentProps {
-  /** Resource group of the parent workspace. Changing it replaces the deployment. */
+  /**
+   * Resource group of the parent workspace. Changing it replaces the deployment.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the parent workspace. Changing it replaces the deployment. */
   workspace: string;
@@ -30,6 +33,7 @@ export interface ChatModelDeploymentProps {
    * Deployment name: 3-24 letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the deployment.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -41,15 +45,25 @@ export interface ChatModelDeploymentProps {
   modelFormat: string;
   /** Model name, e.g. `gpt-4o`. Changing it replaces the deployment. */
   modelName: string;
-  /** Model version. Changing it replaces the deployment. */
+  /**
+   * Model version. Changing it replaces the deployment.
+   * @default unset (Azure's default)
+   */
   modelVersion?: string;
-  /** SKU tier, e.g. `GlobalStandard`. Changing it replaces the deployment. */
+  /**
+   * SKU tier, e.g. `GlobalStandard`. Changing it replaces the deployment.
+   * @default unset (Azure's default)
+   */
   skuName?: string;
-  /** Provisioned capacity units (thousands of tokens per minute). */
+  /**
+   * Provisioned capacity units (thousands of tokens per minute).
+   * @default unset (Azure's default)
+   */
   capacity?: number;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -91,14 +105,26 @@ export interface ChatModelDeployment extends Resource<
  * chat model to a deployment name that the workspace's agents use for
  * inference. Consumes Azure OpenAI quota.
  *
- * Microsoft Discovery is a gated preview: on subscriptions without the
+ * :::caution
+ * Changing `workspace`, `name`, `location`, `resourceGroup`,
+ * `modelFormat`, `modelName`, `modelVersion`, or `skuName` replaces the
+ * deployment.
+ * :::
+ *
+ * :::caution
+ * Microsoft Discovery is a gated preview. On subscriptions without the
  * preview, ARM rejects the resource type with `InvalidResourceType`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/microsoft-discovery/
  *
  * ### Deploying a Chat Model
  * **Example:** GPT-4o deployment
  * ```typescript
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("ws");
+ * const workspace = yield* Azure.Discovery.Workspace("lab", {
+ *   workspaceIdentity: identity.identityId,
+ * });
  * const chat = yield* Azure.Discovery.ChatModelDeployment("gpt", {
  *   workspace: workspace.workspaceName,
  *   modelFormat: "OpenAI",

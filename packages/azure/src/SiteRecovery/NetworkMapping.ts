@@ -24,7 +24,10 @@ import {
 export const AZURE_NETWORK = "azureNetwork";
 
 export interface NetworkMappingProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the mapping. */
+  /**
+   * Resource group of the Recovery Services vault. Changing it replaces the mapping.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Recovery Services vault. Changing it replaces the mapping. */
   vault: string;
@@ -40,6 +43,7 @@ export interface NetworkMappingProps {
    * Mapping name, unique within the network. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * mapping.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** ARM ID of the primary virtual network. Changing it replaces the mapping. */
@@ -83,19 +87,42 @@ export interface NetworkMapping extends Resource<
 > {}
 
 /**
- * An Azure Site Recovery network mapping: maps a primary virtual network to
- * the recovery virtual network that failed-over VMs attach to
- * (Azure-to-Azure).
+ * An Azure Site Recovery network mapping
+ * (`Microsoft.RecoveryServices/vaults/replicationFabrics/replicationNetworks/replicationNetworkMappings`).
+ * It maps a primary virtual network to the recovery virtual network that
+ * failed-over VMs attach to (Azure-to-Azure). See the
+ * [Azure docs](https://learn.microsoft.com/rest/api/site-recovery/replication-network-mappings/create).
  *
- * Mappings cannot be tagged; Alchemy treats a mapping as owned when its
- * vault is tagged for the current stack and stage. The recovery network is
- * updated in place; the primary network and fabrics are immutable.
+ * Mappings have no tags. Alchemy treats a mapping as owned when its vault carries this stack's ownership tags.
  *
- * @see https://learn.microsoft.com/rest/api/site-recovery/replication-network-mappings/create
+ * :::caution
+ * Changing `resourceGroup`, `vault`, `fabric`, `network`, `name`,
+ * `primaryNetworkId`, or `recoveryFabric` replaces the mapping. Alchemy
+ * updates `recoveryNetworkId` in place.
+ * :::
  *
  * ### Azure-to-Azure Disaster Recovery
  * **Example:** Map the primary VNet to the recovery VNet
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("dr-vault", {
+ *   location: "westus2",
+ * });
+ * const primary = yield* Azure.SiteRecovery.Fabric("primary", {
+ *   vault: vault.vaultName,
+ *   location: "eastus",
+ * });
+ * const recovery = yield* Azure.SiteRecovery.Fabric("recovery", {
+ *   vault: vault.vaultName,
+ *   location: "westus2",
+ * });
+ * const primaryVnet = yield* Azure.Network.VirtualNetwork("primary", {
+ *   location: "eastus",
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const recoveryVnet = yield* Azure.Network.VirtualNetwork("recovery", {
+ *   location: "westus2",
+ *   addressPrefixes: ["10.1.0.0/16"],
+ * });
  * yield* Azure.SiteRecovery.NetworkMapping("vnet-mapping", {
  *   vault: vault.vaultName,
  *   fabric: primary.fabricName,

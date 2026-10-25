@@ -31,7 +31,10 @@ import {
 import type { SignalRSkuName } from "./SignalR.ts";
 
 export interface ReplicaProps {
-  /** Resource group of the SignalR service. Changing it replaces the replica. */
+  /**
+   * Resource group of the SignalR service. Changing it replaces the replica.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * SignalR service the replica belongs to. The service must use the
@@ -42,6 +45,7 @@ export interface ReplicaProps {
    * Replica name: 3-63 letters, digits, and hyphens, starting with a
    * letter. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the replica.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -74,6 +78,7 @@ export interface ReplicaProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -108,11 +113,23 @@ export interface Replica extends Resource<
 > {}
 
 /**
- * A geo-replica of a Premium Azure SignalR Service. Clients connecting to
- * the service's endpoint are routed to the nearest healthy replica, and the
- * replica keeps serving if the primary region fails.
+ * A geo-replica of a Premium Azure SignalR Service
+ * (`Microsoft.SignalRService/signalR/replicas`). Clients that connect to the
+ * service's endpoint go to the nearest healthy replica, and the replica keeps
+ * serving if the primary region fails. See the
+ * [Azure docs](https://learn.microsoft.com/azure/azure-signalr/howto-enable-geo-replication).
  *
- * @see https://learn.microsoft.com/azure/azure-signalr/howto-enable-geo-replication
+ * :::caution
+ * The service must use the `Premium_P1` or `Premium_P2` tier, and the
+ * replica's `sku` must match it. `location` must differ from the service's
+ * location and from every other replica.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `signalR`, `name`, or `location` replaces the
+ * replica. Alchemy updates `sku`, `capacity`, `regionEndpointEnabled`,
+ * `resourceStopped`, and `tags` in place.
+ * :::
  *
  * ### Creating a Replica
  * **Example:** Premium service with a replica in another region

@@ -32,6 +32,7 @@ export interface CredentialProps {
   /**
    * Credential name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the credential.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /** User name of the credential. */
@@ -41,7 +42,10 @@ export interface CredentialProps {
    * change is detected against the previously deployed value.
    */
   password: Redacted.Redacted<string>;
-  /** Description of the credential. */
+  /**
+   * Description of the credential.
+   * @default no description
+   */
   description?: string;
 }
 
@@ -69,16 +73,23 @@ export interface Credential extends Resource<
 /**
  * A credential asset (user name + password) in an Azure Automation account,
  * read by runbooks with `Get-AutomationPSCredential`.
+ * The ARM type is `Microsoft.Automation/automationAccounts/credentials`.
+ *
+ * :::caution
+ * Changing `automationAccount`, `name`, or `resourceGroup` replaces the
+ * credential.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/shared-resources/credentials
  *
  * ### Creating a Credential
  * **Example:** Service login
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const login = yield* Azure.Automation.Credential("sql-login", {
  *   automationAccount: account.automationAccountName,
  *   userName: "ops",
- *   password: Redacted.make(process.env.SQL_PASSWORD!),
+ *   password: yield* Config.redacted("SQL_PASSWORD"),
  * });
  * ```
  *

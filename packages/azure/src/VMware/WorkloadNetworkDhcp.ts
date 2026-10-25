@@ -24,13 +24,17 @@ import {
 } from "./common.ts";
 
 export interface WorkloadNetworkDhcpProps {
-  /** Resource group of the private cloud. Changing it replaces the DHCP configuration. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the DHCP configuration.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the DHCP configuration. */
   privateCloud: string;
   /**
    * NSX ID of the DHCP configuration. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the DHCP configuration.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -38,13 +42,25 @@ export interface WorkloadNetworkDhcpProps {
    * to external DHCP servers. Changing it replaces the configuration.
    */
   dhcpType: "SERVER" | "RELAY";
-  /** Display name of the configuration. */
+  /**
+   * Display name of the configuration.
+   * @default not set
+   */
   displayName?: string;
-  /** `SERVER` only: DHCP server address as a CIDR, e.g. `40.20.0.1/24`. */
+  /**
+   * `SERVER` only: DHCP server address as a CIDR, e.g. `40.20.0.1/24`.
+   * @default not set
+   */
   serverAddress?: string;
-  /** `SERVER` only: lease time in seconds. */
+  /**
+   * `SERVER` only: lease time in seconds.
+   * @default not set
+   */
   leaseTime?: number;
-  /** `RELAY` only: addresses of the DHCP servers to relay to. */
+  /**
+   * `RELAY` only: addresses of the DHCP servers to relay to.
+   * @default not set
+   */
   serverAddresses?: string[];
 }
 
@@ -73,14 +89,25 @@ export interface WorkloadNetworkDhcp extends Resource<
 
 /**
  * A DHCP server or relay on the NSX-T tier-1 gateway of an Azure VMware
- * Solution private cloud. Attach it to segments via their subnet's DHCP
- * ranges.
+ * Solution private cloud
+ * (`Microsoft.AVS/privateClouds/workloadNetworks/dhcpConfigurations`).
+ * Attach it to segments via their subnet's DHCP ranges.
+ *
+ * :::caution
+ * Changing `privateCloud`, `name`, `dhcpType`, or `resourceGroup` replaces
+ * the DHCP configuration.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/configure-dhcp-azure-vmware-solution
  *
  * ### DHCP Server
  * **Example:** NSX DHCP server
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
  * yield* Azure.VMware.WorkloadNetworkDhcp("dhcp", {
  *   privateCloud: cloud.privateCloudName,
  *   dhcpType: "SERVER",

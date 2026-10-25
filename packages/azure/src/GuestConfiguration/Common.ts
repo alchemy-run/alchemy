@@ -10,6 +10,7 @@ export interface AssignmentProps {
   /**
    * Resource group of the host machine. Changing it replaces the
    * assignment.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
@@ -39,15 +40,18 @@ export interface AssignmentProps {
   configurationVersion: string;
   /**
    * URI of a custom configuration package (`.zip`), e.g. a blob SAS URL.
+   * @default none (a built-in package)
    */
   contentUri?: string;
   /**
    * SHA256 hash of the custom configuration package.
+   * @default none
    */
   contentHash?: string;
   /**
    * ARM ID of a user-assigned managed identity with read access to
    * `contentUri`.
+   * @default none
    */
   contentManagedIdentity?: string;
   /**
@@ -61,11 +65,13 @@ export interface AssignmentProps {
    * `"Minimum Password Length;ExpectedValue"`). Names must be defined by
    * the package; Azure rejects unknown ones with
    * `GuestConfigurationAgentServiceFailed`.
+   * @default {}
    */
   parameters?: Record<string, string>;
   /**
    * Secret configuration parameters. Azure never returns them, so changes
    * are detected against the previous deployment.
+   * @default none
    */
   protectedParameters?: Redacted.Redacted<Record<string, string>>;
 }
@@ -102,9 +108,13 @@ export interface AssignmentAttributes {
 
 /** Observed shape shared by the VM, VMSS and Arc machine GET responses. */
 export interface ObservedAssignment {
+  /** ARM resource ID of the assignment. */
   id?: string;
+  /** Name of the assignment. */
   name?: string;
+  /** Location of the assignment. */
   location?: string;
+  /** Assignment properties as Azure returns them. */
   properties?: guestconfiguration.GuestConfigurationAssignmentProperties;
 }
 

@@ -44,17 +44,41 @@ export interface WorkspaceNotificationRecipientUser extends Resource<
 /**
  * The workspace-scoped counterpart of {@link NotificationRecipientUser}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/workspaces/notifications/recipientUsers`.
  *
  * Subscribes an API Management {@link User} to a publisher
  * {@link Notification}. The subscription has no settings; changing the
  * notification or user replaces it. Not available on the Consumption
  * tier.
  *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `notificationName`, `userName`,
+ * or `resourceGroup` replaces the recipient.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-configure-notifications
  *
  * ### Subscribing a User
  * **Example:** Send quota warnings to an operator account
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
+ * const operator = yield* Azure.ApiManagement.User("operator", {
+ *   serviceName: apim.serviceName,
+ *   email: "operator@example.com",
+ *   firstName: "Ops",
+ *   lastName: "Operator",
+ * });
  * yield* Azure.ApiManagement.WorkspaceNotificationRecipientUser("quota-ops", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

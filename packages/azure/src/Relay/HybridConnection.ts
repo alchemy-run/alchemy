@@ -24,26 +24,46 @@ import {
 } from "./internal.ts";
 
 export interface HybridConnectionProps {
-  /** Resource group of the namespace. Changing it replaces the connection. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the connection.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Relay namespace that holds the connection. Changing it replaces the connection. */
+  /**
+   * Relay namespace that holds the connection.
+   *
+   * :::caution
+   * Changing it replaces the connection.
+   * :::
+   */
   namespace: string;
   /**
    * Hybrid connection name: 1-260 letters, digits, `.`, `-`, `_`, and `/`,
-   * starting and ending with a letter or digit. If omitted, a unique
-   * lowercase name is generated from the app, stage, and logical ID.
+   * starting and ending with a letter or digit.
+   *
+   * :::caution
    * Changing it replaces the connection.
+   * :::
+   * @default a unique lowercase name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Whether senders must present a SAS token. Fixed at creation; changing it
-   * replaces the connection.
+   * Whether senders must present a SAS token. Fixed at creation.
+   *
+   * :::caution
+   * Changing it replaces the connection.
+   * :::
    * @default true
    */
   requiresClientAuthorization?: boolean;
   /**
    * Free-form user metadata (e.g. owner contact). Alchemy appends an
    * ownership marker to the stored value.
+   * @default none (only the ownership marker)
    */
   userMetadata?: string;
 }
@@ -76,7 +96,8 @@ export interface HybridConnection extends Resource<
 > {}
 
 /**
- * An Azure Relay Hybrid Connection — a bidirectional WebSocket / HTTP
+ * An Azure Relay Hybrid Connection (`Microsoft.Relay/namespaces/hybridConnections`)
+ * — a bidirectional WebSocket / HTTP
  * rendezvous point that lets cloud clients reach a listener running behind
  * a firewall (on-premises or in another network) without opening inbound
  * ports. Billing is per active listener; an unused connection is free.
@@ -98,6 +119,7 @@ export interface HybridConnection extends Resource<
  *
  * **Example:** Anonymous senders
  * ```typescript
+ * const ns = yield* Azure.Relay.Namespace("relay");
  * const hc = yield* Azure.Relay.HybridConnection("public-hook", {
  *   namespace: ns.namespaceName,
  *   requiresClientAuthorization: false,

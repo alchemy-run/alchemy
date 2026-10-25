@@ -49,12 +49,28 @@ export interface ProductPolicy extends Resource<
  * The policy of an API Management product. It applies to every API in
  * the product, between the global and the API policies. There is one per
  * product; deleting it reverts the product to the inherited behavior.
+ * The ARM type is `Microsoft.ApiManagement/service/products/policies`.
+ *
+ * :::caution
+ * Changing `serviceName`, `productName`, or `resourceGroup` replaces the
+ * policy.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/set-edit-policies
  *
  * ### Setting a Product Policy
  * **Example:** Rate-limit every subscription of a product
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const product = yield* Azure.ApiManagement.Product("starter", {
+ *   serviceName: apim.serviceName,
+ *   displayName: "Starter",
+ *   subscriptionRequired: true,
+ *   state: "published",
+ * });
  * yield* Azure.ApiManagement.ProductPolicy("starter-limits", {
  *   serviceName: apim.serviceName,
  *   productName: product.productName,

@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -38,6 +38,7 @@ export interface NetworkTapRuleProps {
   /**
    * Name of the network tap rule. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the network tap rule.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,26 +56,44 @@ export interface NetworkTapRuleProps {
   /**
    * How often (seconds) a `File` rule polls `tapRulesUrl`. Changing it
    * replaces the rule.
+   * @default 30
    */
   pollingIntervalInSeconds?: number;
-  /** URL of the tap rules file when `configurationType` is `File`. */
+  /**
+   * URL of the tap rules file when `configurationType` is `File`.
+   * @default none
+   */
   tapRulesUrl?: string;
   /**
    * Inline match configurations: conditions and the tap actions (e.g.
    * `Goto`, `Redirect`, `Count`) to take when they match.
+   * @default none
    */
   matchConfigurations?: mnf.NetworkTapRulePropertiesInput["matchConfigurations"];
-  /** Named IP, VLAN, and port groups that match configurations reference. */
+  /**
+   * Named IP, VLAN, and port groups that match configurations reference.
+   * @default none
+   */
   dynamicMatchConfigurations?: mnf.NetworkTapRulePropertiesInput["dynamicMatchConfigurations"];
-  /** Managed identity used to read `tapRulesUrl`. */
+  /**
+   * Managed identity used to read `tapRulesUrl`.
+   * @default none
+   */
   identitySelector?: mnf.NetworkTapRulePropertiesInput["identitySelector"];
-  /** Global tap rule actions, e.g. enabling match counters. */
+  /**
+   * Global tap rule actions, e.g. enabling match counters.
+   * @default none
+   */
   globalNetworkTapRuleActions?: mnf.NetworkTapRulePropertiesInput["globalNetworkTapRuleActions"];
-  /** Free-form description. */
+  /**
+   * Free-form description.
+   * @default none
+   */
   annotation?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -112,7 +131,13 @@ export interface NetworkTapRule extends Resource<
  * An Azure Operator Nexus network tap rule — match conditions that select
  * which mirrored packets a network tap forwards, and where.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-configure-network-tap
+ * ARM type: `Microsoft.ManagedNetworkFabric/networkTapRules`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-configure-network-tap).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `configurationType`, or
+ * `pollingIntervalInSeconds` replaces the rule.
+ * :::
  *
  * ### Creating a Network Tap Rule
  * **Example:** Inline rule that counts IPv4 traffic
@@ -178,11 +203,7 @@ export const NetworkTapRuleProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mnf
-        .ListNetworkTapRuleBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListNetworkTapRuleBySubscription", page)),
-        );
+      const page = yield* collectAll(mnf.ListNetworkTapRuleBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

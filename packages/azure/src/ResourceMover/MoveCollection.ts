@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -29,46 +29,77 @@ export type MoveCollectionIdentityType = "None" | "SystemAssigned";
 
 export interface MoveCollectionProps {
   /**
-   * Resource group the move collection is created in. Changing it replaces
-   * the collection.
+   * Resource group the move collection is created in.
+   *
+   * :::caution
+   * Changing it replaces the collection.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
-   * Name of the move collection. If omitted, a unique name is generated from
-   * the app, stage, and logical ID. Changing it replaces the collection.
+   * Name of the move collection.
+   *
+   * :::caution
+   * Changing it replaces the collection.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Azure location that stores the collection's metadata (for example
-   * `eastus2`). Changing it replaces the collection.
+   * `eastus2`).
+   *
+   * :::caution
+   * Changing it replaces the collection.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
    * Kind of move: `RegionToRegion` moves resources between regions;
-   * `RegionToZone` moves regional VMs into an availability zone. Changing it
-   * replaces the collection.
+   * `RegionToZone` moves regional VMs into an availability zone.
+   *
+   * :::caution
+   * Changing it replaces the collection.
+   * :::
    * @default "RegionToRegion"
    */
   moveType?: MoveCollectionMoveType;
   /**
-   * Region the resources are moved from (`RegionToRegion` only). Changing it
-   * replaces the collection.
+   * Region the resources are moved from (`RegionToRegion` only).
+   *
+   * :::caution
+   * Changing it replaces the collection.
+   * :::
+   * @default none
    */
   sourceRegion?: string;
   /**
-   * Region the resources are moved to (`RegionToRegion` only). Changing it
-   * replaces the collection.
+   * Region the resources are moved to (`RegionToRegion` only).
+   *
+   * :::caution
+   * Changing it replaces the collection.
+   * :::
+   * @default none
    */
   targetRegion?: string;
   /**
    * Region in which a regional-to-zonal VM move runs (`RegionToZone` only).
+   *
+   * :::caution
    * Changing it replaces the collection.
+   * :::
+   * @default none
    */
   moveRegion?: string;
   /**
-   * Version of the move collection. If omitted, Azure picks its current
-   * version. Changing it replaces the collection.
+   * Version of the move collection.
+   *
+   * :::caution
+   * Changing it replaces the collection.
+   * :::
+   * @default Azure's current version
    */
   version?: string;
   /**
@@ -81,6 +112,7 @@ export interface MoveCollectionProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -127,7 +159,8 @@ export interface MoveCollection extends Resource<
 > {}
 
 /**
- * An Azure Resource Mover move collection — the container that groups the
+ * An Azure Resource Mover move collection
+ * (`Microsoft.Migrate/moveCollections`) — the container that groups the
  * resources moved together from one region to another (or from a region
  * into an availability zone).
  *
@@ -139,9 +172,6 @@ export interface MoveCollection extends Resource<
  * ### Creating a Move Collection
  * **Example:** Region-to-region collection
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("moves", {
- *   location: "eastus2",
- * });
  * const collection = yield* Azure.ResourceMover.MoveCollection("eastToWest", {
  *   location: "eastus2",
  *   sourceRegion: "eastus",
@@ -160,6 +190,11 @@ export interface MoveCollection extends Resource<
  * ### Granting the Collection Access
  * **Example:** Let Resource Mover's identity act on the subscription
  * ```typescript
+ * const subscriptionId = yield* Config.string("AZURE_SUBSCRIPTION_ID");
+ * const collection = yield* Azure.ResourceMover.MoveCollection("eastToWest", {
+ *   sourceRegion: "eastus",
+ *   targetRegion: "westus2",
+ * });
  * yield* Azure.Authorization.RoleAssignment("moverContributor", {
  *   scope: `/subscriptions/${subscriptionId}`,
  *   roleDefinitionId: Azure.Authorization.BuiltInRole.Contributor,
@@ -227,13 +262,10 @@ export const MoveCollectionProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* resourcemover
-        .MoveCollectionsListMoveCollectionsBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("MoveCollectionsListMoveCollectionsBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(
+        resourcemover.MoveCollectionsListMoveCollectionsBySubscription,
+        { subscriptionId },
+      );
       return (page.value ?? []).flatMap((collection) => {
         const group = resourceGroupOf(collection.id);
         return hasAnyAlchemyTag(collection.tags) &&

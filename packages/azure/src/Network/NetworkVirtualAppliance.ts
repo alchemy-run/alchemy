@@ -1,7 +1,7 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
-import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
+import { collectAll, orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { createNetworkName, lower, ref, sameId, sameSet } from "./common.ts";
@@ -176,7 +176,8 @@ export const NetworkVirtualApplianceProvider = () =>
       // No `updateTags`: Azure answers the tags PATCH with "Patch Method is
       // not yet supported for this Region or Subscription", so tag changes
       // re-apply the PUT.
-      listAll: (subscriptionId) => network.ListNetworkVirtualAppliances({ subscriptionId }),
+      listAll: (subscriptionId) =>
+        collectAll(network.ListNetworkVirtualAppliances, { subscriptionId }),
       body: (news, { location, tags }) => ({
         location,
         tags,

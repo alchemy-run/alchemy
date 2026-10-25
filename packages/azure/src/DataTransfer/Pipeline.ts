@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -34,19 +34,29 @@ import {
 
 /** A subscriber notified about pipeline events. */
 export interface PipelineSubscriber {
-  /** Email address of the subscriber. */
+  /**
+   * Email address of the subscriber.
+   * @default unset
+   */
   email?: string;
-  /** Bit flags selecting which notifications the subscriber receives. */
+  /**
+   * Bit flags selecting which notifications the subscriber receives.
+   * @default unset
+   */
   notifications?: number;
 }
 
 export interface PipelineProps {
-  /** Resource group the pipeline is created in. Changing it replaces the pipeline. */
+  /**
+   * Resource group the pipeline is created in. Changing it replaces the pipeline.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Name of the pipeline, 3-64 letters, digits, and `-`. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the pipeline.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -59,26 +69,45 @@ export interface PipelineProps {
    * `Public`, `Government`). Changing it replaces the pipeline.
    */
   remoteCloud: string;
-  /** Display name of the pipeline. */
+  /**
+   * Display name of the pipeline.
+   * @default unset
+   */
   displayName?: string;
-  /** Subscribers notified about pipeline events. */
+  /**
+   * Subscribers notified about pipeline events.
+   * @default []
+   */
   subscribers?: PipelineSubscriber[];
-  /** Flow types disabled on this pipeline (e.g. `Mission`, `Messaging`). */
+  /**
+   * Flow types disabled on this pipeline (e.g. `Mission`, `Messaging`).
+   * @default []
+   */
   disabledFlowTypes?: string[];
-  /** Storage account used to download quarantined data. */
+  /**
+   * Storage account used to download quarantined data.
+   * @default unset
+   */
   quarantineDownloadStorageAccount?: string;
-  /** Storage container used to download quarantined data. */
+  /**
+   * Storage container used to download quarantined data.
+   * @default unset
+   */
   quarantineDownloadStorageContainer?: string;
   /**
    * Whether the pipeline accepts transfers.
    * @default "Enabled"
    */
   status?: "Enabled" | "Disabled";
-  /** Managed identity of the pipeline. Omit to leave it unmanaged. */
+  /**
+   * Managed identity of the pipeline. Omit to leave it unmanaged.
+   * @default unmanaged
+   */
   identity?: DataTransferIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -115,16 +144,25 @@ export interface Pipeline extends Resource<
 > {}
 
 /**
- * An Azure Data Transfer pipeline — the approved route data takes between
- * Azure and a remote (e.g. sovereign or air-gapped) cloud. Connections in
- * other subscriptions request access to a pipeline, and the pipeline owner
- * approves them before flows can move data.
+ * An Azure Data Transfer pipeline (`Microsoft.AzureDataTransfer/pipelines`)
+ * — the approved route data takes between Azure and a remote (e.g.
+ * sovereign or air-gapped) cloud. Connections in other subscriptions
+ * request access to a pipeline, and the pipeline owner approves them
+ * before flows can move data.
  *
+ * Display name, subscribers, disabled flow types, quarantine settings,
+ * and status are re-applied with a PUT; tags and identity are patched.
+ *
+ * :::caution
+ * Changing `name`, `location`, `remoteCloud`, or `resourceGroup` replaces
+ * the pipeline.
+ * :::
+ *
+ * :::caution
  * Creating pipelines requires a subscription onboarded to Azure Data
- * Transfer; other subscriptions are rejected with
- * `DataTransferPipelineNotAllowed`. Display name, subscribers, disabled
- * flow types, quarantine settings, and status are re-applied with a PUT;
- * tags and identity are patched.
+ * Transfer. Other subscriptions are rejected with
+ * `DataTransferPipelineNotAllowed`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-data-transfer/
  *
@@ -205,9 +243,7 @@ export const PipelineProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* adt
-        .ListPipelineBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPipelineBySubscription", page)));
+      const page = yield* collectAll(adt.ListPipelineBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((pipeline) => {
         const group = resourceGroupOf(pipeline.id);
         return hasAnyAlchemyTag(pipeline.tags) && group !== undefined && pipeline.name !== undefined

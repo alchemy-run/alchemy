@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -31,9 +31,15 @@ import {
 
 /** A feature of an IoT Operations instance. */
 export interface InstanceFeature {
-  /** Lifecycle mode of the feature. */
+  /**
+   * Lifecycle mode of the feature.
+   * @default Azure's default for the feature
+   */
   mode?: "Stable" | "Preview" | "Disabled";
-  /** Feature settings, each `Enabled` or `Disabled`. */
+  /**
+   * Feature settings, each `Enabled` or `Disabled`.
+   * @default {}
+   */
   settings?: Record<string, "Enabled" | "Disabled">;
 }
 
@@ -41,17 +47,24 @@ export interface InstanceFeature {
 export interface InstanceIdentity {
   /** Identity type. */
   type: "None" | "SystemAssigned" | "UserAssigned" | "SystemAssigned,UserAssigned";
-  /** ARM IDs of user-assigned identities to attach. */
+  /**
+   * ARM IDs of user-assigned identities to attach.
+   * @default []
+   */
   userAssignedIdentities?: string[];
 }
 
 export interface InstanceProps {
-  /** Resource group the instance is created in. Changing it replaces the instance. */
+  /**
+   * Resource group the instance is created in. Changing it replaces the instance.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Instance name: 3-63 lowercase letters, digits, and hyphens. If omitted,
    * a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the instance.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -75,22 +88,35 @@ export interface InstanceProps {
   /**
    * ARM ID of the Azure Device Registry namespace used by assets and
    * devices. Changing it replaces the instance.
+   * @default unset
    */
   adrNamespaceId?: string;
   /**
    * ARM ID of the default secret provider class
    * (`Microsoft.SecretSyncController/azureKeyVaultSecretProviderClasses`).
+   * Updated in place.
+   * @default unset
    */
   defaultSecretProviderClassId?: string;
-  /** Feature flags of the instance, keyed by feature name. */
+  /**
+   * Feature flags of the instance, keyed by feature name.
+   * @default Azure's default features
+   */
   features?: Record<string, InstanceFeature>;
-  /** Description of the instance. */
+  /**
+   * Description of the instance.
+   * @default unset
+   */
   description?: string;
-  /** Managed identity of the instance. */
+  /**
+   * Managed identity of the instance.
+   * @default no identity
+   */
   identity?: InstanceIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -125,20 +151,19 @@ export interface Instance extends Resource<
 > {}
 
 /**
- * An Azure IoT Operations instance: the root of the edge MQTT broker,
- * dataflows, and connectors deployed on an Azure Arc-enabled Kubernetes
- * cluster.
- *
- * The cluster, its IoT Operations / secret store / cert-manager
- * extensions, the custom location, and the Azure Device Registry schema
- * registry are prerequisites created outside this resource (for example
- * with `az iot ops init`).
+ * An Azure IoT Operations instance (`Microsoft.IoTOperations/instances`):
+ * the root of the edge MQTT broker, dataflows, and connectors deployed on
+ * an Azure Arc-enabled Kubernetes cluster.
  *
  * @see https://learn.microsoft.com/azure/iot-operations/overview-iot-operations
  *
  * ### Creating an Instance
  * **Example:** Instance on an Arc-enabled cluster
  * ```typescript
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/aio-location";
+ * const schemaRegistryId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.DeviceRegistry/schemaRegistries/aio-schemas";
  * const instance = yield* Azure.IoTOperations.Instance("aio", {
  *   customLocationId,
  *   schemaRegistryId,
@@ -147,6 +172,7 @@ export interface Instance extends Resource<
  *
  * **Example:** Instance with a description and a system-assigned identity
  * ```typescript
+ * // customLocationId and schemaRegistryId as above
  * const instance = yield* Azure.IoTOperations.Instance("aio", {
  *   customLocationId,
  *   schemaRegistryId,
@@ -155,6 +181,20 @@ export interface Instance extends Resource<
  *   tags: { env: "prod" },
  * });
  * ```
+ *
+ * :::caution
+ * Create the prerequisites first, for example with `az iot ops init`: the
+ * Arc-enabled cluster, its IoT Operations, secret store, and cert-manager
+ * extensions, the custom location, and the Azure Device Registry schema
+ * registry.
+ * :::
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `customLocationId`,
+ * `schemaRegistryId`, or `adrNamespaceId` replaces the instance and every
+ * broker, dataflow, and connector in it. With a fixed `name`, the old
+ * instance is deleted first.
+ * :::
  *
  * @resource
  */
@@ -238,9 +278,7 @@ export const InstanceProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        iot
-          .ListInstanceBySubscription({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListInstanceBySubscription", page))),
+        collectAll(iot.ListInstanceBySubscription, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((value) => {
         const group = resourceGroupOf(value.id);

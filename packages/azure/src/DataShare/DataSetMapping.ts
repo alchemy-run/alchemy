@@ -74,7 +74,10 @@ export interface DataSetMappingTarget {
 }
 
 export interface DataSetMappingProps {
-  /** Resource group of the consumer Data Share account. Changing it replaces the mapping. */
+  /**
+   * Resource group of the consumer Data Share account. Changing it replaces the mapping.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Consumer Data Share account. Changing it replaces the mapping. */
   account: string;
@@ -84,6 +87,7 @@ export interface DataSetMappingProps {
    * Mapping name: letters, digits, and `_`, starting with a letter. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the mapping.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Kind of target store. Changing it replaces the mapping. */
@@ -129,17 +133,39 @@ export interface DataSetMapping extends Resource<
 
 /**
  * Maps a data set received through a share subscription into a store the
- * consumer owns. Snapshots of the data set are written to the target.
- * Mappings are immutable; any change replaces them.
+ * consumer owns (`Microsoft.DataShare/accounts/shareSubscriptions/dataSetMappings`).
+ * Snapshots of the data set are written to the target.
  *
  * Snapshots need the consumer account's managed identity to write the
  * target (e.g. `Storage Blob Data Contributor` on the storage account).
+ *
+ * :::caution
+ * Mappings are immutable. Changing any prop (`account`,
+ * `shareSubscription`, `name`, `kind`, `dataSetId`, `target`, or
+ * `resourceGroup`) replaces the mapping. Alchemy deletes the old mapping
+ * first, because a share subscription maps each data set once.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/data-share/subscribe-to-data-share
  *
  * ### Receiving Data
  * **Example:** Map a shared container into a consumer container
  * ```typescript
+ * // Values the data provider sends you.
+ * const invitationId = "<invitation-id>";
+ * const providerLocation = "eastus";
+ * const dataSetId = "<provider-data-set-id>";
+ * const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+ * const consumerAccount = yield* Azure.DataShare.Account("inbox");
+ * const subscription = yield* Azure.DataShare.ShareSubscription("inbound", {
+ *   account: consumerAccount.accountName,
+ *   invitationId,
+ *   sourceShareLocation: providerLocation,
+ * });
+ * const targetStorage = yield* Azure.Storage.StorageAccount("received");
+ * const targetContainer = yield* Azure.Storage.BlobContainer("sales", {
+ *   storageAccount: targetStorage.storageAccountName,
+ * });
  * yield* Azure.Authorization.RoleAssignment("consumer-writes", {
  *   scope: targetStorage.storageAccountId,
  *   roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataContributor,
@@ -147,14 +173,13 @@ export interface DataSetMapping extends Resource<
  *   principalType: "ServicePrincipal",
  * });
  * yield* Azure.DataShare.DataSetMapping("exports", {
- *   resourceGroup: consumerGroup.resourceGroupName,
  *   account: consumerAccount.accountName,
  *   shareSubscription: subscription.shareSubscriptionName,
  *   kind: "Container",
- *   dataSetId: dataSet.dataSetId,
+ *   dataSetId,
  *   target: {
  *     subscriptionId,
- *     resourceGroup: consumerGroup.resourceGroupName,
+ *     resourceGroup: targetStorage.resourceGroup,
  *     storageAccountName: targetStorage.storageAccountName,
  *     containerName: targetContainer.containerName,
  *   },

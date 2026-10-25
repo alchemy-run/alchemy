@@ -21,7 +21,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, NAMESPACE, sameName, whileBusy } from "./internal.ts";
 
 export interface RelationshipProps {
-  /** Resource group of the health model. Changing it replaces the relationship. */
+  /**
+   * Resource group of the health model. Changing it replaces the relationship.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Health model that holds the relationship. Changing it replaces the relationship. */
   healthModel: string;
@@ -30,9 +33,13 @@ export interface RelationshipProps {
    * ending with a letter or digit. If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the
    * relationship.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name. */
+  /**
+   * Display name.
+   * @default none
+   */
   displayName?: string;
   /** Name of the parent entity. Changing it replaces the relationship. */
   parentEntity: string;
@@ -41,6 +48,7 @@ export interface RelationshipProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -80,7 +88,12 @@ export interface Relationship extends Resource<
  *
  * Alchemy records ownership in the relationship's own tags.
  *
- * @see https://learn.microsoft.com/azure/azure-monitor/health-models/overview
+ * :::caution
+ * Changing `name`, `parentEntity`, `childEntity`, `healthModel`, or
+ * `resourceGroup` replaces the relationship.
+ * :::
+ *
+ * See [Azure Monitor health models](https://learn.microsoft.com/azure/azure-monitor/health-models/overview).
  *
  * ### Creating a Relationship
  * **Example:** Make the API a child of the shop
@@ -101,11 +114,6 @@ export interface Relationship extends Resource<
  *   childEntity: api.entityName,
  * });
  * ```
- *
- * :::caution
- * Changing `name`, `parentEntity`, `childEntity`, `healthModel`, or
- * `resourceGroup` replaces the relationship.
- * :::
  *
  * @resource
  */

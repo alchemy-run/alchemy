@@ -44,6 +44,7 @@ export interface ConnectionProps {
    * Connection name: letters, digits, `-`, and `_`. If omitted, a unique
    * name is generated from the logical ID. Changing it replaces the
    * connection.
+   * @default a unique name generated from the logical ID
    */
   name?: string;
   /**
@@ -57,7 +58,10 @@ export interface ConnectionProps {
    * replaces the connection.
    */
   category: string;
-  /** Target URL or ARM ID of the connected service. */
+  /**
+   * Target URL or ARM ID of the connected service.
+   * @default none
+   */
   target?: string;
   /**
    * Credentials for `authType` (write-only): `ApiKey` → `{ key }`,
@@ -65,12 +69,14 @@ export interface ConnectionProps {
    * `{ accessKeyId, secretAccessKey }`, `ServicePrincipal` →
    * `{ clientId, clientSecret, tenantId }`, `PAT` → `{ pat }`. Azure never
    * returns them, so changes are detected against the previous deploy.
+   * @default none
    */
   credentials?: Record<string, unknown>;
   /**
    * Category-specific metadata (e.g. `ApiType`, `ResourceId`). Alchemy
    * ownership markers (`alchemy::stack`, `alchemy::stage`, `alchemy::id`)
    * are merged in.
+   * @default none
    */
   metadata?: Record<string, string>;
   /**
@@ -78,9 +84,15 @@ export interface ConnectionProps {
    * @default true
    */
   isSharedToAll?: boolean;
-  /** Expiry of the credentials, as an ISO 8601 timestamp. */
+  /**
+   * Expiry of the credentials, as an ISO 8601 timestamp.
+   * @default none
+   */
   expiryTime?: string;
-  /** Authenticate with the workspace's managed identity instead of `credentials`. */
+  /**
+   * Authenticate with the workspace's managed identity instead of `credentials`.
+   * @default Azure's default
+   */
   useWorkspaceManagedIdentity?: boolean;
 }
 
@@ -116,14 +128,28 @@ export interface Connection extends Resource<
  * named, credential-bearing link to an external service (Azure OpenAI, AI
  * Search, a storage account, a container registry, any API key).
  *
+ * ARM type: `Microsoft.MachineLearningServices/workspaces/connections`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/how-to-connection).
+ *
  * Connections cannot be tagged, so Alchemy records ownership in the
  * connection's `metadata`. Credentials are write-only.
  *
- * @see https://learn.microsoft.com/azure/machine-learning/how-to-connection
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `name`, `authType`, or `category`
+ * replaces the connection.
+ * :::
  *
  * ### Creating a Connection
  * **Example:** API key connection
  * ```typescript
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const workspace = yield* Azure.MachineLearning.Workspace("hub", {
+ *   kind: "Hub",
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ * });
+ * const apiKey = yield* Config.redacted("EXAMPLE_API_KEY");
  * const connection = yield* Azure.MachineLearning.Connection("search", {
  *   workspace: workspace.workspaceName,
  *   category: "ApiKey",

@@ -6,12 +6,12 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -35,54 +35,106 @@ import {
 export interface PrivateCloudIdentitySource {
   /** Name of the identity source. */
   name: string;
-  /** The domain's NetBIOS name. */
+  /**
+   * The domain's NetBIOS name.
+   * @default not set
+   */
   alias?: string;
-  /** The domain's DNS name. */
+  /**
+   * The domain's DNS name.
+   * @default not set
+   */
   domain?: string;
-  /** Base distinguished name for users. */
+  /**
+   * Base distinguished name for users.
+   * @default not set
+   */
   baseUserDN?: string;
-  /** Base distinguished name for groups. */
+  /**
+   * Base distinguished name for groups.
+   * @default not set
+   */
   baseGroupDN?: string;
-  /** Primary LDAP server URL. */
+  /**
+   * Primary LDAP server URL.
+   * @default not set
+   */
   primaryServer?: string;
-  /** Secondary LDAP server URL. */
+  /**
+   * Secondary LDAP server URL.
+   * @default not set
+   */
   secondaryServer?: string;
-  /** Protect LDAP communication with SSL (LDAPS). */
+  /**
+   * Protect LDAP communication with SSL (LDAPS).
+   * @default not set
+   */
   ssl?: "Enabled" | "Disabled";
-  /** Active Directory user with read access to the base DNs. */
+  /**
+   * Active Directory user with read access to the base DNs.
+   * @default not set
+   */
   username?: string;
-  /** Password of `username`. Write-only; sent on every identity-source update. */
+  /**
+   * Password of `username`. Write-only; sent on every identity-source update.
+   * @default not set
+   */
   password?: Redacted.Redacted<string>;
 }
 
 /** Customer-managed key encryption of the private cloud's vSAN datastores. */
 export interface PrivateCloudEncryption {
-  /** Whether customer-managed key encryption is enabled. */
+  /**
+   * Whether customer-managed key encryption is enabled.
+   * @default not set
+   */
   status?: "Enabled" | "Disabled";
-  /** Name of the Key Vault key. */
+  /**
+   * Name of the Key Vault key.
+   * @default not set
+   */
   keyName?: string;
-  /** Version of the key; omit to auto-detect the latest version. */
+  /**
+   * Version of the key; omit to auto-detect the latest version.
+   * @default the latest key version
+   */
   keyVersion?: string;
-  /** URL of the Key Vault, e.g. `https://myvault.vault.azure.net/`. */
+  /**
+   * URL of the Key Vault, e.g. `https://myvault.vault.azure.net/`.
+   * @default not set
+   */
   keyVaultUrl?: string;
 }
 
 /** How a private cloud is distributed across availability zones. */
 export interface PrivateCloudAvailability {
-  /** Availability strategy. */
+  /**
+   * Availability strategy.
+   * @default not set
+   */
   strategy?: "SingleZone" | "DualZone";
-  /** Primary availability zone. */
+  /**
+   * Primary availability zone.
+   * @default not set
+   */
   zone?: number;
-  /** Secondary availability zone (stretched clusters only). */
+  /**
+   * Secondary availability zone (stretched clusters only).
+   * @default not set
+   */
   secondaryZone?: number;
 }
 
 export interface PrivateCloudProps {
-  /** Resource group the private cloud is created in. Changing it replaces the private cloud. */
+  /**
+   * Resource group the private cloud is created in. Changing it replaces the private cloud.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Name of the private cloud. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the private cloud.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -106,40 +158,68 @@ export interface PrivateCloudProps {
    * @default 3
    */
   clusterSize?: number;
-  /** Internet connectivity of the private cloud. */
+  /**
+   * Internet connectivity of the private cloud.
+   * @default not set
+   */
   internet?: "Enabled" | "Disabled";
-  /** vCenter Single Sign-On identity sources. */
+  /**
+   * vCenter Single Sign-On identity sources.
+   * @default not set
+   */
   identitySources?: PrivateCloudIdentitySource[];
   /**
    * Availability strategy (`SingleZone` / `DualZone` stretched clusters).
    * Changing it replaces the private cloud.
+   * @default {}
    */
   availability?: PrivateCloudAvailability;
-  /** Customer-managed key encryption. Requires `identity: "SystemAssigned"`. */
+  /**
+   * Customer-managed key encryption. Requires `identity: "SystemAssigned"`.
+   * @default not set
+   */
   encryption?: PrivateCloudEncryption;
-  /** Additional non-contiguous /22 network blocks. */
+  /**
+   * Additional non-contiguous /22 network blocks.
+   * @default not set
+   */
   extendedNetworkBlocks?: string[];
-  /** Type of DNS zone used by the private cloud. */
+  /**
+   * Type of DNS zone used by the private cloud.
+   * @default not set
+   */
   dnsZoneType?: "Public" | "Private";
   /**
    * Azure virtual network ID (Gen 2 private clouds). Changing it replaces
    * the private cloud.
+   * @default not set
    */
   virtualNetworkId?: string;
-  /** Availability zones. Changing them replaces the private cloud. */
+  /**
+   * Availability zones. Changing them replaces the private cloud.
+   * @default not set
+   */
   zones?: string[];
-  /** Managed identity of the private cloud. */
+  /**
+   * Managed identity of the private cloud.
+   * @default not set
+   */
   identity?: "SystemAssigned" | "None";
   /**
    * vCenter admin password set at creation. Write-only and create-only;
    * rotate it in the portal afterwards.
+   * @default not set
    */
   vcenterPassword?: Redacted.Redacted<string>;
-  /** NSX-T Manager password set at creation. Write-only and create-only. */
+  /**
+   * NSX-T Manager password set at creation. Write-only and create-only.
+   * @default not set
+   */
   nsxtPassword?: Redacted.Redacted<string>;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -214,12 +294,22 @@ export interface PrivateCloud extends Resource<
 > {}
 
 /**
- * An Azure VMware Solution private cloud — a dedicated vSphere, vSAN, and
- * NSX-T environment on bare-metal hosts.
+ * An Azure VMware Solution private cloud (`Microsoft.AVS/privateClouds`) — a
+ * dedicated vSphere, vSAN, and NSX-T environment on bare-metal hosts.
  *
  * A private cloud needs at least 3 dedicated hosts (~$8-11 per host-hour),
  * an AVS host quota granted through a support request, and 3-4 hours to
  * provision. Every other `Azure.VMware` resource lives inside one.
+ *
+ * :::caution
+ * Changing `name`, `location`, `sku`, `networkBlock`, `virtualNetworkId`,
+ * `availability`, `zones`, or `resourceGroup` replaces the private cloud.
+ * :::
+ *
+ * :::caution
+ * Request an AVS host quota through a support request before you deploy. A
+ * new private cloud takes 3-4 hours to provision.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/introduction
  *
@@ -360,9 +450,7 @@ export const PrivateCloudProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* vmware
-        .ListPrivateCloudInSubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPrivateCloudInSubscription", page)));
+      const page = yield* collectAll(vmware.ListPrivateCloudInSubscription, { subscriptionId });
       return (page.value ?? []).flatMap((cloud) => {
         const group = resourceGroupOf(cloud.id);
         return hasAnyAlchemyTag(cloud.tags) && group !== undefined && cloud.name !== undefined

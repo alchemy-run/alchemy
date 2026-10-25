@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -34,12 +34,14 @@ export interface SupercomputerProps {
   /**
    * Resource group the supercomputer is created in. Changing it replaces
    * the supercomputer.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Supercomputer name: 3-24 letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the supercomputer.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -56,6 +58,7 @@ export interface SupercomputerProps {
    * Subnet of the AKS API server, delegated to
    * `Microsoft.ContainerService/managedClusters`. Changing it replaces the
    * supercomputer.
+   * @default unset
    */
   managementSubnetId?: string;
   /**
@@ -64,7 +67,10 @@ export interface SupercomputerProps {
    * @default "LoadBalancer"
    */
   outboundType?: "LoadBalancer" | "None";
-  /** VM size of the system node pool. Changing it replaces the supercomputer. */
+  /**
+   * VM size of the system node pool. Changing it replaces the supercomputer.
+   * @default unset (Azure's default)
+   */
   systemSku?: string;
   /**
    * ARM ID of the user-assigned cluster identity. Changing it replaces the
@@ -80,6 +86,7 @@ export interface SupercomputerProps {
   /**
    * ARM IDs of user-assigned identities that workloads use as federated
    * credentials.
+   * @default []
    */
   workloadIdentities?: string[];
   /**
@@ -91,11 +98,13 @@ export interface SupercomputerProps {
   /**
    * Disk encryption set for customer-managed keys. Changing it replaces the
    * supercomputer.
+   * @default unset
    */
   diskEncryptionSetId?: string;
   /**
    * Log Analytics cluster for debug logs (required with customer-managed
    * keys). Changing it replaces the supercomputer.
+   * @default unset
    */
   logAnalyticsClusterId?: string;
   /**
@@ -106,6 +115,7 @@ export interface SupercomputerProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -139,15 +149,38 @@ export interface Supercomputer extends Resource<
  * with `Azure.Discovery.NodePool`.
  *
  * Provisioning takes 30+ minutes and the system node pool needs regional
- * vCPU quota. Microsoft Discovery is a gated preview: on subscriptions
- * without the preview, ARM rejects the resource type with
- * `InvalidResourceType`.
+ * vCPU quota.
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `subnetId`,
+ * `managementSubnetId`, `outboundType`, `systemSku`, `clusterIdentity`,
+ * `kubeletIdentity`, `customerManagedKeys`, `diskEncryptionSetId`, or
+ * `logAnalyticsClusterId` replaces the supercomputer (30+ minutes).
+ * :::
+ *
+ * :::caution
+ * Microsoft Discovery is a gated preview. On subscriptions without the
+ * preview, ARM rejects the resource type with `InvalidResourceType`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/microsoft-discovery/
  *
  * ### Creating a Supercomputer
  * **Example:** Supercomputer on an existing virtual network
  * ```typescript
+ * const clusterIdentity = yield* Azure.ManagedIdentity.UserAssignedIdentity("cluster");
+ * const kubeletIdentity = yield* Azure.ManagedIdentity.UserAssignedIdentity("kubelet");
+ * const vnet = yield* Azure.Network.VirtualNetwork("hpc", {
+ *   addressPrefixes: ["10.40.0.0/16"],
+ * });
+ * const systemSubnet = yield* Azure.Network.Subnet("system", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.40.0.0/24",
+ * });
+ * const apiServerSubnet = yield* Azure.Network.Subnet("api-server", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.40.1.0/28",
+ * });
  * const supercomputer = yield* Azure.Discovery.Supercomputer("hpc", {
  *   subnetId: systemSubnet.subnetId,
  *   managementSubnetId: apiServerSubnet.subnetId,
@@ -219,10 +252,9 @@ export const SupercomputerProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* discovery.ListSupercomputerBySubscription({ subscriptionId }).pipe(
-        Effect.flatMap((page) => requireSinglePage("ListSupercomputerBySubscription", page)),
-        Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)),
-      );
+      const page = yield* collectAll(discovery.ListSupercomputerBySubscription, {
+        subscriptionId,
+      }).pipe(Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)));
       return (page?.value ?? []).flatMap((observed) => {
         const group = resourceGroupOf(observed.id);
         return hasAnyAlchemyTag(observed.tags) && group !== undefined && observed.name !== undefined

@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,6 +32,7 @@ export interface PrivateLinkPolicyProps {
   /**
    * Name of the policy. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the policy.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,6 +56,7 @@ export interface PrivateLinkPolicyProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -96,6 +98,10 @@ export interface PrivateLinkPolicy extends Resource<
  * (it is a preview feature; subscriptions without it get
  * `InvalidResourceType`).
  *
+ * :::caution
+ * Changing `name`, `ownerTenantId`, or `resourceGroup` replaces the policy.
+ * :::
+ *
  * @see https://learn.microsoft.com/entra/identity/devices/howto-manage-private-link
  *
  * ### Creating a Policy
@@ -106,8 +112,10 @@ export interface PrivateLinkPolicy extends Resource<
  *
  * **Example:** Allow a list of partner tenants
  * ```typescript
+ * const { tenantId } = yield* Azure.AzureEnvironment.current;
+ * const partnerTenantId = "11111111-2222-3333-4444-555555555555";
  * const policy = yield* Azure.AzureActiveDirectory.PrivateLinkPolicy("entra", {
- *   tenants: [homeTenantId, partnerTenantId],
+ *   tenants: [tenantId, partnerTenantId],
  *   tags: { team: "identity" },
  * });
  * ```
@@ -115,6 +123,14 @@ export interface PrivateLinkPolicy extends Resource<
  * ### Connecting a Virtual Network
  * **Example:** Private endpoint into Microsoft Entra ID
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("app", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const policy = yield* Azure.AzureActiveDirectory.PrivateLinkPolicy("entra");
  * const endpoint = yield* Azure.Network.PrivateEndpoint("entra", {
  *   subnetId: subnet.subnetId,
  *   privateLinkServiceConnections: [
@@ -182,13 +198,7 @@ export const PrivateLinkPolicyProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        aad
-          .ListPrivateLinkForAzureAdBySubscription({ subscriptionId })
-          .pipe(
-            Effect.flatMap((page) =>
-              requireSinglePage("ListPrivateLinkForAzureAdBySubscription", page),
-            ),
-          ),
+        collectAll(aad.ListPrivateLinkForAzureAdBySubscription, { subscriptionId }),
       ).pipe(Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)));
       return (page?.value ?? []).flatMap((policy) => {
         const group = resourceGroupOf(policy.id) ?? policy.resourceGroup;

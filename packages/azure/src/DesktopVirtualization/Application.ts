@@ -15,6 +15,7 @@ export interface ApplicationProps {
   /**
    * Resource group of the application group. Changing it replaces the
    * application.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -26,6 +27,7 @@ export interface ApplicationProps {
    * Application name, 3-24 letters, digits, `@`, `.`, `-`, `_`, or spaces.
    * If omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the application.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -35,28 +37,55 @@ export interface ApplicationProps {
    * @default "InBuilt"
    */
   applicationType?: "InBuilt" | "MsixApplication";
-  /** Path of the executable on the session hosts, e.g. `C:\Windows\System32\notepad.exe`. */
+  /**
+   * Path of the executable on the session hosts, e.g. `C:\Windows\System32\notepad.exe`.
+   * @default unset
+   */
   filePath?: string;
   /**
    * Whether the client may pass command line arguments: never, optionally,
    * or always (`commandLineArguments`).
    */
   commandLineSetting: "DoNotAllow" | "Allow" | "Require";
-  /** Command line arguments passed to the application. */
+  /**
+   * Command line arguments passed to the application.
+   * @default unset
+   */
   commandLineArguments?: string;
-  /** Display name shown to users. */
+  /**
+   * Display name shown to users.
+   * @default unset
+   */
   friendlyName?: string;
-  /** Description of the application. */
+  /**
+   * Description of the application.
+   * @default unset
+   */
   description?: string;
-  /** Whether the application appears in the RD Web Access portal. */
+  /**
+   * Whether the application appears in the RD Web Access portal.
+   * @default unset (Azure's default)
+   */
   showInPortal?: boolean;
-  /** Path of the icon file on the session hosts. */
+  /**
+   * Path of the icon file on the session hosts.
+   * @default unset
+   */
   iconPath?: string;
-  /** Index of the icon inside `iconPath`. */
+  /**
+   * Index of the icon inside `iconPath`.
+   * @default unset (Azure's default)
+   */
   iconIndex?: number;
-  /** Package family name of an MSIX application. */
+  /**
+   * Package family name of an MSIX application.
+   * @default unset
+   */
   msixPackageFamilyName?: string;
-  /** Application ID inside the MSIX package. */
+  /**
+   * Application ID inside the MSIX package.
+   * @default unset
+   */
   msixPackageApplicationId?: string;
 }
 
@@ -85,18 +114,33 @@ export interface Application extends Resource<
 
 /**
  * A RemoteApp application published by an Azure Virtual Desktop
- * `RemoteApp` application group. The executable must exist on the host
- * pool's session hosts for users to launch it; the application object
- * itself is metadata and can be created before any session host exists.
+ * `RemoteApp` application group
+ * (`Microsoft.DesktopVirtualization/applicationGroups/applications`). The
+ * executable must exist on the host pool's session hosts for users to
+ * launch it; the application object itself is metadata and can be created
+ * before any session host exists.
  *
  * Applications have no tags; Alchemy treats an application as owned when
  * its application group carries this stack's ownership tags.
+ *
+ * :::caution
+ * Changing `applicationGroup`, `name`, `applicationType`, or
+ * `resourceGroup` replaces the application.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-desktop/manage-app-groups
  *
  * ### Publishing an Application
  * **Example:** Publish Notepad
  * ```typescript
+ * const pool = yield* Azure.DesktopVirtualization.HostPool("pool", {
+ *   hostPoolType: "Pooled",
+ *   loadBalancerType: "BreadthFirst",
+ * });
+ * const apps = yield* Azure.DesktopVirtualization.ApplicationGroup("apps", {
+ *   hostPoolId: pool.hostPoolId,
+ *   applicationGroupType: "RemoteApp",
+ * });
  * const notepad = yield* Azure.DesktopVirtualization.Application("notepad", {
  *   applicationGroup: apps.applicationGroupName,
  *   filePath: "C:\\Windows\\System32\\notepad.exe",

@@ -33,6 +33,7 @@ export interface TargetProps {
   /**
    * Location of the target. Omit to let Chaos Studio use the parent's
    * location. Changing it replaces the target.
+   * @default the parent resource's location (chosen by Chaos Studio)
    */
   location?: string;
 }
@@ -59,7 +60,8 @@ export interface Target extends Resource<
 > {}
 
 /**
- * Onboards an Azure resource to Azure Chaos Studio as a chaos target.
+ * An Azure Chaos Studio target (`Microsoft.Chaos/targets`) — onboards an
+ * Azure resource so chaos experiments can run faults against it.
  *
  * A target is an extension resource on the onboarded resource
  * (`{parent}/providers/Microsoft.Chaos/targets/{targetType}`). Enable faults
@@ -67,14 +69,17 @@ export interface Target extends Resource<
  * {@link Experiment} selector. Targets cannot be tagged; deleting the parent
  * resource deletes its targets.
  *
- * @see https://learn.microsoft.com/azure/chaos-studio/chaos-studio-targets-capabilities
+ * :::caution
+ * Changing `parentResourceId`, `targetType`, or `location` replaces the
+ * target and deletes its capabilities.
+ * :::
+ *
+ * See [Chaos Studio targets and capabilities](https://learn.microsoft.com/azure/chaos-studio/chaos-studio-targets-capabilities).
  *
  * ### Onboarding a Resource
  * **Example:** Service-direct target on a network security group
  * ```typescript
- * const nsg = yield* Azure.Network.NetworkSecurityGroup("web-nsg", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const nsg = yield* Azure.Network.NetworkSecurityGroup("web-nsg");
  * const target = yield* Azure.Chaos.Target("web-nsg-target", {
  *   parentResourceId: nsg.networkSecurityGroupId,
  *   targetType: "Microsoft-NetworkSecurityGroup",

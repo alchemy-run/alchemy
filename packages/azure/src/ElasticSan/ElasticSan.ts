@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -26,24 +26,40 @@ export type ElasticSanSkuName = "Premium_LRS" | "Premium_ZRS";
 
 /** Automatic capacity scale-up settings of an Elastic SAN. */
 export interface ElasticSanScaleUpProperties {
-  /** Unused capacity (TiB) that triggers a scale-up when reached. */
+  /**
+   * Unused capacity (TiB) that triggers a scale-up when reached.
+   * @default Azure's default
+   */
   unusedSizeTiB?: number;
-  /** Capacity (TiB) added on each scale-up. */
+  /**
+   * Capacity (TiB) added on each scale-up.
+   * @default Azure's default
+   */
   increaseCapacityUnitByTiB?: number;
-  /** Upper limit (TiB) the SAN may scale up to. */
+  /**
+   * Upper limit (TiB) the SAN may scale up to.
+   * @default Azure's default
+   */
   capacityUnitScaleUpLimitTiB?: number;
-  /** Whether automatic scale-up is enabled. */
+  /**
+   * Whether automatic scale-up is enabled.
+   * @default Azure's default (`None`)
+   */
   autoScalePolicyEnforcement?: "None" | "Enabled" | "Disabled";
 }
 
 export interface ElasticSanProps {
-  /** Resource group the SAN is created in. Changing it replaces the SAN. */
+  /**
+   * Resource group the SAN is created in. Changing it replaces the SAN.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /**
    * SAN name: 3-24 lowercase letters, digits, hyphens and underscores,
    * starting and ending with a letter or digit. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the SAN.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -61,6 +77,7 @@ export interface ElasticSanProps {
   /**
    * Availability zone (LRS only), e.g. `["1"]`. Changing it replaces the
    * SAN.
+   * @default none (Azure places the SAN)
    */
   availabilityZones?: string[];
   /**
@@ -75,16 +92,26 @@ export interface ElasticSanProps {
    * @default 0
    */
   extendedCapacitySizeTiB?: number;
-  /** Whether the SAN accepts traffic over public endpoints. */
+  /**
+   * Whether the SAN accepts traffic over public endpoints.
+   * @default Azure's default
+   */
   publicNetworkAccess?: "Enabled" | "Disabled";
-  /** Automatic capacity scale-up settings. */
+  /**
+   * Automatic capacity scale-up settings.
+   * @default none (no automatic scale-up)
+   */
   autoScaleProperties?: {
-    /** Scale-up settings. */
+    /**
+     * Scale-up settings.
+     * @default none
+     */
     scaleUpProperties?: ElasticSanScaleUpProperties;
   };
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -131,12 +158,18 @@ export interface ElasticSan extends Resource<
 > {}
 
 /**
- * An Azure Elastic SAN — a cloud-native storage area network that serves
- * block volumes over iSCSI. Capacity is provisioned on the SAN (base
- * capacity in 1 TiB units, billed hourly) and carved into volume groups and
- * volumes.
+ * An Azure Elastic SAN (`Microsoft.ElasticSan/elasticSans`) — a
+ * cloud-native storage area network that serves block volumes over iSCSI.
+ * Capacity is provisioned on the SAN (base capacity in 1 TiB units, billed
+ * hourly) and carved into volume groups and volumes. See the
+ * [Elastic SAN introduction](https://learn.microsoft.com/azure/storage/elastic-san/elastic-san-introduction).
  *
- * @see https://learn.microsoft.com/azure/storage/elastic-san/elastic-san-introduction
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `sku`, or
+ * `availabilityZones` replaces the SAN and deletes every volume group,
+ * volume, and snapshot in it. An unchanged explicit `name` deletes the old
+ * SAN first.
+ * :::
  *
  * ### Creating an Elastic SAN
  * **Example:** Minimal SAN (1 TiB base capacity)
@@ -227,9 +260,7 @@ export const ElasticSanProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* elasticsan
-        .ListElasticSanBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListElasticSanBySubscription", page)));
+      const page = yield* collectAll(elasticsan.ListElasticSanBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((san) => {
         const group = resourceGroupOf(san.id);
         return hasAnyAlchemyTag(san.tags) && group !== undefined && san.name !== undefined

@@ -16,7 +16,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, sameJson, payloadText } from "./EdgeShared.ts";
 
 export interface SolutionTemplateVersionProps {
-  /** Resource group of the solution template. Changing it replaces the version. */
+  /**
+   * Resource group of the solution template. Changing it replaces the version.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Name of the parent solution template. Changing it replaces the version. */
   solutionTemplate: string;
@@ -69,18 +72,29 @@ export interface SolutionTemplateVersion extends Resource<
 
 /**
  * An immutable version of an Azure Arc workload orchestration solution
- * template: the configuration template YAML plus the Helm deployment
- * specification. Reviewing, publishing, and installing a version on a
- * target are actions, not resources.
+ * template (`Microsoft.Edge/solutionTemplates/versions`): the
+ * configuration template YAML plus the Helm deployment specification.
+ * Reviewing, publishing, and installing a version on a target are
+ * actions, not resources. See the
+ * [workload orchestration overview](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview).
  *
  * Versions carry no tags or free-form fields, so Alchemy cannot mark them;
  * a version found under the expected name is treated as this resource.
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview
+ * :::caution
+ * Versions are immutable. Changing `resourceGroup`, `solutionTemplate`,
+ * `version`, `configurations`, `specification`, or `orchestratorType`
+ * replaces the version. A new payload under the same `version` deletes
+ * the old version first.
+ * :::
  *
  * ### Publishing a Version
  * **Example:** Helm solution version
  * ```typescript
+ * const app = yield* Azure.Edge.SolutionTemplate("app", {
+ *   description: "Price detector",
+ *   capabilities: ["soap"],
+ * });
  * yield* Azure.Edge.SolutionTemplateVersion("app-v1", {
  *   solutionTemplate: app.solutionTemplateName,
  *   version: "1.0.0",

@@ -17,7 +17,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState } from "./EdgeShared.ts";
 
 export interface DynamicConfigurationProps {
-  /** Resource group of the configuration. Changing it replaces the dynamic configuration. */
+  /**
+   * Resource group of the configuration. Changing it replaces the dynamic configuration.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Name of the parent configuration. Changing it replaces the dynamic configuration. */
   configuration: string;
@@ -58,7 +61,8 @@ export interface DynamicConfiguration extends Resource<
 
 /**
  * A dynamic configuration under an Azure Arc workload orchestration
- * configuration. It tracks which version of a solution or config
+ * configuration (`Microsoft.Edge/configurations/dynamicConfigurations`).
+ * It tracks which version of a solution or config
  * template's values is current; the values live in
  * `Azure.Edge.DynamicConfigurationVersion` children. Its name must be the
  * unique identifier of the template it configures, and the service only
@@ -70,13 +74,26 @@ export interface DynamicConfiguration extends Resource<
  *
  * Dynamic configurations carry no tags or free-form fields, so Alchemy
  * cannot mark them; one found under the expected name is treated as this
- * resource.
+ * resource. See the
+ * [configuration model](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model).
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model
+ * :::caution
+ * Changing `resourceGroup`, `configuration`, or `name` replaces the
+ * dynamic configuration and its versions.
+ * :::
  *
  * ### Creating a Dynamic Configuration
  * **Example:** Values for a linked config template
  * ```typescript
+ * const context = yield* Azure.Edge.Context("context", {
+ *   capabilities: [{ name: "soap", description: "Soap production" }],
+ *   hierarchies: [{ name: "country", description: "Country" }],
+ * });
+ * const site = yield* Azure.Edge.Site("plant");
+ * const template = yield* Azure.Edge.ConfigTemplate("common", {
+ *   description: "Shared plant configuration",
+ * });
+ * const configuration = yield* Azure.Edge.Configuration("plant-config");
  * const reference = yield* Azure.Edge.ConfigurationReference("site-config", {
  *   resourceUri: site.siteId,
  *   configurationResourceId: configuration.configurationId,

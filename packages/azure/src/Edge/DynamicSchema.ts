@@ -17,7 +17,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState } from "./EdgeShared.ts";
 
 export interface DynamicSchemaProps {
-  /** Resource group of the schema. Changing it replaces the dynamic schema. */
+  /**
+   * Resource group of the schema. Changing it replaces the dynamic schema.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Name of the parent schema. Changing it replaces the dynamic schema. */
   schema: string;
@@ -25,6 +28,7 @@ export interface DynamicSchemaProps {
    * Name of the dynamic schema. If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the dynamic
    * schema.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
 }
@@ -51,18 +55,24 @@ export interface DynamicSchema extends Resource<
 > {}
 
 /**
- * A dynamic schema under an Azure Arc workload orchestration schema. Its
- * rules live in immutable `Azure.Edge.DynamicSchemaVersion` children.
+ * A dynamic schema under an Azure Arc workload orchestration schema
+ * (`Microsoft.Edge/schemas/dynamicSchemas`). Its rules live in immutable
+ * `Azure.Edge.DynamicSchemaVersion` children. See the
+ * [configuration model](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model).
  *
  * Dynamic schemas carry no tags or free-form fields, so Alchemy cannot
  * mark them; one found under the expected name is treated as this
  * resource.
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuration-model
+ * :::caution
+ * Changing `resourceGroup`, `schema`, or `name` replaces the dynamic
+ * schema and its versions.
+ * :::
  *
  * ### Creating a Dynamic Schema
  * **Example:** Dynamic schema with a version
  * ```typescript
+ * const schema = yield* Azure.Edge.Schema("app");
  * const dynamic = yield* Azure.Edge.DynamicSchema("dynamic", {
  *   schema: schema.schemaName,
  * });

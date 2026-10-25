@@ -28,23 +28,50 @@ export type AttestationToggle = "Enabled" | "Disabled";
 export interface AttestationJsonWebKey {
   /** Key type, e.g. `RSA` or `EC`. */
   kty: string;
-  /** Algorithm intended for use with the key, e.g. `RS256`. */
+  /**
+   * Algorithm intended for use with the key, e.g. `RS256`.
+   * @default not set
+   */
   alg?: string;
-  /** Key ID. */
+  /**
+   * Key ID.
+   * @default not set
+   */
   kid?: string;
-  /** Intended use of the key, e.g. `sig`. */
+  /**
+   * Intended use of the key, e.g. `sig`.
+   * @default not set
+   */
   use?: string;
-  /** Base64 (not base64url) DER-encoded X.509 certificate chain. */
+  /**
+   * Base64 (not base64url) DER-encoded X.509 certificate chain.
+   * @default none
+   */
   x5c?: string[];
-  /** RSA modulus. */
+  /**
+   * RSA modulus.
+   * @default not set
+   */
   n?: string;
-  /** RSA public exponent. */
+  /**
+   * RSA public exponent.
+   * @default not set
+   */
   e?: string;
-  /** EC curve name. */
+  /**
+   * EC curve name.
+   * @default not set
+   */
   crv?: string;
-  /** EC x coordinate. */
+  /**
+   * EC x coordinate.
+   * @default not set
+   */
   x?: string;
-  /** EC y coordinate. */
+  /**
+   * EC y coordinate.
+   * @default not set
+   */
   y?: string;
 }
 
@@ -59,6 +86,7 @@ export interface ProviderProps {
    * region (it forms `https://<name>.<region>.attest.azure.net`). If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the provider.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -71,6 +99,7 @@ export interface ProviderProps {
    * updates. Setting them switches the provider to the `Isolated` trust
    * model; without them it uses `AAD`. Creation-only: changing them
    * replaces the provider.
+   * @default none (the `AAD` trust model)
    */
   policySigningCertificates?: AttestationJsonWebKey[];
   /**
@@ -87,6 +116,7 @@ export interface ProviderProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -121,9 +151,15 @@ export interface Provider extends Resource<
 > {}
 
 /**
- * A Microsoft Azure Attestation provider — a dedicated attestation
+ * A Microsoft Azure Attestation provider
+ * (`Microsoft.Attestation/attestationProviders`) — a dedicated attestation
  * instance that verifies SGX, VBS, TPM, and SEV-SNP evidence and issues
  * signed tokens against your own policies. The provider itself is free.
+ *
+ * :::caution
+ * Changing `name`, `location`, `policySigningCertificates`, or
+ * `resourceGroup` replaces the provider.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/attestation/overview
  *
@@ -137,8 +173,10 @@ export interface Provider extends Resource<
  * ### Isolated Trust Model
  * **Example:** Require policy updates to be signed by your certificate
  * ```typescript
+ * // Base64 DER of the X.509 certificate that signs policy updates.
+ * const certificate = yield* Config.string("ATTESTATION_SIGNING_CERT");
  * const attest = yield* Azure.Attestation.Provider("attest", {
- *   policySigningCertificates: [{ kty: "RSA", x5c: [certificateBase64Der] }],
+ *   policySigningCertificates: [{ kty: "RSA", x5c: [certificate] }],
  * });
  * ```
  *

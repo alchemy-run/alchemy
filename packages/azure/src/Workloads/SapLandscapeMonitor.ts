@@ -37,15 +37,27 @@ export interface SapLandscapeMetricThreshold {
 }
 
 export interface SapLandscapeMonitorProps {
-  /** Resource group of the monitor. Changing it replaces the resource. */
+  /**
+   * Resource group of the monitor. Changing it replaces the resource.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the parent monitor. Changing it replaces the resource. */
   monitor: string;
-  /** SID groupings by landscape (e.g. `Production`, `Non-Production`). */
+  /**
+   * SID groupings by landscape (e.g. `Production`, `Non-Production`).
+   * @default []
+   */
   landscape?: SapLandscapeSidMapping[];
-  /** SID groupings by SAP application (e.g. `ERP`, `BW`). */
+  /**
+   * SID groupings by SAP application (e.g. `ERP`, `BW`).
+   * @default []
+   */
   sapApplication?: SapLandscapeSidMapping[];
-  /** Thresholds for the top-metrics health view. */
+  /**
+   * Thresholds for the top-metrics health view.
+   * @default []
+   */
   topMetricsThresholds?: SapLandscapeMetricThreshold[];
 }
 
@@ -73,16 +85,26 @@ export interface SapLandscapeMonitor extends Resource<
 > {}
 
 /**
- * The SAP landscape monitor dashboard configuration of an Azure Monitor
- * for SAP solutions {@link Monitor} — a singleton (`default`) per monitor
- * that groups SAP system IDs by landscape and application and sets the
- * health thresholds of the top-metrics view.
+ * The SAP landscape monitor dashboard configuration of an Azure Monitor for
+ * SAP solutions {@link Monitor}
+ * (`Microsoft.Workloads/monitors/sapLandscapeMonitor`) — a singleton
+ * (`default`) per monitor that groups SAP system IDs by landscape and
+ * application and sets the health thresholds of the top-metrics view.
+ *
+ * :::caution
+ * Changing `monitor` or `resourceGroup` replaces the dashboard
+ * configuration.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/workloads/sap-landscape-monitor
  *
  * ### Configuring the Dashboard
  * **Example:** Group systems and set thresholds
  * ```typescript
+ * const monitor = yield* Azure.Workloads.Monitor("ams", {
+ *   monitorSubnet:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/sap/providers/Microsoft.Network/virtualNetworks/sap-vnet/subnets/ams",
+ * });
  * yield* Azure.Workloads.SapLandscapeMonitor("landscape", {
  *   monitor: monitor.monitorName,
  *   landscape: [{ name: "Production", topSid: ["S4P"] }],

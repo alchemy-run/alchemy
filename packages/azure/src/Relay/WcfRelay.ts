@@ -26,37 +26,64 @@ import {
 export type WcfRelayType = "NetTcp" | "Http";
 
 export interface WcfRelayProps {
-  /** Resource group of the namespace. Changing it replaces the relay. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the relay.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Relay namespace that holds the relay. Changing it replaces the relay. */
+  /**
+   * Relay namespace that holds the relay.
+   *
+   * :::caution
+   * Changing it replaces the relay.
+   * :::
+   */
   namespace: string;
   /**
    * Relay name: 1-260 letters, digits, `.`, `-`, `_`, and `/`, starting and
-   * ending with a letter or digit. If omitted, a unique lowercase name is
-   * generated from the app, stage, and logical ID. Changing it replaces the
-   * relay.
+   * ending with a letter or digit.
+   *
+   * :::caution
+   * Changing it replaces the relay.
+   * :::
+   * @default a unique lowercase name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * WCF binding type. Changing it replaces the relay.
+   * WCF binding type.
+   *
+   * :::caution
+   * Changing it replaces the relay.
+   * :::
    * @default "NetTcp"
    */
   relayType?: WcfRelayType;
   /**
-   * Whether senders must present a SAS token. Changing it replaces the
-   * relay.
+   * Whether senders must present a SAS token.
+   *
+   * :::caution
+   * Changing it replaces the relay.
+   * :::
    * @default true
    */
   requiresClientAuthorization?: boolean;
   /**
-   * Whether the relay requires transport security (TLS). Changing it
-   * replaces the relay.
+   * Whether the relay requires transport security (TLS).
+   *
+   * :::caution
+   * Changing it replaces the relay.
+   * :::
    * @default true
    */
   requiresTransportSecurity?: boolean;
   /**
    * Free-form user metadata. Alchemy appends an ownership marker to the
    * stored value.
+   * @default none (only the ownership marker)
    */
   userMetadata?: string;
 }
@@ -93,7 +120,8 @@ export interface WcfRelay extends Resource<
 > {}
 
 /**
- * A persistent Azure Relay WCF relay — a rendezvous endpoint for Windows
+ * A persistent Azure Relay WCF relay (`Microsoft.Relay/namespaces/wcfRelays`)
+ * — a rendezvous endpoint for Windows
  * Communication Foundation services using `NetTcpRelayBinding` or the
  * HTTP relay bindings. WCF Relay is a legacy technology; prefer
  * `HybridConnection` for new workloads. Billing is per relay-hour while a
@@ -116,6 +144,7 @@ export interface WcfRelay extends Resource<
  *
  * **Example:** HTTP relay
  * ```typescript
+ * const ns = yield* Azure.Relay.Namespace("relay");
  * const svc = yield* Azure.Relay.WcfRelay("legacy-http", {
  *   namespace: ns.namespaceName,
  *   relayType: "Http",

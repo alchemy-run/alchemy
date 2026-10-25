@@ -49,12 +49,31 @@ export interface TagApiLink extends Resource<
  * Assigns an API Management {@link Tag} to an API through a named link
  * entity (`tags/{tagId}/apiLinks/{linkId}`). It expresses the same
  * relation as {@link ApiTagLink}; use one or the other.
+ * The ARM type is `Microsoft.ApiManagement/service/tags/apiLinks`.
+ *
+ * :::caution
+ * Changing `serviceName`, `tagName`, `apiName`, `name`, or `resourceGroup`
+ * replaces the link.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/apimanagement/tag-api-link
  *
  * ### Tagging APIs from the Tag Side
  * **Example:** Tag the orders API as public
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const publicTag = yield* Azure.ApiManagement.Tag("public", {
+ *   serviceName: apim.serviceName,
+ *   displayName: "Public",
+ * });
+ * const orders = yield* Azure.ApiManagement.Api("orders", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * yield* Azure.ApiManagement.TagApiLink("public-orders", {
  *   serviceName: apim.serviceName,
  *   tagName: publicTag.tagName,

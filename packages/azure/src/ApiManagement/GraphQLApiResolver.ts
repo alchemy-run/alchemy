@@ -60,12 +60,34 @@ export interface GraphQLApiResolver extends Resource<
  * schema field (`Type/field`) to a data source; the data source itself is
  * defined by the resolver's {@link GraphQLApiResolverPolicy}
  * (`http-data-source`, `sql-data-source`, ...).
+ * The ARM type is `Microsoft.ApiManagement/service/apis/resolvers`.
+ *
+ * :::caution
+ * Changing `serviceName`, `apiName`, `name`, or `resourceGroup` replaces the
+ * resolver.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/configure-graphql-resolver
  *
  * ### Resolving GraphQL Fields
  * **Example:** Resolve `Query.users` over HTTP
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const graphqlApi = yield* Azure.ApiManagement.Api("graph", {
+ *   serviceName: apim.serviceName,
+ *   path: "graphql",
+ *   type: "graphql",
+ *   protocols: ["https"],
+ * });
+ * yield* Azure.ApiManagement.ApiSchema("graph-schema", {
+ *   serviceName: apim.serviceName,
+ *   apiName: graphqlApi.apiName,
+ *   contentType: "application/vnd.ms-azure-apim.graphql.schema",
+ *   value: "type Query {\n  users: [String]\n}\n",
+ * });
  * const resolver = yield* Azure.ApiManagement.GraphQLApiResolver("users", {
  *   serviceName: apim.serviceName,
  *   apiName: graphqlApi.apiName,

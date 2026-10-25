@@ -18,7 +18,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { clusterOwnedByStage, lower, reveal } from "./Common.ts";
 
 export interface ExtensionProps {
-  /** Resource group of the cluster. Changing it replaces the extension. */
+  /**
+   * Resource group of the cluster. Changing it replaces the extension.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Cluster the extension is enabled on. Changing it replaces the extension. */
   cluster: string;
@@ -54,24 +57,31 @@ export interface Extension extends Resource<
 > {}
 
 /**
- * A named HDInsight cluster extension, enabled with a Log Analytics
- * workspace — e.g. `clustermonitoring`, the classic Azure Monitor logs
- * integration. Enabling or disabling it reconfigures every node and takes
- * several minutes.
+ * A named HDInsight cluster extension
+ * (`Microsoft.HDInsight/clusters/extensions`), enabled with a Log
+ * Analytics workspace — e.g. `clustermonitoring`, the classic Azure
+ * Monitor logs integration. Enabling or disabling it reconfigures every
+ * node and takes several minutes. See
+ * [use Azure Monitor logs](https://learn.microsoft.com/azure/hdinsight/hdinsight-hadoop-oms-log-analytics-tutorial).
  *
  * Extensions carry no tags; Alchemy treats one as owned when its cluster
  * carries this stack's ownership tags.
  *
- * @see https://learn.microsoft.com/azure/hdinsight/hdinsight-hadoop-oms-log-analytics-tutorial
+ * :::caution
+ * Changing `resourceGroup`, `cluster`, or `extensionName` replaces the
+ * extension.
+ * :::
  *
  * ### Enabling an Extension
  * **Example:** Classic cluster monitoring
  * ```typescript
+ * // `cluster` is an `Azure.HDInsight.Cluster` (see its page)
+ * const workspace = yield* Azure.LogAnalytics.Workspace("logs");
  * const monitoring = yield* Azure.HDInsight.Extension("monitoring", {
  *   cluster: cluster.clusterName,
  *   extensionName: "clustermonitoring",
  *   workspaceId: workspace.customerId,
- *   primaryKey: workspaceKey,
+ *   primaryKey: workspace.primarySharedKey.as<Redacted.Redacted<string>>(),
  * });
  * ```
  *

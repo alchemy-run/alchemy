@@ -32,25 +32,43 @@ export type EndpointType =
   | "S3WithHMAC";
 
 export interface EndpointCredentials {
-  /** Key Vault secret URI holding the SMB username (`SmbMount`). */
+  /**
+   * Key Vault secret URI holding the SMB username (`SmbMount`).
+   * @default not set
+   */
   usernameUri?: string;
-  /** Key Vault secret URI holding the SMB password (`SmbMount`). */
+  /**
+   * Key Vault secret URI holding the SMB password (`SmbMount`).
+   * @default not set
+   */
   passwordUri?: string;
-  /** Key Vault secret URI holding the S3 access key (`S3WithHMAC`). */
+  /**
+   * Key Vault secret URI holding the S3 access key (`S3WithHMAC`).
+   * @default not set
+   */
   accessKeyUri?: string;
-  /** Key Vault secret URI holding the S3 secret key (`S3WithHMAC`). */
+  /**
+   * Key Vault secret URI holding the S3 secret key (`S3WithHMAC`).
+   * @default not set
+   */
   secretKeyUri?: string;
 }
 
 export interface EndpointIdentity {
   /** Managed identity type. */
   type: "None" | "SystemAssigned" | "UserAssigned" | "SystemAssigned,UserAssigned";
-  /** ARM IDs of user-assigned identities to attach. */
+  /**
+   * ARM IDs of user-assigned identities to attach.
+   * @default not set
+   */
   userAssignedIdentities?: string[];
 }
 
 export interface EndpointProps {
-  /** Resource group of the Storage Mover. Changing it replaces the endpoint. */
+  /**
+   * Resource group of the Storage Mover. Changing it replaces the endpoint.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Storage Mover that holds the endpoint. Changing it replaces the endpoint. */
   storageMover: string;
@@ -58,6 +76,7 @@ export interface EndpointProps {
    * Name of the endpoint: 1-64 letters, digits, `-` and `_`, starting with a
    * letter or digit. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the endpoint.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -74,56 +93,94 @@ export interface EndpointProps {
   /**
    * Description of the endpoint. Alchemy appends an ownership marker
    * (`[alchemy <stack>/<stage>/<id>]`) because endpoints have no tags.
+   * @default not set
    */
   description?: string;
   /**
    * ARM ID of the storage account (`AzureStorageBlobContainer`,
    * `AzureStorageSmbFileShare`, `AzureStorageNfsFileShare`). Changing it
    * replaces the endpoint.
+   * @default not set
    */
   storageAccountId?: string;
-  /** Blob container name (`AzureStorageBlobContainer`). Changing it replaces the endpoint. */
+  /**
+   * Blob container name (`AzureStorageBlobContainer`). Changing it replaces the endpoint.
+   * @default not set
+   */
   blobContainerName?: string;
   /**
    * File share name (`AzureStorageSmbFileShare`, `AzureStorageNfsFileShare`).
    * Changing it replaces the endpoint.
+   * @default not set
    */
   fileShareName?: string;
-  /** Host name or IP of the server (`NfsMount`, `SmbMount`). Changing it replaces the endpoint. */
+  /**
+   * Host name or IP of the server (`NfsMount`, `SmbMount`). Changing it replaces the endpoint.
+   * @default not set
+   */
   host?: string;
-  /** Directory exported by the NFS server (`NfsMount`). Changing it replaces the endpoint. */
+  /**
+   * Directory exported by the NFS server (`NfsMount`). Changing it replaces the endpoint.
+   * @default not set
+   */
   export?: string;
   /**
    * NFS protocol version (`NfsMount`). Changing it replaces the endpoint.
    * @default "NFSauto"
    */
   nfsVersion?: "NFSauto" | "NFSv3" | "NFSv4" | "NFSv4_1";
-  /** SMB share name (`SmbMount`). Changing it replaces the endpoint. */
+  /**
+   * SMB share name (`SmbMount`). Changing it replaces the endpoint.
+   * @default not set
+   */
   shareName?: string;
   /**
    * Source flavour: `NfsMount`/`FSX-EFS` for `NfsMount`, `SmbMount`/`FSX-SMB`
    * for `SmbMount`, `MINIO`/`IBM`/`GCS`/`ALIBABA`/`DELL_EMC`/`OTHER` for
    * `S3WithHMAC`. Changing it replaces the endpoint.
+   * @default not set
    */
   sourceType?: string;
-  /** ARM ID of the multi-cloud connector (`AzureMultiCloudConnector`). Changing it replaces the endpoint. */
+  /**
+   * ARM ID of the multi-cloud connector (`AzureMultiCloudConnector`). Changing it replaces the endpoint.
+   * @default not set
+   */
   multiCloudConnectorId?: string;
-  /** ARM ID of the AWS S3 bucket (`AzureMultiCloudConnector`). Changing it replaces the endpoint. */
+  /**
+   * ARM ID of the AWS S3 bucket (`AzureMultiCloudConnector`). Changing it replaces the endpoint.
+   * @default not set
+   */
   awsS3BucketId?: string;
-  /** Source URI (`S3WithHMAC`). Changing it replaces the endpoint. */
+  /**
+   * Source URI (`S3WithHMAC`). Changing it replaces the endpoint.
+   * @default not set
+   */
   sourceUri?: string;
-  /** Description of an `OTHER` source type (`S3WithHMAC`). Changing it replaces the endpoint. */
+  /**
+   * Description of an `OTHER` source type (`S3WithHMAC`). Changing it replaces the endpoint.
+   * @default not set
+   */
   otherSourceTypeDescription?: string;
-  /** Key Vault secret URIs with the credentials (`SmbMount`, `S3WithHMAC`). */
+  /**
+   * Key Vault secret URIs with the credentials (`SmbMount`, `S3WithHMAC`).
+   * @default not set
+   */
   credentials?: EndpointCredentials;
   /**
    * Allow cross-tenant transfers (`AzureStorageBlobContainer`,
    * `AzureStorageSmbFileShare`).
+   * @default not set
    */
   enableCrossTenantTransfer?: boolean;
-  /** Storage account ARM IDs allowed for cross-tenant transfers. */
+  /**
+   * Storage account ARM IDs allowed for cross-tenant transfers.
+   * @default not set
+   */
   allowedStorageAccounts?: string[];
-  /** Managed identity of the endpoint. */
+  /**
+   * Managed identity of the endpoint.
+   * @default not set
+   */
   identity?: EndpointIdentity;
 }
 
@@ -153,17 +210,33 @@ export interface Endpoint extends Resource<
 > {}
 
 /**
- * A Storage Mover endpoint — a migration source (an NFS or SMB share, an S3
- * bucket) or target (an Azure blob container or file share).
+ * A Storage Mover endpoint
+ * (`Microsoft.StorageMover/storageMovers/endpoints`) — a migration source
+ * (an NFS or SMB share, an S3 bucket) or target (an Azure blob container or
+ * file share).
  *
  * Endpoints have no tags, so Alchemy records ownership as a marker at the
  * end of the description.
+ *
+ * :::caution
+ * Changing `storageMover`, `name`, `endpointType`, `endpointKind`, or
+ * `resourceGroup` replaces the endpoint. So does changing any location prop:
+ * `storageAccountId`, `blobContainerName`, `fileShareName`, `host`,
+ * `export`, `nfsVersion`, `shareName`, `sourceType`,
+ * `multiCloudConnectorId`, `awsS3BucketId`, `sourceUri`, or
+ * `otherSourceTypeDescription`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/storage-mover/endpoint-manage
  *
  * ### Target Endpoints
  * **Example:** Blob container target
  * ```typescript
+ * const mover = yield* Azure.StorageMover.StorageMover("mover");
+ * const account = yield* Azure.Storage.StorageAccount("files");
+ * const container = yield* Azure.Storage.BlobContainer("imported", {
+ *   storageAccount: account.storageAccountName,
+ * });
  * const target = yield* Azure.StorageMover.Endpoint("target", {
  *   storageMover: mover.storageMoverName,
  *   endpointType: "AzureStorageBlobContainer",

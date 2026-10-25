@@ -24,9 +24,15 @@ export interface EmailTemplateProps {
   subject: string;
   /** Email body as an HTML/XSLT document (may use `$parameter` placeholders). */
   body: string;
-  /** Title of the template. */
+  /**
+   * Title of the template.
+   * @default no title
+   */
   title?: string;
-  /** Description of the template. */
+  /**
+   * Description of the template.
+   * @default no description
+   */
   description?: string;
 }
 
@@ -56,17 +62,37 @@ export interface EmailTemplate extends Resource<
  * restores Azure's default content. Not available on the Consumption tier,
  * and Pay-As-You-Go/MSDN subscriptions cannot customize templates at all
  * (writes fail with `ApiManagementEmailTemplateWritesNotAllowed`).
+ * The ARM type is `Microsoft.ApiManagement/service/templates`.
+ *
+ * :::caution
+ * Changing `serviceName`, `templateName`, or `resourceGroup` replaces the
+ * template.
+ *
+ * Email templates are not available on the Consumption tier ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-configure-notifications
  *
  * ### Customizing Emails
  * **Example:** Brand the subscription-approved email
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * yield* Azure.ApiManagement.EmailTemplate("approved", {
  *   serviceName: apim.serviceName,
  *   templateName: "applicationApprovedNotificationMessage",
  *   subject: "Your $OrganizationName subscription is ready",
- *   body: approvedEmailBody,
+ *   body: `<!DOCTYPE html>
+ * <html>
+ *   <body>
+ *     <p>Dear $DevFirstName $DevLastName,</p>
+ *     <p>Your subscription to $ProdName is approved.</p>
+ *   </body>
+ * </html>`,
  * });
  * ```
  *

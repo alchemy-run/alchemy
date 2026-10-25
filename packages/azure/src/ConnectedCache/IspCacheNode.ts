@@ -35,6 +35,7 @@ export interface IspCacheNodeProps {
   /**
    * Resource group that holds the parent customer. Changing it replaces the
    * cache node.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -45,6 +46,7 @@ export interface IspCacheNodeProps {
   /**
    * Cache node resource name. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the cache node.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -58,14 +60,21 @@ export interface IspCacheNodeProps {
    * @default the resource name
    */
   cacheNodeName?: string;
-  /** IPv4 address of the server that hosts the cache node. */
+  /**
+   * IPv4 address of the server that hosts the cache node.
+   * @default none
+   */
   ipAddress?: string;
   /**
    * Client IP ranges (CIDR blocks) the cache node serves, when routing is
    * configured manually instead of over BGP.
+   * @default none
    */
   cidrCsv?: string[];
-  /** Maximum egress the cache node may serve, in Mbps. */
+  /**
+   * Maximum egress the cache node may serve, in Mbps.
+   * @default no limit
+   */
   maxAllowableEgressInMbps?: number;
   /**
    * Whether the cache node is enabled.
@@ -86,6 +95,7 @@ export interface IspCacheNodeProps {
   /**
    * HTTP proxy the cache node uses to reach the internet, as
    * `host:port` or `http://host:port`. Omit when no proxy is required.
+   * @default none (direct internet access)
    */
   proxyUrl?: string;
   /**
@@ -96,6 +106,7 @@ export interface IspCacheNodeProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -166,7 +177,12 @@ export interface IspCacheNode extends Resource<
  *
  * Ownership is derived from the parent customer's Alchemy tags.
  *
- * @see https://learn.microsoft.com/windows/deployment/do/mcc-isp-create-provision-deploy
+ * :::caution
+ * Changing `name`, `customer`, `location`, `osType`, or `resourceGroup`
+ * replaces the cache node; the host server must then be provisioned again.
+ * :::
+ *
+ * See [Create and deploy an ISP cache node](https://learn.microsoft.com/windows/deployment/do/mcc-isp-create-provision-deploy).
  *
  * ### Creating a Cache Node
  * **Example:** Linux cache node serving one client range
@@ -196,11 +212,6 @@ export interface IspCacheNode extends Resource<
  *   proxyUrl: "http://proxy.contoso.example:8080",
  * });
  * ```
- *
- * :::caution
- * Changing `name`, `customer`, `location`, `osType`, or `resourceGroup`
- * replaces the cache node; the host server must then be provisioned again.
- * :::
  *
  * @resource
  */

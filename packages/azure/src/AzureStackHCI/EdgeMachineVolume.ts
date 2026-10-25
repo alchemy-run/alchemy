@@ -29,7 +29,10 @@ export interface EdgeMachineVolumeProps {
    * Name of the volume. Changing it replaces the volume.
    */
   name: string;
-  /** Volume configuration. */
+  /**
+   * Volume configuration.
+   * @default not set
+   */
   volumeConfiguration?: EdgeMachineVolumeConfiguration;
 }
 
@@ -57,15 +60,23 @@ export interface EdgeMachineVolume extends Resource<
 /**
  * A volume on an Azure Local edge machine's local storage. Needs a
  * claimed, connected physical machine.
+ * The ARM type is `Microsoft.AzureStackHCI/edgeMachines/volumes`.
  *
  * It has no tags; Alchemy treats it as owned when its parent edge machine
  * carries this stack's ownership tags.
+ *
+ * :::caution
+ * Changing `edgeMachine`, `name`, or `resourceGroup` replaces the edge
+ * machine volume.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/overview
  *
  * ### Creating a Volume
  * **Example:** Volume on an edge machine
  * ```typescript
+ * // ARM ID of the Arc-enabled server (Microsoft.HybridCompute/machines).
+ * const arcServerId = yield* Config.string("ARC_SERVER_ID");
  * const machine = yield* Azure.AzureStackHCI.EdgeMachine("node-1", {
  *   arcMachineResourceId: arcServerId,
  * });

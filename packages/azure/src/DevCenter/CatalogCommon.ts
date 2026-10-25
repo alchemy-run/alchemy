@@ -7,14 +7,21 @@ import { sameValue } from "./Common.ts";
 export interface CatalogGitSource {
   /** Clone URI of the repository, e.g. `https://github.com/org/repo.git`. */
   uri: string;
-  /** Branch to sync. */
+  /**
+   * Branch to sync.
+   * @default unset (Azure's default)
+   */
   branch?: string;
-  /** Folder within the repository that holds the catalog items. */
+  /**
+   * Folder within the repository that holds the catalog items.
+   * @default unset (the repository root)
+   */
   path?: string;
   /**
    * Key Vault secret URI holding a personal access token for the
    * repository. The dev center (or project) identity needs
    * `Key Vault Secrets User` on the vault. Omit for public repositories.
+   * @default unset (public repository)
    */
   secretIdentifier?: string;
 }
@@ -26,9 +33,13 @@ export interface CatalogSourceProps {
   /**
    * GitHub repository source. Exactly one of `gitHub` / `adoGit` is set;
    * switching between them replaces the catalog.
+   * @default unset
    */
   gitHub?: CatalogGitSource;
-  /** Azure DevOps Git repository source. */
+  /**
+   * Azure DevOps Git repository source.
+   * @default unset
+   */
   adoGit?: CatalogGitSource;
   /**
    * Whether the catalog syncs only on demand or on a schedule.
@@ -38,6 +49,7 @@ export interface CatalogSourceProps {
   /**
    * User tags (stored in the catalog's `properties.tags`). Alchemy
    * ownership tags are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }

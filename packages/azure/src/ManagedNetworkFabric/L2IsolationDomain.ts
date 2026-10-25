@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -38,6 +38,7 @@ export interface L2IsolationDomainProps {
   /**
    * Name of the L2 isolation domain. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the L2 isolation domain.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -58,15 +59,23 @@ export interface L2IsolationDomainProps {
   mtu?: number;
   /**
    * Extend the VLAN over network-to-network interconnects (`Enabled`/`Disabled`).
+   * @default "Disabled"
    */
   extendedVlan?: mnf.L2IsolationDomainPropertiesInput["extendedVlan"];
-  /** Network-to-network interconnect the VLAN is extended over. */
+  /**
+   * Network-to-network interconnect the VLAN is extended over.
+   * @default none
+   */
   networkToNetworkInterconnectId?: string;
-  /** Free-form description. */
+  /**
+   * Free-form description.
+   * @default none
+   */
   annotation?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -104,7 +113,13 @@ export interface L2IsolationDomain extends Resource<
  * configured only once the domain is administratively enabled. Needs an
  * Operator Nexus Network Fabric.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-configure-isolation-domain
+ * ARM type: `Microsoft.ManagedNetworkFabric/l2IsolationDomains`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-configure-isolation-domain).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `networkFabricId`, or `vlanId`
+ * replaces the domain.
+ * :::
  *
  * ### Creating an L2 Isolation Domain
  * **Example:** VLAN 750 on a fabric
@@ -165,11 +180,7 @@ export const L2IsolationDomainProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mnf
-        .ListL2IsolationDomainBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListL2IsolationDomainBySubscription", page)),
-        );
+      const page = yield* collectAll(mnf.ListL2IsolationDomainBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

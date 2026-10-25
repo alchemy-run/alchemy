@@ -41,12 +41,34 @@ export interface GatewayApi extends Resource<
  * Serves an API from a self-hosted API Management {@link Gateway}. The
  * association has no settings; changing the gateway or API replaces it.
  * Self-hosted gateways require the Developer or Premium tier.
+ * The ARM type is `Microsoft.ApiManagement/service/gateways/apis`.
+ *
+ * :::caution
+ * Changing `serviceName`, `gatewayName`, `apiName`, or `resourceGroup`
+ * replaces the association.
+ *
+ * Self-hosted gateways need a Developer or Premium service.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/how-to-deploy-self-hosted-gateway-azure-kubernetes-service
  *
  * ### Publishing APIs on a Self-Hosted Gateway
  * **Example:** Serve the orders API on-premises
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "Developer", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const gateway = yield* Azure.ApiManagement.Gateway("dc1", {
+ *   serviceName: apim.serviceName,
+ *   locationData: { name: "dc1", city: "Seattle", countryOrRegion: "US" },
+ * });
+ * const api = yield* Azure.ApiManagement.Api("orders", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * yield* Azure.ApiManagement.GatewayApi("onprem-orders", {
  *   serviceName: apim.serviceName,
  *   gatewayName: gateway.gatewayName,

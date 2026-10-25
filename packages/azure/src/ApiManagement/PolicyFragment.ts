@@ -21,7 +21,10 @@ export interface PolicyFragmentProps {
   name?: string;
   /** Policy XML of the fragment, wrapped in a `<fragment>` element. */
   value: string;
-  /** Description of the fragment. */
+  /**
+   * Description of the fragment.
+   * @default no description
+   */
   description?: string;
   /**
    * Format of `value`. `rawxml` skips XML escaping of policy expressions.
@@ -53,12 +56,26 @@ export interface PolicyFragment extends Resource<
  * A reusable policy fragment of an API Management service. Policies at
  * any scope include it with `<include-fragment fragment-id="..." />`.
  * Azure refuses to delete a fragment while a policy still references it.
+ * The ARM type is `Microsoft.ApiManagement/service/policyFragments`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the fragment.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/policy-fragments
  *
  * ### Sharing Policy Logic
  * **Example:** A fragment that stamps a response header
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const api = yield* Azure.ApiManagement.Api("orders", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * const fragment = yield* Azure.ApiManagement.PolicyFragment("stamp", {
  *   serviceName: apim.serviceName,
  *   description: "Adds x-served-by",

@@ -29,6 +29,7 @@ export interface ApiProps {
    * API identifier (1-80 characters). If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces
    * the API.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -41,9 +42,15 @@ export interface ApiProps {
    * @default the API identifier, or the imported document's title
    */
   displayName?: string;
-  /** Description; may contain HTML. */
+  /**
+   * Description; may contain HTML.
+   * @default no description
+   */
   description?: string;
-  /** URL of the backend service implementing the API. */
+  /**
+   * URL of the backend service implementing the API.
+   * @default no backend URL
+   */
   serviceUrl?: string;
   /**
    * Protocols the API is exposed on.
@@ -55,7 +62,10 @@ export interface ApiProps {
    * @default true
    */
   subscriptionRequired?: boolean;
-  /** Header and query parameter names carrying the subscription key. */
+  /**
+   * Header and query parameter names carrying the subscription key.
+   * @default not set
+   */
   subscriptionKeyParameterNames?: {
     /** Header name. @default "Ocp-Apim-Subscription-Key" */
     header?: string;
@@ -67,20 +77,33 @@ export interface ApiProps {
    * @default "http"
    */
   type?: ApiType;
-  /** Version of the API when it belongs to a version set. */
+  /**
+   * Version of the API when it belongs to a version set.
+   * @default not set
+   */
   apiVersion?: string;
-  /** ARM id of the API version set the API belongs to. */
+  /**
+   * ARM id of the API version set the API belongs to.
+   * @default not set
+   */
   apiVersionSetId?: string;
-  /** Terms of service URL. */
+  /**
+   * Terms of service URL.
+   * @default not set
+   */
   termsOfServiceUrl?: string;
   /**
    * Definition to import (an OpenAPI document, WSDL, GraphQL schema, or a
    * link to one), interpreted according to `format`. Importing replaces
    * the API's operations, so do not combine it with `ApiOperation`
    * resources on the same API. Changing it re-imports the definition.
+   * @default no import (define operations with `ApiOperation`)
    */
   value?: string;
-  /** Format of `value`, e.g. `openapi+json`, `openapi-link`, or `wsdl`. */
+  /**
+   * Format of `value`, e.g. `openapi+json`, `openapi-link`, or `wsdl`.
+   * @default not set (required with `value`)
+   */
   format?: ApiImportFormat;
 }
 
@@ -117,12 +140,23 @@ export interface Api extends Resource<
  * An API exposed through an API Management gateway at
  * `{gatewayUrl}/{path}`. Define operations with `ApiOperation`, or import
  * them from an OpenAPI/WSDL/GraphQL definition with `value` + `format`.
+ * The ARM type is `Microsoft.ApiManagement/service/apis`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, `type`, or `resourceGroup` replaces the
+ * API. Changing `value` re-imports the definition and replaces the API's
+ * operations.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/add-api-manually
  *
  * ### Creating an API
  * **Example:** HTTP API proxying a backend
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const api = yield* Azure.ApiManagement.Api("orders", {
  *   serviceName: apim.serviceName,
  *   path: "orders",
@@ -133,16 +167,28 @@ export interface Api extends Resource<
  * ### Importing a Definition
  * **Example:** Import an inline OpenAPI document
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const api = yield* Azure.ApiManagement.Api("petstore", {
  *   serviceName: apim.serviceName,
  *   path: "pets",
  *   format: "openapi+json",
- *   value: JSON.stringify(openApiDocument),
+ *   value: JSON.stringify({
+ *     openapi: "3.0.1",
+ *     info: { title: "Petstore", version: "1.0.0" },
+ *     paths: { "/pets": { get: { responses: { "200": { description: "OK" } } } } },
+ *   }),
  * });
  * ```
  *
  * **Example:** Import from a URL
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const api = yield* Azure.ApiManagement.Api("petstore", {
  *   serviceName: apim.serviceName,
  *   path: "pets",

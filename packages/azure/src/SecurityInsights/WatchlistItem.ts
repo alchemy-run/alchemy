@@ -17,7 +17,10 @@ import {
 } from "./Common.ts";
 
 export interface WatchlistItemProps {
-  /** Resource group of the Sentinel workspace. Changing it replaces the item. */
+  /**
+   * Resource group of the Sentinel workspace. Changing it replaces the item.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Sentinel workspace of the watchlist. Changing it replaces the item. */
   workspace: string;
@@ -26,6 +29,7 @@ export interface WatchlistItemProps {
   /**
    * Item ID (a GUID). If omitted, a deterministic GUID is derived from the
    * app, stage, and logical ID. Changing it replaces the item.
+   * @default a GUID derived from the app, stage, and logical ID
    */
   watchlistItemId?: string;
   /**
@@ -59,21 +63,32 @@ export interface WatchlistItem extends Resource<
 > {}
 
 /**
- * A row of a Microsoft Sentinel watchlist.
+ * A row of a Microsoft Sentinel watchlist
+ * (`Microsoft.SecurityInsights/watchlists/watchlistItems`). See the
+ * [Azure docs](https://learn.microsoft.com/azure/sentinel/watchlists-manage).
  *
- * @see https://learn.microsoft.com/azure/sentinel/watchlists-manage
+ * :::caution
+ * `itemsKeyValue` must include the watchlist's `itemsSearchKey` column.
+ * Changing `resourceGroup`, `workspace`, `watchlistAlias`, or
+ * `watchlistItemId` replaces the item. Alchemy updates `itemsKeyValue` in
+ * place.
+ * :::
  *
  * ### Managing Rows
  * **Example:** Add a VIP user to a watchlist
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
+ *   workspace: logs.workspaceName,
+ * });
  * const vips = yield* Azure.SecurityInsights.Watchlist("vips", {
- *   resourceGroup: sentinel.resourceGroup,
  *   workspace: sentinel.workspace,
  *   displayName: "VIP users",
  *   itemsSearchKey: "UserPrincipalName",
+ *   source: "vips.csv",
+ *   rawContent: "UserPrincipalName,Tier\n",
  * });
  * yield* Azure.SecurityInsights.WatchlistItem("ceo", {
- *   resourceGroup: vips.resourceGroup,
  *   workspace: vips.workspace,
  *   watchlistAlias: vips.watchlistAlias,
  *   itemsKeyValue: { UserPrincipalName: "ceo@contoso.com", Tier: "1" },

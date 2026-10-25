@@ -46,6 +46,7 @@ export interface OnlineDeploymentProps {
    * Deployment name: 3-32 letters, digits, and hyphens, starting with a
    * letter. If omitted, a unique name is generated from the logical ID.
    * Changing it replaces the deployment.
+   * @default a unique name generated from the logical ID
    */
   name?: string;
   /**
@@ -61,6 +62,7 @@ export interface OnlineDeploymentProps {
   /**
    * VM SKU of each instance, e.g. `Standard_DS3_v2`. Changing it replaces
    * the deployment.
+   * @default "Standard_F4s_v2"
    */
   instanceType?: string;
   /**
@@ -71,23 +73,42 @@ export interface OnlineDeploymentProps {
   /**
    * Model to serve: an ARM asset ID or an `azureml://` URI (e.g. a model
    * from the `azureml` registry).
+   * @default none
    */
   model?: string;
-  /** Environment (image + dependencies): an ARM asset ID or `azureml://` URI. */
+  /**
+   * Environment (image + dependencies): an ARM asset ID or `azureml://` URI.
+   * @default none
+   */
   environmentId?: string;
-  /** Scoring script and code asset (not needed for MLflow models). */
+  /**
+   * Scoring script and code asset (not needed for MLflow models).
+   * @default none
+   */
   codeConfiguration?: { codeId?: string; scoringScript: string };
-  /** Environment variables of the scoring container. */
+  /**
+   * Environment variables of the scoring container.
+   * @default none
+   */
   environmentVariables?: Record<string, string>;
-  /** Request concurrency and timeouts. */
+  /**
+   * Request concurrency and timeouts.
+   * @default Azure's default
+   */
   requestSettings?: {
     maxConcurrentRequestsPerInstance?: number;
     maxQueueWait?: string;
     requestTimeout?: string;
   };
-  /** Liveness probe of the scoring container. */
+  /**
+   * Liveness probe of the scoring container.
+   * @default Azure's default
+   */
   livenessProbe?: OnlineDeploymentProbe;
-  /** Readiness probe of the scoring container. */
+  /**
+   * Readiness probe of the scoring container.
+   * @default Azure's default
+   */
   readinessProbe?: OnlineDeploymentProbe;
   /**
    * Send scoring logs and metrics to the workspace's Application Insights.
@@ -99,11 +120,15 @@ export interface OnlineDeploymentProps {
    * @default Azure's default (`Enabled`)
    */
   egressPublicNetworkAccess?: "Enabled" | "Disabled";
-  /** Description of the deployment. */
+  /**
+   * Description of the deployment.
+   * @default none
+   */
   description?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -144,14 +169,31 @@ export interface OnlineDeployment extends Resource<
  * settings roll out in place; the endpoint's `traffic` decides which
  * deployments receive requests.
  *
+ * ARM type:
+ * `Microsoft.MachineLearningServices/workspaces/onlineEndpoints/deployments`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/how-to-deploy-online-endpoints).
+ *
  * Managed deployments bill per instance-hour from creation and need VM
  * quota for the instance type (plus a 20% upgrade buffer).
  *
- * @see https://learn.microsoft.com/azure/machine-learning/how-to-deploy-online-endpoints
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `endpoint`, `name`, `location`,
+ * `endpointComputeType`, or `instanceType` replaces the deployment.
+ * :::
  *
  * ### Deploying a Model
  * **Example:** MLflow model from the `azureml` registry
  * ```typescript
+ * // An existing Application Insights component for workspace telemetry.
+ * const insightsId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/monitoring/providers/Microsoft.Insights/components/ml-insights";
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const workspace = yield* Azure.MachineLearning.Workspace("ml", {
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ *   applicationInsights: insightsId,
+ * });
  * const endpoint = yield* Azure.MachineLearning.OnlineEndpoint("scoring", {
  *   workspace: workspace.workspaceName,
  * });

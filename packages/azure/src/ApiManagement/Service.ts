@@ -7,19 +7,19 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
+  type WaitBudget,
   userTags,
   waitForProvisioned,
   waitUntilGone,
-  type WaitBudget,
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
@@ -47,7 +47,10 @@ export interface ServiceSku {
 export interface ServiceIdentity {
   /** Managed identity type. */
   type: ServiceIdentityType;
-  /** ARM ids of user-assigned identities to attach. */
+  /**
+   * ARM ids of user-assigned identities to attach.
+   * @default none
+   */
   userAssignedIdentities?: string[];
 }
 
@@ -59,6 +62,7 @@ export interface ServiceProps {
    * `{name}.azure-api.net`): 1-50 letters, digits, and hyphens, starting
    * with a letter. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the service.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -75,27 +79,42 @@ export interface ServiceProps {
   publisherEmail: string;
   /** Publisher (organization) name shown in the developer portal and emails. */
   publisherName: string;
-  /** Sender address for notification emails. */
+  /**
+   * Sender address for notification emails.
+   * @default not set
+   */
   notificationSenderEmail?: string;
-  /** Managed identity of the service (needed for Key Vault references). */
+  /**
+   * Managed identity of the service (needed for Key Vault references).
+   * @default no managed identity
+   */
   identity?: ServiceIdentity;
   /**
    * Gateway TLS/cipher toggles, e.g.
    * `Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls11`.
    * Only the listed keys are synced.
+   * @default not set (Azure's defaults apply)
    */
   customProperties?: Record<string, string>;
   /**
    * Require a client certificate on every gateway request (Consumption only).
+   * @default not set (Azure's default applies)
    */
   enableClientCertificate?: boolean;
-  /** Whether the public endpoint accepts traffic. */
+  /**
+   * Whether the public endpoint accepts traffic.
+   * @default not set (Azure's default applies)
+   */
   publicNetworkAccess?: "Enabled" | "Disabled";
-  /** Disable the gateway in the primary region (multi-region Premium only). */
+  /**
+   * Disable the gateway in the primary region (multi-region Premium only).
+   * @default not set (Azure's default applies)
+   */
   disableGateway?: boolean;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -138,12 +157,23 @@ export interface Service extends Resource<
 > {}
 
 /**
- * An Azure API Management service — the gateway, management plane, and
- * developer portal that APIs, products, and subscriptions live in.
+ * An Azure API Management service (`Microsoft.ApiManagement/service`) —
+ * the gateway, management plane, and developer portal that APIs,
+ * products, and subscriptions live in.
  *
  * Deleting a service soft-deletes it for 48 hours; Alchemy purges the
  * soft-deleted service right after deleting it so the same name can be
  * created again immediately.
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the service and
+ * deletes every API, product, and subscription in it.
+ *
+ * The Consumption tier (the default) has no groups, users, notifications,
+ * identity providers, developer portal content, or workspaces. Use
+ * `BasicV2` or another tier for those. A Developer service takes 30-45
+ * minutes to create.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-key-concepts
  *
@@ -279,9 +309,7 @@ export const ServiceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* apim
-        .ListApiManagementService({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListApiManagementService", page)));
+      const page = yield* collectAll(apim.ListApiManagementService, { subscriptionId });
       return (page.value ?? []).flatMap((service) => {
         const group = resourceGroupOf(service.id);
         return hasAnyAlchemyTag(service.tags) && group !== undefined && service.name !== undefined

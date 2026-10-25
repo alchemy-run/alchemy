@@ -41,6 +41,7 @@ export interface BmcKeySetProps {
   /**
    * Name of the BMC key set. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the BMC key set.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -68,6 +69,7 @@ export interface BmcKeySetProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -108,15 +110,23 @@ export interface BmcKeySet extends Resource<
  * the baseboard management controllers of a Nexus cluster's machines.
  * Needs a deployed Operator Nexus cluster.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-baremetal-bmc-ssh
+ * ARM type: `Microsoft.NetworkCloud/clusters/bmcKeySets`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-baremetal-bmc-ssh).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `clusterName`, `name`, `location`,
+ * `customLocationId`, or `privilegeLevel` replaces the key set.
+ * :::
  *
  * ### Creating a BMC Key Set
  * **Example:** Read-only BMC access
  * ```typescript
+ * // An existing Operator Nexus cluster, "site1", in the stack's resource group.
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ExtendedLocation/customLocations/site1-cl";
  * const bmc = yield* Azure.NetworkCloud.BmcKeySet("bmc", {
- *   resourceGroup: cluster.resourceGroup,
- *   clusterName: cluster.clusterName,
- *   customLocationId: cluster.clusterExtendedLocationId,
+ *   clusterName: "site1",
+ *   customLocationId,
  *   azureGroupId: "00000000-0000-0000-0000-000000000000",
  *   expiration: "2027-01-01T00:00:00Z",
  *   privilegeLevel: "ReadOnly",

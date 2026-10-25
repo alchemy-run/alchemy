@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -35,6 +35,7 @@ export interface AzureTrafficCollectorProps {
    * Collector name: 1-80 letters, digits, `_`, `.`, and `-`. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the collector.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -48,11 +49,13 @@ export interface AzureTrafficCollectorProps {
    * ARM ID of the Virtual WAN hub the collector belongs to (for
    * ExpressRoute circuits connected through Virtual WAN). Changing it
    * replaces the collector.
+   * @default none
    */
   virtualHubId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -89,10 +92,16 @@ export interface AzureTrafficCollector extends Resource<
  * circuits and emits them to Azure Monitor (Log Analytics). Attach
  * circuits with `Azure.NetworkFunction.CollectorPolicy`.
  *
+ * ARM type: `Microsoft.NetworkFunction/azureTrafficCollectors`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/expressroute/traffic-collector).
+ *
  * The collector bills per hour of uptime (≈ $0.60/hour in North America
  * and Europe) plus per GB of processed flow data.
  *
- * @see https://learn.microsoft.com/azure/expressroute/traffic-collector
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `virtualHubId` replaces the
+ * collector.
+ * :::
  *
  * ### Creating a Collector
  * **Example:** Collector in a resource group
@@ -170,13 +179,9 @@ export const AzureTrafficCollectorProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* networkfunction
-        .ListAzureTrafficCollectorsBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListAzureTrafficCollectorsBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(networkfunction.ListAzureTrafficCollectorsBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((collector) => {
         const group = resourceGroupOf(collector.id);
         return hasAnyAlchemyTag(collector.tags) &&

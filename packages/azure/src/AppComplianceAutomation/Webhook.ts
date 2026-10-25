@@ -29,6 +29,7 @@ export interface WebhookProps {
    * Webhook name, unique in the report: 1-50 letters, digits, `-` and `_`.
    * If omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the webhook.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /** URL that receives the notification POST requests, `http(s)://...`. */
@@ -46,6 +47,7 @@ export interface WebhookProps {
   /**
    * Secret the service signs each payload with (the `x-acat-signature-256`
    * header), up to 2048 characters. Omit to send unsigned payloads.
+   * @default no key (payloads are unsigned)
    */
   webhookKey?: string | Redacted.Redacted<string>;
   /**

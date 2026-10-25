@@ -30,6 +30,7 @@ export interface ConfigurationProfileProps {
   /**
    * Name of the profile. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the profile.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -46,6 +47,7 @@ export interface ConfigurationProfileProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -78,9 +80,14 @@ export interface ConfigurationProfile extends Resource<
  * An Azure Automanage configuration profile — a custom set of Automanage
  * Machine Best Practices services (antimalware, security baseline, backup,
  * Log Analytics, ...) that can be assigned to virtual machines.
+ * The ARM type is `Microsoft.Automanage/configurationProfiles`.
  *
  * Automanage Machine Best Practices retires on 2027-09-30; Microsoft
  * recommends Azure Policy / Machine Configuration for new deployments.
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the profile.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automanage/virtual-machines-custom-profile
  *
@@ -98,6 +105,25 @@ export interface ConfigurationProfile extends Resource<
  * ### Assigning the Profile
  * **Example:** Attach the profile to a virtual machine
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("app", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const nic = yield* Azure.Network.NetworkInterface("vm", {
+ *   ipConfigurations: [{ subnetId: subnet.subnetId }],
+ * });
+ * const vm = yield* Azure.Compute.VirtualMachine("vm", {
+ *   vmSize: "Standard_B1s",
+ *   networkInterfaceIds: [nic.networkInterfaceId],
+ *   adminUsername: "azureuser",
+ *   sshPublicKeys: [yield* Config.string("SSH_PUBLIC_KEY")],
+ * });
+ * const profile = yield* Azure.Automanage.ConfigurationProfile("baseline", {
+ *   configuration: { "AzureSecurityBaseline/Enable": true },
+ * });
  * yield* Azure.Automanage.ConfigurationProfileAssignment("vm-profile", {
  *   virtualMachine: vm.virtualMachineName,
  *   configurationProfile: profile.configurationProfileId,

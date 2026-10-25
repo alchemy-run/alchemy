@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -30,12 +30,18 @@ export type PoolEnableStatus = "Enabled" | "Disabled";
 export interface PoolStopSetting {
   /** Whether the setting is enabled. */
   status: PoolEnableStatus;
-  /** Minutes to wait before stopping the dev box. */
+  /**
+   * Minutes to wait before stopping the dev box.
+   * @default unset (Azure's default)
+   */
   gracePeriodMinutes?: number;
 }
 
 export interface PoolProps {
-  /** Resource group of the project. Changing it replaces the pool. */
+  /**
+   * Resource group of the project. Changing it replaces the pool.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the project. Changing it replaces the pool. */
   project: string;
@@ -43,6 +49,7 @@ export interface PoolProps {
    * Pool name: 3-63 letters, digits, hyphens, underscores, and periods.
    * If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the pool.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -76,17 +83,30 @@ export interface PoolProps {
    * @default "Enabled"
    */
   localAdministrator?: PoolEnableStatus;
-  /** Whether single sign-on is enabled for dev boxes of the pool. */
+  /**
+   * Whether single sign-on is enabled for dev boxes of the pool.
+   * @default unset (Azure's default)
+   */
   singleSignOnStatus?: PoolEnableStatus;
-  /** Stop dev boxes after the user disconnects. */
+  /**
+   * Stop dev boxes after the user disconnects.
+   * @default unset (Azure's default)
+   */
   stopOnDisconnect?: PoolStopSetting;
-  /** Stop dev boxes the user never connected to. */
+  /**
+   * Stop dev boxes the user never connected to.
+   * @default unset (Azure's default)
+   */
   stopOnNoConnect?: PoolStopSetting;
-  /** Display name of the pool. */
+  /**
+   * Display name of the pool.
+   * @default unset
+   */
   displayName?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -121,10 +141,15 @@ export interface Pool extends Resource<
 > {}
 
 /**
- * A dev box pool — the collection of dev boxes that developers of a
+ * A dev box pool (`Microsoft.DevCenter/projects/pools`) — the collection of dev boxes that developers of a
  * project create from one dev box definition on one network. Creating a
  * pool provisions no VMs and is free; dev boxes are billed per hour once
  * developers create them.
+ *
+ * :::caution
+ * Changing `project`, `name`, `location`, or `resourceGroup` replaces the
+ * pool.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/dev-box/how-to-manage-dev-box-pools
  *
@@ -133,6 +158,15 @@ export interface Pool extends Resource<
  * ```typescript
  * const center = yield* Azure.DevCenter.DevCenter("center", {
  *   microsoftHostedNetworkEnableStatus: "Enabled",
+ * });
+ * const project = yield* Azure.DevCenter.Project("team", {
+ *   devCenterId: center.devCenterId,
+ * });
+ * const definition = yield* Azure.DevCenter.DevBoxDefinition("win11", {
+ *   devCenter: center.devCenterName,
+ *   imageReferenceId: Output.interpolate`${center.devCenterId}/galleries/default/images/microsoftwindowsdesktop_windows-ent-cpc_win11-24h2-ent-cpc`,
+ *   skuName: "general_i_8c32gb256ssd_v2",
+ *   osStorageType: "ssd_256gb",
  * });
  * const pool = yield* Azure.DevCenter.Pool("pool", {
  *   project: project.projectName,
@@ -254,9 +288,7 @@ export const PoolProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const projects = yield* devcenter
-        .ListProjectBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListProjectBySubscription", page)));
+      const projects = yield* collectAll(devcenter.ListProjectBySubscription, { subscriptionId });
       const owned = (projects.value ?? []).flatMap((project) => {
         const resourceGroup = resourceGroupOf(project.id);
         return hasAnyAlchemyTag(project.tags) &&
@@ -266,24 +298,21 @@ export const PoolProvider = () =>
           : [];
       });
       const pools = yield* Effect.forEach(owned, ({ resourceGroup, projectName }) =>
-        devcenter
-          .ListPoolByProject({
-            subscriptionId,
-            resourceGroupName: resourceGroup,
-            projectName,
-          })
-          .pipe(
-            Effect.flatMap((page) => requireSinglePage("ListPoolByProject", page)),
-            Effect.map((page) =>
-              (page.value ?? []).flatMap((pool) =>
-                hasAnyAlchemyTag(pool.tags) && pool.name !== undefined
-                  ? [toAttrs(resourceGroup, projectName, pool.name, pool)]
-                  : [],
-              ),
+        collectAll(devcenter.ListPoolByProject, {
+          subscriptionId,
+          resourceGroupName: resourceGroup,
+          projectName,
+        }).pipe(
+          Effect.map((page) =>
+            (page.value ?? []).flatMap((pool) =>
+              hasAnyAlchemyTag(pool.tags) && pool.name !== undefined
+                ? [toAttrs(resourceGroup, projectName, pool.name, pool)]
+                : [],
             ),
-            orUndefinedIfNotFound,
-            Effect.map((attrs) => attrs ?? []),
           ),
+          orUndefinedIfNotFound,
+          Effect.map((attrs) => attrs ?? []),
+        ),
       );
       return pools.flat();
     }),

@@ -20,13 +20,17 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, labLocation } from "./Common.ts";
 
 export interface ServiceRunnerProps {
-  /** Resource group of the lab. Changing it replaces the runner. */
+  /**
+   * Resource group of the lab. Changing it replaces the runner.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the lab. Changing it replaces the runner. */
   lab: string;
   /**
    * Runner name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the runner.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -44,6 +48,7 @@ export interface ServiceRunnerProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -72,7 +77,8 @@ export interface ServiceRunner extends Resource<
 > {}
 
 /**
- * A DevTest Labs service runner — the managed identity a lab uses to
+ * A DevTest Labs service runner (`Microsoft.DevTestLab/labs/servicerunners`)
+ * — the managed identity a lab uses to
  * deploy environments and apply artifacts on users' behalf.
  *
  * Azure has deprecated service runners: creating one now fails with
@@ -81,11 +87,18 @@ export interface ServiceRunner extends Resource<
  * lab.Identity.UserAssignedIdentities instead."). Existing runners can
  * still be read, retagged, and deleted.
  *
+ * :::caution
+ * Changing `lab`, `name`, `identityId`, `identityUsageType`, or
+ * `resourceGroup` replaces the runner. Alchemy deletes the old runner
+ * first.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/devtest-labs/use-managed-identities-environments
  *
  * ### Lab Identity
  * **Example:** Run lab services as a user-assigned identity
  * ```typescript
+ * const lab = yield* Azure.DevTestLabs.Lab("team-lab");
  * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("lab");
  * const runner = yield* Azure.DevTestLabs.ServiceRunner("runner", {
  *   lab: lab.labName,

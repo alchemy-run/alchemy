@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -149,9 +149,7 @@ export const TemplateSpecProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* resources
-        .ListTemplateSpecBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListTemplateSpecBySubscription", page)));
+      const page = yield* collectAll(resources.ListTemplateSpecBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((spec) => {
         const group = resourceGroupOf(spec.id);
         return spec.name !== undefined && group !== undefined && hasAnyAlchemyTag(spec.tags)

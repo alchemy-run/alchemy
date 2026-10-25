@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -35,11 +35,13 @@ export interface IspCustomerProps {
   /**
    * Resource group the customer is created in. Changing it replaces the
    * customer.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Customer resource name. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the customer.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,25 +57,42 @@ export interface IspCustomerProps {
    * @default the resource name
    */
   customerName?: string;
-  /** Email address of the ISP's Connected Cache contact. */
+  /**
+   * Email address of the ISP's Connected Cache contact.
+   * @default none
+   */
   contactEmail?: string;
-  /** Full name of the ISP's Connected Cache contact. */
+  /**
+   * Full name of the ISP's Connected Cache contact.
+   * @default none
+   */
   contactName?: string;
-  /** Phone number of the ISP's Connected Cache contact. */
+  /**
+   * Phone number of the ISP's Connected Cache contact.
+   * @default none
+   */
   contactPhone?: string;
   /**
    * Autonomous system number (ASN) the ISP signs up with. Microsoft verifies
    * it against the ISP's PeeringDB record before cache nodes can be created.
    * Azure rejected a private ASN (`64512`) with `InternalServerError`.
+   * @default none
    */
   asn?: string;
-  /** ASN of the ISP's transit provider, when `transitState` is not `NoTransit`. */
+  /**
+   * ASN of the ISP's transit provider, when `transitState` is not `NoTransit`.
+   * @default none
+   */
   transitAsn?: string;
-  /** Whether the ISP serves content directly, through transit, or both. */
+  /**
+   * Whether the ISP serves content directly, through transit, or both.
+   * @default none
+   */
   transitState?: IspTransitState;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -136,7 +155,12 @@ export interface IspCustomer extends Resource<
  * then can `Azure.ConnectedCache.IspCacheNode` resources be created under
  * it.
  *
- * @see https://learn.microsoft.com/windows/deployment/do/mcc-isp-signup
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, or `customerName` replaces
+ * the customer and deletes its cache nodes.
+ * :::
+ *
+ * See [Connected Cache for ISPs sign-up](https://learn.microsoft.com/windows/deployment/do/mcc-isp-signup).
  *
  * ### Creating a Customer
  * **Example:** ISP customer with a contact
@@ -159,11 +183,6 @@ export interface IspCustomer extends Resource<
  *   transitAsn: "65020",
  * });
  * ```
- *
- * :::caution
- * Changing `name`, `location`, `resourceGroup`, or `customerName` replaces
- * the customer and deletes its cache nodes.
- * :::
  *
  * @resource
  */
@@ -234,9 +253,9 @@ export const IspCustomerProvider = () =>
     // so each customer is re-read by the name in its ARM ID.
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* connectedcache
-        .ListIspCustomerBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListIspCustomerBySubscription", page)));
+      const page = yield* collectAll(connectedcache.ListIspCustomerBySubscription, {
+        subscriptionId,
+      });
       const owned = yield* Effect.forEach(page.value ?? [], (listed) =>
         Effect.gen(function* () {
           const group = resourceGroupOf(listed.id);

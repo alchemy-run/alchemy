@@ -8394,6 +8394,9 @@ importers:
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/microsoft-graph':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/microsoft-graph
     devDependencies:
       '@effect/platform-bun':
         specifier: 'catalog:'
@@ -9938,6 +9941,9 @@ importers:
       '@distilled.cloud/iceberg':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/iceberg
+      '@distilled.cloud/microsoft-graph':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/microsoft-graph
       '@distilled.cloud/neon':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/neon
@@ -11211,6 +11217,22 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
+
+  submodules/distilled/packages/microsoft-graph:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.5
+        version: 4.0.5
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.1
 
   submodules/distilled/packages/modal:
     dependencies:

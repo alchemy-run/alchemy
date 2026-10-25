@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -31,7 +31,10 @@ import {
 } from "./Common.ts";
 
 export interface ConfigurationGroupSchemaProps {
-  /** Resource group of the publisher. Changing it replaces the schema. */
+  /**
+   * Resource group of the publisher. Changing it replaces the schema.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the publisher that owns the schema. Changing it replaces the schema. */
   publisher: string;
@@ -39,6 +42,7 @@ export interface ConfigurationGroupSchemaProps {
    * Schema name: 1-64 letters, digits, `_`, and `-`. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the schema.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -53,16 +57,21 @@ export interface ConfigurationGroupSchemaProps {
    * artifacts: changing it replaces the schema.
    */
   schemaDefinition: string;
-  /** Description of what the schema contains. Changing it replaces the schema. */
+  /**
+   * Description of what the schema contains. Changing it replaces the schema.
+   * @default unset
+   */
   description?: string;
   /**
    * Version state of the schema. New schemas start in `Preview`; set
    * `Active` to publish it or `Deprecated` to retire it.
+   * @default "Preview" on create; unchanged on update
    */
   versionState?: "Preview" | "Active" | "Deprecated";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -95,9 +104,10 @@ export interface ConfigurationGroupSchema extends Resource<
 > {}
 
 /**
- * An Azure Operator Service Manager configuration group schema — a JSON
- * schema a publisher defines for the configuration values operators
- * supply when deploying a network service design.
+ * An Azure Operator Service Manager configuration group schema
+ * (`Microsoft.HybridNetwork/publishers/configurationGroupSchemas`): a JSON
+ * schema a publisher defines for the configuration values operators supply
+ * when deploying a network service design.
  *
  * Schemas are free metadata resources.
  *
@@ -106,6 +116,7 @@ export interface ConfigurationGroupSchema extends Resource<
  * ### Creating a Schema
  * **Example:** Schema with one required string value
  * ```typescript
+ * const publisher = yield* Azure.HybridNetwork.Publisher("publisher");
  * const schema = yield* Azure.HybridNetwork.ConfigurationGroupSchema("schema", {
  *   publisher: publisher.publisherName,
  *   schemaDefinition: JSON.stringify({
@@ -118,12 +129,19 @@ export interface ConfigurationGroupSchema extends Resource<
  *
  * **Example:** Publish the schema
  * ```typescript
+ * const publisher = yield* Azure.HybridNetwork.Publisher("publisher");
  * const schema = yield* Azure.HybridNetwork.ConfigurationGroupSchema("schema", {
  *   publisher: publisher.publisherName,
  *   schemaDefinition: JSON.stringify({ type: "object" }),
  *   versionState: "Active",
  * });
  * ```
+ *
+ * :::caution
+ * Schemas are versioned artifacts. Changing `schemaDefinition`,
+ * `description`, `name`, `publisher`, `location`, or `resourceGroup`
+ * replaces the schema. With a fixed `name`, the old schema is deleted first.
+ * :::
  *
  * @resource
  */
@@ -179,23 +197,20 @@ export const ConfigurationGroupSchemaProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const publishers = yield* hybridnetwork
-        .ListPublisherBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPublisherBySubscription", page)));
+      const publishers = yield* collectAll(hybridnetwork.ListPublisherBySubscription, {
+        subscriptionId,
+      });
       const found: ConfigurationGroupSchema["Attributes"][] = [];
       for (const publisher of publishers.value ?? []) {
         const group = resourceGroupOf(publisher.id);
         if (group === undefined || publisher.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          hybridnetwork.ListConfigurationGroupSchemaByPublisher({
+          collectAll(hybridnetwork.ListConfigurationGroupSchemaByPublisher, {
             subscriptionId,
             resourceGroupName: group,
             publisherName: publisher.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListConfigurationGroupSchemaByPublisher", page);
-        }
         for (const schema of page?.value ?? []) {
           if (hasAnyAlchemyTag(schema.tags) && schema.name !== undefined) {
             found.push(toAttrs(group, publisher.name, schema.name, schema));

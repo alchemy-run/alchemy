@@ -13,9 +13,22 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { isVaultOwnedByStack, RECOVERY_SERVICES_NAMESPACE } from "./BackupShared.ts";
 
 export interface VaultExtendedInfoProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the resource. */
+  /**
+   * Resource group of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the resource.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the Recovery Services vault. Changing it replaces the resource. */
+  /**
+   * Name of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the resource.
+   * :::
+   */
   vault: string;
   /**
    * Integrity key the vault's registration clients (MARS agent, DPM, Azure
@@ -24,9 +37,15 @@ export interface VaultExtendedInfoProps {
    * @default the key already set on the vault, else a random 128-bit base64 key
    */
   integrityKey?: Redacted.Redacted<string>;
-  /** Encryption key of the vault credentials. Write-once. */
+  /**
+   * Encryption key of the vault credentials. Write-once.
+   * @default the key already set on the vault, else none
+   */
   encryptionKey?: Redacted.Redacted<string>;
-  /** Thumbprint of `encryptionKey`. Write-once. */
+  /**
+   * Thumbprint of `encryptionKey`. Write-once.
+   * @default the thumbprint already set on the vault, else none
+   */
   encryptionKeyThumbprint?: string;
   /**
    * Algorithm of the extended information. Write-once.
@@ -88,9 +107,11 @@ export interface VaultExtendedInfo extends Resource<
  *
  * **Example:** Bring your own key
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault");
+ * const integrityKey = yield* Config.redacted("VAULT_INTEGRITY_KEY");
  * yield* Azure.RecoveryServices.VaultExtendedInfo("vault-info", {
  *   vault: vault.vaultName,
- *   integrityKey: Redacted.make(myBase64Key),
+ *   integrityKey,
  *   algorithm: "None",
  * });
  * ```

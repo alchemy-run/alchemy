@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -107,6 +107,7 @@ export interface DataServiceProps {
    * Name of the service, 3-23 letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the service.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -122,41 +123,75 @@ export interface DataServiceProps {
   /**
    * Object ID of the Entra group granted admin on the managed AKS cluster.
    * Azure cannot change it in place, so changing it replaces the service.
+   * @default none
    */
   aksAdminGroupId?: string;
-  /** SKU. Updated in place when it changes. */
+  /**
+   * SKU. Updated in place when it changes.
+   * @default Azure's default
+   */
   sku?: DataServiceSku;
-  /** Manufacturing Data Solutions release version. Raising it upgrades in place. */
+  /**
+   * Manufacturing Data Solutions release version. Raising it upgrades in place.
+   * @default Azure's default
+   */
   version?: string;
-  /** Enable the Copilot experience. */
+  /**
+   * Enable the Copilot experience.
+   * @default Azure's default
+   */
   enableCopilot?: boolean;
-  /** Send diagnostic settings of the managed resources to monitoring. */
+  /**
+   * Send diagnostic settings of the managed resources to monitoring.
+   * @default Azure's default
+   */
   enableDiagnosticSettings?: boolean;
-  /** Model deployments of the service-managed Azure OpenAI account. */
+  /**
+   * Model deployments of the service-managed Azure OpenAI account.
+   * @default none
+   */
   openAIProfile?: DataServiceOpenAIProfile;
-  /** Use an existing (user-managed) Azure OpenAI account instead. */
+  /**
+   * Use an existing (user-managed) Azure OpenAI account instead.
+   * @default none
+   */
   userManagedOpenAIProfile?: DataServiceUserManagedOpenAIProfile;
   /**
    * Azure Key Vault key URI for customer-managed-key encryption. Changing it
    * replaces the service.
+   * @default none
    */
   cmkKeyUri?: string;
-  /** Microsoft Fabric (OneLake) integration. */
+  /**
+   * Microsoft Fabric (OneLake) integration.
+   * @default none
+   */
   fabricProfile?: DataServiceFabricProfile;
-  /** Identities excluded from the managed resource group's deny assignment. */
+  /**
+   * Identities excluded from the managed resource group's deny assignment.
+   * @default none
+   */
   denyAssignmentExclusions?: DataServiceDenyAssignmentExclusion[];
-  /** `Inactive` stops the service; `Active` starts it. Not managed when omitted. */
+  /**
+   * `Inactive` stops the service; `Active` starts it. Not managed when omitted.
+   * @default not managed
+   */
   resourceState?: "Active" | "Inactive";
   /**
    * Zone redundancy of the managed resources. Changing it replaces the
    * service.
+   * @default Azure's default
    */
   redundancyState?: "Zonal" | "None";
-  /** Managed identity of the service. Not managed when omitted. */
+  /**
+   * Managed identity of the service. Not managed when omitted.
+   * @default not managed
+   */
   identity?: DataServiceIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -206,7 +241,13 @@ export interface DataService extends Resource<
  * industrial data with a Copilot experience. Provisioning takes about an
  * hour and deploys a large, billed footprint into a managed resource group.
  *
- * @see https://learn.microsoft.com/azure/manufacturing-data-solutions/
+ * ARM type: `Microsoft.ManufacturingPlatform/manufacturingDataServices`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/manufacturing-data-solutions/).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `aadApplicationId`,
+ * `aksAdminGroupId`, `cmkKeyUri`, or `redundancyState` replaces the service.
+ * :::
  *
  * ### Creating a Data Service
  * **Example:** Minimal service signed in through an Entra application
@@ -345,10 +386,9 @@ export const DataServiceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mds.ListManufacturingDataServiceBySubscription({ subscriptionId }).pipe(
-        Effect.flatMap((page) =>
-          requireSinglePage("ListManufacturingDataServiceBySubscription", page),
-        ),
+      const page = yield* collectAll(mds.ListManufacturingDataServiceBySubscription, {
+        subscriptionId,
+      }).pipe(
         // An unregistered subscription, or one the (allow-listed) namespace
         // is not available to, cannot hold services.
         Effect.catchTag(["MissingRegistration", "InvalidResourceNamespace"], () =>

@@ -28,12 +28,30 @@ export interface WorkspaceApi extends Resource<
  * The workspace-scoped counterpart of {@link Api}: an API inside an API
  * Management {@link Workspace} (Premium and v2 tiers). Props and
  * attributes match {@link Api} plus `workspaceName`.
+ * The ARM type is `Microsoft.ApiManagement/service/workspaces/apis`.
+ *
+ * :::caution
+ * Changing `workspaceName`, `serviceName`, `name`, `type`, or
+ * `resourceGroup` replaces the API. Changing `value` re-imports the
+ * definition and replaces the API's operations.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/workspaces-overview
  *
  * ### Workspace APIs
  * **Example:** An HTTP API owned by a team
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
  * yield* Azure.ApiManagement.WorkspaceApi("orders", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

@@ -32,7 +32,10 @@ export class EmailDomainNameRequired extends Data.TaggedError(
 )<{ readonly message: string }> {}
 
 export interface EmailDomainProps {
-  /** Resource group of the email service. Changing it replaces the domain. */
+  /**
+   * Resource group of the email service. Changing it replaces the domain.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Email service that holds the domain. Changing it replaces the domain. */
   emailService: string;
@@ -66,6 +69,7 @@ export interface EmailDomainProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -146,14 +150,21 @@ export interface EmailDomain extends Resource<
 > {}
 
 /**
- * A sender domain of an Azure Communication Services email service.
+ * A sender domain of an Azure Communication Services email service
+ * (`Microsoft.Communication/emailServices/domains`).
  *
  * An Azure-managed domain (the default) gets a free `*.azurecomm.net`
  * sender domain that works immediately. A customer-managed domain uses your
  * own domain: publish the `verificationRecords` in its DNS zone, then start
  * verification in the portal or API before sending.
  *
- * @see https://learn.microsoft.com/azure/communication-services/concepts/email/email-domain-and-sender-authentication
+ * :::caution
+ * Changing `resourceGroup`, `emailService`, `name`, `domainManagement`, or
+ * `location` replaces the domain and deletes its senders and suppression
+ * lists. A new customer-managed domain must be verified again.
+ * :::
+ *
+ * See [Email domains and sender authentication](https://learn.microsoft.com/azure/communication-services/concepts/email/email-domain-and-sender-authentication).
  *
  * ### Azure-managed Domains
  * **Example:** Free azurecomm.net sender domain
@@ -168,6 +179,7 @@ export interface EmailDomain extends Resource<
  * ### Custom Domains
  * **Example:** Customer-managed domain with engagement tracking
  * ```typescript
+ * const email = yield* Azure.Communication.EmailService("email");
  * const domain = yield* Azure.Communication.EmailDomain("custom", {
  *   emailService: email.emailServiceName,
  *   domainManagement: "CustomerManaged",
@@ -180,6 +192,10 @@ export interface EmailDomain extends Resource<
  * ### Sending from a Communication Service
  * **Example:** Link the domain to a communication service
  * ```typescript
+ * const email = yield* Azure.Communication.EmailService("email");
+ * const domain = yield* Azure.Communication.EmailDomain("domain", {
+ *   emailService: email.emailServiceName,
+ * });
  * const acs = yield* Azure.Communication.CommunicationService("acs", {
  *   linkedDomains: [domain.domainId],
  * });

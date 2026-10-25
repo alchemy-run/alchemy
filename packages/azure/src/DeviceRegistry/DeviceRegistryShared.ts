@@ -7,9 +7,9 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   hasAnyAlchemyTag,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   type WaitBudget,
 } from "../Arm.ts";
@@ -91,9 +91,7 @@ export const sameLocation = (a: string | undefined, b: string | undefined) =>
  */
 export const listOwnedNamespaces = Effect.fn(function* (subscriptionId: string) {
   const page = yield* orUndefinedIfNotFound(
-    deviceregistry
-      .ListNamespaceBySubscription({ subscriptionId })
-      .pipe(Effect.flatMap((page) => requireSinglePage("ListNamespaceBySubscription", page))),
+    collectAll(deviceregistry.ListNamespaceBySubscription, { subscriptionId }),
   );
   return (page?.value ?? []).flatMap((ns) => {
     const resourceGroup = resourceGroupOf(ns.id);

@@ -19,24 +19,37 @@ export interface ServiceGroupDependencyOfProps {
   /**
    * The dependent service group: its name or ARM ID
    * (`/providers/Microsoft.Management/serviceGroups/{name}`), e.g.
-   * `group.serviceGroupName`. Changing it replaces the relationship.
+   * `group.serviceGroupName`.
+   *
+   * :::caution
+   * Changing it replaces the relationship.
+   * :::
    */
   serviceGroup: string;
   /**
-   * ARM ID of the resource (or service group) the service group depends
-   * on. Changing it replaces the relationship.
+   * ARM ID of the resource (or service group) the service group depends on.
+   *
+   * :::caution
+   * Changing it replaces the relationship.
+   * :::
    */
   targetId: string;
   /**
-   * Tenant ID of the target, for cross-tenant dependencies. Changing it
-   * replaces the relationship.
+   * Tenant ID of the target, for cross-tenant dependencies.
+   *
+   * :::caution
+   * Changing it replaces the relationship.
+   * :::
    * @default the tenant of the service group
    */
   targetTenant?: string;
   /**
-   * Relationship name (3-64 letters, digits, and hyphens). If omitted, a
-   * unique name is generated from the app, stage, and logical ID. Changing
-   * it replaces the relationship.
+   * Relationship name (3-64 letters, digits, and hyphens).
+   *
+   * :::caution
+   * Changing it replaces the relationship.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
 }
@@ -70,7 +83,7 @@ export interface ServiceGroupDependencyOf extends Resource<
 
 /**
  * An Azure `dependencyOf` relationship on a service group
- * (Microsoft.Relationships) — records that a whole service group (a
+ * (`Microsoft.Relationships/dependencyOf`) — records that a whole service group (a
  * workload) depends on another resource or service group, so health and
  * impact views can follow the dependency.
  *
@@ -82,20 +95,27 @@ export interface ServiceGroupDependencyOf extends Resource<
  * @see https://learn.microsoft.com/azure/governance/service-groups/overview
  *
  * ### Recording a Workload Dependency
- * **Example:** A service group depends on a shared database server
+ * **Example:** A service group depends on a shared key vault
  * ```typescript
  * const checkout = yield* Azure.Management.ServiceGroup("checkout", {
  *   displayName: "Checkout",
  * });
- * yield* Azure.Relationships.ServiceGroupDependencyOf("checkout-needs-db", {
+ * const vault = yield* Azure.KeyVault.Vault("shared-keys");
+ * yield* Azure.Relationships.ServiceGroupDependencyOf("checkout-needs-keys", {
  *   serviceGroup: checkout.serviceGroupName,
- *   targetId: server.serverId,
+ *   targetId: vault.vaultId,
  * });
  * ```
  *
  * ### Depending on Another Service Group
  * **Example:** Checkout depends on the payments service group
  * ```typescript
+ * const checkout = yield* Azure.Management.ServiceGroup("checkout", {
+ *   displayName: "Checkout",
+ * });
+ * const payments = yield* Azure.Management.ServiceGroup("payments", {
+ *   displayName: "Payments",
+ * });
  * yield* Azure.Relationships.ServiceGroupDependencyOf("checkout-needs-payments", {
  *   serviceGroup: checkout.serviceGroupName,
  *   targetId: payments.serviceGroupId,

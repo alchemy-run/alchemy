@@ -23,6 +23,7 @@ export interface ManagementGroupProps {
    * letters, digits, `-`, `_`, `.`, `(` and `)`. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the group.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -67,6 +68,8 @@ export interface ManagementGroup extends Resource<
  * subscriptions (and other management groups) so policies and role
  * assignments can be applied to all of them at once.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/governance/management-groups/overview).
+ *
  * Management groups live above subscriptions, so the identity running the
  * deploy needs `Microsoft.Management/managementGroups/write` on the parent
  * group (by default any principal may create groups under the tenant root).
@@ -74,7 +77,9 @@ export interface ManagementGroup extends Resource<
  * their generated name, so an explicit `name` that already exists is only
  * taken over with `--adopt`.
  *
- * @see https://learn.microsoft.com/azure/governance/management-groups/overview
+ * :::caution
+ * Changing `name` replaces the management group.
+ * :::
  *
  * ### Creating a Management Group
  * **Example:** Group under the tenant root

@@ -34,6 +34,8 @@ export interface FeaturesetContainer extends Resource<
  * container that groups the versions of a feature set in a `FeatureStore`
  * workspace. Register versions with {@link FeaturesetVersion}.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/concept-what-is-managed-feature-store).
+ *
  * The container has nothing mutable: Azure rejects tags, a description,
  * and properties on it and ignores the archive flag. The feature store
  * workspace's stack/stage tags mark Alchemy ownership. Feature store
@@ -43,11 +45,20 @@ export interface FeaturesetContainer extends Resource<
  * Changing `resourceGroup`, `workspace`, or `name` replaces the feature set.
  * :::
  *
- * @see https://learn.microsoft.com/azure/machine-learning/concept-what-is-managed-feature-store
- *
  * ### Creating a Feature set
  * **Example:** Feature set in a workspace
  * ```typescript
+ * // An existing Application Insights component for workspace telemetry.
+ * const insightsId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/monitoring/providers/Microsoft.Insights/components/ml-insights";
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const featureStore = yield* Azure.MachineLearning.Workspace("featureStore", {
+ *   kind: "FeatureStore",
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ *   applicationInsights: insightsId,
+ * });
  * const featuresetContainer = yield* Azure.MachineLearning.FeaturesetContainer("transactions", {
  *   workspace: featureStore.workspaceName,
  * });

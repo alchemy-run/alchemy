@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -27,12 +27,14 @@ export interface PrivateLinkScopeProps {
   /**
    * Resource group the private link scope is created in. Changing it
    * replaces the scope.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the private link scope, at most 54 characters. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the scope.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -49,11 +51,13 @@ export interface PrivateLinkScopeProps {
   /**
    * Azure Arc extensions whose traffic is validated over the private
    * link.
+   * @default []
    */
   serviceExtensions?: PrivateLinkScopeServiceExtension[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -62,10 +66,14 @@ export interface PrivateLinkScopeProps {
  * An Azure Arc extension whose traffic is validated over the private link.
  */
 export interface PrivateLinkScopeServiceExtension {
-  /** Name of the Azure Arc extension. */
+  /**
+   * Name of the Azure Arc extension.
+   * @default unset
+   */
   serviceExtensionType?: string;
   /**
    * Whether the extension may use public Azure Arc extension endpoints.
+   * @default Azure's default
    */
   serviceExtensionPublicNetworkAccess?: "Enabled" | "Disabled";
 }
@@ -100,9 +108,10 @@ export interface PrivateLinkScope extends Resource<
 > {}
 
 /**
- * An Azure Arc private link scope — the target of a private endpoint
- * (`groupId: "hybridcompute"`) that lets Arc-enabled servers reach Azure
- * Arc over a private network instead of the public internet.
+ * An Azure Arc private link scope (`Microsoft.HybridCompute/privateLinkScopes`):
+ * the target of a private endpoint (`groupId: "hybridcompute"`) that lets
+ * Arc-enabled servers reach Azure Arc over a private network instead of
+ * the public internet.
  *
  * @see https://learn.microsoft.com/azure/azure-arc/servers/private-link-security
  *
@@ -122,9 +131,16 @@ export interface PrivateLinkScope extends Resource<
  * ### Onboarding Machines
  * **Example:** Pass the scope to the Connected Machine agent
  * ```typescript
- * // azcmagent connect --private-link-scope <privateLinkScopeResourceId> ...
+ * const scope = yield* Azure.HybridCompute.PrivateLinkScope("arc-scope");
+ * // azcmagent connect --private-link-scope <privateLinkScopeResourceId>
  * const scopeId = scope.privateLinkScopeResourceId;
  * ```
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the scope and
+ * changes its IDs. Machines and private endpoints that use the old scope
+ * must be moved to the new one.
+ * :::
  *
  * @resource
  */
@@ -193,9 +209,7 @@ export const PrivateLinkScopeProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* hybridcompute
-        .ListPrivateLinkScopes({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPrivateLinkScopes", page)));
+      const page = yield* collectAll(hybridcompute.ListPrivateLinkScopes, { subscriptionId });
       return (page.value ?? []).flatMap((scope) => {
         const group = resourceGroupOf(scope.id);
         return hasAnyAlchemyTag(scope.tags) && group !== undefined && scope.name !== undefined

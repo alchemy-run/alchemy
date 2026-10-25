@@ -7,6 +7,7 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
@@ -14,7 +15,6 @@ import {
   isOwned,
   orUndefinedIfNotFound,
   ProvisioningFailed,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -48,7 +48,10 @@ export type ImageTemplateSource =
       sku: string;
       /** Image version, or `latest`. */
       version: string;
-      /** Marketplace purchase plan, for images that require one. */
+      /**
+       * Marketplace purchase plan, for images that require one.
+       * @default unset
+       */
       planInfo?: ImageTemplatePlanInfo;
     }
   | {
@@ -72,67 +75,133 @@ export type ImageTemplateCustomizer =
   | {
       /** Run a shell script (Linux). */
       type: "Shell";
-      /** Friendly name of the step. */
+      /**
+       * Friendly name of the step.
+       * @default unset
+       */
       name?: string;
-      /** URI of the script to run. */
+      /**
+       * URI of the script to run.
+       * @default unset
+       */
       scriptUri?: string;
-      /** SHA256 checksum of the script at `scriptUri`. */
+      /**
+       * SHA256 checksum of the script at `scriptUri`.
+       * @default unset (the download is not verified)
+       */
       sha256Checksum?: string;
-      /** Inline commands to run. */
+      /**
+       * Inline commands to run.
+       * @default []
+       */
       inline?: string[];
     }
   | {
       /** Run a PowerShell script (Windows). */
       type: "PowerShell";
-      /** Friendly name of the step. */
+      /**
+       * Friendly name of the step.
+       * @default unset
+       */
       name?: string;
-      /** URI of the script to run. */
+      /**
+       * URI of the script to run.
+       * @default unset
+       */
       scriptUri?: string;
-      /** SHA256 checksum of the script at `scriptUri`. */
+      /**
+       * SHA256 checksum of the script at `scriptUri`.
+       * @default unset (the download is not verified)
+       */
       sha256Checksum?: string;
-      /** Inline commands to run. */
+      /**
+       * Inline commands to run.
+       * @default []
+       */
       inline?: string[];
       /** Exit codes that count as success. @default [0] */
       validExitCodes?: number[];
-      /** Run with elevated privileges. */
+      /**
+       * Run with elevated privileges.
+       * @default false
+       */
       runElevated?: boolean;
-      /** Run as the Local System user (requires `runElevated`). */
+      /**
+       * Run as the Local System user (requires `runElevated`).
+       * @default false
+       */
       runAsSystem?: boolean;
     }
   | {
       /** Restart a Windows build VM. */
       type: "WindowsRestart";
-      /** Friendly name of the step. */
+      /**
+       * Friendly name of the step.
+       * @default unset
+       */
       name?: string;
-      /** Command that performs the restart. */
+      /**
+       * Command that performs the restart.
+       * @default Azure's default restart command
+       */
       restartCommand?: string;
-      /** Command that checks the restart succeeded. */
+      /**
+       * Command that checks the restart succeeded.
+       * @default unset
+       */
       restartCheckCommand?: string;
-      /** Restart timeout, e.g. `5m` or `2h`. */
+      /**
+       * Restart timeout, e.g. `5m` or `2h`.
+       * @default "5m"
+       */
       restartTimeout?: string;
     }
   | {
       /** Install Windows updates. */
       type: "WindowsUpdate";
-      /** Friendly name of the step. */
+      /**
+       * Friendly name of the step.
+       * @default unset
+       */
       name?: string;
-      /** Update search criteria. */
+      /**
+       * Update search criteria.
+       * @default Azure's default search criteria
+       */
       searchCriteria?: string;
-      /** Update filters. */
+      /**
+       * Update filters.
+       * @default []
+       */
       filters?: string[];
-      /** Maximum number of updates applied at a time. */
+      /**
+       * Maximum number of updates applied at a time.
+       * @default Azure's default
+       */
       updateLimit?: number;
     }
   | {
       /** Download a file to the build VM. */
       type: "File";
-      /** Friendly name of the step. */
+      /**
+       * Friendly name of the step.
+       * @default unset
+       */
       name?: string;
-      /** URI of the file to download. */
+      /**
+       * URI of the file to download.
+       * @default unset
+       */
       sourceUri?: string;
-      /** SHA256 checksum of the file. */
+      /**
+       * SHA256 checksum of the file.
+       * @default unset (the download is not verified)
+       */
       sha256Checksum?: string;
-      /** Absolute destination path on the build VM. */
+      /**
+       * Absolute destination path on the build VM.
+       * @default unset
+       */
       destination?: string;
     };
 
@@ -141,43 +210,88 @@ export type ImageTemplateValidator =
   | {
       /** Validate with a shell script (Linux). */
       type: "Shell";
-      /** Friendly name of the step. */
+      /**
+       * Friendly name of the step.
+       * @default unset
+       */
       name?: string;
-      /** URI of the script to run. */
+      /**
+       * URI of the script to run.
+       * @default unset
+       */
       scriptUri?: string;
-      /** SHA256 checksum of the script. */
+      /**
+       * SHA256 checksum of the script.
+       * @default unset (the download is not verified)
+       */
       sha256Checksum?: string;
-      /** Inline commands to run. */
+      /**
+       * Inline commands to run.
+       * @default []
+       */
       inline?: string[];
     }
   | {
       /** Validate with a PowerShell script (Windows). */
       type: "PowerShell";
-      /** Friendly name of the step. */
+      /**
+       * Friendly name of the step.
+       * @default unset
+       */
       name?: string;
-      /** URI of the script to run. */
+      /**
+       * URI of the script to run.
+       * @default unset
+       */
       scriptUri?: string;
-      /** SHA256 checksum of the script. */
+      /**
+       * SHA256 checksum of the script.
+       * @default unset (the download is not verified)
+       */
       sha256Checksum?: string;
-      /** Inline commands to run. */
+      /**
+       * Inline commands to run.
+       * @default []
+       */
       inline?: string[];
-      /** Exit codes that count as success. */
+      /**
+       * Exit codes that count as success.
+       * @default [0]
+       */
       validExitCodes?: number[];
-      /** Run with elevated privileges. */
+      /**
+       * Run with elevated privileges.
+       * @default false
+       */
       runElevated?: boolean;
-      /** Run as the Local System user. */
+      /**
+       * Run as the Local System user.
+       * @default false
+       */
       runAsSystem?: boolean;
     }
   | {
       /** Download a file to the validation VM. */
       type: "File";
-      /** Friendly name of the step. */
+      /**
+       * Friendly name of the step.
+       * @default unset
+       */
       name?: string;
-      /** URI of the file to download. */
+      /**
+       * URI of the file to download.
+       * @default unset
+       */
       sourceUri?: string;
-      /** SHA256 checksum of the file. */
+      /**
+       * SHA256 checksum of the file.
+       * @default unset (the download is not verified)
+       */
       sha256Checksum?: string;
-      /** Absolute destination path. */
+      /**
+       * Absolute destination path.
+       * @default unset
+       */
       destination?: string;
     };
 
@@ -192,7 +306,10 @@ export type ImageTemplateDistributor =
       imageId: string;
       /** Azure location of the managed image. */
       location: string;
-      /** Tags applied to the created image. */
+      /**
+       * Tags applied to the created image.
+       * @default {}
+       */
       artifactTags?: Record<string, string>;
     }
   | {
@@ -202,15 +319,33 @@ export type ImageTemplateDistributor =
       runOutputName: string;
       /** ARM ID of the gallery image definition (or a specific version). */
       galleryImageId: string;
-      /** Target regions with replica counts and storage types. */
+      /**
+       * Target regions with replica counts and storage types.
+       * @default unset
+       */
       targetRegions?: {
+        /** Azure region to replicate the version to. Required. */
         name: string;
+        /**
+         * Number of replicas in the region.
+         * @default Azure's default
+         */
         replicaCount?: number;
+        /**
+         * Storage type of the replicas.
+         * @default Azure's default
+         */
         storageAccountType?: "Standard_LRS" | "Standard_ZRS" | "Premium_LRS";
       }[];
-      /** Exclude the version from `latest`. */
+      /**
+       * Exclude the version from `latest`.
+       * @default false
+       */
       excludeFromLatest?: boolean;
-      /** Tags applied to the created image version. */
+      /**
+       * Tags applied to the created image version.
+       * @default {}
+       */
       artifactTags?: Record<string, string>;
     }
   | {
@@ -218,27 +353,54 @@ export type ImageTemplateDistributor =
       type: "VHD";
       /** Name of the run output that records this distribution. */
       runOutputName: string;
-      /** Destination blob URI; the service picks one when omitted. */
+      /**
+       * Destination blob URI; the service picks one when omitted.
+       * @default a blob URI the service picks
+       */
       uri?: string;
-      /** Tags applied to the created artifact. */
+      /**
+       * Tags applied to the created artifact.
+       * @default {}
+       */
       artifactTags?: Record<string, string>;
     };
 
 /** The build (and validation) VM. */
 export interface ImageTemplateVmProfile {
-  /** VM size; empty uses `Standard_D2ds_v4` (Gen2) or `Standard_D1_v2` (Gen1). */
+  /**
+   * VM size of the build VM.
+   * @default "" (`Standard_D2ds_v4` for Gen2 images, `Standard_D1_v2` for Gen1)
+   */
   vmSize?: string;
-  /** OS disk size in GB; `0` uses the image default. */
+  /**
+   * OS disk size in GB; `0` uses the image default.
+   * @default 0
+   */
   osDiskSizeGB?: number;
-  /** ARM IDs of user-assigned identities attached to the build VM. */
+  /**
+   * ARM IDs of user-assigned identities attached to the build VM.
+   * @default []
+   */
   userAssignedIdentities?: string[];
-  /** Virtual network the build VM is deployed into. */
+  /**
+   * Virtual network the build VM is deployed into.
+   * @default unset (Image Builder deploys its own network)
+   */
   vnetConfig?: {
-    /** Subnet ID for the build VM. */
+    /**
+     * Subnet ID for the build VM.
+     * @default unset
+     */
     subnetId?: string;
-    /** Subnet ID for Azure Container Instance (isolated builds). */
+    /**
+     * Subnet ID for Azure Container Instance (isolated builds).
+     * @default unset
+     */
     containerInstanceSubnetId?: string;
-    /** Size of the proxy VM. */
+    /**
+     * Size of the proxy VM.
+     * @default Azure's default proxy VM size
+     */
     proxyVmSize?: string;
   };
 }
@@ -247,12 +409,14 @@ export interface ImageTemplateProps {
   /**
    * Resource group the template is created in. Changing it replaces the
    * template.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the template, up to 64 letters, digits, `-`, `_` and `.`. If
    * omitted, a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the template.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -268,29 +432,48 @@ export interface ImageTemplateProps {
   identityId: string;
   /** Image the build starts from. Changing it replaces the template. */
   source: ImageTemplateSource;
-  /** Customization steps, in order. Changing them replaces the template. */
+  /**
+   * Customization steps, in order. Changing them replaces the template.
+   * @default []
+   */
   customize?: ImageTemplateCustomizer[];
   /** Where the built image is published. Mutable in place. */
   distribute: ImageTemplateDistributor[];
   /**
    * Optimize the image for faster VM boot. Changing it replaces the
    * template.
+   * @default false
    */
   optimizeVmBoot?: boolean;
-  /** In-VM validation of the built image. Changing it replaces the template. */
+  /**
+   * In-VM validation of the built image. Changing it replaces the template.
+   * @default no validation
+   */
   validate?: {
-    /** Validations to run. */
+    /**
+     * Validations to run.
+     * @default []
+     */
     inVMValidations?: ImageTemplateValidator[];
     /** Distribute even when validation fails. @default false */
     continueDistributeOnFailure?: boolean;
     /** Only validate the source image, without customizing. @default false */
     sourceValidationOnly?: boolean;
   };
-  /** Cleanup behaviour after a failed build. Changing it replaces the template. */
+  /**
+   * Cleanup behaviour after a failed build. Changing it replaces the template.
+   * @default Azure's default
+   */
   errorHandling?: {
-    /** `cleanup` or `abort` the build VM after a customizer error. */
+    /**
+     * `cleanup` or `abort` the build VM after a customizer error.
+     * @default Azure's default
+     */
     onCustomizerError?: "cleanup" | "abort";
-    /** `cleanup` or `abort` the build VM after a validation error. */
+    /**
+     * `cleanup` or `abort` the build VM after a validation error.
+     * @default Azure's default
+     */
     onValidationError?: "cleanup" | "abort";
   };
   /**
@@ -299,14 +482,21 @@ export interface ImageTemplateProps {
    * @default 0
    */
   buildTimeoutInMinutes?: number;
-  /** Build VM settings. Mutable in place. */
+  /**
+   * Build VM settings. Mutable in place.
+   * @default Azure's default build VM
+   */
   vmProfile?: ImageTemplateVmProfile;
-  /** Additional data disks (sizes in GB). Changing them replaces the template. */
+  /**
+   * Additional data disks (sizes in GB). Changing them replaces the template.
+   * @default []
+   */
   additionalDataDisks?: number[];
   /**
    * ARM ID of the staging resource group. If omitted, Image Builder creates
    * an `IT_*` group and deletes it with the template. Changing it replaces
    * the template.
+   * @default an `IT_*` group Image Builder creates
    */
   stagingResourceGroup?: string;
   /**
@@ -318,11 +508,13 @@ export interface ImageTemplateProps {
   /**
    * Tags on the staging resource group and the resources Image Builder
    * creates. Changing them replaces the template.
+   * @default {}
    */
   managedResourceTags?: Record<string, string>;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -353,20 +545,22 @@ export interface ImageTemplate extends Resource<
 > {}
 
 /**
- * An Azure VM Image Builder template — a declarative description of a
- * source image, customization steps, and distribution targets. Creating
- * the template does not build an image; start a build with `autoRun`, the
- * `run` action, or a {@link Trigger}.
+ * An Azure VM Image Builder template
+ * (`Microsoft.VirtualMachineImages/imageTemplates`): a declarative
+ * description of a source image, customization steps, and distribution
+ * targets. Creating the template does not build an image. Start a build
+ * with `autoRun`, the `run` action, or a {@link Trigger}.
  *
  * @see https://learn.microsoft.com/azure/virtual-machines/image-builder-overview
  *
  * ### Creating a Template
  * **Example:** Ubuntu image with a shell customizer, published as a managed image
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("images");
+ * const groupId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/images";
  * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("builder");
  * yield* Azure.Authorization.RoleAssignment("builder-contributor", {
- *   scope: group.resourceGroupId,
+ *   scope: groupId,
  *   roleDefinitionId: Azure.Authorization.BuiltInRole.Contributor,
  *   principalId: identity.principalId,
  *   principalType: "ServicePrincipal",
@@ -387,7 +581,7 @@ export interface ImageTemplate extends Resource<
  *     {
  *       type: "ManagedImage",
  *       runOutputName: "web",
- *       imageId: Output.interpolate`${group.resourceGroupId}/providers/Microsoft.Compute/images/web`,
+ *       imageId: `${groupId}/providers/Microsoft.Compute/images/web`,
  *       location: "eastus",
  *     },
  *   ],
@@ -397,6 +591,7 @@ export interface ImageTemplate extends Resource<
  * ### Building on Create
  * **Example:** Start a build as soon as the template exists
  * ```typescript
+ * // identity, source, and distribute as in the example above
  * const template = yield* Azure.ImageBuilder.ImageTemplate("web", {
  *   identityId: identity.identityId,
  *   source,
@@ -405,6 +600,20 @@ export interface ImageTemplate extends Resource<
  *   vmProfile: { vmSize: "Standard_D2ds_v4", osDiskSizeGB: 64 },
  * });
  * ```
+ *
+ * :::caution
+ * Grant the template's identity rights on the distribution targets (and on
+ * a custom `stagingResourceGroup`) before the first build. Without them the
+ * build fails.
+ * :::
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `source`, `customize`,
+ * `optimizeVmBoot`, `validate`, `errorHandling`, `buildTimeoutInMinutes`,
+ * `additionalDataDisks`, `stagingResourceGroup`, `autoRun`, or
+ * `managedResourceTags` replaces the template. `identityId`, `distribute`,
+ * `vmProfile`, and `tags` update in place.
+ * :::
  *
  * @resource
  */
@@ -547,11 +756,9 @@ export const ImageTemplateProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* imagebuilder
-        .ListVirtualMachineImageTemplates({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListVirtualMachineImageTemplates", page)),
-        );
+      const page = yield* collectAll(imagebuilder.ListVirtualMachineImageTemplates, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((template) => {
         const group = resourceGroupOf(template.id);
         return hasAnyAlchemyTag(template.tags) && group !== undefined && template.name !== undefined

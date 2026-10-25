@@ -26,13 +26,17 @@ import {
 } from "./common.ts";
 
 export interface ExpressRouteAuthorizationProps {
-  /** Resource group of the private cloud. Changing it replaces the authorization. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the authorization.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the authorization. */
   privateCloud: string;
   /**
    * Name of the authorization. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the authorization.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -73,14 +77,24 @@ export interface ExpressRouteAuthorization extends Resource<
 
 /**
  * An authorization on an Azure VMware Solution private cloud's ExpressRoute
- * circuit. Its key lets a virtual network gateway connect to the private
- * cloud.
+ * circuit (`Microsoft.AVS/privateClouds/authorizations`). Its key lets a
+ * virtual network gateway connect to the private cloud.
+ *
+ * :::caution
+ * Changing `privateCloud`, `name`, `expressRouteId`, or `resourceGroup`
+ * replaces the authorization. The new authorization has a new key.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/deploy-azure-vmware-solution#connect-to-azure-virtual-network-with-expressroute
  *
  * ### Connecting a Virtual Network
  * **Example:** Authorization key for an ExpressRoute gateway connection
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
  * const auth = yield* Azure.VMware.ExpressRouteAuthorization("gateway", {
  *   privateCloud: cloud.privateCloudName,
  * });

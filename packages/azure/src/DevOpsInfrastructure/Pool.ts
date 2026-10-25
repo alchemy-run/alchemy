@@ -8,13 +8,13 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,20 +32,26 @@ export interface PoolAzureDevOpsOrganization {
   /**
    * Projects the pool is restricted to. Omit to make the pool available to
    * every project in the organization.
+   * @default every project in the organization
    */
   projects?: string[];
   /**
    * Maximum number of agents this organization may use out of the pool's
    * `maximumConcurrency`. Required when the pool serves several
    * organizations.
+   * @default unset (Azure's default)
    */
   parallelism?: number;
-  /** Whether every pipeline in the selected projects may use the pool. */
+  /**
+   * Whether every pipeline in the selected projects may use the pool.
+   * @default unset (Azure's default)
+   */
   openAccess?: boolean;
 }
 
 /** Pool serving one or more Azure DevOps organizations. */
 export interface PoolAzureDevOpsOrganizationProfile {
+  /** Discriminator: the pool serves Azure DevOps organizations. */
   kind: "AzureDevOps";
   /** Organizations the pool is registered in. */
   organizations: PoolAzureDevOpsOrganization[];
@@ -67,12 +73,16 @@ export interface PoolAzureDevOpsOrganizationProfile {
 export interface PoolGitHubOrganization {
   /** Organization URL, e.g. `https://github.com/contoso`. */
   url: string;
-  /** Repositories the runners are restricted to. Omit for all. */
+  /**
+   * Repositories the runners are restricted to. Omit for all.
+   * @default every repository
+   */
   repositories?: string[];
 }
 
 /** Pool serving GitHub organizations (GitHub Actions runners). */
 export interface PoolGitHubOrganizationProfile {
+  /** Discriminator: the pool serves GitHub organizations. */
   kind: "GitHub";
   /** Organizations the runners are registered in. */
   organizations: PoolGitHubOrganization[];
@@ -111,15 +121,20 @@ interface PoolAgentProfileBase {
 
 /** Every agent runs exactly one job on a fresh machine. */
 export interface PoolStatelessAgentProfile extends PoolAgentProfileBase {
+  /** Discriminator: every job runs on a fresh machine. */
   kind: "Stateless";
 }
 
 /** Machines are reused across jobs until their lifetime ends. */
 export interface PoolStatefulAgentProfile extends PoolAgentProfileBase {
+  /** Discriminator: machines are reused across jobs. */
   kind: "Stateful";
   /** Maximum lifetime of a machine, `d.hh:mm:ss`. @default "7.00:00:00" */
   maxAgentLifetime?: string;
-  /** How long an idle machine is kept, `d.hh:mm:ss`. */
+  /**
+   * How long an idle machine is kept, `d.hh:mm:ss`.
+   * @default unset (Azure's default)
+   */
   gracePeriodTimeSpan?: string;
 }
 
@@ -130,20 +145,34 @@ export interface PoolImage {
   /**
    * Well-known image, e.g. `windows-2022/latest` or `ubuntu-22.04/latest`.
    * Set this or `resourceId`.
+   * @default unset
    */
   wellKnownImageName?: string;
-  /** ARM ID of an Azure Compute Gallery image (version). */
+  /**
+   * ARM ID of an Azure Compute Gallery image (version).
+   * @default unset
+   */
   resourceId?: string;
-  /** Aliases pipelines use to demand this image. */
+  /**
+   * Aliases pipelines use to demand this image.
+   * @default []
+   */
   aliases?: string[];
-  /** Percentage of stand-by agents allocated to this image, or `*`. */
+  /**
+   * Percentage of stand-by agents allocated to this image, or `*`.
+   * @default unset (Azure's default)
+   */
   buffer?: string;
-  /** `Automatic`, `CacheDisk`, or `ResourceDisk`. */
+  /**
+   * `Automatic`, `CacheDisk`, or `ResourceDisk`.
+   * @default unset (Azure's default)
+   */
   ephemeralType?: "Automatic" | "CacheDisk" | "ResourceDisk";
 }
 
 /** Machines are Azure VM scale set instances managed by the service. */
 export interface PoolVmssFabricProfile {
+  /** Discriminator: machines are VM scale set instances. */
   kind: "Vmss";
   /** VM SKU of the machines. */
   sku: {
@@ -152,7 +181,10 @@ export interface PoolVmssFabricProfile {
   };
   /** Images available to pipelines. */
   images: PoolImage[];
-  /** Operating system settings. */
+  /**
+   * Operating system settings.
+   * @default unset (Azure's default)
+   */
   osProfile?: {
     /** Key Vault certificates installed on every machine. */
     secretsManagementSettings?: {
@@ -168,7 +200,10 @@ export interface PoolVmssFabricProfile {
     /** How the agent runs on Windows: `Service` or `Interactive`. */
     logonType?: "Service" | "Interactive";
   };
-  /** Disk settings. */
+  /**
+   * Disk settings.
+   * @default unset (Azure's default)
+   */
   storageProfile?: {
     /** OS disk type: `Standard`, `Premium`, or `StandardSSD`. */
     osDiskStorageAccountType?: "Standard" | "Premium" | "StandardSSD";
@@ -184,7 +219,10 @@ export interface PoolVmssFabricProfile {
       driveLetter?: string;
     }[];
   };
-  /** Network settings. Omit to use a service-managed network. */
+  /**
+   * Network settings. Omit to use a service-managed network.
+   * @default a service-managed network
+   */
   networkProfile?: {
     /** ARM ID of a subnet (delegated to `Microsoft.DevOpsInfrastructure/pools`). */
     subnetId?: string;
@@ -196,18 +234,25 @@ export interface PoolVmssFabricProfile {
 export interface PoolIdentity {
   /** `None` or `UserAssigned`. */
   type: "None" | "UserAssigned";
-  /** ARM IDs of user-assigned identities, for `UserAssigned`. */
+  /**
+   * ARM IDs of user-assigned identities, for `UserAssigned`.
+   * @default []
+   */
   userAssignedIdentities?: string[];
 }
 
 export interface PoolProps {
-  /** Resource group the pool is created in. Changing it replaces the pool. */
+  /**
+   * Resource group the pool is created in. Changing it replaces the pool.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Pool name, 3-44 characters of letters, digits, `-`, `_` and `.`, unique
    * within the Azure DevOps organization. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * pool.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -231,16 +276,23 @@ export interface PoolProps {
   agentProfile?: PoolAgentProfile;
   /** Machines, images, disks, and networking of the pool. */
   fabricProfile: PoolVmssFabricProfile;
-  /** Agent runtime settings. */
+  /**
+   * Agent runtime settings.
+   * @default unset (Azure's default)
+   */
   runtimeConfiguration?: {
     /** Work folder of the agent on the machine. */
     workFolder?: string;
   };
-  /** Managed identity of the pool (e.g. for Key Vault certificates). */
+  /**
+   * Managed identity of the pool (e.g. for Key Vault certificates).
+   * @default no managed identity
+   */
   identity?: PoolIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -275,14 +327,22 @@ export interface Pool extends Resource<
 > {}
 
 /**
- * A Managed DevOps Pool — Azure-hosted, auto-scaling Azure Pipelines agents
+ * A Managed DevOps Pool (`Microsoft.DevOpsInfrastructure/pools`) —
+ * Azure-hosted, auto-scaling Azure Pipelines agents
  * (or GitHub Actions runners) running in VM scale sets that Microsoft
  * manages in your subscription. A pool belongs to a Dev Center project and
  * registers itself as an agent pool in the given Azure DevOps organizations.
  *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, or
+ * `organizationProfile.kind` replaces the pool.
+ * :::
+ *
+ * :::caution
  * The Azure DevOps organization must be connected to the subscription's
  * Microsoft Entra tenant, and the `DevOpsInfrastructure` service principal
  * needs Reader + Network Contributor on any custom subnet.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/devops/managed-devops-pools/overview
  *
@@ -470,9 +530,7 @@ export const PoolProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mdp
-        .ListPoolBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPoolBySubscription", page)));
+      const page = yield* collectAll(mdp.ListPoolBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((pool) => {
         const group = resourceGroupOf(pool.id);
         return hasAnyAlchemyTag(pool.tags) && group !== undefined && pool.name !== undefined

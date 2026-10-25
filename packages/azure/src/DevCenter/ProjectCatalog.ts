@@ -29,7 +29,10 @@ import {
 import { createDevCenterName, sameArm } from "./Common.ts";
 
 export interface ProjectCatalogProps extends CatalogSourceProps {
-  /** Resource group of the project. Changing it replaces the catalog. */
+  /**
+   * Resource group of the project. Changing it replaces the catalog.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the project. Changing it replaces the catalog. */
   project: string;
@@ -37,6 +40,7 @@ export interface ProjectCatalogProps extends CatalogSourceProps {
    * Catalog name: 3-63 letters, digits, hyphens, underscores, and periods.
    * If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the catalog.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
 }
@@ -53,7 +57,8 @@ export interface ProjectCatalog extends Resource<
 > {}
 
 /**
- * A project catalog — a Git repository folder of environment definitions
+ * A project catalog (`Microsoft.DevCenter/projects/catalogs`) — a Git
+ * repository folder of environment definitions
  * or image definitions scoped to a single project, so a team can manage
  * its own catalog items without touching the dev center. The catalog
  * syncs right after it is created.
@@ -64,11 +69,23 @@ export interface ProjectCatalog extends Resource<
  * need a personal access token stored in Key Vault (`secretIdentifier`)
  * that the project identity can read.
  *
+ * :::caution
+ * Changing `project`, `name`, `resourceGroup`, or the source type
+ * (`gitHub` vs `adoGit`) replaces the catalog.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/deployment-environments/how-to-configure-project-catalog
  *
  * ### Creating a Project Catalog
  * **Example:** Microsoft's public quick-start catalog
  * ```typescript
+ * const center = yield* Azure.DevCenter.DevCenter("center", {
+ *   projectCatalogItemSyncEnableStatus: "Enabled",
+ * });
+ * const project = yield* Azure.DevCenter.Project("team", {
+ *   devCenterId: center.devCenterId,
+ *   catalogItemSyncTypes: ["EnvironmentDefinition"],
+ * });
  * const catalog = yield* Azure.DevCenter.ProjectCatalog("quickstart", {
  *   project: project.projectName,
  *   gitHub: {

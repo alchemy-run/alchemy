@@ -25,16 +25,38 @@ import {
 } from "./internal.ts";
 
 export interface WcfRelayAuthorizationRuleProps {
-  /** Resource group of the namespace. Changing it replaces the rule. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Relay namespace that holds the WCF relay. Changing it replaces the rule. */
+  /**
+   * Relay namespace that holds the WCF relay.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   */
   namespace: string;
-  /** WCF relay the rule grants access to. Changing it replaces the rule. */
+  /**
+   * WCF relay the rule grants access to.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   */
   wcfRelay: string;
   /**
-   * Rule name: 1-50 letters, digits, `.`, `-`, and `_`. If omitted, a unique
-   * name is generated from the app, stage, and logical ID. Changing it
-   * replaces the rule.
+   * Rule name: 1-50 letters, digits, `.`, `-`, and `_`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -75,9 +97,9 @@ export interface WcfRelayAuthorizationRule extends Resource<
 
 /**
  * A shared access (SAS) authorization rule scoped to a single Azure Relay
- * WCF relay. It grants `Listen`, `Send`, and/or `Manage` on that relay
- * only and exposes the rule's keys and connection strings as
- * secrets.
+ * WCF relay (`Microsoft.Relay/namespaces/wcfRelays/authorizationRules`). It
+ * grants `Listen`, `Send`, and/or `Manage` on that relay only and exposes
+ * the rule's keys and connection strings as secrets.
  *
  * Authorization rules have no tags or metadata: Alchemy treats a rule it
  * did not create (e.g. an existing rule with the same explicit `name`) as
@@ -88,6 +110,7 @@ export interface WcfRelayAuthorizationRule extends Resource<
  * ### Creating a Rule
  * **Example:** Separate listener and sender credentials
  * ```typescript
+ * const ns = yield* Azure.Relay.Namespace("relay");
  * const svc = yield* Azure.Relay.WcfRelay("legacy-svc", {
  *   namespace: ns.namespaceName,
  * });

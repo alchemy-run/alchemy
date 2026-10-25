@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -41,6 +41,7 @@ export interface SecurityPolicyProps {
   /**
    * Resource group of the traffic controller. Changing it replaces the
    * policy.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -52,6 +53,7 @@ export interface SecurityPolicyProps {
    * Policy name: up to 64 letters, digits, `-`, `_`, and `.`. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the policy.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -67,16 +69,19 @@ export interface SecurityPolicyProps {
    * `waf` policy. Set exactly one of `wafPolicyId` and
    * `ipAccessRules`; switching between the two, or pointing at a different
    * WAF policy, replaces the policy.
+   * @default not set
    */
   wafPolicyId?: string;
   /**
    * IP access rules — makes this an `ipAccessRules` policy. Set exactly one
    * of `wafPolicyId` and `ipAccessRules`; the rules are updated in place.
+   * @default not set
    */
   ipAccessRules?: SecurityPolicyIpAccessRule[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -113,19 +118,32 @@ export interface SecurityPolicy extends Resource<
 
 /**
  * A security policy of an Application Gateway for Containers traffic
- * controller — either a Web Application Firewall policy reference or a list
- * of IP access rules. Attach IP access rule policies to individual frontends
- * or to the whole traffic controller, and WAF policies to the traffic
- * controller, through `securityPolicyConfigurations`. IP access rule
- * policies are a preview feature that must be enabled on the subscription.
+ * controller (`Microsoft.ServiceNetworking/trafficControllers/securityPolicies`):
+ * a Web Application Firewall policy reference or a list of IP access rules.
+ * Attach IP access rule policies to single frontends or to the whole traffic
+ * controller, and WAF policies to the traffic controller, through
+ * `securityPolicyConfigurations`. See the
+ * [Azure docs](https://learn.microsoft.com/azure/application-gateway/for-containers/ip-access-restriction).
  *
- * IP access rule policies are free; WAF policies bill extra per frontend.
+ * IP access rule policies are free. WAF policies bill extra per frontend.
  *
- * @see https://learn.microsoft.com/azure/application-gateway/for-containers/ip-access-restriction
+ * :::caution
+ * IP access rule policies are a preview feature that you must enable on the
+ * subscription. WAF policies must use the `Microsoft_DefaultRuleSet` 2.1
+ * managed rules. Set exactly one of `wafPolicyId` and `ipAccessRules`.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `trafficController`, `name`, or `location`
+ * replaces the policy. Switching between `wafPolicyId` and `ipAccessRules`,
+ * or pointing `wafPolicyId` at another WAF policy, also replaces it. Alchemy
+ * updates `ipAccessRules` and `tags` in place.
+ * :::
  *
  * ### IP Access Rules
  * **Example:** Allow one range, deny everything else
  * ```typescript
+ * const controller = yield* Azure.ServiceNetworking.TrafficController("alb");
  * const policy = yield* Azure.ServiceNetworking.SecurityPolicy("ip-rules", {
  *   trafficController: controller.trafficControllerName,
  *   ipAccessRules: [
@@ -253,27 +271,21 @@ export const SecurityPolicyProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const controllers = yield* servicenetworking
-        .ListTrafficControllerInterfaceBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListTrafficControllerInterfaceBySubscription", page),
-          ),
-        );
+      const controllers = yield* collectAll(
+        servicenetworking.ListTrafficControllerInterfaceBySubscription,
+        { subscriptionId },
+      );
       const found: SecurityPolicy["Attributes"][] = [];
       for (const controller of controllers.value ?? []) {
         const group = resourceGroupOf(controller.id);
         if (group === undefined || controller.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          servicenetworking.ListSecurityPoliciesInterfaceByTrafficController({
+          collectAll(servicenetworking.ListSecurityPoliciesInterfaceByTrafficController, {
             subscriptionId,
             resourceGroupName: group,
             trafficControllerName: controller.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListSecurityPoliciesInterfaceByTrafficController", page);
-        }
         for (const policy of page?.value ?? []) {
           if (hasAnyAlchemyTag(policy.tags) && policy.name !== undefined) {
             found.push(toAttrs(group, controller.name, policy.name, policy));

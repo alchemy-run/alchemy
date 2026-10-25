@@ -89,9 +89,15 @@ export const sameText = (a: string | null | undefined, b: string | null | undefi
 export interface AutomationContentLink {
   /** Download URL, e.g. a PowerShell Gallery or PyPI package URL. */
   uri: string;
-  /** Version of the content. */
+  /**
+   * Version of the content.
+   * @default not set
+   */
   version?: string;
-  /** Hash Automation verifies the download against. */
+  /**
+   * Hash Automation verifies the download against.
+   * @default not set
+   */
   contentHash?: {
     /** Hash algorithm, e.g. `SHA256`. */
     algorithm: string;

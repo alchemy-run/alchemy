@@ -22,6 +22,7 @@ export interface LoggerProps {
    * Logger identifier (1-80 characters). If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces
    * the logger.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -35,16 +36,23 @@ export interface LoggerProps {
    * `identityClientId` plus `endpointAddress`) for Event Hubs. APIM stores
    * them in a generated named value, so changes are detected against the
    * previously deployed props rather than the cloud.
+   * @default no credentials
    */
   credentials?: Record<string, string | Redacted.Redacted<string>>;
-  /** Description of the logger. */
+  /**
+   * Description of the logger.
+   * @default no description
+   */
   description?: string;
   /**
    * Whether records are buffered before publishing.
    * @default true
    */
   isBuffered?: boolean;
-  /** ARM resource ID of the log target (Application Insights component or Event Hub). */
+  /**
+   * ARM resource ID of the log target (Application Insights component or Event Hub).
+   * @default not set
+   */
   resourceId?: string;
 }
 
@@ -71,29 +79,47 @@ export interface Logger extends Resource<
  * An API Management logger — an event sink (Application Insights, Event
  * Hubs, or Azure Monitor) that diagnostics and the `log-to-eventhub`
  * policy write to.
+ * The ARM type is `Microsoft.ApiManagement/service/loggers`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, `loggerType`, or `resourceGroup` replaces
+ * the logger.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-app-insights
  *
  * ### Creating a Logger
  * **Example:** Application Insights logger
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const logger = yield* Azure.ApiManagement.Logger("insights", {
  *   serviceName: apim.serviceName,
  *   loggerType: "applicationInsights",
  *   credentials: {
- *     connectionString: Redacted.make(process.env.APPINSIGHTS_CONNECTION_STRING!),
+ *     connectionString: yield* Config.redacted("APPINSIGHTS_CONNECTION_STRING"),
  *   },
  * });
  * ```
  *
  * **Example:** Event Hubs logger
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const namespace = yield* Azure.EventHub.Namespace("events");
+ * const hub = yield* Azure.EventHub.EventHub("apim-logs", {
+ *   namespace: namespace.namespaceName,
+ * });
  * const logger = yield* Azure.ApiManagement.Logger("events", {
  *   serviceName: apim.serviceName,
  *   loggerType: "azureEventHub",
  *   credentials: {
  *     name: hub.eventHubName,
- *     connectionString: Redacted.make(process.env.EVENTHUB_CONNECTION_STRING!),
+ *     connectionString: yield* Config.redacted("EVENTHUB_CONNECTION_STRING"),
  *   },
  * });
  * ```

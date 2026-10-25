@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -24,12 +24,16 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createStandbyPoolName, lower, sameLocation, sortedKey } from "./common.ts";
 
 export interface ContainerGroupPoolProps {
-  /** Resource group the pool is created in. Changing it replaces the pool. */
+  /**
+   * Resource group the pool is created in. Changing it replaces the pool.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Pool name: 3-24 letters, digits, and hyphens. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the pool.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -38,7 +42,10 @@ export interface ContainerGroupPoolProps {
    * @default the `Azure.Location` layer, else `eastus`
    */
   location?: string;
-  /** Availability zones of the pooled container groups. Changing them replaces the pool. */
+  /**
+   * Availability zones of the pooled container groups. Changing them replaces the pool.
+   * @default no zones
+   */
   zones?: string[];
   /**
    * ARM ID of the `Microsoft.ContainerInstance/containerGroupProfiles`
@@ -52,7 +59,10 @@ export interface ContainerGroupPoolProps {
    * @default the profile's latest revision
    */
   containerGroupProfileRevision?: number;
-  /** ARM IDs of the subnets the pooled container groups join. */
+  /**
+   * ARM IDs of the subnets the pooled container groups join.
+   * @default no subnets (the profile's networking)
+   */
   subnetIds?: string[];
   /** Maximum number of ready container groups kept in the pool. */
   maxReadyCapacity: number;
@@ -70,6 +80,7 @@ export interface ContainerGroupPoolProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -103,16 +114,25 @@ export interface ContainerGroupPool extends Resource<
 
 /**
  * An Azure standby container group pool
- * (`Microsoft.StandbyPool/standbyContainerGroupPools`) — keeps
- * pre-provisioned Azure Container Instances container groups, created from
- * a container group profile, ready to cut scale-out latency.
+ * (`Microsoft.StandbyPool/standbyContainerGroupPools`). It keeps
+ * pre-provisioned Azure Container Instances container groups, created from a
+ * container group profile, ready to cut scale-out latency. See the
+ * [Azure docs](https://learn.microsoft.com/azure/container-instances/container-instances-standby-pools).
  *
- * The pool itself is free; the pooled container groups bill as regular
- * container groups. The "Standby Pool Resource Provider" service principal
- * needs the `Azure Container Instances Contributor Role` (plus `Network
- * Contributor` for subnets) on the resource group to fill the pool.
+ * The pool itself is free. The pooled container groups bill as regular
+ * container groups.
  *
- * @see https://learn.microsoft.com/azure/container-instances/container-instances-standby-pools
+ * :::caution
+ * The "Standby Pool Resource Provider" service principal needs the `Azure
+ * Container Instances Contributor Role` on the resource group to fill the
+ * pool, plus `Network Contributor` when you set `subnetIds`.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `zones`, or
+ * `containerGroupProfileId` replaces the pool. Alchemy updates the profile
+ * revision, `subnetIds`, capacity, sizing, and `tags` in place.
+ * :::
  *
  * ### Creating a Pool
  * **Example:** Keep one container group warm
@@ -238,13 +258,9 @@ export const ContainerGroupPoolProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* standbypool
-        .ListStandbyContainerGroupPoolBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListStandbyContainerGroupPoolBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(standbypool.ListStandbyContainerGroupPoolBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((observed) => {
         const group = resourceGroupOf(observed.id);
         return hasAnyAlchemyTag(observed.tags) && group !== undefined && observed.name !== undefined

@@ -72,6 +72,8 @@ export interface ConfigurationProfileAssignment extends Resource<
 /**
  * Assigns an Azure Automanage configuration profile to a virtual machine,
  * onboarding the machine to the profile's best-practice services.
+ * The ARM type is `Microsoft.Automanage/configurationProfileAssignments`, an
+ * extension resource on the virtual machine.
  *
  * A machine holds at most one assignment. The assignment has no tags;
  * Alchemy treats it as owned when its virtual machine carries this stack's
@@ -79,11 +81,31 @@ export interface ConfigurationProfileAssignment extends Resource<
  * the background after the assignment is created; the resource does not
  * wait for the machine to become `Conformant`.
  *
+ * :::caution
+ * Changing `virtualMachine` or `resourceGroup` replaces the assignment.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/automanage/overview-about
  *
  * ### Assigning a Profile
  * **Example:** Assign a custom profile to a VM
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("app", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const nic = yield* Azure.Network.NetworkInterface("vm", {
+ *   ipConfigurations: [{ subnetId: subnet.subnetId }],
+ * });
+ * const vm = yield* Azure.Compute.VirtualMachine("vm", {
+ *   vmSize: "Standard_B1s",
+ *   networkInterfaceIds: [nic.networkInterfaceId],
+ *   adminUsername: "azureuser",
+ *   sshPublicKeys: [yield* Config.string("SSH_PUBLIC_KEY")],
+ * });
  * const profile = yield* Azure.Automanage.ConfigurationProfile("baseline", {
  *   configuration: { "AzureSecurityBaseline/Enable": true },
  * });
@@ -95,6 +117,22 @@ export interface ConfigurationProfileAssignment extends Resource<
  *
  * **Example:** Assign the built-in dev/test best practices
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("app", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const nic = yield* Azure.Network.NetworkInterface("vm", {
+ *   ipConfigurations: [{ subnetId: subnet.subnetId }],
+ * });
+ * const vm = yield* Azure.Compute.VirtualMachine("vm", {
+ *   vmSize: "Standard_B1s",
+ *   networkInterfaceIds: [nic.networkInterfaceId],
+ *   adminUsername: "azureuser",
+ *   sshPublicKeys: [yield* Config.string("SSH_PUBLIC_KEY")],
+ * });
  * yield* Azure.Automanage.ConfigurationProfileAssignment("vm-devtest", {
  *   virtualMachine: vm.virtualMachineName,
  *   configurationProfile:

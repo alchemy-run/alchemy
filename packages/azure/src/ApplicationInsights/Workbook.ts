@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -257,9 +257,10 @@ export const WorkbookProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       const seen = new Map<string, Workbook["Attributes"]>();
       for (const category of LIST_CATEGORIES) {
-        const page = yield* applicationinsights
-          .ListWorkbookBySubscription({ subscriptionId, category })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListWorkbookBySubscription", page)));
+        const page = yield* collectAll(applicationinsights.ListWorkbookBySubscription, {
+          subscriptionId,
+          category,
+        });
         for (const workbook of page.value ?? []) {
           const group = resourceGroupOf(workbook.id);
           if (

@@ -26,7 +26,10 @@ export interface ApiReleaseProps {
    * @default the API's current revision
    */
   apiRevision?: string;
-  /** Release notes shown in the developer portal change log. */
+  /**
+   * Release notes shown in the developer portal change log.
+   * @default no notes
+   */
   notes?: string;
 }
 
@@ -57,12 +60,22 @@ export interface ApiRelease extends Resource<
  * A release of an API in API Management. Releasing an API revision makes
  * it the current revision and records an entry (with notes) in the API's
  * change log.
+ * The ARM type is `Microsoft.ApiManagement/service/apis/releases`.
+ *
+ * :::caution
+ * Changing `serviceName`, `apiName`, `name`, `apiRevision`, or
+ * `resourceGroup` replaces the release.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-revisions
  *
  * ### Releasing Revisions
  * **Example:** Make revision 2 current with release notes
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * yield* Azure.ApiManagement.ApiRelease("orders-r2", {
  *   serviceName: apim.serviceName,
  *   apiName: "orders",

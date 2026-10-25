@@ -23,7 +23,10 @@ import {
 } from "./internal.ts";
 
 export interface SharedPrivateLinkResourceProps {
-  /** Resource group of the Web PubSub service. Changing it replaces the link. */
+  /**
+   * Resource group of the Web PubSub service. Changing it replaces the link.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Web PubSub service that makes outbound calls over the link. Needs the
@@ -34,6 +37,7 @@ export interface SharedPrivateLinkResourceProps {
    * Name of the shared private link resource. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * link.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -47,6 +51,7 @@ export interface SharedPrivateLinkResourceProps {
   /**
    * Message shown to the target's owner when approving the connection.
    * Azure keeps it fixed after creation, so changing it replaces the link.
+   * @default ""
    */
   requestMessage?: string;
 }
@@ -81,11 +86,18 @@ export interface SharedPrivateLinkResource extends Resource<
 > {}
 
 /**
- * A shared private link resource of an Azure Web PubSub service: a managed
+ * A shared private link resource of an Azure Web PubSub service
+ * (`Microsoft.SignalRService/webPubSub/sharedPrivateLinkResources`): a managed
  * private endpoint the service uses for outbound calls (event handlers,
  * Key Vault references) to a private target such as a Function App. The
  * target's owner must approve the resulting private endpoint connection
  * before traffic flows; until then `status` is `Pending`.
+ *
+ * :::caution
+ * Changing `webPubSub`, `name`, `groupId`, `privateLinkResourceId`,
+ * `requestMessage`, or `resourceGroup` replaces the link. The new link needs
+ * a new approval on the target.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-web-pubsub/howto-secure-shared-private-endpoints
  *
@@ -98,7 +110,8 @@ export interface SharedPrivateLinkResource extends Resource<
  * const link = yield* Azure.WebPubSub.SharedPrivateLinkResource("func", {
  *   webPubSub: pubsub.webPubSubName,
  *   groupId: "sites",
- *   privateLinkResourceId: functionApp.siteId,
+ *   privateLinkResourceId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/app/providers/Microsoft.Web/sites/upstream",
  *   requestMessage: "Web PubSub upstream",
  * });
  * ```

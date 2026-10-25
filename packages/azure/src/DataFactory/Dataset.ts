@@ -27,7 +27,10 @@ export interface LinkedServiceReference {
 }
 
 export interface DatasetProps {
-  /** Resource group of the factory. Changing it replaces the dataset. */
+  /**
+   * Resource group of the factory. Changing it replaces the dataset.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the factory that holds the dataset. Changing it replaces the dataset. */
   factoryName: string;
@@ -36,6 +39,7 @@ export interface DatasetProps {
    * `_`, without `< > * # . % & : \ + ? /`. If omitted, a unique name of
    * letters, digits, and `_` is generated from the app, stage, and logical
    * ID. Changing it replaces the dataset.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -48,21 +52,38 @@ export interface DatasetProps {
   /**
    * Type-specific properties (location, format settings, table name, …)
    * as documented for the dataset type.
+   * @default {}
    */
   typeProperties?: Record<string, unknown>;
-  /** Columns that define the structure of the dataset. */
+  /**
+   * Columns that define the structure of the dataset.
+   * @default none
+   */
   structure?: unknown;
-  /** Columns that define the physical schema of the dataset. */
+  /**
+   * Columns that define the physical schema of the dataset.
+   * @default none
+   */
   schema?: unknown;
-  /** Parameters the dataset accepts. */
+  /**
+   * Parameters the dataset accepts.
+   * @default {}
+   */
   parameters?: Record<string, ParameterSpecification>;
-  /** Folder shown in the authoring UI. */
+  /**
+   * Folder shown in the authoring UI.
+   * @default none (the root folder)
+   */
   folder?: string;
-  /** Dataset description. */
+  /**
+   * Dataset description.
+   * @default none
+   */
   description?: string;
   /**
    * Annotations shown in the authoring UI. Alchemy appends an ownership
    * annotation (`alchemy:<stack>/<stage>/<id>`).
+   * @default []
    */
   annotations?: string[];
 }
@@ -93,15 +114,32 @@ export interface Dataset extends Resource<
 > {}
 
 /**
- * A Data Factory dataset — a named view of data in a linked service
- * (a file, folder, table, or API resource) used as an activity or data
- * flow input or output.
+ * A Data Factory dataset (`Microsoft.DataFactory/factories/datasets`) — a
+ * named view of data in a linked service (a file, folder, table, or API
+ * resource) used as an activity or data flow input or output.
  *
- * @see https://learn.microsoft.com/azure/data-factory/concepts-datasets-linked-services
+ * :::caution
+ * Changing `resourceGroup`, `factoryName`, `name`, or `type` replaces
+ * the dataset.
+ * :::
+ *
+ * See [Data Factory datasets](https://learn.microsoft.com/azure/data-factory/concepts-datasets-linked-services).
  *
  * ### Defining Datasets
  * **Example:** CSV files in a blob container
  * ```typescript
+ * const factory = yield* Azure.DataFactory.Factory("etl", {
+ *   identity: { type: "SystemAssigned" },
+ * });
+ * const account = yield* Azure.Storage.StorageAccount("lake");
+ * const blob = yield* Azure.DataFactory.LinkedService("blob", {
+ *   factoryName: factory.factoryName,
+ *   type: "AzureBlobStorage",
+ *   typeProperties: {
+ *     serviceEndpoint: account.primaryEndpoints.blob,
+ *     accountKind: "StorageV2",
+ *   },
+ * });
  * const csv = yield* Azure.DataFactory.Dataset("orders", {
  *   factoryName: factory.factoryName,
  *   type: "DelimitedText",

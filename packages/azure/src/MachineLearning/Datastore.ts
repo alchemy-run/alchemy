@@ -54,6 +54,7 @@ export interface DatastoreProps {
    * Datastore name: lowercase letters, digits, and underscores. If omitted,
    * a unique name is generated from the logical ID. Changing it replaces
    * the datastore.
+   * @default a unique name generated from the logical ID
    */
   name?: string;
   /**
@@ -65,15 +66,28 @@ export interface DatastoreProps {
   /**
    * Storage account name (`AzureBlob`, `AzureFile`, `AzureDataLakeGen2`).
    * Changing it replaces the datastore.
+   * @default none
    */
   accountName?: string;
-  /** Blob container name (`AzureBlob`). Changing it replaces the datastore. */
+  /**
+   * Blob container name (`AzureBlob`). Changing it replaces the datastore.
+   * @default none
+   */
   containerName?: string;
-  /** File share name (`AzureFile`). Changing it replaces the datastore. */
+  /**
+   * File share name (`AzureFile`). Changing it replaces the datastore.
+   * @default none
+   */
   fileShareName?: string;
-  /** File system name (`AzureDataLakeGen2`). Changing it replaces the datastore. */
+  /**
+   * File system name (`AzureDataLakeGen2`). Changing it replaces the datastore.
+   * @default none
+   */
   filesystem?: string;
-  /** Data Lake Gen1 store name (`AzureDataLakeGen1`). Changing it replaces the datastore. */
+  /**
+   * Data Lake Gen1 store name (`AzureDataLakeGen1`). Changing it replaces the datastore.
+   * @default none
+   */
   storeName?: string;
   /**
    * Storage endpoint suffix. Changing it replaces the datastore.
@@ -94,9 +108,13 @@ export interface DatastoreProps {
    * Which identity the workspace uses for data access (`None`,
    * `WorkspaceSystemAssignedIdentity`, `WorkspaceUserAssignedIdentity`).
    * Changing it replaces the datastore.
+   * @default "None"
    */
   serviceDataAccessAuthIdentity?: string;
-  /** Description of the datastore. Changing it replaces the datastore. */
+  /**
+   * Description of the datastore. Changing it replaces the datastore.
+   * @default none
+   */
   description?: string;
   /**
    * Skip validating that the workspace can reach the storage with the
@@ -107,6 +125,7 @@ export interface DatastoreProps {
   /**
    * User tags (stored in the datastore body). Alchemy ownership tags are
    * merged in automatically. Changing them replaces the datastore.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -141,16 +160,35 @@ export interface Datastore extends Resource<
  * to a blob container, file share, or Data Lake file system that jobs and
  * data assets read from and write to.
  *
+ * ARM type: `Microsoft.MachineLearningServices/workspaces/datastores`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/how-to-datastore).
+ *
  * Azure ignores updates to an existing datastore, so every change
  * replaces it (datastores are only pointers; no data moves). The
  * workspace's system datastores (`workspaceblobstore`, ...) are created by
  * Azure; manage only your own datastores with this resource.
  *
- * @see https://learn.microsoft.com/azure/machine-learning/how-to-datastore
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `name`, `datastoreType`,
+ * `accountName`, `containerName`, `fileShareName`, `filesystem`, `storeName`,
+ * `endpoint`, `protocol`, `credentials`, `serviceDataAccessAuthIdentity`,
+ * `description`, or `tags` replaces the datastore.
+ * :::
  *
  * ### Creating a Datastore
  * **Example:** Identity-based blob datastore
  * ```typescript
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const hub = yield* Azure.MachineLearning.Workspace("hub", {
+ *   kind: "Hub",
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ * });
+ * const workspace = yield* Azure.MachineLearning.Workspace("project", {
+ *   kind: "Project",
+ *   hubResourceId: hub.workspaceId,
+ * });
  * const container = yield* Azure.Storage.BlobContainer("training", {
  *   storageAccount: storage.storageAccountName,
  * });

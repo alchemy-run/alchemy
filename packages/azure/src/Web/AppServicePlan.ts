@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -258,9 +258,7 @@ export const AppServicePlanProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* web
-        .ListAppServicePlans({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListAppServicePlans", page)));
+      const page = yield* collectAll(web.ListAppServicePlans, { subscriptionId });
       return (page.value ?? []).flatMap((plan) => {
         const group = resourceGroupOf(plan.id);
         return hasAnyAlchemyTag(plan.tags) && group !== undefined && plan.name !== undefined

@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -28,12 +28,14 @@ export type DataReplicationVaultType = "DisasterRecovery" | "Migrate";
 export interface VaultProps {
   /**
    * Resource group the vault is created in. Changing it replaces the vault.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the vault: letters and digits only. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the vault.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -65,6 +67,7 @@ export interface VaultProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -101,13 +104,19 @@ export interface Vault extends Resource<
 > {}
 
 /**
- * An Azure Site Recovery data replication vault (`Microsoft.DataReplication`)
- * — the container for the newer Site Recovery stack that replicates
- * Hyper-V and VMware machines to Azure Local (Azure Stack HCI) and backs
- * Azure Migrate. Fabrics, replication policies, replication extensions, and
- * protected items all hang off a vault.
+ * An Azure Site Recovery data replication vault
+ * (`Microsoft.DataReplication/replicationVaults`) — the container for the
+ * newer Site Recovery stack that replicates Hyper-V and VMware machines to
+ * Azure Local (Azure Stack HCI) and backs Azure Migrate. Fabrics,
+ * replication policies, replication extensions, and protected items all
+ * hang off a vault.
  *
  * The vault itself is free; charges accrue per protected instance.
+ *
+ * :::caution
+ * Changing `name`, `location`, `vaultType`, or `resourceGroup` replaces the
+ * vault.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/migrate/migration-azure-migrate-overview
  *
@@ -163,9 +172,7 @@ export const VaultProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        dr
-          .ListVaultBySubscription({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListVaultBySubscription", page))),
+        collectAll(dr.ListVaultBySubscription, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((vault) => {
         const group = resourceGroupOf(vault.id);

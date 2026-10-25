@@ -25,6 +25,7 @@ export interface GroupProps {
   /**
    * Name of the group. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the group.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -67,13 +68,18 @@ export interface Group extends Resource<
  * (`Microsoft.Migrate/assessmentProjects/groups`) — the scope that
  * assessments evaluate.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/migrate/how-to-create-a-group).
+ *
  * Machines are added to a group with the `updateMachines` action once an
  * appliance or CSV import has discovered them; this resource manages the
  * group itself. Groups cannot be tagged; Alchemy treats a group as owned
  * when its assessment project carries this stack's and stage's ownership
  * tags.
  *
- * @see https://learn.microsoft.com/azure/migrate/how-to-create-a-group
+ * :::caution
+ * Changing `resourceGroup`, `assessmentProject`, `name`, or `groupType`
+ * replaces the group.
+ * :::
  *
  * ### Creating a Group
  * **Example:** Group in an assessment project

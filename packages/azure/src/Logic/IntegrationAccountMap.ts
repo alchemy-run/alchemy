@@ -31,6 +31,7 @@ export interface IntegrationAccountMapProps {
    * Map name: 1-80 letters, digits, `-`, `_`, `.`, `(`, `)`. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the map.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Transform language. Changing it replaces the map. */
@@ -42,11 +43,15 @@ export interface IntegrationAccountMapProps {
    * @default "text/plain" for Liquid, else "application/xml"
    */
   contentType?: string;
-  /** Reference to the schema of the map's parameters. */
+  /**
+   * Reference to the schema of the map's parameters.
+   * @default none
+   */
   parametersSchema?: { ref?: string };
   /**
    * User metadata. Alchemy adds `alchemy::*` ownership and hash keys
    * because artifacts do not return tags.
+   * @default none
    */
   metadata?: Record<string, unknown>;
 }
@@ -80,6 +85,9 @@ export interface IntegrationAccountMap extends Resource<
  * A map (XSLT or Liquid transform) in a Logic Apps integration account,
  * used by the Transform XML and Liquid actions.
  *
+ * ARM type: `Microsoft.Logic/integrationAccounts/maps`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-maps).
+ *
  * Azure stores the content but never returns it, so Alchemy keeps a hash
  * of the desired configuration in the map's metadata to detect changes.
  *
@@ -88,11 +96,10 @@ export interface IntegrationAccountMap extends Resource<
  * replaces the map.
  * :::
  *
- * @see https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-maps
- *
  * ### Adding a Map
  * **Example:** Liquid JSON-to-JSON map
  * ```typescript
+ * const account = yield* Azure.Logic.IntegrationAccount("b2b");
  * const map = yield* Azure.Logic.IntegrationAccountMap("greeting", {
  *   integrationAccount: account.integrationAccountName,
  *   mapType: "Liquid",

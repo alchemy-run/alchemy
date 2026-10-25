@@ -25,7 +25,10 @@ import {
 } from "./common.ts";
 
 export interface PlacementPolicyProps {
-  /** Resource group of the private cloud. Changing it replaces the policy. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the policy.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the policy. */
   privateCloud: string;
@@ -34,6 +37,7 @@ export interface PlacementPolicyProps {
   /**
    * Name of the placement policy. If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the policy.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -47,18 +51,30 @@ export interface PlacementPolicyProps {
   affinityType: "Affinity" | "AntiAffinity";
   /** vCenter VM resource IDs the policy applies to. */
   vmMembers: string[];
-  /** `VmHost` only: host names the VMs are placed on or kept away from. */
+  /**
+   * `VmHost` only: host names the VMs are placed on or kept away from.
+   * @default not set
+   */
   hostMembers?: string[];
-  /** `VmHost` only: whether the rule is a preference (`Should`) or a requirement (`Must`). */
+  /**
+   * `VmHost` only: whether the rule is a preference (`Should`) or a requirement (`Must`).
+   * @default not set
+   */
   affinityStrength?: "Should" | "Must";
-  /** `VmHost` only: Azure Hybrid Benefit opt-in for SQL Server hosts. */
+  /**
+   * `VmHost` only: Azure Hybrid Benefit opt-in for SQL Server hosts.
+   * @default not set
+   */
   azureHybridBenefitType?: "SqlHost" | "None";
   /**
    * Whether the policy is enforced.
    * @default "Enabled"
    */
   state?: "Enabled" | "Disabled";
-  /** Display name of the policy. Changing it replaces the policy. */
+  /**
+   * Display name of the policy. Changing it replaces the policy.
+   * @default not set
+   */
   displayName?: string;
 }
 
@@ -89,19 +105,32 @@ export interface PlacementPolicy extends Resource<
 
 /**
  * A vSphere DRS placement policy (VM-VM or VM-host affinity rule) on an
- * Azure VMware Solution cluster.
+ * Azure VMware Solution cluster
+ * (`Microsoft.AVS/privateClouds/clusters/placementPolicies`).
+ *
+ * :::caution
+ * Changing `privateCloud`, `cluster`, `name`, `type`, `affinityType`,
+ * `displayName`, or `resourceGroup` replaces the policy.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/create-placement-policy
  *
  * ### Keeping VMs Apart
  * **Example:** VM-VM anti-affinity
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
+ * const vms =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/avs/providers/Microsoft.AVS/privateClouds/cloud/clusters/Cluster-1/virtualMachines";
  * yield* Azure.VMware.PlacementPolicy("spread", {
  *   privateCloud: cloud.privateCloudName,
  *   cluster: "Cluster-1",
  *   type: "VmVm",
  *   affinityType: "AntiAffinity",
- *   vmMembers: [vm1Id, vm2Id],
+ *   vmMembers: [`${vms}/vm-101`, `${vms}/vm-102`],
  * });
  * ```
  *
@@ -114,7 +143,7 @@ export interface PlacementPolicy extends Resource<
  *   type: "VmHost",
  *   affinityType: "Affinity",
  *   affinityStrength: "Must",
- *   vmMembers: [vm1Id],
+ *   vmMembers: [`${vms}/vm-101`],
  *   hostMembers: ["esx01.example.avs.azure.com"],
  * });
  * ```

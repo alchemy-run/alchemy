@@ -6,12 +6,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -52,12 +52,16 @@ export interface BackupVaultSoftDelete {
 }
 
 export interface BackupVaultProps {
-  /** Resource group the vault is created in. Changing it replaces the vault. */
+  /**
+   * Resource group the vault is created in. Changing it replaces the vault.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Vault name: 2-50 letters, digits, and hyphens, starting with a letter.
    * If omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the vault.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -80,6 +84,7 @@ export interface BackupVaultProps {
   /**
    * ARM IDs of user-assigned managed identities, used with
    * `identityType: "UserAssigned"` or `"SystemAssigned,UserAssigned"`.
+   * @default []
    */
   userAssignedIdentities?: string[];
   /**
@@ -113,6 +118,7 @@ export interface BackupVaultProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -165,7 +171,13 @@ export interface BackupVault extends Resource<
  * leaves a soft-deleted vault behind until Azure purges it (about a day for
  * an empty vault; the retention period when it held backup data).
  *
- * @see https://learn.microsoft.com/azure/backup/backup-vault-overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `storageSettings`
+ * replaces the vault. The old vault's backup data is lost, and its
+ * soft-deleted copy blocks reusing the name until Azure purges it.
+ * :::
+ *
+ * See [Backup vaults](https://learn.microsoft.com/azure/backup/backup-vault-overview).
  *
  * ### Creating a Backup Vault
  * **Example:** Locally redundant vault
@@ -185,6 +197,8 @@ export interface BackupVault extends Resource<
  * ### Granting the Vault Access to a Data Source
  * **Example:** Role assignment for blob backup
  * ```typescript
+ * const vault = yield* Azure.DataProtection.BackupVault("vault");
+ * const account = yield* Azure.Storage.StorageAccount("data");
  * yield* Azure.Authorization.RoleAssignment("vault-blob-backup", {
  *   scope: account.storageAccountId,
  *   roleDefinitionId: "e5e2a7ff-d759-4cd2-bb51-3152d37e2eb1", // Storage Account Backup Contributor
@@ -259,9 +273,9 @@ export const BackupVaultProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* dataprotection
-        .GetBackupVaultInSubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("GetBackupVaultInSubscription", page)));
+      const page = yield* collectAll(dataprotection.GetBackupVaultInSubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((vault) => {
         const group = resourceGroupOf(vault.id);
         return hasAnyAlchemyTag(vault.tags) && group !== undefined && vault.name !== undefined

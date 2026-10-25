@@ -21,6 +21,7 @@ export interface TriggerProps {
   /**
    * Resource group of the parent image template. Changing it replaces the
    * trigger.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /** Name of the parent image template. Changing it replaces the trigger. */
@@ -28,6 +29,7 @@ export interface TriggerProps {
   /**
    * Name of the trigger. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the trigger.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -65,29 +67,47 @@ export interface Trigger extends Resource<
 > {}
 
 /**
- * A trigger on an Azure VM Image Builder template that starts a build
- * automatically. The `SourceImage` kind rebuilds whenever a new version
- * of the template's Azure Compute Gallery source image is published, which
- * requires the template source to be a `SharedImageVersion` pointing at
- * `.../versions/latest`.
+ * A trigger on an Azure VM Image Builder template
+ * (`Microsoft.VirtualMachineImages/imageTemplates/triggers`) that starts a
+ * build automatically. The `SourceImage` kind rebuilds whenever a new
+ * version of the template's Azure Compute Gallery source image is
+ * published.
  *
  * @see https://learn.microsoft.com/azure/virtual-machines/image-builder-triggers-how-to
  *
  * ### Rebuilding on New Source Versions
  * **Example:** Trigger on the gallery image's latest version
  * ```typescript
+ * const baseImageDefinitionId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/images/providers/Microsoft.Compute/galleries/base/images/ubuntu";
+ * const appImageDefinitionId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/images/providers/Microsoft.Compute/galleries/apps/images/web";
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("builder");
  * const template = yield* Azure.ImageBuilder.ImageTemplate("app", {
  *   identityId: identity.identityId,
  *   source: {
  *     type: "SharedImageVersion",
  *     imageVersionId: `${baseImageDefinitionId}/versions/latest`,
  *   },
- *   distribute,
+ *   distribute: [
+ *     { type: "SharedImage", runOutputName: "web", galleryImageId: appImageDefinitionId },
+ *   ],
  * });
  * yield* Azure.ImageBuilder.Trigger("on-base-update", {
  *   imageTemplate: template.imageTemplateName,
  * });
  * ```
+ *
+ * :::caution
+ * The template's `source` must be a `SharedImageVersion` whose
+ * `imageVersionId` ends in `/versions/latest`.
+ * :::
+ *
+ * :::caution
+ * Changing `imageTemplate`, `name`, `kind`, or `resourceGroup` replaces the
+ * trigger. The old trigger is deleted first, because a template allows one
+ * `SourceImage` trigger.
+ * :::
  *
  * @resource
  */

@@ -26,7 +26,10 @@ import {
 const POLICY_NAME = "Default";
 
 export interface WorkspaceSecurityAlertPolicyProps extends SecurityAlertPolicyFields {
-  /** Resource group of the workspace. Changing it replaces the policy. */
+  /**
+   * Resource group of the workspace. Changing it replaces the policy.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Synapse workspace. Changing it replaces the policy. */
   workspace: string;
@@ -53,18 +56,35 @@ export interface WorkspaceSecurityAlertPolicy extends Resource<
 
 /**
  * The threat detection (Microsoft Defender for SQL alerts) policy of a
- * Synapse workspace's SQL pools — alerts on SQL injection, anomalous
- * access, and data exfiltration. Enabling it turns on Microsoft Defender
- * for SQL, which is billed per workspace.
+ * Synapse workspace's SQL pools
+ * (`Microsoft.Synapse/workspaces/securityAlertPolicies`) — alerts on SQL
+ * injection, anomalous access, and data exfiltration. Enabling it turns on
+ * Microsoft Defender for SQL, which is billed per workspace.
  *
  * This is a singleton policy that always exists on a workspace.
  * Destroying the resource disables threat detection.
+ *
+ * :::caution
+ * Changing `workspace` or `resourceGroup` replaces the policy.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-sql/database/threat-detection-configure
  *
  * ### Enabling Threat Detection
  * **Example:** Alert the security team
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
  * yield* Azure.Synapse.WorkspaceSecurityAlertPolicy("threats", {
  *   workspace: workspace.workspaceName,
  *   emailAddresses: ["security@example.com"],

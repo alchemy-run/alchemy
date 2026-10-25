@@ -17,7 +17,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, instanceOwnedByStage, type ManagedIdentityReference } from "./Common.ts";
 
 export interface TimeSeriesDatabaseConnectionProps {
-  /** Resource group of the instance. Changing it replaces the connection. */
+  /**
+   * Resource group of the instance. Changing it replaces the connection.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Digital Twins instance the connection belongs to. Changing it replaces the connection. */
   instance: string;
@@ -25,6 +28,7 @@ export interface TimeSeriesDatabaseConnectionProps {
    * Connection name: 2-49 letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the connection.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** ARM resource ID of the Azure Data Explorer cluster. Changing it replaces the connection. */
@@ -38,9 +42,15 @@ export interface TimeSeriesDatabaseConnectionProps {
    * @default "AdtPropertyEvents"
    */
   adxTableName?: string;
-  /** Table for twin lifecycle events; not created when omitted. Changing it replaces the connection. */
+  /**
+   * Table for twin lifecycle events; not created when omitted. Changing it replaces the connection.
+   * @default unset (no table)
+   */
   adxTwinLifecycleEventsTableName?: string;
-  /** Table for relationship lifecycle events; not created when omitted. Changing it replaces the connection. */
+  /**
+   * Table for relationship lifecycle events; not created when omitted. Changing it replaces the connection.
+   * @default unset (no table)
+   */
   adxRelationshipLifecycleEventsTableName?: string;
   /** ARM resource ID of the Event Hubs namespace that buffers the history. Changing it replaces the connection. */
   eventHubNamespaceResourceId: string;
@@ -101,20 +111,36 @@ export interface TimeSeriesDatabaseConnection extends Resource<
 > {}
 
 /**
- * A data history connection of an Azure Digital Twins instance — streams
+ * A data history connection of an Azure Digital Twins instance
+ * (`Microsoft.DigitalTwins/digitalTwinsInstances/timeSeriesDatabaseConnections`)
+ * — streams
  * twin property updates and lifecycle events through an Event Hub into an
  * Azure Data Explorer database.
  *
+ * :::caution
+ * Every prop is immutable. Changing any prop replaces the connection;
+ * Alchemy deletes the old connection first.
+ * :::
+ *
+ * :::caution
  * The instance's identity needs `Azure Event Hubs Data Owner` on the event
  * hub and `Contributor` on the Data Explorer cluster plus the database
- * `Admin` principal role. Every property is immutable: any change replaces
- * the connection.
+ * `Admin` principal role.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/digital-twins/concepts-data-history
  *
  * ### Creating a Data History Connection
  * **Example:** History into Azure Data Explorer
  * ```typescript
+ * const cluster = yield* Azure.Kusto.Cluster("history");
+ * const database = yield* Azure.Kusto.Database("twins", {
+ *   cluster: cluster.clusterName,
+ * });
+ * const namespace = yield* Azure.EventHub.Namespace("events");
+ * const hub = yield* Azure.EventHub.EventHub("twin-events", {
+ *   namespace: namespace.namespaceName,
+ * });
  * const twins = yield* Azure.DigitalTwins.Instance("factory", {
  *   identity: { type: "SystemAssigned" },
  * });

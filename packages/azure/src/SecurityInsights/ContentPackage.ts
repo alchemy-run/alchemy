@@ -17,7 +17,10 @@ import type {
 } from "./Metadata.ts";
 
 export interface ContentPackageProps {
-  /** Resource group of the Sentinel workspace. Changing it replaces the package. */
+  /**
+   * Resource group of the Sentinel workspace. Changing it replaces the package.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Sentinel-enabled Log Analytics workspace. Pass `OnboardingState.workspace`
@@ -40,27 +43,60 @@ export interface ContentPackageProps {
   version: string;
   /** Display name of the package. */
   displayName: string;
-  /** Description of the package. */
+  /**
+   * Description of the package.
+   * @default not set
+   */
   description?: string;
-  /** Publisher display name. */
+  /**
+   * Publisher display name.
+   * @default not set
+   */
   publisherDisplayName?: string;
-  /** Source of the package. */
+  /**
+   * Source of the package.
+   * @default not set
+   */
   source?: MetadataSource;
-  /** Author of the package. */
+  /**
+   * Author of the package.
+   * @default not set
+   */
   author?: MetadataAuthor;
-  /** Support information of the package. */
+  /**
+   * Support information of the package.
+   * @default not set
+   */
   support?: MetadataSupport;
-  /** Categories of the package. */
+  /**
+   * Categories of the package.
+   * @default not set
+   */
   categories?: MetadataCategories;
-  /** Providers of the package. */
+  /**
+   * Providers of the package.
+   * @default not set
+   */
   providers?: string[];
-  /** First publish date (`YYYY-MM-DD`). */
+  /**
+   * First publish date (`YYYY-MM-DD`).
+   * @default not set
+   */
   firstPublishDate?: string;
-  /** Last publish date (`YYYY-MM-DD`). */
+  /**
+   * Last publish date (`YYYY-MM-DD`).
+   * @default not set
+   */
   lastPublishDate?: string;
-  /** Schema version of the package. */
+  /**
+   * Schema version of the package.
+   * @default not set
+   */
   contentSchemaVersion?: string;
-  /** Icon identifier. */
+  /**
+   * Icon identifier.
+   * @default not set
+   */
   icon?: string;
 }
 
@@ -88,21 +124,35 @@ export interface ContentPackage extends Resource<
 > {}
 
 /**
- * A Microsoft Sentinel Content Hub package (solution or standalone content)
- * installed in a workspace. Installing records the package; its content
- * (analytics rule templates, workbooks, …) is installed with
- * `ContentTemplate`.
+ * A Microsoft Sentinel Content Hub package
+ * (`Microsoft.SecurityInsights/contentPackages`): a solution or standalone
+ * content installed in a workspace. Installing records the package. Install
+ * its content (analytics rule templates, workbooks, and more) with
+ * `Azure.SecurityInsights.ContentTemplate`. See the
+ * [Azure docs](https://learn.microsoft.com/azure/sentinel/sentinel-solutions-deploy).
  *
- * The package fields are copied from the Content Hub catalog
+ * Copy the package fields from the Content Hub catalog
  * (`ListProductPackages` / `GetProductPackage`).
  *
- * @see https://learn.microsoft.com/azure/sentinel/sentinel-solutions-deploy
+ * :::caution
+ * Onboard the workspace first with `Azure.SecurityInsights.OnboardingState`,
+ * and pass its `workspace` attribute so Alchemy creates this resource after
+ * the onboarding and deletes it before.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, or `packageId` replaces the
+ * package. Alchemy installs a new `version` and the other fields in place.
+ * :::
  *
  * ### Installing Solutions
  * **Example:** Install the Azure Activity solution
  * ```typescript
- * yield* Azure.SecurityInsights.ContentPackage("azure-activity", {
- *   resourceGroup: sentinel.resourceGroup,
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
+ *   workspace: logs.workspaceName,
+ * });
+ * const pkg = yield* Azure.SecurityInsights.ContentPackage("azure-activity", {
  *   workspace: sentinel.workspace,
  *   packageId: "azuresentinel.azure-sentinel-solution-azureactivity",
  *   contentId: "azuresentinel.azure-sentinel-solution-azureactivity",

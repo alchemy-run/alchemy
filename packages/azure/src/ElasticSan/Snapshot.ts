@@ -17,7 +17,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createSanName, isParentOwned, lower } from "./Common.ts";
 
 export interface SnapshotProps {
-  /** Resource group of the Elastic SAN. Changing it replaces the snapshot. */
+  /**
+   * Resource group of the Elastic SAN. Changing it replaces the snapshot.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Name of the Elastic SAN. Changing it replaces the snapshot. */
   elasticSan: string;
@@ -28,6 +31,7 @@ export interface SnapshotProps {
    * starting and ending with a letter or digit. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the snapshot.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -66,18 +70,33 @@ export interface Snapshot extends Resource<
 > {}
 
 /**
- * A point-in-time snapshot of an Azure Elastic SAN volume. Snapshots are
- * immutable: any change replaces the snapshot. Create a new volume from it
- * with `creationData: { createSource: "VolumeSnapshot", sourceId }`.
+ * A point-in-time snapshot of an Azure Elastic SAN volume
+ * (`Microsoft.ElasticSan/elasticSans/volumegroups/snapshots`). Create a
+ * new volume from it with
+ * `creationData: { createSource: "VolumeSnapshot", sourceId }`. See
+ * [Elastic SAN snapshots](https://learn.microsoft.com/azure/storage/elastic-san/elastic-san-snapshots).
  *
  * Snapshots have no tags; Alchemy treats a snapshot as owned when its
  * parent SAN carries this stack's ownership tags.
  *
- * @see https://learn.microsoft.com/azure/storage/elastic-san/elastic-san-snapshots
+ * :::caution
+ * Snapshots are immutable. Changing `resourceGroup`, `elasticSan`,
+ * `volumeGroup`, `name`, or `sourceVolumeId` replaces the snapshot. An
+ * unchanged explicit `name` deletes the old snapshot first.
+ * :::
  *
  * ### Snapshotting a Volume
  * **Example:** Snapshot a volume
  * ```typescript
+ * const san = yield* Azure.ElasticSan.ElasticSan("san");
+ * const volumes = yield* Azure.ElasticSan.VolumeGroup("volumes", {
+ *   elasticSan: san.elasticSanName,
+ * });
+ * const volume = yield* Azure.ElasticSan.Volume("data", {
+ *   elasticSan: san.elasticSanName,
+ *   volumeGroup: volumes.volumeGroupName,
+ *   sizeGiB: 100,
+ * });
  * const snapshot = yield* Azure.ElasticSan.Snapshot("nightly", {
  *   elasticSan: san.elasticSanName,
  *   volumeGroup: volumes.volumeGroupName,

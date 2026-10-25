@@ -32,34 +32,53 @@ export interface AccountIdentity {
    * data sources with this identity.
    */
   type: "SystemAssigned" | "UserAssigned";
-  /** ARM IDs of user-assigned identities (with `type: "UserAssigned"`). */
+  /**
+   * ARM IDs of user-assigned identities (with `type: "UserAssigned"`).
+   * @default []
+   */
   userAssignedIdentities?: string[];
 }
 
 export interface AccountProps {
   /**
-   * Resource group the account is created in. Changing it replaces the
-   * account.
+   * Resource group the account is created in.
+   *
+   * :::caution
+   * Changing it replaces the account and deletes its Data Map.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Globally unique account name (`<name>.purview.azure.com`): 3-63
    * letters, digits, and hyphens, starting and ending with a letter or
-   * digit. If omitted, a unique name is generated from the app, stage, and
-   * logical ID. Changing it replaces the account.
+   * digit.
+   *
+   * :::caution
+   * Changing it replaces the account and deletes its Data Map.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Azure location of the account and its metadata. The first account of a
    * tenant must be in the location that matches the tenant's Microsoft
-   * Entra home region. Changing it replaces the account.
+   * Entra home region.
+   *
+   * :::caution
+   * Changing it replaces the account and deletes its Data Map.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
    * Name of the resource group Purview creates for its managed resources
    * (a storage account and, if enabled, an Event Hubs namespace). It must
-   * not exist yet. Changing it replaces the account.
+   * not exist yet.
+   *
+   * :::caution
+   * Changing it replaces the account and deletes its Data Map.
+   * :::
    * @default Azure generates `managed-rg-<random>`
    */
   managedResourceGroupName?: string;
@@ -90,6 +109,7 @@ export interface AccountProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -150,10 +170,13 @@ export interface Account extends Resource<
  * group with a storage account (and optionally an Event Hubs namespace)
  * next to the account.
  *
+ * :::caution
  * A tenant can create only one Purview account: Azure reconciles the first
- * one into the tenant-level account of the Microsoft Purview portal. The
- * Data Map is billed per capacity unit hour. Provisioning takes about 5-15
- * minutes.
+ * one into the tenant-level account of the Microsoft Purview portal.
+ * :::
+ *
+ * The Data Map is billed per capacity unit hour. Provisioning takes about
+ * 5-15 minutes.
  *
  * @see https://learn.microsoft.com/purview/legacy/create-microsoft-purview-portal
  *

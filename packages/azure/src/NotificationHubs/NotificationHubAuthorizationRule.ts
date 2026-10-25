@@ -38,6 +38,7 @@ export interface NotificationHubAuthorizationRuleProps {
    * Rule name: letters, digits, `.`, `-`, and `_`. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the rule.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -82,16 +83,24 @@ export interface NotificationHubAuthorizationRule extends Resource<
  * `Send` rule to push. The rule's keys and connection strings are exposed
  * as secrets.
  *
+ * ARM type:
+ * `Microsoft.NotificationHubs/namespaces/notificationHubs/authorizationRules`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/notification-hubs/notification-hubs-push-notification-security).
+ *
  * Authorization rules have no tags: Alchemy treats a rule it did not create
  * as unowned and only takes it over with `--adopt`. The built-in
  * `DefaultListenSharedAccessSignature` and
  * `DefaultFullSharedAccessSignature` rules are never deleted.
  *
- * @see https://learn.microsoft.com/azure/notification-hubs/notification-hubs-push-notification-security
+ * :::caution
+ * Changing `resourceGroup`, `namespace`, `notificationHub`, or `name` replaces
+ * the rule.
+ * :::
  *
  * ### Creating a Rule
  * **Example:** Listen rule for the mobile app
  * ```typescript
+ * const ns = yield* Azure.NotificationHubs.Namespace("push");
  * const hub = yield* Azure.NotificationHubs.NotificationHub("app", {
  *   namespace: ns.namespaceName,
  * });

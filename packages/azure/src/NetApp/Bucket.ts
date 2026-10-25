@@ -87,6 +87,7 @@ export interface BucketProps {
    * Bucket name: 3-63 lowercase letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the bucket.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -97,14 +98,20 @@ export interface BucketProps {
   path?: string;
   /** File-system identity used for object access. */
   fileSystemUser: BucketFileSystemUser;
-  /** Bucket server (S3 endpoint) settings. */
+  /**
+   * Bucket server (S3 endpoint) settings.
+   * @default none
+   */
   server?: BucketServer;
   /**
    * Access granted through the bucket.
    * @default "ReadOnly"
    */
   permissions?: "ReadOnly" | "ReadWrite";
-  /** Key Vault locations of the server certificate and credentials. */
+  /**
+   * Key Vault locations of the server certificate and credentials.
+   * @default none
+   */
   akvDetails?: BucketKeyVaultDetails;
 }
 
@@ -147,14 +154,39 @@ export interface Bucket extends Resource<
  * the `GenerateBucketCredentials` action. Preview feature, available in
  * selected regions.
  *
+ * ARM type: `Microsoft.NetApp/netAppAccounts/capacityPools/volumes/buckets`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/azure-netapp-files/object-rest-api-introduction).
+ *
  * Buckets have no tags; Alchemy treats a bucket as owned when its volume
  * carries this stack's ownership tags.
  *
- * @see https://learn.microsoft.com/azure/azure-netapp-files/object-rest-api-introduction
+ * :::caution
+ * Changing `resourceGroup`, `account`, `pool`, `volume`, `name`, or `path`
+ * replaces the bucket.
+ * :::
  *
  * ### Creating a Bucket
  * **Example:** Read-only bucket over an NFS volume
  * ```typescript
+ * const account = yield* Azure.NetApp.Account("files");
+ * const pool = yield* Azure.NetApp.CapacityPool("pool", {
+ *   account: account.accountName,
+ * });
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("anf", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ *   delegations: [{ serviceName: "Microsoft.NetApp/volumes" }],
+ * });
+ * const volume = yield* Azure.NetApp.Volume("data", {
+ *   account: account.accountName,
+ *   pool: pool.poolName,
+ *   subnetId: subnet.subnetId,
+ *   usageThreshold: 100 * Azure.NetApp.GiB,
+ * });
+ * const certificatePemBase64 = yield* Config.string("BUCKET_CERT_PEM_BASE64");
  * const bucket = yield* Azure.NetApp.Bucket("objects", {
  *   account: account.accountName,
  *   pool: pool.poolName,

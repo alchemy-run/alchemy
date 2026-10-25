@@ -11,7 +11,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { isWorkspaceOwnedByStack, lower, resetSetting, syncSetting } from "./common.ts";
 
 export interface ManagedIdentitySqlControlSettingProps {
-  /** Resource group of the workspace. Changing it replaces the setting. */
+  /**
+   * Resource group of the workspace. Changing it replaces the setting.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Synapse workspace. Changing it replaces the setting. */
   workspace: string;
@@ -43,17 +46,34 @@ export interface ManagedIdentitySqlControlSetting extends Resource<
 > {}
 
 /**
- * Whether a Synapse workspace's managed identity is granted `CONTROL` on
- * its SQL pools.
+ * Whether a Synapse workspace's managed identity is granted `CONTROL` on its
+ * SQL pools
+ * (`Microsoft.Synapse/workspaces/managedIdentitySqlControlSettings`).
  *
  * This is a singleton setting that always exists on a workspace.
  * Destroying the resource disables the grant.
+ *
+ * :::caution
+ * Changing `workspace` or `resourceGroup` replaces the setting.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/security/synapse-workspace-managed-identity
  *
  * ### Granting SQL Control
  * **Example:** Grant the workspace identity CONTROL on SQL pools
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
  * yield* Azure.Synapse.ManagedIdentitySqlControlSetting("msi-sql", {
  *   workspace: workspace.workspaceName,
  * });

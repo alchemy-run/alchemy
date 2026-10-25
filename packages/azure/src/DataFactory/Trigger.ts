@@ -28,7 +28,10 @@ export interface TriggerPipeline {
 }
 
 export interface TriggerProps {
-  /** Resource group of the factory. Changing it replaces the trigger. */
+  /**
+   * Resource group of the factory. Changing it replaces the trigger.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the factory that holds the trigger. Changing it replaces the trigger. */
   factoryName: string;
@@ -37,6 +40,7 @@ export interface TriggerProps {
    * `_`, without `< > * # . % & : \ + ? /`. If omitted, a unique name of
    * letters, digits, and `_` is generated from the app, stage, and logical
    * ID. Changing it replaces the trigger.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -49,11 +53,13 @@ export interface TriggerProps {
    * Type-specific properties as documented for the trigger type, e.g.
    * `{ recurrence: { frequency: "Day", interval: 1, startTime, timeZone } }`
    * for a `ScheduleTrigger`.
+   * @default {}
    */
   typeProperties?: Record<string, unknown>;
   /**
    * Pipelines the trigger starts. Schedule and event triggers accept many;
    * a `TumblingWindowTrigger` accepts exactly one.
+   * @default []
    */
   pipelines?: TriggerPipeline[];
   /**
@@ -62,11 +68,15 @@ export interface TriggerProps {
    * @default true
    */
   started?: boolean;
-  /** Trigger description. */
+  /**
+   * Trigger description.
+   * @default none
+   */
   description?: string;
   /**
    * Annotations shown in the authoring UI. Alchemy appends an ownership
    * annotation (`alchemy:<stack>/<stage>/<id>`).
+   * @default []
    */
   annotations?: string[];
 }
@@ -97,18 +107,31 @@ export interface Trigger extends Resource<
 > {}
 
 /**
- * A Data Factory trigger — starts pipeline runs on a schedule, over
- * tumbling time windows, or in response to storage or custom events.
+ * A Data Factory trigger (`Microsoft.DataFactory/factories/triggers`) —
+ * starts pipeline runs on a schedule, over tumbling time windows, or in
+ * response to storage or custom events.
  *
  * Alchemy starts the trigger after deploying it (set `started: false` to
  * keep it stopped) and stops it before updating or deleting it, because
  * Data Factory rejects changes to a started trigger.
  *
- * @see https://learn.microsoft.com/azure/data-factory/concepts-pipeline-execution-triggers
+ * :::caution
+ * Changing `resourceGroup`, `factoryName`, `name`, or `type` replaces the
+ * trigger.
+ * :::
+ *
+ * See [Pipeline execution and triggers](https://learn.microsoft.com/azure/data-factory/concepts-pipeline-execution-triggers).
  *
  * ### Scheduling Pipelines
  * **Example:** Run a pipeline every day at 02:00 UTC
  * ```typescript
+ * const factory = yield* Azure.DataFactory.Factory("etl");
+ * const pipeline = yield* Azure.DataFactory.Pipeline("load", {
+ *   factoryName: factory.factoryName,
+ *   activities: [
+ *     { name: "pause", type: "Wait", typeProperties: { waitTimeInSeconds: 5 } },
+ *   ],
+ * });
  * const nightly = yield* Azure.DataFactory.Trigger("nightly", {
  *   factoryName: factory.factoryName,
  *   type: "ScheduleTrigger",

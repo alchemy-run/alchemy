@@ -43,12 +43,36 @@ export interface ProductGroup extends Resource<
  * The association has no settings; changing the product or group
  * replaces it. {@link ProductGroupLink} expresses the same relation as a
  * named link entity. Groups are not available on the Consumption tier.
+ * The ARM type is `Microsoft.ApiManagement/service/products/groups`.
+ *
+ * :::caution
+ * Changing `serviceName`, `productName`, `groupName`, or `resourceGroup`
+ * replaces the association.
+ *
+ * Groups are not available on the Consumption tier ("Method not allowed in
+ * Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-create-groups
  *
  * ### Granting Product Access
  * **Example:** Let partners see the premium product
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const premium = yield* Azure.ApiManagement.Product("premium", {
+ *   serviceName: apim.serviceName,
+ *   displayName: "Premium",
+ *   subscriptionRequired: true,
+ *   state: "published",
+ * });
+ * const partners = yield* Azure.ApiManagement.Group("partners", {
+ *   serviceName: apim.serviceName,
+ *   displayName: "Partners",
+ * });
  * yield* Azure.ApiManagement.ProductGroup("premium-partners", {
  *   serviceName: apim.serviceName,
  *   productName: premium.productName,

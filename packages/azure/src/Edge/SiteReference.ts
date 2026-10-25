@@ -17,7 +17,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, sameId } from "./EdgeShared.ts";
 
 export interface SiteReferenceProps {
-  /** Resource group of the context. Changing it replaces the reference. */
+  /**
+   * Resource group of the context. Changing it replaces the reference.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Name of the parent context. Changing it replaces the reference. */
   context: string;
@@ -26,6 +29,7 @@ export interface SiteReferenceProps {
    * omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the
    * reference.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** ARM resource ID of the `Azure.Edge.Site` to add to the context. */
@@ -52,18 +56,27 @@ export interface SiteReference extends Resource<
 > {}
 
 /**
- * Adds an Azure Arc site to a workload orchestration context, making the
- * site a hierarchy entity that targets and configurations can attach to.
+ * A workload orchestration site reference
+ * (`Microsoft.Edge/contexts/siteReferences`). It adds an Azure Arc site to
+ * a context, making the site a hierarchy entity that targets and
+ * configurations can attach to. See the
+ * [workload orchestration overview](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview).
  *
  * Site references carry no tags or free-form fields, so Alchemy cannot
  * mark them; one found under the expected name is treated as this
  * resource.
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview
+ * :::caution
+ * Changing `resourceGroup`, `context`, or `name` replaces the reference.
+ * :::
  *
  * ### Linking a Site
  * **Example:** Site in the context
  * ```typescript
+ * const context = yield* Azure.Edge.Context("context", {
+ *   capabilities: [{ name: "soap", description: "Soap production" }],
+ *   hierarchies: [{ name: "factory", description: "Factory" }],
+ * });
  * const site = yield* Azure.Edge.Site("plant");
  * yield* Azure.Edge.SiteReference("plant-ref", {
  *   context: context.contextName,

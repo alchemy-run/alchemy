@@ -19,7 +19,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { getWorkspace, isWorkspaceOwnedByStack, lower } from "./common.ts";
 
 export interface WorkspaceKeyProps {
-  /** Resource group of the workspace. Changing it replaces the key. */
+  /**
+   * Resource group of the workspace. Changing it replaces the key.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Synapse workspace. Changing it replaces the key. */
   workspace: string;
@@ -67,23 +70,46 @@ export interface WorkspaceKey extends Resource<
 > {}
 
 /**
- * A customer-managed key registered with a Synapse workspace. A workspace
+ * A customer-managed key registered with a Synapse workspace
+ * (`Microsoft.Synapse/workspaces/keys`). A workspace
  * created with `customerManagedKey` stays pending until its key is
  * activated here; the active key wraps the workspace's data encryption
  * keys (double encryption).
+ *
+ * :::caution
+ * Changing `workspace`, `name`, `keyVaultUrl`, or `resourceGroup` replaces
+ * the key.
+ * :::
+ *
+ * :::caution
+ * Grant the workspace identity get, wrapKey, and unwrapKey on the key before
+ * you activate it.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/security/workspaces-encryption
  *
  * ### Activating Double Encryption
  * **Example:** Activate the workspace's customer-managed key
  * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("cmk", {
+ *   enablePurgeProtection: true,
+ * });
  * // A short key name keeps `{vault}_{key}_{version}` under Synapse's limit.
  * const key = yield* Azure.KeyVault.Key("cmk", {
- *   vault: vault.vaultName, // purge protection enabled
+ *   vault: vault.vaultName,
  *   name: "synapse-cmk",
  * });
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
  * const workspace = yield* Azure.Synapse.Workspace("ws", {
- *   defaultDataLakeStorage: { accountUrl, filesystem },
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
  *   customerManagedKey: { keyName: "cmk", keyVaultUrl: key.keyUri },
  * });
  * // grant workspace.principalId get/wrapKey/unwrapKey on the key, then:

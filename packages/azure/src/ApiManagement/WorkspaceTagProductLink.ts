@@ -52,16 +52,46 @@ export interface WorkspaceTagProductLink extends Resource<
 /**
  * The workspace-scoped counterpart of {@link TagProductLink}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/workspaces/tags/productLinks`.
  *
  * Assigns an API Management {@link Tag} to a product through a named link
  * entity (`tags/{tagId}/productLinks/{linkId}`). It expresses the same
  * relation as {@link ProductTagLink}; use one or the other.
+ *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `tagName`, `productName`, `name`,
+ * or `resourceGroup` replaces the link.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/apimanagement/tag-product-link
  *
  * ### Tagging Products from the Tag Side
  * **Example:** Tag the starter product as free
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
+ * const free = yield* Azure.ApiManagement.WorkspaceTag("free", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   displayName: "Free",
+ * });
+ * const starter = yield* Azure.ApiManagement.WorkspaceProduct("starter", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   displayName: "Starter",
+ *   subscriptionRequired: true,
+ *   state: "published",
+ * });
  * yield* Azure.ApiManagement.WorkspaceTagProductLink("free-starter", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

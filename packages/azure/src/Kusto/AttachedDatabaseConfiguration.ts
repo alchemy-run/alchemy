@@ -24,32 +24,60 @@ import {
 } from "./common.ts";
 
 export interface KustoTableLevelSharingProperties {
-  /** Tables to include (`*` wildcards allowed). */
+  /**
+   * Tables to include (`*` wildcards allowed).
+   * @default []
+   */
   tablesToInclude?: string[];
-  /** Tables to exclude. */
+  /**
+   * Tables to exclude.
+   * @default []
+   */
   tablesToExclude?: string[];
-  /** External tables to include. */
+  /**
+   * External tables to include.
+   * @default []
+   */
   externalTablesToInclude?: string[];
-  /** External tables to exclude. */
+  /**
+   * External tables to exclude.
+   * @default []
+   */
   externalTablesToExclude?: string[];
-  /** Materialized views to include. */
+  /**
+   * Materialized views to include.
+   * @default []
+   */
   materializedViewsToInclude?: string[];
-  /** Materialized views to exclude. */
+  /**
+   * Materialized views to exclude.
+   * @default []
+   */
   materializedViewsToExclude?: string[];
-  /** Functions to include. */
+  /**
+   * Functions to include.
+   * @default []
+   */
   functionsToInclude?: string[];
-  /** Functions to exclude. */
+  /**
+   * Functions to exclude.
+   * @default []
+   */
   functionsToExclude?: string[];
 }
 
 export interface AttachedDatabaseConfigurationProps {
-  /** Resource group of the follower cluster. Changing it replaces the configuration. */
+  /**
+   * Resource group of the follower cluster. Changing it replaces the configuration.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the follower cluster. Changing it replaces the configuration. */
   cluster: string;
   /**
    * Configuration name. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the configuration.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -70,11 +98,13 @@ export interface AttachedDatabaseConfigurationProps {
   /**
    * Name of the follower database (single-database attach only). Changing
    * it replaces the configuration.
+   * @default the leader database's name
    */
   databaseNameOverride?: string;
   /**
    * Prefix for the follower databases' names. Changing it replaces the
    * configuration.
+   * @default no prefix
    */
   databaseNamePrefix?: string;
   /**
@@ -86,6 +116,7 @@ export interface AttachedDatabaseConfigurationProps {
   /**
    * Restrict which tables, views, and functions are followed. Changing it
    * replaces the configuration.
+   * @default every table, view, and function
    */
   tableLevelSharingProperties?: KustoTableLevelSharingProperties;
 }
@@ -117,14 +148,19 @@ export interface AttachedDatabaseConfiguration extends Resource<
 
 /**
  * Attaches databases of a leader Azure Data Explorer (Kusto) cluster to a
- * follower cluster as read-only follower databases (the follower database
- * pattern).
+ * follower cluster as read-only follower databases
+ * (`Microsoft.Kusto/clusters/attachedDatabaseConfigurations`).
  *
  * @see https://learn.microsoft.com/azure/data-explorer/follower
  *
  * ### Following a Database
  * **Example:** Follow one database from a leader cluster
  * ```typescript
+ * const leader = yield* Azure.Kusto.Cluster("leader");
+ * const db = yield* Azure.Kusto.Database("telemetry", {
+ *   cluster: leader.clusterName,
+ * });
+ * const follower = yield* Azure.Kusto.Cluster("follower");
  * const follow = yield* Azure.Kusto.AttachedDatabaseConfiguration("follow", {
  *   cluster: follower.clusterName,
  *   leaderClusterId: leader.clusterId,
@@ -132,6 +168,13 @@ export interface AttachedDatabaseConfiguration extends Resource<
  *   defaultPrincipalsModificationKind: "Union",
  * });
  * ```
+ *
+ * :::caution
+ * Azure cannot update an attached configuration. Changing any prop
+ * replaces it, and the follower databases detach and attach again.
+ * Changing `defaultPrincipalsModificationKind` or
+ * `tableLevelSharingProperties` deletes the old configuration first.
+ * :::
  *
  * @resource
  */

@@ -26,7 +26,10 @@ import type { RecurrenceInterval } from "./SynchronizationSetting.ts";
 export type SynchronizationMode = "Incremental" | "FullSync";
 
 export interface TriggerProps {
-  /** Resource group of the consumer Data Share account. Changing it replaces the trigger. */
+  /**
+   * Resource group of the consumer Data Share account. Changing it replaces the trigger.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Consumer Data Share account. Changing it replaces the trigger. */
   account: string;
@@ -36,6 +39,7 @@ export interface TriggerProps {
    * Trigger name: letters, digits, and `_`, starting with a letter. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the trigger.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -86,19 +90,35 @@ export interface Trigger extends Resource<
 > {}
 
 /**
- * A snapshot schedule on an Azure Data Share share subscription (consumer
+ * A snapshot schedule on an Azure Data Share share subscription
+ * (`Microsoft.DataShare/accounts/shareSubscriptions/triggers`, consumer
  * side). The schedule must match a synchronization setting the provider
  * offers on the share; Data Share then copies snapshots into the mapped
- * targets on that schedule. Triggers are immutable; any change replaces
- * them.
+ * targets on that schedule.
+ *
+ * :::caution
+ * Triggers are immutable. Changing any prop (`account`,
+ * `shareSubscription`, `name`, `recurrenceInterval`, `synchronizationTime`,
+ * `synchronizationMode`, or `resourceGroup`) replaces the trigger. Alchemy
+ * deletes the old trigger first, because a share subscription holds one
+ * trigger per kind.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/data-share/subscribe-to-data-share#enable-snapshot-schedule
  *
  * ### Scheduling Snapshots
  * **Example:** Daily incremental snapshots
  * ```typescript
+ * // Values the data provider sends you.
+ * const invitationId = "<invitation-id>";
+ * const providerLocation = "eastus";
+ * const consumerAccount = yield* Azure.DataShare.Account("inbox");
+ * const subscription = yield* Azure.DataShare.ShareSubscription("inbound", {
+ *   account: consumerAccount.accountName,
+ *   invitationId,
+ *   sourceShareLocation: providerLocation,
+ * });
  * yield* Azure.DataShare.Trigger("daily", {
- *   resourceGroup: consumerGroup.resourceGroupName,
  *   account: consumerAccount.accountName,
  *   shareSubscription: subscription.shareSubscriptionName,
  *   recurrenceInterval: "Day",

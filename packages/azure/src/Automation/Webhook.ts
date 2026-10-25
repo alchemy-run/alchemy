@@ -25,6 +25,7 @@ export interface WebhookProps {
   /**
    * Webhook name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the webhook.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -43,11 +44,15 @@ export interface WebhookProps {
    * @default true
    */
   isEnabled?: boolean;
-  /** Runbook parameters passed to every job the webhook starts. */
+  /**
+   * Runbook parameters passed to every job the webhook starts.
+   * @default no parameters
+   */
   parameters?: Record<string, string>;
   /**
    * Name of a {@link HybridRunbookWorkerGroup} to run jobs on. Omit to run
    * them in Azure.
+   * @default not set (jobs run in Azure)
    */
   runOn?: string;
 }
@@ -82,16 +87,23 @@ export interface Webhook extends Resource<
 
 /**
  * A webhook that starts a published runbook from a single HTTP POST.
+ * The ARM type is `Microsoft.Automation/automationAccounts/webhooks`.
  *
  * The webhook URL is a secret that Azure shows only once, at creation;
  * Alchemy generates it, creates the webhook with it, and keeps it as a
  * `Redacted` attribute.
+ *
+ * :::caution
+ * Changing `automationAccount`, `name`, `runbook`, `expiryTime`, or
+ * `resourceGroup` replaces the webhook.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/automation-webhooks
  *
  * ### Creating a Webhook
  * **Example:** Start a runbook over HTTP
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const runbook = yield* Azure.Automation.Runbook("deploy", {
  *   automationAccount: account.automationAccountName,
  *   runbookType: "PowerShell72",

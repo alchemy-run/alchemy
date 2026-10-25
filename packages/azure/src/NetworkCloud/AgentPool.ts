@@ -42,6 +42,7 @@ export interface AgentPoolProps {
   /**
    * Name of the agent pool. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the agent pool.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -53,6 +54,7 @@ export interface AgentPoolProps {
   /**
    * ARM ID of the Nexus Kubernetes cluster's custom location. Changing it replaces the
    * agent pool.
+   * @default the Kubernetes cluster's custom location
    */
   customLocationId?: string;
   /** Number of nodes in the pool. */
@@ -64,26 +66,46 @@ export interface AgentPoolProps {
    * the agent pool.
    */
   mode: "System" | "User" | "NotApplicable";
-  /** Kubernetes labels of the nodes. Changing them replaces the agent pool. */
+  /**
+   * Kubernetes labels of the nodes. Changing them replaces the agent pool.
+   * @default none
+   */
   labels?: nc.KubernetesLabel[];
-  /** Kubernetes taints of the nodes. Changing them replaces the agent pool. */
+  /**
+   * Kubernetes taints of the nodes. Changing them replaces the agent pool.
+   * @default none
+   */
   taints?: nc.KubernetesLabel[];
-  /** Surge and drain settings for upgrades. */
+  /**
+   * Surge and drain settings for upgrades.
+   * @default Azure's default
+   */
   upgradeSettings?: nc.AgentPoolUpgradeSettings;
   /**
    * Admin user name and SSH keys of the nodes. The SSH keys are mutable;
    * changing the user name replaces the agent pool.
+   * @default none
    */
   administratorConfiguration?: NexusAdministratorConfiguration;
-  /** Hugepages and CPU options of the nodes. Changing them replaces the agent pool. */
+  /**
+   * Hugepages and CPU options of the nodes. Changing them replaces the agent pool.
+   * @default none
+   */
   agentOptions?: nc.AgentOptions;
-  /** Extra networks attached to the nodes. Changing them replaces the agent pool. */
+  /**
+   * Extra networks attached to the nodes. Changing them replaces the agent pool.
+   * @default none
+   */
   attachedNetworkConfiguration?: nc.AttachedNetworkConfiguration;
-  /** Availability zones of the nodes. Changing them replaces the agent pool. */
+  /**
+   * Availability zones of the nodes. Changing them replaces the agent pool.
+   * @default none
+   */
   availabilityZones?: string[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -131,15 +153,26 @@ export interface AgentPool extends Resource<
  * settings, and admin SSH keys update in place. Needs a deployed Operator
  * Nexus cluster.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-kubernetes-cluster-agent-pools
+ * ARM type: `Microsoft.NetworkCloud/kubernetesClusters/agentPools`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-kubernetes-cluster-agent-pools).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `kubernetesClusterName`, `name`, `location`,
+ * `customLocationId`, `vmSkuName`, `mode`, `labels`, `taints`,
+ * `administratorConfiguration.adminUsername`, `agentOptions`,
+ * `attachedNetworkConfiguration`, or `availabilityZones` replaces the agent
+ * pool.
+ * :::
  *
  * ### Adding an Agent Pool
  * **Example:** User pool with three nodes
  * ```typescript
+ * // An existing Nexus Kubernetes cluster, "naks", in the stack's resource group.
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ExtendedLocation/customLocations/site1-cl";
  * const pool = yield* Azure.NetworkCloud.AgentPool("workers", {
- *   resourceGroup: naks.resourceGroup,
- *   kubernetesClusterName: naks.kubernetesClusterName,
- *   customLocationId: cluster.clusterExtendedLocationId,
+ *   kubernetesClusterName: "naks",
+ *   customLocationId,
  *   count: 3,
  *   mode: "User",
  *   vmSkuName: "NC_P10_56_v1",

@@ -28,12 +28,29 @@ export interface WorkspaceGroup extends Resource<
  * The workspace-scoped counterpart of {@link Group}: a developer group inside an API
  * Management {@link Workspace} (Premium and v2 tiers). Props and
  * attributes match {@link Group} plus `workspaceName`.
+ * The ARM type is `Microsoft.ApiManagement/service/workspaces/groups`.
+ *
+ * :::caution
+ * Changing `workspaceName`, `serviceName`, `name`, `type`, `externalId`, or
+ * `resourceGroup` replaces the group.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/workspaces-overview
  *
  * ### Workspace Groups
  * **Example:** A custom group
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
  * yield* Azure.ApiManagement.WorkspaceGroup("partners", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -33,6 +33,7 @@ export interface WorkspaceGatewayProps {
    * Gateway name, unique within the resource group. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the gateway.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -57,9 +58,15 @@ export interface WorkspaceGatewayProps {
    * @default "None"
    */
   virtualNetworkType?: "None" | "External" | "Internal";
-  /** ARM ID of the subnet the gateway reaches backends through (`External`/`Internal`). */
+  /**
+   * ARM ID of the subnet the gateway reaches backends through (`External`/`Internal`).
+   * @default not set
+   */
   backendSubnetId?: string;
-  /** User tags. */
+  /**
+   * User tags.
+   * @default {}
+   */
   tags?: Record<string, string>;
 }
 
@@ -97,11 +104,28 @@ export interface WorkspaceGateway extends Resource<
  * {@link WorkspaceGatewayConfigConnection}. Requires a Premium service;
  * creation takes 30+ minutes and the gateway bills per scale unit.
  *
+ * :::caution
+ * Changing `name`, `location`, `sku`, or `resourceGroup` replaces the
+ * gateway.
+ *
+ * `WorkspaceGatewayPremium` is offered in a subset of regions (not
+ * `eastus`). A gateway serves only workspaces of a Premium service in the
+ * same region.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/api-management/workspaces-overview#workspace-gateway
  *
  * ### Creating a Workspace Gateway
  * **Example:** A premium workspace gateway
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "Premium", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
  * const gateway = yield* Azure.ApiManagement.WorkspaceGateway("payments-gw", {
  *   sku: "WorkspaceGatewayPremium",
  *   capacity: 1,
@@ -151,9 +175,7 @@ export const WorkspaceGatewayProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* apim
-        .ListApiGateway({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListApiGateway", page)));
+      const page = yield* collectAll(apim.ListApiGateway, { subscriptionId });
       return (page.value ?? []).flatMap((gateway) => {
         const group = resourceGroupOf(gateway.id);
         return hasAnyAlchemyTag(gateway.tags) && group !== undefined && gateway.name !== undefined

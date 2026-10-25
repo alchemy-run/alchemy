@@ -24,7 +24,10 @@ export interface ConfigTemplateHierarchy {
 }
 
 export interface ConfigTemplateMetadataProps {
-  /** Resource group of the config template. Changing it replaces the metadata. */
+  /**
+   * Resource group of the config template. Changing it replaces the metadata.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Name of the parent config template. Changing it replaces the metadata. */
   configTemplate: string;
@@ -70,19 +73,35 @@ export interface ConfigTemplateMetadata extends Resource<
 > {}
 
 /**
- * Links an Azure Arc workload orchestration config template to hierarchy
- * entities (sites or targets) of a context, so the template's shared
- * configuration applies to them.
+ * Config template metadata
+ * (`Microsoft.Edge/configTemplates/configTemplateMetadatas`). It links an
+ * Azure Arc workload orchestration config template to hierarchy entities
+ * (sites or targets) of a context, so the template's shared configuration
+ * applies to them. See
+ * [configuring a template](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuring-template).
  *
  * The metadata resource carries no tags or free-form fields, so Alchemy
  * cannot mark it; one found under the expected name is treated as this
  * resource.
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuring-template
+ * :::caution
+ * Changing `resourceGroup`, `configTemplate`, `name`, or `contextId`
+ * replaces the metadata. A context links one metadata per config template,
+ * so a replacement in the same template and context deletes the old one
+ * first.
+ * :::
  *
  * ### Linking a Config Template
  * **Example:** Apply a config template to a site
  * ```typescript
+ * const context = yield* Azure.Edge.Context("context", {
+ *   capabilities: [{ name: "soap", description: "Soap production" }],
+ *   hierarchies: [{ name: "country", description: "Country" }],
+ * });
+ * const site = yield* Azure.Edge.Site("plant");
+ * const template = yield* Azure.Edge.ConfigTemplate("common", {
+ *   description: "Shared plant configuration",
+ * });
  * yield* Azure.Edge.ConfigTemplateMetadata("common-links", {
  *   configTemplate: template.configTemplateName,
  *   contextId: context.contextId,

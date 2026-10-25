@@ -85,13 +85,17 @@ export interface AzureRetentionRule {
 export type BackupPolicyRule = AzureBackupRule | AzureRetentionRule;
 
 export interface BackupPolicyProps {
-  /** Resource group of the Backup vault. Changing it replaces the policy. */
+  /**
+   * Resource group of the Backup vault. Changing it replaces the policy.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Backup vault that holds the policy. Changing it replaces the policy. */
   backupVault: string;
   /**
    * Policy name. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the policy.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -138,11 +142,18 @@ export interface BackupPolicy extends Resource<
  * vault is owned by the current stack and stage. Azure does not allow
  * updating a policy, so any rule change replaces it.
  *
- * @see https://learn.microsoft.com/azure/backup/backup-vault-overview
+ * :::caution
+ * Changing `resourceGroup`, `backupVault`, `name`, `datasourceTypes`, or
+ * `policyRules` replaces the policy. Backup instances move to the new
+ * policy in the same deploy.
+ * :::
+ *
+ * See [Backup vaults](https://learn.microsoft.com/azure/backup/backup-vault-overview).
  *
  * ### Creating a Backup Policy
  * **Example:** Operational blob backup retained for 30 days
  * ```typescript
+ * const vault = yield* Azure.DataProtection.BackupVault("vault");
  * const policy = yield* Azure.DataProtection.BackupPolicy("blobs", {
  *   backupVault: vault.backupVaultName,
  *   datasourceTypes: ["Microsoft.Storage/storageAccounts/blobServices"],

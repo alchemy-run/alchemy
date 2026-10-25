@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,28 +32,41 @@ import {
 
 /** An inclusive IPv4 address range (`startIP`-`endIP`). */
 export interface VirtualNetworkIpPool {
-  /** First IP address of the pool. */
+  /** First IP address of the pool. Required. */
   startIP: string;
-  /** Last IP address of the pool. */
+  /** Last IP address of the pool. Required. */
   endIP: string;
 }
 
 /** The Microsoft On-premises Cloud (MOC) network an AKS Arc network maps onto. */
 export interface VirtualNetworkHciProfile {
-  /** Group in MOC (Microsoft On-premises Cloud). */
+  /**
+   * Group in MOC (Microsoft On-premises Cloud).
+   * @default unset
+   */
   mocGroup?: string;
-  /** Location in MOC (Microsoft On-premises Cloud). */
+  /**
+   * Location in MOC (Microsoft On-premises Cloud).
+   * @default unset
+   */
   mocLocation?: string;
-  /** Name of the virtual network in MOC (Microsoft On-premises Cloud). */
+  /**
+   * Name of the virtual network in MOC (Microsoft On-premises Cloud).
+   * @default unset
+   */
   mocVnetName?: string;
 }
 
 export interface VirtualNetworkProps {
-  /** Resource group the network is created in. Changing it replaces the network. */
+  /**
+   * Resource group the network is created in. Changing it replaces the network.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Name of the network. If omitted, a unique lowercase name is generated
    * from the app, stage, and logical ID. Changing it replaces the network.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -64,39 +77,53 @@ export interface VirtualNetworkProps {
   location?: string;
   /**
    * Arc custom location of the Azure Local cluster that hosts the network.
-   * Changing it replaces the network.
+   * Required. Changing it replaces the network.
    */
   extendedLocation: HybridAksExtendedLocation;
   /**
    * The MOC virtual network on the Azure Local cluster this network
    * represents. Changing it replaces the network.
+   * @default unset
    */
   hci?: VirtualNetworkHciProfile;
   /**
    * IP ranges for the Kubernetes API server and `LoadBalancer` services
    * (when using the HA Proxy load balancer). Changing them replaces the
    * network.
+   * @default []
    */
   vipPool?: VirtualNetworkIpPool[];
   /**
    * IP ranges for the Kubernetes node VMs (static IP networks). Changing
    * them replaces the network.
+   * @default []
    */
   vmipPool?: VirtualNetworkIpPool[];
-  /** DNS server IP addresses. Changing them replaces the network. */
+  /**
+   * DNS server IP addresses. Changing them replaces the network.
+   * @default []
+   */
   dnsServers?: string[];
-  /** Gateway IP address of the network. Changing it replaces the network. */
+  /**
+   * Gateway IP address of the network. Changing it replaces the network.
+   * @default unset
+   */
   gateway?: string;
   /**
    * Address prefix of the network in CIDR notation, e.g. `10.0.0.0/24`.
    * Changing it replaces the network.
+   * @default unset
    */
   ipAddressPrefix?: string;
-  /** VLAN ID of the network. Changing it replaces the network. */
+  /**
+   * VLAN ID of the network. Changing it replaces the network.
+   * @default unset (no VLAN)
+   */
   vlanID?: number;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -142,6 +169,8 @@ export interface VirtualNetwork extends Resource<
  * ### Creating a Network
  * **Example:** Static IP network with a VIP pool
  * ```typescript
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hci/providers/Microsoft.ExtendedLocation/customLocations/hci-location";
  * const network = yield* Azure.HybridContainerService.VirtualNetwork("aks-net", {
  *   extendedLocation: { name: customLocationId },
  *   hci: { mocGroup: "target-group", mocLocation: "MocLocation", mocVnetName: "vnet1" },
@@ -155,6 +184,8 @@ export interface VirtualNetwork extends Resource<
  *
  * **Example:** Tagged network on a VLAN
  * ```typescript
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/hci/providers/Microsoft.ExtendedLocation/customLocations/hci-location";
  * yield* Azure.HybridContainerService.VirtualNetwork("vlan-net", {
  *   extendedLocation: { name: customLocationId },
  *   hci: { mocVnetName: "vlan100" },
@@ -162,6 +193,13 @@ export interface VirtualNetwork extends Resource<
  *   tags: { team: "platform" },
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `extendedLocation`, `hci`,
+ * `vipPool`, `vmipPool`, `dnsServers`, `gateway`, `ipAddressPrefix`, or
+ * `vlanID` replaces the network. With a fixed `name`, the old network is
+ * deleted first.
+ * :::
  *
  * @resource
  */
@@ -219,11 +257,7 @@ export const VirtualNetworkProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        aks
-          .ListVirtualNetworkBySubscription({ subscriptionId })
-          .pipe(
-            Effect.flatMap((page) => requireSinglePage("ListVirtualNetworkBySubscription", page)),
-          ),
+        collectAll(aks.ListVirtualNetworkBySubscription, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((value) => {
         const group = resourceGroupOf(value.id);

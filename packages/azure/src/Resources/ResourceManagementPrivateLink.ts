@@ -6,10 +6,10 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitUntilGone,
 } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
@@ -122,12 +122,10 @@ export const ResourceManagementPrivateLinkProvider = () =>
     // No tags or markers: report links in Alchemy-owned resource groups.
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const groups = yield* resources
-        .ListResourceGroups({
-          subscriptionId,
-          _filter: "tagName eq 'alchemy::stack'",
-        })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListResourceGroups", page)));
+      const groups = yield* collectAll(resources.ListResourceGroups, {
+        subscriptionId,
+        _filter: "tagName eq 'alchemy::stack'",
+      });
       const perGroup = yield* Effect.forEach(
         (groups.value ?? []).flatMap((group) => (group.name === undefined ? [] : [group.name])),
         (resourceGroupName) =>

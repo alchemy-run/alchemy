@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -36,10 +36,12 @@ export interface WorkspaceScope {
   resourceTypes?: "Microsoft.Storage/storageAccounts"[];
   /**
    * Only include storage accounts that carry these tag keys (any value).
+   * @default no tag-key filter
    */
   tagKeysOnly?: string[];
   /**
    * Only include storage accounts that carry these exact tag key/value pairs.
+   * @default no tag filter
    */
   tags?: Record<string, string>;
 }
@@ -48,11 +50,12 @@ export interface WorkspaceProps {
   /**
    * Resource group the workspace is created in. Changing it replaces the
    * workspace.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
-   * Name of the workspace. If omitted, a unique name is generated from the
-   * app, stage, and logical ID. Changing it replaces the workspace.
+   * Name of the workspace. Changing it replaces the workspace.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -71,7 +74,10 @@ export interface WorkspaceProps {
    * @default "Free"
    */
   sku?: "Free" | "Standard";
-  /** Description of the workspace. */
+  /**
+   * Description of the workspace.
+   * @default no description
+   */
   description?: string;
   /**
    * ARM IDs of the subscriptions and/or resource groups whose storage
@@ -88,6 +94,7 @@ export interface WorkspaceProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -120,12 +127,25 @@ export interface Workspace extends Resource<
 > {}
 
 /**
- * An Azure Storage Discovery workspace — aggregated insights (capacity,
- * activity, security and configuration) across every storage account under
- * a set of subscriptions or resource groups, grouped into scopes filtered by
- * resource tags.
+ * An Azure Storage Discovery workspace
+ * (`Microsoft.StorageDiscovery/storageDiscoveryWorkspaces`). It reports
+ * capacity, activity, security, and configuration insights across every
+ * storage account under a set of subscriptions or resource groups. Scopes
+ * group those accounts by resource tags. See the
+ * [Azure docs](https://learn.microsoft.com/azure/storage-discovery/overview).
  *
- * @see https://learn.microsoft.com/azure/storage-discovery/overview
+ * :::caution
+ * Storage Discovery runs in a limited set of regions, such as `eastus2`,
+ * `westus2`, and `westeurope`. Other regions fail with
+ * `LocationNotAvailable`. The deploying principal needs read access to every
+ * workspace root.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the workspace.
+ * Alchemy updates `sku`, `description`, `workspaceRoots`, `scopes`, and
+ * `tags` in place.
+ * :::
  *
  * ### Creating a Workspace
  * **Example:** Free workspace over one resource group
@@ -141,7 +161,9 @@ export interface Workspace extends Resource<
  * ### Filtering by Tags
  * **Example:** Separate scopes for production and tagged accounts
  * ```typescript
+ * const subscriptionId = "00000000-0000-0000-0000-000000000000";
  * const workspace = yield* Azure.StorageDiscovery.Workspace("insights", {
+ *   location: "eastus2",
  *   sku: "Standard",
  *   description: "Storage estate overview",
  *   workspaceRoots: [`/subscriptions/${subscriptionId}`],
@@ -217,13 +239,9 @@ export const WorkspaceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* storagediscovery
-        .ListStorageDiscoveryWorkspaceBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListStorageDiscoveryWorkspaceBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(storagediscovery.ListStorageDiscoveryWorkspaceBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((workspace) => {
         const group = resourceGroupOf(workspace.id);
         return hasAnyAlchemyTag(workspace.tags) &&

@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -29,6 +29,7 @@ export interface MasterSiteProps {
   /**
    * Name of the site. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the site.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -45,18 +46,25 @@ export interface MasterSiteProps {
    * @default false
    */
   allowMultipleSites?: boolean;
-  /** ARM IDs of the fabric sites (VMware, Hyper-V, server) the master site groups. */
+  /**
+   * ARM IDs of the fabric sites (VMware, Hyper-V, server) the master site groups.
+   * @default none
+   */
   sites?: string[];
   /**
    * Whether the site accepts traffic over the public endpoint.
    * @default "Enabled"
    */
   publicNetworkAccess?: "Enabled" | "Disabled";
-  /** ARM ID of the storage account used when public access is disabled. */
+  /**
+   * ARM ID of the storage account used when public access is disabled.
+   * @default none
+   */
   customerStorageAccountArmId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -91,12 +99,12 @@ export interface MasterSite extends Resource<
  * an appliance's fabric sites (VMware, Hyper-V, physical servers) together
  * with the SQL and web-app inventory sites the appliance creates under it.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/migrate/migrate-appliance-architecture).
+ *
  * :::caution
  * Azure honors `allowMultipleSites` only when the site is created. Changing
  * it, `name`, `location`, or `resourceGroup` replaces the site.
  * :::
- *
- * @see https://learn.microsoft.com/azure/migrate/migrate-appliance-architecture
  *
  * ### Creating a Site
  * **Example:** Master site
@@ -166,13 +174,9 @@ export const MasterSiteProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* migrate
-        .ListMasterSitesControllerBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListMasterSitesControllerBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(migrate.ListMasterSitesControllerBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((site) => {
         const group = resourceGroupOf(site.id);
         return hasAnyAlchemyTag(site.tags) && group !== undefined && site.name !== undefined

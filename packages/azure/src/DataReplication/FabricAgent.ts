@@ -38,7 +38,10 @@ export interface FabricAgentIdentity {
 }
 
 export interface FabricAgentProps {
-  /** Resource group of the fabric. Changing it replaces the agent. */
+  /**
+   * Resource group of the fabric. Changing it replaces the agent.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the fabric the agent belongs to. Changing it replaces the agent. */
   fabric: string;
@@ -46,6 +49,7 @@ export interface FabricAgentProps {
    * Name of the agent: letters and digits only. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the agent.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** ID of the machine (appliance) running the agent. Changing it replaces the agent. */
@@ -108,14 +112,32 @@ export interface FabricAgent extends Resource<
  * is the appliance-side component that discovers and replicates machines.
  *
  * Agents cannot be tagged; Alchemy treats one as owned when its fabric is
- * tagged for the current stack and stage. All settings are immutable, so
- * any change replaces the agent.
+ * tagged for the current stack and stage.
+ *
+ * :::caution
+ * All settings are immutable. Changing any prop (`fabric`, `name`,
+ * `machineId`, `machineName`, `authenticationIdentity`,
+ * `resourceAccessIdentity`, `customProperties`, or `resourceGroup`)
+ * replaces the agent.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/datareplication/fabric-agent/create
  *
  * ### Registering an Agent
  * **Example:** VMware appliance agent
  * ```typescript
+ * // Service principal the appliance signs in with.
+ * const tenantId = "00000000-0000-0000-0000-000000000000";
+ * const appId = "11111111-1111-1111-1111-111111111111";
+ * const spObjectId = "22222222-2222-2222-2222-222222222222";
+ * // Source fabric for the VMware site.
+ * const fabric = yield* Azure.DataReplication.Fabric("vmware", {
+ *   customProperties: {
+ *     instanceType: "VMwareMigrate",
+ *     vmwareSiteId: "<vmware-site-arm-id>",
+ *     migrationSolutionId: "<migration-solution-arm-id>",
+ *   },
+ * });
  * const identity = {
  *   tenantId,
  *   applicationId: appId,

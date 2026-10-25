@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -137,16 +137,22 @@ export interface ExperimentIdentity {
 }
 
 export interface ExperimentProps {
-  /** Resource group the experiment is created in. Changing it replaces the experiment. */
+  /**
+   * Resource group the experiment is created in. Changing it replaces the
+   * experiment.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Experiment name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the experiment.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure region; must be a region Chaos Studio supports. Defaults to the
-   * provider's location. Changing it replaces the experiment.
+   * Azure region; must be a region Chaos Studio supports. Changing it
+   * replaces the experiment.
+   * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
@@ -159,7 +165,11 @@ export interface ExperimentProps {
   steps: ExperimentStep[];
   /** Target selectors referenced by the actions. */
   selectors: ExperimentSelector[];
-  /** User tags. Alchemy ownership tags are merged in. */
+  /**
+   * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
+   * `alchemy::id`) are merged in automatically.
+   * @default {}
+   */
   tags?: Record<string, string>;
 }
 
@@ -192,8 +202,8 @@ export interface Experiment extends Resource<
 > {}
 
 /**
- * An Azure Chaos Studio experiment: steps of faults run against selected
- * Chaos targets.
+ * An Azure Chaos Studio experiment (`Microsoft.Chaos/experiments`): steps
+ * of faults run against selected Chaos targets.
  *
  * Creating an experiment is free; Chaos Studio bills per target-action
  * minute only while an experiment runs. Alchemy creates and updates the
@@ -201,11 +211,18 @@ export interface Experiment extends Resource<
  * identity needs the roles each fault requires on its targets (see the
  * fault library) before a run succeeds.
  *
- * @see https://learn.microsoft.com/azure/chaos-studio/chaos-studio-overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the experiment
+ * and its system-assigned identity, so role assignments to the old
+ * `principalId` stop working.
+ * :::
+ *
+ * See the [Chaos Studio overview](https://learn.microsoft.com/azure/chaos-studio/chaos-studio-overview).
  *
  * ### Creating an Experiment
  * **Example:** Block traffic through a network security group for 10 minutes
  * ```typescript
+ * const nsg = yield* Azure.Network.NetworkSecurityGroup("web-nsg");
  * const target = yield* Azure.Chaos.Target("web-nsg-target", {
  *   parentResourceId: nsg.networkSecurityGroupId,
  *   targetType: "Microsoft-NetworkSecurityGroup",
@@ -255,7 +272,8 @@ export interface Experiment extends Resource<
  * ```typescript
  * yield* Azure.Authorization.RoleAssignment("chaos-nsg", {
  *   scope: nsg.networkSecurityGroupId,
- *   roleDefinitionId: Azure.Authorization.BuiltInRole.NetworkContributor,
+ *   // Network Contributor
+ *   roleDefinitionId: "4d97b98b-1d4f-4787-a291-c67834d212e7",
  *   principalId: experiment.principalId,
  *   principalType: "ServicePrincipal",
  * });
@@ -397,9 +415,7 @@ export const ExperimentProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* chaos
-        .ListExperimentAll({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListExperimentAll", page)));
+      const page = yield* collectAll(chaos.ListExperimentAll, { subscriptionId });
       return (page.value ?? []).flatMap((experiment) => {
         const group = resourceGroupOf(experiment.id);
         return hasAnyAlchemyTag(experiment.tags) &&

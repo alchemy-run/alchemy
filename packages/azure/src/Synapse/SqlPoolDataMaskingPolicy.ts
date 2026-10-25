@@ -38,6 +38,7 @@ export interface SqlPoolDataMaskingPolicyProps extends SqlPoolChildProps {
    * `analyst1;analyst2`. Every entry must be an existing database user.
    * Administrators (`dbo`) always see unmasked data, so Azure drops them
    * from the list.
+   * @default not set
    */
   exemptPrincipals?: string;
 }
@@ -58,18 +59,39 @@ export interface SqlPoolDataMaskingPolicy extends Resource<
 > {}
 
 /**
- * The dynamic data masking policy of a dedicated SQL pool. Masking rules
+ * The dynamic data masking policy of a dedicated SQL pool
+ * (`Microsoft.Synapse/workspaces/sqlPools/dataMaskingPolicies`). Masking rules
  * (`Azure.Synapse.SqlPoolDataMaskingRule`) only take effect while the
  * policy is enabled.
  *
  * This is a singleton setting that always exists on a pool. Destroying the
  * resource turns masking off.
  *
+ * :::caution
+ * Changing `workspace`, `sqlPool`, or `resourceGroup` replaces the policy.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/azure-sql/database/dynamic-data-masking-overview
  *
  * ### Enabling Data Masking
  * **Example:** Mask for everyone except analysts
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
+ * const pool = yield* Azure.Synapse.SqlPool("dw", {
+ *   workspace: workspace.workspaceName,
+ *   sku: "DW100c",
+ * });
  * yield* Azure.Synapse.SqlPoolDataMaskingPolicy("masking", {
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,

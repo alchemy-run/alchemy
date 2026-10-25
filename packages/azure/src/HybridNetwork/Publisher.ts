@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -36,12 +36,16 @@ import {
 export type PublisherIdentity = HybridNetworkIdentity;
 
 export interface PublisherProps {
-  /** Resource group the publisher is created in. Changing it replaces the publisher. */
+  /**
+   * Resource group the publisher is created in. Changing it replaces the publisher.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Publisher name: 1-64 letters, digits, `_`, and `-`. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the publisher.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -57,11 +61,15 @@ export interface PublisherProps {
    * @default "Private"
    */
   scope?: "Private";
-  /** Managed identity of the publisher. */
+  /**
+   * Managed identity of the publisher.
+   * @default no identity
+   */
   identity?: PublisherIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -92,10 +100,10 @@ export interface Publisher extends Resource<
 > {}
 
 /**
- * An Azure Operator Service Manager (AOSM) publisher — the top-level
- * container a network function vendor uses to publish artifact stores,
- * network function definitions, network service designs, and
- * configuration group schemas.
+ * An Azure Operator Service Manager (AOSM) publisher
+ * (`Microsoft.HybridNetwork/publishers`): the top-level container a network
+ * function vendor uses to publish artifact stores, network function
+ * definitions, network service designs, and configuration group schemas.
  *
  * Publishers are free metadata resources.
  *
@@ -104,9 +112,6 @@ export interface Publisher extends Resource<
  * ### Creating a Publisher
  * **Example:** Private publisher
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("aosm", {
- *   location: "eastus",
- * });
  * const publisher = yield* Azure.HybridNetwork.Publisher("publisher", {
  *   location: "eastus",
  * });
@@ -119,6 +124,17 @@ export interface Publisher extends Resource<
  *   tags: { team: "network" },
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, or `scope` replaces the
+ * publisher. Resources that reference it by `publisherName` move to the
+ * new publisher only if their own `publisher` prop changes with it.
+ * :::
+ *
+ * :::caution
+ * AOSM is available in `eastus`, `southcentralus`, `westus3`, and
+ * `uksouth`. Other locations fail.
+ * :::
  *
  * @resource
  */
@@ -156,9 +172,7 @@ export const PublisherProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* hybridnetwork
-        .ListPublisherBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPublisherBySubscription", page)));
+      const page = yield* collectAll(hybridnetwork.ListPublisherBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((publisher) => {
         const group = resourceGroupOf(publisher.id);
         return hasAnyAlchemyTag(publisher.tags) &&

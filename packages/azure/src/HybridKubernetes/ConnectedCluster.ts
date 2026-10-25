@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -25,9 +25,15 @@ import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface ConnectedClusterAadProfile {
-  /** Use Azure RBAC for Kubernetes authorization. */
+  /**
+   * Use Azure RBAC for Kubernetes authorization.
+   * @default false
+   */
   enableAzureRBAC?: boolean;
-  /** Object IDs of Microsoft Entra groups granted cluster admin. */
+  /**
+   * Object IDs of Microsoft Entra groups granted cluster admin.
+   * @default []
+   */
   adminGroupObjectIDs?: string[];
   /**
    * Microsoft Entra tenant used for authentication.
@@ -37,7 +43,10 @@ export interface ConnectedClusterAadProfile {
 }
 
 export interface ConnectedClusterArcAgentProfile {
-  /** Arc agent version to install on the cluster. */
+  /**
+   * Arc agent version to install on the cluster.
+   * @default the latest version
+   */
   desiredAgentVersion?: string;
   /**
    * Whether the Arc agents upgrade automatically to the latest version.
@@ -47,11 +56,15 @@ export interface ConnectedClusterArcAgentProfile {
 }
 
 export interface ConnectedClusterOidcIssuerProfile {
-  /** Enable the OIDC issuer for workload identity. */
+  /**
+   * Enable the OIDC issuer for workload identity.
+   * @default false
+   */
   enabled?: boolean;
   /**
    * Issuer URL of a public-cloud cluster (AKS, EKS, GKE) that already
    * hosts its own OIDC issuer.
+   * @default unset (Azure hosts the issuer)
    */
   selfHostedIssuerUrl?: string;
 }
@@ -60,6 +73,7 @@ export interface ConnectedClusterProps {
   /**
    * Resource group the connected cluster is registered in. Changing it
    * replaces the cluster.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -67,6 +81,7 @@ export interface ConnectedClusterProps {
    * starting and ending with a letter or digit. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the cluster.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -79,7 +94,7 @@ export interface ConnectedClusterProps {
    * Base64-encoded DER RSA public key the Arc agents use for their initial
    * handshake with Azure. The onboarding tool (`az connectedk8s connect`)
    * generates the key pair and installs the private key with the agents.
-   * Changing it replaces the cluster.
+   * Required. Changing it replaces the cluster.
    */
   agentPublicKeyCertificate: string;
   /**
@@ -91,45 +106,72 @@ export interface ConnectedClusterProps {
    * Kind of connected cluster, e.g. `ProvisionedCluster` for clusters
    * provisioned by Azure (AKS on Azure Local). Omit for a regular Arc
    * cluster. Changing it replaces the cluster.
+   * @default unset (a regular Arc cluster)
    */
   kind?: string;
   /**
    * Kubernetes distribution running on the cluster, e.g. `k3s`, `kind`, or
    * `generic`.
+   * @default unset (the agents report it on connect)
    */
   distribution?: string;
-  /** Version of the Kubernetes distribution. */
+  /**
+   * Version of the Kubernetes distribution.
+   * @default unset
+   */
   distributionVersion?: string;
-  /** Infrastructure the cluster runs on, e.g. `generic` or `azure_stack_hci`. */
+  /**
+   * Infrastructure the cluster runs on, e.g. `generic` or `azure_stack_hci`.
+   * @default unset (the agents report it on connect)
+   */
   infrastructure?: string;
-  /** Opt in to Azure Hybrid Benefit (`True`, `False`, `NotApplicable`). */
+  /**
+   * Opt in to Azure Hybrid Benefit (`True`, `False`, `NotApplicable`).
+   * @default unset
+   */
   azureHybridBenefit?: "True" | "False" | "NotApplicable";
-  /** Whether the cluster connects to Azure over a private link. */
+  /**
+   * Whether the cluster connects to Azure over a private link.
+   * @default unset (public endpoints)
+   */
   privateLinkState?: "Enabled" | "Disabled";
   /**
    * ARM ID of the Arc private link scope the cluster is assigned to. Only
    * used when `privateLinkState` is `Enabled`.
+   * @default unset
    */
   privateLinkScopeResourceId?: string;
   /**
    * Microsoft Entra integration for the cluster. Azure rejects it with
    * "Internal failure" until the Arc agents have connected.
+   * @default unset (no Entra integration)
    */
   aadProfile?: ConnectedClusterAadProfile;
-  /** Arc agent version and auto-upgrade settings. */
+  /**
+   * Arc agent version and auto-upgrade settings.
+   * @default the latest agents, upgraded automatically
+   */
   arcAgentProfile?: ConnectedClusterArcAgentProfile;
-  /** Enable the workload identity webhook. */
+  /**
+   * Enable the workload identity webhook.
+   * @default false
+   */
   workloadIdentity?: boolean;
   /**
    * OIDC issuer settings for workload identity. Once enabled, the OIDC
    * issuer cannot be disabled again.
+   * @default unset (no OIDC issuer)
    */
   oidcIssuerProfile?: ConnectedClusterOidcIssuerProfile;
-  /** Enable the gateway used by the Arc router for connectivity. */
+  /**
+   * Enable the gateway used by the Arc router for connectivity.
+   * @default false
+   */
   gatewayEnabled?: boolean;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -183,9 +225,10 @@ export interface ConnectedCluster extends Resource<
 > {}
 
 /**
- * An Azure Arc-enabled Kubernetes cluster — the ARM projection of a
+ * An Azure Arc-enabled Kubernetes cluster
+ * (`Microsoft.Kubernetes/connectedClusters`): the ARM record of a
  * Kubernetes cluster running anywhere (on-premises, edge, or another
- * cloud). Registering the resource reserves the identity; the cluster
+ * cloud). Registering the resource reserves the identity. The cluster
  * connects once the Arc agents are installed with the private key matching
  * `agentPublicKeyCertificate` (normally by `az connectedk8s connect`).
  *
@@ -194,6 +237,8 @@ export interface ConnectedCluster extends Resource<
  * ### Registering a Cluster
  * **Example:** Connected cluster for a k3s cluster
  * ```typescript
+ * // base64 DER RSA public key of the agents' key pair
+ * const agentPublicKey = "MIICCgKCAgEAyH6w...";
  * const cluster = yield* Azure.HybridKubernetes.ConnectedCluster("store-42", {
  *   agentPublicKeyCertificate: agentPublicKey,
  *   distribution: "k3s",
@@ -206,6 +251,8 @@ export interface ConnectedCluster extends Resource<
  *
  * **Example:** Azure RBAC with an admin group
  * ```typescript
+ * const agentPublicKey = "MIICCgKCAgEAyH6w...";
+ * const adminGroupId = "5f8c2b1e-0d3a-4c7e-9b6f-2a1d4e8c7b90";
  * const cluster = yield* Azure.HybridKubernetes.ConnectedCluster("store-42", {
  *   agentPublicKeyCertificate: agentPublicKey,
  *   aadProfile: {
@@ -218,12 +265,19 @@ export interface ConnectedCluster extends Resource<
  * ### Workload Identity
  * **Example:** OIDC issuer and workload identity webhook
  * ```typescript
+ * const agentPublicKey = "MIICCgKCAgEAyH6w...";
  * const cluster = yield* Azure.HybridKubernetes.ConnectedCluster("store-42", {
  *   agentPublicKeyCertificate: agentPublicKey,
  *   oidcIssuerProfile: { enabled: true },
  *   workloadIdentity: true,
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `agentPublicKeyCertificate`,
+ * `identityType`, or `kind` replaces the cluster record. The Arc agents on
+ * the cluster must then be onboarded again with the new key.
+ * :::
  *
  * @resource
  */
@@ -384,11 +438,7 @@ export const ConnectedClusterProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* hk
-        .ListConnectedClusterBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListConnectedClusterBySubscription", page)),
-        );
+      const page = yield* collectAll(hk.ListConnectedClusterBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((cluster) => {
         const group = resourceGroupOf(cluster.id);
         return hasAnyAlchemyTag(cluster.tags) && group !== undefined && cluster.name !== undefined

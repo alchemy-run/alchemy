@@ -19,6 +19,7 @@ export interface IntegrationAccountSessionProps {
    * Session name: 1-80 letters, digits, `-`, `_`, `.`, `(`, `)`. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the session.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** JSON content of the session, stored and returned as given. */
@@ -53,6 +54,8 @@ export interface IntegrationAccountSession extends Resource<
  * Apps integration account: a named JSON document that B2B workflows read
  * and write, for example to share state such as control numbers.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/rest/api/logic/integration-account-sessions).
+ *
  * Sessions carry no tags or metadata, so Alchemy only treats a session it
  * created and persisted as its own; a session found by name without state
  * is reported as unowned and needs `--adopt`.
@@ -61,8 +64,6 @@ export interface IntegrationAccountSession extends Resource<
  * Changing `name`, `integrationAccount`, or `resourceGroup` replaces the
  * session.
  * :::
- *
- * @see https://learn.microsoft.com/rest/api/logic/integration-account-sessions
  *
  * ### Creating a Session
  * **Example:** Session with JSON content

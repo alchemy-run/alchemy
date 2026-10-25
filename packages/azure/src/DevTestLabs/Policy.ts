@@ -32,7 +32,10 @@ export type PolicyFactName =
   | "ScheduleEditPermission";
 
 export interface PolicyProps {
-  /** Resource group of the lab. Changing it replaces the policy. */
+  /**
+   * Resource group of the lab. Changing it replaces the policy.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the lab. Changing it replaces the policy. */
   lab: string;
@@ -53,20 +56,28 @@ export interface PolicyProps {
   /**
    * Policy name. Labs look policies up by fact, so the name defaults to
    * `factName`. Changing it replaces the policy.
+   * @default `factName`
    */
   name?: string;
-  /** Extra fact data, e.g. the subnet for `UserOwnedLabVmCountInSubnet`. */
+  /**
+   * Extra fact data, e.g. the subnet for `UserOwnedLabVmCountInSubnet`.
+   * @default unset
+   */
   factData?: string;
   /**
    * Whether the policy is enforced.
    * @default "Enabled"
    */
   status?: "Enabled" | "Disabled";
-  /** Description of the policy. */
+  /**
+   * Description of the policy.
+   * @default unset
+   */
   description?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -101,14 +112,21 @@ export interface Policy extends Resource<
 > {}
 
 /**
- * A DevTest Labs policy — a limit or allow-list (VM count, VM sizes,
+ * A DevTest Labs policy (`Microsoft.DevTestLab/labs/policysets/policies`)
+ * — a limit or allow-list (VM count, VM sizes,
  * gallery images, ...) enforced in the lab's `default` policy set.
+ *
+ * :::caution
+ * Changing `lab`, `name`, `factName`, `evaluatorType`, or `resourceGroup`
+ * replaces the policy.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/devtest-labs/devtest-lab-set-lab-policy
  *
  * ### Limits
  * **Example:** At most 5 VMs per lab
  * ```typescript
+ * const lab = yield* Azure.DevTestLabs.Lab("team-lab");
  * const vmCount = yield* Azure.DevTestLabs.Policy("vm-count", {
  *   lab: lab.labName,
  *   factName: "LabVmCount",

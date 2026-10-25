@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -57,6 +57,7 @@ export interface RegistryProps {
    * keywords `azureml`, `microsoft`, or `azure`. If omitted, a unique name
    * is generated from the app, stage, and logical ID (blocked keywords
    * stripped). Changing it replaces the registry.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -84,6 +85,7 @@ export interface RegistryProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -123,7 +125,13 @@ export interface Registry extends Resource<
  * regions. Azure provisions a managed resource group with a Premium
  * container registry and a storage account per replicated region.
  *
- * @see https://learn.microsoft.com/azure/machine-learning/how-to-manage-registries
+ * ARM type: `Microsoft.MachineLearningServices/registries`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/how-to-manage-registries).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the registry.
+ * Removing a region from `regions` also replaces it.
+ * :::
  *
  * ### Creating a Registry
  * **Example:** Single-region registry
@@ -211,9 +219,7 @@ export const RegistryProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* ml
-        .ListRegistryBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListRegistryBySubscription", page)));
+      const page = yield* collectAll(ml.ListRegistryBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((registry) => {
         const group = resourceGroupOf(registry.id);
         return hasAnyAlchemyTag(registry.tags) && group !== undefined && registry.name !== undefined

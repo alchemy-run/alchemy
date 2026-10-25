@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -30,6 +30,7 @@ export interface AccountProps {
   /**
    * Resource group the account is created in. Changing it replaces the
    * account.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -37,6 +38,7 @@ export interface AccountProps {
    * single hyphens, starting with a letter and ending with a letter or
    * digit. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the account.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -56,6 +58,7 @@ export interface AccountProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -88,7 +91,8 @@ export interface Account extends Resource<
 > {}
 
 /**
- * An Artifact Signing (formerly Trusted Signing) account — the top-level
+ * An Artifact Signing (formerly Trusted Signing) account
+ * (`Microsoft.CodeSigning/codeSigningAccounts`) — the top-level
  * container for identity validations and certificate profiles used to sign
  * Windows binaries, MSIX packages, and other artifacts with Microsoft-managed
  * certificates.
@@ -98,15 +102,19 @@ export interface Account extends Resource<
  * `CodeSigningSubscriptionNotSupported`. The monthly SKU fee is billed in
  * full when the account is created.
  *
- * @see https://learn.microsoft.com/azure/artifact-signing/overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the account and
+ * deletes its certificate profiles.
+ * :::
+ *
+ * See [Artifact Signing overview](https://learn.microsoft.com/azure/artifact-signing/overview).
  *
  * ### Creating an Account
  * **Example:** Basic account
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("signing", {
+ * const account = yield* Azure.CodeSigning.Account("signing", {
  *   location: "eastus",
  * });
- * const account = yield* Azure.CodeSigning.Account("signing");
  * // account.accountUri -> "https://eus.codesigning.azure.net/"
  * ```
  *
@@ -121,6 +129,7 @@ export interface Account extends Resource<
  * ### Adding a Certificate Profile
  * **Example:** Public-trust profile for an identity validation
  * ```typescript
+ * const account = yield* Azure.CodeSigning.Account("signing");
  * const profile = yield* Azure.CodeSigning.CertificateProfile("release", {
  *   account: account.accountName,
  *   profileType: "PublicTrust",
@@ -182,11 +191,9 @@ export const AccountProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* codesigning
-        .ListCodeSigningAccountBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListCodeSigningAccountBySubscription", page)),
-        );
+      const page = yield* collectAll(codesigning.ListCodeSigningAccountBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((account) => {
         const group = resourceGroupOf(account.id);
         return hasAnyAlchemyTag(account.tags) && group !== undefined && account.name !== undefined

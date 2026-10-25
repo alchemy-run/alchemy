@@ -7,12 +7,12 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -28,9 +28,15 @@ import { canonicalJson, getMonitor, sameName } from "./common.ts";
 export interface DatadogUserInfo {
   /** Email address of the user (required). */
   emailAddress: string;
-  /** Full name of the user. */
+  /**
+   * Full name of the user.
+   * @default unset
+   */
   name?: string;
-  /** Phone number of the user. */
+  /**
+   * Phone number of the user.
+   * @default unset
+   */
   phoneNumber?: string;
 }
 
@@ -45,19 +51,40 @@ export interface DatadogOrganization {
    * @default the monitor name when creating a new organization
    */
   name?: string;
-  /** ID of an existing Datadog organization to link. */
+  /**
+   * ID of an existing Datadog organization to link.
+   * @default unset
+   */
   id?: string;
-  /** OAuth auth code from Datadog used to link an existing organization. */
+  /**
+   * OAuth auth code from Datadog used to link an existing organization.
+   * @default unset
+   */
   linkingAuthCode?: Redacted.Redacted<string>;
-  /** OAuth client ID that issued `linkingAuthCode`. */
+  /**
+   * OAuth client ID that issued `linkingAuthCode`.
+   * @default unset
+   */
   linkingClientId?: string;
-  /** Redirect URI used when obtaining `linkingAuthCode`. */
+  /**
+   * Redirect URI used when obtaining `linkingAuthCode`.
+   * @default unset
+   */
   redirectUri?: string;
-  /** API key of the existing Datadog organization. */
+  /**
+   * API key of the existing Datadog organization.
+   * @default unset
+   */
   apiKey?: Redacted.Redacted<string>;
-  /** Application key of the existing Datadog organization. */
+  /**
+   * Application key of the existing Datadog organization.
+   * @default unset
+   */
   applicationKey?: Redacted.Redacted<string>;
-  /** ID of the Entra ID enterprise application used for SAML single sign-on. */
+  /**
+   * ID of the Entra ID enterprise application used for SAML single sign-on.
+   * @default unset
+   */
   enterpriseAppId?: string;
 }
 
@@ -65,12 +92,14 @@ export interface MonitorProps {
   /**
    * Resource group the monitor is created in. Changing it replaces the
    * monitor.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the monitor resource, 2-32 letters, digits, `-`, and `_`. If
    * omitted, a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the monitor.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -93,6 +122,7 @@ export interface MonitorProps {
   /**
    * The Datadog organization to create or link. Changing it replaces the
    * monitor.
+   * @default a new Datadog organization
    */
   organization?: DatadogOrganization;
   /**
@@ -110,16 +140,19 @@ export interface MonitorProps {
   /**
    * Collect resource configuration for Datadog Cloud Security Posture
    * Management.
+   * @default unmanaged (Datadog's default)
    */
   cspm?: boolean;
   /**
    * Collect configuration information for every resource in the
    * subscription.
+   * @default unmanaged (Datadog's default)
    */
   resourceCollection?: boolean;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -173,14 +206,18 @@ export interface Monitor extends Resource<
  * sign-on, and monitored subscriptions are managed as children of the
  * monitor.
  *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `sku`, `userInfo`, the
+ * linked `organization`, or `systemAssignedIdentity` replaces the monitor.
+ * Replacing a monitor that created its organization cancels that Datadog
+ * SaaS subscription.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/partner-solutions/datadog/overview
  *
  * ### Creating a Monitor
  * **Example:** Pay-as-you-go Datadog organization
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("observability", {
- *   location: "westus2",
- * });
  * const monitor = yield* Azure.Datadog.Monitor("datadog", {
  *   location: "westus2",
  *   userInfo: { name: "Platform Team", emailAddress: "platform@example.com" },
@@ -268,9 +305,7 @@ export const MonitorProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* datadog
-        .ListMonitors({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListMonitors", page)));
+      const page = yield* collectAll(datadog.ListMonitors, { subscriptionId });
       return (page.value ?? []).flatMap((monitor) => {
         const group = resourceGroupOf(monitor.id);
         return hasAnyAlchemyTag(monitor.tags) && group !== undefined && monitor.name !== undefined

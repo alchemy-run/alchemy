@@ -7,10 +7,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -142,15 +142,11 @@ const findConnection = Effect.fn(function* (
   privateEndpointId: string,
 ) {
   const page = yield* orUndefinedIfNotFound(
-    sql
-      .ListPrivateEndpointConnectionByServer({
-        subscriptionId,
-        resourceGroupName,
-        serverName,
-      })
-      .pipe(
-        Effect.flatMap((page) => requireSinglePage("ListPrivateEndpointConnectionByServer", page)),
-      ),
+    collectAll(sql.ListPrivateEndpointConnectionByServer, {
+      subscriptionId,
+      resourceGroupName,
+      serverName,
+    }),
   );
   return (page?.value ?? []).find((connection) =>
     matchesEndpoint(connection.properties?.privateEndpoint?.id, privateEndpointId),

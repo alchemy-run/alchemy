@@ -1,7 +1,7 @@
 import * as servicefabric from "@distilled.cloud/azure/servicefabric";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Effect from "effect/Effect";
-import { orUndefinedIfNotFound, requireSinglePage, resourceGroupOf } from "../Arm.ts";
+import { collectAll, orUndefinedIfNotFound, resourceGroupOf } from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 
 /** Observe a classic Service Fabric cluster; `undefined` when missing. */
@@ -17,9 +17,7 @@ export const getCluster = (
 /** Every classic cluster in the subscription (children are listed per cluster). */
 export const listClusters = Effect.gen(function* () {
   const { subscriptionId } = yield* AzureEnvironment.current;
-  const page = yield* servicefabric
-    .ListClusters({ subscriptionId })
-    .pipe(Effect.flatMap((page) => requireSinglePage("ListClusters", page)));
+  const page = yield* collectAll(servicefabric.ListClusters, { subscriptionId });
   return (page.value ?? []).flatMap((cluster) => {
     const resourceGroup = resourceGroupOf(cluster.id);
     return resourceGroup !== undefined && cluster.name !== undefined

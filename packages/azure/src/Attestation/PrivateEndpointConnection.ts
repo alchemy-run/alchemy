@@ -6,10 +6,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -40,12 +40,14 @@ export interface PrivateEndpointConnectionProps {
    * ARM resource ID of the private endpoint whose connection is managed —
    * typically `Azure.Network.PrivateEndpoint(...).privateEndpointId`. The
    * connection is looked up by this ID. Changing it replaces the resource.
+   * @default not set (then `name` is required)
    */
   privateEndpointId?: string;
   /**
    * Name of the connection, when known (Azure generates it when the
    * private endpoint is created). Either `name` or `privateEndpointId` is
    * required. Changing it replaces the resource.
+   * @default not set (the connection is looked up by `privateEndpointId`)
    */
   name?: string;
   /**
@@ -57,6 +59,7 @@ export interface PrivateEndpointConnectionProps {
    * Reason shown to the private endpoint owner. Azure Attestation only
    * accepts it together with a status change (e.g. `Pending` → `Approved`,
    * `Approved` → `Rejected`); changing only the description is not applied.
+   * @default no description
    */
   description?: string;
 }
@@ -86,20 +89,33 @@ export interface PrivateEndpointConnection extends Resource<
 
 /**
  * Approves (or rejects) a private endpoint connection to an Azure
- * Attestation provider. The connection itself is created by the private
- * endpoint (`Azure.Network.PrivateEndpoint` targeting the provider with
- * group ID `standard`); this resource takes it over and drives its
- * approval state. Deleting it removes the connection, which disconnects the
- * endpoint.
+ * Attestation provider
+ * (`Microsoft.Attestation/attestationProviders/privateEndpointConnections`).
+ * The connection itself is created by the private endpoint
+ * (`Azure.Network.PrivateEndpoint` targeting the provider with group ID
+ * `standard`); this resource takes it over and drives its approval state.
+ * Deleting it removes the connection, which disconnects the endpoint.
  *
  * The connection is identified by the private endpoint you reference, so
  * Alchemy treats it as owned without tags.
+ *
+ * :::caution
+ * Changing `provider`, `privateEndpointId`, `name`, or `resourceGroup`
+ * replaces the resource.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/attestation/private-endpoint-powershell
  *
  * ### Approving a Private Endpoint
  * **Example:** Manual-approval endpoint, approved by the provider owner
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("endpoints", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
  * const attest = yield* Azure.Attestation.Provider("attest");
  * const endpoint = yield* Azure.Network.PrivateEndpoint("attest-pe", {
  *   subnetId: subnet.subnetId,
@@ -149,9 +165,7 @@ const findConnection = (
     if (name !== undefined) return yield* getConnection(parent, name);
     if (privateEndpointId === undefined) return undefined;
     const page = yield* orUndefinedIfNotFound(
-      attestation
-        .ListPrivateEndpointConnections(parent)
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPrivateEndpointConnections", page))),
+      collectAll(attestation.ListPrivateEndpointConnections, parent),
     );
     return (page?.value ?? []).find((connection) =>
       same(connection.properties?.privateEndpoint?.id, privateEndpointId),

@@ -31,6 +31,7 @@ export interface TopicProps extends OrganizationChildProps {
    * Kafka topic name, 1-249 letters, digits, `.`, `_`, and `-`. If omitted,
    * a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the topic.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -46,6 +47,7 @@ export interface TopicProps extends OrganizationChildProps {
   /**
    * Kafka topic configuration overrides, e.g.
    * `{ "cleanup.policy": "compact", "retention.ms": "86400000" }`.
+   * @default {}
    */
   configs?: Record<string, string>;
 }
@@ -80,20 +82,36 @@ export interface Topic extends Resource<
 > {}
 
 /**
- * A Kafka topic in a Confluent Cloud cluster of an Azure-managed Confluent
- * organization.
+ * A Kafka topic
+ * (`Microsoft.Confluent/organizations/environments/clusters/topics`) in a
+ * Confluent Cloud cluster of an Azure-managed Confluent organization.
  *
  * Topics carry no tags, so Alchemy ownership is inherited from the
  * organization's tags. Partition count and replication factor are fixed at
  * creation; configuration overrides are updated in place.
  *
- * @see https://docs.confluent.io/cloud/current/topics/overview.html
+ * :::caution
+ * Changing `resourceGroup`, `organization`, `environment`, `cluster`,
+ * `name`, `partitionsCount`, or `replicationFactor` replaces the topic
+ * and deletes its messages.
+ * :::
+ *
+ * See [Confluent topics](https://docs.confluent.io/cloud/current/topics/overview.html).
  *
  * ### Creating a Topic
  * **Example:** Topic with six partitions
  * ```typescript
+ * const org = yield* Azure.Confluent.Organization("kafka", {
+ *   userDetail: { emailAddress: "platform@example.com" },
+ * });
+ * const environment = yield* Azure.Confluent.Environment("dev", {
+ *   organization: org.organizationName,
+ * });
+ * const cluster = yield* Azure.Confluent.Cluster("events", {
+ *   organization: org.organizationName,
+ *   environment: environment.environmentId,
+ * });
  * const topic = yield* Azure.Confluent.Topic("orders", {
- *   resourceGroup: org.resourceGroup,
  *   organization: org.organizationName,
  *   environment: environment.environmentId,
  *   cluster: cluster.clusterId,
@@ -105,7 +123,6 @@ export interface Topic extends Resource<
  * **Example:** Compacted topic
  * ```typescript
  * const topic = yield* Azure.Confluent.Topic("customers", {
- *   resourceGroup: org.resourceGroup,
  *   organization: org.organizationName,
  *   environment: environment.environmentId,
  *   cluster: cluster.clusterId,

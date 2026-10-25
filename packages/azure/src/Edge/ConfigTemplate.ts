@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -25,12 +25,16 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState } from "./EdgeShared.ts";
 
 export interface ConfigTemplateProps {
-  /** Resource group the config template is created in. Changing it replaces the config template. */
+  /**
+   * Resource group the config template is created in. Changing it replaces the config template.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /**
    * Name of the config template: 3-24 letters, digits, and `-`. If
    * omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the config template.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -44,6 +48,7 @@ export interface ConfigTemplateProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -74,19 +79,21 @@ export interface ConfigTemplate extends Resource<
 > {}
 
 /**
- * An Azure Arc workload orchestration configuration template. A config
- * template carries shared configuration (with its inline schema) that is
- * linked to hierarchy levels of a context. Its YAML lives in immutable
- * `Azure.Edge.ConfigTemplateVersion` children.
+ * An Azure Arc workload orchestration configuration template
+ * (`Microsoft.Edge/configTemplates`). A config template carries shared
+ * configuration (with its inline schema) that is linked to hierarchy
+ * levels of a context. Its YAML lives in immutable
+ * `Azure.Edge.ConfigTemplateVersion` children. See
+ * [configuring a template](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuring-template).
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuring-template
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the config
+ * template and its versions.
+ * :::
  *
  * ### Creating a Config Template
  * **Example:** Config template with a version
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("edge", {
- *   location: "eastus",
- * });
  * const template = yield* Azure.Edge.ConfigTemplate("common", {
  *   description: "Shared plant configuration",
  * });
@@ -148,11 +155,7 @@ export const ConfigTemplateProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* edge
-        .ListConfigTemplateBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListConfigTemplateBySubscription", page)),
-        );
+      const page = yield* collectAll(edge.ListConfigTemplateBySubscription, { subscriptionId });
       return page.value.flatMap((configTemplate) => {
         const group = resourceGroupOf(configTemplate.id);
         return hasAnyAlchemyTag(configTemplate.tags) &&

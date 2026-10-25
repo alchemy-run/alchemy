@@ -21,7 +21,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { DEVTESTLAB_NAMESPACE, diverges, labLocation } from "./Common.ts";
 
 export interface UserProps {
-  /** Resource group of the lab. Changing it replaces the user. */
+  /**
+   * Resource group of the lab. Changing it replaces the user.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the lab. Changing it replaces the user. */
   lab: string;
@@ -30,11 +33,20 @@ export interface UserProps {
    * name. Changing it replaces the user.
    */
   objectId: string;
-  /** Tenant of the principal. Changing it replaces the user. */
+  /**
+   * Tenant of the principal. Changing it replaces the user.
+   * @default unset
+   */
   tenantId?: string;
-  /** User principal name, e.g. `alice@contoso.com`. Changing it replaces the user. */
+  /**
+   * User principal name, e.g. `alice@contoso.com`. Changing it replaces the user.
+   * @default unset
+   */
   principalName?: string;
-  /** Application ID, for service principals. Changing it replaces the user. */
+  /**
+   * Application ID, for service principals. Changing it replaces the user.
+   * @default unset
+   */
   appId?: string;
   /**
    * Key Vault holding the user's secrets.
@@ -49,6 +61,7 @@ export interface UserProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -81,7 +94,7 @@ export interface User extends Resource<
 > {}
 
 /**
- * A DevTest Labs user profile — holds a principal's secrets, disks,
+ * A DevTest Labs user profile (`Microsoft.DevTestLab/labs/users`) — holds a principal's secrets, disks,
  * environments, and Service Fabric clusters in a lab. Azure creates one
  * when a principal first uses the lab; declare it to manage those
  * children as code. Deleting it deletes the user's lab resources.
@@ -90,11 +103,18 @@ export interface User extends Resource<
  * application service principals of the tenant work, while managed
  * identities are rejected with "User was not found in the tenant."
  *
+ * :::caution
+ * Changing `lab`, `objectId`, `tenantId`, `principalName`, `appId`, or
+ * `resourceGroup` replaces the profile and deletes the user's lab
+ * resources.
+ * :::
+ *
  * @see https://learn.microsoft.com/rest/api/dtl/users
  *
  * ### Registering a User
  * **Example:** Lab profile for a user
  * ```typescript
+ * const lab = yield* Azure.DevTestLabs.Lab("team-lab");
  * const user = yield* Azure.DevTestLabs.User("alice", {
  *   lab: lab.labName,
  *   objectId: "00000000-0000-0000-0000-000000000000", // Entra object ID

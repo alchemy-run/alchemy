@@ -42,12 +42,33 @@ export interface NotificationRecipientUser extends Resource<
  * {@link Notification}. The subscription has no settings; changing the
  * notification or user replaces it. Not available on the Consumption
  * tier.
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/notifications/recipientUsers`.
+ *
+ * :::caution
+ * Changing `serviceName`, `notificationName`, `userName`, or `resourceGroup`
+ * replaces the recipient.
+ *
+ * Notifications are not available on the Consumption tier ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-configure-notifications
  *
  * ### Subscribing a User
  * **Example:** Send quota warnings to an operator account
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const operator = yield* Azure.ApiManagement.User("operator", {
+ *   serviceName: apim.serviceName,
+ *   email: "operator@example.com",
+ *   firstName: "Ops",
+ *   lastName: "Operator",
+ * });
  * yield* Azure.ApiManagement.NotificationRecipientUser("quota-ops", {
  *   serviceName: apim.serviceName,
  *   notificationName: "QuotaLimitApproachingPublisherNotificationMessage",

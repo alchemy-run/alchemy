@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -29,6 +29,7 @@ export interface MigrateProjectProps {
   /**
    * Name of the Migrate project. If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the project.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -44,11 +45,15 @@ export interface MigrateProjectProps {
    * @default "Enabled"
    */
   publicNetworkAccess?: "Enabled" | "Disabled";
-  /** ARM ID of the storage account Azure Migrate uses for replication data. */
+  /**
+   * ARM ID of the storage account Azure Migrate uses for replication data.
+   * @default none
+   */
   utilityStorageAccountId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -81,7 +86,11 @@ export interface MigrateProject extends Resource<
  * that discovery, assessment, and migration tools register with as
  * `Migrate.Solution`s and report their summaries to.
  *
- * @see https://learn.microsoft.com/azure/migrate/create-manage-projects
+ * See the [Azure documentation](https://learn.microsoft.com/azure/migrate/create-manage-projects).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the project.
+ * :::
  *
  * ### Creating a Project
  * **Example:** Migrate project
@@ -148,9 +157,7 @@ export const MigrateProjectProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* migrate
-        .ListProjectBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListProjectBySubscription", page)));
+      const page = yield* collectAll(migrate.ListProjectBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((project) => {
         const group = resourceGroupOf(project.id);
         return hasAnyAlchemyTag(project.tags) && group !== undefined && project.name !== undefined

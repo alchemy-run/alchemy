@@ -11,7 +11,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { isWorkspaceOwnedByStack, lower, syncSetting } from "./common.ts";
 
 export interface WorkspaceAadAdminProps {
-  /** Resource group of the workspace. Changing it replaces the administrator. */
+  /**
+   * Resource group of the workspace. Changing it replaces the administrator.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Synapse workspace. Changing it replaces the administrator. */
   workspace: string;
@@ -55,23 +58,39 @@ export interface WorkspaceAadAdmin extends Resource<
  * (dedicated and serverless) — a user, group, or service principal that can
  * create database users for other Entra identities.
  *
- * A workspace has at most one Entra administrator. Azure makes the
- * identity that created the workspace its initial administrator; this
- * resource replaces it. Destroying the resource removes the administrator.
- * Azure keeps one administrator behind both
+ * A workspace has at most one Entra administrator. Azure makes the identity
+ * that created the workspace its initial administrator; this resource
+ * replaces it. Destroying the resource removes the administrator. Azure
+ * keeps one administrator behind both
  * `Microsoft.Synapse/workspaces/administrators` and
  * `Microsoft.Synapse/workspaces/sqlAdministrators`, so this resource covers
  * both types.
+ *
+ * :::caution
+ * Changing `workspace` or `resourceGroup` replaces the administrator.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/sql/active-directory-authentication
  *
  * ### Setting the Administrator
  * **Example:** Entra group as administrator
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
  * yield* Azure.Synapse.WorkspaceAadAdmin("admin", {
  *   workspace: workspace.workspaceName,
  *   login: "data-admins",
- *   sid: dataAdminsGroupObjectId,
+ *   sid: "2b7f4c1d-8e3a-4f6b-9c0d-1e2f3a4b5c6d", // object ID of the group
  * });
  * ```
  *

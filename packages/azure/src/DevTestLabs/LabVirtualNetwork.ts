@@ -52,7 +52,10 @@ export interface LabSubnetOverride {
 }
 
 export interface LabVirtualNetworkProps {
-  /** Resource group of the lab. Changing it replaces the registration. */
+  /**
+   * Resource group of the lab. Changing it replaces the registration.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the lab. Changing it replaces the registration. */
   lab: string;
@@ -60,6 +63,7 @@ export interface LabVirtualNetworkProps {
    * Name of the lab virtual network. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces
    * the registration.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -67,15 +71,25 @@ export interface LabVirtualNetworkProps {
    * Changing it replaces the registration.
    */
   externalProviderResourceId: string;
-  /** Description of the lab virtual network. */
+  /**
+   * Description of the lab virtual network.
+   * @default unset
+   */
   description?: string;
-  /** Subnets lab VMs may use. */
+  /**
+   * Subnets lab VMs may use.
+   * @default []
+   */
   allowedSubnets?: LabSubnet[];
-  /** Per-subnet settings for lab VM creation and public IPs. */
+  /**
+   * Per-subnet settings for lab VM creation and public IPs.
+   * @default []
+   */
   subnetOverrides?: LabSubnetOverride[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -106,14 +120,28 @@ export interface LabVirtualNetwork extends Resource<
 > {}
 
 /**
- * Registers an existing virtual network with a DevTest Lab so lab VMs can
- * be placed in its subnets.
+ * Registers an existing virtual network with a DevTest Lab
+ * (`Microsoft.DevTestLab/labs/virtualnetworks`) so lab VMs can be placed
+ * in its subnets.
+ *
+ * :::caution
+ * Changing `lab`, `name`, `externalProviderResourceId`, or
+ * `resourceGroup` replaces the registration.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/devtest-labs/devtest-lab-configure-vnet
  *
  * ### Registering a Virtual Network
  * **Example:** Allow lab VMs in one subnet
  * ```typescript
+ * const lab = yield* Azure.DevTestLabs.Lab("team-lab");
+ * const vnet = yield* Azure.Network.VirtualNetwork("lab-vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("lab-vms", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
  * const network = yield* Azure.DevTestLabs.LabVirtualNetwork("net", {
  *   lab: lab.labName,
  *   externalProviderResourceId: vnet.virtualNetworkId,

@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -185,9 +185,7 @@ export const NetworkSecurityGroupProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* network
-        .ListNetworkSecurityGroupAll({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListNetworkSecurityGroupAll", page)));
+      const page = yield* collectAll(network.ListNetworkSecurityGroupAll, { subscriptionId });
       return page.value.flatMap((nsg) => {
         const group = resourceGroupOf(nsg.id);
         return hasAnyAlchemyTag(nsg.tags) && group !== undefined && nsg.name !== undefined

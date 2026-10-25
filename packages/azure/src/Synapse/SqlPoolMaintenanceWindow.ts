@@ -54,18 +54,39 @@ export interface SqlPoolMaintenanceWindow extends Resource<
 > {}
 
 /**
- * The maintenance schedule of a dedicated SQL pool — the two weekly
+ * The maintenance schedule of a dedicated SQL pool
+ * (`Microsoft.Synapse/workspaces/sqlPools/maintenancewindows`) — the two weekly
  * windows in which Azure may apply updates.
  *
  * This is a singleton setting that always exists on a pool. Azure cannot
  * remove a schedule, so destroying the resource leaves the last windows in
  * place.
  *
+ * :::caution
+ * Changing `workspace`, `sqlPool`, or `resourceGroup` replaces the schedule.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/synapse-analytics/sql-data-warehouse/maintenance-scheduling
  *
  * ### Scheduling Maintenance
  * **Example:** Weekend and mid-week windows
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
+ * const pool = yield* Azure.Synapse.SqlPool("dw", {
+ *   workspace: workspace.workspaceName,
+ *   sku: "DW100c",
+ * });
  * yield* Azure.Synapse.SqlPoolMaintenanceWindow("maintenance", {
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,

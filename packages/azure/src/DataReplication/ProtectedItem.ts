@@ -23,7 +23,10 @@ import {
 } from "./Shared.ts";
 
 export interface ProtectedItemProps {
-  /** Resource group of the vault. Changing it replaces the protected item. */
+  /**
+   * Resource group of the vault. Changing it replaces the protected item.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the data replication vault. Changing it replaces the protected item. */
   vault: string;
@@ -31,6 +34,7 @@ export interface ProtectedItemProps {
    * Name of the protected item: letters and digits only. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the protected item.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Name of the replication policy in the vault. Changing it replaces the protected item. */
@@ -102,11 +106,44 @@ export interface ProtectedItem extends Resource<
  * Protected items cannot be tagged; Alchemy treats one as owned when its
  * vault is tagged for the current stack and stage.
  *
+ * :::caution
+ * Changing `vault`, `name`, `policyName`, `replicationExtensionName`,
+ * `customProperties.instanceType`, or `resourceGroup` replaces the
+ * protected item and restarts replication of the machine.
+ * :::
+ *
  * @see https://learn.microsoft.com/rest/api/datareplication/protected-item/create
  *
  * ### Protecting a Machine
  * **Example:** Replicate a Hyper-V VM to Azure Local
  * ```typescript
+ * // IDs reported by the Azure Migrate appliance and the Azure Local cluster.
+ * const discoveredMachineId = "<discovered-machine-arm-id>";
+ * const clusterId = "<azure-local-cluster-arm-id>";
+ * const customLocationId = "<custom-location-arm-id>";
+ * const storageContainerId = "<storage-container-arm-id>";
+ * const runAsAccountId = "<run-as-account-arm-id>";
+ * const vault = yield* Azure.DataReplication.Vault("vault");
+ * const policy = yield* Azure.DataReplication.Policy("policy", {
+ *   vault: vault.vaultName,
+ *   customProperties: {
+ *     instanceType: "HyperVToAzStackHCI",
+ *     recoveryPointHistoryInMinutes: 4320,
+ *     crashConsistentFrequencyInMinutes: 60,
+ *     appConsistentFrequencyInMinutes: 240,
+ *   },
+ * });
+ * const extension = yield* Azure.DataReplication.ReplicationExtension("ext", {
+ *   vault: vault.vaultName,
+ *   customProperties: {
+ *     instanceType: "HyperVToAzStackHCI",
+ *     hyperVFabricArmId: "<hyperv-fabric-arm-id>",
+ *     azStackHciFabricArmId: "<azure-local-fabric-arm-id>",
+ *   },
+ * });
+ * const targetGroup = yield* Azure.Resources.ResourceGroup("migrated", {
+ *   location: "westus2",
+ * });
  * const item = yield* Azure.DataReplication.ProtectedItem("web01", {
  *   vault: vault.vaultName,
  *   policyName: policy.policyName,

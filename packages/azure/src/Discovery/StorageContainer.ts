@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -52,12 +52,14 @@ export interface StorageContainerProps {
   /**
    * Resource group the storage container is created in. Changing it
    * replaces the storage container.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Storage container name: 3-24 letters, digits, and hyphens. If omitted,
    * a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the storage container.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -73,6 +75,7 @@ export interface StorageContainerProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -106,8 +109,16 @@ export interface StorageContainer extends Resource<
  * account or Azure NetApp Files volume as a data source that Discovery
  * projects and storage assets reference.
  *
- * Microsoft Discovery is a gated preview: on subscriptions without the
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `storageStore.kind`, the
+ * store resource ID, or `storageStore.mountProtocol` replaces the
+ * container.
+ * :::
+ *
+ * :::caution
+ * Microsoft Discovery is a gated preview. On subscriptions without the
  * preview, ARM rejects the resource type with `InvalidResourceType`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/microsoft-discovery/
  *
@@ -125,6 +136,8 @@ export interface StorageContainer extends Resource<
  *
  * **Example:** Azure NetApp Files volume
  * ```typescript
+ * // ARM ID of an existing Azure NetApp Files volume.
+ * const volumeId = "<netapp-volume-arm-id>";
  * const container = yield* Azure.Discovery.StorageContainer("hpc", {
  *   storageStore: { kind: "AzureNetAppFiles", netAppVolumeId: volumeId },
  * });
@@ -186,10 +199,9 @@ export const StorageContainerProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* discovery.ListStorageContainerBySubscription({ subscriptionId }).pipe(
-        Effect.flatMap((page) => requireSinglePage("ListStorageContainerBySubscription", page)),
-        Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)),
-      );
+      const page = yield* collectAll(discovery.ListStorageContainerBySubscription, {
+        subscriptionId,
+      }).pipe(Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)));
       return (page?.value ?? []).flatMap((observed) => {
         const group = resourceGroupOf(observed.id);
         return hasAnyAlchemyTag(observed.tags) && group !== undefined && observed.name !== undefined

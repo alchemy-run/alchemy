@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -423,9 +423,7 @@ export const VirtualMachineProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* compute
-        .ListVirtualMachineAll({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListVirtualMachineAll", page)));
+      const page = yield* collectAll(compute.ListVirtualMachineAll, { subscriptionId });
       return page.value.flatMap((vm) => {
         const resourceGroup = resourceGroupOf(vm.id);
         return hasAnyAlchemyTag(vm.tags) && resourceGroup !== undefined && vm.name !== undefined

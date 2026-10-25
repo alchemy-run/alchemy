@@ -38,6 +38,7 @@ export interface VolumeQuotaRuleProps {
   /**
    * Rule name. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the rule.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Kind of quota. Changing it replaces the rule. */
@@ -46,6 +47,7 @@ export interface VolumeQuotaRuleProps {
    * UID / GID (NFS) or SID (SMB) the quota applies to. Required for
    * individual quotas, omitted for default quotas. Changing it replaces the
    * rule.
+   * @default none
    */
   quotaTarget?: string;
   /** Quota size in KiB (at least 4). */
@@ -53,6 +55,7 @@ export interface VolumeQuotaRuleProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -93,11 +96,37 @@ export interface VolumeQuotaRule extends Resource<
  * per-group capacity limit inside a volume. Quota rules are deleted
  * together with their volume.
  *
- * @see https://learn.microsoft.com/azure/azure-netapp-files/manage-default-individual-user-group-quotas
+ * ARM type:
+ * `Microsoft.NetApp/netAppAccounts/capacityPools/volumes/volumeQuotaRules`. See
+ * the [Azure
+ * documentation](https://learn.microsoft.com/azure/azure-netapp-files/manage-default-individual-user-group-quotas).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `account`, `pool`, `volume`, `name`, `quotaType`,
+ * or `quotaTarget` replaces the rule.
+ * :::
  *
  * ### Default Quotas
  * **Example:** Limit every user to 10 GiB
  * ```typescript
+ * const account = yield* Azure.NetApp.Account("files");
+ * const pool = yield* Azure.NetApp.CapacityPool("pool", {
+ *   account: account.accountName,
+ * });
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("anf", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ *   delegations: [{ serviceName: "Microsoft.NetApp/volumes" }],
+ * });
+ * const volume = yield* Azure.NetApp.Volume("data", {
+ *   account: account.accountName,
+ *   pool: pool.poolName,
+ *   subnetId: subnet.subnetId,
+ *   usageThreshold: 100 * Azure.NetApp.GiB,
+ * });
  * const rule = yield* Azure.NetApp.VolumeQuotaRule("per-user", {
  *   account: account.accountName,
  *   pool: pool.poolName,

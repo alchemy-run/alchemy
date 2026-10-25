@@ -26,7 +26,10 @@ import {
 } from "./internal.ts";
 
 export interface SharedPrivateLinkResourceProps {
-  /** Resource group of the SignalR service. Changing it replaces the link. */
+  /**
+   * Resource group of the SignalR service. Changing it replaces the link.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * SignalR service that makes outbound calls over the link. Needs the
@@ -37,6 +40,7 @@ export interface SharedPrivateLinkResourceProps {
    * Name of the shared private link resource. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * link.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -49,6 +53,7 @@ export interface SharedPrivateLinkResourceProps {
   /**
    * Message shown to the target's owner when approving the connection.
    * Changing it replaces the link.
+   * @default no message
    */
   requestMessage?: string;
 }
@@ -83,36 +88,46 @@ export interface SharedPrivateLinkResource extends Resource<
 > {}
 
 /**
- * A shared private link resource of an Azure SignalR Service: a managed
- * private endpoint the service uses for outbound calls (serverless
- * upstreams, Key Vault certificate references) to a private target such as
- * a Function App. The target's owner must approve the resulting private
- * endpoint connection before traffic flows; until then `status` is
- * `Pending`.
+ * A shared private link resource of an Azure SignalR Service
+ * (`Microsoft.SignalRService/signalR/sharedPrivateLinkResources`): a managed
+ * private endpoint the service uses for outbound calls to a private target,
+ * such as a Function App. Serverless upstreams and Key Vault certificate
+ * references use it. See the
+ * [Azure docs](https://learn.microsoft.com/azure/azure-signalr/howto-shared-private-endpoints).
  *
- * @see https://learn.microsoft.com/azure/azure-signalr/howto-shared-private-endpoints
+ * :::caution
+ * The service needs the `Standard_S1` tier or higher. The target's owner must
+ * approve the private endpoint connection before traffic flows. Until then,
+ * `status` is `Pending`.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `signalR`, `name`, `groupId`,
+ * `privateLinkResourceId`, or `requestMessage` replaces the link.
+ * :::
  *
  * ### Reaching a Private Target
- * **Example:** Private link to a Function App
+ * **Example:** Private link to a Key Vault
  * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("secrets");
  * const signalR = yield* Azure.SignalR.SignalR("realtime", {
  *   sku: "Standard_S1",
- *   serviceMode: "Serverless",
  * });
+ * const link = yield* Azure.SignalR.SharedPrivateLinkResource("vault", {
+ *   signalR: signalR.signalRName,
+ *   groupId: "vault",
+ *   privateLinkResourceId: vault.vaultId,
+ *   requestMessage: "SignalR certificate access",
+ * });
+ * ```
+ *
+ * **Example:** Private link to a Function App
+ * ```typescript
  * const link = yield* Azure.SignalR.SharedPrivateLinkResource("func", {
  *   signalR: signalR.signalRName,
  *   groupId: "sites",
  *   privateLinkResourceId: functionApp.siteId,
  *   requestMessage: "SignalR upstream",
- * });
- * ```
- *
- * **Example:** Private link to a Key Vault
- * ```typescript
- * const link = yield* Azure.SignalR.SharedPrivateLinkResource("vault", {
- *   signalR: signalR.signalRName,
- *   groupId: "vault",
- *   privateLinkResourceId: vault.vaultId,
  * });
  * ```
  *

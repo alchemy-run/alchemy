@@ -1,4 +1,5 @@
 import * as Azure from "@alchemy.run/azure";
+import type { Input } from "alchemy/Input";
 import * as Effect from "effect/Effect";
 import { flexStorage } from "./flex-app.ts";
 
@@ -48,9 +49,9 @@ export const windowsFunctionApp = (connection: string) =>
  * in place through ARM (`Azure.Web.SiteFunction`).
  */
 export const slotFunction = (props: {
-  resourceGroup: string;
-  functionAppName: string;
-  slot: string;
+  resourceGroup: Input<string>;
+  functionAppName: Input<string>;
+  slot: Input<string>;
 }) =>
   Azure.Web.SiteFunction("Hello", {
     resourceGroup: props.resourceGroup,

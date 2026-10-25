@@ -29,7 +29,10 @@ export type SchemaFormat = deviceregistry.Format;
 export type SchemaKind = deviceregistry.SchemaType;
 
 export interface SchemaProps {
-  /** Resource group of the schema registry. Changing it replaces the schema. */
+  /**
+   * Resource group of the schema registry. Changing it replaces the schema.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the parent schema registry. Changing it replaces the schema. */
   schemaRegistry: string;
@@ -37,6 +40,7 @@ export interface SchemaProps {
    * Schema name: 3-63 lowercase letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the schema.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -48,14 +52,21 @@ export interface SchemaProps {
    * @default "MessageSchema"
    */
   schemaType?: SchemaKind;
-  /** Human-readable display name. */
+  /**
+   * Human-readable display name.
+   * @default unset
+   */
   displayName?: string;
-  /** Human-readable description. */
+  /**
+   * Human-readable description.
+   * @default unset
+   */
   description?: string;
   /**
    * User tags stored on the schema (`properties.tags`). Alchemy ownership
    * tags (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) are merged in
    * automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -90,18 +101,31 @@ export interface Schema extends Resource<
 > {}
 
 /**
- * A message schema in an Azure Device Registry schema registry. The schema
+ * A message schema in an Azure Device Registry schema registry
+ * (`Microsoft.DeviceRegistry/schemaRegistries/schemas`). The schema
  * holds metadata; its content lives in immutable
  * {@link SchemaVersion | schema versions}.
  *
  * Schemas have no ARM tags, so Alchemy records ownership in the schema's
  * own `properties.tags`.
  *
+ * :::caution
+ * Changing `schemaRegistry`, `name`, `format`, `schemaType`, or
+ * `resourceGroup` replaces the schema.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/iot-operations/connect-to-cloud/concept-schema-registry
  *
  * ### Creating a Schema
  * **Example:** JSON Schema message schema
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("schemas");
+ * const container = yield* Azure.Storage.BlobContainer("schemas", {
+ *   storageAccount: account.storageAccountName,
+ * });
+ * const registry = yield* Azure.DeviceRegistry.SchemaRegistry("registry", {
+ *   storageAccountContainerUrl: Output.interpolate`${account.primaryEndpoints.blob}${container.containerName}`,
+ * });
  * const schema = yield* Azure.DeviceRegistry.Schema("telemetry", {
  *   schemaRegistry: registry.schemaRegistryName,
  *   format: "JsonSchema/draft-07",

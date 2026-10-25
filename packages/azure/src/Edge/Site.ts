@@ -24,39 +24,71 @@ import { EDGE_WAIT, edgeState, sameJson } from "./EdgeShared.ts";
 
 /** Physical address of an Azure Arc site. */
 export interface SiteAddress {
-  /** First line of the street address. */
+  /**
+   * First line of the street address.
+   * @default none
+   */
   streetAddress1?: string;
-  /** Second line of the street address. */
+  /**
+   * Second line of the street address.
+   * @default none
+   */
   streetAddress2?: string;
-  /** City. */
+  /**
+   * City.
+   * @default none
+   */
   city?: string;
-  /** State or province. */
+  /**
+   * State or province.
+   * @default none
+   */
   stateOrProvince?: string;
-  /** Country. */
+  /**
+   * Country.
+   * @default none
+   */
   country?: string;
-  /** Postal or ZIP code. */
+  /**
+   * Postal or ZIP code.
+   * @default none
+   */
   postalCode?: string;
 }
 
 export interface SiteProps {
-  /** Resource group the site is created in. Changing it replaces the site. */
+  /**
+   * Resource group the site is created in. Changing it replaces the site.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /**
    * Name of the site: 4-24 letters, digits, `-`, and `_`, starting and
    * ending with a letter or digit. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the site.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name of the site. */
+  /**
+   * Display name of the site.
+   * @default none
+   */
   displayName?: string;
-  /** Description of the site. */
+  /**
+   * Description of the site.
+   * @default none
+   */
   description?: string;
-  /** Physical address of the site. */
+  /**
+   * Physical address of the site.
+   * @default none
+   */
   siteAddress?: SiteAddress;
   /**
    * User labels. Sites have no ARM tags, so Alchemy ownership markers
    * (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) are merged into the
    * labels.
+   * @default {}
    */
   labels?: Record<string, string>;
 }
@@ -87,16 +119,19 @@ export interface Site extends Resource<
 > {}
 
 /**
- * An Azure Arc site manager site at resource-group scope. A site groups the
- * Arc resources of one physical location (a factory, a store) so they can
- * be monitored and managed together, and it is the hierarchy level that
- * workload orchestration contexts reference.
+ * An Azure Arc site manager site at resource-group scope
+ * (`Microsoft.Edge/sites`). A site groups the Arc resources of one physical
+ * location (a factory, a store) so they can be monitored and managed
+ * together, and it is the hierarchy level that workload orchestration
+ * contexts reference. See the
+ * [site manager overview](https://learn.microsoft.com/azure/azure-arc/site-manager/overview).
  *
- * Azure allows one site per resource group, so renaming a site deletes
- * the old one before creating the new one. Sites have no ARM tags; Alchemy
- * records ownership in the site's labels.
+ * Sites have no ARM tags; Alchemy records ownership in the site's labels.
  *
- * @see https://learn.microsoft.com/azure/azure-arc/site-manager/overview
+ * :::caution
+ * Changing `resourceGroup` or `name` replaces the site. Azure allows one
+ * site per resource group, so a rename deletes the old site first.
+ * :::
  *
  * ### Creating a Site
  * **Example:** Site with an address

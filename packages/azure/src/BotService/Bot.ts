@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -35,6 +35,7 @@ export interface BotProps {
    * Bot handle: 4-42 letters, digits, `-`, `_`, and `.`, globally unique
    * across Azure. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the bot.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -58,9 +59,15 @@ export interface BotProps {
    * @default the bot name
    */
   displayName?: string;
-  /** Description of the bot. */
+  /**
+   * Description of the bot.
+   * @default no description
+   */
   description?: string;
-  /** URL of the bot's icon. */
+  /**
+   * URL of the bot's icon.
+   * @default not set
+   */
   iconUrl?: string;
   /**
    * Messaging endpoint the Bot Framework posts activities to, e.g.
@@ -90,21 +97,43 @@ export interface BotProps {
   /**
    * ARM resource ID of the user-assigned managed identity
    * (`UserAssignedMSI` only). Changing it replaces the bot.
+   * @default not set
    */
   msaAppMSIResourceId?: string;
-  /** Application Insights instrumentation key for bot analytics. */
+  /**
+   * Application Insights instrumentation key for bot analytics.
+   * @default not set
+   */
   developerAppInsightKey?: string;
-  /** Application Insights API key for bot analytics. */
+  /**
+   * Application Insights API key for bot analytics.
+   * @default not set
+   */
   developerAppInsightsApiKey?: Redacted.Redacted<string>;
-  /** Application Insights application ID for bot analytics. */
+  /**
+   * Application Insights application ID for bot analytics.
+   * @default not set
+   */
   developerAppInsightsApplicationId?: string;
-  /** LUIS app IDs used by the bot. */
+  /**
+   * LUIS app IDs used by the bot.
+   * @default none
+   */
   luisAppIds?: string[];
-  /** LUIS key. */
+  /**
+   * LUIS key.
+   * @default not set
+   */
   luisKey?: Redacted.Redacted<string>;
-  /** Whether customer-managed key encryption is enabled. */
+  /**
+   * Whether customer-managed key encryption is enabled.
+   * @default not set (Azure's default applies)
+   */
   isCmekEnabled?: boolean;
-  /** Key Vault key URL used for customer-managed key encryption. */
+  /**
+   * Key Vault key URL used for customer-managed key encryption.
+   * @default not set
+   */
   cmekKeyVaultUrl?: string;
   /**
    * Whether the bot is reachable from public networks.
@@ -114,15 +143,23 @@ export interface BotProps {
   /**
    * Opt out of local authentication so that only managed identity and Entra
    * ID can authenticate.
+   * @default not set (Azure's default applies)
    */
   disableLocalAuth?: boolean;
-  /** Whether the bot supports streaming (Direct Line App Service extension). */
+  /**
+   * Whether the bot supports streaming (Direct Line App Service extension).
+   * @default not set (Azure's default applies)
+   */
   isStreamingSupported?: boolean;
-  /** Channel schema transformation version, e.g. `1.3`. */
+  /**
+   * Channel schema transformation version, e.g. `1.3`.
+   * @default not set
+   */
   schemaTransformationVersion?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -169,8 +206,15 @@ export interface Bot extends Resource<
 /**
  * An Azure Bot — a Bot Framework registration that connects a bot's
  * messaging endpoint to channels (Web Chat, Direct Line, Teams, Slack, ...).
+ * The ARM type is `Microsoft.BotService/botServices`.
  *
  * The bot authenticates as a user-assigned managed identity by default.
+ *
+ * :::caution
+ * Changing `name`, `location`, `kind`, `msaAppType`, `msaAppId`,
+ * `msaAppTenantId`, `msaAppMSIResourceId`, or `resourceGroup` replaces the
+ * bot.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/bot-service/abs-quickstart
  *
@@ -189,6 +233,7 @@ export interface Bot extends Resource<
  * ### Configuring the Bot
  * **Example:** Display name, description, and Standard tier
  * ```typescript
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("bot-id");
  * const bot = yield* Azure.BotService.Bot("support", {
  *   msaAppId: identity.clientId,
  *   msaAppMSIResourceId: identity.identityId,
@@ -234,9 +279,7 @@ export const BotProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* botservice
-        .ListBots({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListBots", page)));
+      const page = yield* collectAll(botservice.ListBots, { subscriptionId });
       return (page.value ?? []).flatMap((bot) => {
         const group = resourceGroupOf(bot.id);
         return hasAnyAlchemyTag(bot.tags) && group !== undefined && bot.name !== undefined

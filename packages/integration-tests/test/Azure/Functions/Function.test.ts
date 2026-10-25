@@ -1,14 +1,17 @@
 import * as Azure from "@alchemy.run/azure";
 import * as authorization from "@distilled.cloud/azure/authorization";
+import * as cosmos from "@distilled.cloud/azure/cosmos_db";
 import * as web from "@distilled.cloud/azure/web";
 import * as Alchemy from "alchemy";
 import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
 import { AsyncContainer, AsyncFunction } from "./fixtures/async-stack.ts";
+import CosmosFunction, { CosmosAccount } from "./fixtures/cosmos-function.ts";
 import EffectFunction from "./fixtures/effect-function.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -86,7 +89,10 @@ const roleAssignmentsOf = (principalId: string) =>
       _filter: `principalId eq '${principalId}'`,
     });
     return page.value
-      .map((a) => `${a.properties?.scope?.toLowerCase()}|${a.properties?.roleDefinitionId?.split("/").pop()}`)
+      .map(
+        (a) =>
+          `${a.properties?.scope?.toLowerCase()}|${a.properties?.roleDefinitionId?.split("/").pop()}`,
+      )
       .sort();
   });
 
@@ -169,7 +175,11 @@ test.provider(
 
       const { subscriptionId } = yield* Azure.AzureEnvironment.current;
       const functions = yield* web
-        .ListWebAppFunctions({ subscriptionId, resourceGroupName: out.resourceGroup, name: out.name })
+        .ListWebAppFunctions({
+          subscriptionId,
+          resourceGroupName: out.resourceGroup,
+          name: out.name,
+        })
         .pipe(
           Effect.map((page) =>
             (page.value ?? []).map((f) => (f.name ?? "").split("/").pop() ?? "").sort(),
@@ -189,9 +199,30 @@ test.provider(
           "queue-FnJobs",
           "sbq-FnOrders",
           "sbs-FnAudit",
-          "timer-yearly",
+          "timer-minutely",
         ].sort(),
       );
+    }),
+  { timeout: 600_000 },
+);
+
+test.provider(
+  "Functions.schedule runs the handler on its schedule",
+  (_stack) =>
+    Effect.gen(function* () {
+      const out = yield* effect;
+      const since = Date.now() - 60_000;
+      // The timer fires every minute; wait for a run after this test began.
+      const recorded = yield* pollOk(`${out.url}/result?key=timer/last`).pipe(
+        Effect.map((body) => JSON.parse(body) as { at: string; isPastDue: boolean }),
+        Effect.repeat({
+          schedule: Schedule.spaced("15 seconds"),
+          until: (run) => Date.parse(run.at) >= since,
+          times: 12,
+        }),
+      );
+      expect(Date.parse(recorded.at)).toBeGreaterThanOrEqual(since);
+      expect(recorded.isPastDue).toBe(false);
     }),
   { timeout: 600_000 },
 );
@@ -274,6 +305,59 @@ test.provider(
   { timeout: 600_000 },
 );
 
+// Serverless Cosmos DB account in centralus (~$0; ~3 min create, ~8 min
+// delete) + a second function app; ~17 min.
+test.provider(
+  "CosmosDB.ChangeFeedEventSource runs the handler for a written document",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const out = yield* stack.deploy(
+        Effect.gen(function* () {
+          const fn = yield* CosmosFunction;
+          const account = yield* CosmosAccount;
+          return {
+            url: fn.url,
+            name: fn.functionAppName,
+            resourceGroup: fn.resourceGroup,
+            principalId: fn.principalId,
+            accountName: account.accountName,
+            cosmosGroup: account.resourceGroup,
+          };
+        }),
+      );
+
+      // Out of band: the event source assigned the Cosmos data role.
+      const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+      const assignments = yield* cosmos.ListSqlResourceSqlRoleAssignments({
+        subscriptionId,
+        resourceGroupName: out.cosmosGroup,
+        accountName: out.accountName,
+      });
+      expect(
+        (assignments.value ?? [])
+          .filter((a) => a.properties?.principalId === out.principalId)
+          .map((a) => a.properties?.roleDefinitionId?.split("/").pop()),
+      ).toEqual([Azure.CosmosDB.SqlBuiltInRole.DataContributor]);
+
+      const id = runId("c");
+      // Cosmos data-plane roles can take minutes to apply.
+      yield* pollOk(`${out.url}/cosmos/write?id=${id}`);
+      // The change feed listener starts once the data role applies (~5 min
+      // seen): poll for up to 10 minutes.
+      const recorded = JSON.parse(
+        yield* pollOk(`${out.url}/result?key=cosmos/${id}`).pipe(
+          Effect.retry({ schedule: Schedule.spaced("10 seconds"), times: 30 }),
+        ),
+      );
+      expect(recorded.batch).toBeGreaterThanOrEqual(1);
+
+      yield* stack.destroy();
+      expect(yield* siteGone(out.resourceGroup, out.name)).toBe("gone");
+    }),
+  { timeout: 1_800_000 },
+);
+
 test.provider(
   "redeploying the effect function keeps its role assignments",
   (_stack) =>
@@ -281,28 +365,40 @@ test.provider(
       const out = yield* effect;
       expect(out.principalId).toMatch(/^[0-9a-f-]{36}$/);
       const before = yield* roleAssignmentsOf(out.principalId!);
-      // Host storage (3) + the fixture's producer grants (6) + event sources
-      // (Jobs ×2, Orders, Audit, Telemetry).
-      expect(before.length).toBe(14);
+      // Host storage (3) + bindings (10: Files Write and ReadWrite share one
+      // Contributor grant) + the topic sender + event sources (Jobs ×2,
+      // Orders, Audit, Telemetry).
+      expect(before.length).toBe(19);
 
       // A changed env value updates the app in place.
-      process.env.AZURE_FN_EFFECT_GREETING = "hi";
+      const config = yield* ConfigProvider.ConfigProvider;
       const redeployed = yield* deploy(EffectStack).pipe(
-        Effect.ensuring(Effect.sync(() => delete process.env.AZURE_FN_EFFECT_GREETING)),
+        Effect.provideService(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.orElse(
+            ConfigProvider.fromEnv({ env: { AZURE_FN_EFFECT_GREETING: "hi" } }),
+            config,
+          ),
+        ),
       );
       expect(redeployed.name).toBe(out.name);
-      expect(yield* pollOk(`${out.url}/hello`).pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("10 seconds"),
-          until: (body) => body === "hi from azure",
-          times: 12,
-        }),
-      )).toBe("hi from azure");
+      expect(
+        yield* pollOk(`${out.url}/hello`).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("10 seconds"),
+            until: (body) => body === "hi from azure",
+            times: 12,
+          }),
+        ),
+      ).toBe("hi from azure");
 
       expect(yield* roleAssignmentsOf(out.principalId!)).toEqual(before);
       // …and the bindings still work with them.
       yield* fetchOk(`${out.url}/blob/write?key=redeploy.txt&value=still-here`);
-      expect(yield* fetchOk(`${out.url}/blob/read?key=redeploy.txt`)).toBe("still-here");
+      const read = JSON.parse(yield* fetchOk(`${out.url}/blob/read?key=redeploy.txt`)) as {
+        result: { text: string };
+      };
+      expect(read.result.text).toBe("still-here");
     }),
-  { timeout: 900_000, exclusive: true },
+  { timeout: 900_000 },
 );

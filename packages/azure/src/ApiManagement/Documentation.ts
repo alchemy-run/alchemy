@@ -47,12 +47,25 @@ export interface Documentation extends Resource<
  * A Markdown documentation page of an API Management service. Wikis
  * ({@link ApiWiki}, {@link ProductWiki}) list pages to show them with an
  * API or product in the developer portal.
+ * The ARM type is `Microsoft.ApiManagement/service/documentations`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the page.
+ *
+ * Azure does not serve the documentation routes yet: PUT and GET answer an
+ * empty 404 on Consumption, Developer, BasicV2, and Premium services.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/apimanagement/documentation
  *
  * ### Writing Documentation
  * **Example:** A getting-started page
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const page = yield* Azure.ApiManagement.Documentation("getting-started", {
  *   serviceName: apim.serviceName,
  *   title: "Getting started",

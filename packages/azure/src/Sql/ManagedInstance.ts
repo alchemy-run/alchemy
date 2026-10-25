@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -299,9 +299,7 @@ export const ManagedInstanceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* sql
-        .ListManagedInstances({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListManagedInstances", page)));
+      const page = yield* collectAll(sql.ListManagedInstances, { subscriptionId });
       return (page.value ?? []).flatMap((mi) => {
         const group = resourceGroupOf(mi.id);
         return hasAnyAlchemyTag(mi.tags) && group !== undefined && mi.name !== undefined

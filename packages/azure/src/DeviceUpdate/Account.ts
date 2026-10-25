@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -50,12 +50,16 @@ export interface DeviceUpdateAccountEncryption {
 }
 
 export interface AccountProps {
-  /** Resource group the account is created in. Changing it replaces the account. */
+  /**
+   * Resource group the account is created in. Changing it replaces the account.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Account name: 3-24 letters, digits, and single hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the account.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -70,8 +74,9 @@ export interface AccountProps {
    */
   sku?: DeviceUpdateSku;
   /**
-   * Customer-managed key encryption. Set only at creation; changing it
-   * replaces the account.
+   * Customer-managed key encryption. Set only at creation: Alchemy does
+   * not apply a later change.
+   * @default Microsoft-managed keys
    */
   encryption?: DeviceUpdateAccountEncryption;
   /**
@@ -82,11 +87,13 @@ export interface AccountProps {
   /**
    * Managed identities of the account. When omitted the account keeps its
    * current identity.
+   * @default unmanaged (no identity on create)
    */
   identity?: DeviceUpdateAccountIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -121,9 +128,15 @@ export interface Account extends Resource<
 > {}
 
 /**
- * A Device Update for IoT Hub account — the top-level container for
+ * A Device Update for IoT Hub account (`Microsoft.DeviceUpdate/accounts`)
+ * — the top-level container for
  * over-the-air update instances. Connect an account to IoT Hubs through
  * `Azure.DeviceUpdate.Instance`.
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, or `sku` replaces the
+ * account.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/iot-hub-device-update/understand-device-update
  *
@@ -249,9 +262,7 @@ export const AccountProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* deviceupdate
-        .ListAccountBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListAccountBySubscription", page)));
+      const page = yield* collectAll(deviceupdate.ListAccountBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((account) => {
         const group = resourceGroupOf(account.id);
         return hasAnyAlchemyTag(account.tags) && group !== undefined && account.name !== undefined

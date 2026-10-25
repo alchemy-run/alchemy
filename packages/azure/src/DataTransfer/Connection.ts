@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -33,12 +33,16 @@ import {
 } from "./Common.ts";
 
 export interface ConnectionProps {
-  /** Resource group the connection is created in. Changing it replaces the connection. */
+  /**
+   * Resource group the connection is created in. Changing it replaces the connection.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Name of the connection, 3-64 letters, digits, and `-`. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the connection.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -54,36 +58,56 @@ export interface ConnectionProps {
   /**
    * Direction of data movement through the pipeline. Changing it replaces
    * the connection.
+   * @default unset (Azure's default)
    */
   direction?: "Send" | "Receive";
   /**
    * Business justification shown to the pipeline approver. Changing it
    * replaces the connection.
+   * @default no justification
    */
   justification?: string;
-  /** Requirement ID of the connection. Changing it replaces the connection. */
+  /**
+   * Requirement ID of the connection. Changing it replaces the connection.
+   * @default unset
+   */
   requirementId?: string;
   /**
    * Subscription ID in the remote cloud to link with. Changing it replaces
    * the connection.
+   * @default unset
    */
   remoteSubscriptionId?: string;
-  /** PIN used to link the request with its remote counterpart. Changing it replaces the connection. */
+  /**
+   * PIN used to link the request with its remote counterpart. Changing it replaces the connection.
+   * @default unset
+   */
   pin?: string;
-  /** Primary contact for the connection request. Changing it replaces the connection. */
+  /**
+   * Primary contact for the connection request. Changing it replaces the connection.
+   * @default unset
+   */
   primaryContact?: string;
-  /** Secondary contacts for the connection request. Changing them replaces the connection. */
+  /**
+   * Secondary contacts for the connection request. Changing them replaces the connection.
+   * @default []
+   */
   secondaryContacts?: string[];
   /**
    * Flow types requested for the connection (e.g. `Mission`, `Messaging`).
    * Changing them replaces the connection.
+   * @default unset (Azure's default)
    */
   flowTypes?: string[];
-  /** Managed identity of the connection. Omit to leave it unmanaged. */
+  /**
+   * Managed identity of the connection. Omit to leave it unmanaged.
+   * @default unmanaged
+   */
   identity?: DataTransferIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -128,15 +152,23 @@ export interface Connection extends Resource<
 > {}
 
 /**
- * An Azure Data Transfer connection — a request to use a pipeline for
- * moving data in one direction. The pipeline owner approves the request;
- * flows can only be created on an approved connection.
+ * An Azure Data Transfer connection
+ * (`Microsoft.AzureDataTransfer/connections`) — a request to use a
+ * pipeline for moving data in one direction. The pipeline owner approves
+ * the request; flows can only be created on an approved connection.
  *
- * The connection PUT is create-only (Azure rejects a second PUT with
- * `DataTransferConnectionAlreadyExists`), so every request property
- * replaces the connection; tags and identity are patched in place. A
- * connection whose pipeline does not exist ends in provisioning state
+ * A connection whose pipeline does not exist ends in provisioning state
  * `Failed`, which surfaces as `Azure.ProvisioningFailed`.
+ *
+ * :::caution
+ * The connection PUT is create-only (Azure rejects a second PUT with
+ * `DataTransferConnectionAlreadyExists`). Changing any request prop
+ * replaces the connection: `name`, `location`, `resourceGroup`,
+ * `pipeline`, `direction`, `justification`, `requirementId`,
+ * `remoteSubscriptionId`, `pin`, `primaryContact`, `secondaryContacts`,
+ * or `flowTypes`. The new connection needs approval again. Tags and
+ * identity are patched in place.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-data-transfer/
  *
@@ -210,9 +242,7 @@ export const ConnectionProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* adt
-        .ListConnectionBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListConnectionBySubscription", page)));
+      const page = yield* collectAll(adt.ListConnectionBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((connection) => {
         const group = resourceGroupOf(connection.id);
         return hasAnyAlchemyTag(connection.tags) &&

@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -39,6 +39,7 @@ export interface IpPrefixProps {
   /**
    * Name of the IP prefix list. If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the list.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -51,11 +52,15 @@ export interface IpPrefixProps {
    * matches, e.g. `{ action: "Permit", sequenceNumber: 10, networkPrefix: "10.0.0.0/8" }`.
    */
   ipPrefixRules: IpPrefixRule[];
-  /** Free-form description of the list. */
+  /**
+   * Free-form description of the list.
+   * @default none
+   */
   annotation?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -95,7 +100,12 @@ export interface IpPrefix extends Resource<
  * plain ARM configuration; it is pushed to fabric devices only when a
  * route policy on a Network Fabric references it.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-route-policy
+ * ARM type: `Microsoft.ManagedNetworkFabric/ipPrefixes`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-route-policy).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the prefix list.
+ * :::
  *
  * ### Creating an IP Prefix List
  * **Example:** Permit the 10.0.0.0/8 range
@@ -154,9 +164,7 @@ export const IpPrefixProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mnf
-        .ListIpPrefixBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListIpPrefixBySubscription", page)));
+      const page = yield* collectAll(mnf.ListIpPrefixBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

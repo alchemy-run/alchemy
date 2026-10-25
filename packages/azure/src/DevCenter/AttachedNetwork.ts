@@ -18,7 +18,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createDevCenterName, devCenterOwnedByStage, sameArm } from "./Common.ts";
 
 export interface AttachedNetworkProps {
-  /** Resource group of the dev center. Changing it replaces the attachment. */
+  /**
+   * Resource group of the dev center. Changing it replaces the attachment.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the dev center. Changing it replaces the attachment. */
   devCenter: string;
@@ -26,6 +29,7 @@ export interface AttachedNetworkProps {
    * Attachment name; pools refer to it as their `networkConnectionName`.
    * If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the attachment.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** ARM resource ID of the `NetworkConnection`. Changing it replaces the attachment. */
@@ -58,17 +62,34 @@ export interface AttachedNetwork extends Resource<
 > {}
 
 /**
- * Attaches a Dev Box `NetworkConnection` to a dev center so the dev
- * center's pools can place dev boxes in that network.
+ * Attaches a Dev Box `NetworkConnection` to a dev center
+ * (`Microsoft.DevCenter/devcenters/attachednetworks`) so the dev center's
+ * pools can place dev boxes in that network.
  *
  * Attachments have no tags; Alchemy treats one as owned when its dev
  * center carries this stack's ownership tags.
+ *
+ * :::caution
+ * Changing `devCenter`, `name`, `networkConnectionId`, or `resourceGroup`
+ * replaces the attachment.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/dev-box/how-to-configure-network-connections#attach-a-network-connection-to-a-dev-center
  *
  * ### Attaching a Network
  * **Example:** Attach a network connection to a dev center
  * ```typescript
+ * const center = yield* Azure.DevCenter.DevCenter("center");
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("devboxes", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.0.0/24",
+ * });
+ * const connection = yield* Azure.DevCenter.NetworkConnection("connection", {
+ *   subnetId: subnet.subnetId,
+ * });
  * const attached = yield* Azure.DevCenter.AttachedNetwork("network", {
  *   devCenter: center.devCenterName,
  *   networkConnectionId: connection.networkConnectionId,

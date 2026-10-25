@@ -8,13 +8,13 @@ import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -28,11 +28,20 @@ import { canonicalJson, lower, matchesObserved, nameOf, sameId, unredact } from 
 
 /** Domain account passwords used when the SQL VM joins a WSFC group. */
 export interface SqlVirtualMachineWsfcDomainCredentials {
-  /** Password of the cluster bootstrap account. */
+  /**
+   * Password of the cluster bootstrap account.
+   * @default not sent
+   */
   clusterBootstrapAccountPassword?: Redacted.Redacted<string>;
-  /** Password of the cluster operator account. */
+  /**
+   * Password of the cluster operator account.
+   * @default not sent
+   */
   clusterOperatorAccountPassword?: Redacted.Redacted<string>;
-  /** Password of the SQL service account. */
+  /**
+   * Password of the SQL service account.
+   * @default not sent
+   */
   sqlServiceAccountPassword?: Redacted.Redacted<string>;
 }
 
@@ -41,9 +50,15 @@ export interface SqlVirtualMachineAutoBackupSettings extends Omit<
   sqlvm.AutoBackupSettings,
   "password" | "storageAccessKey"
 > {
-  /** Storage account key backups are written with. Write-only. */
+  /**
+   * Storage account key backups are written with. Write-only.
+   * @default not sent
+   */
   storageAccessKey?: Redacted.Redacted<string>;
-  /** Backup encryption password. Write-only. */
+  /**
+   * Backup encryption password. Write-only.
+   * @default not sent
+   */
   password?: Redacted.Redacted<string>;
 }
 
@@ -52,7 +67,10 @@ export interface SqlVirtualMachineKeyVaultCredentialSettings extends Omit<
   sqlvm.KeyVaultCredentialSettings,
   "servicePrincipalSecret"
 > {
-  /** Secret of the service principal that reads the key vault. Write-only. */
+  /**
+   * Secret of the service principal that reads the key vault. Write-only.
+   * @default not sent
+   */
   servicePrincipalSecret?: Redacted.Redacted<string>;
 }
 
@@ -60,6 +78,7 @@ export interface SqlVirtualMachineProps {
   /**
    * Resource group of the underlying virtual machine. Changing it replaces
    * the registration.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -83,48 +102,86 @@ export interface SqlVirtualMachineProps {
   /**
    * SQL IaaS Agent management mode. Deprecated by Azure (the mode is
    * detected automatically); only set it when an older API requires it.
+   * @default detected by Azure
    */
   sqlManagement?: "Full" | "LightWeight" | "NoAgent";
-  /** SQL image offer, e.g. `SQL2022-WS2022`. */
+  /**
+   * SQL image offer, e.g. `SQL2022-WS2022`.
+   * @default detected from the VM image
+   */
   sqlImageOffer?: string;
-  /** SQL Server edition. Changing it re-registers the edition in place. */
+  /**
+   * SQL Server edition. Changing it re-registers the edition in place.
+   * @default detected from the VM image
+   */
   sqlImageSku?: "Developer" | "Express" | "Standard" | "Enterprise" | "Web";
-  /** Run the SQL IaaS Agent with least privilege. */
+  /**
+   * Run the SQL IaaS Agent with least privilege.
+   * @default Azure's default
+   */
   leastPrivilegeMode?: "Enabled" | "NotSet";
   /**
    * ARM ID of the `SqlVirtualMachineGroup` (WSFC cluster) to join.
+   * @default not joined to a group
    */
   sqlVirtualMachineGroupResourceId?: string;
-  /** Domain account passwords for joining the WSFC group. Write-only. */
+  /**
+   * Domain account passwords for joining the WSFC group. Write-only.
+   * @default not sent
+   */
   wsfcDomainCredentials?: SqlVirtualMachineWsfcDomainCredentials;
-  /** Static IP of the WSFC cluster (multi-subnet setups). */
+  /**
+   * Static IP of the WSFC cluster (multi-subnet setups).
+   * @default not set
+   */
   wsfcStaticIp?: string;
-  /** Automated patching window for Windows and SQL Server updates. */
+  /**
+   * Automated patching window for Windows and SQL Server updates.
+   * @default Azure's default (not managed)
+   */
   autoPatchingSettings?: sqlvm.AutoPatchingSettings;
-  /** Automated backup settings. */
+  /**
+   * Automated backup settings.
+   * @default Azure's default (not managed)
+   */
   autoBackupSettings?: SqlVirtualMachineAutoBackupSettings;
-  /** Azure Key Vault integration settings. Write-only. */
+  /**
+   * Azure Key Vault integration settings. Write-only.
+   * @default not set
+   */
   keyVaultCredentialSettings?: SqlVirtualMachineKeyVaultCredentialSettings;
   /**
    * Connectivity, workload, storage, instance, and Entra ID settings applied
    * by the SQL IaaS Agent. Write-only: changes are detected against the
    * previous props.
+   * @default not set
    */
   serverConfigurationsManagementSettings?: sqlvm.ServerConfigurationsManagementSettings;
   /**
    * Data/log/tempdb storage layout. Write-only: changes are detected
    * against the previous props.
+   * @default not set
    */
   storageConfigurationSettings?: sqlvm.StorageConfigurationSettings;
-  /** SQL best practices assessment settings. */
+  /**
+   * SQL best practices assessment settings.
+   * @default Azure's default (not managed)
+   */
   assessmentSettings?: sqlvm.AssessmentSettings;
-  /** Automatically upgrade the SQL IaaS Agent extension. */
+  /**
+   * Automatically upgrade the SQL IaaS Agent extension.
+   * @default Azure's default
+   */
   enableAutomaticUpgrade?: boolean;
-  /** Identity the SQL IaaS Agent uses (e.g. for Entra ID authentication). */
+  /**
+   * Identity the SQL IaaS Agent uses (e.g. for Entra ID authentication).
+   * @default Azure's default
+   */
   virtualMachineIdentitySettings?: sqlvm.VirtualMachineIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -163,16 +220,34 @@ export interface SqlVirtualMachine extends Resource<
 > {}
 
 /**
- * A SQL Server on Azure VM registration — registers a virtual machine
- * running SQL Server with the SQL IaaS Agent extension and manages its
- * license, edition, patching, backup, and connectivity settings. Deleting
- * it unregisters the extension; the virtual machine itself is untouched.
+ * A SQL Server on Azure VM registration
+ * (`Microsoft.SqlVirtualMachine/sqlVirtualMachines`). It registers a VM
+ * running SQL Server with the SQL IaaS Agent extension, and manages its
+ * license, edition, patching, backup, and connectivity settings. See the
+ * [Azure docs](https://learn.microsoft.com/azure/azure-sql/virtual-machines/windows/sql-agent-extension-manually-register-single-vm).
  *
- * @see https://learn.microsoft.com/azure/azure-sql/virtual-machines/windows/sql-agent-extension-manually-register-single-vm
+ * Deleting it unregisters the extension. The VM itself stays.
+ *
+ * :::caution
+ * Changing `resourceGroup`, `virtualMachineId`, or `location` replaces the
+ * registration. The SQL VM resource takes the VM's name, and `location` must
+ * equal the VM's location. Alchemy updates every other prop in place.
+ * :::
  *
  * ### Registering a SQL VM
  * **Example:** Register a VM created from a SQL Server image
  * ```typescript
+ * const password = yield* Config.redacted("SQL_VM_PASSWORD");
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("sql", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const nic = yield* Azure.Network.NetworkInterface("sql", {
+ *   ipConfigurations: [{ subnetId: subnet.subnetId }],
+ * });
  * const vm = yield* Azure.Compute.VirtualMachine("sql", {
  *   vmSize: "Standard_D2s_v5",
  *   image: {
@@ -182,7 +257,7 @@ export interface SqlVirtualMachine extends Resource<
  *   },
  *   networkInterfaceIds: [nic.networkInterfaceId],
  *   adminUsername: "sqladmin",
- *   adminPassword: Redacted.make(password),
+ *   adminPassword: password,
  *   computerName: "sqlvm",
  * });
  * const sql = yield* Azure.SqlVirtualMachine.SqlVirtualMachine("sql", {
@@ -286,9 +361,10 @@ export const SqlVirtualMachineProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* orUndefinedIfNotFound(sqlvm.ListSqlVirtualMachines({ subscriptionId }));
+      const page = yield* orUndefinedIfNotFound(
+        collectAll(sqlvm.ListSqlVirtualMachines, { subscriptionId }),
+      );
       if (page === undefined) return [];
-      yield* requireSinglePage("ListSqlVirtualMachines", page);
       return (page.value ?? []).flatMap((vm) => {
         const resourceGroup = resourceGroupOf(vm.id);
         return hasAnyAlchemyTag(vm.tags) && resourceGroup !== undefined && vm.name !== undefined

@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -44,6 +44,7 @@ export interface KubernetesClusterProps {
   /**
    * Name of the Kubernetes cluster. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the Kubernetes cluster.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -77,21 +78,27 @@ export interface KubernetesClusterProps {
    * networks. Changing it replaces the cluster.
    */
   networkConfiguration: nc.NetworkConfiguration;
-  /** Entra ID admin groups for the cluster. Changing it replaces the cluster. */
+  /**
+   * Entra ID admin groups for the cluster. Changing it replaces the cluster.
+   * @default none
+   */
   aadConfiguration?: nc.AadConfiguration;
   /**
    * Admin user name and SSH keys of the nodes. The SSH keys are mutable;
    * changing the user name replaces the cluster.
+   * @default none
    */
   administratorConfiguration?: NexusAdministratorConfiguration;
   /**
    * Name and location of the managed resource group the cluster creates.
    * Changing it replaces the cluster.
+   * @default none
    */
   managedResourceGroupConfiguration?: NexusManagedResourceGroupConfiguration;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -139,13 +146,38 @@ export interface KubernetesCluster extends Resource<
  * on-premises racks. Changing `kubernetesVersion` upgrades in place. Needs a
  * deployed Operator Nexus cluster.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/quickstarts-kubernetes-cluster-deployment-cli
+ * ARM type: `Microsoft.NetworkCloud/kubernetesClusters`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/quickstarts-kubernetes-cluster-deployment-cli).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `customLocationId`,
+ * `controlPlaneNodeConfiguration.vmSkuName`,
+ * `controlPlaneNodeConfiguration.availabilityZones`,
+ * `initialAgentPoolConfigurations`, `networkConfiguration`, `aadConfiguration`,
+ * `administratorConfiguration.adminUsername`, or
+ * `managedResourceGroupConfiguration` replaces the cluster.
+ * :::
  *
  * ### Creating a Kubernetes Cluster
  * **Example:** Three control plane nodes and one agent pool
  * ```typescript
+ * // An existing Operator Nexus cluster, "site1", in the stack's resource group.
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ExtendedLocation/customLocations/site1-cl";
+ * const csn = yield* Azure.NetworkCloud.CloudServicesNetwork("csn", {
+ *   customLocationId,
+ *   enableDefaultEgressEndpoints: "True",
+ * });
+ * const l3 = yield* Azure.NetworkCloud.L3Network("cni", {
+ *   customLocationId,
+ *   l3IsolationDomainId: "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/l3IsolationDomains/tenant",
+ *   vlan: 1001,
+ *   ipAllocationType: "DualStack",
+ *   ipv4ConnectedPrefix: "10.10.0.0/24",
+ *   ipv6ConnectedPrefix: "fd00:10::/64",
+ * });
  * const naks = yield* Azure.NetworkCloud.KubernetesCluster("naks", {
- *   customLocationId: cluster.clusterExtendedLocationId,
+ *   customLocationId,
  *   kubernetesVersion: "1.30.4-1",
  *   controlPlaneNodeConfiguration: { count: 3, vmSkuName: "NC_G6_28_v1" },
  *   initialAgentPoolConfigurations: [
@@ -215,11 +247,7 @@ export const KubernetesClusterProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* nc
-        .ListKubernetesClusterBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListKubernetesClusterBySubscription", page)),
-        );
+      const page = yield* collectAll(nc.ListKubernetesClusterBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

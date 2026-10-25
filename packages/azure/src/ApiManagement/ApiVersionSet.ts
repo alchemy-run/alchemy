@@ -21,6 +21,7 @@ export interface ApiVersionSetProps {
    * Version set identifier (1-80 characters). If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces
    * the version set.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -33,11 +34,20 @@ export interface ApiVersionSetProps {
    * parameter, or a header.
    */
   versioningScheme: VersioningScheme;
-  /** Query parameter that carries the version. Required when `versioningScheme` is `Query`. */
+  /**
+   * Query parameter that carries the version. Required when `versioningScheme` is `Query`.
+   * @default not set
+   */
   versionQueryName?: string;
-  /** Header that carries the version. Required when `versioningScheme` is `Header`. */
+  /**
+   * Header that carries the version. Required when `versioningScheme` is `Header`.
+   * @default not set
+   */
   versionHeaderName?: string;
-  /** Description of the version set. */
+  /**
+   * Description of the version set.
+   * @default no description
+   */
   description?: string;
 }
 
@@ -66,12 +76,22 @@ export interface ApiVersionSet extends Resource<
  * An API Management version set — groups the versions of an API and
  * defines how callers select a version (path segment, query parameter, or
  * header).
+ * The ARM type is `Microsoft.ApiManagement/service/apiVersionSets`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the version
+ * set.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-versions
  *
  * ### Creating a Version Set
  * **Example:** Path-segment versioning (`/hello/v1/...`)
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const versions = yield* Azure.ApiManagement.ApiVersionSet("hello", {
  *   serviceName: apim.serviceName,
  *   displayName: "Hello",
@@ -81,6 +101,10 @@ export interface ApiVersionSet extends Resource<
  *
  * **Example:** Header versioning
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const versions = yield* Azure.ApiManagement.ApiVersionSet("hello", {
  *   serviceName: apim.serviceName,
  *   versioningScheme: "Header",

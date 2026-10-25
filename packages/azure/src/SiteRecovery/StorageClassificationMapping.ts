@@ -21,7 +21,10 @@ import {
 } from "./Shared.ts";
 
 export interface StorageClassificationMappingProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the mapping. */
+  /**
+   * Resource group of the Recovery Services vault. Changing it replaces the mapping.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Recovery Services vault. Changing it replaces the mapping. */
   vault: string;
@@ -35,6 +38,7 @@ export interface StorageClassificationMappingProps {
   /**
    * Mapping name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the mapping.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** ARM ID of the target storage classification. Changing it replaces the mapping. */
@@ -65,21 +69,33 @@ export interface StorageClassificationMapping extends Resource<
 > {}
 
 /**
- * An Azure Site Recovery storage classification mapping: maps a storage
- * classification of a VMM-managed Hyper-V site to a target classification
- * used on failover.
+ * An Azure Site Recovery storage classification mapping
+ * (`Microsoft.RecoveryServices/vaults/replicationFabrics/replicationStorageClassifications/replicationStorageClassificationMappings`).
+ * It maps a storage classification of a VMM-managed Hyper-V site to the
+ * target classification used on failover. See the
+ * [Azure docs](https://learn.microsoft.com/rest/api/site-recovery/replication-storage-classification-mappings/create).
  *
- * Storage classifications are discovered from an on-premises System Center
- * VMM server registered with the vault, so this resource only applies to
- * VMM-to-VMM or VMM-to-Azure scenarios. Mappings cannot be tagged;
- * Alchemy treats a mapping as owned when its vault is tagged for the
- * current stack and stage. Every change replaces the mapping.
+ * Mappings have no tags. Alchemy treats a mapping as owned when its vault carries this stack's ownership tags.
  *
- * @see https://learn.microsoft.com/rest/api/site-recovery/replication-storage-classification-mappings/create
+ * :::caution
+ * Site Recovery discovers storage classifications from an on-premises System
+ * Center VMM server registered with the vault. This resource only applies to
+ * VMM-to-VMM or VMM-to-Azure scenarios.
+ * :::
+ *
+ * :::caution
+ * Every change replaces the mapping: `resourceGroup`, `vault`, `fabric`,
+ * `storageClassification`, `name`, and `targetStorageClassificationId`.
+ * :::
  *
  * ### VMM Sites
  * **Example:** Map a gold storage tier to its recovery counterpart
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("dr-vault", {
+ *   location: "westus2",
+ * });
+ * const goldRecoveryClassificationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/dr/providers/Microsoft.RecoveryServices/vaults/dr-vault/replicationFabrics/vmm-recovery/replicationStorageClassifications/gold-recovery";
  * yield* Azure.SiteRecovery.StorageClassificationMapping("gold", {
  *   vault: vault.vaultName,
  *   fabric: "vmm-primary",

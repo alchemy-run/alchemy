@@ -14,11 +14,20 @@ import { createEntityName, isParentOwned, sameName, subsetMatches } from "./Comm
 export interface GatewayLocation {
   /** Canonical name of the location where the gateway runs, e.g. `on-premises-dc1`. */
   name: string;
-  /** City or locality. */
+  /**
+   * City or locality.
+   * @default not set
+   */
   city?: string;
-  /** District, state, or province. */
+  /**
+   * District, state, or province.
+   * @default not set
+   */
   district?: string;
-  /** Country or region. */
+  /**
+   * Country or region.
+   * @default not set
+   */
   countryOrRegion?: string;
 }
 
@@ -31,11 +40,15 @@ export interface GatewayProps {
    * Gateway identifier (1-80 characters, not `managed`). If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the gateway.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Where the self-hosted gateway runs. */
   locationData: GatewayLocation;
-  /** Description of the gateway. */
+  /**
+   * Description of the gateway.
+   * @default no description
+   */
   description?: string;
 }
 
@@ -64,12 +77,24 @@ export interface Gateway extends Resource<
  * A self-hosted gateway registration in an API Management service. The
  * gateway container runs in your own environment and pulls its
  * configuration from the service. Requires the Developer or Premium tier.
+ * The ARM type is `Microsoft.ApiManagement/service/gateways`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the gateway.
+ *
+ * Self-hosted gateways need a Developer or Premium service.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/self-hosted-gateway-overview
  *
  * ### Registering a Self-Hosted Gateway
  * **Example:** Gateway running in an on-premises data center
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "Developer", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const gateway = yield* Azure.ApiManagement.Gateway("dc1", {
  *   serviceName: apim.serviceName,
  *   locationData: { name: "dc1", city: "Seattle", countryOrRegion: "US" },

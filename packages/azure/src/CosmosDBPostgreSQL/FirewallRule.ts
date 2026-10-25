@@ -24,7 +24,10 @@ import {
 } from "./common.ts";
 
 export interface FirewallRuleProps {
-  /** Resource group of the cluster. Changing it replaces the rule. */
+  /**
+   * Resource group of the cluster. Changing it replaces the rule.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the cluster. Changing it replaces the rule. */
   cluster: string;
@@ -32,6 +35,7 @@ export interface FirewallRuleProps {
    * Rule name: letters, digits, `-`, `_`, and `.` (up to 128 characters).
    * If omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the rule.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -65,14 +69,20 @@ export interface FirewallRule extends Resource<
 > {}
 
 /**
- * A firewall rule that lets an IPv4 range connect to the public endpoint of
- * an Azure Cosmos DB for PostgreSQL cluster.
+ * A firewall rule of an Azure Cosmos DB for PostgreSQL cluster
+ * (`Microsoft.DBforPostgreSQL/serverGroupsv2/firewallRules`). It lets an
+ * IPv4 range connect to the cluster's public endpoint.
  *
- * @see https://learn.microsoft.com/azure/cosmos-db/postgresql/concepts-firewall-rules
+ * :::caution
+ * Changing `resourceGroup`, `cluster`, or `name` replaces the rule.
+ * :::
+ *
+ * See [Cosmos DB for PostgreSQL firewall rules](https://learn.microsoft.com/azure/cosmos-db/postgresql/concepts-firewall-rules).
  *
  * ### Allowing Clients
  * **Example:** Allow an office IP range
  * ```typescript
+ * const cluster = yield* Azure.CosmosDBPostgreSQL.Cluster("db");
  * const office = yield* Azure.CosmosDBPostgreSQL.FirewallRule("office", {
  *   cluster: cluster.clusterName,
  *   startIpAddress: "203.0.113.0",

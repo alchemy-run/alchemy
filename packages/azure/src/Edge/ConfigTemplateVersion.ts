@@ -16,7 +16,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { EDGE_WAIT, edgeState, payloadText } from "./EdgeShared.ts";
 
 export interface ConfigTemplateVersionProps {
-  /** Resource group of the config template. Changing it replaces the version. */
+  /**
+   * Resource group of the config template. Changing it replaces the version.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /** Name of the parent config template. Changing it replaces the version. */
   configTemplate: string;
@@ -53,17 +56,26 @@ export interface ConfigTemplateVersion extends Resource<
 
 /**
  * An immutable version of an Azure Arc workload orchestration config
- * template. The YAML `configurations` carry the shared configuration
- * values and, optionally, the schema rules they validate against.
+ * template (`Microsoft.Edge/configTemplates/versions`). The YAML
+ * `configurations` carry the shared configuration values and, optionally,
+ * the schema rules they validate against. See
+ * [configuring a template](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuring-template).
  *
  * Versions carry no tags or free-form fields, so Alchemy cannot mark them;
  * a version found under the expected name is treated as this resource.
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/configuring-template
+ * :::caution
+ * Versions are immutable. Changing `resourceGroup`, `configTemplate`,
+ * `version`, or `configurations` replaces the version. New
+ * `configurations` under the same `version` delete the old version first.
+ * :::
  *
  * ### Publishing a Version
  * **Example:** Config template with an inline schema
  * ```typescript
+ * const template = yield* Azure.Edge.ConfigTemplate("common", {
+ *   description: "Shared plant configuration",
+ * });
  * const v1 = yield* Azure.Edge.ConfigTemplateVersion("common-v1", {
  *   configTemplate: template.configTemplateName,
  *   version: "1.0.0",

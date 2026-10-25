@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -223,9 +223,7 @@ export const DomainProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* eventgrid
-        .ListDomainBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDomainBySubscription", page)));
+      const page = yield* collectAll(eventgrid.ListDomainBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((domain) => {
         const group = resourceGroupOf(domain.id);
         return hasAnyAlchemyTag(domain.tags) && group !== undefined && domain.name !== undefined

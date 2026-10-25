@@ -23,20 +23,27 @@ import {
 } from "./common.ts";
 
 export interface WorkloadNetworkPublicIPProps {
-  /** Resource group of the private cloud. Changing it replaces the public IP block. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the public IP block.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the public IP block. */
   privateCloud: string;
   /**
    * NSX ID of the public IP block. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the public IP block.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Number of public IPs to allocate. Changing it replaces the block.
    */
   numberOfPublicIPs: number;
-  /** Display name of the block. Changing it replaces the block. */
+  /**
+   * Display name of the block. Changing it replaces the block.
+   * @default not set
+   */
   displayName?: string;
 }
 
@@ -64,14 +71,26 @@ export interface WorkloadNetworkPublicIP extends Resource<
 > {}
 
 /**
- * A block of public IPs allocated to the NSX edge of an Azure VMware Solution
- * private cloud, for inbound/outbound internet on workload VMs.
+ * A block of public IPs allocated to the NSX edge of an Azure VMware
+ * Solution private cloud
+ * (`Microsoft.AVS/privateClouds/workloadNetworks/publicIPs`), for
+ * inbound/outbound internet on workload VMs.
+ *
+ * :::caution
+ * Changing `privateCloud`, `name`, `numberOfPublicIPs`, `displayName`, or
+ * `resourceGroup` replaces the block. The new block has new addresses.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/enable-public-ip-nsx-edge
  *
  * ### Allocating Public IPs
  * **Example:** Allocate four public IPs
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
  * const ips = yield* Azure.VMware.WorkloadNetworkPublicIP("edge", {
  *   privateCloud: cloud.privateCloudName,
  *   numberOfPublicIPs: 4,

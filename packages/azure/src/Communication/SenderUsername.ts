@@ -11,7 +11,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { isEmailServiceOwnedByStack, lower } from "./CommunicationShared.ts";
 
 export interface SenderUsernameProps {
-  /** Resource group of the email service. Changing it replaces the sender. */
+  /**
+   * Resource group of the email service. Changing it replaces the sender.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Email service that holds the domain. Changing it replaces the sender. */
   emailService: string;
@@ -58,18 +61,28 @@ export interface SenderUsername extends Resource<
 
 /**
  * A sender address (the `MailFrom` local part) of an Azure Communication
- * Services email domain.
+ * Services email domain
+ * (`Microsoft.Communication/emailServices/domains/senderUsernames`).
  *
  * Every domain comes with a `DoNotReply` sender and must keep at least one
  * sender: deleting the last sender is a no-op, and it is removed together
  * with its domain. Sender usernames carry no tags, so ownership follows the
  * parent email service.
  *
- * @see https://learn.microsoft.com/azure/communication-services/quickstarts/email/add-multiple-senders
+ * :::caution
+ * Changing `resourceGroup`, `emailService`, `domain`, or `username`
+ * replaces the sender.
+ * :::
+ *
+ * See [Add multiple sender addresses](https://learn.microsoft.com/azure/communication-services/quickstarts/email/add-multiple-senders).
  *
  * ### Managing Senders
  * **Example:** Set the display name of the default sender
  * ```typescript
+ * const email = yield* Azure.Communication.EmailService("email");
+ * const domain = yield* Azure.Communication.EmailDomain("domain", {
+ *   emailService: email.emailServiceName,
+ * });
  * const sender = yield* Azure.Communication.SenderUsername("sender", {
  *   emailService: email.emailServiceName,
  *   domain: domain.domainName,

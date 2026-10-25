@@ -24,20 +24,38 @@ import {
 export interface SourceControlRepositoryAccess {
   /** Access kind: `OAuth`, `PAT`, or `App` (GitHub App). */
   kind: "OAuth" | "PAT" | "App" | (string & {});
-  /** OAuth authorization code (`OAuth`). */
+  /**
+   * OAuth authorization code (`OAuth`).
+   * @default not set
+   */
   code?: string | Redacted.Redacted<string>;
-  /** OAuth state (`OAuth`). */
+  /**
+   * OAuth state (`OAuth`).
+   * @default not set
+   */
   state?: string;
-  /** OAuth client ID (`OAuth`). */
+  /**
+   * OAuth client ID (`OAuth`).
+   * @default not set
+   */
   clientId?: string;
-  /** Personal access token (`PAT`). */
+  /**
+   * Personal access token (`PAT`).
+   * @default not set
+   */
   token?: string | Redacted.Redacted<string>;
-  /** GitHub App installation ID (`App`). */
+  /**
+   * GitHub App installation ID (`App`).
+   * @default not set
+   */
   installationId?: string;
 }
 
 export interface SourceControlProps {
-  /** Resource group of the Sentinel workspace. Changing it replaces the connection. */
+  /**
+   * Resource group of the Sentinel workspace. Changing it replaces the connection.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Sentinel-enabled Log Analytics workspace. Pass `OnboardingState.workspace`
@@ -47,11 +65,15 @@ export interface SourceControlProps {
   /**
    * Source control ID (a GUID). If omitted, a deterministic GUID is derived
    * from the app, stage, and logical ID. Changing it replaces the connection.
+   * @default a GUID derived from the app, stage, and logical ID
    */
   sourceControlId?: string;
   /** Display name of the connection. */
   displayName: string;
-  /** Description of the connection. An Alchemy ownership marker is appended. */
+  /**
+   * Description of the connection. An Alchemy ownership marker is appended.
+   * @default only the Alchemy ownership marker
+   */
   description?: string;
   /** Repository type: `Github` or `AzureDevOps`. Changing it replaces the connection. */
   repoType: "Github" | "AzureDevOps" | (string & {});
@@ -63,12 +85,18 @@ export interface SourceControlProps {
     url: string;
     /** Branch to deploy from. */
     branch: string;
-    /** URL shown in the portal. */
+    /**
+     * URL shown in the portal.
+     * @default not set
+     */
     displayUrl?: string;
   };
   /** Credentials for the repository. Write-only; only sent on create and when changed. */
   repositoryAccess: SourceControlRepositoryAccess;
-  /** Expiry of the service principal credentials Sentinel creates (ISO-8601). */
+  /**
+   * Expiry of the service principal credentials Sentinel creates (ISO-8601).
+   * @default Azure's default
+   */
   servicePrincipalCredentialsExpireOn?: string;
 }
 
@@ -98,23 +126,40 @@ export interface SourceControl extends Resource<
 > {}
 
 /**
- * A Microsoft Sentinel repositories connection: deploys analytics rules,
+ * A Microsoft Sentinel repositories connection
+ * (`Microsoft.SecurityInsights/sourcecontrols`): it deploys analytics rules,
  * workbooks, playbooks, and other content from a GitHub or Azure DevOps
- * repository branch (Sentinel commits a deployment workflow to it).
+ * repository branch. Sentinel commits a deployment workflow to the
+ * repository. See the
+ * [Azure docs](https://learn.microsoft.com/azure/sentinel/ci-cd).
  *
- * @see https://learn.microsoft.com/azure/sentinel/ci-cd
+ * :::caution
+ * Onboard the workspace first with `Azure.SecurityInsights.OnboardingState`,
+ * and pass its `workspace` attribute so Alchemy creates this resource after
+ * the onboarding and deletes it before.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `repoType`, `repository.url`, or
+ * `sourceControlId` replaces the connection. Alchemy updates the other props
+ * in place, and only sends `repositoryAccess` on create and when it changes.
+ * :::
  *
  * ### Connecting Repositories
  * **Example:** Deploy analytics rules from GitHub with a PAT
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
+ *   workspace: logs.workspaceName,
+ * });
+ * const token = yield* Config.redacted("GITHUB_TOKEN");
  * yield* Azure.SecurityInsights.SourceControl("content-repo", {
- *   resourceGroup: sentinel.resourceGroup,
  *   workspace: sentinel.workspace,
  *   displayName: "Sentinel content",
  *   repoType: "Github",
  *   contentTypes: ["AnalyticsRule", "AutomationRule"],
  *   repository: { url: "https://github.com/acme/sentinel-content", branch: "main" },
- *   repositoryAccess: { kind: "PAT", token: Redacted.make(process.env.GITHUB_TOKEN!) },
+ *   repositoryAccess: { kind: "PAT", token },
  * });
  * ```
  *

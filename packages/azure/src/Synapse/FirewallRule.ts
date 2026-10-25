@@ -17,7 +17,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, isWorkspaceOwnedByStack, lower } from "./common.ts";
 
 export interface FirewallRuleProps {
-  /** Resource group of the workspace. Changing it replaces the rule. */
+  /**
+   * Resource group of the workspace. Changing it replaces the rule.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Synapse workspace. Changing it replaces the rule. */
   workspace: string;
@@ -26,6 +29,7 @@ export interface FirewallRuleProps {
    * `AllowAllWindowsAzureIps` with `0.0.0.0`–`0.0.0.0` to allow Azure
    * services. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the rule.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** First IPv4 address of the allowed range. */
@@ -56,14 +60,31 @@ export interface FirewallRule extends Resource<
 > {}
 
 /**
- * An IP firewall rule on a Synapse workspace — allows a public IPv4 range
- * to reach the workspace's SQL, development, and Studio endpoints.
+ * An IP firewall rule on a Synapse workspace
+ * (`Microsoft.Synapse/workspaces/firewallRules`) — allows a public IPv4
+ * range to reach the workspace's SQL, development, and Studio endpoints.
+ *
+ * :::caution
+ * Changing `workspace`, `name`, or `resourceGroup` replaces the rule.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/security/synapse-workspace-ip-firewall
  *
  * ### Allowing Client Addresses
  * **Example:** Allow an office range
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
  * yield* Azure.Synapse.FirewallRule("office", {
  *   workspace: workspace.workspaceName,
  *   startIpAddress: "203.0.113.0",

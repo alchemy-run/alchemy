@@ -6,7 +6,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 
 export interface DataflowEndpointProps {
-  /** Resource group of the IoT Operations instance. Changing it replaces the endpoint. */
+  /**
+   * Resource group of the IoT Operations instance. Changing it replaces the endpoint.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** IoT Operations instance that holds the endpoint. Changing it replaces the endpoint. */
   instanceName: string;
@@ -14,6 +17,7 @@ export interface DataflowEndpointProps {
    * Endpoint name (lowercase letters, digits, and hyphens). If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the endpoint.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -28,21 +32,45 @@ export interface DataflowEndpointProps {
     | "LocalStorage"
     | "Mqtt"
     | "OpenTelemetry";
-  /** Kind of host behind a Kafka or MQTT endpoint (e.g. `Eventhub`, `EventGrid`, `LocalBroker`). */
+  /**
+   * Kind of host behind a Kafka or MQTT endpoint (e.g. `Eventhub`, `EventGrid`, `LocalBroker`).
+   * @default unset
+   */
   hostType?: "FabricRT" | "EventGrid" | "LocalBroker" | "Eventhub" | "CustomMqtt" | "CustomKafka";
-  /** Azure Data Explorer settings (`endpointType: "DataExplorer"`). */
+  /**
+   * Azure Data Explorer settings (`endpointType: "DataExplorer"`).
+   * @default unset
+   */
   dataExplorerSettings?: iot.DataflowEndpointDataExplorer;
-  /** Azure Data Lake Storage Gen2 settings (`endpointType: "DataLakeStorage"`). */
+  /**
+   * Azure Data Lake Storage Gen2 settings (`endpointType: "DataLakeStorage"`).
+   * @default unset
+   */
   dataLakeStorageSettings?: iot.DataflowEndpointDataLakeStorage;
-  /** Microsoft Fabric OneLake settings (`endpointType: "FabricOneLake"`). */
+  /**
+   * Microsoft Fabric OneLake settings (`endpointType: "FabricOneLake"`).
+   * @default unset
+   */
   fabricOneLakeSettings?: iot.DataflowEndpointFabricOneLake;
-  /** Kafka settings, incl. Event Hubs (`endpointType: "Kafka"`). */
+  /**
+   * Kafka settings, incl. Event Hubs (`endpointType: "Kafka"`).
+   * @default unset
+   */
   kafkaSettings?: iot.DataflowEndpointKafka;
-  /** Local persistent volume settings (`endpointType: "LocalStorage"`). */
+  /**
+   * Local persistent volume settings (`endpointType: "LocalStorage"`).
+   * @default unset
+   */
   localStorageSettings?: iot.DataflowEndpointLocalStorage;
-  /** MQTT broker settings, incl. Event Grid (`endpointType: "Mqtt"`). */
+  /**
+   * MQTT broker settings, incl. Event Grid (`endpointType: "Mqtt"`).
+   * @default unset
+   */
   mqttSettings?: iot.DataflowEndpointMqtt;
-  /** OpenTelemetry collector settings (`endpointType: "OpenTelemetry"`). */
+  /**
+   * OpenTelemetry collector settings (`endpointType: "OpenTelemetry"`).
+   * @default unset
+   */
   openTelemetrySettings?: iot.DataflowEndpointOpenTelemetry;
 }
 
@@ -68,7 +96,8 @@ export interface DataflowEndpoint extends Resource<
 > {}
 
 /**
- * A dataflow endpoint of an Azure IoT Operations instance: a source or
+ * A dataflow endpoint of an Azure IoT Operations instance
+ * (`Microsoft.IoTOperations/instances/dataflowEndpoints`): a source or
  * destination (MQTT broker, Kafka/Event Hubs, Data Lake Storage, Data
  * Explorer, Fabric OneLake, local storage, OpenTelemetry) that dataflows
  * reference by name.
@@ -78,6 +107,12 @@ export interface DataflowEndpoint extends Resource<
  * ### Creating Endpoints
  * **Example:** Local MQTT broker
  * ```typescript
+ * const instance = yield* Azure.IoTOperations.Instance("aio", {
+ *   customLocationId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/aio-location",
+ *   schemaRegistryId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.DeviceRegistry/schemaRegistries/aio-schemas",
+ * });
  * const local = yield* Azure.IoTOperations.DataflowEndpoint("local", {
  *   instanceName: instance.instanceName,
  *   endpointType: "Mqtt",
@@ -95,6 +130,10 @@ export interface DataflowEndpoint extends Resource<
  *
  * **Example:** Azure Data Lake Storage with the instance's managed identity
  * ```typescript
+ * // instance: the Azure.IoTOperations.Instance of the first example
+ * const account = yield* Azure.Storage.StorageAccount("telemetry", {
+ *   isHnsEnabled: true,
+ * });
  * const lake = yield* Azure.IoTOperations.DataflowEndpoint("lake", {
  *   instanceName: instance.instanceName,
  *   endpointType: "DataLakeStorage",
@@ -107,6 +146,11 @@ export interface DataflowEndpoint extends Resource<
  *   },
  * });
  * ```
+ *
+ * :::caution
+ * Changing `resourceGroup`, `instanceName`, `name`, or `endpointType`
+ * replaces the endpoint.
+ * :::
  *
  * @resource
  */

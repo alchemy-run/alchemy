@@ -26,7 +26,10 @@ import {
 export type EndpointType = "EventHub" | "EventGrid" | "ServiceBus";
 
 export interface EndpointProps {
-  /** Resource group of the instance. Changing it replaces the endpoint. */
+  /**
+   * Resource group of the instance. Changing it replaces the endpoint.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Digital Twins instance the endpoint belongs to. Changing it replaces the endpoint. */
   instance: string;
@@ -34,6 +37,7 @@ export interface EndpointProps {
    * Endpoint name: 2-49 letters, digits, and hyphens. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the endpoint.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Kind of egress target. Changing it replaces the endpoint. */
@@ -54,26 +58,49 @@ export interface EndpointProps {
   /**
    * Event Hubs / Service Bus (`IdentityBased`): namespace URL, e.g.
    * `sb://{namespace}.servicebus.windows.net`.
+   * @default unset
    */
   endpointUri?: string;
-  /** Event Hubs / Service Bus (`IdentityBased`): event hub, queue, or topic name. */
+  /**
+   * Event Hubs / Service Bus (`IdentityBased`): event hub, queue, or topic name.
+   * @default unset
+   */
   entityPath?: string;
   /**
    * Event Hubs / Service Bus (`KeyBased`): primary connection string,
    * including `EntityPath`.
+   * @default unset (Azure's default)
    */
   primaryConnectionString?: string | Redacted.Redacted<string>;
-  /** Event Hubs / Service Bus (`KeyBased`): secondary connection string. */
+  /**
+   * Event Hubs / Service Bus (`KeyBased`): secondary connection string.
+   * @default unset (Azure's default)
+   */
   secondaryConnectionString?: string | Redacted.Redacted<string>;
-  /** Event Grid: topic endpoint URL, e.g. `https://{topic}.{region}-1.eventgrid.azure.net/api/events`. */
+  /**
+   * Event Grid: topic endpoint URL, e.g. `https://{topic}.{region}-1.eventgrid.azure.net/api/events`.
+   * @default unset
+   */
   topicEndpoint?: string;
-  /** Event Grid: primary access key of the topic. */
+  /**
+   * Event Grid: primary access key of the topic.
+   * @default unset (Azure's default)
+   */
   accessKey1?: string | Redacted.Redacted<string>;
-  /** Event Grid: secondary access key of the topic. */
+  /**
+   * Event Grid: secondary access key of the topic.
+   * @default unset (Azure's default)
+   */
   accessKey2?: string | Redacted.Redacted<string>;
-  /** Dead-letter storage container URL for `IdentityBased` authentication. */
+  /**
+   * Dead-letter storage container URL for `IdentityBased` authentication.
+   * @default unset
+   */
   deadLetterUri?: string;
-  /** Dead-letter storage container SAS URL for `KeyBased` authentication. */
+  /**
+   * Dead-letter storage container SAS URL for `KeyBased` authentication.
+   * @default unset (Azure's default)
+   */
   deadLetterSecret?: string | Redacted.Redacted<string>;
 }
 
@@ -103,7 +130,8 @@ export interface Endpoint extends Resource<
 > {}
 
 /**
- * An egress endpoint of an Azure Digital Twins instance — an Event Hub,
+ * An egress endpoint of an Azure Digital Twins instance
+ * (`Microsoft.DigitalTwins/digitalTwinsInstances/endpoints`) — an Event Hub,
  * Event Grid topic, or Service Bus topic that event routes deliver twin
  * change and telemetry events to.
  *
@@ -112,11 +140,17 @@ export interface Endpoint extends Resource<
  * strings, access keys) are write-only: Azure obfuscates them on read, so
  * changing one re-sends the endpoint.
  *
+ * :::caution
+ * Changing `instance`, `name`, `endpointType`, or `resourceGroup` replaces
+ * the endpoint.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/digital-twins/concepts-route-events
  *
  * ### Event Grid Endpoints
  * **Example:** Key-based Event Grid topic endpoint
  * ```typescript
+ * const twins = yield* Azure.DigitalTwins.Instance("factory");
  * const topic = yield* Azure.EventGrid.Topic("twin-events");
  * const endpoint = yield* Azure.DigitalTwins.Endpoint("events", {
  *   instance: twins.instanceName,
@@ -129,13 +163,16 @@ export interface Endpoint extends Resource<
  * ### Event Hubs Endpoints
  * **Example:** Identity-based Event Hub endpoint
  * ```typescript
+ * const namespace = yield* Azure.EventHub.Namespace("events");
+ * const hub = yield* Azure.EventHub.EventHub("twin-events", {
+ *   namespace: namespace.namespaceName,
+ * });
  * const twins = yield* Azure.DigitalTwins.Instance("factory", {
  *   identity: { type: "SystemAssigned" },
  * });
  * yield* Azure.Authorization.RoleAssignment("twins-sends-events", {
  *   scope: hub.eventHubId,
- *   // Azure Event Hubs Data Sender
- *   roleDefinitionId: "2b629674-e913-4c01-ae53-ef4638d8f975",
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.EventHubsDataSender,
  *   principalId: twins.principalId,
  *   principalType: "ServicePrincipal",
  * });

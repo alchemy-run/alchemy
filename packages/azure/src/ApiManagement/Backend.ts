@@ -11,18 +11,30 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, isParentOwned, sameName, subsetMatches } from "./Common.ts";
 
 export interface BackendCredentials {
-  /** Header name to values sent with every request to the backend. */
+  /**
+   * Header name to values sent with every request to the backend.
+   * @default not set
+   */
   header?: Record<string, string[]>;
-  /** Query parameter name to values sent with every request. */
+  /**
+   * Query parameter name to values sent with every request.
+   * @default not set
+   */
   query?: Record<string, string[]>;
-  /** `Authorization` header sent to the backend. */
+  /**
+   * `Authorization` header sent to the backend.
+   * @default not set
+   */
   authorization?: {
     /** Authentication scheme, e.g. `Basic` or `Bearer`. */
     scheme: string;
     /** Scheme parameter (the credential). */
     parameter: string;
   };
-  /** Client certificate ids (APIM certificate entity ids) for mutual TLS. */
+  /**
+   * Client certificate ids (APIM certificate entity ids) for mutual TLS.
+   * @default none
+   */
   certificateIds?: string[];
 }
 
@@ -36,9 +48,15 @@ export interface BackendTls {
 export interface BackendPoolMember {
   /** ARM id of a `Single` backend in the same service. */
   id: string;
-  /** Relative weight for load balancing. */
+  /**
+   * Relative weight for load balancing.
+   * @default not set
+   */
   weight?: number;
-  /** Priority group (lower is preferred). */
+  /**
+   * Priority group (lower is preferred).
+   * @default not set
+   */
   priority?: number;
 }
 
@@ -51,6 +69,7 @@ export interface BackendProps {
    * Backend identifier (1-80 characters). If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces
    * the backend.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -59,29 +78,51 @@ export interface BackendProps {
    * @default "Single"
    */
   type?: "Single" | "Pool";
-  /** Runtime URL of the backend. Required for `Single` backends. */
+  /**
+   * Runtime URL of the backend. Required for `Single` backends.
+   * @default not set
+   */
   url?: string;
   /**
    * Backend protocol. Required for `Single` backends.
    * @default "http" for `Single` backends
    */
   protocol?: "http" | "soap";
-  /** Title. */
+  /**
+   * Title.
+   * @default no title
+   */
   title?: string;
-  /** Description. */
+  /**
+   * Description.
+   * @default no description
+   */
   description?: string;
   /**
    * Management URI of the backend's Azure resource (e.g. the ARM URL of a
    * Function App or Logic App).
+   * @default not set
    */
   resourceId?: string;
-  /** Credentials sent to the backend. */
+  /**
+   * Credentials sent to the backend.
+   * @default no credentials
+   */
   credentials?: BackendCredentials;
-  /** TLS validation settings. */
+  /**
+   * TLS validation settings.
+   * @default not set (Azure's default applies)
+   */
   tls?: BackendTls;
-  /** Members of a `Pool` backend. */
+  /**
+   * Members of a `Pool` backend.
+   * @default none
+   */
   pool?: BackendPoolMember[];
-  /** Circuit breaker rules (v2 and classic tiers). */
+  /**
+   * Circuit breaker rules (v2 and classic tiers).
+   * @default no circuit breaker
+   */
   circuitBreaker?: apim.BackendCircuitBreaker;
 }
 
@@ -111,12 +152,22 @@ export interface Backend extends Resource<
 /**
  * An API Management backend — a named upstream service that policies route
  * to with `<set-backend-service backend-id="..." />`.
+ * The ARM type is `Microsoft.ApiManagement/service/backends`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, `type`, or `resourceGroup` replaces the
+ * backend.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/backends
  *
  * ### Creating a Backend
  * **Example:** HTTP backend
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const backend = yield* Azure.ApiManagement.Backend("orders", {
  *   serviceName: apim.serviceName,
  *   url: "https://orders.example.com",
@@ -126,6 +177,10 @@ export interface Backend extends Resource<
  *
  * **Example:** Backend with a header credential and relaxed TLS
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const backend = yield* Azure.ApiManagement.Backend("legacy", {
  *   serviceName: apim.serviceName,
  *   url: "https://legacy.internal.example.com",

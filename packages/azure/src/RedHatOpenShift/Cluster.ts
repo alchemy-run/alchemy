@@ -8,13 +8,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -28,7 +28,13 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 export type ClusterVisibility = "Public" | "Private";
 
 export interface ClusterServicePrincipal {
-  /** Application (client) ID of the cluster's Microsoft Entra service principal. */
+  /**
+   * Application (client) ID of the cluster's Microsoft Entra service principal.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
+   */
   clientId: string;
   /**
    * Client secret of the service principal. Changing it rotates the
@@ -38,85 +44,145 @@ export interface ClusterServicePrincipal {
 }
 
 export interface ClusterMasterProfile {
-  /** ARM ID of the control-plane subnet. Changing it replaces the cluster. */
+  /**
+   * ARM ID of the control-plane subnet.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
+   */
   subnetId: string;
   /**
-   * VM size of the three control-plane nodes. Changing it replaces the
-   * cluster.
+   * VM size of the three control-plane nodes.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default "Standard_D8s_v5"
    */
   vmSize?: string;
   /**
-   * Encrypt the control-plane VM disks at host. Changing it replaces the
-   * cluster.
+   * Encrypt the control-plane VM disks at host.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default false
    */
   encryptionAtHost?: boolean;
   /**
-   * ARM ID of a disk encryption set for the control-plane disks. Changing it
-   * replaces the cluster.
+   * ARM ID of a disk encryption set for the control-plane disks.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
+   * @default platform-managed keys
    */
   diskEncryptionSetId?: string;
 }
 
 export interface ClusterWorkerProfile {
-  /** ARM ID of the worker subnet. Changing it replaces the cluster. */
+  /**
+   * ARM ID of the worker subnet.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
+   */
   subnetId: string;
   /**
-   * Name of the initial worker profile (machine set prefix). Changing it
-   * replaces the cluster.
+   * Name of the initial worker profile (machine set prefix).
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default "worker"
    */
   name?: string;
   /**
-   * VM size of the workers. Changing it replaces the cluster.
+   * VM size of the workers.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default "Standard_D4s_v5"
    */
   vmSize?: string;
   /**
-   * OS disk size of each worker in GB (minimum 128). Changing it replaces
-   * the cluster.
+   * OS disk size of each worker in GB (minimum 128).
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default 128
    */
   diskSizeGB?: number;
   /**
    * Number of initial workers (minimum 3). Scale an existing cluster with
-   * OpenShift MachineSets; changing it here replaces the cluster.
+   * OpenShift MachineSets.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default 3
    */
   count?: number;
   /**
-   * Encrypt the worker VM disks at host. Changing it replaces the cluster.
+   * Encrypt the worker VM disks at host.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default false
    */
   encryptionAtHost?: boolean;
   /**
-   * ARM ID of a disk encryption set for the worker disks. Changing it
-   * replaces the cluster.
+   * ARM ID of a disk encryption set for the worker disks.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
+   * @default platform-managed keys
    */
   diskEncryptionSetId?: string;
 }
 
 export interface ClusterNetworkProfile {
   /**
-   * CIDR for pod IPs. Changing it replaces the cluster.
+   * CIDR for pod IPs.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default "10.128.0.0/14"
    */
   podCidr?: string;
   /**
-   * CIDR for service IPs. Changing it replaces the cluster.
+   * CIDR for service IPs.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default "172.30.0.0/16"
    */
   serviceCidr?: string;
   /**
    * Egress strategy. `UserDefinedRouting` requires private API server and
-   * ingress visibility. Changing it replaces the cluster.
+   * ingress visibility.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default "Loadbalancer"
    */
   outboundType?: "Loadbalancer" | "UserDefinedRouting";
   /**
    * Use network security groups already attached to the subnets instead of
-   * ARO-managed ones. Changing it replaces the cluster.
+   * ARO-managed ones.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default false
    */
   preconfiguredNsg?: boolean;
@@ -129,22 +195,40 @@ export interface ClusterNetworkProfile {
 }
 
 export interface ClusterProps {
-  /** Resource group the cluster is created in. Changing it replaces the cluster. */
+  /**
+   * Resource group the cluster is created in.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
-   * Cluster name. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the cluster.
+   * Cluster name.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the cluster. Changing it replaces the cluster.
+   * Azure location of the cluster.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
    * Cluster domain: either a short prefix (the cluster is served under
-   * `{domain}.{location}.aroapp.io`) or a custom FQDN you own. Changing it
-   * replaces the cluster.
+   * `{domain}.{location}.aroapp.io`) or a custom FQDN you own.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default a unique 10-character prefix derived from the instance
    */
   domain?: string;
@@ -158,18 +242,25 @@ export interface ClusterProps {
   /**
    * Red Hat pull secret (JSON from console.redhat.com) that unlocks Red Hat
    * registries and OperatorHub content. Only used at creation.
+   * @default no pull secret
    */
   pullSecret?: Redacted.Redacted<string>;
   /**
    * Name of the cluster-managed resource group that ARO creates for the
    * cluster's VMs, disks, and load balancers. It must not exist yet.
+   *
+   * :::caution
    * Changing it replaces the cluster.
+   * :::
    * @default `aro-{domain}`
    */
   managedResourceGroup?: string;
   /**
-   * Use FIPS-validated cryptographic modules. Changing it replaces the
-   * cluster.
+   * Use FIPS-validated cryptographic modules.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default false
    */
   fipsValidatedModules?: boolean;
@@ -177,11 +268,17 @@ export interface ClusterProps {
    * Service principal the cluster uses to manage Azure resources. It needs
    * Network Contributor on the virtual network. Mutually exclusive with
    * `platformWorkloadIdentities`.
+   *
+   * :::caution
+   * Adding or removing it, or changing `clientId`, replaces the cluster.
+   * :::
+   * @default none
    */
   servicePrincipal?: ClusterServicePrincipal;
   /**
    * ARM ID of the user-assigned managed identity of a workload identity
    * cluster. Required with `platformWorkloadIdentities`. Mutable in place.
+   * @default none
    */
   clusterIdentityId?: string;
   /**
@@ -189,32 +286,46 @@ export interface ClusterProps {
    * OpenShift platform operator uses (workload identity clusters; see
    * `ListPlatformWorkloadIdentityRoleSets` for the required operators).
    * Mutable in place.
+   * @default none
    */
   platformWorkloadIdentities?: Record<string, string>;
   /**
    * OpenShift version a workload identity cluster is prepared to upgrade
    * to. Mutable in place.
+   * @default none
    */
   upgradeableTo?: string;
   /** Control-plane nodes. */
   master: ClusterMasterProfile;
   /** Initial worker nodes. */
   worker: ClusterWorkerProfile;
-  /** Cluster networking. */
+  /**
+   * Cluster networking.
+   * @default the defaults of each `ClusterNetworkProfile` field
+   */
   network?: ClusterNetworkProfile;
   /**
-   * API server visibility. Changing it replaces the cluster.
+   * API server visibility.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default "Public"
    */
   apiServerVisibility?: ClusterVisibility;
   /**
-   * Default ingress controller visibility. Changing it replaces the cluster.
+   * Default ingress controller visibility.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default "Public"
    */
   ingressVisibility?: ClusterVisibility;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -265,21 +376,24 @@ export interface Cluster extends Resource<
 > {}
 
 /**
- * An Azure Red Hat OpenShift (ARO) cluster — a fully managed OpenShift
- * cluster jointly operated by Microsoft and Red Hat. ARO needs a virtual
- * network with two subnets (control plane and workers) and either a
- * service principal or platform workload identities, and at least 44
- * regional vCPUs of quota (3 × D8s control plane + 3 × D4s workers).
- * Creation takes 35-45 minutes.
+ * An Azure Red Hat OpenShift (ARO) cluster
+ * (`Microsoft.RedHatOpenShift/openShiftClusters`) — a fully managed
+ * OpenShift cluster jointly operated by Microsoft and Red Hat. ARO needs a
+ * virtual network with two subnets (control plane and workers) and either
+ * a service principal or platform workload identities. Creation takes
+ * 35-45 minutes.
+ *
+ * :::caution
+ * ARO needs at least 44 regional vCPUs of quota (3 × D8s control plane +
+ * 3 × D4s workers). A fresh subscription has less: request a quota
+ * increase first.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/openshift/intro-openshift
  *
  * ### Creating a Cluster
  * **Example:** Public cluster with a service principal
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("aro", {
- *   location: "eastus",
- * });
  * const vnet = yield* Azure.Network.VirtualNetwork("aro-vnet", {
  *   addressPrefixes: ["10.0.0.0/22"],
  * });
@@ -291,12 +405,12 @@ export interface Cluster extends Resource<
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.2.0/23",
  * });
+ * const clientId = yield* Config.string("ARO_CLIENT_ID");
+ * const clientSecret = yield* Config.redacted("ARO_CLIENT_SECRET");
+ * const pullSecret = yield* Config.redacted("ARO_PULL_SECRET");
  * const cluster = yield* Azure.RedHatOpenShift.Cluster("aro", {
- *   servicePrincipal: {
- *     clientId: process.env.ARO_CLIENT_ID!,
- *     clientSecret: Redacted.make(process.env.ARO_CLIENT_SECRET!),
- *   },
- *   pullSecret: Redacted.make(process.env.ARO_PULL_SECRET!),
+ *   servicePrincipal: { clientId, clientSecret },
+ *   pullSecret,
  *   master: { subnetId: master.subnetId },
  *   worker: { subnetId: worker.subnetId },
  * });
@@ -305,8 +419,21 @@ export interface Cluster extends Resource<
  *
  * **Example:** Private cluster with user-defined routing
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("aro-vnet", {
+ *   addressPrefixes: ["10.0.0.0/22"],
+ * });
+ * const master = yield* Azure.Network.Subnet("master", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.0.0/23",
+ * });
+ * const worker = yield* Azure.Network.Subnet("worker", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.2.0/23",
+ * });
+ * const clientId = yield* Config.string("ARO_CLIENT_ID");
+ * const clientSecret = yield* Config.redacted("ARO_CLIENT_SECRET");
  * const cluster = yield* Azure.RedHatOpenShift.Cluster("aro", {
- *   servicePrincipal,
+ *   servicePrincipal: { clientId, clientSecret },
  *   master: { subnetId: master.subnetId },
  *   worker: { subnetId: worker.subnetId, count: 3 },
  *   network: { outboundType: "UserDefinedRouting" },
@@ -318,13 +445,28 @@ export interface Cluster extends Resource<
  * ### Workload Identity
  * **Example:** Cluster with platform workload identities
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("aro-vnet", {
+ *   addressPrefixes: ["10.0.0.0/22"],
+ * });
+ * const master = yield* Azure.Network.Subnet("master", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.0.0/23",
+ * });
+ * const worker = yield* Azure.Network.Subnet("worker", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.2.0/23",
+ * });
+ * const clusterIdentity = yield* Azure.ManagedIdentity.UserAssignedIdentity("aro-cluster");
+ * const ccm = yield* Azure.ManagedIdentity.UserAssignedIdentity("aro-ccm");
+ * const ingress = yield* Azure.ManagedIdentity.UserAssignedIdentity("aro-ingress");
  * const cluster = yield* Azure.RedHatOpenShift.Cluster("aro", {
  *   version: "4.15.35",
  *   clusterIdentityId: clusterIdentity.identityId,
+ *   // List one identity for every operator in the version's role set
+ *   // (`ListPlatformWorkloadIdentityRoleSets`).
  *   platformWorkloadIdentities: {
  *     "cloud-controller-manager": ccm.identityId,
  *     ingress: ingress.identityId,
- *     // ...one identity per operator in the version's role set
  *   },
  *   master: { subnetId: master.subnetId },
  *   worker: { subnetId: worker.subnetId },
@@ -471,9 +613,7 @@ export const ClusterProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* aro
-        .ListOpenShiftClusters({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListOpenShiftClusters", page)));
+      const page = yield* collectAll(aro.ListOpenShiftClusters, { subscriptionId });
       return (page.value ?? []).flatMap((cluster) => {
         const group = resourceGroupOf(cluster.id);
         return hasAnyAlchemyTag(cluster.tags) && group !== undefined && cluster.name !== undefined

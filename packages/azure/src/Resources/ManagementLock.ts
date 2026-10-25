@@ -6,10 +6,10 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -138,13 +138,9 @@ export const ManagementLockProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       // Lists locks at the subscription and every scope below it.
-      const page = yield* resources
-        .ListManagementLockAtSubscriptionLevel({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListManagementLockAtSubscriptionLevel", page),
-          ),
-        );
+      const page = yield* collectAll(resources.ListManagementLockAtSubscriptionLevel, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((lock) =>
         lock.id !== undefined && lock.name !== undefined && MARKER.test(lock.properties.notes ?? "")
           ? [toAttrs(scopeOf(lock.id), lock.name, lock)]

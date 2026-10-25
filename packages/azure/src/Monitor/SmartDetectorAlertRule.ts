@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -231,9 +231,9 @@ export const SmartDetectorAlertRuleProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* alertsmanagement
-        .ListSmartDetectorAlertRules({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListSmartDetectorAlertRules", page)));
+      const page = yield* collectAll(alertsmanagement.ListSmartDetectorAlertRules, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((rule) => {
         const group = resourceGroupOf(rule.id);
         return hasAnyAlchemyTag(rule.tags) && group !== undefined && rule.name !== undefined

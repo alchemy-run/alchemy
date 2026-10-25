@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -36,43 +36,71 @@ import {
  * Failover Cluster (WSFC) behind the group.
  */
 export interface WsfcDomainProfile {
-  /** Fully qualified name of the AD domain, e.g. `contoso.com`. */
+  /**
+   * Fully qualified name of the AD domain, e.g. `contoso.com`.
+   * @default not set
+   */
   domainFqdn?: string;
-  /** Organizational Unit path in which the nodes and cluster are created. */
+  /**
+   * Organizational Unit path in which the nodes and cluster are created.
+   * @default not set
+   */
   ouPath?: string;
   /**
    * Account used to create the cluster (needs `Create Computer Objects`
    * on the domain), e.g. `bootstrap@contoso.com`.
+   * @default not set
    */
   clusterBootstrapAccount?: string;
   /**
    * Account used to operate the cluster; joins the administrators group on
    * every participating VM.
+   * @default not set
    */
   clusterOperatorAccount?: string;
-  /** Account the SQL Server service runs as on every participating VM. */
+  /**
+   * Account the SQL Server service runs as on every participating VM.
+   * @default not set
+   */
   sqlServiceAccount?: string;
-  /** Whether `sqlServiceAccount` is a group managed service account. */
+  /**
+   * Whether `sqlServiceAccount` is a group managed service account.
+   * @default false
+   */
   isSqlServiceAccountGmsa?: boolean;
-  /** Optional file share witness path. */
+  /**
+   * Optional file share witness path.
+   * @default not set
+   */
   fileShareWitnessPath?: string;
-  /** Blob endpoint URL of the cloud witness storage account. */
+  /**
+   * Blob endpoint URL of the cloud witness storage account.
+   * @default not set
+   */
   storageAccountUrl?: string;
   /**
    * Primary key of the cloud witness storage account. Write-only: Azure
    * never returns it.
+   * @default not set
    */
   storageAccountPrimaryKey?: Redacted.Redacted<string>;
-  /** Cluster subnet type: `SingleSubnet` or `MultiSubnet`. */
+  /**
+   * Cluster subnet type: `SingleSubnet` or `MultiSubnet`.
+   * @default not set
+   */
   clusterSubnetType?: "SingleSubnet" | "MultiSubnet";
 }
 
 export interface SqlVirtualMachineGroupProps {
-  /** Resource group the group is created in. Changing it replaces the group. */
+  /**
+   * Resource group the group is created in. Changing it replaces the group.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Group name; also the WSFC cluster name, so at most 15 characters. If
    * omitted, a unique name is generated. Changing it replaces the group.
+   * @default a unique name generated from the app, stage, and logical ID (at most 15 characters)
    */
   name?: string;
   /**
@@ -93,11 +121,13 @@ export interface SqlVirtualMachineGroupProps {
   /**
    * Active Directory profile of the failover cluster. Mutable until SQL VMs
    * join the group.
+   * @default no domain profile
    */
   wsfcDomainProfile?: WsfcDomainProfile;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -132,16 +162,31 @@ export interface SqlVirtualMachineGroup extends Resource<
 > {}
 
 /**
- * A SQL virtual machine group — the Windows Server Failover Cluster that
- * hosts a SQL Server Always On availability group across SQL VMs. SQL VMs
- * join the group through `sqlVirtualMachineGroupId`; listeners are added
- * with `AvailabilityGroupListener`.
+ * A SQL virtual machine group
+ * (`Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups`): the Windows Server
+ * Failover Cluster that hosts a SQL Server Always On availability group
+ * across SQL VMs. SQL VMs join the group through `sqlVirtualMachineGroupId`.
+ * Add listeners with `Azure.SqlVirtualMachine.AvailabilityGroupListener`. See
+ * the
+ * [Azure docs](https://learn.microsoft.com/azure/azure-sql/virtual-machines/windows/availability-group-az-commandline-configure).
  *
- * @see https://learn.microsoft.com/azure/azure-sql/virtual-machines/windows/availability-group-az-commandline-configure
+ * :::caution
+ * The member VMs must be joined to the Active Directory domain in
+ * `wsfcDomainProfile`. You can change `wsfcDomainProfile` only until SQL VMs
+ * join the group.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `sqlImageOffer`, or
+ * `sqlImageSku` replaces the group. The name is also the WSFC cluster name,
+ * so it has at most 15 characters.
+ * :::
  *
  * ### Creating a Group
  * **Example:** Group for a domain-joined cluster
  * ```typescript
+ * const witness = yield* Azure.Storage.StorageAccount("witness");
+ * const witnessKey = yield* Config.redacted("WITNESS_KEY");
  * const cluster = yield* Azure.SqlVirtualMachine.SqlVirtualMachineGroup("cluster", {
  *   sqlImageOffer: "SQL2022-WS2022",
  *   sqlImageSku: "Enterprise",
@@ -151,7 +196,7 @@ export interface SqlVirtualMachineGroup extends Resource<
  *     clusterOperatorAccount: "operator@contoso.com",
  *     sqlServiceAccount: "sqlservice@contoso.com",
  *     storageAccountUrl: witness.primaryEndpoints.blob,
- *     storageAccountPrimaryKey: Redacted.make(witnessKey),
+ *     storageAccountPrimaryKey: witnessKey,
  *     clusterSubnetType: "SingleSubnet",
  *   },
  * });
@@ -160,6 +205,9 @@ export interface SqlVirtualMachineGroup extends Resource<
  * ### Joining SQL VMs
  * **Example:** Register a SQL VM into the group
  * ```typescript
+ * const bootstrapPassword = yield* Config.redacted("BOOTSTRAP_PASSWORD");
+ * const operatorPassword = yield* Config.redacted("OPERATOR_PASSWORD");
+ * const sqlServicePassword = yield* Config.redacted("SQL_SERVICE_PASSWORD");
  * yield* Azure.SqlVirtualMachine.SqlVirtualMachine("sql1", {
  *   virtualMachineId: vm1.virtualMachineId,
  *   sqlServerLicenseType: "PAYG",
@@ -214,10 +262,9 @@ export const SqlVirtualMachineGroupProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        sqlvm.ListSqlVirtualMachineGroups({ subscriptionId }),
+        collectAll(sqlvm.ListSqlVirtualMachineGroups, { subscriptionId }),
       );
       if (page === undefined) return [];
-      yield* requireSinglePage("ListSqlVirtualMachineGroups", page);
       return (page.value ?? []).flatMap((group) => {
         const resourceGroup = resourceGroupOf(group.id);
         return hasAnyAlchemyTag(group.tags) &&

@@ -1,7 +1,7 @@
 import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
-import { orUndefinedIfNotFound, userTags } from "../Arm.ts";
+import { collectAll, orUndefinedIfNotFound, userTags } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameId } from "./common.ts";
@@ -137,7 +137,7 @@ export const VpnGatewayProvider = () =>
           gatewayName: path.name,
           tags,
         }),
-      listAll: (subscriptionId) => network.ListVpnGateways({ subscriptionId }),
+      listAll: (subscriptionId) => collectAll(network.ListVpnGateways, { subscriptionId }),
       // The PUT replaces the connection and NAT-rule collections: carry the
       // observed ones (managed by VpnConnection / VpnGatewayNatRule).
       body: (news, { location, tags, observed }) => ({

@@ -6,10 +6,10 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   waitForProvisioned,
   waitUntilGone,
@@ -31,20 +31,30 @@ import {
 
 export interface ZoneProps {
   /**
-   * Resource group the zone is created in. Changing it replaces the zone.
+   * Resource group the zone is created in.
+   *
+   * :::caution
+   * Changing it replaces the zone.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * DNS name of the zone without a terminating dot, e.g.
-   * `internal.contoso.com` or `privatelink.blob.core.windows.net`. If
-   * omitted, `<generated-name>.internal` is used, where the generated name
-   * comes from the app, stage, and logical ID. Changing it replaces the zone.
+   * `internal.contoso.com` or `privatelink.blob.core.windows.net`.
+   *
+   * :::caution
+   * Changing it replaces the zone and deletes its record sets.
+   * :::
+   * @default `<generated-name>.internal`, with a name generated from the
+   * app, stage, and logical ID
    */
   name?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy_stack`, `alchemy_stage`,
    * `alchemy_id`) are merged in automatically; Private DNS drops tag keys
    * containing `:`.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -77,8 +87,8 @@ export interface Zone extends Resource<
 > {}
 
 /**
- * An Azure Private DNS zone — a DNS zone resolvable only from the virtual
- * networks linked to it.
+ * An Azure Private DNS zone (`Microsoft.Network/privateDnsZones`) — a DNS
+ * zone resolvable only from the virtual networks linked to it.
  *
  * Add records with `Azure.PrivateDns.RecordSet` and link virtual networks
  * with `Azure.PrivateDns.VirtualNetworkLink`. Zones are global resources.
@@ -104,6 +114,12 @@ export interface Zone extends Resource<
  * ### Linking a Virtual Network
  * **Example:** Resolve the zone from a virtual network
  * ```typescript
+ * const zone = yield* Azure.PrivateDns.Zone("internal", {
+ *   name: "internal.contoso.com",
+ * });
+ * const vnet = yield* Azure.Network.VirtualNetwork("hub", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
  * yield* Azure.PrivateDns.VirtualNetworkLink("hub", {
  *   privateZoneName: zone.privateZoneName,
  *   virtualNetworkId: vnet.virtualNetworkId,
@@ -156,9 +172,7 @@ export const ZoneProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* privatedns
-        .ListPrivateZones({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPrivateZones", page)));
+      const page = yield* collectAll(privatedns.ListPrivateZones, { subscriptionId });
       return (page.value ?? []).flatMap((zone) => {
         const group = resourceGroupOf(zone.id);
         return hasAnyMarker(zone.tags) && group !== undefined && zone.name !== undefined

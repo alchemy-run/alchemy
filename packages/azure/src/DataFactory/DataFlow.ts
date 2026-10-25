@@ -20,7 +20,10 @@ import {
 export type DataFlowType = "MappingDataFlow" | "Flowlet" | "WranglingDataFlow";
 
 export interface DataFlowProps {
-  /** Resource group of the factory. Changing it replaces the data flow. */
+  /**
+   * Resource group of the factory. Changing it replaces the data flow.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the factory that holds the data flow. Changing it replaces the data flow. */
   factoryName: string;
@@ -28,6 +31,7 @@ export interface DataFlowProps {
    * Data flow name: letters, digits, and `_`, up to 260 characters. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the data flow.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -38,15 +42,23 @@ export interface DataFlowProps {
   /**
    * Type-specific properties: `sources`, `sinks`, `transformations`, and
    * the data flow `script` or `scriptLines`.
+   * @default {}
    */
   typeProperties?: Record<string, unknown>;
-  /** Folder shown in the authoring UI. */
+  /**
+   * Folder shown in the authoring UI.
+   * @default none (the root folder)
+   */
   folder?: string;
-  /** Data flow description. */
+  /**
+   * Data flow description.
+   * @default none
+   */
   description?: string;
   /**
    * Annotations shown in the authoring UI. Alchemy appends an ownership
    * annotation (`alchemy:<stack>/<stage>/<id>`).
+   * @default []
    */
   annotations?: string[];
 }
@@ -75,16 +87,46 @@ export interface DataFlow extends Resource<
 > {}
 
 /**
- * A Data Factory data flow — a visually designed Spark transformation
- * (mapping data flow), a reusable flowlet, or a Power Query wrangling flow.
- * Defining a data flow is free; executing it from a pipeline bills Spark
- * vCore-hours.
+ * A Data Factory data flow (`Microsoft.DataFactory/factories/dataflows`) —
+ * a visually designed Spark transformation (mapping data flow), a reusable
+ * flowlet, or a Power Query wrangling flow. Defining a data flow is free;
+ * executing it from a pipeline bills Spark vCore-hours.
  *
- * @see https://learn.microsoft.com/azure/data-factory/concepts-data-flow-overview
+ * :::caution
+ * Changing `resourceGroup`, `factoryName`, `name`, or `type` replaces the
+ * data flow.
+ * :::
+ *
+ * See [Mapping data flows](https://learn.microsoft.com/azure/data-factory/concepts-data-flow-overview).
  *
  * ### Defining Data Flows
  * **Example:** Copy rows from one dataset to another
  * ```typescript
+ * const factory = yield* Azure.DataFactory.Factory("etl", {
+ *   identity: { type: "SystemAssigned" },
+ * });
+ * const account = yield* Azure.Storage.StorageAccount("lake");
+ * const blob = yield* Azure.DataFactory.LinkedService("blob", {
+ *   factoryName: factory.factoryName,
+ *   type: "AzureBlobStorage",
+ *   typeProperties: { serviceEndpoint: account.primaryEndpoints.blob },
+ * });
+ * const raw = yield* Azure.DataFactory.Dataset("raw", {
+ *   factoryName: factory.factoryName,
+ *   type: "Json",
+ *   linkedServiceName: { referenceName: blob.linkedServiceName },
+ *   typeProperties: {
+ *     location: { type: "AzureBlobStorageLocation", container: "raw" },
+ *   },
+ * });
+ * const curated = yield* Azure.DataFactory.Dataset("curated", {
+ *   factoryName: factory.factoryName,
+ *   type: "Json",
+ *   linkedServiceName: { referenceName: blob.linkedServiceName },
+ *   typeProperties: {
+ *     location: { type: "AzureBlobStorageLocation", container: "curated" },
+ *   },
+ * });
  * const flow = yield* Azure.DataFactory.DataFlow("orders", {
  *   factoryName: factory.factoryName,
  *   typeProperties: {

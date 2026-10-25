@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,11 +32,15 @@ import {
 } from "./Common.ts";
 
 export interface EnclaveConnectionProps {
-  /** Resource group the connection is created in. Changing it replaces the connection. */
+  /**
+   * Resource group the connection is created in. Changing it replaces the connection.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Connection name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the connection.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -65,6 +69,7 @@ export interface EnclaveConnectionProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -106,16 +111,49 @@ export interface EnclaveConnection extends Resource<
 > {}
 
 /**
- * An enclave connection — firewall rules that let a source enclave reach
- * an {@link EnclaveEndpoint} (or {@link CommunityEndpoint}) through the
- * community. The destination owner may need to approve it, depending on
- * the community's and enclave's approval settings.
+ * An enclave connection (`Microsoft.Mission/enclaveConnections`) — firewall
+ * rules that let a source enclave reach an {@link EnclaveEndpoint} (or
+ * {@link CommunityEndpoint}) through the community. The destination owner
+ * may need to approve it, depending on the community's and enclave's
+ * approval settings.
+ *
+ * :::caution
+ * Changing `name`, `location`, `communityId`, `sourceId`,
+ * `destinationEndpointId`, or `resourceGroup` replaces the connection. The
+ * new connection may need a new approval.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-enclaves/overview
  *
  * ### Connecting Enclaves
  * **Example:** Let one enclave reach another enclave's endpoint
  * ```typescript
+ * const community = yield* Azure.VirtualEnclaves.Community("hub", {
+ *   addressSpace: "10.0.0.0/16",
+ *   firewallSku: "Basic",
+ * });
+ * const enclaveA = yield* Azure.VirtualEnclaves.VirtualEnclave("a", {
+ *   communityId: community.communityId,
+ *   enclaveVirtualNetwork: { networkSize: "small" },
+ * });
+ * const enclaveB = yield* Azure.VirtualEnclaves.VirtualEnclave("b", {
+ *   // Create B after A: enclaves created together with the first one fail.
+ *   communityId: Output.all(community.communityId, enclaveA.virtualEnclaveId).pipe(
+ *     Output.map(([communityId]) => communityId),
+ *   ),
+ *   enclaveVirtualNetwork: { networkSize: "small" },
+ * });
+ * const endpointB = yield* Azure.VirtualEnclaves.EnclaveEndpoint("b-ingress", {
+ *   virtualEnclave: enclaveB.virtualEnclaveName,
+ *   ruleCollection: [
+ *     {
+ *       endpointRuleName: "https",
+ *       destination: "10.1.0.0/26",
+ *       protocols: ["TCP"],
+ *       ports: "443",
+ *     },
+ *   ],
+ * });
  * const connection = yield* Azure.VirtualEnclaves.EnclaveConnection("a-to-b", {
  *   communityId: community.communityId,
  *   sourceId: enclaveA.virtualEnclaveId,
@@ -178,11 +216,9 @@ export const EnclaveConnectionProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mission
-        .ListEnclaveConnectionBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListEnclaveConnectionBySubscription", page)),
-        );
+      const page = yield* collectAll(mission.ListEnclaveConnectionBySubscription, {
+        subscriptionId,
+      });
       return page.value.flatMap((connection) => {
         const group = resourceGroupOf(connection.id);
         return hasAnyAlchemyTag(connection.tags) &&

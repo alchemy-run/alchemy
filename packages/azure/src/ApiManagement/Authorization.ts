@@ -32,6 +32,7 @@ export interface AuthorizationProps {
    * Grant parameters, e.g. `{ clientId, clientSecret }` for
    * `ClientCredentials`. Azure never returns them, so changes are detected
    * against the previously deployed values.
+   * @default no parameters
    */
   parameters?: Record<string, Redacted.Redacted<string>>;
 }
@@ -64,19 +65,44 @@ export interface Authorization extends Resource<
  * {@link AuthorizationProvider}. APIM obtains and refreshes the OAuth 2.0
  * tokens; policies fetch them with `get-authorization-context`. Callers
  * need an {@link AuthorizationAccessPolicy} to use it.
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/authorizationProviders/authorizations`.
+ *
+ * :::caution
+ * Changing `serviceName`, `authorizationProviderName`, `name`,
+ * `oauth2GrantType`, or `resourceGroup` replaces the authorization.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/credentials-overview
  *
  * ### Creating Connections
  * **Example:** A client-credentials connection to Microsoft Graph
  * ```typescript
+ * const appId = yield* Config.string("ENTRA_CLIENT_ID");
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const { tenantId } = yield* Azure.AzureEnvironment.current;
+ * const provider = yield* Azure.ApiManagement.AuthorizationProvider("entra", {
+ *   serviceName: apim.serviceName,
+ *   identityProvider: "aad",
+ *   grantTypes: {
+ *     clientCredentials: {
+ *       resourceUri: "https://graph.microsoft.com",
+ *       scopes: "https://graph.microsoft.com/.default",
+ *       loginUri: "https://login.windows.net",
+ *       tenantId,
+ *     },
+ *   },
+ * });
  * const connection = yield* Azure.ApiManagement.Authorization("graph", {
  *   serviceName: apim.serviceName,
  *   authorizationProviderName: provider.authorizationProviderName,
  *   oauth2GrantType: "ClientCredentials",
  *   parameters: {
- *     clientId: Redacted.make(appId),
- *     clientSecret: Redacted.make(appSecret),
+ *     clientId: yield* Config.redacted("ENTRA_CLIENT_ID"),
+ *     clientSecret: yield* Config.redacted("ENTRA_CLIENT_SECRET"),
  *   },
  * });
  * ```

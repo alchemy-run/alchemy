@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -39,7 +39,10 @@ export interface DataControllerOnPremiseProperty {
   id: string;
   /** Certificate holding the cluster's public key, used to verify signed uploads. */
   publicSigningKey: string;
-  /** Thumbprint of the signing certificate. */
+  /**
+   * Thumbprint of the signing certificate.
+   * @default not set
+   */
   signingCertificateThumbprint?: string;
 }
 
@@ -80,6 +83,7 @@ export interface DataControllerProps {
    * Name of the data controller, 1-63 characters of lowercase letters,
    * digits and `-`. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the data controller.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -92,6 +96,7 @@ export interface DataControllerProps {
    * `microsoft.arcdataservices` extension (directly connected mode). Omit
    * it for indirect connectivity mode, where the cluster uploads usage via
    * `az arcdata`. Changing it replaces the data controller.
+   * @default no custom location (indirect connectivity mode)
    */
   extendedLocation?: DataControllerExtendedLocation;
   /**
@@ -102,6 +107,7 @@ export interface DataControllerProps {
   /**
    * Identity of the Kubernetes cluster for indirect connectivity mode.
    * Changing it replaces the data controller.
+   * @default not set
    */
   onPremiseProperty?: DataControllerOnPremiseProperty;
   /**
@@ -110,17 +116,30 @@ export interface DataControllerProps {
    * cluster. Azure requires it.
    */
   k8sRaw: Record<string, unknown>;
-  /** Administrator login of the data controller. */
+  /**
+   * Administrator login of the data controller.
+   * @default not set
+   */
   basicLoginInformation?: DataControllerLogin;
-  /** Login for the metrics (Grafana) dashboard. */
+  /**
+   * Login for the metrics (Grafana) dashboard.
+   * @default not set
+   */
   metricsDashboardCredential?: DataControllerLogin;
-  /** Login for the logs (Kibana) dashboard. */
+  /**
+   * Login for the logs (Kibana) dashboard.
+   * @default not set
+   */
   logsDashboardCredential?: DataControllerLogin;
-  /** Log Analytics workspace the data controller uploads logs to. */
+  /**
+   * Log Analytics workspace the data controller uploads logs to.
+   * @default no workspace
+   */
   logAnalyticsWorkspaceConfig?: DataControllerLogAnalyticsWorkspace;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -157,47 +176,58 @@ export interface DataController extends Resource<
 > {}
 
 /**
- * An Azure Arc data controller — the Azure projection of the Arc-enabled
- * data services control plane running in a Kubernetes cluster. SQL
- * Managed Instances and PostgreSQL servers on Arc hang off it.
+ * An Azure Arc data controller (`Microsoft.AzureArcData/dataControllers`)
+ * — the Azure projection of the Arc-enabled data services control plane
+ * running in a Kubernetes cluster. SQL Managed Instances and PostgreSQL
+ * servers on Arc hang off it.
  *
  * In indirect connectivity mode the resource is a registration that the
  * cluster uploads usage, metrics and logs to; in directly connected mode
  * it is bound to the custom location of an Arc-enabled Kubernetes cluster
  * running the `microsoft.arcdataservices` extension.
  *
+ * :::caution
+ * Changing `name`, `location`, `extendedLocation`, `onPremiseProperty`, or
+ * `resourceGroup` replaces the data controller.
+ *
+ * Azure requires `k8sRaw`, the `DataController` custom resource exported
+ * from the cluster. Its `spec.settings.azure` must name this subscription
+ * and resource group.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/azure-arc/data/overview
  *
  * ### Indirect Connectivity Mode
  * **Example:** Register an on-premises data controller
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("arc");
+ * // The DataController custom resource exported by `az arcdata dc export`.
+ * const exported = yield* Config.string("ARC_DATA_CONTROLLER_CR");
  * const controller = yield* Azure.ArcData.DataController("dc", {
  *   infrastructure: "onpremises",
  *   onPremiseProperty: {
  *     id: "1c2c7f4a-5d55-4a1f-9c55-0e2b6c3b9a10",
- *     publicSigningKey: clusterSigningCertificate,
+ *     publicSigningKey: yield* Config.string("ARC_CLUSTER_SIGNING_CERTIFICATE"),
  *   },
- *   // The DataController custom resource exported by `az arcdata dc export`;
- *   // spec.settings.azure must name this subscription and resource group.
- *   k8sRaw: exportedDataControllerCr,
+ *   k8sRaw: JSON.parse(exported),
  * });
  * ```
  *
  * ### Directly Connected Mode
  * **Example:** Bind to an Arc-enabled Kubernetes custom location
  * ```typescript
+ * const exported = yield* Config.string("ARC_DATA_CONTROLLER_CR");
+ * const workspace = yield* Azure.LogAnalytics.Workspace("arc-logs");
  * const controller = yield* Azure.ArcData.DataController("dc", {
  *   infrastructure: "azure",
- *   extendedLocation: { name: customLocationId },
- *   k8sRaw: dataControllerCr,
+ *   extendedLocation: { name: yield* Config.string("ARC_CUSTOM_LOCATION_ID") },
+ *   k8sRaw: JSON.parse(exported),
  *   basicLoginInformation: {
  *     username: "arcadmin",
- *     password: Redacted.make(adminPassword),
+ *     password: yield* Config.redacted("ARC_ADMIN_PASSWORD"),
  *   },
  *   logAnalyticsWorkspaceConfig: {
  *     workspaceId: workspace.customerId,
- *     primaryKey: workspaceKey,
+ *     primaryKey: yield* Config.redacted("ARC_WORKSPACE_KEY"),
  *   },
  * });
  * ```
@@ -282,11 +312,7 @@ export const DataControllerProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* arcdata
-        .ListDataControllerInSubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListDataControllerInSubscription", page)),
-        );
+      const page = yield* collectAll(arcdata.ListDataControllerInSubscription, { subscriptionId });
       return (page.value ?? []).flatMap((controller) => {
         const group = resourceGroupOf(controller.id);
         return hasAnyAlchemyTag(controller.tags) &&

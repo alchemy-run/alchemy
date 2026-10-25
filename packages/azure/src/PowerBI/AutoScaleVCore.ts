@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -24,29 +24,46 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface AutoScaleVCoreProps {
   /**
-   * Resource group the auto scale v-core resource is created in. Changing
-   * it replaces the resource.
+   * Resource group the auto scale v-core resource is created in.
+   *
+   * :::caution
+   * Changing it replaces the resource.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the auto scale v-core resource: 3-63 lowercase letters and
-   * digits, starting with a letter. If omitted, a unique name is generated
-   * from the app, stage, and logical ID. Changing it replaces the resource.
+   * digits, starting with a letter.
+   *
+   * :::caution
+   * Changing it replaces the resource.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Azure location. Must match the region of the Power BI Premium
-   * capacity. Changing it replaces the resource.
+   * capacity.
+   *
+   * :::caution
+   * Changing it replaces the resource.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
    * Object ID of the Power BI Premium Gen2 capacity that autoscales onto
-   * this resource. Changing it replaces the resource.
+   * this resource.
+   *
+   * :::caution
+   * Changing it replaces the resource.
+   * :::
    */
   capacityObjectId: string;
   /**
    * Maximum number of v-cores the capacity may autoscale to.
+   * @default Azure's default
    */
   capacityLimit?: number;
   /**
@@ -57,6 +74,7 @@ export interface AutoScaleVCoreProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -87,10 +105,16 @@ export interface AutoScaleVCore extends Resource<
 > {}
 
 /**
- * Power BI Premium autoscale v-cores — the Azure resource that bills the
+ * Power BI Premium autoscale v-cores (`Microsoft.PowerBIDedicated/autoScaleVCores`)
+ * — the Azure resource that bills the
  * extra v-cores a Power BI Premium Gen2 capacity scales onto under load.
  * The Premium capacity itself is purchased through Microsoft 365 and
  * referenced by its object ID.
+ *
+ * :::caution
+ * You need an existing Power BI Premium Gen2 capacity. Alchemy cannot
+ * create one.
+ * :::
  *
  * @see https://learn.microsoft.com/power-bi/enterprise/service-premium-auto-scale
  *
@@ -152,11 +176,9 @@ export const AutoScaleVCoreProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* powerbidedicated
-        .ListAutoScaleVCoreBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListAutoScaleVCoreBySubscription", page)),
-        );
+      const page = yield* collectAll(powerbidedicated.ListAutoScaleVCoreBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((vcore) => {
         const group = resourceGroupOf(vcore.id);
         return hasAnyAlchemyTag(vcore.tags) && group !== undefined && vcore.name !== undefined

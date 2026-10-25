@@ -52,17 +52,47 @@ export interface WorkspaceProductGroupLink extends Resource<
 /**
  * The workspace-scoped counterpart of {@link ProductGroupLink}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/workspaces/products/groupLinks`.
  *
  * Makes an API Management product visible to a {@link Group} through a
  * named link entity (`products/{productId}/groupLinks/{linkId}`). It
  * expresses the same relation as {@link ProductGroup}; use one or the
  * other. Groups are not available on the Consumption tier.
  *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `productName`, `groupName`,
+ * `name`, or `resourceGroup` replaces the link.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
+ *
  * @see https://learn.microsoft.com/rest/api/apimanagement/product-group-link
  *
  * ### Granting Product Access
  * **Example:** Let partners see the premium product
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
+ * const premium = yield* Azure.ApiManagement.WorkspaceProduct("premium", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   displayName: "Premium",
+ *   subscriptionRequired: true,
+ *   state: "published",
+ * });
+ * const partners = yield* Azure.ApiManagement.WorkspaceGroup("partners", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   displayName: "Partners",
+ * });
  * yield* Azure.ApiManagement.WorkspaceProductGroupLink("premium-partners", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -47,11 +47,15 @@ export interface ContextHierarchy {
 }
 
 export interface ContextProps {
-  /** Resource group the context is created in. Changing it replaces the context. */
+  /**
+   * Resource group the context is created in. Changing it replaces the context.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /**
    * Name of the context. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the context.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -67,6 +71,7 @@ export interface ContextProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -97,23 +102,27 @@ export interface Context extends Resource<
 > {}
 
 /**
- * An Azure Arc workload orchestration context: the root object that
- * declares the capabilities (kinds of workloads) and the hierarchy levels
- * (country, region, factory, line, ...) used by sites, targets, and
- * solution templates.
+ * An Azure Arc workload orchestration context (`Microsoft.Edge/contexts`):
+ * the root object that declares the capabilities (kinds of workloads) and
+ * the hierarchy levels (country, region, factory, line, ...) used by
+ * sites, targets, and solution templates. See the
+ * [workload orchestration overview](https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview).
  *
+ * :::caution
  * Azure allows only one context per subscription; creating a second one
- * fails with `Context ... already exists`, so a replacement deletes the
- * old context first.
+ * fails with `Context ... already exists`. Workload orchestration runs in
+ * `eastus` and `eastus2` only.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/azure-arc/workload-orchestration/overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the context.
+ * The old context is deleted first, and resources that name the context
+ * (site references, workflows) are replaced too.
+ * :::
  *
  * ### Creating a Context
  * **Example:** Context with two hierarchy levels
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("edge", {
- *   location: "eastus",
- * });
  * const context = yield* Azure.Edge.Context("context", {
  *   capabilities: [{ name: "soap", description: "Soap production" }],
  *   hierarchies: [
@@ -174,9 +183,7 @@ export const ContextProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* edge
-        .ListContextBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListContextBySubscription", page)));
+      const page = yield* collectAll(edge.ListContextBySubscription, { subscriptionId });
       return page.value.flatMap((context) => {
         const group = resourceGroupOf(context.id);
         return hasAnyAlchemyTag(context.tags) && group !== undefined && context.name !== undefined

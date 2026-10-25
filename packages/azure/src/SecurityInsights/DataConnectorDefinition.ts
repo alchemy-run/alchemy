@@ -18,7 +18,10 @@ import {
 } from "./Common.ts";
 
 export interface DataConnectorDefinitionProps {
-  /** Resource group of the Sentinel workspace. Changing it replaces the definition. */
+  /**
+   * Resource group of the Sentinel workspace. Changing it replaces the definition.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Sentinel-enabled Log Analytics workspace. Pass `OnboardingState.workspace`
@@ -28,6 +31,7 @@ export interface DataConnectorDefinitionProps {
   /**
    * Name of the definition. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the definition.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   dataConnectorDefinitionName?: string;
   /**
@@ -41,7 +45,10 @@ export interface DataConnectorDefinitionProps {
    * `connectivityCriteria`, `permissions`, `instructionSteps`, …
    */
   connectorUiConfig: Record<string, unknown>;
-  /** Connections configuration, e.g. `{ templateSpecName: "..." }`. */
+  /**
+   * Connections configuration, e.g. `{ templateSpecName: "..." }`.
+   * @default not set
+   */
   connectionsConfig?: Record<string, unknown>;
 }
 
@@ -67,17 +74,33 @@ export interface DataConnectorDefinition extends Resource<
 > {}
 
 /**
- * A Codeless Connector Platform (CCP) data connector definition: the
- * connector page shown in Microsoft Sentinel, usually paired with a
- * `DataConnector` of kind `RestApiPoller` that does the polling.
+ * A Microsoft Sentinel Codeless Connector Platform (CCP) data connector
+ * definition (`Microsoft.SecurityInsights/dataConnectorDefinitions`): the
+ * connector page shown in Sentinel. Pair it with an
+ * `Azure.SecurityInsights.DataConnector` of kind `RestApiPoller` that does
+ * the polling. See the
+ * [Azure docs](https://learn.microsoft.com/azure/sentinel/create-codeless-connector).
  *
- * @see https://learn.microsoft.com/azure/sentinel/create-codeless-connector
+ * :::caution
+ * Onboard the workspace first with `Azure.SecurityInsights.OnboardingState`,
+ * and pass its `workspace` attribute so Alchemy creates this resource after
+ * the onboarding and deletes it before.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `kind`, or
+ * `dataConnectorDefinitionName` replaces the definition. Alchemy updates
+ * `connectorUiConfig` and `connectionsConfig` in place.
+ * :::
  *
  * ### Codeless Connectors
  * **Example:** Define a connector page
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
+ *   workspace: logs.workspaceName,
+ * });
  * yield* Azure.SecurityInsights.DataConnectorDefinition("acme", {
- *   resourceGroup: sentinel.resourceGroup,
  *   workspace: sentinel.workspace,
  *   connectorUiConfig: {
  *     title: "Acme audit logs",

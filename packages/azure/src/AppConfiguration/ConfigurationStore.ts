@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -257,9 +257,7 @@ export const ConfigurationStoreProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* appconfiguration
-        .ListConfigurationStores({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListConfigurationStores", page)));
+      const page = yield* collectAll(appconfiguration.ListConfigurationStores, { subscriptionId });
       return (page.value ?? []).flatMap((store) => {
         const group = resourceGroupOf(store.id);
         return hasAnyAlchemyTag(store.tags) && group !== undefined && store.name !== undefined

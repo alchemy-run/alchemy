@@ -50,17 +50,40 @@ export interface WorkspaceTag extends Resource<
 /**
  * The workspace-scoped counterpart of {@link Tag}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is `Microsoft.ApiManagement/service/workspaces/tags`.
  *
  * An API Management tag entity, used to group and search APIs, operations,
  * and products (via {@link TagApiLink}, {@link TagOperationLink},
  * {@link TagProductLink}, {@link ApiTagLink}, ...). These are not ARM
  * resource tags.
  *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `name`, or `resourceGroup`
+ * replaces the tag.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
+ *
  * @see https://learn.microsoft.com/rest/api/apimanagement/tag
  *
  * ### Creating Tags
  * **Example:** Tag an API as public
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
+ * const api = yield* Azure.ApiManagement.WorkspaceApi("orders", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * const tag = yield* Azure.ApiManagement.WorkspaceTag("public", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

@@ -51,6 +51,7 @@ export interface OutboundRuleProps {
   /**
    * Rule name. If omitted, a unique name is generated from the logical ID.
    * Changing it replaces the rule.
+   * @default a unique name generated from the logical ID
    */
   name?: string;
   /**
@@ -101,16 +102,25 @@ export interface OutboundRule extends Resource<
  * virtual network: a private endpoint to an Azure resource, an allowed
  * FQDN, or an allowed service tag.
  *
+ * ARM type: `Microsoft.MachineLearningServices/workspaces/outboundRules`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/how-to-managed-network).
+ *
  * Rules are immutable: any change replaces the rule. They have no tags or
  * metadata, so ownership is tracked only in Alchemy state. A rule is
  * `Inactive` until the managed network is provisioned (when the first
  * compute is created).
  *
- * @see https://learn.microsoft.com/azure/machine-learning/how-to-managed-network
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `name`, `type`, `destination`, or
+ * `category` replaces the rule.
+ * :::
  *
  * ### Private Endpoints
  * **Example:** Private endpoint to a storage account
  * ```typescript
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const data = yield* Azure.Storage.StorageAccount("data");
  * const workspace = yield* Azure.MachineLearning.Workspace("ws", {
  *   kind: "Hub",
  *   storageAccount: storage.storageAccountId,

@@ -5,10 +5,10 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -121,12 +121,9 @@ interface AdministratorRef extends ServerRef {
  * GET can answer a bare 404 for an administrator the list reports.
  */
 const getAdministrator = (ref: AdministratorRef) =>
-  orUndefinedIfNotFound(postgresql.ListAdministratorsMicrosoftEntraByServer(serverOnly(ref))).pipe(
-    Effect.flatMap((page) =>
-      page === undefined
-        ? Effect.succeed(undefined)
-        : requireSinglePage("ListAdministratorsMicrosoftEntraByServer", page),
-    ),
+  orUndefinedIfNotFound(
+    collectAll(postgresql.ListAdministratorsMicrosoftEntraByServer, serverOnly(ref)),
+  ).pipe(
     Effect.map((page) =>
       (page?.value ?? []).find(
         (admin) => admin.properties.objectId?.toLowerCase() === ref.objectId.toLowerCase(),

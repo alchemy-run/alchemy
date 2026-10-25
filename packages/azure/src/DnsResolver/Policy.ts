@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,12 +32,14 @@ export interface PolicyProps {
   /**
    * Resource group the policy is created in. The DNS resolver API rejects resource group names
    * longer than 80 characters. Changing it replaces the policy.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
    * Policy name: 1-80 letters, digits, `_`, and `-`. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the policy.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -49,6 +51,7 @@ export interface PolicyProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -75,11 +78,15 @@ export interface Policy extends Resource<
 > {}
 
 /**
- * An Azure DNS security policy (DNS resolver policy) — filters and logs
- * DNS queries from the virtual networks linked to it, using DNS security
- * rules over domain lists.
+ * An Azure DNS security policy (`Microsoft.Network/dnsResolverPolicies`) —
+ * filters and logs DNS queries from the virtual networks linked to it,
+ * using DNS security rules over domain lists. See
+ * [DNS security policy](https://learn.microsoft.com/azure/dns/dns-security-policy).
  *
- * @see https://learn.microsoft.com/azure/dns/dns-security-policy
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the policy and
+ * its rules and virtual network links.
+ * :::
  *
  * ### Creating a Policy
  * **Example:** DNS security policy
@@ -130,9 +137,7 @@ export const PolicyProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* dnsresolver
-        .ListDnsResolverPolicies({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDnsResolverPolicies", page)));
+      const page = yield* collectAll(dnsresolver.ListDnsResolverPolicies, { subscriptionId });
       return (page.value ?? []).flatMap((policy) => {
         const group = resourceGroupOf(policy.id);
         return hasAnyAlchemyTag(policy.tags) && group !== undefined && policy.name !== undefined

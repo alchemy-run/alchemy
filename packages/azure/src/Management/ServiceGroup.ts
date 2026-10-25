@@ -24,6 +24,7 @@ export interface ServiceGroupProps {
    * Service group name, unique in the tenant: letters, digits, `-`, `_`,
    * `.`, `(`, `)` and `~`. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the group.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -40,15 +41,18 @@ export interface ServiceGroupProps {
   parentId?: string;
   /**
    * Criticality designation of the group, `0` through `4`.
+   * @default Azure's default
    */
   criticality?: number;
   /**
    * Kind of the service group. Changing it replaces the group.
+   * @default none
    */
   kind?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -87,11 +91,15 @@ export interface ServiceGroup extends Resource<
  * hierarchy, used to aggregate health, cost, and inventory views for a
  * workload.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/governance/service-groups/overview).
+ *
  * Service groups live outside subscriptions; the deploying identity needs
  * `Microsoft.Management/serviceGroups/write` on the parent group (by
  * default any principal may create groups under the tenant root).
  *
- * @see https://learn.microsoft.com/azure/governance/service-groups/overview
+ * :::caution
+ * Changing `name`, or `kind` replaces the service group.
+ * :::
  *
  * ### Creating a Service Group
  * **Example:** Service group under the tenant root

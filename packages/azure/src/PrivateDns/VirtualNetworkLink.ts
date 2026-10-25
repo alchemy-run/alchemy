@@ -6,10 +6,10 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   waitForProvisioned,
   waitUntilGone,
@@ -31,18 +31,38 @@ import {
 export type ResolutionPolicy = "Default" | "NxDomainRedirect";
 
 export interface VirtualNetworkLinkProps {
-  /** Resource group of the zone. Changing it replaces the link. */
+  /**
+   * Resource group of the zone.
+   *
+   * :::caution
+   * Changing it replaces the link.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the private DNS zone. Changing it replaces the link. */
+  /**
+   * Name of the private DNS zone.
+   *
+   * :::caution
+   * Changing it replaces the link.
+   * :::
+   */
   privateZoneName: string;
   /**
-   * Link name: 1-80 letters, digits, `_`, `-`, and `.`. If omitted, a
-   * unique name is generated from the app, stage, and logical ID. Changing
-   * it replaces the link.
+   * Link name: 1-80 letters, digits, `_`, `-`, and `.`.
+   *
+   * :::caution
+   * Changing it replaces the link.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * ARM ID of the virtual network to link. Changing it replaces the link.
+   * ARM ID of the virtual network to link.
+   *
+   * :::caution
+   * Changing it replaces the link.
+   * :::
    */
   virtualNetworkId: string;
   /**
@@ -56,13 +76,15 @@ export interface VirtualNetworkLinkProps {
    * With `NxDomainRedirect`, queries that return NXDOMAIN from the zone
    * fall back to public resolution. Only applies to Private Link
    * (`privatelink.*`) zones and A/AAAA/CNAME queries.
-   * When omitted, the policy is not managed (Azure uses `Default`).
+   * When omitted, Alchemy does not manage the policy.
+   * @default Azure's default (`Default`)
    */
   resolutionPolicy?: ResolutionPolicy;
   /**
    * User tags. Alchemy ownership tags (`alchemy_stack`, `alchemy_stage`,
    * `alchemy_id`) are merged in automatically; Private DNS drops tag keys
    * containing `:`.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -95,15 +117,27 @@ export interface VirtualNetworkLink extends Resource<
 > {}
 
 /**
- * A link between an Azure Private DNS zone and a virtual network: resources
+ * A link between an Azure Private DNS zone and a virtual network
+ * (`Microsoft.Network/privateDnsZones/virtualNetworkLinks`): resources
  * in the virtual network resolve the zone's records, and VMs can
  * auto-register their own records.
+ *
+ * :::caution
+ * A zone links to a virtual network only once, so a replacement that keeps
+ * the same zone and network deletes the old link first.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/dns/private-dns-virtual-network-links
  *
  * ### Linking a Virtual Network
  * **Example:** Resolution-only link
  * ```typescript
+ * const zone = yield* Azure.PrivateDns.Zone("internal", {
+ *   name: "internal.contoso.com",
+ * });
+ * const vnet = yield* Azure.Network.VirtualNetwork("hub", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
  * const link = yield* Azure.PrivateDns.VirtualNetworkLink("hub", {
  *   privateZoneName: zone.privateZoneName,
  *   virtualNetworkId: vnet.virtualNetworkId,
@@ -113,6 +147,12 @@ export interface VirtualNetworkLink extends Resource<
  * ### Auto-Registration
  * **Example:** Register VM records in the zone
  * ```typescript
+ * const zone = yield* Azure.PrivateDns.Zone("internal", {
+ *   name: "internal.contoso.com",
+ * });
+ * const vnet = yield* Azure.Network.VirtualNetwork("hub", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
  * yield* Azure.PrivateDns.VirtualNetworkLink("workloads", {
  *   privateZoneName: zone.privateZoneName,
  *   virtualNetworkId: vnet.virtualNetworkId,
@@ -123,6 +163,12 @@ export interface VirtualNetworkLink extends Resource<
  * ### Private Link Fallback
  * **Example:** Fall back to public DNS for unknown names
  * ```typescript
+ * const blobZone = yield* Azure.PrivateDns.Zone("blob", {
+ *   name: "privatelink.blob.core.windows.net",
+ * });
+ * const vnet = yield* Azure.Network.VirtualNetwork("hub", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
  * yield* Azure.PrivateDns.VirtualNetworkLink("blob", {
  *   privateZoneName: blobZone.privateZoneName,
  *   virtualNetworkId: vnet.virtualNetworkId,
@@ -192,23 +238,18 @@ export const VirtualNetworkLinkProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const zones = yield* privatedns
-        .ListPrivateZones({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPrivateZones", page)));
+      const zones = yield* collectAll(privatedns.ListPrivateZones, { subscriptionId });
       const found: VirtualNetworkLink["Attributes"][] = [];
       for (const zone of zones.value ?? []) {
         const group = resourceGroupOf(zone.id);
         if (group === undefined || zone.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          privatedns.ListVirtualNetworkLinks({
+          collectAll(privatedns.ListVirtualNetworkLinks, {
             subscriptionId,
             resourceGroupName: group,
             privateZoneName: zone.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListVirtualNetworkLinks", page);
-        }
         for (const link of page?.value ?? []) {
           if (hasAnyMarker(link.tags) && link.name !== undefined) {
             found.push(toAttrs(group, zone.name, link.name, link));

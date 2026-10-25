@@ -53,26 +53,47 @@ export interface BackupSchedulePolicy {
     | "SimpleSchedulePolicyV2"
     | "LongTermSchedulePolicy"
     | "LogSchedulePolicy";
-  /** Frequency of a simple schedule. */
+  /**
+   * Frequency of a simple schedule.
+   * @default none
+   */
   scheduleRunFrequency?: "Daily" | "Weekly" | "Hourly";
   /**
    * Times of day backups run, as ISO timestamps (only the time of day is
    * used), e.g. `["2026-01-01T23:00:00Z"]`.
+   * @default none
    */
   scheduleRunTimes?: string[];
-  /** Days of the week for a weekly schedule, e.g. `["Sunday"]`. */
+  /**
+   * Days of the week for a weekly schedule, e.g. `["Sunday"]`.
+   * @default none
+   */
   scheduleRunDays?: string[];
-  /** Hourly schedule (`SimpleSchedulePolicyV2`). */
+  /**
+   * Hourly schedule (`SimpleSchedulePolicyV2`): `interval` in hours,
+   * `scheduleWindowStartTime` as an ISO timestamp, and
+   * `scheduleWindowDuration` in hours.
+   * @default none
+   */
   hourlySchedule?: {
     interval?: number;
     scheduleWindowStartTime?: string;
     scheduleWindowDuration?: number;
   };
-  /** Daily schedule (`SimpleSchedulePolicyV2`). */
+  /**
+   * Daily schedule (`SimpleSchedulePolicyV2`).
+   * @default none
+   */
   dailySchedule?: { scheduleRunTimes?: string[] };
-  /** Weekly schedule (`SimpleSchedulePolicyV2`). */
+  /**
+   * Weekly schedule (`SimpleSchedulePolicyV2`).
+   * @default none
+   */
   weeklySchedule?: { scheduleRunDays?: string[]; scheduleRunTimes?: string[] };
-  /** Log backup frequency in minutes (`LogSchedulePolicy`). */
+  /**
+   * Log backup frequency in minutes (`LogSchedulePolicy`).
+   * @default none
+   */
   scheduleFrequencyInMins?: number;
   /** Any other service field. */
   [key: string]: unknown;
@@ -80,11 +101,20 @@ export interface BackupSchedulePolicy {
 
 /** A daily/weekly/monthly/yearly retention schedule. */
 export interface BackupRetentionSchedule {
-  /** Times of day the retained backups are taken (ISO timestamps). */
+  /**
+   * Times of day the retained backups are taken (ISO timestamps).
+   * @default none
+   */
   retentionTimes?: string[];
-  /** How long these recovery points are kept. */
+  /**
+   * How long these recovery points are kept.
+   * @default none
+   */
   retentionDuration?: BackupRetentionDuration;
-  /** Days of the week (weekly/monthly/yearly weekly-format schedules). */
+  /**
+   * Days of the week (weekly/monthly/yearly weekly-format schedules).
+   * @default none
+   */
   daysOfTheWeek?: string[];
   /** Any other service field. */
   [key: string]: unknown;
@@ -97,65 +127,124 @@ export interface BackupRetentionSchedule {
 export interface BackupRetentionPolicy {
   /** `LongTermRetentionPolicy` or `SimpleRetentionPolicy` (SQL log backups). */
   retentionPolicyType: "LongTermRetentionPolicy" | "SimpleRetentionPolicy";
-  /** Daily retention. */
+  /**
+   * Daily retention.
+   * @default none
+   */
   dailySchedule?: BackupRetentionSchedule;
-  /** Weekly retention. */
+  /**
+   * Weekly retention.
+   * @default none
+   */
   weeklySchedule?: BackupRetentionSchedule;
-  /** Monthly retention. */
+  /**
+   * Monthly retention.
+   * @default none
+   */
   monthlySchedule?: BackupRetentionSchedule;
-  /** Yearly retention. */
+  /**
+   * Yearly retention.
+   * @default none
+   */
   yearlySchedule?: BackupRetentionSchedule;
-  /** Retention of a `SimpleRetentionPolicy`. */
+  /**
+   * Retention of a `SimpleRetentionPolicy`.
+   * @default none
+   */
   retentionDuration?: BackupRetentionDuration;
   /** Any other service field. */
   [key: string]: unknown;
 }
 
 export interface BackupPolicyProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the policy. */
+  /**
+   * Resource group of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the policy.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the Recovery Services vault. Changing it replaces the policy. */
+  /**
+   * Name of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the policy.
+   * :::
+   */
   vault: string;
   /**
-   * Policy name, unique within the vault. If omitted, a unique name is
-   * generated from the app, stage, and logical ID. Changing it replaces the
-   * policy.
+   * Policy name, unique within the vault.
+   *
+   * :::caution
+   * Changing it replaces the policy.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Workload family the policy protects: `AzureIaasVM` (virtual machines),
    * `AzureStorage` (Azure Files), `AzureWorkload` (SQL/SAP HANA in VMs).
+   *
+   * :::caution
    * Changing it replaces the policy.
+   * :::
    */
   backupManagementType: BackupManagementType;
   /**
    * Workload type of an `AzureStorage`/`AzureWorkload` policy, e.g.
-   * `AzureFileShare` or `SQLDataBase`. Changing it replaces the policy.
+   * `AzureFileShare` or `SQLDataBase`. Set it at creation: Alchemy sends a
+   * later change as an in-place update.
+   * @default none
    */
   workLoadType?: string;
   /**
    * IaaS VM policy generation: `V1` (standard, daily/weekly) or `V2`
-   * (enhanced, hourly). Changing it replaces the policy.
+   * (enhanced, hourly). Set it at creation: Alchemy sends a later change as
+   * an in-place update.
+   * @default Azure's default
    */
   policyType?: "V1" | "V2";
-  /** Backup schedule. Required for `AzureIaasVM` and `AzureStorage` policies. */
+  /**
+   * Backup schedule. Required for `AzureIaasVM` and `AzureStorage` policies.
+   * @default none
+   */
   schedulePolicy?: BackupSchedulePolicy;
-  /** Retention of recovery points. Required for `AzureIaasVM` and `AzureStorage` policies. */
+  /**
+   * Retention of recovery points. Required for `AzureIaasVM` and `AzureStorage` policies.
+   * @default none
+   */
   retentionPolicy?: BackupRetentionPolicy;
-  /** Vaulted-tier retention (Azure Files vaulted backup). */
+  /**
+   * Vaulted-tier retention (Azure Files vaulted backup).
+   * @default none
+   */
   vaultRetentionPolicy?: Record<string, unknown>;
   /**
    * Time zone of the schedule, e.g. `UTC` or `Pacific Standard Time`.
    * @default "UTC"
    */
   timeZone?: string;
-  /** Days instant (snapshot) recovery points are kept (IaaS VM, 1-30). */
+  /**
+   * Days instant (snapshot) recovery points are kept (IaaS VM, 1-30).
+   * @default Azure's default
+   */
   instantRpRetentionRangeInDays?: number;
-  /** Archive tiering policy keyed by tier (IaaS VM). */
+  /**
+   * Archive tiering policy keyed by tier (IaaS VM).
+   * @default none
+   */
   tieringPolicy?: Record<string, unknown>;
-  /** Workload settings such as time zone and compression (`AzureWorkload`). */
+  /**
+   * Workload settings such as time zone and compression (`AzureWorkload`).
+   * @default none
+   */
   settings?: Record<string, unknown>;
-  /** Sub-policies per backup type: Full, Differential, Log (`AzureWorkload`). */
+  /**
+   * Sub-policies per backup type: Full, Differential, Log (`AzureWorkload`).
+   * @default none
+   */
   subProtectionPolicy?: Record<string, unknown>[];
 }
 
@@ -181,7 +270,8 @@ export interface BackupPolicy extends Resource<
 > {}
 
 /**
- * An Azure Backup policy in a Recovery Services vault: when backups run
+ * An Azure Backup policy in a Recovery Services vault
+ * (`Microsoft.RecoveryServices/vaults/backupPolicies`): when backups run
  * and how long recovery points are kept.
  *
  * Backup policies cannot be tagged; Alchemy treats a policy as owned when
@@ -217,6 +307,7 @@ export interface BackupPolicy extends Resource<
  * ### Virtual Machines
  * **Example:** Enhanced (V2) VM policy with a 4-hourly schedule
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault");
  * const policy = yield* Azure.RecoveryServices.BackupPolicy("vm-hourly", {
  *   vault: vault.vaultName,
  *   backupManagementType: "AzureIaasVM",

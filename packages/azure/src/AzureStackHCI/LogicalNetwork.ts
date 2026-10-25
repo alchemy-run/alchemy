@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -39,6 +39,7 @@ export interface LogicalNetworkProps {
   /**
    * Name of the logical network. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the logical network.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,11 +56,18 @@ export interface LogicalNetworkProps {
   /**
    * Name of the Hyper-V virtual switch the network is attached to.
    * Changing it replaces the network.
+   * @default not set
    */
   vmSwitchName?: string;
-  /** Subnets of the network. Changing them replaces the network. */
+  /**
+   * Subnets of the network. Changing them replaces the network.
+   * @default none
+   */
   subnets?: LogicalNetworkSubnet[];
-  /** DHCP options. Changing them replaces the network. */
+  /**
+   * DHCP options. Changing them replaces the network.
+   * @default not set
+   */
   dhcpOptions?: {
     /** DNS server IP addresses. */
     dnsServers?: string[];
@@ -67,6 +75,7 @@ export interface LogicalNetworkProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -101,12 +110,20 @@ export interface LogicalNetwork extends Resource<
  * network interfaces to, mapped onto a Hyper-V virtual switch (optionally
  * with static IP pools and a VLAN). Needs an Arc custom location backed by
  * the Arc Resource Bridge of a deployed Azure Local cluster.
+ * The ARM type is `Microsoft.AzureStackHCI/logicalNetworks`.
+ *
+ * :::caution
+ * Changing `name`, `location`, `extendedLocation`, `vmSwitchName`,
+ * `subnets`, `dhcpOptions`, or `resourceGroup` replaces the logical network.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/manage/create-logical-networks
  *
  * ### Creating a Logical Network
  * **Example:** DHCP network on a virtual switch
  * ```typescript
+ * // Arc custom location of the Azure Local cluster.
+ * const customLocationId = yield* Config.string("HCI_CUSTOM_LOCATION_ID");
  * const lnet = yield* Azure.AzureStackHCI.LogicalNetwork("lan", {
  *   extendedLocation: { name: customLocationId },
  *   vmSwitchName: "ConvergedSwitch(management_compute_storage)",
@@ -157,9 +174,7 @@ export const LogicalNetworkProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        hci
-          .ListLogicalNetworkAll({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListLogicalNetworkAll", page))),
+        collectAll(hci.ListLogicalNetworkAll, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((value) => {
         const group = resourceGroupOf(value.id);

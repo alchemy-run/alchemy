@@ -1,5 +1,6 @@
 import * as Azure from "@alchemy.run/azure";
 import type { AzureOpError } from "@distilled.cloud/azure";
+import type { Input } from "alchemy/Input";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -85,7 +86,7 @@ export const hasWorkloadNetworks = !!customLocationId && !!nexus.l3IsolationDoma
  * Cloud services network plus L3 network for the Kubernetes and virtual
  * machine lifecycles, in `resourceGroup` on the cluster's custom location.
  */
-export const workloadNetworks = (resourceGroup: string, vlan: number) =>
+export const workloadNetworks = (resourceGroup: Input<string>, vlan: number) =>
   Effect.gen(function* () {
     const csn = yield* Azure.NetworkCloud.CloudServicesNetwork("Services", {
       resourceGroup,

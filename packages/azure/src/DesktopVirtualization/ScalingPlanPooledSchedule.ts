@@ -31,7 +31,10 @@ export interface ScalingTime {
 export type ScalingLoadBalancingAlgorithm = "BreadthFirst" | "DepthFirst";
 
 export interface ScalingPlanPooledScheduleProps {
-  /** Resource group of the scaling plan. Changing it replaces the schedule. */
+  /**
+   * Resource group of the scaling plan. Changing it replaces the schedule.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Name of a `Pooled` scaling plan. Changing it replaces the schedule.
@@ -41,6 +44,7 @@ export interface ScalingPlanPooledScheduleProps {
    * Schedule name, 1-64 letters, digits, `@`, `.`, `-`, `_`, or spaces. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the schedule.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Days the schedule applies to. Days may not overlap other schedules of the plan. */
@@ -49,9 +53,15 @@ export interface ScalingPlanPooledScheduleProps {
   rampUpStartTime: ScalingTime;
   /** Load balancing during ramp-up. @default "BreadthFirst" */
   rampUpLoadBalancingAlgorithm?: ScalingLoadBalancingAlgorithm;
-  /** Minimum percentage of session hosts kept running during ramp-up. */
+  /**
+   * Minimum percentage of session hosts kept running during ramp-up.
+   * @default unset (Azure's default)
+   */
   rampUpMinimumHostsPct?: number;
-  /** Used-capacity percentage that triggers starting more hosts during ramp-up. */
+  /**
+   * Used-capacity percentage that triggers starting more hosts during ramp-up.
+   * @default unset (Azure's default)
+   */
   rampUpCapacityThresholdPct?: number;
   /** Start of the peak phase. */
   peakStartTime: ScalingTime;
@@ -61,17 +71,35 @@ export interface ScalingPlanPooledScheduleProps {
   rampDownStartTime: ScalingTime;
   /** Load balancing during ramp-down. @default "DepthFirst" */
   rampDownLoadBalancingAlgorithm?: ScalingLoadBalancingAlgorithm;
-  /** Minimum percentage of session hosts kept running during ramp-down. */
+  /**
+   * Minimum percentage of session hosts kept running during ramp-down.
+   * @default unset (Azure's default)
+   */
   rampDownMinimumHostsPct?: number;
-  /** Used-capacity percentage below which hosts are stopped during ramp-down. */
+  /**
+   * Used-capacity percentage below which hosts are stopped during ramp-down.
+   * @default unset (Azure's default)
+   */
   rampDownCapacityThresholdPct?: number;
-  /** Force users to log off when their host is stopped during ramp-down. */
+  /**
+   * Force users to log off when their host is stopped during ramp-down.
+   * @default unset (Azure's default)
+   */
   rampDownForceLogoffUsers?: boolean;
-  /** Which sessions block stopping a host during ramp-down. */
+  /**
+   * Which sessions block stopping a host during ramp-down.
+   * @default unset (Azure's default)
+   */
   rampDownStopHostsWhen?: "ZeroSessions" | "ZeroActiveSessions";
-  /** Minutes users get to save their work before a forced logoff. */
+  /**
+   * Minutes users get to save their work before a forced logoff.
+   * @default unset (Azure's default)
+   */
   rampDownWaitTimeMinutes?: number;
-  /** Message shown to users before a forced logoff. */
+  /**
+   * Message shown to users before a forced logoff.
+   * @default unset
+   */
   rampDownNotificationMessage?: string;
   /** Start of the off-peak phase. */
   offPeakStartTime: ScalingTime;
@@ -99,17 +127,27 @@ export interface ScalingPlanPooledSchedule extends Resource<
 > {}
 
 /**
- * A schedule of a `Pooled` Azure Virtual Desktop scaling plan: the
+ * A schedule of a `Pooled` Azure Virtual Desktop scaling plan
+ * (`Microsoft.DesktopVirtualization/scalingPlans/pooledSchedules`): the
  * ramp-up, peak, ramp-down, and off-peak phases for a set of weekdays.
  *
  * Schedules have no tags; Alchemy treats a schedule as owned when its
  * scaling plan carries this stack's ownership tags.
+ *
+ * :::caution
+ * Changing `scalingPlan`, `name`, or `resourceGroup` replaces the
+ * schedule. Alchemy deletes the old schedule first, because a plan allows
+ * one schedule per weekday.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-desktop/autoscale-scaling-plan
  *
  * ### Creating a Schedule
  * **Example:** Weekday schedule
  * ```typescript
+ * const plan = yield* Azure.DesktopVirtualization.ScalingPlan("autoscale", {
+ *   timeZone: "UTC",
+ * });
  * const weekdays = yield* Azure.DesktopVirtualization.ScalingPlanPooledSchedule(
  *   "weekdays",
  *   {

@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -28,12 +28,14 @@ export interface ApplicationGroupProps {
   /**
    * Resource group of the application group. Changing it replaces the
    * application group.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Application group name, 3-64 letters, digits, `@`, `.`, `-`, `_`, or
    * spaces. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the application group.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -52,15 +54,25 @@ export interface ApplicationGroupProps {
    * applications. Changing it replaces the application group.
    */
   applicationGroupType: ApplicationGroupType;
-  /** Display name shown to users. */
+  /**
+   * Display name shown to users.
+   * @default unset
+   */
   friendlyName?: string;
-  /** Description of the application group. */
+  /**
+   * Description of the application group.
+   * @default unset
+   */
   description?: string;
-  /** Whether the group appears in users' feeds. */
+  /**
+   * Whether the group appears in users' feeds.
+   * @default unset (Azure's default)
+   */
   showInFeed?: boolean;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -93,17 +105,28 @@ export interface ApplicationGroup extends Resource<
 > {}
 
 /**
- * An Azure Virtual Desktop application group — a set of resources (a full
- * desktop, or individual RemoteApp applications) published from a host
- * pool. Grant users access with a `Desktop Virtualization User` role
- * assignment scoped to the group, and add the group to a workspace so it
- * appears in their feed.
+ * An Azure Virtual Desktop application group
+ * (`Microsoft.DesktopVirtualization/applicationGroups`) — a set of
+ * resources (a full desktop, or individual RemoteApp applications)
+ * published from a host pool. Grant users access with a `Desktop
+ * Virtualization User` role assignment scoped to the group, and add the
+ * group to a workspace so it appears in their feed.
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `hostPoolId`, or
+ * `applicationGroupType` replaces the application group. Role assignments
+ * scoped to the old group do not carry over.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-desktop/terminology#application-groups
  *
  * ### Creating an Application Group
  * **Example:** Desktop application group
  * ```typescript
+ * const pool = yield* Azure.DesktopVirtualization.HostPool("pool", {
+ *   hostPoolType: "Pooled",
+ *   loadBalancerType: "BreadthFirst",
+ * });
  * const desktops = yield* Azure.DesktopVirtualization.ApplicationGroup("desktops", {
  *   hostPoolId: pool.hostPoolId,
  *   applicationGroupType: "Desktop",
@@ -170,11 +193,9 @@ export const ApplicationGroupProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* desktopvirtualization
-        .ListApplicationGroupBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListApplicationGroupBySubscription", page)),
-        );
+      const page = yield* collectAll(desktopvirtualization.ListApplicationGroupBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((group) => {
         const rg = resourceGroupOf(group.id);
         return hasAnyAlchemyTag(group.tags) && rg !== undefined && group.name !== undefined

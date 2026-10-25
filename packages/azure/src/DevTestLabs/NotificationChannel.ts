@@ -20,28 +20,45 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, diverges, labLocation } from "./Common.ts";
 
 export interface NotificationChannelProps {
-  /** Resource group of the lab. Changing it replaces the channel. */
+  /**
+   * Resource group of the lab. Changing it replaces the channel.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the lab. Changing it replaces the channel. */
   lab: string;
   /**
    * Channel name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the channel.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Events the channel is notified of. */
   events: ("AutoShutdown" | "Cost")[];
-  /** Webhook URL that receives notifications. */
+  /**
+   * Webhook URL that receives notifications.
+   * @default unset
+   */
   webHookUrl?: string;
-  /** Semicolon-separated email recipients. */
+  /**
+   * Semicolon-separated email recipients.
+   * @default unset
+   */
   emailRecipient?: string;
-  /** Locale of notification emails, e.g. `"en"`. */
+  /**
+   * Locale of notification emails, e.g. `"en"`.
+   * @default unset (Azure's default)
+   */
   notificationLocale?: string;
-  /** Description of the channel. */
+  /**
+   * Description of the channel.
+   * @default unset
+   */
   description?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -70,15 +87,21 @@ export interface NotificationChannel extends Resource<
 > {}
 
 /**
- * A DevTest Labs notification channel — a webhook and/or email recipients
+ * A DevTest Labs notification channel
+ * (`Microsoft.DevTestLab/labs/notificationchannels`) — a webhook and/or email recipients
  * notified of lab events such as upcoming auto-shutdown or cost
  * thresholds.
+ *
+ * :::caution
+ * Changing `lab`, `name`, or `resourceGroup` replaces the channel.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/devtest-labs/devtest-lab-auto-shutdown#configure-autoshutdown-for-lab-vms
  *
  * ### Email Notifications
  * **Example:** Email the team before auto-shutdown
  * ```typescript
+ * const lab = yield* Azure.DevTestLabs.Lab("team-lab");
  * const channel = yield* Azure.DevTestLabs.NotificationChannel("ops", {
  *   lab: lab.labName,
  *   events: ["AutoShutdown"],

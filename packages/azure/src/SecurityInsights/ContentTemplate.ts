@@ -12,7 +12,10 @@ import { compact, isWorkspaceOwnedByStack, SENTINEL_NAMESPACE, sameText } from "
 import type { MetadataAuthor, MetadataSource, MetadataSupport } from "./Metadata.ts";
 
 export interface ContentTemplateProps {
-  /** Resource group of the Sentinel workspace. Changing it replaces the template. */
+  /**
+   * Resource group of the Sentinel workspace. Changing it replaces the template.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Sentinel-enabled Log Analytics workspace. Pass `OnboardingState.workspace`
@@ -34,23 +37,47 @@ export interface ContentTemplateProps {
   version: string;
   /** Display name of the template. */
   displayName: string;
-  /** ID of the package the template belongs to (`ContentPackage.packageId`). */
+  /**
+   * ID of the package the template belongs to (`ContentPackage.packageId`).
+   * @default not set
+   */
   packageId?: string;
-  /** Version of the package. */
+  /**
+   * Version of the package.
+   * @default not set
+   */
   packageVersion?: string;
-  /** Kind of the package: `Solution` or `Standalone`. */
+  /**
+   * Kind of the package: `Solution` or `Standalone`.
+   * @default not set
+   */
   packageKind?: "Solution" | "Standalone" | (string & {});
-  /** Display name of the package. */
+  /**
+   * Display name of the package.
+   * @default not set
+   */
   packageName?: string;
   /** ARM template that deploys the content (the catalog's `packagedContent`). */
   mainTemplate: Record<string, unknown>;
-  /** Source of the template. */
+  /**
+   * Source of the template.
+   * @default not set
+   */
   source?: MetadataSource;
-  /** Author of the template. */
+  /**
+   * Author of the template.
+   * @default not set
+   */
   author?: MetadataAuthor;
-  /** Support information of the template. */
+  /**
+   * Support information of the template.
+   * @default not set
+   */
   support?: MetadataSupport;
-  /** Schema version of the content. */
+  /**
+   * Schema version of the content.
+   * @default not set
+   */
   contentSchemaVersion?: string;
 }
 
@@ -78,32 +105,59 @@ export interface ContentTemplate extends Resource<
 > {}
 
 /**
- * A Microsoft Sentinel content template (analytics rule template, workbook,
- * hunting query, …) installed in a workspace, usually from a Content Hub
- * package. The fields are copied from the Content Hub catalog
- * (`ListProductTemplates` / `GetProductTemplate`, whose `packagedContent`
- * is the `mainTemplate`).
+ * A Microsoft Sentinel content template
+ * (`Microsoft.SecurityInsights/contentTemplates`): an analytics rule
+ * template, workbook, hunting query, or other content installed in a
+ * workspace, usually from a Content Hub package. See the
+ * [Azure docs](https://learn.microsoft.com/azure/sentinel/sentinel-solutions-deploy).
  *
- * @see https://learn.microsoft.com/azure/sentinel/sentinel-solutions-deploy
+ * Copy the fields from the Content Hub catalog (`ListProductTemplates` /
+ * `GetProductTemplate`). The catalog's `packagedContent` is the
+ * `mainTemplate`.
+ *
+ * :::caution
+ * Onboard the workspace first with `Azure.SecurityInsights.OnboardingState`,
+ * and pass its `workspace` attribute so Alchemy creates this resource after
+ * the onboarding and deletes it before.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, or `templateId` replaces the
+ * template. Alchemy installs a new `version` and the other fields in place.
+ * :::
  *
  * ### Installing Templates
  * **Example:** Install a template of an installed solution
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
+ *   workspace: logs.workspaceName,
+ * });
  * const pkg = yield* Azure.SecurityInsights.ContentPackage("azure-activity", {
- *   // ... fields from the Content Hub catalog
+ *   workspace: sentinel.workspace,
+ *   packageId: "azuresentinel.azure-sentinel-solution-azureactivity",
+ *   contentId: "azuresentinel.azure-sentinel-solution-azureactivity",
+ *   contentProductId: "azuresentinel.azure-sentinel-solution-azureactivity-sl-...",
+ *   contentKind: "Solution",
+ *   version: "3.0.3",
+ *   displayName: "Azure Activity",
  * });
  * yield* Azure.SecurityInsights.ContentTemplate("activity-rule", {
- *   resourceGroup: pkg.resourceGroup,
  *   workspace: pkg.workspace,
- *   templateId: catalogTemplate.name,
- *   contentId: catalogTemplate.properties.contentId,
- *   contentProductId: catalogTemplate.properties.contentProductId,
+ *   templateId: "azuresentinel.azure-sentinel-solution-azureactivity-ar-...",
+ *   contentId: "<contentId from the catalog>",
+ *   contentProductId: "azuresentinel.azure-sentinel-solution-azureactivity-ar-...",
  *   contentKind: "AnalyticsRule",
- *   version: catalogTemplate.properties.version,
- *   displayName: catalogTemplate.properties.displayName,
+ *   version: "1.0.0",
+ *   displayName: "Azure Activity analytics rule",
  *   packageId: pkg.packageId,
  *   packageKind: "Solution",
- *   mainTemplate: catalogTemplate.properties.packagedContent,
+ *   mainTemplate: {
+ *     $schema:
+ *       "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+ *     contentVersion: "1.0.0.0",
+ *     resources: [],
+ *   },
  * });
  * ```
  *

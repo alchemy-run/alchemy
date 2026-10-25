@@ -6,10 +6,10 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -32,6 +32,7 @@ export interface BudgetProps {
    * Name of the budget, unique within the scope. Letters, digits, `-` and
    * `_`, at most 63 characters. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the budget.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   budgetName?: string;
   /**
@@ -59,6 +60,7 @@ export interface BudgetProps {
   /**
    * Narrows tracked cost to resources matching dimensions (e.g.
    * `ResourceId`, `ResourceGroupName`, `MeterCategory`) and/or tags.
+   * @default none (all cost in the scope)
    */
   filter?: BudgetFilter;
   /**
@@ -66,6 +68,7 @@ export interface BudgetProps {
    * `Forecasted`). Each fires when spend crosses `threshold` percent of
    * `amount` and mails `contactEmails`, `contactRoles` (e.g. `Owner`), or
    * action groups in `contactGroups`.
+   * @default {} (no alerts)
    */
   notifications?: Record<string, BudgetNotification>;
 }
@@ -94,14 +97,20 @@ export interface Budget extends Resource<
 > {}
 
 /**
- * An Azure Cost Management budget — a spending limit on a subscription or
- * resource group that sends alerts when actual or forecasted cost crosses
- * a percentage of the limit. Budgets cost nothing and never stop resources.
+ * An Azure Cost Management budget (`Microsoft.CostManagement/budgets`) — a
+ * spending limit on a subscription or resource group that sends alerts when
+ * actual or forecasted cost crosses a percentage of the limit. Budgets cost
+ * nothing and never stop resources.
  *
  * Budgets have no tags or free-form fields, so Alchemy treats a budget as
  * its own when its name is the one Alchemy generated (or recorded) for it.
  *
- * @see https://learn.microsoft.com/azure/cost-management-billing/costs/tutorial-acm-create-budgets
+ * :::caution
+ * Changing `scope`, `budgetName`, `timeGrain`, or `startDate` replaces the
+ * budget.
+ * :::
+ *
+ * See [Create and manage budgets](https://learn.microsoft.com/azure/cost-management-billing/costs/tutorial-acm-create-budgets).
  *
  * ### Subscription Budgets
  * **Example:** Monthly budget with an 80% alert to the subscription owners
@@ -124,7 +133,7 @@ export interface Budget extends Resource<
  * ### Resource Group Budgets
  * **Example:** Forecast alert for one resource group
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("app", {});
+ * const group = yield* Azure.Resources.ResourceGroup("app");
  * yield* Azure.CostManagement.Budget("app-budget", {
  *   scope: group.resourceGroupId,
  *   amount: 25,
@@ -247,9 +256,7 @@ export const BudgetProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const scope = `/subscriptions/${subscriptionId}`;
-      const page = yield* cm
-        .ListBudgets({ scope })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListBudgets", page)));
+      const page = yield* collectAll(cm.ListBudgets, { scope });
       return (page.value ?? []).flatMap((budget) =>
         budget.name !== undefined && GENERATED.test(budget.name)
           ? [toAttrs(scope, budget.name, budget)]

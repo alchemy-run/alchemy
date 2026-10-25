@@ -27,9 +27,15 @@ export interface CacheProps {
    * @default "default"
    */
   useFromLocation?: string;
-  /** ARM resource ID of the Azure Cache for Redis instance (for portal linking). */
+  /**
+   * ARM resource ID of the Azure Cache for Redis instance (for portal linking).
+   * @default not set
+   */
   resourceId?: string;
-  /** Description of the cache. */
+  /**
+   * Description of the cache.
+   * @default no description
+   */
   description?: string;
 }
 
@@ -56,18 +62,27 @@ export interface Cache extends Resource<
  * An external Redis-compatible cache for API Management's `cache-lookup`
  * / `cache-store` policies. Required on the Consumption tier (which has no
  * built-in cache) and optional elsewhere.
+ * The ARM type is `Microsoft.ApiManagement/service/caches`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the cache.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-cache-external
  *
  * ### Using an External Cache
  * **Example:** Point the gateway at Azure Cache for Redis
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const redis = yield* Azure.Redis.Cache("cache");
  * yield* Azure.ApiManagement.Cache("redis", {
  *   serviceName: apim.serviceName,
- *   connectionString: Redacted.make(
- *     `${redisHost}:6380,password=${redisKey},ssl=True,abortConnect=False`,
- *   ),
- *   resourceId: redis.id,
+ *   // host:6380,password=<key>,ssl=True,abortConnect=False
+ *   connectionString: yield* Config.redacted("REDIS_CONNECTION_STRING"),
+ *   resourceId: redis.cacheId,
  *   description: "Response cache",
  * });
  * ```

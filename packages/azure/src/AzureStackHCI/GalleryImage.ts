@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -41,6 +41,7 @@ export interface GalleryImageProps {
   /**
    * Name of the gallery image. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the gallery image.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -57,6 +58,7 @@ export interface GalleryImageProps {
   /**
    * Location of the source image: a local path on the cluster, or a
    * storage blob URL. Changing it replaces the image.
+   * @default not set
    */
   imagePath?: string;
   /**
@@ -67,17 +69,30 @@ export interface GalleryImageProps {
   containerId?: string;
   /** Operating system of the image. Changing it replaces the image. */
   osType: "Windows" | "Linux";
-  /** Cloud-init datasource of the image. Changing it replaces the image. */
+  /**
+   * Cloud-init datasource of the image. Changing it replaces the image.
+   * @default not set
+   */
   cloudInitDataSource?: "NoCloud" | "Azure";
-  /** Hyper-V generation of the image. Changing it replaces the image. */
+  /**
+   * Hyper-V generation of the image. Changing it replaces the image.
+   * @default not set
+   */
   hyperVGeneration?: "V1" | "V2";
-  /** Gallery image definition identifier. Changing it replaces the image. */
+  /**
+   * Gallery image definition identifier. Changing it replaces the image.
+   * @default not set
+   */
   identifier?: GalleryImageIdentifier;
-  /** Image version. Changing it replaces the image. */
+  /**
+   * Image version. Changing it replaces the image.
+   * @default not set
+   */
   version?: GalleryImageVersion;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -113,12 +128,21 @@ export interface GalleryImage extends Resource<
  * A VM image on an Azure Local cluster, imported from a local path or a
  * storage blob, used to create Arc VMs. Needs an Arc custom location backed
  * by the Arc Resource Bridge of a deployed Azure Local cluster.
+ * The ARM type is `Microsoft.AzureStackHCI/galleryImages`.
+ *
+ * :::caution
+ * Changing `name`, `location`, `extendedLocation`, `imagePath`,
+ * `containerId`, `osType`, `cloudInitDataSource`, `hyperVGeneration`,
+ * `identifier`, `version`, or `resourceGroup` replaces the image.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/manage/virtual-machine-image-storage-account
  *
  * ### Importing an Image
  * **Example:** Image from a storage blob
  * ```typescript
+ * // Arc custom location of the Azure Local cluster.
+ * const customLocationId = yield* Config.string("HCI_CUSTOM_LOCATION_ID");
  * const image = yield* Azure.AzureStackHCI.GalleryImage("ubuntu", {
  *   extendedLocation: { name: customLocationId },
  *   imagePath: "https://account.blob.core.windows.net/images/ubuntu.vhdx",
@@ -178,9 +202,7 @@ export const GalleryImageProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        hci
-          .ListGalleryImageAll({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListGalleryImageAll", page))),
+        collectAll(hci.ListGalleryImageAll, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((value) => {
         const group = resourceGroupOf(value.id);

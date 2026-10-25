@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -111,12 +111,14 @@ export interface WorkflowProps {
   /**
    * Resource group the workflow is created in. Changing it replaces the
    * workflow.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the workflow (1-63 characters of letters, digits, `-` and `_`).
    * If omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the workflow.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -129,16 +131,19 @@ export interface WorkflowProps {
    * together. Creating the workflow opens a pull request against the
    * repository, which requires the Developer Hub GitHub app to be
    * authorized for the subscription. Changing it replaces the workflow.
+   * @default unset
    */
   githubWorkflowProfile?: WorkflowGitHubProfile;
   /**
    * Dockerfile/manifest generation settings. Changing them replaces the
    * workflow.
+   * @default unset (no generated artifacts)
    */
   artifactGenerationProperties?: WorkflowArtifactGenerationProperties;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -173,19 +178,36 @@ export interface Workflow extends Resource<
 > {}
 
 /**
- * A Developer Hub workflow (Automated Deployments for AKS). It connects a
+ * A Developer Hub workflow (`Microsoft.DevHub/workflows`, Automated
+ * Deployments for AKS). It connects a
  * GitHub repository to an AKS cluster and an Azure Container Registry, and
  * opens a pull request that adds a GitHub Actions workflow building the
  * image and deploying it to the cluster.
  *
+ * :::caution
+ * The workflow is fixed once its pull request is open. Changing `name`,
+ * `location`, `resourceGroup`, `githubWorkflowProfile`, or
+ * `artifactGenerationProperties` replaces the workflow. Only `tags`
+ * update in place.
+ * :::
+ *
+ * :::caution
  * The subscription must first authorize the Developer Hub GitHub app
  * (Azure portal → AKS → Automated deployments).
+ * :::
  *
  * @see https://learn.microsoft.com/azure/aks/automated-deployments
  *
  * ### Creating a Workflow
  * **Example:** Deploy a repository to AKS with Helm
  * ```typescript
+ * const { subscriptionId, tenantId } = yield* Azure.AzureEnvironment.current;
+ * // Client ID of the Entra app GitHub Actions signs in with (OIDC).
+ * const clientId = "00000000-0000-0000-0000-000000000000";
+ * const registry = yield* Azure.ContainerRegistry.Registry("images");
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+ *   defaultNodePool: { vmSize: "Standard_D2s_v7", count: 1 },
+ * });
  * const workflow = yield* Azure.DevHub.Workflow("deploy", {
  *   githubWorkflowProfile: {
  *     repositoryOwner: "my-org",
@@ -201,7 +223,7 @@ export interface Workflow extends Resource<
  *     namespace: "default",
  *     acr: {
  *       acrSubscriptionId: subscriptionId,
- *       acrResourceGroup: group.resourceGroupName,
+ *       acrResourceGroup: registry.resourceGroup,
  *       acrRegistryName: registry.registryName,
  *       acrRepositoryName: "my-app",
  *     },
@@ -215,7 +237,12 @@ export interface Workflow extends Resource<
  * **Example:** Let Developer Hub generate the build artifacts
  * ```typescript
  * const workflow = yield* Azure.DevHub.Workflow("deploy", {
- *   githubWorkflowProfile: { ...profile },
+ *   githubWorkflowProfile: {
+ *     repositoryOwner: "my-org",
+ *     repositoryName: "my-app",
+ *     branchName: "main",
+ *     aksResourceId: cluster.clusterId,
+ *   },
  *   artifactGenerationProperties: {
  *     generationLanguage: "javascript",
  *     languageVersion: "20",
@@ -276,9 +303,7 @@ export const WorkflowProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* developerhub
-        .ListWorkflow({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListWorkflow", page)));
+      const page = yield* collectAll(developerhub.ListWorkflow, { subscriptionId });
       return (page.value ?? []).flatMap((workflow) => {
         const group = resourceGroupOf(workflow.id);
         return hasAnyAlchemyTag(workflow.tags) && group !== undefined && workflow.name !== undefined

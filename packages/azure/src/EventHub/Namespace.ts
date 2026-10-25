@@ -6,12 +6,12 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -246,9 +246,7 @@ export const NamespaceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* eventhub
-        .ListNamespaces({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListNamespaces", page)));
+      const page = yield* collectAll(eventhub.ListNamespaces, { subscriptionId });
       return (page.value ?? []).flatMap((namespace) => {
         const group = resourceGroupOf(namespace.id);
         return hasAnyAlchemyTag(namespace.tags) &&

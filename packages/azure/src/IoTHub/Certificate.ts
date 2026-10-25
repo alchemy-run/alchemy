@@ -19,7 +19,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, iotHubOwnedByStage } from "./Common.ts";
 
 export interface CertificateProps {
-  /** Resource group of the IoT hub. Changing it replaces the certificate. */
+  /**
+   * Resource group of the IoT hub. Changing it replaces the certificate.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the IoT hub. Changing it replaces the certificate. */
   iotHub: string;
@@ -27,6 +30,7 @@ export interface CertificateProps {
    * Certificate name: letters, digits, periods, hyphens, and underscores
    * (up to 64). If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the certificate.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -73,11 +77,12 @@ export interface Certificate extends Resource<
 > {}
 
 /**
- * An X.509 CA certificate registered on an IoT hub. Devices presenting a
+ * An X.509 CA certificate registered on an IoT hub
+ * (`Microsoft.Devices/IotHubs/certificates`). Devices presenting a
  * certificate signed by a verified CA can authenticate without per-device
  * secrets.
  *
- * Certificates carry no tags or metadata; they count as owned when the
+ * Certificates carry no tags or metadata. They count as owned when the
  * parent hub carries this stack's and stage's ownership tags.
  *
  * @see https://learn.microsoft.com/azure/iot-hub/authenticate-authorize-x509
@@ -85,6 +90,8 @@ export interface Certificate extends Resource<
  * ### Registering a CA Certificate
  * **Example:** Upload a pre-verified root CA
  * ```typescript
+ * // the public root CA certificate, PEM-encoded
+ * const rootCaPem = "-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIU...\n-----END CERTIFICATE-----";
  * const hub = yield* Azure.IoTHub.IotHub("devices");
  * const ca = yield* Azure.IoTHub.Certificate("root-ca", {
  *   iotHub: hub.iotHubName,
@@ -92,6 +99,10 @@ export interface Certificate extends Resource<
  *   isVerified: true,
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `iotHub`, or `resourceGroup` replaces the certificate.
+ * :::
  *
  * @resource
  */

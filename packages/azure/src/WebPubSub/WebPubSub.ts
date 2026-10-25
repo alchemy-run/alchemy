@@ -6,12 +6,12 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -46,14 +46,23 @@ export interface WebPubSubLogCategory {
 export interface WebPubSubLiveTrace {
   /** Whether live trace clients may connect to the service. */
   enabled: boolean;
-  /** Per-category live trace switches. */
+  /**
+   * Per-category live trace switches.
+   * @default not set
+   */
   categories?: WebPubSubLogCategory[];
 }
 
 export interface WebPubSubNetworkAcl {
-  /** Request types allowed through this ACL. */
+  /**
+   * Request types allowed through this ACL.
+   * @default not set
+   */
   allow?: WebPubSubRequestType[];
-  /** Request types denied by this ACL. */
+  /**
+   * Request types denied by this ACL.
+   * @default not set
+   */
   deny?: WebPubSubRequestType[];
 }
 
@@ -72,29 +81,45 @@ export interface WebPubSubIpRule {
 export interface WebPubSubNetworkAcls {
   /** Action applied to requests no ACL matches. */
   defaultAction: "Allow" | "Deny";
-  /** ACL for requests from the public network. */
+  /**
+   * ACL for requests from the public network.
+   * @default not set
+   */
   publicNetwork?: WebPubSubNetworkAcl;
-  /** ACLs for requests from private endpoints. */
+  /**
+   * ACLs for requests from private endpoints.
+   * @default not set
+   */
   privateEndpoints?: WebPubSubPrivateEndpointAcl[];
-  /** IP rules filtering public traffic. */
+  /**
+   * IP rules filtering public traffic.
+   * @default not set
+   */
   ipRules?: WebPubSubIpRule[];
 }
 
 export interface WebPubSubIdentity {
   /** Identity type. `None` removes the identity. */
   type: "None" | "SystemAssigned" | "UserAssigned";
-  /** ARM resource IDs of user-assigned identities (with `UserAssigned`). */
+  /**
+   * ARM resource IDs of user-assigned identities (with `UserAssigned`).
+   * @default not set
+   */
   userAssignedIdentities?: string[];
 }
 
 export interface WebPubSubProps {
-  /** Resource group the service is created in. Changing it replaces the service. */
+  /**
+   * Resource group the service is created in. Changing it replaces the service.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Globally unique service name (it becomes
    * `{name}.webpubsub.azure.com`): 3-63 letters, digits, and hyphens,
    * starting with a letter. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the service.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -126,11 +151,20 @@ export interface WebPubSubProps {
    * @default Azure's default (`false`)
    */
   clientCertEnabled?: boolean;
-  /** Live trace settings. */
+  /**
+   * Live trace settings.
+   * @default not set
+   */
   liveTrace?: WebPubSubLiveTrace;
-  /** Resource log categories sent to diagnostic settings. */
+  /**
+   * Resource log categories sent to diagnostic settings.
+   * @default not set
+   */
   resourceLogCategories?: WebPubSubLogCategory[];
-  /** Network ACLs for public and private endpoint traffic. */
+  /**
+   * Network ACLs for public and private endpoint traffic.
+   * @default not set
+   */
   networkAcls?: WebPubSubNetworkAcls;
   /**
    * Whether the public endpoint accepts traffic. When disabled, private
@@ -167,11 +201,15 @@ export interface WebPubSubProps {
    * @default Azure's default (`Default`)
    */
   socketIOServiceMode?: "Default" | "Serverless";
-  /** Managed identity of the service, e.g. for event handler auth. */
+  /**
+   * Managed identity of the service, e.g. for event handler auth.
+   * @default not set
+   */
   identity?: WebPubSubIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -224,10 +262,15 @@ export interface WebPubSub extends Resource<
 > {}
 
 /**
- * An Azure Web PubSub service — a managed real-time messaging service for
- * WebSocket and Socket.IO clients. Configure hubs with
- * `Azure.WebPubSub.Hub`; the access keys and connection strings are exposed
- * as redacted attributes.
+ * An Azure Web PubSub service (`Microsoft.SignalRService/webPubSub`) — a
+ * managed real-time messaging service for WebSocket and Socket.IO clients.
+ * Configure hubs with `Azure.WebPubSub.Hub`; the access keys and connection
+ * strings are exposed as redacted attributes.
+ *
+ * :::caution
+ * Changing `name`, `location`, `kind`, or `resourceGroup` replaces the
+ * service. The new service has new access keys and connection strings.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-web-pubsub/overview
  *
@@ -490,9 +533,7 @@ export const WebPubSubProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* webpubsub
-        .ListWebPubSubBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListWebPubSubBySubscription", page)));
+      const page = yield* collectAll(webpubsub.ListWebPubSubBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((service) => {
         const group = resourceGroupOf(service.id);
         return hasAnyAlchemyTag(service.tags) && group !== undefined && service.name !== undefined

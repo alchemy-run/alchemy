@@ -27,21 +27,45 @@ export interface IdentityProviderProps {
   clientId: string;
   /** Client secret registered with the identity provider. */
   clientSecret: Redacted.Redacted<string>;
-  /** Allowed Microsoft Entra tenants (`aad` only). */
+  /**
+   * Allowed Microsoft Entra tenants (`aad` only).
+   * @default none
+   */
   allowedTenants?: string[];
-  /** Tenant used for sign-in instead of `common` (`aad` only). */
+  /**
+   * Tenant used for sign-in instead of `common` (`aad` only).
+   * @default not set
+   */
   signinTenant?: string;
-  /** OpenID Connect discovery authority (`aad`/`aadB2C`). */
+  /**
+   * OpenID Connect discovery authority (`aad`/`aadB2C`).
+   * @default not set
+   */
   authority?: string;
-  /** Sign-up policy name (`aadB2C` only). */
+  /**
+   * Sign-up policy name (`aadB2C` only).
+   * @default not set
+   */
   signupPolicyName?: string;
-  /** Sign-in policy name (`aadB2C` only). */
+  /**
+   * Sign-in policy name (`aadB2C` only).
+   * @default not set
+   */
   signinPolicyName?: string;
-  /** Profile editing policy name (`aadB2C` only). */
+  /**
+   * Profile editing policy name (`aadB2C` only).
+   * @default not set
+   */
   profileEditingPolicyName?: string;
-  /** Password reset policy name (`aadB2C` only). */
+  /**
+   * Password reset policy name (`aadB2C` only).
+   * @default not set
+   */
   passwordResetPolicyName?: string;
-  /** Client library used by the developer portal (`MSAL` or `MSAL-2`). */
+  /**
+   * Client library used by the developer portal (`MSAL` or `MSAL-2`).
+   * @default not set (Azure's default applies)
+   */
   clientLibrary?: string;
 }
 
@@ -68,17 +92,32 @@ export interface IdentityProvider extends Resource<
  * A sign-in provider (Microsoft Entra ID, Azure AD B2C, ...) of the
  * developer portal of an API Management service. Not available on the
  * Consumption tier.
+ * The ARM type is `Microsoft.ApiManagement/service/identityProviders`.
+ *
+ * :::caution
+ * Changing `serviceName`, `type`, or `resourceGroup` replaces the identity
+ * provider.
+ *
+ * Identity providers are not available on the Consumption tier ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-aad
  *
  * ### Developer Portal Sign-in
  * **Example:** Sign in with Microsoft Entra ID
  * ```typescript
+ * const appId = yield* Config.string("ENTRA_CLIENT_ID");
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * yield* Azure.ApiManagement.IdentityProvider("entra", {
  *   serviceName: apim.serviceName,
  *   type: "aad",
  *   clientId: appId,
- *   clientSecret: Redacted.make(appSecret),
+ *   clientSecret: yield* Config.redacted("ENTRA_CLIENT_SECRET"),
  *   allowedTenants: ["contoso.onmicrosoft.com"],
  *   clientLibrary: "MSAL-2",
  * });

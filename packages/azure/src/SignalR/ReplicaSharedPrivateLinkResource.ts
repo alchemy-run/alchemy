@@ -19,7 +19,10 @@ import {
 } from "./internal.ts";
 
 export interface ReplicaSharedPrivateLinkResourceProps {
-  /** Resource group of the SignalR service. Changing it replaces the link. */
+  /**
+   * Resource group of the SignalR service. Changing it replaces the link.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** SignalR service that owns the replica. Changing it replaces the link. */
   signalR: string;
@@ -42,6 +45,7 @@ export interface ReplicaSharedPrivateLinkResourceProps {
   /**
    * Message shown to the target's owner when approving the connection.
    * Changing it replaces the link.
+   * @default no message
    */
   requestMessage?: string;
 }
@@ -78,23 +82,44 @@ export interface ReplicaSharedPrivateLinkResource extends Resource<
 > {}
 
 /**
- * The replica copy of a SignalR shared private link resource. Azure does
- * not create replica links directly: each link of the primary service is
- * replicated to every replica under the same name — but only after the
- * target's owner has approved the primary link — and the replica copy
- * needs its own approval on the target. This resource waits (up to 10
- * minutes) for the copy,
- * keeps its settings converged, and exposes its approval `status`.
+ * The replica copy of a SignalR shared private link resource
+ * (`Microsoft.SignalRService/signalR/replicas/sharedPrivateLinkResources`).
+ * Azure does not create replica links directly. It copies each link of the
+ * primary service to every replica under the same name, but only after the
+ * target's owner approves the primary link. The replica copy then needs its
+ * own approval on the target. This resource waits up to 10 minutes for the
+ * copy, keeps its settings converged, and exposes its approval `status`. See
+ * the
+ * [Azure docs](https://learn.microsoft.com/azure/azure-signalr/howto-enable-geo-replication).
  *
- * Azure exposes no DELETE for replica shared private links: destroying this
- * resource only forgets it, and the copy is removed together with the
- * primary link or the replica.
+ * Azure has no DELETE for replica shared private links. Destroying this
+ * resource only forgets it. Azure removes the copy with the primary link or
+ * the replica.
  *
- * @see https://learn.microsoft.com/azure/azure-signalr/howto-enable-geo-replication
+ * :::caution
+ * Approve the primary `Azure.SignalR.SharedPrivateLinkResource` on the target
+ * first. Otherwise the copy never appears and the deploy fails after 10
+ * minutes.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `signalR`, `replica`,
+ * `sharedPrivateLinkResource`, `groupId`, `privateLinkResourceId`, or
+ * `requestMessage` replaces the link.
+ * :::
  *
  * ### Tracking a Replicated Link
  * **Example:** Primary link and its copy on a replica
  * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("secrets");
+ * const signalR = yield* Azure.SignalR.SignalR("realtime", {
+ *   location: "eastus",
+ *   sku: "Premium_P1",
+ * });
+ * const replica = yield* Azure.SignalR.Replica("west", {
+ *   signalR: signalR.signalRName,
+ *   location: "westus2",
+ * });
  * const link = yield* Azure.SignalR.SharedPrivateLinkResource("vault", {
  *   signalR: signalR.signalRName,
  *   groupId: "vault",

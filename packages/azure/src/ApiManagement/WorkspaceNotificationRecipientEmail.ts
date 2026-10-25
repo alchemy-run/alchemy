@@ -45,17 +45,35 @@ export interface WorkspaceNotificationRecipientEmail extends Resource<
 /**
  * The workspace-scoped counterpart of {@link NotificationRecipientEmail}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/workspaces/notifications/recipientEmails`.
  *
  * Subscribes an email address to an API Management publisher
  * {@link Notification}. The subscription has no settings; changing the
  * notification or address replaces it. Not available on the Consumption
  * tier.
  *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `notificationName`, `email`, or
+ * `resourceGroup` replaces the recipient.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-configure-notifications
  *
  * ### Subscribing an Address
  * **Example:** Notify the API team about new subscriptions
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
  * yield* Azure.ApiManagement.WorkspaceNotificationRecipientEmail("new-subs", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

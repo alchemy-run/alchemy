@@ -30,14 +30,21 @@ export interface ContentTypeProps {
    * @default the content type identifier
    */
   displayName?: string;
-  /** Description of the content type. */
+  /**
+   * Description of the content type.
+   * @default no description
+   */
   description?: string;
   /**
    * JSON schema of the content items of this type: their properties,
    * validation rules, and constraints.
+   * @default not set
    */
   schema?: Record<string, unknown>;
-  /** Version of the content type. */
+  /**
+   * Version of the content type.
+   * @default not set
+   */
   version?: string;
 }
 
@@ -78,6 +85,11 @@ export interface ContentType extends Resource<
  * ### Creating Content Types
  * **Example:** A content type for FAQ entries
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const faq = yield* Azure.ApiManagement.ContentType("faq", {
  *   serviceName: apim.serviceName,
  *   name: "c-faq",

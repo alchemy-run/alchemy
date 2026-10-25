@@ -20,6 +20,7 @@ export interface EvidenceProps {
    * Evidence name, unique in the report: letters, digits, `-`, `_` and `.`.
    * If omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the evidence.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -32,11 +33,20 @@ export interface EvidenceProps {
    * @default "File"
    */
   evidenceType?: "File" | "AutoCollectedEvidence" | "Data";
-  /** Extra data submitted as evidence. */
+  /**
+   * Extra data submitted as evidence.
+   * @default no extra data
+   */
   extraData?: string;
-  /** Control the evidence answers, e.g. `Operational_Security_10`. */
+  /**
+   * Control the evidence answers, e.g. `Operational_Security_10`.
+   * @default not set
+   */
   controlId?: string;
-  /** Customer responsibility of the control the evidence answers. */
+  /**
+   * Customer responsibility of the control the evidence answers.
+   * @default not set
+   */
   responsibilityId?: string;
 }
 

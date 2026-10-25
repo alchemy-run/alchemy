@@ -30,6 +30,7 @@ export interface DscNodeConfigurationProps {
    * Node part of the name; the full name is `<configuration>.<nodeName>`.
    * If omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the node configuration.
+   * @default a name generated from the app, stage, and logical ID
    */
   nodeName?: string;
   /** Compiled MOF document (the node configuration content). */
@@ -68,25 +69,40 @@ export interface DscNodeConfiguration extends Resource<
 /**
  * A DSC node configuration (a compiled MOF document) in an Azure Automation
  * account, assignable to DSC nodes.
+ * The ARM type is
+ * `Microsoft.Automation/automationAccounts/nodeConfigurations`.
  *
  * Azure Automation State Configuration retires in September 2027 in favor
  * of Azure Machine Configuration.
+ *
+ * :::caution
+ * Changing `automationAccount`, `configuration`, `nodeName`, or
+ * `resourceGroup` replaces the node configuration.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/automation-dsc-compile
  *
  * ### Importing a Node Configuration
  * **Example:** Pre-compiled MOF
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const web = yield* Azure.Automation.DscConfiguration("WebServer", {
  *   automationAccount: account.automationAccountName,
  *   name: "WebServer",
- *   script: webServerScript,
+ *   script: `Configuration WebServer {
+ *     Node localhost {
+ *       WindowsFeature IIS { Ensure = "Present"; Name = "Web-Server" }
+ *     }
+ *   }`,
  * });
+ * // MOF compiled locally from the configuration above.
+ * const fs = yield* FileSystem.FileSystem;
+ * const mof = yield* fs.readFileString("./dsc/WebServer/localhost.mof");
  * const node = yield* Azure.Automation.DscNodeConfiguration("web-node", {
  *   automationAccount: account.automationAccountName,
  *   configuration: web.configurationName,
  *   nodeName: "localhost",
- *   mof: compiledMof,
+ *   mof,
  * });
  * ```
  *

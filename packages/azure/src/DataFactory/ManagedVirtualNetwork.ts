@@ -11,7 +11,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { factoryOwnedByStack } from "./FactoryChild.ts";
 
 export interface ManagedVirtualNetworkProps {
-  /** Resource group of the factory. Changing it replaces the managed virtual network. */
+  /**
+   * Resource group of the factory. Changing it replaces the managed virtual network.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the factory. Changing it replaces the managed virtual network. */
   factoryName: string;
@@ -47,15 +50,21 @@ export interface ManagedVirtualNetwork extends Resource<
 > {}
 
 /**
- * The managed virtual network of a Data Factory. Azure integration
- * runtimes created inside it reach data stores only through managed
- * private endpoints.
+ * The managed virtual network of a Data Factory
+ * (`Microsoft.DataFactory/factories/managedVirtualNetworks`). Azure
+ * integration runtimes created inside it reach data stores only through
+ * managed private endpoints.
  *
  * Data Factory has no API to delete a managed virtual network: removing
  * this resource from a stack only forgets it, and Azure reclaims it when
  * the factory is deleted.
  *
- * @see https://learn.microsoft.com/azure/data-factory/managed-virtual-network-private-endpoint
+ * :::caution
+ * Changing `resourceGroup`, `factoryName`, or `name` replaces the managed
+ * virtual network.
+ * :::
+ *
+ * See [Managed virtual network and private endpoints](https://learn.microsoft.com/azure/data-factory/managed-virtual-network-private-endpoint).
  *
  * ### Creating a Managed Virtual Network
  * **Example:** Enable the managed virtual network on a factory
@@ -69,6 +78,11 @@ export interface ManagedVirtualNetwork extends Resource<
  * ### Private Connectivity
  * **Example:** Managed private endpoint to a storage account
  * ```typescript
+ * const factory = yield* Azure.DataFactory.Factory("etl");
+ * const vnet = yield* Azure.DataFactory.ManagedVirtualNetwork("vnet", {
+ *   factoryName: factory.factoryName,
+ * });
+ * const account = yield* Azure.Storage.StorageAccount("lake");
  * yield* Azure.DataFactory.ManagedPrivateEndpoint("blob", {
  *   factoryName: factory.factoryName,
  *   managedVirtualNetworkName: vnet.managedVirtualNetworkName,

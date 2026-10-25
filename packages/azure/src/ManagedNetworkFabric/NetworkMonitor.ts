@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -38,6 +38,7 @@ export interface NetworkMonitorProps {
   /**
    * Name of the network monitor. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the network monitor.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -52,16 +53,19 @@ export interface NetworkMonitorProps {
    * port, connection mode and properties (required), and monitored networks.
    * The service requires `stationName` to equal the monitor's name, so
    * Alchemy always sets it.
+   * @default none
    */
   bmpConfiguration?: mnf.NetworkMonitorPropertiesInput["bmpConfiguration"];
   /**
    * Free-form description. Azure cannot update it in place, so changing
    * it replaces the resource.
+   * @default none
    */
   annotation?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -98,7 +102,13 @@ export interface NetworkMonitor extends Resource<
  * station configuration that streams routing state from fabric devices to a
  * collector.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/concepts-network-fabric
+ * ARM type: `Microsoft.ManagedNetworkFabric/networkMonitors`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/concepts-network-fabric).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `annotation` replaces the
+ * monitor.
+ * :::
  *
  * ### Creating a Network Monitor
  * **Example:** BMP station
@@ -159,11 +169,7 @@ export const NetworkMonitorProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mnf
-        .ListNetworkMonitorBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListNetworkMonitorBySubscription", page)),
-        );
+      const page = yield* collectAll(mnf.ListNetworkMonitorBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

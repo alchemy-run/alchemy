@@ -6,7 +6,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 
 export interface BrokerProps {
-  /** Resource group of the IoT Operations instance. Changing it replaces the broker. */
+  /**
+   * Resource group of the IoT Operations instance. Changing it replaces the broker.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** IoT Operations instance that holds the broker. Changing it replaces the broker. */
   instanceName: string;
@@ -16,15 +19,30 @@ export interface BrokerProps {
    * @default "default"
    */
   name?: string;
-  /** Advanced settings (client limits, internal certificates, encryption of internal traffic). */
+  /**
+   * Advanced settings (client limits, internal certificates, encryption of internal traffic).
+   * @default Azure's defaults
+   */
   advanced?: iot.AdvancedSettings;
-  /** Frontend and backend chain topology. Changing it replaces the broker. */
+  /**
+   * Frontend and backend chain topology. Changing it replaces the broker.
+   * @default Azure's default topology
+   */
   cardinality?: iot.Cardinality;
-  /** Logs, metrics, self-check, and traces settings. */
+  /**
+   * Logs, metrics, self-check, and traces settings.
+   * @default Azure's defaults
+   */
   diagnostics?: iot.BrokerDiagnostics;
-  /** Disk-backed message buffer settings. Changing it replaces the broker. */
+  /**
+   * Disk-backed message buffer settings. Changing it replaces the broker.
+   * @default unset
+   */
   diskBackedMessageBuffer?: iot.DiskBackedMessageBuffer;
-  /** Whether Kubernetes CPU resource limits are requested. Changing it replaces the broker. */
+  /**
+   * Whether Kubernetes CPU resource limits are requested. Changing it replaces the broker.
+   * @default Azure's default
+   */
   generateResourceLimits?: iot.GenerateResourceLimits;
   /**
    * Whether high-priority messages are still accepted while regular
@@ -32,9 +50,15 @@ export interface BrokerProps {
    * @default "Accept"
    */
   highPriorityMessagesBackpressureHandling?: "Accept" | "Reject";
-  /** Memory profile of the broker. Changing it replaces the broker. */
+  /**
+   * Memory profile of the broker. Changing it replaces the broker.
+   * @default Azure's default
+   */
   memoryProfile?: "Tiny" | "Low" | "Medium" | "High";
-  /** Persistence settings of the broker. Changing it replaces the broker. */
+  /**
+   * Persistence settings of the broker. Changing it replaces the broker.
+   * @default unset
+   */
   persistence?: iot.BrokerPersistence;
 }
 
@@ -60,16 +84,22 @@ export interface Broker extends Resource<
 > {}
 
 /**
- * The MQTT broker of an Azure IoT Operations instance. IoT Operations
- * deploys one broker named `default`; its topology (cardinality, memory
- * profile, persistence) is fixed at creation, so changing it replaces the
- * broker.
+ * The MQTT broker of an Azure IoT Operations instance
+ * (`Microsoft.IoTOperations/instances/brokers`). IoT Operations deploys one
+ * broker named `default`. Its topology (cardinality, memory profile,
+ * persistence) is fixed at creation.
  *
  * @see https://learn.microsoft.com/azure/iot-operations/manage-mqtt-broker/overview-broker
  *
  * ### Configuring the Broker
  * **Example:** Default broker with a low memory profile
  * ```typescript
+ * const instance = yield* Azure.IoTOperations.Instance("aio", {
+ *   customLocationId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/aio-location",
+ *   schemaRegistryId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.DeviceRegistry/schemaRegistries/aio-schemas",
+ * });
  * const broker = yield* Azure.IoTOperations.Broker("broker", {
  *   instanceName: instance.instanceName,
  *   memoryProfile: "Low",
@@ -79,6 +109,13 @@ export interface Broker extends Resource<
  *   },
  * });
  * ```
+ *
+ * :::caution
+ * Changing `resourceGroup`, `instanceName`, `name`, `cardinality`,
+ * `diskBackedMessageBuffer`, `generateResourceLimits`, `memoryProfile`, or
+ * `persistence` replaces the broker. The old broker is deleted first, so
+ * MQTT clients disconnect.
+ * :::
  *
  * @resource
  */

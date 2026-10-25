@@ -75,6 +75,7 @@ export interface ServerProps {
    * Server name: 3-63 lowercase letters and digits, starting with a letter.
    * Unique per region. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the server.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -102,15 +103,18 @@ export interface ServerProps {
   administrators?: string[];
   /**
    * SAS URI of a blob container used for backups. Treat it as a secret.
+   * @default no backup container
    */
   backupBlobContainerUri?: string;
   /**
    * Resource ID of an on-premises data gateway to associate with the server.
+   * @default no gateway
    */
   gatewayResourceId?: string;
   /**
    * IPv4 firewall. When omitted, the firewall is left as Azure configures
    * it (open).
+   * @default left as Azure configures it (open)
    */
   firewall?: AnalysisServicesFirewall;
   /**
@@ -121,10 +125,12 @@ export interface ServerProps {
   querypoolConnectionMode?: "All" | "ReadOnly";
   /**
    * Managed mode of the server (`0` = not managed, `1` = managed).
+   * @default not sent (Azure's default)
    */
   managedMode?: 0 | 1;
   /**
    * Server monitor mode (`0` = off, `1` = on).
+   * @default not sent (Azure's default)
    */
   serverMonitorMode?: 0 | 1;
   /**
@@ -136,6 +142,7 @@ export interface ServerProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -175,9 +182,14 @@ export interface Server extends Resource<
 > {}
 
 /**
- * An Azure Analysis Services server — a managed tabular-model (SSAS)
- * engine that Power BI, Excel, and other clients query over
- * `asazure://` connections.
+ * An Azure Analysis Services server (`Microsoft.AnalysisServices/servers`)
+ * — a managed tabular-model (SSAS) engine that Power BI, Excel, and other
+ * clients query over `asazure://` connections.
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the server and
+ * deletes its models.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/analysis-services/analysis-services-overview
  *
@@ -186,7 +198,9 @@ export interface Server extends Resource<
  * ```typescript
  * const server = yield* Azure.AnalysisServices.Server("models", {
  *   sku: "D1",
- *   administrators: ["app:00000000-0000-0000-0000-000000000000@contoso.com"],
+ *   administrators: [
+ *     "app:00000000-0000-0000-0000-000000000000@11111111-1111-1111-1111-111111111111",
+ *   ],
  * });
  * ```
  *

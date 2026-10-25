@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -23,12 +23,16 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createClusterName, delta, getCluster, lower, matches } from "./Common.ts";
 
 export interface ClusterProps {
-  /** Resource group the cluster is created in. Changing it replaces the cluster. */
+  /**
+   * Resource group the cluster is created in. Changing it replaces the cluster.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Cluster name: 4-23 lowercase letters, digits, and hyphens, starting with
    * a letter. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the cluster.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -54,6 +58,7 @@ export interface ClusterProps {
    * Replica set size of the system services: `None` (1, test clusters
    * only), `Bronze` (3), `Silver` (5), `Gold` (7), `Platinum` (9).
    * Changeable in place (a cluster upgrade).
+   * @default Azure's default
    */
   reliabilityLevel?: servicefabric.ReliabilityLevel;
   /**
@@ -62,7 +67,10 @@ export interface ClusterProps {
    * @default "Automatic"
    */
   upgradeMode?: servicefabric.UpgradeMode;
-  /** Service Fabric runtime version. Settable only when `upgradeMode` is `Manual`. */
+  /**
+   * Service Fabric runtime version. Settable only when `upgradeMode` is `Manual`.
+   * @default Azure's default
+   */
   clusterCodeVersion?: string;
   /**
    * Operating system of the scale sets (`Windows` or `Linux`). Changing it
@@ -70,49 +78,110 @@ export interface ClusterProps {
    * @default "Windows"
    */
   vmImage?: string;
-  /** Cluster certificate (node-to-node security and the management endpoint). */
+  /**
+   * Cluster certificate (node-to-node security and the management endpoint).
+   * @default no cluster certificate (unsecured cluster)
+   */
   certificate?: servicefabric.CertificateDescription;
-  /** Cluster certificates referenced by common name. */
+  /**
+   * Cluster certificates referenced by common name.
+   * @default not set
+   */
   certificateCommonNames?: servicefabric.ServerCertificateCommonNames;
-  /** Client certificates (by thumbprint) allowed to manage the cluster. */
+  /**
+   * Client certificates (by thumbprint) allowed to manage the cluster.
+   * @default []
+   */
   clientCertificateThumbprints?: servicefabric.ClientCertificateThumbprint[];
-  /** Client certificates (by common name) allowed to manage the cluster. */
+  /**
+   * Client certificates (by common name) allowed to manage the cluster.
+   * @default []
+   */
   clientCertificateCommonNames?: servicefabric.ClientCertificateCommonName[];
-  /** Server certificate of the reverse proxy. */
+  /**
+   * Server certificate of the reverse proxy.
+   * @default not set
+   */
   reverseProxyCertificate?: servicefabric.CertificateDescription;
-  /** Microsoft Entra ID authentication for the cluster. */
+  /**
+   * Microsoft Entra ID authentication for the cluster.
+   * @default no Entra authentication
+   */
   azureActiveDirectory?: servicefabric.AzureActiveDirectory;
-  /** Storage account receiving Service Fabric diagnostic logs. */
+  /**
+   * Storage account receiving Service Fabric diagnostic logs.
+   * @default no diagnostics storage
+   */
   diagnosticsStorageAccountConfig?: servicefabric.DiagnosticsStorageAccountConfig;
-  /** Add-on system services (`RepairManager`, `DnsService`, `BackupRestoreService`, `ResourceMonitorService`). */
+  /**
+   * Add-on system services (`RepairManager`, `DnsService`, `BackupRestoreService`, `ResourceMonitorService`).
+   * @default []
+   */
   addOnFeatures?: servicefabric.AddOnFeatures[];
-  /** Custom fabric settings sections. */
+  /**
+   * Custom fabric settings sections.
+   * @default []
+   */
   fabricSettings?: servicefabric.SettingsSectionDescription[];
-  /** Enable the event store service. */
+  /**
+   * Enable the event store service.
+   * @default Azure's default
+   */
   eventStoreServiceEnabled?: boolean;
-  /** Policy applied to cluster upgrades. */
+  /**
+   * Policy applied to cluster upgrades.
+   * @default Azure's default
+   */
   upgradeDescription?: servicefabric.ClusterUpgradePolicy;
-  /** How many unused application type versions to keep. */
+  /**
+   * How many unused application type versions to keep.
+   * @default Azure's default
+   */
   applicationTypeVersionsCleanupPolicy?: servicefabric.ApplicationTypeVersionsCleanupPolicy;
-  /** How Service Fabric upgrades nodes across availability zones. */
+  /**
+   * How Service Fabric upgrades nodes across availability zones.
+   * @default Azure's default
+   */
   sfZonalUpgradeMode?: servicefabric.SfZonalUpgradeMode;
-  /** How the scale sets upgrade across availability zones. */
+  /**
+   * How the scale sets upgrade across availability zones.
+   * @default Azure's default
+   */
   vmssZonalUpgradeMode?: servicefabric.VmssZonalUpgradeMode;
-  /** Enable the infrastructure service manager. */
+  /**
+   * Enable the infrastructure service manager.
+   * @default Azure's default
+   */
   infrastructureServiceManager?: boolean;
-  /** Release wave for automatic runtime upgrades (`Wave0`-`Wave2`). */
+  /**
+   * Release wave for automatic runtime upgrades (`Wave0`-`Wave2`).
+   * @default Azure's default
+   */
   upgradeWave?: servicefabric.ClusterUpgradeCadence;
-  /** Pause automatic runtime upgrades. */
+  /**
+   * Pause automatic runtime upgrades.
+   * @default Azure's default
+   */
   waveUpgradePaused?: boolean;
-  /** Start of a pause window for automatic upgrades (UTC timestamp). */
+  /**
+   * Start of a pause window for automatic upgrades (UTC timestamp).
+   * @default not set
+   */
   upgradePauseStartTimestampUtc?: string;
-  /** End of a pause window for automatic upgrades (UTC timestamp). */
+  /**
+   * End of a pause window for automatic upgrades (UTC timestamp).
+   * @default not set
+   */
   upgradePauseEndTimestampUtc?: string;
-  /** Notification channels for cluster events. */
+  /**
+   * Notification channels for cluster events.
+   * @default []
+   */
   notifications?: servicefabric.Notification[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -155,15 +224,27 @@ export interface Cluster extends Resource<
 > {}
 
 /**
- * A classic Service Fabric cluster (`Microsoft.ServiceFabric/clusters`).
+ * A classic Service Fabric cluster (`Microsoft.ServiceFabric/clusters`). The
+ * cluster resource describes the cluster. Its nodes are virtual machine scale
+ * sets that you deploy separately, with the `ServiceFabricNode` extension
+ * pointing at the cluster's `clusterEndpoint`. See the
+ * [Azure docs](https://learn.microsoft.com/azure/service-fabric/service-fabric-cluster-creation-via-arm).
  *
- * The cluster resource describes the cluster; its nodes are virtual machine
- * scale sets you deploy separately with the `ServiceFabricNode` extension
- * pointing at the cluster's `clusterEndpoint`. Until they report in, the
- * cluster sits in `WaitingForNodes` and costs nothing. Microsoft recommends
- * Service Fabric managed clusters for new deployments.
+ * Until the nodes report in, the cluster stays in `WaitingForNodes` and costs
+ * nothing. Microsoft recommends `Azure.ServiceFabric.ManagedCluster` for new
+ * deployments.
  *
- * @see https://learn.microsoft.com/azure/service-fabric/service-fabric-cluster-creation-via-arm
+ * :::caution
+ * Exactly one node type in `nodeTypes` must be `isPrimary`. Set
+ * `clusterCodeVersion` only when `upgradeMode` is `Manual`.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `managementEndpoint`, or
+ * `vmImage` replaces the cluster. Alchemy changes node types, instance
+ * counts, reliability, and the other settings in place through a cluster
+ * upgrade.
+ * :::
  *
  * ### Creating a Cluster
  * **Example:** Single-node test cluster
@@ -271,9 +352,7 @@ export const ClusterProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* servicefabric
-        .ListClusters({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListClusters", page)));
+      const page = yield* collectAll(servicefabric.ListClusters, { subscriptionId });
       return (page.value ?? []).flatMap((cluster) => {
         const group = resourceGroupOf(cluster.id);
         return hasAnyAlchemyTag(cluster.tags) && group !== undefined && cluster.name !== undefined

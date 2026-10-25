@@ -23,16 +23,23 @@ import {
 } from "./common.ts";
 
 export interface WorkloadNetworkPortMirroringProfileProps {
-  /** Resource group of the private cloud. Changing it replaces the port mirroring profile. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the port mirroring profile.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the port mirroring profile. */
   privateCloud: string;
   /**
    * NSX ID of the port mirroring profile. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the port mirroring profile.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name of the profile. */
+  /**
+   * Display name of the profile.
+   * @default not set
+   */
   displayName?: string;
   /** Traffic direction to mirror. */
   direction: "INGRESS" | "EGRESS" | "BIDIRECTIONAL";
@@ -65,13 +72,23 @@ export interface WorkloadNetworkPortMirroringProfile extends Resource<
 
 /**
  * An NSX-T port mirroring profile in an Azure VMware Solution private cloud
- * — copies traffic from a source VM group to a destination VM group.
+ * (`Microsoft.AVS/privateClouds/workloadNetworks/portMirroringProfiles`) —
+ * copies traffic from a source VM group to a destination VM group.
+ *
+ * :::caution
+ * Changing `privateCloud`, `name`, or `resourceGroup` replaces the profile.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/configure-port-mirroring-azure-vmware-solution
  *
  * ### Mirroring Traffic
  * **Example:** Mirror both directions between VM groups
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
  * const sources = yield* Azure.VMware.WorkloadNetworkVMGroup("sources", {
  *   privateCloud: cloud.privateCloudName,
  *   members: [],

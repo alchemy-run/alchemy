@@ -27,7 +27,10 @@ export const WORKLOAD_BUDGET: WaitBudget = { interval: "5 seconds", times: 60 };
 
 /** Common props of every resource nested under a private cloud. */
 export interface PrivateCloudChildProps {
-  /** Resource group of the private cloud. Changing it replaces the resource. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the resource.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the resource. */
   privateCloud: string;

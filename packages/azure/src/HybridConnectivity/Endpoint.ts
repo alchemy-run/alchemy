@@ -36,6 +36,7 @@ export interface EndpointProps {
   /**
    * ARM resource ID of the connectivity target. Azure does not support
    * updating an endpoint in place, so changing it recreates the endpoint.
+   * @default unset
    */
   resourceId?: string;
 }
@@ -62,7 +63,8 @@ export interface Endpoint extends Resource<
 > {}
 
 /**
- * An Azure Arc hybrid connectivity endpoint. It is the extension resource
+ * An Azure Arc hybrid connectivity endpoint
+ * (`Microsoft.HybridConnectivity/endpoints`). It is the extension resource
  * that lets Azure Arc SSH and Windows Admin Center reach an Arc-enabled
  * server through Azure Relay, without inbound ports.
  *
@@ -74,13 +76,17 @@ export interface Endpoint extends Resource<
  * ### Enabling Arc connectivity
  * **Example:** Default endpoint on an Arc server
  * ```typescript
- * const machine = yield* Azure.HybridCompute.Machine("Server", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const machine = yield* Azure.HybridCompute.Machine("Server");
  * const endpoint = yield* Azure.HybridConnectivity.Endpoint("Endpoint", {
  *   resourceUri: machine.machineId,
  * });
  * ```
+ *
+ * :::caution
+ * Changing `resourceUri` or `name` replaces the endpoint. Changing `type`
+ * or `resourceId` deletes the endpoint and creates it again, because Azure
+ * rejects in-place updates. Its service configurations go with it.
+ * :::
  *
  * @resource
  */

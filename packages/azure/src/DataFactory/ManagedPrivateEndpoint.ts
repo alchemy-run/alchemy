@@ -19,7 +19,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { factoryOwnedByStack } from "./FactoryChild.ts";
 
 export interface ManagedPrivateEndpointProps {
-  /** Resource group of the factory. Changing it replaces the endpoint. */
+  /**
+   * Resource group of the factory. Changing it replaces the endpoint.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the factory. Changing it replaces the endpoint. */
   factoryName: string;
@@ -34,6 +37,7 @@ export interface ManagedPrivateEndpointProps {
    * underlying private endpoint `<factoryName>.<name>`, which must fit in 80
    * characters. If omitted, a unique name that fits is generated from the
    * app, stage, and logical ID. Changing it replaces the endpoint.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -51,6 +55,7 @@ export interface ManagedPrivateEndpointProps {
   /**
    * Fully qualified domain names served by the endpoint. Data Factory does
    * not update endpoints in place, so changing them replaces the endpoint.
+   * @default Azure's default
    */
   fqdns?: string[];
 }
@@ -90,15 +95,24 @@ export interface ManagedPrivateEndpoint extends Resource<
 > {}
 
 /**
- * A managed private endpoint in a Data Factory managed virtual network.
+ * A managed private endpoint in a Data Factory managed virtual network
+ * (`Microsoft.DataFactory/factories/managedVirtualNetworks/managedPrivateEndpoints`).
  * It creates a private endpoint connection on the target resource that the
  * target's owner must approve (status `Pending` until then).
  *
- * @see https://learn.microsoft.com/azure/data-factory/managed-virtual-network-private-endpoint
+ * :::caution
+ * Changing `resourceGroup`, `factoryName`, `managedVirtualNetworkName`,
+ * `name`, `privateLinkResourceId`, `groupId`, or `fqdns` replaces the
+ * endpoint, and the target's owner must approve the new connection.
+ * :::
+ *
+ * See [Managed virtual network and private endpoints](https://learn.microsoft.com/azure/data-factory/managed-virtual-network-private-endpoint).
  *
  * ### Connecting to Storage
  * **Example:** Private endpoint to a storage account's blob service
  * ```typescript
+ * const factory = yield* Azure.DataFactory.Factory("etl");
+ * const account = yield* Azure.Storage.StorageAccount("lake");
  * const vnet = yield* Azure.DataFactory.ManagedVirtualNetwork("vnet", {
  *   factoryName: factory.factoryName,
  * });

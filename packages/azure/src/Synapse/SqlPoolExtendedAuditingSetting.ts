@@ -33,6 +33,7 @@ export interface SqlPoolExtendedAuditingSettingProps
   /**
    * T-SQL `WHERE` clause filtering audited events, e.g.
    * `statement <> 'select 1'`.
+   * @default not set
    */
   predicateExpression?: string;
 }
@@ -57,19 +58,42 @@ export interface SqlPoolExtendedAuditingSetting extends Resource<
 > {}
 
 /**
- * Extended blob auditing of a single dedicated SQL pool — pool auditing
- * plus a T-SQL predicate that filters which events are audited.
+ * Extended blob auditing of a single dedicated SQL pool
+ * (`Microsoft.Synapse/workspaces/sqlPools/extendedAuditingSettings`) — pool
+ * auditing plus a T-SQL predicate that filters which events are audited.
  *
  * This is a singleton policy that always exists on a pool. Destroying the
  * resource disables pool-level auditing.
+ *
+ * :::caution
+ * Changing `workspace`, `sqlPool`, or `resourceGroup` replaces the setting.
+ * Pass `resourceGroup` explicitly: this resource does not default to the
+ * stack's group.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-sql/database/auditing-overview
  *
  * ### Enabling Extended Auditing
  * **Example:** Audit everything except health probes
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
+ * const pool = yield* Azure.Synapse.SqlPool("dw", {
+ *   workspace: workspace.workspaceName,
+ *   sku: "DW100c",
+ * });
  * yield* Azure.Synapse.SqlPoolExtendedAuditingSetting("audit", {
- *   resourceGroup: group.resourceGroupName,
+ *   resourceGroup: workspace.resourceGroup,
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,
  *   isAzureMonitorTargetEnabled: true,

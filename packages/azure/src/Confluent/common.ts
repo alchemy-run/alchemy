@@ -39,7 +39,10 @@ export const isOrganizationOwnedByStack = Effect.fn(function* (
 
 /** Location props shared by every organization child. */
 export interface OrganizationChildProps {
-  /** Resource group of the organization. Changing it replaces the resource. */
+  /**
+   * Resource group of the organization. Changing it replaces the resource.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Confluent organization. Changing it replaces the resource. */
   organization: string;

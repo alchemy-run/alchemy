@@ -41,6 +41,7 @@ export interface BareMetalMachineKeySetProps {
   /**
    * Name of the bare metal machine key set. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the bare metal machine key set.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -60,7 +61,10 @@ export interface BareMetalMachineKeySetProps {
   expiration: string;
   /** IP addresses of jump hosts allowed to connect to the machines. */
   jumpHostsAllowed: string[];
-  /** Name of the OS group the users join. Changing it replaces the key set. */
+  /**
+   * Name of the OS group the users join. Changing it replaces the key set.
+   * @default none
+   */
   osGroupName?: string;
   /**
    * Access level: `Standard`, `Superuser`, or `Other`. Changing it
@@ -70,6 +74,7 @@ export interface BareMetalMachineKeySetProps {
   /**
    * Custom privilege level name when `privilegeLevel` is `Other`. Changing
    * it replaces the key set.
+   * @default none
    */
   privilegeLevelName?: string;
   /** Users and their SSH public keys. */
@@ -77,6 +82,7 @@ export interface BareMetalMachineKeySetProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -117,15 +123,24 @@ export interface BareMetalMachineKeySet extends Resource<
  * Entra ID group to the bare metal machines of a Nexus cluster, with an
  * expiry and allowed jump hosts. Needs a deployed Operator Nexus cluster.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-baremetal-bmm-ssh
+ * ARM type: `Microsoft.NetworkCloud/clusters/bareMetalMachineKeySets`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-baremetal-bmm-ssh).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `clusterName`, `name`, `location`,
+ * `customLocationId`, `osGroupName`, `privilegeLevel`, or `privilegeLevelName`
+ * replaces the key set.
+ * :::
  *
  * ### Creating a Key Set
  * **Example:** Superuser access for an operations group
  * ```typescript
+ * // An existing Operator Nexus cluster, "site1", in the stack's resource group.
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ExtendedLocation/customLocations/site1-cl";
  * const keys = yield* Azure.NetworkCloud.BareMetalMachineKeySet("ops", {
- *   resourceGroup: cluster.resourceGroup,
- *   clusterName: cluster.clusterName,
- *   customLocationId: cluster.clusterExtendedLocationId,
+ *   clusterName: "site1",
+ *   customLocationId,
  *   azureGroupId: "00000000-0000-0000-0000-000000000000",
  *   expiration: "2027-01-01T00:00:00Z",
  *   jumpHostsAllowed: ["10.0.0.4"],

@@ -20,7 +20,10 @@ export interface GlobalParameterValue {
 }
 
 export interface GlobalParameterProps {
-  /** Resource group of the factory. Changing it replaces the resource. */
+  /**
+   * Resource group of the factory. Changing it replaces the resource.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the factory. Changing it replaces the resource. */
   factoryName: string;
@@ -59,15 +62,22 @@ export interface GlobalParameter extends Resource<
 > {}
 
 /**
- * The global parameters of a Data Factory — constants pipelines reference
- * as `@pipeline().globalParameters.<name>`. One resource owns the factory's
- * whole parameter map; do not also set global parameters on the factory.
+ * The global parameters of a Data Factory
+ * (`Microsoft.DataFactory/factories/globalParameters`) — constants
+ * pipelines reference as `@pipeline().globalParameters.<name>`. One
+ * resource owns the factory's whole parameter map; do not also set global
+ * parameters on the factory.
  *
- * @see https://learn.microsoft.com/azure/data-factory/author-global-parameters
+ * :::caution
+ * Changing `resourceGroup`, `factoryName`, or `name` replaces the resource.
+ * :::
+ *
+ * See [Global parameters](https://learn.microsoft.com/azure/data-factory/author-global-parameters).
  *
  * ### Defining Global Parameters
  * **Example:** Environment name and batch size
  * ```typescript
+ * const factory = yield* Azure.DataFactory.Factory("etl");
  * yield* Azure.DataFactory.GlobalParameter("params", {
  *   factoryName: factory.factoryName,
  *   parameters: {

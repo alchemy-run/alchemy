@@ -32,7 +32,10 @@ export type DataConnectorKind =
   | (string & {});
 
 export interface DataConnectorProps {
-  /** Resource group of the Sentinel workspace. Changing it replaces the connector. */
+  /**
+   * Resource group of the Sentinel workspace. Changing it replaces the connector.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Sentinel-enabled Log Analytics workspace. Pass `OnboardingState.workspace`
@@ -42,6 +45,7 @@ export interface DataConnectorProps {
   /**
    * Connector ID (a GUID). If omitted, a deterministic GUID is derived from
    * the app, stage, and logical ID. Changing it replaces the connector.
+   * @default a GUID derived from the app, stage, and logical ID
    */
   dataConnectorId?: string;
   /** Kind of connector. Changing it replaces the connector. */
@@ -50,6 +54,7 @@ export interface DataConnectorProps {
    * Kind-specific connector properties, e.g.
    * `{ dataTypes: { indicators: { state: "Enabled" } } }` for `ThreatIntelligence`.
    * `tenantId` defaults to the deployment's Entra tenant for kinds that need it.
+   * @default {} (`tenantId` filled in for kinds that need it)
    */
   properties?: Record<string, unknown>;
 }
@@ -76,25 +81,41 @@ export interface DataConnector extends Resource<
 > {}
 
 /**
- * A Microsoft Sentinel data connector that streams a source (Microsoft
- * threat intelligence, Defender for Cloud alerts, Microsoft 365, AWS
- * CloudTrail, a Codeless Connector Platform poller, …) into the workspace.
+ * A Microsoft Sentinel data connector
+ * (`Microsoft.SecurityInsights/dataConnectors`): it streams a source into the
+ * workspace, such as Microsoft threat intelligence, Defender for Cloud
+ * alerts, Microsoft 365, AWS CloudTrail, or a Codeless Connector Platform
+ * poller. See the
+ * [Azure docs](https://learn.microsoft.com/azure/sentinel/connect-data-sources).
  *
+ * :::caution
+ * Onboard the workspace first with `Azure.SecurityInsights.OnboardingState`,
+ * and pass its `workspace` attribute so Alchemy creates this resource after
+ * the onboarding and deletes it before.
+ * :::
+ *
+ * :::caution
  * Most first-party connector kinds need licenses or consent on the tenant
- * (Microsoft 365 E5, Defender plans), and `MicrosoftThreatIntelligence`
- * needs the tenant approved for Defender TI onboarding; the ARM call fails
- * without them.
+ * (Microsoft 365 E5, Defender plans). `MicrosoftThreatIntelligence` needs the
+ * tenant approved for Defender TI onboarding. The ARM call fails without
+ * them.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/sentinel/connect-data-sources
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `kind`, or `dataConnectorId`
+ * replaces the connector. First-party kinds allow one connector per kind and
+ * context per workspace, so Alchemy deletes the old connector first. Alchemy
+ * updates `properties` in place.
+ * :::
  *
  * ### Threat Intelligence
- * **Example:** Enable the threat intelligence platforms connector
+ * **Example:** Turn on the threat intelligence platforms connector
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * const sentinel = yield* Azure.SecurityInsights.OnboardingState("sentinel", {
  *   workspace: logs.workspaceName,
  * });
  * yield* Azure.SecurityInsights.DataConnector("ti", {
- *   resourceGroup: sentinel.resourceGroup,
  *   workspace: sentinel.workspace,
  *   kind: "ThreatIntelligence",
  *   properties: { dataTypes: { indicators: { state: "Enabled" } } },
@@ -105,7 +126,6 @@ export interface DataConnector extends Resource<
  * **Example:** Stream Defender for Cloud alerts of a subscription
  * ```typescript
  * yield* Azure.SecurityInsights.DataConnector("defender", {
- *   resourceGroup: sentinel.resourceGroup,
  *   workspace: sentinel.workspace,
  *   kind: "AzureSecurityCenter",
  *   properties: {

@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -31,6 +31,7 @@ export interface SecurityRuleProps {
    * Resource group of the DNS security policy. The DNS resolver API rejects
    * resource group names longer than 80 characters. Changing it replaces
    * the rule.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
@@ -42,6 +43,7 @@ export interface SecurityRuleProps {
    * Rule name: 1-80 letters, digits, `_`, and `-`. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the rule.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -67,6 +69,7 @@ export interface SecurityRuleProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -101,11 +104,17 @@ export interface SecurityRule extends Resource<
 > {}
 
 /**
- * An Azure DNS security rule — allows, alerts on, or blocks DNS queries
- * for the domains in one or more domain lists, for every virtual network
- * linked to its DNS security policy.
+ * An Azure DNS security rule
+ * (`Microsoft.Network/dnsResolverPolicies/dnsSecurityRules`) — allows,
+ * alerts on, or blocks DNS queries for the domains in one or more domain
+ * lists, for every virtual network linked to its DNS security policy. See
+ * [DNS security policy](https://learn.microsoft.com/azure/dns/dns-security-policy).
  *
- * @see https://learn.microsoft.com/azure/dns/dns-security-policy
+ * :::caution
+ * Changing `resourceGroup`, `dnsResolverPolicy`, `name`, or `location`
+ * replaces the rule. Priorities are unique per policy, so a replacement at
+ * the same priority deletes the old rule first.
+ * :::
  *
  * ### Creating a Rule
  * **Example:** Block a list of domains
@@ -208,23 +217,18 @@ export const SecurityRuleProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const policies = yield* dnsresolver
-        .ListDnsResolverPolicies({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDnsResolverPolicies", page)));
+      const policies = yield* collectAll(dnsresolver.ListDnsResolverPolicies, { subscriptionId });
       const found: SecurityRule["Attributes"][] = [];
       for (const policy of policies.value ?? []) {
         const group = resourceGroupOf(policy.id);
         if (group === undefined || policy.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          dnsresolver.ListDnsSecurityRules({
+          collectAll(dnsresolver.ListDnsSecurityRules, {
             subscriptionId,
             resourceGroupName: group,
             dnsResolverPolicyName: policy.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListDnsSecurityRules", page);
-        }
         for (const rule of page?.value ?? []) {
           if (hasAnyAlchemyTag(rule.tags) && rule.name !== undefined) {
             found.push(toAttrs(group, policy.name, rule.name, rule));

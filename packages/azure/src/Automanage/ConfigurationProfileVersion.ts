@@ -35,6 +35,7 @@ export interface ConfigurationProfileVersionProps {
   /**
    * Version name, e.g. `1.0`. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the version.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -51,6 +52,7 @@ export interface ConfigurationProfileVersionProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -81,6 +83,12 @@ export interface ConfigurationProfileVersion extends Resource<
 /**
  * A version of an Azure Automanage configuration profile — an immutable,
  * named snapshot of a profile's configuration dictionary.
+ * The ARM type is `Microsoft.Automanage/configurationProfiles/versions`.
+ *
+ * :::caution
+ * Changing `configurationProfile`, `name`, `location`, `configuration`, or
+ * `resourceGroup` replaces the version.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/automanage/configuration-profiles-versions
  *

@@ -24,13 +24,17 @@ import {
 } from "./common.ts";
 
 export interface PureStoragePolicyProps {
-  /** Resource group of the private cloud. Changing it replaces the policy. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the policy.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the policy. */
   privateCloud: string;
   /**
    * Name of the storage policy. If omitted, a unique name is generated from the app, stage, and
    * logical ID. Changing it replaces the policy.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -68,18 +72,34 @@ export interface PureStoragePolicy extends Resource<
 
 /**
  * A Pure Storage Cloud storage policy (SPBM) on an Azure VMware Solution
- * private cloud. Needs a `PureStorage.Block` storage pool, a marketplace
- * partner offer.
+ * private cloud (`Microsoft.AVS/privateClouds/pureStoragePolicies`). Needs a
+ * `PureStorage.Block` storage pool, a marketplace partner offer.
+ *
+ * :::caution
+ * Changing `privateCloud`, `name`, `storagePoolId`,
+ * `storagePolicyDefinition`, or `resourceGroup` replaces the policy.
+ * :::
+ *
+ * :::caution
+ * Subscribe to the Pure Storage Cloud Marketplace offer and create a
+ * `PureStorage.Block` storage pool before you create the policy.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/configure-pure-cloud-block-store
  *
  * ### Creating a Storage Policy
  * **Example:** Pure Storage SPBM policy
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
+ * const policyDefinition = yield* Config.string("PURE_SPBM_POLICY");
  * yield* Azure.VMware.PureStoragePolicy("gold", {
  *   privateCloud: cloud.privateCloudName,
  *   storagePolicyDefinition: policyDefinition,
- *   storagePoolId: storagePoolId,
+ *   storagePoolId: `/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/storage/providers/PureStorage.Block/storagePools/avs-pool`,
  * });
  * ```
  *

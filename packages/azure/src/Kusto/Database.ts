@@ -24,7 +24,10 @@ import {
 } from "./common.ts";
 
 export interface DatabaseProps {
-  /** Resource group of the cluster. Changing it replaces the database. */
+  /**
+   * Resource group of the cluster. Changing it replaces the database.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the cluster that hosts the database. Changing it replaces the database. */
   cluster: string;
@@ -32,6 +35,7 @@ export interface DatabaseProps {
    * Database name, unique within the cluster. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * database.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -42,11 +46,13 @@ export interface DatabaseProps {
   /**
    * How long data stays queryable before it is soft-deleted, as an ISO-8601
    * duration (e.g. `P365D`). Omit for unlimited retention.
+   * @default unset (unlimited)
    */
   softDeletePeriod?: string;
   /**
    * How long data stays in the hot cache, as an ISO-8601 duration (e.g.
    * `P31D`). Omit for unlimited caching.
+   * @default unset (unlimited)
    */
   hotCachePeriod?: string;
   /**
@@ -81,8 +87,9 @@ export interface Database extends Resource<
 > {}
 
 /**
- * A read-write database in an Azure Data Explorer (Kusto) cluster, with
- * its data retention (soft-delete) and hot-cache policies.
+ * A read-write database in an Azure Data Explorer (Kusto) cluster
+ * (`Microsoft.Kusto/clusters/databases`, kind `ReadWrite`), with its data
+ * retention (soft-delete) and hot-cache policies.
  *
  * @see https://learn.microsoft.com/azure/data-explorer/create-cluster-and-database
  *
@@ -96,6 +103,11 @@ export interface Database extends Resource<
  *   hotCachePeriod: "P31D",
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `cluster`, `location`, or `resourceGroup` replaces the
+ * database and deletes its tables and data.
+ * :::
  *
  * @resource
  */

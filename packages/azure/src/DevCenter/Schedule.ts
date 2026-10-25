@@ -21,7 +21,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameArm } from "./Common.ts";
 
 export interface ScheduleProps {
-  /** Resource group of the project. Changing it replaces the schedule. */
+  /**
+   * Resource group of the project. Changing it replaces the schedule.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the project. Changing it replaces the schedule. */
   project: string;
@@ -55,6 +58,7 @@ export interface ScheduleProps {
   /**
    * User tags (stored in the schedule's `properties.tags`). Alchemy
    * ownership tags are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -91,14 +95,34 @@ export interface Schedule extends Resource<
 > {}
 
 /**
- * A dev box pool schedule — stops every running dev box of the pool at a
+ * A dev box pool schedule (`Microsoft.DevCenter/projects/pools/schedules`)
+ * — stops every running dev box of the pool at a
  * fixed time each day so idle dev boxes stop accruing compute charges.
+ *
+ * :::caution
+ * Changing `project`, `pool`, `name`, `type`, or `resourceGroup` replaces
+ * the schedule.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/dev-box/how-to-configure-stop-schedule
  *
  * ### Auto-stop
  * **Example:** Stop dev boxes at 7 PM Pacific
  * ```typescript
+ * const center = yield* Azure.DevCenter.DevCenter("center");
+ * const project = yield* Azure.DevCenter.Project("team", {
+ *   devCenterId: center.devCenterId,
+ * });
+ * const definition = yield* Azure.DevCenter.DevBoxDefinition("win11", {
+ *   devCenter: center.devCenterName,
+ *   imageReferenceId: Output.interpolate`${center.devCenterId}/galleries/default/images/microsoftwindowsdesktop_windows-ent-cpc_win11-24h2-ent-cpc`,
+ *   skuName: "general_i_8c32gb256ssd_v2",
+ *   osStorageType: "ssd_256gb",
+ * });
+ * const pool = yield* Azure.DevCenter.Pool("pool", {
+ *   project: project.projectName,
+ *   devBoxDefinitionName: definition.devBoxDefinitionName,
+ * });
  * const schedule = yield* Azure.DevCenter.Schedule("stop", {
  *   project: project.projectName,
  *   pool: pool.poolName,

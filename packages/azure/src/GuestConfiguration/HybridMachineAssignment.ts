@@ -49,23 +49,37 @@ export interface HybridMachineAssignment extends Resource<
 
 /**
  * A machine configuration (guest configuration) assignment on an Azure
- * Arc-enabled server — audits or applies an OS-level configuration package
- * such as the built-in Linux/Windows security baselines on a machine
- * outside Azure.
+ * Arc-enabled server
+ * (`Microsoft.HybridCompute/machines/providers/Microsoft.GuestConfiguration/guestConfigurationAssignments`)
+ * — audits or applies an OS-level configuration package such as the
+ * built-in Linux/Windows security baselines on a machine outside Azure.
+ * See the
+ * [machine configuration overview](https://learn.microsoft.com/azure/governance/machine-configuration/overview).
  *
+ * :::caution
  * Compliance is evaluated by the Connected Machine agent; on a machine
  * whose agent has not connected yet the assignment stays `Pending`.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/governance/machine-configuration/overview
+ * :::caution
+ * Changing `resourceGroup`, `machine`, `name`, `location`, or
+ * `configurationName` replaces the assignment.
+ * :::
  *
  * ### Auditing a Baseline
  * **Example:** Audit the Azure Linux security baseline on a connected Arc server
  * ```typescript
+ * // the base64 public key of the host's Connected Machine agent
+ * const agentPublicKey = "MIIBCgKCAQEAw3k9...";
+ * const machine = yield* Azure.HybridCompute.Machine("web-01", {
+ *   vmId: "3f2c1a9e-5b7d-4e8a-9c21-7d6e5f4a3b2c",
+ *   clientPublicKey: agentPublicKey,
+ *   osType: "linux",
+ * });
  * const baseline = yield* Azure.GuestConfiguration.HybridMachineAssignment(
  *   "Baseline",
  *   {
- *     resourceGroup: "arc-servers",
- *     machine: "web-01",
+ *     machine: machine.machineName,
  *     configurationName: "AzureLinuxBaseline",
  *     configurationVersion: "1.*",
  *   },
@@ -76,8 +90,7 @@ export interface HybridMachineAssignment extends Resource<
  * **Example:** Apply and monitor with configuration parameters
  * ```typescript
  * yield* Azure.GuestConfiguration.HybridMachineAssignment("Baseline", {
- *   resourceGroup: "arc-servers",
- *   machine: "web-01",
+ *   machine: machine.machineName,
  *   configurationName: "AzureLinuxBaseline",
  *   configurationVersion: "1.*",
  *   assignmentType: "ApplyAndMonitor",

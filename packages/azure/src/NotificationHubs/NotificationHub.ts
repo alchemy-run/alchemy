@@ -39,6 +39,7 @@ export interface NotificationHubProps {
    * Hub name: 1-260 letters, digits, `.`, `-`, `_`, and `/`. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the hub.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -51,11 +52,13 @@ export interface NotificationHubProps {
    * Push notification service credentials (APNs, FCM/GCM, WNS, Web Push,
    * ...). Secret fields accept `Redacted` values. Removing this prop leaves
    * the credentials in place.
+   * @default none
    */
   pnsCredentials?: PnsCredentials;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -93,7 +96,12 @@ export interface NotificationHub extends Resource<
  * notification that the hub fans out through APNs, FCM, WNS, and Web Push
  * using the hub's push notification service credentials.
  *
- * @see https://learn.microsoft.com/azure/notification-hubs/notification-hubs-push-notification-overview
+ * ARM type: `Microsoft.NotificationHubs/namespaces/notificationHubs`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/notification-hubs/notification-hubs-push-notification-overview).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `namespace`, or `name` replaces the hub.
+ * :::
  *
  * ### Creating a Hub
  * **Example:** Hub in a free namespace

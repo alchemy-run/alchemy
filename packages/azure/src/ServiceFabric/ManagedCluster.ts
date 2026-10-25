@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,20 +32,38 @@ export type ClusterUpgradeCadence = sf.ClusterUpgradeCadence;
 export interface ManagedClusterClientCertificate {
   /** Whether the certificate grants admin (read-write) access; non-admin clients are read-only. */
   isAdmin: boolean;
-  /** Certificate thumbprint. Set either this or `commonName`. */
+  /**
+   * Certificate thumbprint. Set either this or `commonName`.
+   * @default not set
+   */
   thumbprint?: string;
-  /** Certificate common name. */
+  /**
+   * Certificate common name.
+   * @default not set
+   */
   commonName?: string;
-  /** Issuer thumbprint; only used together with `commonName`. */
+  /**
+   * Issuer thumbprint; only used together with `commonName`.
+   * @default not set
+   */
   issuerThumbprint?: string;
 }
 
 export interface ManagedClusterAzureActiveDirectory {
-  /** Microsoft Entra tenant ID. */
+  /**
+   * Microsoft Entra tenant ID.
+   * @default not set
+   */
   tenantId?: string;
-  /** Entra application ID of the cluster (server) app. */
+  /**
+   * Entra application ID of the cluster (server) app.
+   * @default not set
+   */
   clusterApplication?: string;
-  /** Entra application ID of the client app. */
+  /**
+   * Entra application ID of the client app.
+   * @default not set
+   */
   clientApplication?: string;
 }
 
@@ -60,34 +78,67 @@ export interface ManagedClusterLoadBalancingRule {
   probePort?: number;
   /** Probe protocol. */
   probeProtocol: "tcp" | "http" | "https";
-  /** Probe request path (HTTP/HTTPS probes only). */
+  /**
+   * Probe request path (HTTP/HTTPS probes only).
+   * @default not set
+   */
   probeRequestPath?: string;
-  /** Load distribution policy (`Default`, `SourceIP`, `SourceIPProtocol`). */
+  /**
+   * Load distribution policy (`Default`, `SourceIP`, `SourceIPProtocol`).
+   * @default "Default"
+   */
   loadDistribution?: string;
 }
 
 export interface ManagedClusterNetworkSecurityRule {
   /** Rule name. */
   name: string;
-  /** Rule description. */
+  /**
+   * Rule description.
+   * @default not set
+   */
   description?: string;
   /** Protocol (`http`, `https`, `tcp`, `udp`, `icmp`, `ah`, `esp`, `any`). */
   protocol: string;
-  /** Source address prefixes (CIDRs or service tags). */
+  /**
+   * Source address prefixes (CIDRs or service tags).
+   * @default not set
+   */
   sourceAddressPrefixes?: string[];
-  /** Destination address prefixes. */
+  /**
+   * Destination address prefixes.
+   * @default not set
+   */
   destinationAddressPrefixes?: string[];
-  /** Source port ranges. */
+  /**
+   * Source port ranges.
+   * @default not set
+   */
   sourcePortRanges?: string[];
-  /** Destination port ranges. */
+  /**
+   * Destination port ranges.
+   * @default not set
+   */
   destinationPortRanges?: string[];
-  /** Single source address prefix. */
+  /**
+   * Single source address prefix.
+   * @default not set
+   */
   sourceAddressPrefix?: string;
-  /** Single destination address prefix. */
+  /**
+   * Single destination address prefix.
+   * @default not set
+   */
   destinationAddressPrefix?: string;
-  /** Single source port range. */
+  /**
+   * Single source port range.
+   * @default not set
+   */
   sourcePortRange?: string;
-  /** Single destination port range. */
+  /**
+   * Single destination port range.
+   * @default not set
+   */
   destinationPortRange?: string;
   /** `allow` or `deny`. */
   access: "allow" | "deny";
@@ -105,12 +156,16 @@ export interface ManagedClusterFabricSetting {
 }
 
 export interface ManagedClusterProps {
-  /** Resource group the cluster is created in. Changing it replaces the cluster. */
+  /**
+   * Resource group the cluster is created in. Changing it replaces the cluster.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Cluster name: 4-23 lowercase letters, digits, and `-`. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the cluster.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -136,53 +191,97 @@ export interface ManagedClusterProps {
   /**
    * Administrator password of the node VMs. Azure never returns it, so it
    * is sent on create and on every full update but never compared.
+   * @default not sent
    */
   adminPassword?: Redacted.Redacted<string>;
-  /** Client certificates allowed to manage the cluster. */
+  /**
+   * Client certificates allowed to manage the cluster.
+   * @default []
+   */
   clients?: ManagedClusterClientCertificate[];
-  /** Microsoft Entra authentication settings of the cluster. */
+  /**
+   * Microsoft Entra authentication settings of the cluster.
+   * @default no Entra authentication
+   */
   azureActiveDirectory?: ManagedClusterAzureActiveDirectory;
   /**
    * Open the RDP port to the node VMs.
    * @default false
    */
   allowRdpAccess?: boolean;
-  /** Load balancing rules applied to the cluster's public load balancer. */
+  /**
+   * Load balancing rules applied to the cluster's public load balancer.
+   * @default []
+   */
   loadBalancingRules?: ManagedClusterLoadBalancingRule[];
-  /** Custom network security rules applied to the cluster's virtual network. */
+  /**
+   * Custom network security rules applied to the cluster's virtual network.
+   * @default []
+   */
   networkSecurityRules?: ManagedClusterNetworkSecurityRule[];
-  /** Custom Service Fabric settings. */
+  /**
+   * Custom Service Fabric settings.
+   * @default []
+   */
   fabricSettings?: ManagedClusterFabricSetting[];
-  /** Service Fabric runtime version; required when `clusterUpgradeMode` is `Manual`. */
+  /**
+   * Service Fabric runtime version; required when `clusterUpgradeMode` is `Manual`.
+   * @default Azure's default
+   */
   clusterCodeVersion?: string;
   /**
    * How new Service Fabric runtime versions are applied.
    * @default Azure's default (`Automatic`)
    */
   clusterUpgradeMode?: ClusterUpgradeMode;
-  /** When automatic runtime upgrades are applied after release (`Wave0`-`Wave2`). */
+  /**
+   * When automatic runtime upgrades are applied after release (`Wave0`-`Wave2`).
+   * @default Azure's default
+   */
   clusterUpgradeCadence?: ClusterUpgradeCadence;
-  /** Add-on features (`DnsService`, `BackupRestoreService`, `ResourceMonitorService`). */
+  /**
+   * Add-on features (`DnsService`, `BackupRestoreService`, `ResourceMonitorService`).
+   * @default []
+   */
   addonFeatures?: ManagedClusterAddOnFeature[];
-  /** Automatically upgrade node OS images that use version `latest`. */
+  /**
+   * Automatically upgrade node OS images that use version `latest`.
+   * @default false
+   */
   enableAutoOSUpgrade?: boolean;
   /** Port for client connections. @default 19000 */
   clientConnectionPort?: number;
   /** Port for HTTP gateway connections. @default 19080 */
   httpGatewayConnectionPort?: number;
-  /** Spread the cluster across availability zones (Standard SKU). Changing it replaces the cluster. */
+  /**
+   * Spread the cluster across availability zones (Standard SKU). Changing it replaces the cluster.
+   * @default false
+   */
   zonalResiliency?: boolean;
-  /** Create IPv6 address space for the default VNet. Changing it replaces the cluster. */
+  /**
+   * Create IPv6 address space for the default VNet. Changing it replaces the cluster.
+   * @default false
+   */
   enableIpv6?: boolean;
-  /** Subnet the node types are created in instead of the default VNet. Changing it replaces the cluster. */
+  /**
+   * Subnet the node types are created in instead of the default VNet. Changing it replaces the cluster.
+   * @default the default VNet
+   */
   subnetId?: string;
-  /** Bring your own VNet with subnets set per node type. Changing it replaces the cluster. */
+  /**
+   * Bring your own VNet with subnets set per node type. Changing it replaces the cluster.
+   * @default false
+   */
   useCustomVnet?: boolean;
-  /** Public IPv4 prefix the load balancer allocates its IP from. Changing it replaces the cluster. */
+  /**
+   * Public IPv4 prefix the load balancer allocates its IP from. Changing it replaces the cluster.
+   * @default no prefix
+   */
   publicIPPrefixId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -227,23 +326,39 @@ export interface ManagedCluster extends Resource<
 > {}
 
 /**
- * An Azure Service Fabric managed cluster — a Service Fabric cluster whose
- * VMs, load balancer, network, and certificates Azure manages for you.
- * Add a primary {@link NodeType} to give the cluster nodes.
+ * An Azure Service Fabric managed cluster
+ * (`Microsoft.ServiceFabric/managedClusters`): a Service Fabric cluster whose
+ * VMs, load balancer, network, and certificates Azure manages for you. Add a
+ * primary `Azure.ServiceFabric.NodeType` to give the cluster nodes. See the
+ * [Azure docs](https://learn.microsoft.com/azure/service-fabric/overview-managed-cluster).
  *
- * The cluster resource itself provisions the public load balancer and IP
- * in a managed `SFC_{clusterId}` resource group; it stays in the
- * `WaitingForNodes` state until a primary node type exists.
+ * The cluster creates its public load balancer and IP in a managed
+ * `SFC_{clusterId}` resource group. It stays in the `WaitingForNodes` state
+ * until a primary node type exists.
  *
- * @see https://learn.microsoft.com/azure/service-fabric/overview-managed-cluster
+ * :::caution
+ * A `Basic` cluster needs a primary node type with at least 3 nodes. A
+ * `Standard` cluster needs at least 5. Set `clusterCodeVersion` when
+ * `clusterUpgradeMode` is `Manual`.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `sku`, `dnsName`,
+ * `adminUserName`, `zonalResiliency`, `enableIpv6`, `useCustomVnet`,
+ * `subnetId`, or `publicIPPrefixId` replaces the cluster and every node type
+ * and application in it. Alchemy updates every other prop in place.
+ * :::
  *
  * ### Creating a Managed Cluster
  * **Example:** Basic cluster managed with a client certificate
  * ```typescript
+ * const password = yield* Config.redacted("SF_ADMIN_PASSWORD");
  * const cluster = yield* Azure.ServiceFabric.ManagedCluster("cluster", {
  *   adminUserName: "sfadmin",
- *   adminPassword: Redacted.make(password),
- *   clients: [{ isAdmin: true, thumbprint: adminCertThumbprint }],
+ *   adminPassword: password,
+ *   clients: [
+ *     { isAdmin: true, thumbprint: "0123456789ABCDEF0123456789ABCDEF01234567" },
+ *   ],
  * });
  * const primary = yield* Azure.ServiceFabric.NodeType("primary", {
  *   cluster: cluster.managedClusterName,
@@ -255,10 +370,13 @@ export interface ManagedCluster extends Resource<
  * ### Networking
  * **Example:** Expose an application port through the load balancer
  * ```typescript
+ * const password = yield* Config.redacted("SF_ADMIN_PASSWORD");
  * const cluster = yield* Azure.ServiceFabric.ManagedCluster("cluster", {
  *   adminUserName: "sfadmin",
- *   adminPassword: Redacted.make(password),
- *   clients: [{ isAdmin: true, thumbprint: adminCertThumbprint }],
+ *   adminPassword: password,
+ *   clients: [
+ *     { isAdmin: true, thumbprint: "0123456789ABCDEF0123456789ABCDEF01234567" },
+ *   ],
  *   loadBalancingRules: [
  *     {
  *       frontendPort: 443,
@@ -337,11 +455,7 @@ export const ManagedClusterProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* sf
-        .ListManagedClusterBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListManagedClusterBySubscription", page)),
-        );
+      const page = yield* collectAll(sf.ListManagedClusterBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((cluster) => {
         const group = resourceGroupOf(cluster.id);
         return hasAnyAlchemyTag(cluster.tags) && group !== undefined && cluster.name !== undefined

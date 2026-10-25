@@ -17,18 +17,30 @@ export interface PeerContact {
   role: PeerContactRole;
   /** E-mail address of the contact. */
   email: string;
-  /** Phone number of the contact. */
+  /**
+   * Phone number of the contact.
+   * @default no phone number
+   */
   phone?: string;
 }
 
 export interface PeerAsnProps {
   /**
-   * Name of the peer ASN registration. If omitted, a unique name is
-   * generated from the app, stage, and logical ID. Changing it replaces the
-   * registration.
+   * Name of the peer ASN registration.
+   *
+   * :::caution
+   * Changing it replaces the registration.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Autonomous system number of the peer. Changing it replaces the registration. */
+  /**
+   * Autonomous system number of the peer.
+   *
+   * :::caution
+   * Changing it replaces the registration.
+   * :::
+   */
   peerAsn: number;
   /** Name of the network operator that owns the ASN. */
   peerName: string;
@@ -60,14 +72,20 @@ export interface PeerAsn extends Resource<
 > {}
 
 /**
- * A peer ASN registration — the subscription-level record of a network
- * operator's autonomous system that Microsoft (AS8075) validates before
- * the operator can create Direct or Exchange peerings. Validation is a
- * manual review by Microsoft's peering team, so register only an ASN your
- * organization owns; `validationState` reports the outcome.
+ * A peer ASN registration (`Microsoft.Peering/peerAsns`) — the
+ * subscription-level record of a network operator's autonomous system that
+ * Microsoft (AS8075) validates before the operator can create Direct or
+ * Exchange peerings. Validation is a manual review by Microsoft's peering
+ * team, so register only an ASN your organization owns; `validationState`
+ * reports the outcome.
  *
  * Registrations have no tags; Alchemy treats one as owned when its name is
  * the name Alchemy generates for the logical ID.
+ *
+ * :::caution
+ * Azure allows one registration per ASN, so a replacement deletes the old
+ * registration before it creates the new one.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/internet-peering/howto-subscription-association-portal
  *

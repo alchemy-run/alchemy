@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,12 +32,14 @@ export interface EmailServiceProps {
   /**
    * Resource group the email service is created in. Changing it replaces
    * the email service.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Email service name: 1-63 letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the email service.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -56,6 +58,7 @@ export interface EmailServiceProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -82,10 +85,16 @@ export interface EmailService extends Resource<
 > {}
 
 /**
- * An Azure Communication Services email service — the container for the
- * sender domains used to send email through a communication service.
+ * An Azure Communication Services email service
+ * (`Microsoft.Communication/emailServices`) — the container for the sender
+ * domains used to send email through a communication service.
  *
- * @see https://learn.microsoft.com/azure/communication-services/concepts/email/email-overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `dataLocation` replaces
+ * the email service and deletes its domains.
+ * :::
+ *
+ * See [Email in Azure Communication Services](https://learn.microsoft.com/azure/communication-services/concepts/email/email-overview).
  *
  * ### Creating an Email Service
  * **Example:** Email service in the United States
@@ -139,9 +148,9 @@ export const EmailServiceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* communication
-        .ListEmailServiceBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListEmailServiceBySubscription", page)));
+      const page = yield* collectAll(communication.ListEmailServiceBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((service) => {
         const group = resourceGroupOf(service.id);
         return hasAnyAlchemyTag(service.tags) && group !== undefined && service.name !== undefined

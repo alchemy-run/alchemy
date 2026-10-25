@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -38,7 +38,10 @@ export interface FleetIdentity {
    * @default false
    */
   systemAssigned?: boolean;
-  /** ARM IDs of user-assigned managed identities to attach. */
+  /**
+   * ARM IDs of user-assigned managed identities to attach.
+   * @default none
+   */
   userAssignedIdentityIds?: string[];
 }
 
@@ -51,6 +54,7 @@ export interface FleetProps {
    * Name of the fleet: 1-64 letters, digits, `.`, `_`, and `-`. If omitted,
    * a unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the fleet.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -61,11 +65,13 @@ export interface FleetProps {
   /**
    * Availability zones the fleet's VMs are spread over. Changing them
    * replaces the fleet.
+   * @default no zones (regional)
    */
   zones?: string[];
   /**
    * Marketplace plan of the VM image (marketplace images only). Changing it
    * replaces the fleet.
+   * @default no plan
    */
   plan?: FleetPlan;
   /**
@@ -77,17 +83,20 @@ export interface FleetProps {
   /**
    * Attribute-based VM selection (vCPU / memory ranges, architectures,
    * ...), an alternative to listing sizes. Updated in place.
+   * @default not set (sizes come from `vmSizesProfile`)
    */
   vmAttributes?: FleetVmAttributes;
   /**
    * Regular (pay-as-you-go) capacity. `capacity` scales in place; changing
    * `minCapacity` or `allocationStrategy` replaces the fleet.
+   * @default no regular-priority capacity
    */
   regularPriorityProfile?: FleetRegularPriorityProfile;
   /**
    * Spot capacity. `capacity` scales in place; changing any other field
    * replaces the fleet. Spot VMs are unavailable on free-trial
    * subscriptions.
+   * @default no Spot capacity
    */
   spotPriorityProfile?: FleetSpotPriorityProfile;
   /**
@@ -100,15 +109,18 @@ export interface FleetProps {
   /**
    * Additional regions the fleet may deploy VMs to. Changing it replaces
    * the fleet.
+   * @default no additional regions
    */
   additionalLocationsProfile?: FleetAdditionalLocationsProfile;
   /**
    * Managed identities of the fleet. Updated in place.
+   * @default no managed identity
    */
   identity?: FleetIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -149,19 +161,38 @@ export interface Fleet extends Resource<
 > {}
 
 /**
- * An Azure Compute Fleet — one resource that provisions a mix of VM sizes
- * and Spot / regular capacity across underlying flexible scale sets. The
- * fleet's VMs, disks, and NICs are deleted with it.
+ * An Azure Compute Fleet (`Microsoft.AzureFleet/fleets`) — one resource
+ * that provisions a mix of VM sizes and Spot / regular capacity across
+ * underlying flexible scale sets. The fleet's VMs, disks, and NICs are
+ * deleted with it.
  *
  * Target capacity, the VM size list, attribute-based selection, identity,
  * and tags update in place; the VM template (`computeProfile`) and the
  * minimum capacities are fixed at creation.
+ *
+ * :::caution
+ * Changing `name`, `location`, `zones`, `plan`, `computeProfile`,
+ * `additionalLocationsProfile`, or `resourceGroup` replaces the fleet and
+ * deletes its VMs. So does changing `minCapacity` or `allocationStrategy`
+ * of `regularPriorityProfile`, or any `spotPriorityProfile` field other
+ * than `capacity`.
+ *
+ * Spot VMs are unavailable on free-trial subscriptions.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-compute-fleet/overview
  *
  * ### Creating a Fleet
  * **Example:** One regular-priority Linux VM from two candidate sizes
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("workers", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const publicKey = yield* Config.string("SSH_PUBLIC_KEY");
  * const fleet = yield* Azure.AzureFleet.Fleet("workers", {
  *   vmSizesProfile: [{ name: "Standard_D2as_v5" }, { name: "Standard_D2s_v5" }],
  *   regularPriorityProfile: {
@@ -206,6 +237,14 @@ export interface Fleet extends Resource<
  * ### Mixing Spot and Regular Capacity
  * **Example:** Spot capacity with a regular-priority floor
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("workers", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const publicKey = yield* Config.string("SSH_PUBLIC_KEY");
  * const fleet = yield* Azure.AzureFleet.Fleet("batch", {
  *   vmSizesProfile: [{ name: "Standard_D4as_v5" }, { name: "Standard_D4s_v5" }],
  *   spotPriorityProfile: {
@@ -216,7 +255,37 @@ export interface Fleet extends Resource<
  *     maintain: true,
  *   },
  *   regularPriorityProfile: { capacity: 2, minCapacity: 2 },
- *   computeProfile,
+ *   computeProfile: {
+ *     baseVirtualMachineProfile: {
+ *       storageProfile: {
+ *         imageReference: {
+ *           publisher: "Canonical",
+ *           offer: "ubuntu-24_04-lts",
+ *           sku: "server",
+ *           version: "latest",
+ *         },
+ *         osDisk: { createOption: "FromImage", managedDisk: { storageAccountType: "Standard_LRS" } },
+ *       },
+ *       osProfile: {
+ *         computerNamePrefix: "batch",
+ *         adminUsername: "azureuser",
+ *         linuxConfiguration: {
+ *           disablePasswordAuthentication: true,
+ *           ssh: { publicKeys: [{ path: "/home/azureuser/.ssh/authorized_keys", keyData: publicKey }] },
+ *         },
+ *       },
+ *       networkProfile: {
+ *         networkApiVersion: "2020-11-01",
+ *         networkInterfaceConfigurations: [{
+ *           name: "nic",
+ *           properties: {
+ *             primary: true,
+ *             ipConfigurations: [{ name: "ipconfig", properties: { primary: true, subnet: { id: subnet.subnetId } } }],
+ *           },
+ *         }],
+ *       },
+ *     },
+ *   },
  * });
  * ```
  *
@@ -338,9 +407,7 @@ export const FleetProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* azurefleet
-        .ListFleetBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListFleetBySubscription", page)));
+      const page = yield* collectAll(azurefleet.ListFleetBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((fleet) => {
         const resourceGroup = resourceGroupOf(fleet.id);
         return hasAnyAlchemyTag(fleet.tags) &&

@@ -23,18 +23,26 @@ export interface GuestAgentProps {
    * Changing it replaces the agent.
    */
   machineId: string;
-  /** Guest OS user name used to install the agent. Changing it replaces the agent. */
+  /**
+   * Guest OS user name used to install the agent. Changing it replaces the agent.
+   * @default no credentials are sent
+   */
   username?: string;
   /**
    * Guest OS password used to install the agent. Never returned by Azure.
    * Changing it replaces the agent.
+   * @default no credentials are sent
    */
   password?: string | Redacted.Redacted<string>;
-  /** HTTPS proxy URL the agent uses to reach Azure. Changing it replaces the agent. */
+  /**
+   * HTTPS proxy URL the agent uses to reach Azure. Changing it replaces the agent.
+   * @default no proxy
+   */
   httpsProxy?: string;
   /**
    * ARM ID of the Arc private link scope the machine is assigned to.
    * Changing it replaces the agent.
+   * @default no private link scope
    */
   privateLinkScopeResourceId?: string;
   /**
@@ -68,34 +76,51 @@ export interface GuestAgent extends Resource<
 > {}
 
 /**
- * The Arc guest agent of an SCVMM VM (the singleton
+ * The Arc guest agent of an SCVMM VM
+ * (`Microsoft.ScVmm/virtualMachineInstances/guestAgents`, the singleton
  * `virtualMachineInstances/default/guestAgents/default`). Installing it
- * enables guest management (extensions, run commands) for a VM managed by
- * an Arc-enabled System Center Virtual Machine Manager.
+ * turns on guest management (extensions, run commands) for a VM on an
+ * Arc-enabled System Center Virtual Machine Manager. See the
+ * [Azure docs](https://learn.microsoft.com/azure/azure-arc/system-center-virtual-machine-manager/enable-guest-management-at-scale).
  *
- * The agent has no tags; Alchemy treats it as owned when the VM's Arc
- * machine carries this stack's ownership tags. Azure has no update
- * operation: the provisioning action is re-applied through the create
- * upsert, every other change replaces the agent.
+ * The agent has no tags. Alchemy treats it as owned when the VM's Arc
+ * machine carries this stack's ownership tags.
  *
- * @see https://learn.microsoft.com/azure/azure-arc/system-center-virtual-machine-manager/enable-guest-management-at-scale
+ * :::caution
+ * The `Azure.ScVmm.VirtualMachineInstance` for `machineId` must already
+ * exist.
+ * :::
+ *
+ * :::caution
+ * Azure has no update operation. Changing `machineId`, `username`,
+ * `password`, `httpsProxy`, or `privateLinkScopeResourceId` replaces the
+ * agent. Alchemy re-applies `provisioningAction` in place.
+ * :::
  *
  * ### Enabling Guest Management
  * **Example:** Install the guest agent on an SCVMM VM
  * ```typescript
+ * const password = yield* Config.redacted("VM_ADMIN_PASSWORD");
+ * const machine = yield* Azure.HybridCompute.Machine("vm", {
+ *   kind: "SCVMM",
+ * });
  * yield* Azure.ScVmm.GuestAgent("agent", {
- *   machineId: vm.machineId,
+ *   machineId: machine.machineId,
  *   username: "Administrator",
- *   password: Redacted.make(adminPassword),
+ *   password,
  * });
  * ```
  *
  * **Example:** Install through an HTTPS proxy
  * ```typescript
+ * const password = yield* Config.redacted("VM_ADMIN_PASSWORD");
+ * const machine = yield* Azure.HybridCompute.Machine("vm", {
+ *   kind: "SCVMM",
+ * });
  * yield* Azure.ScVmm.GuestAgent("agent", {
- *   machineId: vm.machineId,
+ *   machineId: machine.machineId,
  *   username: "Administrator",
- *   password: Redacted.make(adminPassword),
+ *   password,
  *   httpsProxy: "http://proxy.contoso.local:3128",
  * });
  * ```

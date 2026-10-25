@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -39,12 +39,16 @@ export type AssetEvent = deviceregistry.Event;
 export type AssetTopic = deviceregistry.Topic;
 
 export interface AssetProps {
-  /** Resource group the asset is created in. Changing it replaces the asset. */
+  /**
+   * Resource group the asset is created in. Changing it replaces the asset.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Asset name: lowercase letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the asset.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -67,45 +71,100 @@ export interface AssetProps {
    * @default the asset's Azure-assigned UUID
    */
   externalAssetId?: string;
-  /** Names of discovered assets this asset was promoted from. Changing it replaces the asset. */
+  /**
+   * Names of discovered assets this asset was promoted from. Changing it replaces the asset.
+   * @default []
+   */
   discoveredAssetRefs?: string[];
-  /** Whether the asset is enabled. */
+  /**
+   * Whether the asset is enabled.
+   * @default unset (Azure's default)
+   */
   enabled?: boolean;
-  /** Human-readable display name. */
+  /**
+   * Human-readable display name.
+   * @default unset
+   */
   displayName?: string;
-  /** Human-readable description. */
+  /**
+   * Human-readable description.
+   * @default unset
+   */
   description?: string;
-  /** Asset manufacturer. */
+  /**
+   * Asset manufacturer.
+   * @default unset
+   */
   manufacturer?: string;
-  /** Asset manufacturer URI. */
+  /**
+   * Asset manufacturer URI.
+   * @default unset
+   */
   manufacturerUri?: string;
-  /** Asset model. */
+  /**
+   * Asset model.
+   * @default unset
+   */
   model?: string;
-  /** Asset product code. */
+  /**
+   * Asset product code.
+   * @default unset
+   */
   productCode?: string;
-  /** Hardware revision. */
+  /**
+   * Hardware revision.
+   * @default unset
+   */
   hardwareRevision?: string;
-  /** Software revision. */
+  /**
+   * Software revision.
+   * @default unset
+   */
   softwareRevision?: string;
-  /** Documentation URI. */
+  /**
+   * Documentation URI.
+   * @default unset
+   */
   documentationUri?: string;
-  /** Serial number. */
+  /**
+   * Serial number.
+   * @default unset
+   */
   serialNumber?: string;
-  /** Custom key-value attributes. */
+  /**
+   * Custom key-value attributes.
+   * @default {}
+   */
   attributes?: Record<string, unknown>;
-  /** Stringified JSON with connector-specific defaults for all datasets. */
+  /**
+   * Stringified JSON with connector-specific defaults for all datasets.
+   * @default unset
+   */
   defaultDatasetsConfiguration?: string;
-  /** Stringified JSON with connector-specific defaults for all events. */
+  /**
+   * Stringified JSON with connector-specific defaults for all events.
+   * @default unset
+   */
   defaultEventsConfiguration?: string;
-  /** Default MQTT topic for the asset's messages. */
+  /**
+   * Default MQTT topic for the asset's messages.
+   * @default unset
+   */
   defaultTopic?: AssetTopic;
-  /** Datasets of the asset. */
+  /**
+   * Datasets of the asset.
+   * @default []
+   */
   datasets?: AssetDataset[];
-  /** Events of the asset. */
+  /**
+   * Events of the asset.
+   * @default []
+   */
   events?: AssetEvent[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -140,19 +199,31 @@ export interface Asset extends Resource<
 > {}
 
 /**
- * An Azure Device Registry asset (Azure IoT Operations v1 model) — a
+ * An Azure Device Registry asset (`Microsoft.DeviceRegistry/assets`, Azure
+ * IoT Operations v1 model) — a
  * piece of equipment whose datasets and events connectors collect through
  * an asset endpoint profile. Superseded by namespace assets
  * (`Azure.DeviceRegistry.NamespaceAsset`).
  *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `customLocationId`,
+ * `assetEndpointProfile`, `externalAssetId`, or `discoveredAssetRefs`
+ * replaces the asset.
+ * :::
+ *
+ * :::caution
  * Requires an Arc-enabled Kubernetes cluster running Azure IoT Operations
  * (its custom location).
+ * :::
  *
  * @see https://learn.microsoft.com/azure/iot-operations/discover-manage-assets/overview-manage-assets
  *
  * ### Creating an Asset
  * **Example:** OPC UA asset with a dataset
  * ```typescript
+ * // Custom location of an Arc-enabled cluster running Azure IoT Operations.
+ * const aioCustomLocationId =
+ *   "/subscriptions/<subscription-id>/resourceGroups/iot/providers/Microsoft.ExtendedLocation/customLocations/aio";
  * const profile = yield* Azure.DeviceRegistry.AssetEndpointProfile("plc", {
  *   customLocationId: aioCustomLocationId,
  *   targetAddress: "opc.tcp://plc.factory.local:4840",
@@ -229,9 +300,7 @@ export const AssetProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        deviceregistry
-          .ListAssetBySubscription({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListAssetBySubscription", page))),
+        collectAll(deviceregistry.ListAssetBySubscription, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((asset) => {
         const group = resourceGroupOf(asset.id);

@@ -43,12 +43,27 @@ export interface NotificationRecipientEmail extends Resource<
  * {@link Notification}. The subscription has no settings; changing the
  * notification or address replaces it. Not available on the Consumption
  * tier.
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/notifications/recipientEmails`.
+ *
+ * :::caution
+ * Changing `serviceName`, `notificationName`, `email`, or `resourceGroup`
+ * replaces the recipient.
+ *
+ * Notifications are not available on the Consumption tier ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-configure-notifications
  *
  * ### Subscribing an Address
  * **Example:** Notify the API team about new subscriptions
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * yield* Azure.ApiManagement.NotificationRecipientEmail("new-subs", {
  *   serviceName: apim.serviceName,
  *   notificationName: "RequestPublisherNotificationMessage",

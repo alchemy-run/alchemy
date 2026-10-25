@@ -14,7 +14,10 @@ import { isWorkspaceOwnedByStack, lower, resetSetting, syncSetting } from "./com
 const SETTING_NAME = "default";
 
 export interface AzureADOnlyAuthenticationProps {
-  /** Resource group of the workspace. Changing it replaces the setting. */
+  /**
+   * Resource group of the workspace. Changing it replaces the setting.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Synapse workspace. Changing it replaces the setting. */
   workspace: string;
@@ -45,17 +48,34 @@ export interface AzureADOnlyAuthentication extends Resource<
 
 /**
  * Microsoft Entra-only authentication for a Synapse workspace's SQL
- * endpoints. When enabled, SQL authentication (the workspace SQL
- * administrator and SQL users) is disabled.
+ * endpoints (`Microsoft.Synapse/workspaces/azureADOnlyAuthentications`).
+ * When enabled, SQL authentication (the workspace SQL administrator and SQL
+ * users) is disabled.
  *
  * This is a singleton setting that always exists on a workspace.
  * Destroying the resource turns Entra-only authentication off again.
+ *
+ * :::caution
+ * Changing `workspace` or `resourceGroup` replaces the setting.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/sql/active-directory-authentication
  *
  * ### Enforcing Entra Authentication
  * **Example:** Disable SQL authentication
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
  * yield* Azure.Synapse.AzureADOnlyAuthentication("entra-only", {
  *   workspace: workspace.workspaceName,
  * });

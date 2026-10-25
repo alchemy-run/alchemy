@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -39,6 +39,7 @@ export interface L3NetworkProps {
   /**
    * Name of the L3 network. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the L3 network.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -68,21 +69,25 @@ export interface L3NetworkProps {
   /**
    * IPv4 prefix (CIDR) of the network. Required for `IPV4` and `DualStack`.
    * Changing it replaces the L3 network.
+   * @default none
    */
   ipv4ConnectedPrefix?: string;
   /**
    * IPv6 prefix (CIDR) of the network. Required for `IPV6` and `DualStack`.
    * Changing it replaces the L3 network.
+   * @default none
    */
   ipv6ConnectedPrefix?: string;
   /**
    * Interface name of the network on attached virtual machines. Changing it
    * replaces the L3 network.
+   * @default Azure's default
    */
   interfaceName?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -133,14 +138,26 @@ export interface L3Network extends Resource<
  * Network Fabric L3 isolation domain, used by Nexus virtual machines and
  * Kubernetes clusters. Needs a deployed Operator Nexus cluster.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/quickstarts-tenant-workload-prerequisites
+ * ARM type: `Microsoft.NetworkCloud/l3Networks`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/quickstarts-tenant-workload-prerequisites).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `customLocationId`,
+ * `l3IsolationDomainId`, `vlan`, `ipAllocationType`, `ipv4ConnectedPrefix`,
+ * `ipv6ConnectedPrefix`, or `interfaceName` replaces the network.
+ * :::
  *
  * ### Creating an L3 Network
  * **Example:** Dual-stack L3 network
  * ```typescript
+ * // An existing Operator Nexus cluster, "site1", in the stack's resource group.
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ExtendedLocation/customLocations/site1-cl";
+ * const l3DomainId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/l3IsolationDomains/tenant";
  * const net = yield* Azure.NetworkCloud.L3Network("l3", {
- *   customLocationId: cluster.clusterExtendedLocationId,
- *   l3IsolationDomainId: l3Domain.l3IsolationDomainId,
+ *   customLocationId,
+ *   l3IsolationDomainId: l3DomainId,
  *   vlan: 1001,
  *   ipAllocationType: "DualStack",
  *   ipv4ConnectedPrefix: "10.10.0.0/24",
@@ -195,9 +212,7 @@ export const L3NetworkProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* nc
-        .ListL3NetworkBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListL3NetworkBySubscription", page)));
+      const page = yield* collectAll(nc.ListL3NetworkBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

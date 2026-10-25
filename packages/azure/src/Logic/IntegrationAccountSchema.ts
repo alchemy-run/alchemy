@@ -28,6 +28,7 @@ export interface IntegrationAccountSchemaProps {
    * Schema name: 1-80 letters, digits, `-`, `_`, `.`, `(`, `)`. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the schema.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** XSD document. */
@@ -42,15 +43,25 @@ export interface IntegrationAccountSchemaProps {
    * @default "application/xml"
    */
   contentType?: string;
-  /** Target namespace. Azure derives it from the XSD when omitted. */
+  /**
+   * Target namespace. Azure derives it from the XSD when omitted.
+   * @default derived by Azure from the XSD
+   */
   targetNamespace?: string;
-  /** Root document name. Azure derives it from the XSD when omitted. */
+  /**
+   * Root document name. Azure derives it from the XSD when omitted.
+   * @default derived by Azure from the XSD
+   */
   documentName?: string;
-  /** File name shown in the portal. */
+  /**
+   * File name shown in the portal.
+   * @default none
+   */
   fileName?: string;
   /**
    * User metadata. Alchemy adds `alchemy::*` ownership and hash keys
    * because artifacts do not return tags.
+   * @default none
    */
   metadata?: Record<string, unknown>;
 }
@@ -86,6 +97,9 @@ export interface IntegrationAccountSchema extends Resource<
  * An XML schema (XSD) in a Logic Apps integration account, used by the
  * XML Validation, Transform XML, and B2B encode/decode actions.
  *
+ * ARM type: `Microsoft.Logic/integrationAccounts/schemas`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-schemas).
+ *
  * Azure stores the content but never returns it, so Alchemy keeps a hash
  * of the desired configuration in the schema's metadata to detect changes.
  *
@@ -93,8 +107,6 @@ export interface IntegrationAccountSchema extends Resource<
  * Changing `name`, `integrationAccount`, or `resourceGroup` replaces the
  * schema.
  * :::
- *
- * @see https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-schemas
  *
  * ### Adding a Schema
  * **Example:** Order schema

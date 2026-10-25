@@ -29,7 +29,10 @@ export interface AuthorizationAccessPolicyProps {
    * service's managed identity. Changing it replaces the policy.
    */
   objectId: string;
-  /** Client application IDs that may use the connection. */
+  /**
+   * Client application IDs that may use the connection.
+   * @default none
+   */
   appIds?: string[];
 }
 
@@ -62,12 +65,45 @@ export interface AuthorizationAccessPolicy extends Resource<
  * Grants an identity access to the tokens of an API Management
  * credential manager {@link Authorization} (connection). Without an access
  * policy, `get-authorization-context` fails for that identity.
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/authorizationProviders/authorizations/accessPolicies`.
+ *
+ * :::caution
+ * Changing `serviceName`, `authorizationProviderName`, `authorizationName`,
+ * `name`, `tenantId`, `objectId`, or `resourceGroup` replaces the policy.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/credentials-overview
  *
  * ### Granting Access
  * **Example:** Let the service's managed identity use a connection
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const { tenantId } = yield* Azure.AzureEnvironment.current;
+ * const provider = yield* Azure.ApiManagement.AuthorizationProvider("entra", {
+ *   serviceName: apim.serviceName,
+ *   identityProvider: "aad",
+ *   grantTypes: {
+ *     clientCredentials: {
+ *       resourceUri: "https://graph.microsoft.com",
+ *       scopes: "https://graph.microsoft.com/.default",
+ *       loginUri: "https://login.windows.net",
+ *       tenantId,
+ *     },
+ *   },
+ * });
+ * const connection = yield* Azure.ApiManagement.Authorization("graph", {
+ *   serviceName: apim.serviceName,
+ *   authorizationProviderName: provider.authorizationProviderName,
+ *   oauth2GrantType: "ClientCredentials",
+ *   parameters: {
+ *     clientId: yield* Config.redacted("GRAPH_CLIENT_ID"),
+ *     clientSecret: yield* Config.redacted("GRAPH_CLIENT_SECRET"),
+ *   },
+ * });
  * yield* Azure.ApiManagement.AuthorizationAccessPolicy("graph-access", {
  *   serviceName: apim.serviceName,
  *   authorizationProviderName: provider.authorizationProviderName,

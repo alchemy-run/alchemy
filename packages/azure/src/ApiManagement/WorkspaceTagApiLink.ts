@@ -52,16 +52,45 @@ export interface WorkspaceTagApiLink extends Resource<
 /**
  * The workspace-scoped counterpart of {@link TagApiLink}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/workspaces/tags/apiLinks`.
  *
  * Assigns an API Management {@link Tag} to an API through a named link
  * entity (`tags/{tagId}/apiLinks/{linkId}`). It expresses the same
  * relation as {@link ApiTagLink}; use one or the other.
+ *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `tagName`, `apiName`, `name`, or
+ * `resourceGroup` replaces the link.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/apimanagement/tag-api-link
  *
  * ### Tagging APIs from the Tag Side
  * **Example:** Tag the orders API as public
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
+ * const publicTag = yield* Azure.ApiManagement.WorkspaceTag("public", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   displayName: "Public",
+ * });
+ * const orders = yield* Azure.ApiManagement.WorkspaceApi("orders", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * yield* Azure.ApiManagement.WorkspaceTagApiLink("public-orders", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

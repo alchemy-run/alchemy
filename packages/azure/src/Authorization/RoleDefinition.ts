@@ -7,10 +7,10 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -178,9 +178,10 @@ export const RoleDefinitionProvider = () =>
 
     list: Effect.fn(function* () {
       const scope = yield* defaultScope;
-      const page = yield* authorization
-        .ListRoleDefinitions({ scope, _filter: "type eq 'CustomRole'" })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListRoleDefinitions", page)));
+      const page = yield* collectAll(authorization.ListRoleDefinitions, {
+        scope,
+        _filter: "type eq 'CustomRole'",
+      });
       return (page.value ?? []).flatMap((definition) =>
         MARKER.test(definition.properties?.description ?? "") && definition.name !== undefined
           ? [

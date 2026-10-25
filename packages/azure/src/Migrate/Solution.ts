@@ -54,6 +54,7 @@ export interface SolutionProps {
    * `<Goal>-<Purpose>-<Tool>` (e.g. `Servers-Assessment-ServerAssessment`).
    * If omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the solution.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Tool the solution represents. Changing it replaces the solution. */
@@ -67,7 +68,10 @@ export interface SolutionProps {
    * @default "Active"
    */
   status?: "Active" | "Inactive";
-  /** Free-form key/value details the tool reports to the hub. */
+  /**
+   * Free-form key/value details the tool reports to the hub.
+   * @default none
+   */
   extendedDetails?: Record<string, string>;
 }
 
@@ -104,10 +108,15 @@ export interface Solution extends Resource<
  * discovery, assessment, or migration tool, or an ISV tool such as
  * Turbonomic.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/migrate/migrate-services-overview).
+ *
  * Solutions cannot be tagged; Alchemy treats a solution as owned when its
  * Migrate project carries this stack's and stage's ownership tags.
  *
- * @see https://learn.microsoft.com/azure/migrate/migrate-services-overview
+ * :::caution
+ * Changing `resourceGroup`, `migrateProject`, `name`, `tool`, `purpose`, or
+ * `goal` replaces the solution.
+ * :::
  *
  * ### Registering a Tool
  * **Example:** Server assessment tool

@@ -40,6 +40,7 @@ export interface NamedValueProps {
    * Named value identifier (1-256 characters). If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces
    * the named value.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -50,6 +51,7 @@ export interface NamedValueProps {
   displayName?: string;
   /**
    * Literal value. Exactly one of `value` and `keyVault` must be set.
+   * @default not set
    */
   value?: string | Redacted.Redacted<string>;
   /**
@@ -57,9 +59,15 @@ export interface NamedValueProps {
    * @default false (always `true` for Key Vault references)
    */
   secret?: boolean;
-  /** Key Vault reference; the service identity needs `get` access to the secret. */
+  /**
+   * Key Vault reference; the service identity needs `get` access to the secret.
+   * @default not set
+   */
   keyVault?: NamedValueKeyVault;
-  /** APIM labels used to filter named values (not ARM tags). */
+  /**
+   * APIM labels used to filter named values (not ARM tags).
+   * @default none
+   */
   tags?: string[];
 }
 
@@ -90,12 +98,22 @@ export interface NamedValue extends Resource<
  * An API Management named value — a constant or secret that policies
  * reference as `{{displayName}}`. The value can be a literal or a Key
  * Vault secret reference.
+ * The ARM type is `Microsoft.ApiManagement/service/namedValues`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the named
+ * value.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-properties
  *
  * ### Creating a Named Value
  * **Example:** Plain value
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const region = yield* Azure.ApiManagement.NamedValue("region", {
  *   serviceName: apim.serviceName,
  *   displayName: "region",
@@ -105,10 +123,14 @@ export interface NamedValue extends Resource<
  *
  * **Example:** Secret value
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const apiKey = yield* Azure.ApiManagement.NamedValue("backend-key", {
  *   serviceName: apim.serviceName,
  *   displayName: "backend-key",
- *   value: Redacted.make(process.env.BACKEND_KEY!),
+ *   value: yield* Config.redacted("BACKEND_KEY"),
  *   secret: true,
  * });
  * ```
@@ -116,6 +138,10 @@ export interface NamedValue extends Resource<
  * ### Key Vault References
  * **Example:** Value read from Key Vault
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const secret = yield* Azure.ApiManagement.NamedValue("db-password", {
  *   serviceName: apim.serviceName,
  *   keyVault: {

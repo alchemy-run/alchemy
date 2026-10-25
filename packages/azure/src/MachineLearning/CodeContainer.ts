@@ -35,6 +35,8 @@ export interface CodeContainer extends Resource<
  * snapshot shared across workspaces. Register versions with
  * {@link CodeVersion}.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/how-to-share-models-pipelines-across-workspaces-with-registries).
+ *
  * Workspaces keep code versions without an addressable container (Azure
  * rejects `workspaces/codes` reads), so declare only a {@link CodeVersion}
  * there.
@@ -45,11 +47,10 @@ export interface CodeContainer extends Resource<
  * Changing `resourceGroup`, `registry`, or `name` replaces the code asset.
  * :::
  *
- * @see https://learn.microsoft.com/azure/machine-learning/how-to-share-models-pipelines-across-workspaces-with-registries
- *
  * ### Creating a Code Asset
  * **Example:** Code asset shared through a registry
  * ```typescript
+ * const registry = yield* Azure.MachineLearning.Registry("shared");
  * const code = yield* Azure.MachineLearning.CodeContainer("trainer", {
  *   registry: registry.registryName,
  *   description: "Training scripts",

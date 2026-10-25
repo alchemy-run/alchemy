@@ -26,6 +26,8 @@ export interface ModelContainer extends Resource<
  * `registries/models`) — the named container that groups the registered
  * versions of a trained model. Register versions with {@link ModelVersion}.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/concept-model-management-and-deployment).
+ *
  * Description, properties, tags, and the archive flag update in place.
  * In a workspace Azure drops a model's tags (a registry keeps them), so
  * Alchemy sends none there and the workspace's stack/stage tags mark
@@ -36,11 +38,19 @@ export interface ModelContainer extends Resource<
  * model.
  * :::
  *
- * @see https://learn.microsoft.com/azure/machine-learning/concept-model-management-and-deployment
- *
  * ### Creating a Model
  * **Example:** Model in a workspace
  * ```typescript
+ * // An existing Application Insights component for workspace telemetry.
+ * const insightsId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/monitoring/providers/Microsoft.Insights/components/ml-insights";
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const workspace = yield* Azure.MachineLearning.Workspace("ml", {
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ *   applicationInsights: insightsId,
+ * });
  * const modelContainer = yield* Azure.MachineLearning.ModelContainer("churn", {
  *   workspace: workspace.workspaceName,
  *   description: "Churn classifier",

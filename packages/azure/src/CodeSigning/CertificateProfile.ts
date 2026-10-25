@@ -29,6 +29,7 @@ export type CertificateProfileType =
 export interface CertificateProfileProps {
   /**
    * Resource group of the parent account. Changing it replaces the profile.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -40,6 +41,7 @@ export interface CertificateProfileProps {
    * Profile name, 5-100 characters of letters, digits, and hyphens,
    * starting with a letter. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the profile.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -129,17 +131,24 @@ export interface CertificateProfile extends Resource<
 > {}
 
 /**
- * A certificate profile of an Artifact Signing account. A profile binds an
- * identity validation to a certificate type; Microsoft issues and renews
- * short-lived signing certificates for it, which SignTool or the signing
- * GitHub Action use via the account's `accountUri`.
+ * A certificate profile of an Artifact Signing account
+ * (`Microsoft.CodeSigning/codeSigningAccounts/certificateProfiles`). A
+ * profile binds an identity validation to a certificate type; Microsoft
+ * issues and renews short-lived signing certificates for it, which SignTool
+ * or the signing GitHub Action use via the account's `accountUri`.
  *
  * Profiles carry no tags and have no update API: every change replaces the
  * profile. Alchemy treats a profile as owned when its parent account carries
  * this stack's and stage's ownership tags. Creating one requires a completed
  * identity validation, which is done in the Azure portal.
  *
- * @see https://learn.microsoft.com/azure/artifact-signing/concept-certificate-management
+ * :::caution
+ * Changing `resourceGroup`, `account`, `name`, `profileType`,
+ * `identityValidationId`, or any `include*` flag replaces the profile. The
+ * new profile issues new certificates.
+ * :::
+ *
+ * See [Artifact Signing certificate management](https://learn.microsoft.com/azure/artifact-signing/concept-certificate-management).
  *
  * ### Creating a Profile
  * **Example:** Public-trust profile
@@ -154,10 +163,11 @@ export interface CertificateProfile extends Resource<
  *
  * **Example:** Private-trust profile for App Control policies
  * ```typescript
+ * const account = yield* Azure.CodeSigning.Account("signing");
  * const profile = yield* Azure.CodeSigning.CertificateProfile("ci-policy", {
  *   account: account.accountName,
  *   profileType: "PrivateTrustCIPolicy",
- *   identityValidationId: validationId,
+ *   identityValidationId: "00000000-0000-0000-0000-000000000000",
  *   includeCity: true,
  *   includeCountry: true,
  * });

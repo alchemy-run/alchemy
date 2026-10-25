@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,12 +32,14 @@ export interface DnsResolverProps {
   /**
    * Resource group the resolver is created in. The DNS resolver API rejects resource group names
    * longer than 80 characters. Changing it replaces the resolver.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
    * Resolver name: 1-80 letters, digits, `_`, and `-`. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the resolver.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -54,6 +56,7 @@ export interface DnsResolverProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -84,28 +87,37 @@ export interface DnsResolver extends Resource<
 > {}
 
 /**
- * An Azure DNS Private Resolver — a managed DNS service inside a virtual
- * network that resolves Azure Private DNS zones from on-premises and
- * forwards queries from the virtual network to other DNS servers.
+ * An Azure DNS Private Resolver (`Microsoft.Network/dnsResolvers`) — a
+ * managed DNS service inside a virtual network that resolves Azure Private
+ * DNS zones from on-premises and forwards queries from the virtual network
+ * to other DNS servers.
  *
  * The resolver itself is free; its inbound and outbound endpoints are
  * billed hourly. Add endpoints with `Azure.DnsResolver.InboundEndpoint` and
- * `Azure.DnsResolver.OutboundEndpoint`.
+ * `Azure.DnsResolver.OutboundEndpoint`. See the
+ * [DNS Private Resolver overview](https://learn.microsoft.com/azure/dns/dns-private-resolver-overview).
  *
- * @see https://learn.microsoft.com/azure/dns/dns-private-resolver-overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `virtualNetworkId`
+ * replaces the resolver. A virtual network holds one resolver, so a
+ * replacement on the same network deletes the old resolver first.
+ * :::
  *
  * ### Creating a Resolver
  * **Example:** Resolver for a virtual network
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
  * const resolver = yield* Azure.DnsResolver.DnsResolver("resolver", {
- *   virtualNetworkId: vnetId,
+ *   virtualNetworkId: vnet.virtualNetworkId,
  * });
  * ```
  *
  * **Example:** Resolver with tags
  * ```typescript
  * const resolver = yield* Azure.DnsResolver.DnsResolver("resolver", {
- *   virtualNetworkId: vnetId,
+ *   virtualNetworkId: vnet.virtualNetworkId,
  *   tags: { team: "platform" },
  * });
  * ```
@@ -153,9 +165,7 @@ export const DnsResolverProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* dnsresolver
-        .ListDnsResolvers({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDnsResolvers", page)));
+      const page = yield* collectAll(dnsresolver.ListDnsResolvers, { subscriptionId });
       return (page.value ?? []).flatMap((resolver) => {
         const group = resourceGroupOf(resolver.id);
         return hasAnyAlchemyTag(resolver.tags) && group !== undefined && resolver.name !== undefined

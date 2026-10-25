@@ -6,11 +6,11 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   waitUntilGone,
 } from "../Arm.ts";
@@ -46,17 +46,35 @@ export interface ChannelSite {
   siteName: string;
   /** Whether the site is enabled. */
   isEnabled: boolean;
-  /** Whether the site accepts the Bot Framework V3 protocol. */
+  /**
+   * Whether the site accepts the Bot Framework V3 protocol.
+   * @default not set (Azure's default applies)
+   */
   isV3Enabled?: boolean;
-  /** Whether enhanced authentication (trusted origins) is enabled. */
+  /**
+   * Whether enhanced authentication (trusted origins) is enabled.
+   * @default not set (Azure's default applies)
+   */
   isSecureSiteEnabled?: boolean;
-  /** Trusted origin URLs (requires `isSecureSiteEnabled`). */
+  /**
+   * Trusted origin URLs (requires `isSecureSiteEnabled`).
+   * @default none
+   */
   trustedOrigins?: string[];
-  /** Whether Web Chat speech is enabled. */
+  /**
+   * Whether Web Chat speech is enabled.
+   * @default not set (Azure's default applies)
+   */
   isWebChatSpeechEnabled?: boolean;
-  /** Whether preview versions of Web Chat are enabled. */
+  /**
+   * Whether preview versions of Web Chat are enabled.
+   * @default not set (Azure's default applies)
+   */
   isWebchatPreviewEnabled?: boolean;
-  /** Whether users are blocked from uploading files. */
+  /**
+   * Whether users are blocked from uploading files.
+   * @default not set (Azure's default applies)
+   */
   isBlockUserUploadEnabled?: boolean;
 }
 
@@ -76,6 +94,7 @@ export interface ChannelProps {
    * (see {@link ChannelSite}); third-party channels take their app
    * credentials (e.g. Slack `clientId`/`clientSecret`, Telegram
    * `accessToken`, Teams `isEnabled`).
+   * @default not set
    */
   properties?: { sites?: ChannelSite[] } & Record<string, unknown>;
   /**
@@ -127,17 +146,30 @@ export interface Channel extends Resource<
 /**
  * A channel of an Azure Bot — connects the bot to a client surface such as
  * Direct Line, Web Chat, Microsoft Teams, Slack, or Telegram.
+ * The ARM type is `Microsoft.BotService/botServices/channels`.
  *
  * Every bot gets `WebChatChannel` and `DirectLineChannel` automatically;
  * declaring one adopts and configures the existing channel.
  *
  * Channels cannot be tagged: a channel is owned by whoever owns its bot.
  *
+ * :::caution
+ * Changing `bot`, `channelName`, `location`, or `resourceGroup` replaces the
+ * channel.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/bot-service/bot-service-manage-channels
  *
  * ### Direct Line
  * **Example:** Direct Line channel with one site
  * ```typescript
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("bot-id");
+ * const bot = yield* Azure.BotService.Bot("support", {
+ *   msaAppId: identity.clientId,
+ *   msaAppTenantId: identity.tenantId,
+ *   msaAppMSIResourceId: identity.identityId,
+ *   endpoint: "https://support.example.com/api/messages",
+ * });
  * const directLine = yield* Azure.BotService.Channel("direct-line", {
  *   bot: bot.botName,
  *   channelName: "DirectLineChannel",
@@ -153,6 +185,13 @@ export interface Channel extends Resource<
  * ### Third-Party Channels
  * **Example:** Microsoft Teams
  * ```typescript
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("bot-id");
+ * const bot = yield* Azure.BotService.Bot("support", {
+ *   msaAppId: identity.clientId,
+ *   msaAppTenantId: identity.tenantId,
+ *   msaAppMSIResourceId: identity.identityId,
+ *   endpoint: "https://support.example.com/api/messages",
+ * });
  * yield* Azure.BotService.Channel("teams", {
  *   bot: bot.botName,
  *   channelName: "MsTeamsChannel",
@@ -274,23 +313,18 @@ export const ChannelProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const bots = yield* botservice
-        .ListBots({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListBots", page)));
+      const bots = yield* collectAll(botservice.ListBots, { subscriptionId });
       const found: Channel["Attributes"][] = [];
       for (const bot of bots.value ?? []) {
         const group = resourceGroupOf(bot.id);
         if (group === undefined || bot.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          botservice.ListChannelByResourceGroup({
+          collectAll(botservice.ListChannelByResourceGroup, {
             subscriptionId,
             resourceGroupName: group,
             resourceName: bot.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListChannelByResourceGroup", page);
-        }
         for (const channel of page?.value ?? []) {
           const channelName = channel.properties?.channelName ?? channel.name;
           if (hasAnyAlchemyTag(bot.tags) && channelName !== undefined) {

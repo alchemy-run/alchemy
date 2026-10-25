@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   ProvisioningFailed,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -340,11 +340,7 @@ export const ManagedEnvironmentProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* app
-        .ListManagedEnvironmentBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListManagedEnvironmentBySubscription", page)),
-        );
+      const page = yield* collectAll(app.ListManagedEnvironmentBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((env) => {
         const group = resourceGroupOf(env.id);
         return hasAnyAlchemyTag(env.tags) && group !== undefined && env.name !== undefined

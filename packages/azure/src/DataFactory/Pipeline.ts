@@ -70,7 +70,10 @@ export interface VariableSpecification {
 }
 
 export interface PipelineProps {
-  /** Resource group of the factory. Changing it replaces the pipeline. */
+  /**
+   * Resource group of the factory. Changing it replaces the pipeline.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the factory that holds the pipeline. Changing it replaces the pipeline. */
   factoryName: string;
@@ -79,30 +82,54 @@ export interface PipelineProps {
    * `_`, without `< > * # . % & : \ + ? /`. If omitted, a unique name of
    * letters, digits, and `_` is generated from the app, stage, and logical
    * ID. Changing it replaces the pipeline.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Activities that make up the pipeline. */
+  /**
+   * Activities that make up the pipeline.
+   * @default []
+   */
   activities?: PipelineActivity[];
-  /** Parameters the pipeline accepts. */
+  /**
+   * Parameters the pipeline accepts.
+   * @default {}
+   */
   parameters?: Record<string, ParameterSpecification>;
-  /** Variables the pipeline declares. */
+  /**
+   * Variables the pipeline declares.
+   * @default {}
+   */
   variables?: Record<string, VariableSpecification>;
-  /** Maximum number of concurrent runs. */
+  /**
+   * Maximum number of concurrent runs.
+   * @default no limit
+   */
   concurrency?: number;
-  /** Dimensions emitted by the pipeline for metrics. */
+  /**
+   * Dimensions emitted by the pipeline for metrics.
+   * @default none
+   */
   runDimensions?: Record<string, unknown>;
-  /** Folder shown in the authoring UI. */
+  /**
+   * Folder shown in the authoring UI.
+   * @default none (the root folder)
+   */
   folder?: string;
   /**
    * Elapsed-time metric threshold, e.g. `"0.00:10:00"`; runs longer than
    * this raise the `Elapsed Time Pipeline Run` metric.
+   * @default none (no metric)
    */
   elapsedTimeMetricDuration?: string;
-  /** Pipeline description. */
+  /**
+   * Pipeline description.
+   * @default none
+   */
   description?: string;
   /**
    * Annotations shown in the authoring UI. Alchemy appends an ownership
    * annotation (`alchemy:<stack>/<stage>/<id>`).
+   * @default []
    */
   annotations?: string[];
 }
@@ -129,14 +156,21 @@ export interface Pipeline extends Resource<
 > {}
 
 /**
- * A Data Factory pipeline — a logical grouping of activities that
- * together perform a task. Runs are started on demand or by a trigger.
+ * A Data Factory pipeline (`Microsoft.DataFactory/factories/pipelines`) —
+ * a logical grouping of activities that together perform a task. Runs are
+ * started on demand or by a trigger.
  *
- * @see https://learn.microsoft.com/azure/data-factory/concepts-pipelines-activities
+ * :::caution
+ * Changing `resourceGroup`, `factoryName`, or `name` replaces the
+ * pipeline.
+ * :::
+ *
+ * See [Pipelines and activities](https://learn.microsoft.com/azure/data-factory/concepts-pipelines-activities).
  *
  * ### Defining Pipelines
  * **Example:** Pipeline with a Wait activity
  * ```typescript
+ * const factory = yield* Azure.DataFactory.Factory("etl");
  * const pipeline = yield* Azure.DataFactory.Pipeline("nightly", {
  *   factoryName: factory.factoryName,
  *   activities: [

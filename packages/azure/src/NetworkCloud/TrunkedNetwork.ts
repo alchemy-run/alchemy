@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -39,6 +39,7 @@ export interface TrunkedNetworkProps {
   /**
    * Name of the trunked network. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the trunked network.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -62,11 +63,13 @@ export interface TrunkedNetworkProps {
   /**
    * Interface name of the network on attached virtual machines. Changing it
    * replaces the trunked network.
+   * @default Azure's default
    */
   interfaceName?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -111,14 +114,25 @@ export interface TrunkedNetwork extends Resource<
  * Network Fabric isolation domains, attached to Nexus virtual machines and
  * Kubernetes clusters. Needs a deployed Operator Nexus cluster.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/quickstarts-tenant-workload-prerequisites
+ * ARM type: `Microsoft.NetworkCloud/trunkedNetworks`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/quickstarts-tenant-workload-prerequisites).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `customLocationId`,
+ * `isolationDomainIds`, `vlans`, or `interfaceName` replaces the network.
+ * :::
  *
  * ### Creating a Trunked Network
  * **Example:** Trunk two VLANs
  * ```typescript
+ * // An existing Operator Nexus cluster, "site1", in the stack's resource group.
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ExtendedLocation/customLocations/site1-cl";
+ * const l2DomainId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/l2IsolationDomains/vlan750";
  * const trunk = yield* Azure.NetworkCloud.TrunkedNetwork("trunk", {
- *   customLocationId: cluster.clusterExtendedLocationId,
- *   isolationDomainIds: [l2Domain.l2IsolationDomainId],
+ *   customLocationId,
+ *   isolationDomainIds: [l2DomainId],
  *   vlans: [500, 501],
  * });
  * ```
@@ -173,11 +187,7 @@ export const TrunkedNetworkProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* nc
-        .ListTrunkedNetworkBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListTrunkedNetworkBySubscription", page)),
-        );
+      const page = yield* collectAll(nc.ListTrunkedNetworkBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -87,6 +87,7 @@ export interface PublicCloudConnectorGcpProfile {
    * :::caution
    * Changing it replaces the connector.
    * :::
+   * @default unset (set this or `organizationProperties`)
    */
   projectProperties?: PublicCloudConnectorGcpProject;
   /**
@@ -96,6 +97,7 @@ export interface PublicCloudConnectorGcpProfile {
    * :::caution
    * Changing the organization or management project replaces the connector.
    * :::
+   * @default unset (set this or `projectProperties`)
    */
   organizationProperties?: PublicCloudConnectorGcpOrganization;
 }
@@ -107,6 +109,7 @@ export interface PublicCloudConnectorProps {
    * :::caution
    * Changing it replaces the connector.
    * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -116,6 +119,7 @@ export interface PublicCloudConnectorProps {
    * :::caution
    * Changing it replaces the connector.
    * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -136,13 +140,20 @@ export interface PublicCloudConnectorProps {
    * :::
    */
   hostType: "AWS" | "GCP";
-  /** AWS account details. Required when `hostType` is `AWS`. */
+  /**
+   * AWS account details. Required when `hostType` is `AWS`.
+   * @default unset
+   */
   awsCloudProfile?: PublicCloudConnectorAwsProfile;
-  /** Google Cloud project or organization. Required when `hostType` is `GCP`. */
+  /**
+   * Google Cloud project or organization. Required when `hostType` is `GCP`.
+   * @default unset
+   */
   gcpCloudProfile?: PublicCloudConnectorGcpProfile;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -223,6 +234,13 @@ export interface PublicCloudConnector extends Resource<
  *   },
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `hostType`, the AWS
+ * `accountId` or `isOrganizationalAccount`, or the GCP project,
+ * organization, or management project replaces the connector and its
+ * solution configurations.
+ * :::
  *
  * @resource
  */
@@ -317,13 +335,9 @@ export const PublicCloudConnectorProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* hybridconnectivity
-        .ListPublicCloudConnectorBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListPublicCloudConnectorBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(hybridconnectivity.ListPublicCloudConnectorBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((connector) => {
         const group = resourceGroupOf(connector.id);
         return hasAnyAlchemyTag(connector.tags) &&

@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -38,25 +38,38 @@ export interface DisconnectedOperationBillingConfiguration {
   autoRenew: "Enabled" | "Disabled" | (string & {});
   /** The current billing period. */
   current: DisconnectedOperationBillingPeriod;
-  /** The billing period that takes over when the current one ends. */
+  /**
+   * The billing period that takes over when the current one ends.
+   * @default none
+   */
   upcoming?: DisconnectedOperationBillingPeriod;
 }
 
 /** Benefit plans of a disconnected operation. */
 export interface DisconnectedOperationBenefitPlans {
-  /** Azure Hybrid Benefit for Windows Server: `Enabled` or `Disabled`. */
+  /**
+   * Azure Hybrid Benefit for Windows Server: `Enabled` or `Disabled`.
+   * @default Azure's default
+   */
   azureHybridWindowsServerBenefit?: "Enabled" | "Disabled" | (string & {});
-  /** Number of Windows Server VMs licensed under the Azure Hybrid Benefit. */
+  /**
+   * Number of Windows Server VMs licensed under the Azure Hybrid Benefit.
+   * @default Azure's default
+   */
   windowsServerVmCount?: number;
 }
 
 export interface DisconnectedOperationProps {
-  /** Resource group the disconnected operation is created in. Changing it replaces the resource. */
+  /**
+   * Resource group the disconnected operation is created in. Changing it replaces the resource.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /**
    * Name of the disconnected operation. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * resource.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -70,17 +83,30 @@ export interface DisconnectedOperationProps {
    * fully disconnected.
    */
   connectionIntent: "Connected" | "Disconnected" | (string & {});
-  /** Registration intent of the appliance: `Registered` or `Unregistered`. */
+  /**
+   * Registration intent of the appliance: `Registered` or `Unregistered`.
+   * @default Azure's default (left unmanaged when omitted)
+   */
   registrationStatus?: "Registered" | "Unregistered" | (string & {});
-  /** Version of the disconnected operations appliance software. */
+  /**
+   * Version of the disconnected operations appliance software.
+   * @default Azure's default (left unmanaged when omitted)
+   */
   deviceVersion?: string;
-  /** Capacity billing configuration (cores and pricing model). */
+  /**
+   * Capacity billing configuration (cores and pricing model).
+   * @default Azure's default (left unmanaged when omitted)
+   */
   billingConfiguration?: DisconnectedOperationBillingConfiguration;
-  /** Azure Hybrid Benefit plans applied to the appliance. */
+  /**
+   * Azure Hybrid Benefit plans applied to the appliance.
+   * @default Azure's default (left unmanaged when omitted)
+   */
   benefitPlans?: DisconnectedOperationBenefitPlans;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -117,14 +143,21 @@ export interface DisconnectedOperation extends Resource<
 > {}
 
 /**
- * An Azure Local disconnected operations registration. It registers an
- * Azure Local appliance that runs Azure services without a connection to
- * Azure, and carries its capacity billing configuration and benefit plans.
+ * An Azure Local disconnected operations registration
+ * (`Microsoft.Edge/disconnectedOperations`). It registers an Azure Local
+ * appliance that runs Azure services without a connection to Azure, and
+ * carries its capacity billing configuration and benefit plans. See the
+ * [disconnected operations overview](https://learn.microsoft.com/azure/azure-local/manage/disconnected-operations-overview).
  *
- * Creating one requires an approved disconnected operations enrollment for
- * the subscription and starts capacity billing.
+ * :::caution
+ * Creating one requires an approved disconnected operations enrollment
+ * for the subscription and starts capacity billing.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/azure-local/manage/disconnected-operations-overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the
+ * registration.
+ * :::
  *
  * ### Registering a disconnected appliance
  * **Example:** Disconnected operation with trial billing
@@ -247,10 +280,9 @@ export const DisconnectedOperationProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* edge.ListDisconnectedOperationBySubscription({ subscriptionId }).pipe(
-        Effect.flatMap((page) =>
-          requireSinglePage("ListDisconnectedOperationBySubscription", page),
-        ),
+      const page = yield* collectAll(edge.ListDisconnectedOperationBySubscription, {
+        subscriptionId,
+      }).pipe(
         Effect.catchTag("InvalidResourceType", () =>
           Effect.succeed({ value: [] as edge.DisconnectedOperation[] }),
         ),

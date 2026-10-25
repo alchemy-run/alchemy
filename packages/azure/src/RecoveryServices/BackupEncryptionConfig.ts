@@ -17,9 +17,22 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { isVaultOwnedByStack, RECOVERY_SERVICES_NAMESPACE, sameId } from "./BackupShared.ts";
 
 export interface BackupEncryptionConfigProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the config. */
+  /**
+   * Resource group of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the config.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the Recovery Services vault. Changing it replaces the config. */
+  /**
+   * Name of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the config.
+   * :::
+   */
   vault: string;
   /**
    * Key Vault key URI used to encrypt backup data, e.g.
@@ -36,8 +49,11 @@ export interface BackupEncryptionConfigProps {
   keyVaultSubscriptionId?: string;
   /**
    * Double encryption at the infrastructure layer. Can only be set the
-   * first time customer-managed keys are configured. Changing it replaces
-   * the config.
+   * first time customer-managed keys are configured.
+   *
+   * :::caution
+   * Changing it replaces the config.
+   * :::
    * @default unmanaged
    */
   infrastructureEncryptionState?: "Enabled" | "Disabled";
@@ -68,13 +84,17 @@ export interface BackupEncryptionConfig extends Resource<
 
 /**
  * Customer-managed key (CMK) encryption of the backup data in a Recovery
- * Services vault (`backupEncryptionConfigs/backupResourceEncryptionConfig`).
+ * Services vault
+ * (`Microsoft.RecoveryServices/vaults/backupEncryptionConfigs/backupResourceEncryptionConfig`).
  *
+ * :::caution
  * This is a singleton and a one-way switch: once a vault uses
  * customer-managed keys it cannot go back to platform-managed keys, so
- * destroying the resource leaves the key configured. Changing `keyUri`
- * rotates to another key in place. Configure it before protecting any
- * item.
+ * destroying the resource leaves the key configured. Configure it before
+ * you protect any item.
+ * :::
+ *
+ * Changing `keyUri` rotates to another key in place.
  *
  * @see https://learn.microsoft.com/azure/backup/encryption-at-rest-with-cmk
  *

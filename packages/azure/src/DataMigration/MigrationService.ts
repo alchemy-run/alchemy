@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -27,12 +27,14 @@ export interface MigrationServiceProps {
   /**
    * Resource group the service is created in. Changing it replaces the
    * service.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the migration service, 3-63 characters of letters, digits
    * and hyphens. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the service.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -43,6 +45,7 @@ export interface MigrationServiceProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -74,15 +77,20 @@ export interface MigrationService extends Resource<
 > {}
 
 /**
- * An Azure Database Migration Service migration service — the
- * control-plane resource that drives MongoDB to Azure Cosmos DB (RU or
- * vCore) migrations from the Azure Cosmos DB migration extension. The
- * service itself is free; database migrations run against it.
+ * An Azure Database Migration Service migration service
+ * (`Microsoft.DataMigration/migrationServices`) — the control-plane
+ * resource that drives MongoDB to Azure Cosmos DB (RU or vCore) migrations
+ * from the Azure Cosmos DB migration extension. The service itself is free;
+ * database migrations run against it.
  *
- * @see https://learn.microsoft.com/azure/dms/dms-overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the service.
+ * :::
+ *
+ * See [Azure Database Migration Service](https://learn.microsoft.com/azure/dms/dms-overview).
  *
  * ### Creating a Migration Service
- * **Example:** Service in a resource group
+ * **Example:** Service in the stack's resource group
  * ```typescript
  * const service = yield* Azure.DataMigration.MigrationService("mongo");
  * ```
@@ -137,11 +145,9 @@ export const MigrationServiceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* datamigration
-        .ListMigrationServiceBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListMigrationServiceBySubscription", page)),
-        );
+      const page = yield* collectAll(datamigration.ListMigrationServiceBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((service) => {
         const group = resourceGroupOf(service.id);
         return hasAnyAlchemyTag(service.tags) && group !== undefined && service.name !== undefined

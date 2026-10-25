@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -53,6 +53,7 @@ export interface FactoryProps {
   /**
    * Resource group the factory is created in. Changing it replaces the
    * factory.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -60,6 +61,7 @@ export interface FactoryProps {
    * hyphens, starting and ending with a letter or digit. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the factory.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -71,6 +73,7 @@ export interface FactoryProps {
    * Managed identity of the factory. A system-assigned identity lets
    * linked services authenticate to Azure resources without secrets.
    * Removing the identity is not supported in place.
+   * @default no identity on create; unchanged on update
    */
   identity?: FactoryIdentity;
   /**
@@ -81,16 +84,19 @@ export interface FactoryProps {
   /**
    * ARM resource ID of a Microsoft Purview account that receives lineage
    * from this factory.
+   * @default none (no lineage)
    */
   purviewResourceId?: string;
   /**
    * Customer-managed-key encryption. Can only be set on an empty factory,
    * so changing it replaces the factory.
+   * @default Microsoft-managed keys
    */
   encryption?: FactoryEncryption;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -132,14 +138,20 @@ export interface Factory extends Resource<
 > {}
 
 /**
- * An Azure Data Factory — the managed ETL/ELT orchestration service that
- * holds pipelines, datasets, linked services, triggers, data flows, and
- * integration runtimes.
+ * An Azure Data Factory (`Microsoft.DataFactory/factories`) — the managed
+ * ETL/ELT orchestration service that holds pipelines, datasets, linked
+ * services, triggers, data flows, and integration runtimes.
  *
  * An empty factory and its authoring objects are free; you pay per
  * pipeline/activity run, data flow vCore-hour, and integration runtime hour.
  *
- * @see https://learn.microsoft.com/azure/data-factory/introduction
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `encryption` replaces
+ * the factory and deletes every pipeline, dataset, linked service, trigger,
+ * and integration runtime in it.
+ * :::
+ *
+ * See [Azure Data Factory](https://learn.microsoft.com/azure/data-factory/introduction).
  *
  * ### Creating a Factory
  * **Example:** Factory with a system-assigned identity
@@ -254,9 +266,7 @@ export const FactoryProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* datafactory
-        .ListFactories({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListFactories", page)));
+      const page = yield* collectAll(datafactory.ListFactories, { subscriptionId });
       return (page.value ?? []).flatMap((factory) => {
         const group = resourceGroupOf(factory.id);
         return hasAnyAlchemyTag(factory.tags) && group !== undefined && factory.name !== undefined

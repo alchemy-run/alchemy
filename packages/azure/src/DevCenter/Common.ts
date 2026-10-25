@@ -63,6 +63,7 @@ export interface DevCenterIdentity {
   /**
    * ARM resource IDs of user-assigned identities. Required when `type`
    * includes `UserAssigned`.
+   * @default []
    */
   userAssignedIdentities?: string[];
 }

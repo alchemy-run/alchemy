@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -38,6 +38,7 @@ export interface AccessControlListProps {
   /**
    * Name of the access control list. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the access control list.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,34 +56,56 @@ export interface AccessControlListProps {
   /**
    * ACL kind, e.g. `Tenant` or `ControlPlaneTrafficPolicy`. Changing it
    * replaces the ACL.
+   * @default Azure's default
    */
   aclType?: mnf.AccessControlListPropertiesInput["aclType"];
   /**
    * Device role the ACL applies to (`CE`, `ToR`, `NPB`,
    * `ManagementSwitch`). Changing it replaces the ACL.
+   * @default Azure's default
    */
   deviceRole?: mnf.AccessControlListPropertiesInput["deviceRole"];
-  /** URL of the ACL file when `configurationType` is `File`. */
+  /**
+   * URL of the ACL file when `configurationType` is `File`.
+   * @default none
+   */
   aclsUrl?: string;
-  /** Action when no match configuration matches (`Permit` or `Deny`). */
+  /**
+   * Action when no match configuration matches (`Permit` or `Deny`).
+   * @default Azure's default
+   */
   defaultAction?: mnf.AccessControlListPropertiesInput["defaultAction"];
   /**
    * Inline match configurations: conditions (protocols, IPs, ports, VLANs)
    * and the actions to take when they match. Required for `Inline` ACLs;
    * sequence numbers must be greater than 1000.
+   * @default none
    */
   matchConfigurations?: mnf.AccessControlListPropertiesInput["matchConfigurations"];
-  /** Named IP, VLAN, and port groups that match configurations reference. */
+  /**
+   * Named IP, VLAN, and port groups that match configurations reference.
+   * @default none
+   */
   dynamicMatchConfigurations?: mnf.AccessControlListPropertiesInput["dynamicMatchConfigurations"];
-  /** Global ACL actions, e.g. enabling match counters. */
+  /**
+   * Global ACL actions, e.g. enabling match counters.
+   * @default none
+   */
   globalAccessControlListActions?: mnf.AccessControlListPropertiesInput["globalAccessControlListActions"];
-  /** Control-plane ACL entries (for `ControlPlaneAcl` ACLs). */
+  /**
+   * Control-plane ACL entries (for `ControlPlaneAcl` ACLs).
+   * @default none
+   */
   controlPlaneAclConfiguration?: mnf.AccessControlListPropertiesInput["controlPlaneAclConfiguration"];
-  /** Free-form description. */
+  /**
+   * Free-form description.
+   * @default none
+   */
   annotation?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -122,7 +145,13 @@ export interface AccessControlList extends Resource<
  * isolation-domain networks. The ACL is plain ARM configuration until a fabric
  * resource references it.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-create-access-control-list-for-network-to-network-interconnects
+ * ARM type: `Microsoft.ManagedNetworkFabric/accessControlLists`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-create-access-control-list-for-network-to-network-interconnects).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `configurationType`, `aclType`,
+ * or `deviceRole` replaces the access control list.
+ * :::
  *
  * ### Creating an ACL
  * **Example:** Inline ACL that drops one subnet
@@ -197,11 +226,7 @@ export const AccessControlListProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* mnf
-        .ListAccessControlListBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListAccessControlListBySubscription", page)),
-        );
+      const page = yield* collectAll(mnf.ListAccessControlListBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((item) => {
         const group = resourceGroupOf(item.id);
         return hasAnyAlchemyTag(item.tags) && group !== undefined && item.name !== undefined

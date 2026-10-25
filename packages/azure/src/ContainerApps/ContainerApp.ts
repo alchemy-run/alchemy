@@ -8,13 +8,13 @@ import type { Resource, ResourceBinding } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -322,17 +322,14 @@ const roleGuid = (roleDefinitionId: string) =>
 
 /** Binding-created role assignments currently held by `principalId`. */
 const listBindingAssignments = (subscriptionId: string, principalId: string, marker: string) =>
-  authorization
-    .ListRoleAssignmentForSubscription({
-      subscriptionId,
-      _filter: `principalId eq '${principalId}'`,
-    })
-    .pipe(
-      Effect.flatMap((page) => requireSinglePage("ListRoleAssignmentForSubscription", page)),
-      Effect.map((page) =>
-        page.value.filter((a) => (a.properties?.description ?? "").endsWith(marker)),
-      ),
-    );
+  collectAll(authorization.ListRoleAssignmentForSubscription, {
+    subscriptionId,
+    _filter: `principalId eq '${principalId}'`,
+  }).pipe(
+    Effect.map((page) =>
+      page.value.filter((a) => (a.properties?.description ?? "").endsWith(marker)),
+    ),
+  );
 
 /** Binding marker; distinct from `RoleAssignment`'s so `list` ignores it. */
 const bindingMarker = (id: string) => ownershipMarker(`${id}#binding`);
@@ -428,9 +425,7 @@ export const ContainerAppProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* app
-        .ListContainerAppBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListContainerAppBySubscription", page)));
+      const page = yield* collectAll(app.ListContainerAppBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((observed) => {
         const group = resourceGroupOf(observed.id);
         return hasAnyAlchemyTag(observed.tags) && group !== undefined && observed.name !== undefined

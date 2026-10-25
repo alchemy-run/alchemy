@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -163,9 +163,7 @@ export const SshPublicKeyProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* compute
-        .ListSshPublicKeyBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListSshPublicKeyBySubscription", page)));
+      const page = yield* collectAll(compute.ListSshPublicKeyBySubscription, { subscriptionId });
       return page.value.flatMap((key) => {
         const resourceGroup = resourceGroupOf(key.id);
         return hasAnyAlchemyTag(key.tags) && resourceGroup !== undefined && key.name !== undefined

@@ -26,31 +26,74 @@ import type { PolicyParameterDefinition } from "./PolicyDefinition.ts";
 export interface PolicyDefinitionVersionProps {
   /**
    * Name of the parent custom policy definition, e.g.
-   * `definition.policyDefinitionName`. Changing it replaces the version.
+   * `definition.policyDefinitionName`.
+   *
+   * :::caution
+   * Changing it replaces the version.
+   * :::
    */
   policyDefinitionName: string;
   /**
    * Semantic version `major.minor.patch`, e.g. `1.0.0`. ARM only accepts
-   * versions older than the parent's current `version`. Changing it
-   * replaces the version.
+   * versions older than the parent's current `version`.
+   *
+   * :::caution
+   * Changing it replaces the version.
+   * :::
    */
   version: string;
   /**
    * Policy mode of this version.
+   *
+   * :::caution
+   * Changing it replaces the version.
+   * :::
    * @default "All"
    */
   mode?: string;
-  /** Display name of this version. */
+  /**
+   * Display name of this version.
+   *
+   * :::caution
+   * Changing it replaces the version.
+   * :::
+   * @default none
+   */
   displayName?: string;
-  /** Description of this version. */
+  /**
+   * Description of this version.
+   *
+   * :::caution
+   * Changing it replaces the version.
+   * :::
+   * @default none
+   */
   description?: string;
-  /** The policy rule of this version. */
+  /**
+   * The policy rule of this version.
+   *
+   * :::caution
+   * Changing it replaces the version.
+   * :::
+   */
   policyRule: Record<string, unknown>;
-  /** Parameter definitions of this version. */
+  /**
+   * Parameter definitions of this version.
+   *
+   * :::caution
+   * Changing it replaces the version.
+   * :::
+   * @default {}
+   */
   parameters?: Record<string, PolicyParameterDefinition>;
   /**
    * Metadata of this version. Alchemy merges ownership entries
    * (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) in.
+   *
+   * :::caution
+   * Changing it replaces the version.
+   * :::
+   * @default {} (plus the ownership entries)
    */
   metadata?: Record<string, unknown>;
 }
@@ -73,12 +116,16 @@ export interface PolicyDefinitionVersion extends Resource<
 > {}
 
 /**
- * A version of a custom Azure Policy definition. Assignments can pin a
- * version with `PolicyAssignment.definitionVersion` (e.g. `1.*.*`).
+ * A version of a custom Azure Policy definition
+ * (`Microsoft.Authorization/policyDefinitions/versions`). Assignments can
+ * pin a version with `PolicyAssignment.definitionVersion` (e.g. `1.*.*`).
  *
- * Deleting the parent definition deletes its versions. Versions are
- * immutable in ARM, so changing any other property deletes and
- * re-publishes the same version.
+ * Deleting the parent definition deletes its versions.
+ *
+ * :::caution
+ * Versions are immutable in ARM. Changing any property deletes the version
+ * and publishes it again.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/governance/policy/concepts/definition-structure-basics#version-preview
  *

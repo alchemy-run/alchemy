@@ -23,9 +23,22 @@ import {
 export type BackupStorageType = "LocallyRedundant" | "GeoRedundant" | "ZoneRedundant";
 
 export interface BackupStorageConfigProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the config. */
+  /**
+   * Resource group of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the config.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the Recovery Services vault. Changing it replaces the config. */
+  /**
+   * Name of the Recovery Services vault.
+   *
+   * :::caution
+   * Changing it replaces the config.
+   * :::
+   */
   vault: string;
   /**
    * Redundancy of backup storage. Can only be changed while
@@ -65,14 +78,18 @@ export interface BackupStorageConfig extends Resource<
 
 /**
  * The backup storage settings of a Recovery Services vault
- * (`backupstorageconfig/vaultstorageconfig`): storage redundancy and
- * Cross Region Restore.
+ * (`Microsoft.RecoveryServices/vaults/backupstorageconfig/vaultstorageconfig`):
+ * storage redundancy and Cross Region Restore.
  *
  * This is a singleton: every vault has exactly one. Only the settings you
- * specify are managed. Configure it before protecting anything — once an
- * item is protected the storage type is locked. Destroying the resource
- * restores the default `GeoRedundant` storage type while it is still
- * unlocked; Cross Region Restore cannot be turned off.
+ * specify are managed.
+ *
+ * :::caution
+ * Configure it before you protect anything: once an item is protected the
+ * storage type is locked. Destroying the resource restores the default
+ * `GeoRedundant` storage type while it is still unlocked; Cross Region
+ * Restore cannot be turned off.
+ * :::
  *
  * Vaults created with current API versions get their redundancy set
  * through the vault API, and Azure Backup rejects changes through the
@@ -94,6 +111,7 @@ export interface BackupStorageConfig extends Resource<
  *
  * **Example:** Geo-redundant storage with Cross Region Restore
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("backup-vault");
  * yield* Azure.RecoveryServices.BackupStorageConfig("storage-config", {
  *   vault: vault.vaultName,
  *   storageType: "GeoRedundant",

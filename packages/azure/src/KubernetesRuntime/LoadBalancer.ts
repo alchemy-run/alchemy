@@ -37,6 +37,7 @@ export interface LoadBalancerProps {
    * Name of the load balancer (3-24 letters, digits and `-`). If omitted,
    * a unique lowercase name is generated. Changing it replaces the load
    * balancer.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -51,11 +52,13 @@ export interface LoadBalancerProps {
   /**
    * Label selector restricting which Kubernetes Services get addresses
    * from this pool, e.g. `{ "a": "b" }`. Omit to serve every Service.
+   * @default {} (every Service)
    */
   serviceSelector?: Record<string, string>;
   /**
    * Names of `Azure.KubernetesRuntime.BgpPeer`s to advertise to. Omit or
    * leave empty to advertise to all peers.
+   * @default [] (every peer)
    */
   bgpPeers?: string[];
 }
@@ -86,12 +89,12 @@ export interface LoadBalancer extends Resource<
 > {}
 
 /**
- * A MetalLB address pool on an Azure Arc-enabled Kubernetes cluster:
+ * A MetalLB address pool (`Microsoft.KubernetesRuntime/loadBalancers`) on
+ * an Azure Arc-enabled Kubernetes cluster:
  * Kubernetes Services of type `LoadBalancer` get external IPs from
  * `addresses`, announced via ARP and/or BGP (AKS Arc / Azure Local).
  *
- * Requires a connected cluster with the `networking` service enabled; ARM
- * proxies every write to the cluster. Load balancers carry no tags, so one
+ * ARM proxies every write to the cluster. Load balancers carry no tags, so one
  * found at the expected scope is only treated as owned when Alchemy
  * created it.
  *
@@ -100,6 +103,8 @@ export interface LoadBalancer extends Resource<
  * ### Address Pools
  * **Example:** Layer-2 (ARP) pool
  * ```typescript
+ * const clusterId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.Kubernetes/connectedClusters/edge-cluster";
  * const networking = yield* Azure.KubernetesRuntime.Service("networking", {
  *   clusterId,
  *   serviceName: "networking",
@@ -113,6 +118,13 @@ export interface LoadBalancer extends Resource<
  *
  * **Example:** BGP pool for selected services
  * ```typescript
+ * // networking: the Service of the first example
+ * const peer = yield* Azure.KubernetesRuntime.BgpPeer("tor", {
+ *   clusterId: networking.clusterId,
+ *   myAsn: 64500,
+ *   peerAsn: 64501,
+ *   peerAddress: "10.0.0.1",
+ * });
  * yield* Azure.KubernetesRuntime.LoadBalancer("public", {
  *   clusterId: networking.clusterId,
  *   addresses: ["10.20.0.10-10.20.0.20"],
@@ -121,6 +133,15 @@ export interface LoadBalancer extends Resource<
  *   bgpPeers: [peer.bgpPeerName],
  * });
  * ```
+ *
+ * :::caution
+ * The cluster must be connected and have the `networking`
+ * `Azure.KubernetesRuntime.Service` enabled.
+ * :::
+ *
+ * :::caution
+ * Changing `clusterId` or `name` replaces the load balancer.
+ * :::
  *
  * @resource
  */

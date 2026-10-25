@@ -17,7 +17,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, labLocation } from "./Common.ts";
 
 export interface SecretProps {
-  /** Resource group of the lab. Changing it replaces the secret. */
+  /**
+   * Resource group of the lab. Changing it replaces the secret.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the lab. Changing it replaces the secret. */
   lab: string;
@@ -27,6 +30,7 @@ export interface SecretProps {
    * Secret name (letters, digits, and `-`). If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces
    * the secret.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -58,7 +62,8 @@ export interface Secret extends Resource<
 > {}
 
 /**
- * A secret in a DevTest Labs user's secret store (the lab's Key Vault),
+ * A secret in a DevTest Labs user's secret store
+ * (`Microsoft.DevTestLab/labs/users/secrets`, kept in the lab's Key Vault),
  * e.g. a VM password or a repository token that lab formulas and
  * environments reference by name.
  *
@@ -67,11 +72,22 @@ export interface Secret extends Resource<
  * deterministic name. A new secret becomes readable about 1-2 minutes
  * after it is written.
  *
+ * :::caution
+ * Changing `lab`, `user`, `name`, or `resourceGroup` replaces the secret.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/devtest-labs/devtest-lab-store-secrets-in-key-vault
  *
  * ### Storing a Secret
  * **Example:** VM password for lab formulas
  * ```typescript
+ * const lab = yield* Azure.DevTestLabs.Lab("team-lab");
+ * const user = yield* Azure.DevTestLabs.User("alice", {
+ *   lab: lab.labName,
+ *   // Entra object ID of the lab user.
+ *   objectId: "00000000-0000-0000-0000-000000000000",
+ * });
+ * const vmPassword = "<vm-password>";
  * const password = yield* Azure.DevTestLabs.Secret("vm-password", {
  *   lab: lab.labName,
  *   user: user.userName,

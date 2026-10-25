@@ -64,12 +64,33 @@ export interface WorkspaceGatewayConfigConnection extends Resource<
  * Connects an API Management {@link Workspace} to a {@link WorkspaceGateway}
  * so the gateway serves the workspace's APIs. Requires a Premium service;
  * the connection provisions asynchronously.
+ * The ARM type is `Microsoft.ApiManagement/gateways/configConnections`.
+ *
+ * :::caution
+ * Changing `gatewayName`, `name`, `workspaceId`, or `resourceGroup` replaces
+ * the connection.
+ *
+ * The gateway and the Premium service must be in the same region.
+ * Connections activated in `eastasia`; in `westus` and `norwayeast` they
+ * ended in `ActivationFailed`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/workspaces-overview#workspace-gateway
  *
  * ### Connecting a Workspace
  * **Example:** Serve a workspace on a dedicated gateway
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "Premium", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const gateway = yield* Azure.ApiManagement.WorkspaceGateway("payments-gw", {
+ *   sku: "WorkspaceGatewayPremium",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
  * yield* Azure.ApiManagement.WorkspaceGatewayConfigConnection("payments", {
  *   gatewayName: gateway.gatewayName,
  *   workspaceId: workspace.workspaceId,

@@ -32,24 +32,33 @@ export interface HubEventHandler {
   /**
    * User events forwarded to the handler: `*` for all, `event1,event2`,
    * or a single event name.
+   * @default not set
    */
   userEventPattern?: string;
-  /** System events forwarded to the handler: `connect`, `connected`, `disconnected`. */
+  /**
+   * System events forwarded to the handler: `connect`, `connected`, `disconnected`.
+   * @default not set
+   */
   systemEvents?: string[];
   /**
    * Authenticate upstream calls with the service's managed identity,
    * requesting a token for this App ID URI (the `aud` claim). The service
    * needs an identity.
+   * @default not set
    */
   managedIdentityResource?: string;
 }
 
 export interface HubEventListener {
-  /** System events forwarded to the listener: `connected`, `disconnected`. */
+  /**
+   * System events forwarded to the listener: `connected`, `disconnected`.
+   * @default not set
+   */
   systemEvents?: string[];
   /**
    * User events forwarded to the listener: `*` for all, `event1,event2`,
    * or a single event name.
+   * @default not set
    */
   userEventPattern?: string;
   /** Fully qualified Event Hubs namespace, e.g. `my-ns.servicebus.windows.net`. */
@@ -59,7 +68,10 @@ export interface HubEventListener {
 }
 
 export interface HubProps {
-  /** Resource group of the Web PubSub service. Changing it replaces the hub. */
+  /**
+   * Resource group of the Web PubSub service. Changing it replaces the hub.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Web PubSub service that owns the hub. Changing it replaces the hub. */
   webPubSub: string;
@@ -67,14 +79,19 @@ export interface HubProps {
    * Hub name: letters, digits, and underscores, starting with a letter. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the hub.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Upstream webhooks invoked for client events, in priority order. */
+  /**
+   * Upstream webhooks invoked for client events, in priority order.
+   * @default []
+   */
   eventHandlers?: HubEventHandler[];
   /**
    * Event Hubs listeners that receive client events (at most 10 across all
    * hubs of a service). The service's identity needs the `Azure Event Hubs
    * Data Sender` role on the event hub.
+   * @default []
    */
   eventListeners?: HubEventListener[];
   /**
@@ -111,9 +128,14 @@ export interface Hub extends Resource<
 > {}
 
 /**
- * A hub of an Azure Web PubSub service: a logical channel with its own
- * upstream event handlers, Event Hubs listeners, and anonymous-connect
+ * A hub of an Azure Web PubSub service
+ * (`Microsoft.SignalRService/webPubSub/hubs`): a logical channel with its
+ * own upstream event handlers, Event Hubs listeners, and anonymous-connect
  * policy. Clients connect to `wss://{host}/client/hubs/{hubName}`.
+ *
+ * :::caution
+ * Changing `webPubSub`, `name`, or `resourceGroup` replaces the hub.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-web-pubsub/howto-develop-eventhandler
  *

@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -171,9 +171,7 @@ export const InstancePoolProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* sql
-        .ListInstancePools({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListInstancePools", page)));
+      const page = yield* collectAll(sql.ListInstancePools, { subscriptionId });
       return (page.value ?? []).flatMap((pool) => {
         const group = resourceGroupOf(pool.id);
         return hasAnyAlchemyTag(pool.tags) && group !== undefined && pool.name !== undefined
@@ -304,14 +302,10 @@ export const InstancePoolProvider = () =>
       const subnetId = output.subnetId;
       if (subnetId === undefined) return;
       const clusters = yield* orUndefinedIfNotFound(
-        sql
-          .ListVirtualClusterByResourceGroup({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-          })
-          .pipe(
-            Effect.flatMap((page) => requireSinglePage("ListVirtualClusterByResourceGroup", page)),
-          ),
+        collectAll(sql.ListVirtualClusterByResourceGroup, {
+          subscriptionId,
+          resourceGroupName: output.resourceGroup,
+        }),
       );
       for (const cluster of clusters?.value ?? []) {
         if (

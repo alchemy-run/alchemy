@@ -24,20 +24,28 @@ export class ProvisioningServicePrivateEndpointConnectionMissing extends Data.Ta
 }> {}
 
 export interface ProvisioningServicePrivateEndpointConnectionProps {
-  /** Resource group of the provisioning service. Changing it replaces the resource. */
+  /**
+   * Resource group of the provisioning service (its `resourceGroup`
+   * attribute). Required. Changing it replaces the resource.
+   */
   resourceGroup: string;
-  /** Provisioning service the private endpoint targets. Changing it replaces the resource. */
+  /**
+   * Provisioning service the private endpoint targets. Required. Changing
+   * it replaces the resource.
+   */
   provisioningService: string;
   /**
-   * ARM resource ID of the private endpoint whose connection is managed —
+   * ARM resource ID of the private endpoint whose connection is managed,
    * typically `Azure.Network.PrivateEndpoint(...).privateEndpointId`. The
    * connection is looked up by this ID. Changing it replaces the resource.
+   * @default unset (set this or `name`)
    */
   privateEndpointId?: string;
   /**
    * Name of the connection, when known (Azure generates it when the
    * private endpoint is created). Either `name` or `privateEndpointId` is
    * required. Changing it replaces the resource.
+   * @default the connection of `privateEndpointId`
    */
   name?: string;
   /**
@@ -48,6 +56,7 @@ export interface ProvisioningServicePrivateEndpointConnectionProps {
   /**
    * Reason shown to the private endpoint owner. DPS only records it when
    * the status changes; a description-only change is not applied.
+   * @default unset
    */
   description?: string;
 }
@@ -77,11 +86,12 @@ export interface ProvisioningServicePrivateEndpointConnection extends Resource<
 
 /**
  * Approves (or rejects) a private endpoint connection to a Device
- * Provisioning Service. The connection itself is created by the private
- * endpoint (`Azure.Network.PrivateEndpoint` with
- * `manualPrivateLinkServiceConnections` and group ID `iotDps`); this
- * resource takes it over and drives its approval state. Deleting it removes
- * the connection, which disconnects the endpoint.
+ * Provisioning Service
+ * (`Microsoft.Devices/provisioningServices/privateEndpointConnections`).
+ * The private endpoint (`Azure.Network.PrivateEndpoint` with
+ * `manualPrivateLinkServiceConnections` and group ID `iotDps`) creates the
+ * connection. This resource takes it over and drives its approval state.
+ * Deleting it removes the connection, which disconnects the endpoint.
  *
  * The connection is identified by the private endpoint you reference, so
  * Alchemy treats it as owned without tags.
@@ -91,18 +101,22 @@ export interface ProvisioningServicePrivateEndpointConnection extends Resource<
  * ### Approving a Private Endpoint
  * **Example:** Manual-approval endpoint, approved by the service owner
  * ```typescript
- * const dps = yield* Azure.IoT.ProvisioningService("dps", {
- *   resourceGroup: group.resourceGroupName,
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
  * });
+ * const subnet = yield* Azure.Network.Subnet("endpoints", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const dps = yield* Azure.IoT.ProvisioningService("dps");
  * const endpoint = yield* Azure.Network.PrivateEndpoint("dps-pe", {
- *   resourceGroup: group.resourceGroupName,
  *   subnetId: subnet.subnetId,
  *   manualPrivateLinkServiceConnections: [
  *     { privateLinkServiceId: dps.provisioningServiceId, groupIds: ["iotDps"] },
  *   ],
  * });
  * yield* Azure.IoT.ProvisioningServicePrivateEndpointConnection("dps-pe-approval", {
- *   resourceGroup: group.resourceGroupName,
+ *   resourceGroup: dps.resourceGroup,
  *   provisioningService: dps.provisioningServiceName,
  *   privateEndpointId: endpoint.privateEndpointId,
  *   description: "approved by platform team",
@@ -112,14 +126,21 @@ export interface ProvisioningServicePrivateEndpointConnection extends Resource<
  * ### Rejecting a Private Endpoint
  * **Example:** Reject a connection request
  * ```typescript
+ * // dps and endpoint as above
  * yield* Azure.IoT.ProvisioningServicePrivateEndpointConnection("dps-pe-reject", {
- *   resourceGroup: group.resourceGroupName,
+ *   resourceGroup: dps.resourceGroup,
  *   provisioningService: dps.provisioningServiceName,
  *   privateEndpointId: endpoint.privateEndpointId,
  *   status: "Rejected",
  *   description: "not an approved network",
  * });
  * ```
+ *
+ * :::caution
+ * Changing `resourceGroup`, `provisioningService`, `name`, or
+ * `privateEndpointId` replaces the resource: the old connection is removed
+ * and its endpoint disconnects.
+ * :::
  *
  * @resource
  */

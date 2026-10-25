@@ -8,7 +8,10 @@ import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 type TemplateScope = InstanceScope & { readonly akriConnectorTemplateName: string };
 
 export interface AkriConnectorProps {
-  /** Resource group of the IoT Operations instance. Changing it replaces the connector. */
+  /**
+   * Resource group of the IoT Operations instance. Changing it replaces the connector.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** IoT Operations instance that holds the template. Changing it replaces the connector. */
   instanceName: string;
@@ -18,6 +21,7 @@ export interface AkriConnectorProps {
    * Connector name (lowercase letters, digits, and hyphens, 3-63
    * characters). If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the connector.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
 }
@@ -67,6 +71,12 @@ export interface AkriConnector extends Resource<
  * ### Running a Connector
  * **Example:** A connector of a REST connector template
  * ```typescript
+ * const instance = yield* Azure.IoTOperations.Instance("aio", {
+ *   customLocationId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/aio-location",
+ *   schemaRegistryId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.DeviceRegistry/schemaRegistries/aio-schemas",
+ * });
  * const template = yield* Azure.IoTOperations.AkriConnectorTemplate("rest", {
  *   instanceName: instance.instanceName,
  *   deviceInboundEndpointTypes: [{ endpointType: "Microsoft.Rest" }],

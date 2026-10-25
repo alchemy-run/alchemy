@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -239,9 +239,7 @@ export const TopicProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* eventgrid
-        .ListTopicBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListTopicBySubscription", page)));
+      const page = yield* collectAll(eventgrid.ListTopicBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((topic) => {
         const group = resourceGroupOf(topic.id);
         return hasAnyAlchemyTag(topic.tags) && group !== undefined && topic.name !== undefined

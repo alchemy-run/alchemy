@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -28,12 +28,14 @@ export interface SqlMigrationServiceProps {
   /**
    * Resource group the service is created in. Changing it replaces the
    * service.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the SQL migration service, 3-63 characters of letters, digits
    * and hyphens. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the service.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -44,6 +46,7 @@ export interface SqlMigrationServiceProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -79,17 +82,24 @@ export interface SqlMigrationService extends Resource<
 > {}
 
 /**
- * An Azure Database Migration Service SQL migration service — the
- * control-plane resource that the Azure SQL migration extension uses to
+ * An Azure Database Migration Service SQL migration service
+ * (`Microsoft.DataMigration/sqlMigrationServices`) — the control-plane
+ * resource that the Azure SQL migration extension uses to
  * move SQL Server databases to Azure SQL Database, Azure SQL Managed
  * Instance, or SQL Server on Azure VMs. A self-hosted integration runtime
  * registers against it with one of its auth keys. The service itself is
  * free.
  *
- * @see https://learn.microsoft.com/azure/dms/dms-overview
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the service. The
+ * new service has new auth keys, so the self-hosted integration runtime
+ * must register again.
+ * :::
+ *
+ * See [Azure Database Migration Service](https://learn.microsoft.com/azure/dms/dms-overview).
  *
  * ### Creating a SQL Migration Service
- * **Example:** Service in a resource group
+ * **Example:** Service in the stack's resource group
  * ```typescript
  * const service = yield* Azure.DataMigration.SqlMigrationService("sql");
  * ```
@@ -168,13 +178,9 @@ export const SqlMigrationServiceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* datamigration
-        .ListSqlMigrationServiceBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListSqlMigrationServiceBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(datamigration.ListSqlMigrationServiceBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((service) => {
         const group = resourceGroupOf(service.id);
         return hasAnyAlchemyTag(service.tags) && group !== undefined && service.name !== undefined

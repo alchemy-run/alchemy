@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -205,9 +205,7 @@ export const ProfileProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* cdn
-        .ListProfiles({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListProfiles", page)));
+      const page = yield* collectAll(cdn.ListProfiles, { subscriptionId });
       return (page.value ?? []).flatMap((profile) => {
         const group = resourceGroupOf(profile.id);
         return hasAnyAlchemyTag(profile.tags) && group !== undefined && profile.name !== undefined

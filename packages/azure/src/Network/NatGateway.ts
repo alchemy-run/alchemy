@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -179,9 +179,7 @@ export const NatGatewayProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* network
-        .ListNatGatewayAll({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListNatGatewayAll", page)));
+      const page = yield* collectAll(network.ListNatGatewayAll, { subscriptionId });
       return page.value.flatMap((nat) => {
         const group = resourceGroupOf(nat.id);
         return hasAnyAlchemyTag(nat.tags) && group !== undefined && nat.name !== undefined

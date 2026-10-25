@@ -15,7 +15,10 @@ import {
 } from "./CommunicationShared.ts";
 
 export interface SuppressionListProps {
-  /** Resource group of the email service. Changing it replaces the list. */
+  /**
+   * Resource group of the email service. Changing it replaces the list.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Email service that holds the domain. Changing it replaces the list. */
   emailService: string;
@@ -28,6 +31,7 @@ export interface SuppressionListProps {
    * Resource name of the suppression list. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * list.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -65,18 +69,28 @@ export interface SuppressionList extends Resource<
 > {}
 
 /**
- * A suppression list of an Azure Communication Services email domain.
+ * A suppression list of an Azure Communication Services email domain
+ * (`Microsoft.Communication/emailServices/domains/suppressionLists`).
  * Email to addresses on the list is not sent from the matching sender.
  *
  * Suppression lists carry no tags, so ownership follows the parent email
  * service. Addresses on the list are data, managed through the API, not
  * this resource.
  *
- * @see https://learn.microsoft.com/azure/communication-services/quickstarts/email/manage-suppression-list-management-sdks
+ * :::caution
+ * Changing `resourceGroup`, `emailService`, `domain`, or `name` replaces
+ * the list and deletes the addresses on it.
+ * :::
+ *
+ * See [Manage suppression lists](https://learn.microsoft.com/azure/communication-services/quickstarts/email/manage-suppression-list-management-sdks).
  *
  * ### Creating a Suppression List
  * **Example:** Suppression list for the default sender
  * ```typescript
+ * const email = yield* Azure.Communication.EmailService("email");
+ * const domain = yield* Azure.Communication.EmailDomain("domain", {
+ *   emailService: email.emailServiceName,
+ * });
  * const list = yield* Azure.Communication.SuppressionList("unsubscribed", {
  *   emailService: email.emailServiceName,
  *   domain: domain.domainName,

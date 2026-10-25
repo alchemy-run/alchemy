@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -30,7 +30,10 @@ import {
 } from "./Common.ts";
 
 export interface NetworkServiceDesignGroupProps {
-  /** Resource group of the publisher. Changing it replaces the group. */
+  /**
+   * Resource group of the publisher. Changing it replaces the group.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the publisher that owns the group. Changing it replaces the group. */
   publisher: string;
@@ -38,6 +41,7 @@ export interface NetworkServiceDesignGroupProps {
    * Group name: 1-64 letters, digits, `_`, and `-`. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the group.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -46,11 +50,15 @@ export interface NetworkServiceDesignGroupProps {
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
-  /** Description of the network service design group. */
+  /**
+   * Description of the network service design group. Updated in place.
+   * @default unset
+   */
   description?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -79,7 +87,8 @@ export interface NetworkServiceDesignGroup extends Resource<
 > {}
 
 /**
- * An Azure Operator Service Manager network service design group — a
+ * An Azure Operator Service Manager network service design group
+ * (`Microsoft.HybridNetwork/publishers/networkServiceDesignGroups`): a
  * publisher-scoped container for the versions
  * (`NetworkServiceDesignVersion`) of one network service.
  *
@@ -88,8 +97,9 @@ export interface NetworkServiceDesignGroup extends Resource<
  * @see https://learn.microsoft.com/azure/operator-service-manager/network-service-design-version-overview
  *
  * ### Creating a Group
- * **Example:** Network function definition group
+ * **Example:** Network service design group
  * ```typescript
+ * const publisher = yield* Azure.HybridNetwork.Publisher("publisher");
  * const nsdg = yield* Azure.HybridNetwork.NetworkServiceDesignGroup(
  *   "edge-service",
  *   {
@@ -98,6 +108,11 @@ export interface NetworkServiceDesignGroup extends Resource<
  *   },
  * );
  * ```
+ *
+ * :::caution
+ * Changing `name`, `publisher`, `location`, or `resourceGroup` replaces the
+ * group.
+ * :::
  *
  * @resource
  */
@@ -149,23 +164,20 @@ export const NetworkServiceDesignGroupProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const publishers = yield* hybridnetwork
-        .ListPublisherBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPublisherBySubscription", page)));
+      const publishers = yield* collectAll(hybridnetwork.ListPublisherBySubscription, {
+        subscriptionId,
+      });
       const found: NetworkServiceDesignGroup["Attributes"][] = [];
       for (const publisher of publishers.value ?? []) {
         const group = resourceGroupOf(publisher.id);
         if (group === undefined || publisher.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          hybridnetwork.ListNetworkServiceDesignGroupByPublisher({
+          collectAll(hybridnetwork.ListNetworkServiceDesignGroupByPublisher, {
             subscriptionId,
             resourceGroupName: group,
             publisherName: publisher.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListNetworkServiceDesignGroupByPublisher", page);
-        }
         for (const item of page?.value ?? []) {
           if (hasAnyAlchemyTag(item.tags) && item.name !== undefined) {
             found.push(toAttrs(group, publisher.name, item.name, item));

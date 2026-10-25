@@ -32,6 +32,7 @@ export interface WatcherProps {
   /**
    * Watcher name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the watcher.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Watcher {@link Runbook} that checks for the condition. Changing it replaces the watcher. */
@@ -41,7 +42,10 @@ export interface WatcherProps {
    * tasks only run on hybrid workers. Changing it replaces the watcher.
    */
   scriptRunOn: string;
-  /** Parameters passed to the watcher runbook. Changing them replaces the watcher. */
+  /**
+   * Parameters passed to the watcher runbook. Changing them replaces the watcher.
+   * @default no parameters
+   */
   scriptParameters?: Record<string, string>;
   /**
    * How often the watcher runbook runs, in seconds. Changing it replaces
@@ -49,7 +53,10 @@ export interface WatcherProps {
    * @default 30
    */
   executionFrequencyInSeconds?: number;
-  /** Description of the watcher. Changing it replaces the watcher. */
+  /**
+   * Description of the watcher. Changing it replaces the watcher.
+   * @default no description
+   */
   description?: string;
 }
 
@@ -79,15 +86,31 @@ export interface Watcher extends Resource<
  * hybrid worker every few seconds to detect a condition (and starts an
  * action runbook when it occurs). Created stopped. Watchers do not keep
  * tags, so ownership is inferred from the parent account's tags.
+ * The ARM type is `Microsoft.Automation/automationAccounts/watchers`.
  *
  * Watcher tasks are a legacy feature; prefer Event Grid or Logic Apps for
  * new event-driven automation.
+ *
+ * :::caution
+ * Changing `automationAccount`, `name`, `scriptName`, `scriptRunOn`,
+ * `scriptParameters`, `executionFrequencyInSeconds`, `description`, or
+ * `resourceGroup` replaces the watcher.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/automation-scenario-using-watcher-task
  *
  * ### Creating a Watcher
  * **Example:** Folder watcher on a hybrid worker group
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
+ * const watchRunbook = yield* Azure.Automation.Runbook("watch-folder", {
+ *   automationAccount: account.automationAccountName,
+ *   runbookType: "PowerShell72",
+ *   content: 'Get-ChildItem "C:/inbox"',
+ * });
+ * const workers = yield* Azure.Automation.HybridRunbookWorkerGroup("onprem", {
+ *   automationAccount: account.automationAccountName,
+ * });
  * const watcher = yield* Azure.Automation.Watcher("folder", {
  *   automationAccount: account.automationAccountName,
  *   scriptName: watchRunbook.runbookName,

@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -35,6 +35,7 @@ export interface IntegrationAccountProps {
    * Account name: 1-80 letters, digits, `-`, `_`, `.`, `(`, `)`. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the account.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -53,6 +54,7 @@ export interface IntegrationAccountProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -90,7 +92,13 @@ export interface IntegrationAccount extends Resource<
  * workflows use for XML validation, transforms, and AS2/X12/EDIFACT
  * messaging.
  *
- * @see https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-create-integration-account
+ * ARM type: `Microsoft.Logic/integrationAccounts`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/logic-apps/logic-apps-enterprise-integration-create-integration-account).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the account.
+ * A `sku` downgrade (`Standard` to `Basic` to `Free`) also replaces it.
+ * :::
  *
  * ### Creating an Integration Account
  * **Example:** Free integration account
@@ -156,11 +164,9 @@ export const IntegrationAccountProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* logic
-        .ListIntegrationAccountBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListIntegrationAccountBySubscription", page)),
-        );
+      const page = yield* collectAll(logic.ListIntegrationAccountBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((account) => {
         const group = resourceGroupOf(account.id);
         return hasAnyAlchemyTag(account.tags) && group !== undefined && account.name !== undefined

@@ -25,7 +25,10 @@ import {
 export const DEFAULT_ALERT_SETTING = "defaultAlertSetting";
 
 export interface AlertSettingProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the setting. */
+  /**
+   * Resource group of the Recovery Services vault. Changing it replaces the setting.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Recovery Services vault. Changing it replaces the setting. */
   vault: string;
@@ -76,24 +79,34 @@ export interface AlertSetting extends Resource<
 
 /**
  * Azure Site Recovery email notification settings of a Recovery Services
- * vault: who gets emailed about replication health, failover, and
- * configuration events.
+ * vault (`Microsoft.RecoveryServices/vaults/replicationAlertSettings`): who
+ * gets emails about replication health, failover, and configuration events.
+ * See the
+ * [Azure docs](https://learn.microsoft.com/rest/api/site-recovery/replication-alert-settings/create).
  *
- * Every vault has exactly one alert setting (`defaultAlertSetting`), so
- * this resource manages that singleton; Alchemy treats it as owned when its
- * vault is tagged for the current stack and stage. There is no delete API:
- * destroying the resource resets it to `DoNotSend` with no recipients.
+ * Every vault has exactly one alert setting (`defaultAlertSetting`), so this
+ * resource manages that singleton. Alchemy treats it as owned when its
+ * vault carries this stack's ownership tags. There is no delete API: destroying the resource resets it to
+ * `DoNotSend` with no recipients.
  *
+ * :::caution
  * Site Recovery only accepts alert settings once the vault has at least one
- * registered fabric (e.g. an Azure-to-Azure `Fabric`). A fabric deployed in
- * the same stack is waited for (up to ~5 minutes); without one the write
- * fails with `SiteRecoveryNoRegisteredServers`.
+ * registered fabric, such as an Azure-to-Azure `Azure.SiteRecovery.Fabric`.
+ * Alchemy waits up to about 5 minutes for a fabric in the same stack. Without
+ * one, the write fails with `SiteRecoveryNoRegisteredServers`.
+ * :::
  *
- * @see https://learn.microsoft.com/rest/api/site-recovery/replication-alert-settings/create
+ * :::caution
+ * Changing `resourceGroup`, `vault`, or `name` replaces the setting. Alchemy
+ * updates the recipients and locale in place.
+ * :::
  *
  * ### Notifications
  * **Example:** Email the owners and an on-call alias
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("dr-vault", {
+ *   location: "westus2",
+ * });
  * yield* Azure.SiteRecovery.Fabric("primary", {
  *   vault: vault.vaultName,
  *   location: "eastus",

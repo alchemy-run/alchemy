@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -40,13 +40,17 @@ export interface FileShareNfsProperties {
 }
 
 export interface FileShareProps {
-  /** Resource group the share is created in. Changing it replaces the share. */
+  /**
+   * Resource group the share is created in. Changing it replaces the share.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /**
    * File share resource name: 3-63 lowercase letters, digits, and hyphens,
    * starting and ending with a letter or digit. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * share.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -83,7 +87,10 @@ export interface FileShareProps {
    * @default Azure's recommendation for the provisioned storage
    */
   provisionedThroughputMiBPerSec?: number;
-  /** NFS protocol settings. */
+  /**
+   * NFS protocol settings.
+   * @default Azure's defaults
+   */
   nfs?: FileShareNfsProperties;
   /**
    * Whether the public endpoint accepts traffic.
@@ -93,11 +100,13 @@ export interface FileShareProps {
   /**
    * Subnet resource IDs allowed to reach the public endpoint when access is
    * restricted. The subnets need the `Microsoft.Storage` service endpoint.
+   * @default Azure's default (subnet rules left unmanaged when omitted)
    */
   allowedSubnets?: string[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -153,14 +162,18 @@ export interface FileShare extends Resource<
 
 /**
  * An Azure Files share managed by the file-share-centric
- * `Microsoft.FileShares` resource provider: an NFS 4.1 share on SSD with
+ * `Microsoft.FileShares/fileShares` resource type: an NFS 4.1 share on SSD with
  * provisioned v2 billing and no parent storage account.
  *
  * Shares are billed for provisioned storage, IOPS, and throughput whether
  * or not they hold data. Mounting the share requires network access from a
- * VNet (allowed subnets or a private endpoint).
+ * VNet (allowed subnets or a private endpoint). See the
+ * [Azure Files documentation](https://learn.microsoft.com/azure/storage/files/).
  *
- * @see https://learn.microsoft.com/azure/storage/files/
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `mountName`, or
+ * `redundancy` replaces the share and deletes its data.
+ * :::
  *
  * ### Creating a File Share
  * **Example:** Minimal NFS share
@@ -180,6 +193,14 @@ export interface FileShare extends Resource<
  * ### Network Access
  * **Example:** Restrict the share to a subnet
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("clients", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ *   serviceEndpoints: [{ service: "Microsoft.Storage" }],
+ * });
  * const share = yield* Azure.FileShares.FileShare("data", {
  *   allowedSubnets: [subnet.subnetId],
  * });
@@ -264,9 +285,7 @@ export const FileShareProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        fileshares
-          .ListFileShareBySubscription({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListFileShareBySubscription", page))),
+        collectAll(fileshares.ListFileShareBySubscription, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((share) => {
         const group = resourceGroupOf(share.id);

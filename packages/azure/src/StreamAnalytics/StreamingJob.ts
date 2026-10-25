@@ -5,12 +5,12 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -35,6 +35,7 @@ export interface StreamingJobStorageAccount {
    * Account key, required when `authenticationMode` is `ConnectionString`.
    * Azure never returns it, so a change is detected against the previous
    * props.
+   * @default not set
    */
   accountKey?: string;
   /**
@@ -48,12 +49,14 @@ export interface StreamingJobProps {
   /**
    * Resource group the job is created in, at most 80 characters (Stream
    * Analytics rejects longer names). Changing it replaces the job.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Job name: 3-63 letters, digits, hyphens, and underscores. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the job.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -80,11 +83,13 @@ export interface StreamingJobProps {
   /**
    * Maximum delay, in seconds, within which out-of-order events are put
    * back in order.
+   * @default not set
    */
   eventsOutOfOrderMaxDelayInSeconds?: number;
   /**
    * Maximum delay, in seconds, for late-arriving events to be included;
    * `-1` waits indefinitely.
+   * @default not set
    */
   eventsLateArrivalMaxDelayInSeconds?: number;
   /**
@@ -93,30 +98,43 @@ export interface StreamingJobProps {
    * @default Azure's default (`Stop`)
    */
   outputErrorPolicy?: "Stop" | "Drop";
-  /** .NET culture name used to parse and format data, e.g. `en-US`. */
+  /**
+   * .NET culture name used to parse and format data, e.g. `en-US`.
+   * @default not set
+   */
   dataLocale?: string;
-  /** Query-language compatibility level. */
+  /**
+   * Query-language compatibility level.
+   * @default not set
+   */
   compatibilityLevel?: "1.0" | "1.2";
   /**
    * Where job content (reference data, custom code) is stored. Set
    * `JobStorageAccount` together with `jobStorageAccount`.
+   * @default not set
    */
   contentStoragePolicy?: "SystemAccount" | "JobStorageAccount";
-  /** Storage account for job content and checkpoints. */
+  /**
+   * Storage account for job content and checkpoints.
+   * @default not set
+   */
   jobStorageAccount?: StreamingJobStorageAccount;
   /**
    * ARM ID of a Stream Analytics cluster to run the job on. If omitted,
    * the job runs in the shared multi-tenant environment.
+   * @default the shared multi-tenant environment
    */
   clusterId?: string;
   /**
    * Give the job a system-assigned managed identity it can use to
    * authenticate to inputs and outputs (`authenticationMode: "Msi"`).
+   * @default not set
    */
   identity?: "SystemAssigned";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -149,15 +167,21 @@ export interface StreamingJob extends Resource<
 > {}
 
 /**
- * An Azure Stream Analytics streaming job — a real-time analytics pipeline
- * whose inputs, outputs, functions, and query are modelled as the child
- * resources `Input`, `Output`, `Function`, and `Transformation`.
+ * An Azure Stream Analytics streaming job
+ * (`Microsoft.StreamAnalytics/streamingjobs`) — a real-time analytics
+ * pipeline whose inputs, outputs, functions, and query are modelled as the
+ * child resources `Input`, `Output`, `Function`, and `Transformation`.
  *
  * Alchemy creates and updates the job definition but never starts it; a
  * job is billed per streaming unit only while running, so a deployed,
  * stopped job costs nothing. Start it from the portal or the
  * `StartStreamingJob` API. A running job rejects definition changes, so
  * stop it before deploying updates.
+ *
+ * :::caution
+ * Changing `name`, `location`, `jobType`, or `resourceGroup` replaces the
+ * job.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/stream-analytics/stream-analytics-introduction
  *
@@ -215,9 +239,7 @@ export const StreamingJobProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* streamanalytics
-        .ListStreamingJobs({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListStreamingJobs", page)));
+      const page = yield* collectAll(streamanalytics.ListStreamingJobs, { subscriptionId });
       return (page.value ?? []).flatMap((job) => {
         const group = resourceGroupOf(job.id);
         return hasAnyAlchemyTag(job.tags) && group !== undefined && job.name !== undefined

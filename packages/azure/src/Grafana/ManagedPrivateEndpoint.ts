@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -28,6 +28,7 @@ export interface ManagedPrivateEndpointProps {
   /**
    * Resource group of the Grafana workspace. Changing it replaces the
    * endpoint.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
@@ -39,6 +40,7 @@ export interface ManagedPrivateEndpointProps {
    * Endpoint name: letters, digits, and hyphens, starting with a letter. If
    * omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the endpoint.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -62,16 +64,21 @@ export interface ManagedPrivateEndpointProps {
    * replaces the endpoint.
    */
   groupIds: string[];
-  /** Message sent to the owner of the target with the connection request. */
+  /**
+   * Message sent to the owner of the target with the connection request.
+   * @default none
+   */
   requestMessage?: string;
   /**
    * Host of the data store behind a private-link service, as used in the
    * Grafana data source (without protocol and port).
+   * @default none
    */
   privateLinkServiceUrl?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -114,15 +121,26 @@ export interface ManagedPrivateEndpoint extends Resource<
  * A managed private endpoint of an Azure Managed Grafana workspace — lets
  * Grafana reach a data source (storage account, Azure Data Explorer, SQL,
  * private-link service, ...) over Azure Private Link. The target's owner
- * must approve the connection before traffic flows.
+ * must approve the connection before traffic flows. The ARM type is
+ * `Microsoft.Dashboard/grafana/managedPrivateEndpoints`. See
+ * [connect to a data source privately](https://learn.microsoft.com/azure/managed-grafana/how-to-connect-to-data-source-privately).
  *
- * Requires a Standard-tier workspace.
+ * :::caution
+ * The endpoint needs a Standard-tier workspace.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/managed-grafana/how-to-connect-to-data-source-privately
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `name`, `location`,
+ * `privateLinkResourceId`, `privateLinkResourceRegion`, or `groupIds`
+ * replaces the endpoint, and the target's owner must approve the new
+ * connection.
+ * :::
  *
  * ### Connecting Privately to a Data Source
  * **Example:** Private endpoint to a storage account's blob service
  * ```typescript
+ * const grafana = yield* Azure.Grafana.Workspace("grafana");
+ * const account = yield* Azure.Storage.StorageAccount("data");
  * const endpoint = yield* Azure.Grafana.ManagedPrivateEndpoint("blob", {
  *   workspace: grafana.workspaceName,
  *   privateLinkResourceId: account.storageAccountId,
@@ -217,22 +235,22 @@ export const ManagedPrivateEndpointProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const workspaces = yield* orUndefinedIfNotFound(dashboard.ListGrafana({ subscriptionId }));
+      const workspaces = yield* orUndefinedIfNotFound(
+        collectAll(dashboard.ListGrafana, { subscriptionId }),
+      );
       if (workspaces === undefined) return [];
-      yield* requireSinglePage("ListGrafana", workspaces);
       const found: ManagedPrivateEndpoint["Attributes"][] = [];
       for (const grafana of workspaces.value ?? []) {
         const group = resourceGroupOf(grafana.id);
         if (group === undefined || grafana.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          dashboard.ListManagedPrivateEndpoints({
+          collectAll(dashboard.ListManagedPrivateEndpoints, {
             subscriptionId,
             resourceGroupName: group,
             workspaceName: grafana.name,
           }),
         );
         if (page === undefined) continue;
-        yield* requireSinglePage("ListManagedPrivateEndpoints", page);
         for (const endpoint of page.value ?? []) {
           if (hasAnyAlchemyTag(endpoint.tags) && endpoint.name !== undefined) {
             found.push(toAttrs(group, grafana.name, endpoint.name, endpoint));

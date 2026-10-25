@@ -6,10 +6,10 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   waitForProvisioned,
   waitUntilGone,
@@ -148,9 +148,7 @@ export const ZoneProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* dns
-        .ListZones({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListZones", page)));
+      const page = yield* collectAll(dns.ListZones, { subscriptionId });
       return (page.value ?? []).flatMap((zone) => {
         const group = resourceGroupOf(zone.id);
         return hasAnyMarker(zone.tags) && group !== undefined && zone.name !== undefined

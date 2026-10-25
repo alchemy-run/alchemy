@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -33,12 +33,14 @@ export interface FabricProps {
   /**
    * Resource group the fabric is created in. Changing it replaces the
    * fabric.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the fabric: letters and digits only. If omitted, a unique name
    * is generated from the app, stage, and logical ID. Changing it replaces
    * the fabric.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -61,6 +63,7 @@ export interface FabricProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -107,27 +110,47 @@ export interface Fabric extends Resource<
  * (or an Azure Local cluster); the service discards fabrics whose site
  * does not exist.
  *
+ * :::caution
+ * Changing `name`, `location`, `customProperties.instanceType`, or
+ * `resourceGroup` replaces the fabric.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/azure-local/migrate/migration-azure-migrate-overview
  *
  * ### Creating a Fabric
  * **Example:** Hyper-V source fabric
  * ```typescript
+ * const hub = yield* Azure.Migrate.MigrateProject("hub", {
+ *   location: "centralus",
+ * });
+ * const migration = yield* Azure.Migrate.Solution("migration", {
+ *   migrateProject: hub.migrateProjectName,
+ *   name: "Servers-Migration-ServerMigration_DataReplication",
+ *   tool: "ServerMigration_DataReplication",
+ *   purpose: "Migration",
+ *   goal: "Servers",
+ * });
+ * const hyperVSite = yield* Azure.Migrate.HypervSite("hyperv", {
+ *   location: "centralus",
+ * });
  * const source = yield* Azure.DataReplication.Fabric("hyperv", {
  *   customProperties: {
  *     instanceType: "HyperVMigrate",
  *     hyperVSiteId: hyperVSite.siteId,
- *     migrationSolutionId: solution.solutionId,
+ *     migrationSolutionId: migration.solutionId,
  *   },
  * });
  * ```
  *
  * **Example:** Azure Local target fabric
  * ```typescript
+ * // ARM ID of the Azure Local (Azure Stack HCI) migration site.
+ * const hciSiteId = "<azure-local-site-arm-id>";
  * const target = yield* Azure.DataReplication.Fabric("azlocal", {
  *   customProperties: {
  *     instanceType: "AzStackHCI",
- *     azStackHciSiteId: hciSite.siteId,
- *     migrationSolutionId: solution.solutionId,
+ *     azStackHciSiteId: hciSiteId,
+ *     migrationSolutionId: migration.solutionId,
  *     cluster: {
  *       clusterName: "hci-cluster",
  *       resourceName: "hci-cluster",
@@ -180,9 +203,7 @@ export const FabricProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        dr
-          .ListFabricBySubscription({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListFabricBySubscription", page))),
+        collectAll(dr.ListFabricBySubscription, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((fabric) => {
         const group = resourceGroupOf(fabric.id);

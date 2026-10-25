@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -28,6 +28,7 @@ export interface PolicyVirtualNetworkLinkProps {
    * Resource group of the DNS security policy. The DNS resolver API rejects
    * resource group names longer than 80 characters. Changing it replaces
    * the link.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
@@ -38,6 +39,7 @@ export interface PolicyVirtualNetworkLinkProps {
    * Link name: 1-80 letters, digits, `_`, and `-`. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the link.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,6 +57,7 @@ export interface PolicyVirtualNetworkLinkProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -83,21 +86,30 @@ export interface PolicyVirtualNetworkLink extends Resource<
 > {}
 
 /**
- * Links a virtual network to an Azure DNS security policy so the policy's
- * DNS security rules filter and log the network's DNS queries.
+ * Links a virtual network to an Azure DNS security policy
+ * (`Microsoft.Network/dnsResolverPolicies/virtualNetworkLinks`) so the
+ * policy's DNS security rules filter and log the network's DNS queries.
+ * See [DNS security policy](https://learn.microsoft.com/azure/dns/dns-security-policy).
  *
  * A virtual network can be linked to only one DNS security policy, and
  * the link must be in the same region as the policy and the network.
  *
- * @see https://learn.microsoft.com/azure/dns/dns-security-policy
+ * :::caution
+ * Changing `resourceGroup`, `dnsResolverPolicy`, `name`, `location`, or
+ * `virtualNetworkId` replaces the link. A replacement on the same network
+ * deletes the old link first, so the network is briefly unfiltered.
+ * :::
  *
  * ### Linking a Virtual Network
  * **Example:** Apply a DNS security policy to a network
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("app-vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
  * const policy = yield* Azure.DnsResolver.Policy("dns-security");
  * const link = yield* Azure.DnsResolver.PolicyVirtualNetworkLink("app-vnet", {
  *   dnsResolverPolicy: policy.policyName,
- *   virtualNetworkId: vnetId,
+ *   virtualNetworkId: vnet.virtualNetworkId,
  * });
  * ```
  *
@@ -105,7 +117,7 @@ export interface PolicyVirtualNetworkLink extends Resource<
  * ```typescript
  * const link = yield* Azure.DnsResolver.PolicyVirtualNetworkLink("app-vnet", {
  *   dnsResolverPolicy: policy.policyName,
- *   virtualNetworkId: vnetId,
+ *   virtualNetworkId: vnet.virtualNetworkId,
  *   tags: { team: "security" },
  * });
  * ```
@@ -161,23 +173,18 @@ export const PolicyVirtualNetworkLinkProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const policies = yield* dnsresolver
-        .ListDnsResolverPolicies({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDnsResolverPolicies", page)));
+      const policies = yield* collectAll(dnsresolver.ListDnsResolverPolicies, { subscriptionId });
       const found: PolicyVirtualNetworkLink["Attributes"][] = [];
       for (const policy of policies.value ?? []) {
         const group = resourceGroupOf(policy.id);
         if (group === undefined || policy.name === undefined) continue;
         const page = yield* orUndefinedIfNotFound(
-          dnsresolver.ListDnsResolverPolicyVirtualNetworkLinks({
+          collectAll(dnsresolver.ListDnsResolverPolicyVirtualNetworkLinks, {
             subscriptionId,
             resourceGroupName: group,
             dnsResolverPolicyName: policy.name,
           }),
         );
-        if (page !== undefined) {
-          yield* requireSinglePage("ListDnsResolverPolicyVirtualNetworkLinks", page);
-        }
         for (const link of page?.value ?? []) {
           if (hasAnyAlchemyTag(link.tags) && link.name !== undefined) {
             found.push(toAttrs(group, policy.name, link.name, link));

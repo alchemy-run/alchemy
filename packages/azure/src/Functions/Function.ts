@@ -1,13 +1,13 @@
+import type { Credentials } from "@distilled.cloud/azure";
 import * as eventgrid from "@distilled.cloud/azure/eventgrid";
 import * as kudu from "@distilled.cloud/azure/kudu";
 import * as web from "@distilled.cloud/azure/web";
-import type { Credentials } from "@distilled.cloud/azure";
 import { Unowned } from "alchemy/AdoptPolicy";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle, resolveMainPath } from "alchemy/Bundle/TempRoot";
 import { isResolved } from "alchemy/Diff";
-import type { InputProps } from "alchemy/Input";
 import { isScopeEjected, safeHttpEffect, type HttpEffect } from "alchemy/Http";
+import type { InputProps } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
@@ -29,13 +29,13 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   waitForProvisioned,
@@ -51,11 +51,7 @@ import { BlobContainer } from "../Storage/BlobContainer.ts";
 import { StorageAccount } from "../Storage/StorageAccount.ts";
 import { AppServicePlan } from "../Web/AppServicePlan.ts";
 import { getSite } from "../Web/Site.ts";
-import {
-  functionRegistry,
-  type TriggerBinding,
-  type TriggerInvocation,
-} from "./internal.ts";
+import { functionRegistry, type TriggerBinding, type TriggerInvocation } from "./internal.ts";
 
 export type { InferEnv } from "../InferEnv.ts";
 export type { TriggerBinding, TriggerInvocation } from "./internal.ts";
@@ -246,13 +242,21 @@ export interface FunctionRuntimeContext extends BaseRuntimeContext {
 }
 
 /**
+ * Run `effect` under the program's captured context. Handlers are stored
+ * with erased (`any`) requirements and the context holds every service the
+ * program's init had, so the cast only drops the erased `any`.
+ */
+const runInContext = <A, E>(effect: Effect.Effect<A, E, any>, context: Context.Context<never>) =>
+  Effect.runPromise(effect.pipe(Effect.provideContext(context)) as Effect.Effect<A, E>);
+
+/**
  * Web-standard dispatcher over the program's `fetch`: each request runs
  * under the program's context with its own scope.
  */
 const makeDispatcher =
   (handler: HttpEffect<any>, context: Context.Context<never>) =>
   (webRequest: Request): Promise<Response> =>
-    Effect.runPromise(
+    runInContext(
       Effect.gen(function* () {
         const request = HttpServerRequest.fromWeb(webRequest);
         const scope = yield* Scope.make();
@@ -272,13 +276,18 @@ const makeDispatcher =
         const response = yield* Deferred.await(out);
         if (!isScopeEjected(scope)) yield* Scope.close(scope, Exit.void);
         return response;
-      }).pipe(Effect.provideContext(context)),
+      }),
+      context,
     );
 
 const createFunctionRuntimeContext = (id: string): FunctionRuntimeContext => {
   // No `run`: instances scale to zero, so background loops would stop.
-  const { run: _run, exports: _exports, serve: _serve, ...base } =
-    createHostRuntimeContext(FunctionTypeId)(id);
+  const {
+    run: _run,
+    exports: _exports,
+    serve: _serve,
+    ...base
+  } = createHostRuntimeContext(FunctionTypeId)(id);
   const serve = ((handler: HttpEffect<any>) =>
     globalThis.__ALCHEMY_RUNTIME__
       ? Effect.gen(function* () {
@@ -295,10 +304,7 @@ const createFunctionRuntimeContext = (id: string): FunctionRuntimeContext => {
             const context = yield* Effect.context<never>();
             functionRegistry().triggers.set(name, {
               binding,
-              run: (invocation) =>
-                Effect.runPromise(
-                  handler(invocation).pipe(Effect.scoped, Effect.provideContext(context)),
-                ),
+              run: (invocation) => runInContext(Effect.scoped(handler(invocation)), context),
             });
           })
         : Effect.void,
@@ -462,7 +468,7 @@ const transformFunctionProps = (id: string, props: FunctionProps) =>
  * });
  * const api = yield* Azure.Functions.Function("Api", {
  *   main: "./src/api.ts",
- *   app,
+ *   app: { siteName: app.siteName, resourceGroup: app.resourceGroup },
  * });
  * ```
  *
@@ -504,28 +510,35 @@ const transformFunctionProps = (id: string, props: FunctionProps) =>
  *
  * **Example:** Send to a Storage queue
  * ```typescript
+ * // init
  * const send = yield* Azure.Storage.QueueSend(jobs);
+ *
+ * // runtime
  * yield* send.send(JSON.stringify({ id: 1 }));
  * ```
  *
  * ### Key Vault Bindings
  * **Example:** Read a secret
  * ```typescript
- * const secrets = yield* Azure.KeyVault.SecretRead(vault);
- * const apiKey = yield* secrets.get("api-key");
+ * // init
+ * const apiKey = yield* Azure.KeyVault.SecretRead(apiKeySecret);
+ *
+ * // runtime: the latest version, as a Redacted<string>
+ * const value = yield* apiKey.get();
  * ```
  *
  * ### Service Bus and Event Hubs Bindings
  * **Example:** Send a Service Bus message
  * ```typescript
  * const orders = yield* Azure.ServiceBus.QueueSend(queue);
- * yield* orders.send({ body: JSON.stringify({ id: 1 }) });
+ * yield* orders.send({ id: 1 }, { messageId: "order-1" });
  * ```
  *
  * **Example:** Send an event to an event hub
  * ```typescript
  * const telemetry = yield* Azure.EventHub.Send(hub);
- * yield* telemetry.send([{ body: { temperature: 21 } }]);
+ * yield* telemetry.send({ temperature: 21 });
+ * yield* telemetry.sendBatch([{ temperature: 21 }, { temperature: 22 }]);
  * ```
  *
  * ### Timers
@@ -669,7 +682,8 @@ const HOST_JSON = `${JSON.stringify(
 const PACKAGE_JSON = `${JSON.stringify({ type: "module", main: "index.mjs" }, null, 2)}\n`;
 
 /** Generated entry of an Effect Function: raise the runtime flag, run init, register. */
-const effectEntry = (handler: string) => (importPath: string) => `
+const effectEntry = (handler: string) => (importPath: string) =>
+  `
 import { bootstrap } from "@alchemy.run/azure/Bootstrap/Functions";
 
 globalThis.__ALCHEMY_RUNTIME__ = true;
@@ -679,7 +693,8 @@ await bootstrap(entrypoint);
 `;
 
 /** Generated entry of an async Function: no Effect, just the handler file. */
-const asyncEntry = (handler: string, envKeys: readonly string[]) => (importPath: string) => `
+const asyncEntry = (handler: string, envKeys: readonly string[]) => (importPath: string) =>
+  `
 import { serve } from "@alchemy.run/azure/Bootstrap/FunctionsAsync";
 import { ${handler} as handler } from ${JSON.stringify(importPath)};
 
@@ -1022,7 +1037,10 @@ export const FunctionProvider = () =>
             output?.resourceGroup ?? olds?.app?.resourceGroup ?? olds?.resourceGroup;
           if (resourceGroup === undefined) return undefined;
           const name =
-            output?.functionAppName ?? olds?.app?.siteName ?? olds?.name ?? (yield* createAppName(id));
+            output?.functionAppName ??
+            olds?.app?.siteName ??
+            olds?.name ??
+            (yield* createAppName(id));
           const site = yield* getSite(subscriptionId, resourceGroup, name);
           if (site === undefined) return undefined;
           const managedApp = output?.managedApp ?? olds?.app === undefined;
@@ -1041,9 +1059,7 @@ export const FunctionProvider = () =>
 
         list: Effect.fn(function* () {
           const { subscriptionId } = yield* AzureEnvironment.current;
-          const page = yield* web
-            .ListWebApps({ subscriptionId })
-            .pipe(Effect.flatMap((p) => requireSinglePage("ListWebApps", p)));
+          const page = yield* collectAll(web.ListWebApps, { subscriptionId });
           return (page.value ?? []).flatMap((site) => {
             const group = resourceGroupOf(site.id);
             return hasAnyAlchemyTag(site.tags) &&
@@ -1296,7 +1312,9 @@ export const FunctionProvider = () =>
           for (const [key, value] of Object.entries(observed.properties ?? {})) {
             if (value !== undefined && !output.settingKeys.includes(key)) next[key] = value;
           }
-          yield* ignoreNotFound(web.UpdateWebAppApplicationSettings({ ...where, properties: next }));
+          yield* ignoreNotFound(
+            web.UpdateWebAppApplicationSettings({ ...where, properties: next }),
+          );
         }),
       });
     }),

@@ -32,6 +32,7 @@ export interface InternalNetworkProps {
   /**
    * Name of the internal network. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the internal network.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** VLAN ID of the network (100-4095). Changing it replaces the network. */
@@ -39,6 +40,7 @@ export interface InternalNetworkProps {
   /**
    * Extension flag (`NoExtension` or `NPB`). Changing it replaces the
    * network.
+   * @default "NoExtension"
    */
   extension?: mnf.InternalNetworkPropertiesInput["extension"];
   /**
@@ -46,27 +48,60 @@ export interface InternalNetworkProps {
    * @default 1500
    */
   mtu?: number;
-  /** Connected IPv4 subnets, e.g. `[{ prefix: "10.0.0.0/24" }]`. */
+  /**
+   * Connected IPv4 subnets, e.g. `[{ prefix: "10.0.0.0/24" }]`.
+   * @default none
+   */
   connectedIPv4Subnets?: mnf.InternalNetworkPropertiesInput["connectedIPv4Subnets"];
-  /** Connected IPv6 subnets. */
+  /**
+   * Connected IPv6 subnets.
+   * @default none
+   */
   connectedIPv6Subnets?: mnf.InternalNetworkPropertiesInput["connectedIPv6Subnets"];
-  /** Import route policies (IPv4/IPv6 route policy IDs). */
+  /**
+   * Import route policies (IPv4/IPv6 route policy IDs).
+   * @default none
+   */
   importRoutePolicy?: mnf.InternalNetworkPropertiesInput["importRoutePolicy"];
-  /** Export route policies (IPv4/IPv6 route policy IDs). */
+  /**
+   * Export route policies (IPv4/IPv6 route policy IDs).
+   * @default none
+   */
   exportRoutePolicy?: mnf.InternalNetworkPropertiesInput["exportRoutePolicy"];
-  /** ARM ID of the ingress access control list. */
+  /**
+   * ARM ID of the ingress access control list.
+   * @default none
+   */
   ingressAclId?: string;
-  /** ARM ID of the egress access control list. */
+  /**
+   * ARM ID of the egress access control list.
+   * @default none
+   */
   egressAclId?: string;
-  /** Enable monitoring (`True`/`False`). */
+  /**
+   * Enable monitoring (`True`/`False`).
+   * @default "False"
+   */
   isMonitoringEnabled?: mnf.InternalNetworkPropertiesInput["isMonitoringEnabled"];
-  /** BGP configuration (peer ASN, neighbors, BFD). */
+  /**
+   * BGP configuration (peer ASN, neighbors, BFD).
+   * @default none
+   */
   bgpConfiguration?: mnf.InternalNetworkPropertiesInput["bgpConfiguration"];
-  /** Static routes (IPv4/IPv6) and BFD. */
+  /**
+   * Static routes (IPv4/IPv6) and BFD.
+   * @default none
+   */
   staticRouteConfiguration?: mnf.InternalNetworkPropertiesInput["staticRouteConfiguration"];
-  /** Native IPv4 prefix limit. */
+  /**
+   * Native IPv4 prefix limit.
+   * @default none
+   */
   nativeIpv4PrefixLimit?: mnf.InternalNetworkPropertiesInput["nativeIpv4PrefixLimit"];
-  /** Native IPv6 prefix limit. */
+  /**
+   * Native IPv6 prefix limit.
+   * @default none
+   */
   nativeIpv6PrefixLimit?: mnf.InternalNetworkPropertiesInput["nativeIpv6PrefixLimit"];
 }
 
@@ -99,11 +134,23 @@ export interface InternalNetwork extends Resource<
  * policies, and ACLs. Alchemy marks ownership in `properties.annotation`.
  * Needs an Operator Nexus Network Fabric.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-configure-isolation-domain
+ * ARM type: `Microsoft.ManagedNetworkFabric/l3IsolationDomains/internalNetworks`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-configure-isolation-domain).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `l3IsolationDomain`, `name`, `vlanId`, or
+ * `extension` replaces the network.
+ * :::
  *
  * ### Creating an Internal Network
  * **Example:** Workload subnet with BGP
  * ```typescript
+ * // The Network Fabric is provisioned on Operator Nexus racks.
+ * const fabricId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ManagedNetworkFabric/networkFabrics/fab1";
+ * const l3 = yield* Azure.ManagedNetworkFabric.L3IsolationDomain("tenant", {
+ *   networkFabricId: fabricId,
+ * });
  * const internal = yield* Azure.ManagedNetworkFabric.InternalNetwork("workload", {
  *   l3IsolationDomain: l3.l3IsolationDomainName,
  *   vlanId: 805,

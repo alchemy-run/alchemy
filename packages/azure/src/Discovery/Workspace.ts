@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -40,12 +40,16 @@ export interface WorkspaceKeyVaultKey {
 }
 
 export interface WorkspaceProps {
-  /** Resource group the workspace is created in. Changing it replaces the workspace. */
+  /**
+   * Resource group the workspace is created in. Changing it replaces the workspace.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Workspace name: 3-24 letters, digits, and hyphens. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the workspace.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -58,7 +62,10 @@ export interface WorkspaceProps {
    * resources. Changing it replaces the workspace.
    */
   workspaceIdentity: string;
-  /** ARM IDs of the Discovery supercomputers linked to the workspace. */
+  /**
+   * ARM IDs of the Discovery supercomputers linked to the workspace.
+   * @default []
+   */
   supercomputerIds?: string[];
   /**
    * Encrypt data at rest with a customer-managed key. Changing it replaces
@@ -66,11 +73,15 @@ export interface WorkspaceProps {
    * @default "Disabled"
    */
   customerManagedKeys?: "Enabled" | "Disabled";
-  /** Customer-managed key, required when `customerManagedKeys` is `Enabled`. */
+  /**
+   * Customer-managed key, required when `customerManagedKeys` is `Enabled`.
+   * @default unset
+   */
   keyVaultProperties?: WorkspaceKeyVaultKey;
   /**
    * Log Analytics cluster for debug logs (required with customer-managed
    * keys). Changing it replaces the workspace.
+   * @default unset
    */
   logAnalyticsClusterId?: string;
   /**
@@ -78,15 +89,25 @@ export interface WorkspaceProps {
    * @default Azure's default (`Disabled`)
    */
   publicNetworkAccess?: "Enabled" | "Disabled";
-  /** Subnet for agent resources. Changing it replaces the workspace. */
+  /**
+   * Subnet for agent resources. Changing it replaces the workspace.
+   * @default unset
+   */
   agentSubnetId?: string;
-  /** Subnet for private endpoint connections. Changing it replaces the workspace. */
+  /**
+   * Subnet for private endpoint connections. Changing it replaces the workspace.
+   * @default unset
+   */
   privateEndpointSubnetId?: string;
-  /** Subnet for workspace (function) resources. Changing it replaces the workspace. */
+  /**
+   * Subnet for workspace (function) resources. Changing it replaces the workspace.
+   * @default unset
+   */
   workspaceSubnetId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -124,9 +145,19 @@ export interface Workspace extends Resource<
  * model deployments, and links supercomputers for compute.
  *
  * Provisioning creates an Azure-managed resource group with the
- * workspace's backing services and takes 20-40 minutes. Microsoft Discovery
- * is a gated preview: on subscriptions without the preview, ARM rejects the
- * resource type with `InvalidResourceType`.
+ * workspace's backing services and takes 20-40 minutes.
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `workspaceIdentity`,
+ * `customerManagedKeys`, `keyVaultProperties.keyVaultUri`,
+ * `logAnalyticsClusterId`, `agentSubnetId`, `privateEndpointSubnetId`, or
+ * `workspaceSubnetId` replaces the workspace (20-40 minutes).
+ * :::
+ *
+ * :::caution
+ * Microsoft Discovery is a gated preview. On subscriptions without the
+ * preview, ARM rejects the resource type with `InvalidResourceType`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/microsoft-discovery/
  *
@@ -142,6 +173,21 @@ export interface Workspace extends Resource<
  * ### Linking Compute
  * **Example:** Workspace linked to a supercomputer
  * ```typescript
+ * const clusterIdentity = yield* Azure.ManagedIdentity.UserAssignedIdentity("cluster");
+ * const kubeletIdentity = yield* Azure.ManagedIdentity.UserAssignedIdentity("kubelet");
+ * const vnet = yield* Azure.Network.VirtualNetwork("hpc", {
+ *   addressPrefixes: ["10.40.0.0/16"],
+ * });
+ * const systemSubnet = yield* Azure.Network.Subnet("system", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.40.0.0/24",
+ * });
+ * const supercomputer = yield* Azure.Discovery.Supercomputer("hpc", {
+ *   subnetId: systemSubnet.subnetId,
+ *   clusterIdentity: clusterIdentity.identityId,
+ *   kubeletIdentity: kubeletIdentity.identityId,
+ * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("ws");
  * const workspace = yield* Azure.Discovery.Workspace("lab", {
  *   workspaceIdentity: identity.identityId,
  *   supercomputerIds: [supercomputer.supercomputerId],
@@ -200,10 +246,9 @@ export const WorkspaceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* discovery.ListWorkspaceBySubscription({ subscriptionId }).pipe(
-        Effect.flatMap((page) => requireSinglePage("ListWorkspaceBySubscription", page)),
-        Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)),
-      );
+      const page = yield* collectAll(discovery.ListWorkspaceBySubscription, {
+        subscriptionId,
+      }).pipe(Effect.catchTag("InvalidResourceType", () => Effect.succeed(undefined)));
       return (page?.value ?? []).flatMap((observed) => {
         const group = resourceGroupOf(observed.id);
         return hasAnyAlchemyTag(observed.tags) && group !== undefined && observed.name !== undefined

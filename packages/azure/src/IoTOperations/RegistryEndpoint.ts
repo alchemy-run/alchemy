@@ -6,7 +6,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 
 export interface RegistryEndpointProps {
-  /** Resource group of the IoT Operations instance. Changing it replaces the endpoint. */
+  /**
+   * Resource group of the IoT Operations instance. Changing it replaces the endpoint.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** IoT Operations instance that holds the endpoint. Changing it replaces the endpoint. */
   instanceName: string;
@@ -14,6 +17,7 @@ export interface RegistryEndpointProps {
    * Endpoint name (lowercase letters, digits, and hyphens). If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the endpoint.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Container registry host name, e.g. `myregistry.azurecr.io`. */
@@ -31,6 +35,7 @@ export interface RegistryEndpointProps {
   /**
    * Certificate authorities that sign artifacts in the registry, each a
    * `Secret` (`secretRef`) or `ConfigMap` (`configMapRef`).
+   * @default []
    */
   codeSigningCas?: iot.RegistryEndpointTrustedSigningKey[];
 }
@@ -57,18 +62,26 @@ export interface RegistryEndpoint extends Resource<
 > {}
 
 /**
- * A container registry endpoint of an Azure IoT Operations instance, from
- * which dataflow graphs pull WebAssembly modules and Akri connector
- * templates pull images.
+ * A container registry endpoint of an Azure IoT Operations instance
+ * (`Microsoft.IoTOperations/instances/registryEndpoints`), from which
+ * dataflow graphs pull WebAssembly modules and Akri connector templates
+ * pull images.
  *
  * @see https://learn.microsoft.com/azure/iot-operations/connect-to-cloud/howto-configure-registry-endpoint
  *
  * ### Connecting a Registry
  * **Example:** Azure Container Registry with the instance's managed identity
  * ```typescript
+ * const instance = yield* Azure.IoTOperations.Instance("aio", {
+ *   customLocationId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/aio-location",
+ *   schemaRegistryId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.DeviceRegistry/schemaRegistries/aio-schemas",
+ * });
+ * const acr = yield* Azure.ContainerRegistry.Registry("modules");
  * const registry = yield* Azure.IoTOperations.RegistryEndpoint("acr", {
  *   instanceName: instance.instanceName,
- *   host: `${acr.registryName}.azurecr.io`,
+ *   host: acr.loginServer,
  *   authentication: {
  *     method: "SystemAssignedManagedIdentity",
  *     systemAssignedManagedIdentitySettings: {},
@@ -78,12 +91,18 @@ export interface RegistryEndpoint extends Resource<
  *
  * **Example:** Public registry
  * ```typescript
+ * // instance: the Azure.IoTOperations.Instance of the first example
  * const registry = yield* Azure.IoTOperations.RegistryEndpoint("public", {
  *   instanceName: instance.instanceName,
  *   host: "ghcr.io",
  *   authentication: { method: "Anonymous", anonymousSettings: {} },
  * });
  * ```
+ *
+ * :::caution
+ * Changing `resourceGroup`, `instanceName`, or `name` replaces the
+ * endpoint.
+ * :::
  *
  * @resource
  */

@@ -6,10 +6,10 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -121,9 +121,7 @@ export const ResourceLinkProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* resources
-        .ListResourceLinkAtSubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListResourceLinkAtSubscription", page)));
+      const page = yield* collectAll(resources.ListResourceLinkAtSubscription, { subscriptionId });
       return page.value.flatMap((link) =>
         link.id !== undefined &&
         link.name !== undefined &&

@@ -31,6 +31,7 @@ export interface NetworkToNetworkInterconnectProps {
   /**
    * Name of the network-to-network interconnect. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the network-to-network interconnect.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -41,35 +42,65 @@ export interface NetworkToNetworkInterconnectProps {
   /**
    * Interconnect type (`CE` or `NPB`). Changing it replaces the
    * interconnect.
+   * @default "CE"
    */
   nniType?: mnf.NetworkToNetworkInterconnectPropertiesInput["nniType"];
   /**
    * Whether this is the management interconnect (`True`/`False`).
    * Changing it replaces the interconnect.
+   * @default "True"
    */
   isManagementType?: mnf.NetworkToNetworkInterconnectPropertiesInput["isManagementType"];
   /**
    * Conditional default route configuration. Changing it replaces the
    * interconnect.
+   * @default none
    */
   conditionalDefaultRouteConfiguration?: mnf.NetworkToNetworkInterconnectPropertiesInput["conditionalDefaultRouteConfiguration"];
-  /** Layer 2 configuration (MTU, interfaces). */
+  /**
+   * Layer 2 configuration (MTU, interfaces).
+   * @default none
+   */
   layer2Configuration?: mnf.NetworkToNetworkInterconnectPropertiesInput["layer2Configuration"];
-  /** Option B layer 3 configuration (peer ASN, VLAN, prefixes). */
+  /**
+   * Option B layer 3 configuration (peer ASN, VLAN, prefixes).
+   * @default none
+   */
   optionBLayer3Configuration?: mnf.NetworkToNetworkInterconnectPropertiesInput["optionBLayer3Configuration"];
-  /** Static routes for an `NPB` interconnect. */
+  /**
+   * Static routes for an `NPB` interconnect.
+   * @default none
+   */
   npbStaticRouteConfiguration?: mnf.NetworkToNetworkInterconnectPropertiesInput["npbStaticRouteConfiguration"];
-  /** Static routes and BFD. */
+  /**
+   * Static routes and BFD.
+   * @default none
+   */
   staticRouteConfiguration?: mnf.NetworkToNetworkInterconnectPropertiesInput["staticRouteConfiguration"];
-  /** Import route policies (IPv4/IPv6 route policy IDs). */
+  /**
+   * Import route policies (IPv4/IPv6 route policy IDs).
+   * @default none
+   */
   importRoutePolicy?: mnf.NetworkToNetworkInterconnectPropertiesInput["importRoutePolicy"];
-  /** Export route policies (IPv4/IPv6 route policy IDs). */
+  /**
+   * Export route policies (IPv4/IPv6 route policy IDs).
+   * @default none
+   */
   exportRoutePolicy?: mnf.NetworkToNetworkInterconnectPropertiesInput["exportRoutePolicy"];
-  /** ARM ID of the ingress access control list. */
+  /**
+   * ARM ID of the ingress access control list.
+   * @default none
+   */
   ingressAclId?: string;
-  /** ARM ID of the egress access control list. */
+  /**
+   * ARM ID of the egress access control list.
+   * @default none
+   */
   egressAclId?: string;
-  /** Micro-BFD state (`Enabled`/`Disabled`). */
+  /**
+   * Micro-BFD state (`Enabled`/`Disabled`).
+   * @default Azure's default
+   */
   microBfdState?: mnf.NetworkToNetworkInterconnectPropertiesInput["microBfdState"];
 }
 
@@ -103,13 +134,23 @@ export interface NetworkToNetworkInterconnect extends Resource<
  * annotation, so ownership comes from Alchemy state. Needs an Operator Nexus
  * Network Fabric.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-configure-network-fabric
+ * ARM type:
+ * `Microsoft.ManagedNetworkFabric/networkFabrics/networkToNetworkInterconnects`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-configure-network-fabric).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `networkFabric`, `name`, `useOptionB`, `nniType`,
+ * `isManagementType`, or `conditionalDefaultRouteConfiguration` replaces the
+ * interconnect.
+ * :::
  *
  * ### Creating an Interconnect
  * **Example:** Option B interconnect
  * ```typescript
+ * // The Network Fabric "fab1" is provisioned on Operator Nexus racks, in the
+ * // stack's resource group.
  * const nni = yield* Azure.ManagedNetworkFabric.NetworkToNetworkInterconnect("nni", {
- *   networkFabric: fabric.networkFabricName,
+ *   networkFabric: "fab1",
  *   nniType: "CE",
  *   isManagementType: "True",
  *   useOptionB: "True",

@@ -30,9 +30,15 @@ export interface ProtectedItemManagedDisk {
   primaryStagingAzureStorageAccountId: string;
   /** Resource group the replica disk is created in. */
   recoveryResourceGroupId: string;
-  /** Replica disk type, e.g. `Standard_LRS`. */
+  /**
+   * Replica disk type, e.g. `Standard_LRS`.
+   * @default Azure's default (the source disk type)
+   */
   recoveryReplicaDiskAccountType?: string;
-  /** Disk type of the failed-over disk, e.g. `Standard_LRS`. */
+  /**
+   * Disk type of the failed-over disk, e.g. `Standard_LRS`.
+   * @default Azure's default (the source disk type)
+   */
   recoveryTargetDiskAccountType?: string;
   /** Any other provider field. */
   [key: string]: unknown;
@@ -45,24 +51,45 @@ export interface ProtectedItemManagedDisk {
 export interface ProtectedItemProviderInput {
   /** Replication provider, e.g. `A2A`. */
   instanceType: string;
-  /** ARM ID of the VM to protect (A2A). */
+  /**
+   * ARM ID of the VM to protect (A2A).
+   * @default not set
+   */
   fabricObjectId?: string;
-  /** ARM ID of the recovery protection container (A2A). */
+  /**
+   * ARM ID of the recovery protection container (A2A).
+   * @default not set
+   */
   recoveryContainerId?: string;
-  /** ARM ID of the resource group failed-over VMs are created in (A2A). */
+  /**
+   * ARM ID of the resource group failed-over VMs are created in (A2A).
+   * @default not set
+   */
   recoveryResourceGroupId?: string;
-  /** ARM ID of the recovery virtual network (A2A). */
+  /**
+   * ARM ID of the recovery virtual network (A2A).
+   * @default not set
+   */
   recoveryAzureNetworkId?: string;
-  /** Recovery subnet name (A2A). */
+  /**
+   * Recovery subnet name (A2A).
+   * @default not set
+   */
   recoverySubnetName?: string;
-  /** Managed disks to replicate (A2A). */
+  /**
+   * Managed disks to replicate (A2A).
+   * @default not set
+   */
   vmManagedDisks?: ProtectedItemManagedDisk[];
   /** Any other provider field. */
   [key: string]: unknown;
 }
 
 export interface ProtectedItemProps {
-  /** Resource group of the Recovery Services vault. Changing it replaces the item. */
+  /**
+   * Resource group of the Recovery Services vault. Changing it replaces the item.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Recovery Services vault. Changing it replaces the item. */
   vault: string;
@@ -74,21 +101,37 @@ export interface ProtectedItemProps {
    * Protected item name, unique within the container. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing it
    * replaces the item.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** ARM ID of the replication policy. Changing it replaces the item. */
   policyId: string;
-  /** ARM ID of the protectable item (not used by A2A). Changing it replaces the item. */
+  /**
+   * ARM ID of the protectable item (not used by A2A). Changing it replaces the item.
+   * @default not set
+   */
   protectableItemId?: string;
   /** Enable-protection input. Changing it replaces the item. */
   providerSpecificDetails: ProtectedItemProviderInput;
-  /** Name of the VM created on failover. Updated in place. */
+  /**
+   * Name of the VM created on failover. Updated in place.
+   * @default the source VM name
+   */
   recoveryAzureVMName?: string;
-  /** Size of the VM created on failover, e.g. `Standard_B1s`. Updated in place. */
+  /**
+   * Size of the VM created on failover, e.g. `Standard_B1s`. Updated in place.
+   * @default Azure's default (the source VM size)
+   */
   recoveryAzureVMSize?: string;
-  /** ARM ID of the network failed-over VMs attach to. Updated in place. */
+  /**
+   * ARM ID of the network failed-over VMs attach to. Updated in place.
+   * @default the network mapping's recovery network
+   */
   selectedRecoveryAzureNetworkId?: string;
-  /** ARM ID of the network test-failover VMs attach to. Updated in place. */
+  /**
+   * ARM ID of the network test-failover VMs attach to. Updated in place.
+   * @default not set
+   */
   selectedTfoAzureNetworkId?: string;
 }
 
@@ -124,23 +167,89 @@ export interface ProtectedItem extends Resource<
 > {}
 
 /**
- * An Azure Site Recovery replication protected item: enables replication
- * of a VM (Azure-to-Azure) from the primary container to the recovery
- * region under a replication policy.
+ * An Azure Site Recovery replication protected item
+ * (`Microsoft.RecoveryServices/vaults/replicationFabrics/replicationProtectionContainers/replicationProtectedItems`).
+ * It turns on Azure-to-Azure replication of a VM from the primary container
+ * to the recovery region under a replication policy. See the
+ * [Azure docs](https://learn.microsoft.com/rest/api/site-recovery/replication-protected-items/create).
  *
- * Protected items cannot be tagged; Alchemy treats an item as owned when
- * its vault is tagged for the current stack and stage. Reconcile returns
- * once the item exists; initial replication continues in the background
- * (30-60+ minutes) while `protectionState` progresses to `Protected`. The
- * failover VM name/size and recovery networks update in place; delete
- * disables replication gracefully. Protection is billed per instance
- * (first 31 days free) plus replica and cache storage.
+ * Protected items have no tags. Alchemy treats an item as owned when its
+ * vault carries this stack's ownership tags. The deploy returns once the item exists. Initial replication
+ * continues in the background (30-60+ minutes) while `protectionState`
+ * moves to `Protected`. Delete turns off replication gracefully. Protection
+ * bills per instance (the first 31 days are free), plus replica and cache
+ * storage.
  *
- * @see https://learn.microsoft.com/rest/api/site-recovery/replication-protected-items/create
+ * :::caution
+ * The primary container must already be paired to a recovery container with
+ * an `Azure.SiteRecovery.ProtectionContainerMapping`.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup`, `vault`, `fabric`, `protectionContainer`,
+ * `name`, `policyId`, `protectableItemId`, or `providerSpecificDetails`
+ * replaces the item and restarts initial replication. Alchemy updates the
+ * failover VM name and size and the recovery networks in place.
+ * :::
  *
  * ### Azure-to-Azure Disaster Recovery
  * **Example:** Replicate a VM with one managed disk
  * ```typescript
+ * const vault = yield* Azure.RecoveryServices.Vault("dr-vault", {
+ *   location: "westus2",
+ * });
+ * const primary = yield* Azure.SiteRecovery.Fabric("primary", {
+ *   vault: vault.vaultName,
+ *   location: "eastus",
+ * });
+ * const recovery = yield* Azure.SiteRecovery.Fabric("recovery", {
+ *   vault: vault.vaultName,
+ *   location: "westus2",
+ * });
+ * const primaryContainer = yield* Azure.SiteRecovery.ProtectionContainer("primary", {
+ *   vault: vault.vaultName,
+ *   fabric: primary.fabricName,
+ * });
+ * const recoveryContainer = yield* Azure.SiteRecovery.ProtectionContainer("recovery", {
+ *   vault: vault.vaultName,
+ *   fabric: recovery.fabricName,
+ * });
+ * const policy = yield* Azure.SiteRecovery.ReplicationPolicy("a2a-policy", {
+ *   vault: vault.vaultName,
+ *   providerSpecificInput: {
+ *     instanceType: "A2A",
+ *     recoveryPointHistory: 1440,
+ *     appConsistentFrequencyInMinutes: 240,
+ *     multiVmSyncStatus: "Enable",
+ *   },
+ * });
+ * const mapping = yield* Azure.SiteRecovery.ProtectionContainerMapping(
+ *   "primary-to-recovery",
+ *   {
+ *     vault: vault.vaultName,
+ *     fabric: primary.fabricName,
+ *     protectionContainer: primaryContainer.protectionContainerName,
+ *     targetProtectionContainerId: recoveryContainer.protectionContainerId,
+ *     policyId: policy.policyId,
+ *     providerSpecificInput: {
+ *       instanceType: "A2A",
+ *       agentAutoUpdateStatus: "Disabled",
+ *     },
+ *   },
+ * );
+ * const recoveryGroup = yield* Azure.Resources.ResourceGroup("dr-recovery", {
+ *   location: "westus2",
+ * });
+ * const cache = yield* Azure.Storage.StorageAccount("asrcache", {
+ *   location: "eastus",
+ * });
+ * const vm = yield* Azure.Compute.VirtualMachine("web", {
+ *   location: "eastus",
+ *   vmSize: "Standard_B1s",
+ *   networkInterfaceIds: [nic.networkInterfaceId],
+ *   adminUsername: "azureuser",
+ *   sshPublicKeys: ["ssh-ed25519 AAAAC3Nza... me@example.com"],
+ * });
  * const item = yield* Azure.SiteRecovery.ProtectedItem("web-vm", {
  *   vault: vault.vaultName,
  *   fabric: primary.fabricName,

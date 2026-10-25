@@ -17,7 +17,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, iotHubOwnedByStage } from "./Common.ts";
 
 export interface ConsumerGroupProps {
-  /** Resource group of the IoT hub. Changing it replaces the consumer group. */
+  /**
+   * Resource group of the IoT hub. Changing it replaces the consumer group.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the IoT hub. Changing it replaces the consumer group. */
   iotHub: string;
@@ -33,6 +36,7 @@ export interface ConsumerGroupProps {
    * underscores. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the consumer group. The built-in
    * `$Default` group is never managed.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
 }
@@ -60,10 +64,11 @@ export interface ConsumerGroup extends Resource<
 
 /**
  * A consumer group on an IoT hub's built-in Event Hub-compatible `events`
- * endpoint — an independent read position for one application reading
+ * endpoint (`Microsoft.Devices/IotHubs/eventHubEndpoints/ConsumerGroups`):
+ * an independent read position for one application reading
  * device-to-cloud telemetry.
  *
- * Consumer groups carry no tags or metadata; they count as owned when the
+ * Consumer groups carry no tags or metadata. They count as owned when the
  * parent hub carries this stack's and stage's ownership tags.
  *
  * @see https://learn.microsoft.com/azure/iot-hub/iot-hub-devguide-messages-read-builtin
@@ -79,11 +84,17 @@ export interface ConsumerGroup extends Resource<
  *
  * **Example:** Explicit name
  * ```typescript
+ * const hub = yield* Azure.IoTHub.IotHub("devices");
  * const alerts = yield* Azure.IoTHub.ConsumerGroup("alerts", {
  *   iotHub: hub.iotHubName,
  *   name: "alerts",
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `iotHub`, `eventHubEndpointName`, or `resourceGroup`
+ * replaces the consumer group.
+ * :::
  *
  * @resource
  */

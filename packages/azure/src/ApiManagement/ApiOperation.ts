@@ -25,6 +25,7 @@ export interface ApiOperationProps {
    * Operation identifier (1-80 characters). If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces
    * the operation.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -39,13 +40,25 @@ export interface ApiOperationProps {
    * matching entry in `templateParameters`.
    */
   urlTemplate: string;
-  /** Description; may contain HTML. */
+  /**
+   * Description; may contain HTML.
+   * @default no description
+   */
   description?: string;
-  /** Parameters of the URL template. */
+  /**
+   * Parameters of the URL template.
+   * @default none
+   */
   templateParameters?: ApiOperationParameter[];
-  /** Request details (query parameters, headers, representations). */
+  /**
+   * Request details (query parameters, headers, representations).
+   * @default not set
+   */
   request?: ApiOperationRequest;
-  /** Documented responses. */
+  /**
+   * Documented responses.
+   * @default none
+   */
   responses?: ApiOperationResponse[];
 }
 
@@ -76,12 +89,27 @@ export interface ApiOperation extends Resource<
 
 /**
  * An operation (method + URL template) of an API Management API.
+ * The ARM type is `Microsoft.ApiManagement/service/apis/operations`.
+ *
+ * :::caution
+ * Changing `serviceName`, `apiName`, `name`, or `resourceGroup` replaces the
+ * operation.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/add-api-manually#add-an-operation
  *
  * ### Creating an Operation
  * **Example:** GET operation
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const api = yield* Azure.ApiManagement.Api("orders", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * const hello = yield* Azure.ApiManagement.ApiOperation("hello", {
  *   serviceName: apim.serviceName,
  *   apiName: api.apiName,
@@ -92,6 +120,15 @@ export interface ApiOperation extends Resource<
  *
  * **Example:** Operation with a path parameter
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const api = yield* Azure.ApiManagement.Api("orders", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
  * const getUser = yield* Azure.ApiManagement.ApiOperation("get-user", {
  *   serviceName: apim.serviceName,
  *   apiName: api.apiName,

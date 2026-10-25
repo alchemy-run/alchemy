@@ -58,21 +58,31 @@ export interface EdgeMachineDeploymentSetting extends Resource<
 /**
  * Single-machine deployment of Azure Local onto a claimed edge machine.
  * A deployment runs for hours and needs real Azure Local hardware.
+ * The ARM type is `Microsoft.AzureStackHCI/edgeMachines/deploymentSettings`.
  *
  * It has no tags; Alchemy treats it as owned when its parent edge machine
  * carries this stack's ownership tags.
+ *
+ * :::caution
+ * Changing `edgeMachine`, `name`, or `resourceGroup` replaces the edge
+ * machine deployment.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/overview
  *
  * ### Deploying a Machine
  * **Example:** Single-machine deployment
  * ```typescript
+ * // ARM ID of the Arc-enabled server (Microsoft.HybridCompute/machines).
+ * const arcServerId = yield* Config.string("ARC_SERVER_ID");
  * const machine = yield* Azure.AzureStackHCI.EdgeMachine("node-1", {
  *   arcMachineResourceId: arcServerId,
  * });
+ * const deployment = yield* Config.string("HCI_DEPLOYMENT_CONFIGURATION");
  * yield* Azure.AzureStackHCI.EdgeMachineDeploymentSetting("deploy", {
  *   edgeMachine: machine.edgeMachineName,
- *   deploymentConfiguration: { version: "10.0.0.0", scaleUnits: [{ ... }] },
+ *   // The deployment configuration exported from the Azure portal, as JSON.
+ *   deploymentConfiguration: JSON.parse(deployment),
  * });
  * ```
  *

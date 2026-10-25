@@ -7,13 +7,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -85,6 +85,7 @@ export interface AccountProps {
    * `.`, starting with a letter or digit. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * account.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -119,25 +120,30 @@ export interface AccountProps {
   /**
    * CORS rules for browser access (up to five). An empty or omitted list
    * disables CORS.
+   * @default [] (CORS disabled)
    */
   cors?: MapsCorsRule[];
   /**
    * Resources linked to the account (e.g. a storage account for the data
    * registry). The list is replaced as a whole.
+   * @default []
    */
   linkedResources?: MapsLinkedResource[];
   /**
    * Enable infrastructure (double) encryption. Changing it replaces the
    * account.
+   * @default false
    */
   infrastructureEncryption?: boolean;
   /**
    * Customer-managed key encryption. Only managed when set.
+   * @default not managed
    */
   customerManagedKeyEncryption?: MapsCustomerManagedKeyEncryption;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -185,7 +191,14 @@ export interface Account extends Resource<
  * (rendering, search, routing, geolocation, weather). Gen2 accounts are
  * billed per transaction with a free monthly allowance and no hourly fee.
  *
- * @see https://learn.microsoft.com/azure/azure-maps/how-to-manage-account-keys
+ * ARM type: `Microsoft.Maps/accounts`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/azure-maps/how-to-manage-account-keys).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, or `infrastructureEncryption`
+ * replaces the account.
+ * Changing `kind` also replaces it, except an upgrade from `Gen1` to `Gen2`.
+ * :::
  *
  * ### Creating an Account
  * **Example:** Gen2 Maps account
@@ -338,9 +351,7 @@ export const AccountProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* maps
-        .ListAccountBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListAccountBySubscription", page)));
+      const page = yield* collectAll(maps.ListAccountBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((account) => {
         const group = resourceGroupOf(account.id);
         return hasAnyAlchemyTag(account.tags) && group !== undefined && account.name !== undefined

@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -33,6 +33,7 @@ export interface ScheduleProps extends ScheduleRecurrenceProps {
   /**
    * Resource group of the schedule; must be the target VM's resource
    * group. Changing it replaces the schedule.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -49,6 +50,7 @@ export interface ScheduleProps extends ScheduleRecurrenceProps {
    * Schedule name. Azure requires `shutdown-computevm-<vmName>` for VM
    * auto-shutdown, which is the default for `ComputeVmShutdownTask`.
    * Changing it replaces the schedule.
+   * @default `shutdown-computevm-<vmName>` for `ComputeVmShutdownTask`
    */
   name?: string;
   /**
@@ -60,6 +62,7 @@ export interface ScheduleProps extends ScheduleRecurrenceProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -82,11 +85,32 @@ export interface Schedule extends Resource<
  * the portal's VM "Auto-shutdown" blade creates. Lives in the VM's
  * resource group as `Microsoft.DevTestLab/schedules`; no lab is needed.
  *
+ * :::caution
+ * Changing `targetResourceId`, `taskType`, `name`, `location`, or
+ * `resourceGroup` replaces the schedule.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/virtual-machines/auto-shutdown-vm
  *
  * ### Auto-shutdown
  * **Example:** Shut a VM down every evening
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("vms", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * const nic = yield* Azure.Network.NetworkInterface("web", {
+ *   ipConfigurations: [{ subnetId: subnet.subnetId }],
+ * });
+ * const vm = yield* Azure.Compute.VirtualMachine("web", {
+ *   vmSize: "Standard_B1s",
+ *   networkInterfaceIds: [nic.networkInterfaceId],
+ *   adminUsername: "azureuser",
+ *   sshPublicKeys: ["ssh-ed25519 AAAAC3Nza... me@example.com"],
+ * });
  * const shutdown = yield* Azure.DevTestLabs.Schedule("vm-shutdown", {
  *   location: vm.location,
  *   targetResourceId: vm.virtualMachineId,
@@ -146,11 +170,9 @@ export const ScheduleProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* devtestlabs
-        .ListGlobalScheduleBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListGlobalScheduleBySubscription", page)),
-        );
+      const page = yield* collectAll(devtestlabs.ListGlobalScheduleBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((s) => {
         const group = resourceGroupOf(s.id);
         return hasAnyAlchemyTag(s.tags) && group !== undefined && s.name !== undefined

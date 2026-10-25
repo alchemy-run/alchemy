@@ -16,6 +16,7 @@ export interface OpenAIIntegrationProps extends MonitorChildProps {
   /**
    * Name of the integration. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the integration.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -58,15 +59,27 @@ export interface OpenAIIntegration extends Resource<
  * An Azure OpenAI integration of an Elastic monitor
  * (`Microsoft.Elastic/monitors/openAIIntegrations`). Elastic creates a
  * connector to the Azure OpenAI account so Elastic AI Assistant and LLM
- * observability can use it.
+ * observability can use it. See the
+ * [Elastic on Azure overview](https://learn.microsoft.com/azure/partner-solutions/elastic/overview).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `monitor`, or `name` replaces the
+ * integration.
+ * :::
  *
  * ### Connecting Azure OpenAI
  * **Example:** Connect an Azure OpenAI account to Elastic
  * ```typescript
+ * const monitor = yield* Azure.Elastic.Monitor("elastic", {
+ *   userInfo: { emailAddress: "platform@example.com" },
+ * });
+ * const account = yield* Azure.CognitiveServices.Account("openai", {
+ *   kind: "OpenAI",
+ * });
  * const integration = yield* Azure.Elastic.OpenAIIntegration("openai", {
  *   monitor: monitor.monitorName,
  *   openAIResourceId: account.accountId,
- *   openAIResourceEndpoint: account.endpoint,
+ *   openAIResourceEndpoint: account.endpoint.as<string>(),
  *   key: Redacted.make(process.env.AZURE_OPENAI_KEY!),
  * });
  * ```

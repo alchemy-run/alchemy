@@ -17,13 +17,17 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createWatcherChildName } from "./common.ts";
 
 export interface AlertRuleResourceProps {
-  /** Resource group of the watcher. Changing it replaces the link. */
+  /**
+   * Resource group of the watcher. Changing it replaces the link.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the watcher. Changing it replaces the link. */
   watcher: string;
   /**
    * Name of the alert rule link. If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing it replaces the link.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -75,22 +79,47 @@ export interface AlertRuleResource extends Resource<
 > {}
 
 /**
- * Links an Azure Monitor alert rule to a database watcher so the watcher
- * lists it among its alerts. The alert rule itself is an
+ * Links an Azure Monitor alert rule to a database watcher
+ * (`Microsoft.DatabaseWatcher/watchers/alertRuleResources`) so the
+ * watcher lists it among its alerts. The alert rule itself is an
  * `Azure.Monitor.ScheduledQueryRule` created from a watcher alert
  * template.
  *
  * Links cannot be tagged; Alchemy owns a link it created or whose name it
- * generated. All properties are immutable.
+ * generated.
+ *
+ * :::caution
+ * All props are immutable. Changing `watcher`, `name`,
+ * `alertRuleResourceId`, `createdWithProperties`, `creationTime`,
+ * `alertRuleTemplateId`, `alertRuleTemplateVersion`, or `resourceGroup`
+ * replaces the link.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-sql/database-watcher-alerts
  *
  * ### Linking an Alert Rule
  * **Example:** Register a scheduled query rule with a watcher
  * ```typescript
+ * const watcher = yield* Azure.DatabaseWatcher.Watcher("sql-watcher");
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const rule = yield* Azure.Monitor.ScheduledQueryRule("high-cpu", {
+ *   scopes: [logs.workspaceId],
+ *   severity: 2,
+ *   evaluationFrequency: "PT5M",
+ *   windowSize: "PT15M",
+ *   criteria: [
+ *     {
+ *       query: "Perf | where CounterName == '% Processor Time'",
+ *       timeAggregation: "Average",
+ *       metricMeasureColumn: "CounterValue",
+ *       operator: "GreaterThan",
+ *       threshold: 90,
+ *     },
+ *   ],
+ * });
  * yield* Azure.DatabaseWatcher.AlertRuleResource("high-cpu", {
  *   watcher: watcher.watcherName,
- *   alertRuleResourceId: rule.scheduledQueryRuleId,
+ *   alertRuleResourceId: rule.ruleId,
  *   alertRuleTemplateId: "SqlDb-HighCpuUtilization",
  *   alertRuleTemplateVersion: "1.0",
  * });

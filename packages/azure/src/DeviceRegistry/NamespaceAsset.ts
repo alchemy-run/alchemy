@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -47,7 +47,10 @@ export type NamespaceAssetEventDestination = deviceregistry.EventDestination;
 export type NamespaceAssetStreamDestination = deviceregistry.StreamDestination;
 
 export interface NamespaceAssetProps {
-  /** Resource group of the parent namespace. Changing it replaces the asset. */
+  /**
+   * Resource group of the parent namespace. Changing it replaces the asset.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the parent Device Registry namespace. Changing it replaces the asset. */
   namespace: string;
@@ -55,6 +58,7 @@ export interface NamespaceAssetProps {
    * Asset name: lowercase letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID.
    * Changing it replaces the asset.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -76,59 +80,135 @@ export interface NamespaceAssetProps {
    * @default the asset's Azure-assigned UUID
    */
   externalAssetId?: string;
-  /** Names of discovered assets this asset was promoted from. Changing it replaces the asset. */
+  /**
+   * Names of discovered assets this asset was promoted from. Changing it replaces the asset.
+   * @default []
+   */
   discoveredAssetRefs?: string[];
-  /** Whether the asset is enabled. */
+  /**
+   * Whether the asset is enabled.
+   * @default unset (Azure's default)
+   */
   enabled?: boolean;
-  /** Human-readable display name. */
+  /**
+   * Human-readable display name.
+   * @default unset
+   */
   displayName?: string;
-  /** Human-readable description. */
+  /**
+   * Human-readable description.
+   * @default unset
+   */
   description?: string;
-  /** Asset type definition URIs or IDs. */
+  /**
+   * Asset type definition URIs or IDs.
+   * @default []
+   */
   assetTypeRefs?: string[];
-  /** Asset manufacturer. */
+  /**
+   * Asset manufacturer.
+   * @default unset
+   */
   manufacturer?: string;
-  /** Asset manufacturer URI. */
+  /**
+   * Asset manufacturer URI.
+   * @default unset
+   */
   manufacturerUri?: string;
-  /** Asset model. */
+  /**
+   * Asset model.
+   * @default unset
+   */
   model?: string;
-  /** Asset product code. */
+  /**
+   * Asset product code.
+   * @default unset
+   */
   productCode?: string;
-  /** Hardware revision. */
+  /**
+   * Hardware revision.
+   * @default unset
+   */
   hardwareRevision?: string;
-  /** Software revision. */
+  /**
+   * Software revision.
+   * @default unset
+   */
   softwareRevision?: string;
-  /** Documentation URI. */
+  /**
+   * Documentation URI.
+   * @default unset
+   */
   documentationUri?: string;
-  /** Serial number. */
+  /**
+   * Serial number.
+   * @default unset
+   */
   serialNumber?: string;
-  /** Custom key-value attributes. */
+  /**
+   * Custom key-value attributes.
+   * @default {}
+   */
   attributes?: Record<string, unknown>;
-  /** Stringified JSON with connector-specific defaults for all datasets. */
+  /**
+   * Stringified JSON with connector-specific defaults for all datasets.
+   * @default unset
+   */
   defaultDatasetsConfiguration?: string;
-  /** Stringified JSON with connector-specific defaults for all events. */
+  /**
+   * Stringified JSON with connector-specific defaults for all events.
+   * @default unset
+   */
   defaultEventsConfiguration?: string;
-  /** Stringified JSON with connector-specific defaults for all streams. */
+  /**
+   * Stringified JSON with connector-specific defaults for all streams.
+   * @default unset
+   */
   defaultStreamsConfiguration?: string;
-  /** Stringified JSON with connector-specific defaults for all management groups. */
+  /**
+   * Stringified JSON with connector-specific defaults for all management groups.
+   * @default unset
+   */
   defaultManagementGroupsConfiguration?: string;
-  /** Default destinations for datasets. */
+  /**
+   * Default destinations for datasets.
+   * @default []
+   */
   defaultDatasetsDestinations?: NamespaceAssetDatasetDestination[];
-  /** Default destinations for events. */
+  /**
+   * Default destinations for events.
+   * @default []
+   */
   defaultEventsDestinations?: NamespaceAssetEventDestination[];
-  /** Default destinations for streams. */
+  /**
+   * Default destinations for streams.
+   * @default []
+   */
   defaultStreamsDestinations?: NamespaceAssetStreamDestination[];
-  /** Datasets of the asset. */
+  /**
+   * Datasets of the asset.
+   * @default []
+   */
   datasets?: NamespaceAssetDataset[];
-  /** Event groups of the asset. */
+  /**
+   * Event groups of the asset.
+   * @default []
+   */
   eventGroups?: NamespaceAssetEventGroup[];
-  /** Streams of the asset. */
+  /**
+   * Streams of the asset.
+   * @default []
+   */
   streams?: NamespaceAssetStream[];
-  /** Management groups of the asset. */
+  /**
+   * Management groups of the asset.
+   * @default []
+   */
   managementGroups?: NamespaceAssetManagementGroup[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -167,18 +247,43 @@ export interface NamespaceAsset extends Resource<
 > {}
 
 /**
- * An asset in an Azure Device Registry namespace — a logical
+ * An asset in an Azure Device Registry namespace
+ * (`Microsoft.DeviceRegistry/namespaces/assets`) — a logical
  * representation of equipment whose datasets, events, and streams Azure
  * IoT Operations connectors collect through a namespace device endpoint.
  *
+ * :::caution
+ * Changing `namespace`, `name`, `location`, `resourceGroup`,
+ * `customLocationId`, `device`, `deviceEndpoint`, `externalAssetId`, or
+ * `discoveredAssetRefs` replaces the asset.
+ * :::
+ *
+ * :::caution
  * Requires an Arc-enabled Kubernetes cluster running Azure IoT Operations
  * (its custom location).
+ * :::
  *
  * @see https://learn.microsoft.com/azure/iot-operations/discover-manage-assets/overview-manage-assets
  *
  * ### Creating an Asset
  * **Example:** OPC UA asset with one dataset
  * ```typescript
+ * // Custom location of an Arc-enabled cluster running Azure IoT Operations.
+ * const aioCustomLocationId =
+ *   "/subscriptions/<subscription-id>/resourceGroups/iot/providers/Microsoft.ExtendedLocation/customLocations/aio";
+ * const ns = yield* Azure.DeviceRegistry.Namespace("devices");
+ * const plc = yield* Azure.DeviceRegistry.NamespaceDevice("plc", {
+ *   namespace: ns.namespaceName,
+ *   customLocationId: aioCustomLocationId,
+ *   endpoints: {
+ *     inbound: {
+ *       opcua: {
+ *         endpointType: "Microsoft.OpcUa",
+ *         address: "opc.tcp://plc.factory.local:4840",
+ *       },
+ *     },
+ *   },
+ * });
  * const asset = yield* Azure.DeviceRegistry.NamespaceAsset("oven", {
  *   namespace: ns.namespaceName,
  *   customLocationId: aioCustomLocationId,
@@ -289,15 +394,11 @@ export const NamespaceAssetProvider = () =>
       const all: NamespaceAsset["Attributes"][] = [];
       for (const ns of namespaces) {
         const page = yield* orUndefinedIfNotFound(
-          deviceregistry
-            .ListNamespaceAssetByNamespace({
-              subscriptionId,
-              resourceGroupName: ns.resourceGroup,
-              namespaceName: ns.name,
-            })
-            .pipe(
-              Effect.flatMap((page) => requireSinglePage("ListNamespaceAssetByNamespace", page)),
-            ),
+          collectAll(deviceregistry.ListNamespaceAssetByNamespace, {
+            subscriptionId,
+            resourceGroupName: ns.resourceGroup,
+            namespaceName: ns.name,
+          }),
         );
         for (const asset of page?.value ?? []) {
           if (hasAnyAlchemyTag(asset.tags) && asset.name !== undefined) {

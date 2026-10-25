@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -261,13 +261,9 @@ export const AlertProcessingRuleProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* alertsmanagement
-        .ListAlertProcessingRuleBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) =>
-            requireSinglePage("ListAlertProcessingRuleBySubscription", page),
-          ),
-        );
+      const page = yield* collectAll(alertsmanagement.ListAlertProcessingRuleBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((rule) => {
         const group = resourceGroupOf(rule.id);
         return hasAnyAlchemyTag(rule.tags) && group !== undefined && rule.name !== undefined

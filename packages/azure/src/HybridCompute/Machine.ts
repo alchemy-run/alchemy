@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -26,13 +26,22 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 export type MachineKind = hybridcompute.ArcKindEnum;
 
 export interface MachineLocationData {
-  /** Canonical name of the geographic or physical location. */
+  /** Canonical name of the geographic or physical location. Required. */
   name: string;
-  /** City or locality. */
+  /**
+   * City or locality.
+   * @default unset
+   */
   city?: string;
-  /** District, state, or province. */
+  /**
+   * District, state, or province.
+   * @default unset
+   */
   district?: string;
-  /** Country or region. */
+  /**
+   * Country or region.
+   * @default unset
+   */
   countryOrRegion?: string;
 }
 
@@ -40,11 +49,13 @@ export interface MachineProps {
   /**
    * Resource group the machine is registered in. Changing it replaces the
    * machine.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the machine. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the machine.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -56,31 +67,39 @@ export interface MachineProps {
   /**
    * Kind of on-premises placement (`AVS`, `HCI`, `SCVMM`, `VMware`, `EPS`,
    * `GCP`, `AWS`). Changing it replaces the machine.
+   * @default unset (a plain Arc-enabled server)
    */
   kind?: MachineKind;
   /**
    * Unique ID of the host. Required to pre-register a machine before the
    * Connected Machine agent runs `azcmagent connect`. Changing it replaces
    * the machine.
+   * @default unset
    */
   vmId?: string;
   /**
    * Base64 public key the agent uses during onboarding. Required together
    * with `vmId` to pre-register a machine. Changing it replaces the
    * machine.
+   * @default unset
    */
   clientPublicKey?: string;
   /**
    * Operating system type (`windows` or `linux`). Changing it replaces the
    * machine.
+   * @default unset (the agent reports it on connect)
    */
   osType?: "windows" | "linux";
   /**
    * ARM ID of the `HybridCompute.PrivateLinkScope` the machine reaches
    * Azure Arc through.
+   * @default unset (public Azure Arc endpoints)
    */
   privateLinkScopeResourceId?: string;
-  /** Geographic or physical location of the host. */
+  /**
+   * Geographic or physical location of the host.
+   * @default unset
+   */
   locationData?: MachineLocationData;
   /**
    * Whether Azure upgrades the Connected Machine agent automatically.
@@ -90,6 +109,7 @@ export interface MachineProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -139,9 +159,9 @@ export interface Machine extends Resource<
 > {}
 
 /**
- * An Azure Arc-enabled server — the ARM projection of a machine that runs
- * outside Azure (on-premises or another cloud) with the Connected Machine
- * agent.
+ * An Azure Arc-enabled server (`Microsoft.HybridCompute/machines`): the
+ * ARM record of a machine that runs outside Azure (on-premises or another
+ * cloud) with the Connected Machine agent.
  *
  * Machines are normally registered by `azcmagent connect`. Declaring one
  * with `vmId` and `clientPublicKey` pre-registers it: the record waits in
@@ -154,6 +174,8 @@ export interface Machine extends Resource<
  * ### Registering a Machine
  * **Example:** Pre-register a Linux server
  * ```typescript
+ * // the base64 public key of the host's Connected Machine agent
+ * const agentPublicKey = "MIIBCgKCAQEAw3k9...";
  * const machine = yield* Azure.HybridCompute.Machine("web-01", {
  *   vmId: "3f2c1a9e-5b7d-4e8a-9c21-7d6e5f4a3b2c",
  *   clientPublicKey: agentPublicKey,
@@ -164,13 +186,20 @@ export interface Machine extends Resource<
  * ### Private Connectivity
  * **Example:** Assign the machine to a private link scope
  * ```typescript
+ * const agentPublicKey = "MIIBCgKCAQEAw3k9...";
  * const scope = yield* Azure.HybridCompute.PrivateLinkScope("arc-scope");
  * const machine = yield* Azure.HybridCompute.Machine("web-01", {
- *   vmId,
+ *   vmId: "3f2c1a9e-5b7d-4e8a-9c21-7d6e5f4a3b2c",
  *   clientPublicKey: agentPublicKey,
  *   privateLinkScopeResourceId: scope.privateLinkScopeResourceId,
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `kind`, `vmId`, `osType`,
+ * or `clientPublicKey` replaces the machine's ARM record, its tags, and
+ * its sub-resources.
+ * :::
  *
  * @resource
  */
@@ -254,9 +283,7 @@ export const MachineProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* hybridcompute
-        .ListMachineBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListMachineBySubscription", page)));
+      const page = yield* collectAll(hybridcompute.ListMachineBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((machine) => {
         const group = resourceGroupOf(machine.id);
         return hasAnyAlchemyTag(machine.tags) && group !== undefined && machine.name !== undefined

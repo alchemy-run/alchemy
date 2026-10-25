@@ -6,12 +6,12 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -265,9 +265,7 @@ export const RegistryProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* containerregistry
-        .ListRegistries({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListRegistries", page)));
+      const page = yield* collectAll(containerregistry.ListRegistries, { subscriptionId });
       return (page.value ?? []).flatMap((registry) => {
         const group = resourceGroupOf(registry.id);
         return hasAnyAlchemyTag(registry.tags) && group !== undefined && registry.name !== undefined

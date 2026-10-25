@@ -23,13 +23,17 @@ import {
 } from "./common.ts";
 
 export interface ManagedPrivateEndpointProps {
-  /** Resource group of the cluster. Changing it replaces the endpoint. */
+  /**
+   * Resource group of the cluster. Changing it replaces the endpoint.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the cluster. Changing it replaces the endpoint. */
   cluster: string;
   /**
    * Endpoint name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the endpoint.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -51,6 +55,7 @@ export interface ManagedPrivateEndpointProps {
    * Message shown to the target's owner in the approval request. Azure
    * accepts but never applies changes to it, so changing it replaces the
    * endpoint.
+   * @default unset
    */
   requestMessage?: string;
 }
@@ -79,16 +84,18 @@ export interface ManagedPrivateEndpoint extends Resource<
 > {}
 
 /**
- * A managed private endpoint from an Azure Data Explorer (Kusto) cluster
- * to another Azure resource (Event Hubs, IoT Hub, Storage, ...), so
- * ingestion reaches the source over a private link. The target resource's
- * owner must approve the resulting private endpoint connection.
+ * A managed private endpoint
+ * (`Microsoft.Kusto/clusters/managedPrivateEndpoints`) from an Azure Data
+ * Explorer (Kusto) cluster to another Azure resource (Event Hubs, IoT Hub,
+ * Storage), so ingestion reaches the source over a private link.
  *
  * @see https://learn.microsoft.com/azure/data-explorer/security-network-managed-private-endpoint-create
  *
  * ### Private Ingestion
  * **Example:** Managed private endpoint to an Event Hubs namespace
  * ```typescript
+ * const cluster = yield* Azure.Kusto.Cluster("adx");
+ * const namespace = yield* Azure.EventHub.Namespace("events");
  * const endpoint = yield* Azure.Kusto.ManagedPrivateEndpoint("events", {
  *   cluster: cluster.clusterName,
  *   privateLinkResourceId: namespace.namespaceId,
@@ -96,6 +103,17 @@ export interface ManagedPrivateEndpoint extends Resource<
  *   requestMessage: "Kusto ingestion",
  * });
  * ```
+ *
+ * :::caution
+ * The target resource's owner must approve the private endpoint
+ * connection before traffic flows.
+ * :::
+ *
+ * :::caution
+ * Changing `name`, `cluster`, `resourceGroup`, `privateLinkResourceId`,
+ * `groupId`, `privateLinkResourceRegion`, or `requestMessage` replaces the
+ * endpoint, and the new connection needs approval again.
+ * :::
  *
  * @resource
  */

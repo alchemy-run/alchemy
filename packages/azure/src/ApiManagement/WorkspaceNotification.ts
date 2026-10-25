@@ -49,6 +49,8 @@ export interface WorkspaceNotification extends Resource<
 /**
  * The workspace-scoped counterpart of {@link Notification}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/workspaces/notifications`.
  *
  * One of the fixed publisher notifications of an API Management service
  * (new subscription requests, quota warnings, BCC of developer emails,
@@ -57,11 +59,27 @@ export interface WorkspaceNotification extends Resource<
  * with {@link NotificationRecipientEmail} and
  * {@link NotificationRecipientUser}. Not available on the Consumption tier.
  *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `notificationName`, or
+ * `resourceGroup` replaces the notification.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-configure-notifications
  *
  * ### Managing Notifications
  * **Example:** BCC every developer email to the API team
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
  * const bcc = yield* Azure.ApiManagement.WorkspaceNotification("bcc", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
@@ -16,7 +17,6 @@ import {
   isOwned,
   ProvisioningFailed,
   ProvisioningTimedOut,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -623,9 +623,7 @@ export const FlexibleServerProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* postgresql
-        .ListServerBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListServerBySubscription", page)));
+      const page = yield* collectAll(postgresql.ListServerBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((server) => {
         const group = resourceGroupOf(server.id);
         return hasAnyAlchemyTag(server.tags) && group !== undefined && server.name !== undefined

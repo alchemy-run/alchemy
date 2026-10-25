@@ -6,12 +6,12 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -31,9 +31,12 @@ export type PolicyParameterDefinition = resources.ParameterDefinitionsValue;
 export interface PolicyDefinitionProps {
   /**
    * Name of the policy definition (the last segment of its ID). At most 64
-   * characters, without `<>*%&:\?.+/`. If omitted, a unique name is
-   * generated from the app, stage, and logical ID. Changing it replaces the
-   * definition.
+   * characters, without `<>*%&:\?.+/`.
+   *
+   * :::caution
+   * Changing it replaces the definition.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -43,24 +46,37 @@ export interface PolicyDefinitionProps {
    * @default "All"
    */
   mode?: string;
-  /** Display name shown in the portal. */
+  /**
+   * Display name shown in the portal.
+   * @default none
+   */
   displayName?: string;
-  /** Description of the policy definition. */
+  /**
+   * Description of the policy definition.
+   * @default none
+   */
   description?: string;
   /**
    * The policy rule: an `if` condition and a `then` effect, e.g.
    * `{ if: { field: "location", notIn: ["eastus"] }, then: { effect: "audit" } }`.
    */
   policyRule: Record<string, unknown>;
-  /** Parameter definitions referenced from the rule as `[parameters('x')]`. */
+  /**
+   * Parameter definitions referenced from the rule as `[parameters('x')]`.
+   * @default {}
+   */
   parameters?: Record<string, PolicyParameterDefinition>;
   /**
    * Metadata such as `{ category: "Tags" }`. Alchemy merges ownership
    * entries (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) in because
    * policy definitions have no tags.
+   * @default {} (plus the ownership entries)
    */
   metadata?: Record<string, unknown>;
-  /** Semantic version of the definition, e.g. `1.0.0`. */
+  /**
+   * Semantic version of the definition, e.g. `1.0.0`.
+   * @default no version
+   */
   version?: string;
 }
 
@@ -91,7 +107,8 @@ export interface PolicyDefinition extends Resource<
 > {}
 
 /**
- * A custom Azure Policy definition at subscription scope — a rule that
+ * A custom Azure Policy definition (`Microsoft.Authorization/policyDefinitions`)
+ * at subscription scope — a rule that
  * audits, denies, or modifies resources. Assign it with
  * `Azure.Policy.PolicyAssignment` to make it take effect.
  *
@@ -130,6 +147,15 @@ export interface PolicyDefinition extends Resource<
  * ### Assigning a Policy
  * **Example:** Assign the definition to a resource group
  * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
+ * const definition = yield* Azure.Policy.PolicyDefinition("require-tag", {
+ *   mode: "Indexed",
+ *   parameters: { tagName: { type: "String" } },
+ *   policyRule: {
+ *     if: { field: "[concat('tags[', parameters('tagName'), ']')]", exists: "false" },
+ *     then: { effect: "deny" },
+ *   },
+ * });
  * yield* Azure.Policy.PolicyAssignment("require-tag", {
  *   scope: group.resourceGroupId,
  *   policyDefinitionId: definition.policyDefinitionId,
@@ -169,12 +195,10 @@ export const PolicyDefinitionProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* resources
-        .ListPolicyDefinitions({
-          subscriptionId,
-          _filter: "policyType eq 'Custom'",
-        })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPolicyDefinitions", page)));
+      const page = yield* collectAll(resources.ListPolicyDefinitions, {
+        subscriptionId,
+        _filter: "policyType eq 'Custom'",
+      });
       return page.value.flatMap((definition) =>
         definition.name !== undefined &&
         hasAnyAlchemyTag(metadataTags(definition.properties?.metadata))

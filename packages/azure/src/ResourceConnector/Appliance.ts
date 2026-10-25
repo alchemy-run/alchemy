@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -28,53 +28,80 @@ export type ApplianceInfrastructureProvider = "VMWare" | "HCI" | "SCVMM";
 
 export interface ApplianceProps {
   /**
-   * Resource group the appliance is created in. Changing it replaces the
-   * appliance.
+   * Resource group the appliance is created in.
+   *
+   * :::caution
+   * Changing it replaces the appliance.
+   * :::
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
-   * Name of the appliance, 1-64 characters of letters, digits, `-`, `_`,
-   * and `.`. If omitted, a unique name is generated from the app, stage,
-   * and logical ID. Changing it replaces the appliance.
+   * Name of the appliance, 1-64 characters of letters, digits, `-`, `_`, and
+   * `.`.
+   *
+   * :::caution
+   * Changing it replaces the appliance.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the appliance. Changing it replaces the appliance.
+   * Azure location of the appliance.
+   *
+   * :::caution
+   * Changing it replaces the appliance.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
-   * On-premises fabric hosting the appliance VM. Changing it replaces the
-   * appliance.
+   * On-premises fabric hosting the appliance VM.
+   *
+   * :::caution
+   * Changing it replaces the appliance.
+   * :::
    */
   infrastructureProvider: ApplianceInfrastructureProvider;
   /**
-   * Kubernetes distribution the appliance runs. Changing it replaces the
-   * appliance.
+   * Kubernetes distribution the appliance runs.
+   *
+   * :::caution
+   * Changing it replaces the appliance.
+   * :::
    * @default "AKSEdge"
    */
   distro?: "AKSEdge";
   /**
    * Public key of the certificate pair the appliance uses to download its
-   * managed identity certificate. Azure accepts it only once; it is
-   * usually written by the on-premises appliance VM during deployment.
+   * managed identity certificate. Azure accepts it only once; it is usually
+   * written by the on-premises appliance VM during deployment.
+   *
+   * :::caution
    * Changing it replaces the appliance.
+   * :::
+   * @default none (the appliance VM writes it)
    */
   publicKey?: string;
   /**
    * Appliance version. Upgrades are driven from the on-premises side
    * (`az arcappliance upgrade`); this value is only sent on create.
+   * @default none (the appliance VM reports it)
    */
   version?: string;
   /**
    * Whether the appliance gets a system-assigned managed identity.
+   *
+   * :::caution
    * Changing it replaces the appliance.
+   * :::
    * @default true
    */
   systemAssignedIdentity?: boolean;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -120,6 +147,11 @@ export interface Appliance extends Resource<
  * record reserves the bridge identity; it stays in `WaitingForHeartbeat`
  * until the on-premises appliance VM is deployed with
  * `az arcappliance deploy` and connects.
+ *
+ * :::caution
+ * The bridge only becomes usable with an on-premises VMware vSphere, Azure
+ * Stack HCI, or System Center VMM environment that runs the appliance VM.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-arc/resource-bridge/overview
  *
@@ -191,9 +223,9 @@ export const ApplianceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* resourceconnector
-        .ListApplianceBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListApplianceBySubscription", page)));
+      const page = yield* collectAll(resourceconnector.ListApplianceBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((appliance) => {
         const group = resourceGroupOf(appliance.id);
         return hasAnyAlchemyTag(appliance.tags) &&

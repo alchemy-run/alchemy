@@ -26,15 +26,22 @@ import {
 const POLICY_NAME = "default";
 
 export interface WorkspaceExtendedAuditingSettingProps extends AuditingSettingFields {
-  /** Resource group of the workspace. Changing it replaces the setting. */
+  /**
+   * Resource group of the workspace. Changing it replaces the setting.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Synapse workspace. Changing it replaces the setting. */
   workspace: string;
-  /** Also audit Microsoft support operations (DevOps auditing). */
+  /**
+   * Also audit Microsoft support operations (DevOps auditing).
+   * @default not set
+   */
   isDevopsAuditEnabled?: boolean;
   /**
    * T-SQL `WHERE` clause filtering audited events, e.g.
    * `statement <> 'select 1'`.
+   * @default not set
    */
   predicateExpression?: string;
 }
@@ -65,7 +72,8 @@ export interface WorkspaceExtendedAuditingSetting extends Resource<
 > {}
 
 /**
- * Extended blob auditing for every SQL pool of a Synapse workspace — the
+ * Extended blob auditing for every SQL pool of a Synapse workspace
+ * (`Microsoft.Synapse/workspaces/extendedAuditingSettings`) — the
  * workspace auditing policy plus a T-SQL predicate that filters which
  * events are audited. Writes to a storage account, Log Analytics, or Event
  * Hubs (via Azure Monitor).
@@ -73,11 +81,27 @@ export interface WorkspaceExtendedAuditingSetting extends Resource<
  * This is a singleton policy that always exists on a workspace.
  * Destroying the resource disables auditing.
  *
+ * :::caution
+ * Changing `workspace` or `resourceGroup` replaces the setting.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/azure-sql/database/auditing-overview
  *
  * ### Enabling Extended Auditing
  * **Example:** Audit to Azure Monitor
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
  * yield* Azure.Synapse.WorkspaceExtendedAuditingSetting("audit", {
  *   workspace: workspace.workspaceName,
  *   isAzureMonitorTargetEnabled: true,

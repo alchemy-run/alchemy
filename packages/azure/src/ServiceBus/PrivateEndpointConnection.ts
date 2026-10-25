@@ -6,10 +6,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
-  requireSinglePage,
   waitForProvisioned,
   waitUntilGone,
 } from "../Arm.ts";
@@ -144,9 +144,7 @@ const findConnection = (
     if (name !== undefined) return yield* getConnection(parent, name);
     if (privateEndpointId === undefined) return undefined;
     const page = yield* orUndefinedIfNotFound(
-      servicebus
-        .ListPrivateEndpointConnections(parent)
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPrivateEndpointConnections", page))),
+      collectAll(servicebus.ListPrivateEndpointConnections, parent),
     );
     return (page?.value ?? []).find((connection) =>
       sameName(connection.properties?.privateEndpoint?.id, privateEndpointId),

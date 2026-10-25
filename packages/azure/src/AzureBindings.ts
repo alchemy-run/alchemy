@@ -1,5 +1,6 @@
 import { Credentials, fromClientSecret, fromManagedIdentity } from "@distilled.cloud/azure";
 import * as Binding from "alchemy/Binding";
+import type * as Bundle from "alchemy/Bundle/Bundle";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { isResourceOfType, type ResourceLike } from "alchemy/Resource";
@@ -9,7 +10,6 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import type * as rolldown from "rolldown";
 import { RoleAssignment } from "./Authorization/RoleAssignment.ts";
 import { Application } from "./Entra/Application.ts";
 import { ApplicationPassword } from "./Entra/ApplicationPassword.ts";
@@ -74,6 +74,9 @@ export interface HostBinding {
 /** Value of `__ALCHEMY_HOST_IDENTITY__` in a bundle that runs as a managed identity. */
 export const MANAGED_IDENTITY = "Azure.ManagedIdentity";
 
+/** Rolldown input options, as `Bundle.build` takes them (azure has no direct rolldown dependency). */
+type BundleInputOptions = Parameters<typeof Bundle.build>[0];
+
 /**
  * Build options for a bundle that runs on a host with an Azure managed
  * identity (Functions, App Service, Container Apps, Container Instances,
@@ -81,7 +84,7 @@ export const MANAGED_IDENTITY = "Azure.ManagedIdentity";
  * `"Azure.ManagedIdentity"` so the bundler drops the created-secret
  * credentials path. Every Azure host bundler applies it.
  */
-export const managedIdentityHostBundle = (input: rolldown.InputOptions): rolldown.InputOptions => ({
+export const managedIdentityHostBundle = (input: BundleInputOptions): BundleInputOptions => ({
   ...input,
   transform: {
     ...input.transform,

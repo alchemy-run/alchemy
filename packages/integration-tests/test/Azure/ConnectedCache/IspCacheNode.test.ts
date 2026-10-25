@@ -1,5 +1,6 @@
 import * as Azure from "@alchemy.run/azure";
 import { expect } from "alchemy-test";
+import type { Input } from "alchemy/Input";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { runPaidOnly } from "../gates.ts";
@@ -18,8 +19,8 @@ const signedUp = signedUpCustomerId?.match(
 );
 
 const nodeProgram = (props: {
-  resourceGroup: string;
-  customer: string;
+  resourceGroup: Input<string>;
+  customer: Input<string>;
   name?: string;
   isEnabled?: boolean;
   maxAllowableEgressInMbps: number;

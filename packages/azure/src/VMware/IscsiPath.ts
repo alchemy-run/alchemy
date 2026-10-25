@@ -22,7 +22,10 @@ import {
 } from "./common.ts";
 
 export interface IscsiPathProps {
-  /** Resource group of the private cloud. Changing it replaces the iSCSI path. */
+  /**
+   * Resource group of the private cloud. Changing it replaces the iSCSI path.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the private cloud. Changing it replaces the iSCSI path. */
   privateCloud: string;
@@ -53,15 +56,26 @@ export interface IscsiPath extends Resource<
 > {}
 
 /**
- * The iSCSI path of an Azure VMware Solution private cloud — the network
+ * The iSCSI path of an Azure VMware Solution private cloud
+ * (`Microsoft.AVS/privateClouds/iscsiPaths`) — the network
  * used to reach external iSCSI storage such as Elastic SAN. A private cloud
  * has at most one (`iscsiPaths/default`); deleting the resource removes it.
+ *
+ * :::caution
+ * Changing `privateCloud`, `networkBlock`, or `resourceGroup` replaces the
+ * iSCSI path.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-vmware/configure-azure-elastic-san
  *
  * ### Enabling iSCSI
  * **Example:** iSCSI path for Elastic SAN datastores
  * ```typescript
+ * const cloud = yield* Azure.VMware.PrivateCloud("cloud", {
+ *   sku: "av36p",
+ *   networkBlock: "10.175.0.0/22",
+ *   clusterSize: 3,
+ * });
  * yield* Azure.VMware.IscsiPath("iscsi", {
  *   privateCloud: cloud.privateCloudName,
  *   networkBlock: "10.10.0.0/24",

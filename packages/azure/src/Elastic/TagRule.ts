@@ -24,7 +24,10 @@ import {
 } from "./common.ts";
 
 export interface TagRuleProps extends MonitorChildProps {
-  /** Which Azure logs are sent to Elastic. Omitted rules send no logs. */
+  /**
+   * Which Azure logs are sent to Elastic. Omitted rules send no logs.
+   * @default no logs are sent
+   */
   logRules?: ElasticLogRules;
 }
 
@@ -50,11 +53,24 @@ export interface TagRule extends Resource<
 /**
  * The log rules of an Elastic monitor (`Microsoft.Elastic/monitors/tagRules`,
  * singleton `default`): which Microsoft Entra ID, subscription activity,
- * and resource logs are shipped to Elastic, filtered by resource tags.
+ * and resource logs are shipped to Elastic, filtered by resource tags. See
+ * the [Elastic on Azure overview](https://learn.microsoft.com/azure/partner-solutions/elastic/overview).
+ *
+ * :::caution
+ * The rule set needs an `Azure.Elastic.Monitor`, which requires a
+ * subscription that allows Marketplace purchases.
+ * :::
+ *
+ * :::caution
+ * Changing `resourceGroup` or `monitor` replaces the rule set.
+ * :::
  *
  * ### Sending Logs
  * **Example:** Send resource logs for tagged resources
  * ```typescript
+ * const monitor = yield* Azure.Elastic.Monitor("elastic", {
+ *   userInfo: { emailAddress: "platform@example.com" },
+ * });
  * const rules = yield* Azure.Elastic.TagRule("rules", {
  *   monitor: monitor.monitorName,
  *   logRules: {

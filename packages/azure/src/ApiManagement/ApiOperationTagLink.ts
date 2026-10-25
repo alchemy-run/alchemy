@@ -45,12 +45,38 @@ export interface ApiOperationTagLink extends Resource<
  * (`apis/{apiId}/operations/{operationId}/tags/{tagId}`). The assignment
  * has no settings; changing the operation or tag replaces it.
  * {@link TagOperationLink} expresses the same relation from the tag side.
+ * The ARM type is `Microsoft.ApiManagement/service/apis/operations/tags`.
+ *
+ * :::caution
+ * Changing `serviceName`, `apiName`, `operationName`, `tagName`, or
+ * `resourceGroup` replaces the link.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/apimanagement/tag/assign-to-operation
  *
  * ### Tagging an Operation
  * **Example:** Mark one operation as deprecated
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const api = yield* Azure.ApiManagement.Api("orders", {
+ *   serviceName: apim.serviceName,
+ *   path: "orders",
+ *   serviceUrl: "https://orders.example.com",
+ * });
+ * const getOrder = yield* Azure.ApiManagement.ApiOperation("get-order", {
+ *   serviceName: apim.serviceName,
+ *   apiName: api.apiName,
+ *   method: "GET",
+ *   urlTemplate: "/orders/{id}",
+ *   templateParameters: [{ name: "id", type: "string", required: true }],
+ * });
+ * const deprecated = yield* Azure.ApiManagement.Tag("deprecated", {
+ *   serviceName: apim.serviceName,
+ *   displayName: "Deprecated",
+ * });
  * yield* Azure.ApiManagement.ApiOperationTagLink("get-order-deprecated", {
  *   serviceName: apim.serviceName,
  *   apiName: api.apiName,

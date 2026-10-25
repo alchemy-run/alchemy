@@ -17,26 +17,38 @@ import type { Providers } from "../Providers.ts";
 
 export interface DependencyOfProps {
   /**
-   * ARM ID of the dependent (source) resource the relationship is attached
-   * to — any resource, resource group, or subscription, e.g.
-   * `app.identityId`. Changing it replaces the relationship.
+   * ARM ID of the dependent (source) resource the relationship is attached to —
+   * any resource, resource group, or subscription, e.g. `app.identityId`.
+   *
+   * :::caution
+   * Changing it replaces the relationship.
+   * :::
    */
   resourceId: string;
   /**
-   * ARM ID of the resource the source depends on, e.g.
-   * `database.serverId`. Changing it replaces the relationship.
+   * ARM ID of the resource the source depends on, e.g. `database.serverId`.
+   *
+   * :::caution
+   * Changing it replaces the relationship.
+   * :::
    */
   targetId: string;
   /**
    * Tenant ID of the target resource, for cross-tenant dependencies.
+   *
+   * :::caution
    * Changing it replaces the relationship.
+   * :::
    * @default the tenant of the source resource
    */
   targetTenant?: string;
   /**
-   * Relationship name (3-64 letters, digits, and hyphens). If omitted, a
-   * unique name is generated from the app, stage, and logical ID. Changing
-   * it replaces the relationship.
+   * Relationship name (3-64 letters, digits, and hyphens).
+   *
+   * :::caution
+   * Changing it replaces the relationship.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
 }
@@ -72,7 +84,8 @@ export interface DependencyOf extends Resource<
 > {}
 
 /**
- * An Azure `dependencyOf` relationship (Microsoft.Relationships) — records
+ * An Azure `dependencyOf` relationship
+ * (`Microsoft.Relationships/dependencyOf`) — records
  * that one ARM resource depends on another, so Azure Service Groups and
  * health models can trace the impact of an outage across a workload.
  *
@@ -83,18 +96,22 @@ export interface DependencyOf extends Resource<
  * @see https://learn.microsoft.com/azure/templates/microsoft.relationships/dependencyof
  *
  * ### Recording a Dependency
- * **Example:** A web app depends on its database server
+ * **Example:** A storage account depends on its key vault
  * ```typescript
- * yield* Azure.Relationships.DependencyOf("app-needs-db", {
- *   resourceId: app.siteId,
- *   targetId: server.serverId,
+ * const vault = yield* Azure.KeyVault.Vault("keys");
+ * const account = yield* Azure.Storage.StorageAccount("uploads");
+ * yield* Azure.Relationships.DependencyOf("uploads-needs-keys", {
+ *   resourceId: account.storageAccountId,
+ *   targetId: vault.vaultId,
  * });
  * ```
  *
  * ### Naming the Relationship
  * **Example:** Explicit relationship name
  * ```typescript
- * yield* Azure.Relationships.DependencyOf("api-needs-identity", {
+ * const vault = yield* Azure.KeyVault.Vault("keys");
+ * const api = yield* Azure.ManagedIdentity.UserAssignedIdentity("api");
+ * yield* Azure.Relationships.DependencyOf("api-needs-vault", {
  *   resourceId: api.identityId,
  *   targetId: vault.vaultId,
  *   name: "api-vault",

@@ -44,12 +44,38 @@ export interface ProductWiki extends Resource<
  * The wiki of a product in API Management: an ordered list of
  * {@link Documentation} pages shown with the product in the developer
  * portal. There is one per product.
+ * The ARM type is `Microsoft.ApiManagement/service/products/wikis`.
+ *
+ * :::caution
+ * Changing `serviceName`, `productName`, or `resourceGroup` replaces the
+ * wiki.
+ *
+ * Azure does not serve the wiki routes yet: they answer an empty 404 or "did
+ * not have proper uri path format" on Developer, BasicV2, and Premium
+ * services.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/apimanagement/product-wiki
  *
  * ### Attaching Documentation
  * **Example:** Show onboarding docs with a product
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const product = yield* Azure.ApiManagement.Product("starter", {
+ *   serviceName: apim.serviceName,
+ *   displayName: "Starter",
+ *   subscriptionRequired: true,
+ *   state: "published",
+ * });
+ * const onboarding = yield* Azure.ApiManagement.Documentation("onboarding", {
+ *   serviceName: apim.serviceName,
+ *   title: "Onboarding",
+ *   content: "# Onboarding\nSubscribe to the Starter product to get a key.",
+ * });
  * yield* Azure.ApiManagement.ProductWiki("starter-wiki", {
  *   serviceName: apim.serviceName,
  *   productName: product.productName,

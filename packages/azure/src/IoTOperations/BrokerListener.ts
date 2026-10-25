@@ -8,7 +8,10 @@ import { childLifecycle, childStatus, type InstanceScope } from "./Common.ts";
 type BrokerScope = InstanceScope & { readonly brokerName: string };
 
 export interface BrokerListenerProps {
-  /** Resource group of the IoT Operations instance. Changing it replaces the listener. */
+  /**
+   * Resource group of the IoT Operations instance. Changing it replaces the listener.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** IoT Operations instance that holds the broker. Changing it replaces the listener. */
   instanceName: string;
@@ -21,9 +24,13 @@ export interface BrokerListenerProps {
    * Listener name (lowercase letters, digits, and hyphens). If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the listener.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Kubernetes Service name of the listener. Changing it replaces the listener. */
+  /**
+   * Kubernetes Service name of the listener. Changing it replaces the listener.
+   * @default unset (Azure picks the Service name)
+   */
   serviceName?: string;
   /**
    * Kubernetes Service type of the listener. Changing it replaces the listener.
@@ -62,7 +69,8 @@ export interface BrokerListener extends Resource<
 > {}
 
 /**
- * A listener of an Azure IoT Operations MQTT broker: a Kubernetes Service
+ * A listener of an Azure IoT Operations MQTT broker
+ * (`Microsoft.IoTOperations/instances/brokers/listeners`): a Kubernetes Service
  * exposing one or more ports with their own authentication, authorization,
  * and TLS settings.
  *
@@ -71,6 +79,21 @@ export interface BrokerListener extends Resource<
  * ### Exposing the Broker
  * **Example:** Load-balanced listener with automatic TLS
  * ```typescript
+ * const instance = yield* Azure.IoTOperations.Instance("aio", {
+ *   customLocationId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/aio-location",
+ *   schemaRegistryId:
+ *     "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.DeviceRegistry/schemaRegistries/aio-schemas",
+ * });
+ * const authn = yield* Azure.IoTOperations.BrokerAuthentication("sat", {
+ *   instanceName: instance.instanceName,
+ *   authenticationMethods: [
+ *     {
+ *       method: "ServiceAccountToken",
+ *       serviceAccountTokenSettings: { audiences: ["aio-internal"] },
+ *     },
+ *   ],
+ * });
  * const listener = yield* Azure.IoTOperations.BrokerListener("external", {
  *   instanceName: instance.instanceName,
  *   serviceType: "LoadBalancer",
@@ -92,12 +115,19 @@ export interface BrokerListener extends Resource<
  *
  * **Example:** Unencrypted in-cluster listener
  * ```typescript
+ * // instance: the Azure.IoTOperations.Instance of the first example
  * const listener = yield* Azure.IoTOperations.BrokerListener("internal", {
  *   instanceName: instance.instanceName,
  *   serviceType: "ClusterIp",
  *   ports: [{ port: 1883 }],
  * });
  * ```
+ *
+ * :::caution
+ * Changing `resourceGroup`, `instanceName`, `brokerName`, `name`,
+ * `serviceName`, or `serviceType` replaces the listener, and clients
+ * disconnect.
+ * :::
  *
  * @resource
  */

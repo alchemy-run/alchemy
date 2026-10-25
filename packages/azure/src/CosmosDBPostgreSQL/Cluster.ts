@@ -8,13 +8,13 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   ProvisioningTimedOut,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -46,13 +46,17 @@ export interface ClusterMaintenanceWindow {
 }
 
 export interface ClusterProps {
-  /** Resource group that holds the cluster. Changing it replaces the cluster. */
+  /**
+   * Resource group that holds the cluster. Changing it replaces the cluster.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Cluster name: 3-40 lowercase letters, digits, and hyphens, globally
    * unique (it forms the `c-{name}.{hash}.postgres.cosmos.azure.com` host).
    * If omitted, a unique name is generated from the app, stage, and logical
    * ID. Changing it replaces the cluster.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -63,6 +67,7 @@ export interface ClusterProps {
   /**
    * Password of the built-in `citus` administrator. If omitted, a random
    * password is generated on create and exposed as an attribute.
+   * @default a random password generated on create
    */
   administratorLoginPassword?: Redacted.Redacted<string>;
   /**
@@ -71,7 +76,10 @@ export interface ClusterProps {
    * @default "16"
    */
   postgresqlVersion?: string;
-  /** Citus extension version, e.g. `12.1`. */
+  /**
+   * Citus extension version, e.g. `12.1`.
+   * @default Azure's default for `postgresqlVersion`
+   */
   citusVersion?: string;
   /**
    * Edition of the coordinator: `BurstableMemoryOptimized`,
@@ -103,43 +111,69 @@ export interface ClusterProps {
    * @default 0
    */
   nodeCount?: number;
-  /** Edition of the worker nodes (`MemoryOptimized`, `GeneralPurpose`). */
+  /**
+   * Edition of the worker nodes (`MemoryOptimized`, `GeneralPurpose`).
+   * @default Azure's default
+   */
   nodeServerEdition?: string;
-  /** vCores of each worker node (up to 104). */
+  /**
+   * vCores of each worker node (up to 104).
+   * @default Azure's default
+   */
   nodeVCores?: number;
-  /** Storage of each worker node in MiB. Can only grow in place. */
+  /**
+   * Storage of each worker node in MiB. Can only grow in place.
+   * @default Azure's default
+   */
   nodeStorageQuotaInMb?: number;
   /**
    * Allow public connections to the worker nodes. Changing it replaces the
    * cluster.
+   * @default Azure's default
    */
   nodeEnablePublicIpAccess?: boolean;
-  /** Enable high availability (a standby for every server). */
+  /**
+   * Enable high availability (a standby for every server).
+   * @default Azure's default (`false`)
+   */
   enableHa?: boolean;
   /**
    * Place distributed table shards on the coordinator. Azure turns it on for
    * single-node clusters.
+   * @default Azure's default (`true` for single-node clusters)
    */
   enableShardsOnCoordinator?: boolean;
-  /** Preferred availability zone of the primary servers. */
+  /**
+   * Preferred availability zone of the primary servers.
+   * @default none (Azure picks the zone)
+   */
   preferredPrimaryZone?: string;
-  /** Weekly maintenance window. */
+  /**
+   * Weekly maintenance window.
+   * @default the system-managed window
+   */
   maintenanceWindow?: ClusterMaintenanceWindow;
   /**
    * Resource ID of the source cluster, to create a read replica or a
    * point-in-time restore. Changing it replaces the cluster.
+   * @default none (a new, empty cluster)
    */
   sourceResourceId?: string;
-  /** Region of the source cluster. Changing it replaces the cluster. */
+  /**
+   * Region of the source cluster. Changing it replaces the cluster.
+   * @default none
+   */
   sourceLocation?: string;
   /**
    * Restore point (ISO 8601) for a point-in-time restore of
    * `sourceResourceId`. Changing it replaces the cluster.
+   * @default none (a read replica when `sourceResourceId` is set)
    */
   pointInTimeUTC?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -198,8 +232,9 @@ export interface Cluster extends Resource<
 > {}
 
 /**
- * An Azure Cosmos DB for PostgreSQL cluster (distributed PostgreSQL with
- * the Citus extension).
+ * An Azure Cosmos DB for PostgreSQL cluster
+ * (`Microsoft.DBforPostgreSQL/serverGroupsv2`): distributed PostgreSQL with
+ * the Citus extension.
  *
  * Clusters default to the cheapest configuration — a single-node cluster
  * with a Burstable 1-vCore coordinator, 32 GiB storage, PostgreSQL 16, and
@@ -214,7 +249,15 @@ export interface Cluster extends Resource<
  * restores and read replicas (`sourceResourceId`) remain available. New
  * workloads should use `Azure.PostgreSQL.FlexibleServer` (elastic clusters).
  *
- * @see https://learn.microsoft.com/azure/cosmos-db/postgresql/introduction
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `nodeEnablePublicIpAccess`,
+ * `sourceResourceId`, `sourceLocation`, or `pointInTimeUTC` replaces the
+ * cluster and deletes its data. Lowering `postgresqlVersion`, `nodeCount`,
+ * `coordinatorStorageQuotaInMb`, or `nodeStorageQuotaInMb` also replaces
+ * it.
+ * :::
+ *
+ * See [Azure Cosmos DB for PostgreSQL](https://learn.microsoft.com/azure/cosmos-db/postgresql/introduction).
  *
  * ### Creating a Cluster
  * **Example:** Single-node cluster with a generated password
@@ -430,9 +473,7 @@ export const ClusterProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* postgresqlhsc
-        .ListClusters({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListClusters", page)));
+      const page = yield* collectAll(postgresqlhsc.ListClusters, { subscriptionId });
       return (page.value ?? []).flatMap((cluster) => {
         const group = resourceGroupOf(cluster.id);
         return hasAnyAlchemyTag(cluster.tags) && group !== undefined && cluster.name !== undefined

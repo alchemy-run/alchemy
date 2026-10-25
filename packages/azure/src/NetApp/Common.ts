@@ -2,7 +2,7 @@ import * as netapp from "@distilled.cloud/azure/netapp";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { orUndefinedIfNotFound, requireSinglePage, stackAndStage } from "../Arm.ts";
+import { collectAll, orUndefinedIfNotFound, stackAndStage } from "../Arm.ts";
 
 /**
  * Polling budget for NetApp long-running operations (up to ~30 minutes;
@@ -142,9 +142,7 @@ export const ownedByStage = Effect.fn(function* (
 export const listAllAccounts = Effect.fn(function* (subscriptionId: string) {
   // An unregistered Microsoft.NetApp namespace holds no accounts.
   const page = yield* orUndefinedIfNotFound(
-    netapp
-      .ListAccountBySubscription({ subscriptionId })
-      .pipe(Effect.flatMap((page) => requireSinglePage("ListAccountBySubscription", page))),
+    collectAll(netapp.ListAccountBySubscription, { subscriptionId }),
   );
   return page?.value ?? [];
 });
@@ -168,13 +166,11 @@ export const listAllPools = Effect.fn(function* (subscriptionId: string) {
   const accounts = yield* listAllAccounts(subscriptionId);
   const pools = yield* Effect.forEach(accountRefs(accounts), ({ resourceGroup, accountName }) =>
     orUndefinedIfNotFound(
-      netapp
-        .ListPools({
-          subscriptionId,
-          resourceGroupName: resourceGroup,
-          accountName,
-        })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListPools", page))),
+      collectAll(netapp.ListPools, {
+        subscriptionId,
+        resourceGroupName: resourceGroup,
+        accountName,
+      }),
     ).pipe(Effect.map((page) => page?.value ?? [])),
   );
   return pools.flat();

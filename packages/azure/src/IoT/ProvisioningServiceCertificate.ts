@@ -24,7 +24,10 @@ import {
 } from "./Common.ts";
 
 export interface ProvisioningServiceCertificateProps {
-  /** Resource group of the provisioning service. Changing it replaces the certificate. */
+  /**
+   * Resource group of the provisioning service. Changing it replaces the certificate.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the provisioning service. Changing it replaces the certificate. */
   provisioningService: string;
@@ -32,6 +35,7 @@ export interface ProvisioningServiceCertificateProps {
    * Certificate name: letters, digits, periods, hyphens, and underscores
    * (up to 64). If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the certificate.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -78,11 +82,11 @@ export interface ProvisioningServiceCertificate extends Resource<
 > {}
 
 /**
- * An X.509 CA certificate registered on a Device Provisioning Service.
- * Enrollment groups can then trust devices whose certificates chain to a
- * verified CA.
+ * An X.509 CA certificate registered on a Device Provisioning Service
+ * (`Microsoft.Devices/provisioningServices/certificates`). Enrollment
+ * groups can then trust devices whose certificates chain to a verified CA.
  *
- * Certificates carry no tags; they count as owned when the parent service
+ * Certificates carry no tags. They count as owned when the parent service
  * carries this stack's and stage's ownership tags.
  *
  * @see https://learn.microsoft.com/azure/iot-dps/concepts-x509-attestation
@@ -90,6 +94,8 @@ export interface ProvisioningServiceCertificate extends Resource<
  * ### Registering a CA Certificate
  * **Example:** Upload a pre-verified root CA
  * ```typescript
+ * // the public root CA certificate, PEM-encoded
+ * const rootCaPem = "-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIU...\n-----END CERTIFICATE-----";
  * const dps = yield* Azure.IoT.ProvisioningService("dps");
  * const ca = yield* Azure.IoT.ProvisioningServiceCertificate("root-ca", {
  *   provisioningService: dps.provisioningServiceName,
@@ -100,11 +106,18 @@ export interface ProvisioningServiceCertificate extends Resource<
  *
  * **Example:** Upload an unverified CA (prove possession later)
  * ```typescript
+ * // dps and rootCaPem as above
  * const ca = yield* Azure.IoT.ProvisioningServiceCertificate("root-ca", {
  *   provisioningService: dps.provisioningServiceName,
  *   certificate: rootCaPem,
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `provisioningService`, or `resourceGroup` replaces the
+ * certificate. Enrollment groups that use it must be pointed at the new
+ * one.
+ * :::
  *
  * @resource
  */

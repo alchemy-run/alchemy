@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -33,7 +33,10 @@ export type VideoIndexerIdentityType =
 export interface VideoIndexerIdentity {
   /** Identity type. */
   type: VideoIndexerIdentityType;
-  /** ARM IDs of user-assigned identities attached to the account. */
+  /**
+   * ARM IDs of user-assigned identities attached to the account.
+   * @default not set
+   */
   userAssignedIdentities?: string[];
 }
 
@@ -43,6 +46,7 @@ export interface VideoIndexerOpenAiServices {
   /**
    * ARM ID of the user-assigned identity used to access the OpenAI
    * account. It must be attached to the Video Indexer account.
+   * @default not set
    */
   userAssignedIdentity?: string;
 }
@@ -51,11 +55,13 @@ export interface AccountProps {
   /**
    * Resource group the account is created in. Changing it replaces the
    * account.
+   * @default the stack's resource group (`<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Account name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the account.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -74,6 +80,7 @@ export interface AccountProps {
    * storage account. It needs `Storage Blob Data Owner` on the storage
    * account before the Video Indexer account is created. When omitted the
    * system-assigned identity is used.
+   * @default the account's system-assigned identity
    */
   storageUserAssignedIdentity?: string;
   /**
@@ -95,11 +102,13 @@ export interface AccountProps {
    * Data-plane ID (GUID) of an existing classic account to connect. Set
    * only when migrating a classic account. Changing it replaces the
    * account.
+   * @default not set
    */
   accountId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -134,12 +143,23 @@ export interface Account extends Resource<
 > {}
 
 /**
- * An Azure AI Video Indexer account (ARM-based). Indexed media is stored
- * in a Storage account the account reaches through a managed identity.
- * Creating the account is free; indexing is billed per input minute.
+ * An Azure AI Video Indexer account (`Microsoft.VideoIndexer/accounts`).
+ * Indexed media is stored in a Storage account the account reaches through a
+ * managed identity. Creating the account is free; indexing is billed per
+ * input minute.
  *
  * Grant the identity `Storage Blob Data Owner` on the storage account
  * before creating the Video Indexer account.
+ *
+ * :::caution
+ * Changing `name`, `location`, `storageAccountId`, `accountId`, or
+ * `resourceGroup` replaces the account.
+ * :::
+ *
+ * :::caution
+ * Grant the identity `Storage Blob Data Owner` on the storage account before
+ * you create the Video Indexer account, as the example does.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-video-indexer/create-account-portal
  *
@@ -238,11 +258,7 @@ export const AccountProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* orUndefinedIfNotFound(
-        vi
-          .ListAccounts({ subscriptionId })
-          .pipe(Effect.flatMap((page) => requireSinglePage("ListAccounts", page))),
-      );
+      const page = yield* orUndefinedIfNotFound(collectAll(vi.ListAccounts, { subscriptionId }));
       return (page?.value ?? []).flatMap((account) => {
         const group = resourceGroupOf(account.id);
         return hasAnyAlchemyTag(account.tags) && group !== undefined && account.name !== undefined

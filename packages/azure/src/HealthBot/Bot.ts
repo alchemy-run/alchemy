@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -43,6 +43,7 @@ export interface BotIdentity {
   /**
    * ARM resource IDs of user-assigned identities to attach (required when
    * `type` includes `UserAssigned`).
+   * @default []
    */
   userAssignedIdentities?: string[];
 }
@@ -50,13 +51,17 @@ export interface BotIdentity {
 export interface BotKeyVaultProperties {
   /** Name of the Key Vault key used for customer-managed encryption. */
   keyName: string;
-  /** Version of the key. If omitted, the latest version is used. */
+  /**
+   * Version of the key.
+   * @default the latest version
+   */
   keyVersion?: string;
   /** URI of the Key Vault, e.g. `https://my-vault.vault.azure.net/`. */
   keyVaultUri: string;
   /**
    * ARM resource ID of the user-assigned identity that has access to the
-   * key. If omitted, the bot's system-assigned identity is used.
+   * key.
+   * @default the bot's system-assigned identity
    */
   userIdentity?: string;
 }
@@ -64,13 +69,14 @@ export interface BotKeyVaultProperties {
 export interface BotProps {
   /**
    * Resource group the bot is created in. Changing it replaces the bot.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Bot name, 2-30 characters of lowercase letters, digits, and single
-   * dashes, starting with a letter and not ending with a dash. If omitted, a
-   * unique name is generated
-   * from the app, stage, and logical ID. Changing it replaces the bot.
+   * dashes, starting with a letter and not ending with a dash. Changing it
+   * replaces the bot.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -88,16 +94,19 @@ export interface BotProps {
   /**
    * Managed identity of the bot (needed for customer-managed keys). Updated
    * in place. When omitted, the observed identity is left untouched.
+   * @default no identity on create; unchanged on update
    */
   identity?: BotIdentity;
   /**
    * Customer-managed key used to encrypt the bot's data. Updated in place.
    * When omitted, the observed encryption settings are left untouched.
+   * @default Microsoft-managed keys on create; unchanged on update
    */
   keyVaultProperties?: BotKeyVaultProperties;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -130,20 +139,19 @@ export interface Bot extends Resource<
 > {}
 
 /**
- * An Azure Health Bot (Healthcare agent service) — a managed, compliant
- * conversational AI service for building virtual health assistants. The
- * bot's scenarios are authored in its management portal
- * (`botManagementPortalLink`).
+ * An Azure Health Bot (`Microsoft.HealthBot/healthBots`), the Healthcare
+ * agent service: a managed, compliant conversational AI service for
+ * building virtual health assistants. You author the bot's scenarios in
+ * its management portal (`botManagementPortalLink`).
  *
  * @see https://learn.microsoft.com/azure/health-bot/
  *
  * ### Creating a Bot
  * **Example:** Free-tier bot
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("health", {
+ * const bot = yield* Azure.HealthBot.Bot("assistant", {
  *   location: "eastus",
  * });
- * const bot = yield* Azure.HealthBot.Bot("assistant");
  * // bot.botManagementPortalLink -> "https://us.healthbot.microsoft.com/..."
  * ```
  *
@@ -158,6 +166,7 @@ export interface Bot extends Resource<
  * ### Customer-Managed Keys
  * **Example:** Encrypt with a Key Vault key via a user-assigned identity
  * ```typescript
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("bot");
  * const bot = yield* Azure.HealthBot.Bot("assistant", {
  *   sku: "C0",
  *   identity: {
@@ -171,6 +180,11 @@ export interface Bot extends Resource<
  *   },
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the bot and
+ * deletes the scenarios authored in its portal.
+ * :::
  *
  * @resource
  */
@@ -245,9 +259,7 @@ export const BotProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* healthbot
-        .ListBots({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListBots", page)));
+      const page = yield* collectAll(healthbot.ListBots, { subscriptionId });
       return (page.value ?? []).flatMap((bot) => {
         const group = resourceGroupOf(bot.id);
         return hasAnyAlchemyTag(bot.tags) && group !== undefined && bot.name !== undefined

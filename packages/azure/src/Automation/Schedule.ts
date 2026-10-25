@@ -28,11 +28,20 @@ export type ScheduleDay =
   | "Sunday";
 
 export interface AdvancedSchedule {
-  /** Days of the week, for `Week` schedules. */
+  /**
+   * Days of the week, for `Week` schedules.
+   * @default none
+   */
   weekDays?: ScheduleDay[];
-  /** Days of the month (1-31, or -1 for the last day), for `Month` schedules. */
+  /**
+   * Days of the month (1-31, or -1 for the last day), for `Month` schedules.
+   * @default none
+   */
   monthDays?: number[];
-  /** Occurrences such as "the second Monday", for `Month` schedules. */
+  /**
+   * Occurrences such as "the second Monday", for `Month` schedules.
+   * @default not set
+   */
   monthlyOccurrences?: {
     /** Occurrence in the month (1-5, or -1 for the last). */
     occurrence: number;
@@ -49,6 +58,7 @@ export interface ScheduleProps {
   /**
    * Schedule name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the schedule.
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -75,9 +85,15 @@ export interface ScheduleProps {
    * @default never expires
    */
   expiryTime?: string;
-  /** Week/month day selection. Changing it replaces the schedule. */
+  /**
+   * Week/month day selection. Changing it replaces the schedule.
+   * @default not set
+   */
   advancedSchedule?: AdvancedSchedule;
-  /** Description of the schedule. */
+  /**
+   * Description of the schedule.
+   * @default no description
+   */
   description?: string;
   /**
    * Whether the schedule triggers its linked runbooks.
@@ -118,14 +134,22 @@ export interface Schedule extends Resource<
 /**
  * A schedule in an Azure Automation account. Link it to a runbook with a
  * {@link JobSchedule} to run the runbook on the schedule.
+ * The ARM type is `Microsoft.Automation/automationAccounts/schedules`.
  *
  * Every timing field is immutable; changing one replaces the schedule.
+ *
+ * :::caution
+ * Changing `automationAccount`, `name`, `startTime`, `frequency`,
+ * `interval`, `timeZone`, `expiryTime`, `advancedSchedule`, or
+ * `resourceGroup` replaces the schedule.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/shared-resources/schedules
  *
  * ### Creating a Schedule
  * **Example:** Daily at 02:00 UTC
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const nightly = yield* Azure.Automation.Schedule("nightly", {
  *   automationAccount: account.automationAccountName,
  *   startTime: "2030-01-01T02:00:00Z",
@@ -135,6 +159,7 @@ export interface Schedule extends Resource<
  *
  * **Example:** Every Monday and Friday
  * ```typescript
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * const weekly = yield* Azure.Automation.Schedule("weekly", {
  *   automationAccount: account.automationAccountName,
  *   startTime: "2030-01-01T08:00:00Z",

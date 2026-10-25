@@ -52,16 +52,41 @@ export interface WorkspaceProductPolicy extends Resource<
 /**
  * The workspace-scoped counterpart of {@link ProductPolicy}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is
+ * `Microsoft.ApiManagement/service/workspaces/products/policies`.
  *
  * The policy of an API Management product. It applies to every API in
  * the product, between the global and the API policies. There is one per
  * product; deleting it reverts the product to the inherited behavior.
+ *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `productName`, or `resourceGroup`
+ * replaces the policy.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/set-edit-policies
  *
  * ### Setting a Product Policy
  * **Example:** Rate-limit every subscription of a product
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
+ * const product = yield* Azure.ApiManagement.WorkspaceProduct("starter", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   displayName: "Starter",
+ *   subscriptionRequired: true,
+ *   state: "published",
+ * });
  * yield* Azure.ApiManagement.WorkspaceProductPolicy("starter-limits", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

@@ -7,12 +7,12 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -90,11 +90,13 @@ export interface ClusterWorkerNodeProfile extends ClusterNodeProfile {
   /**
    * Load- or schedule-based autoscale. Updated in place; removing it
    * disables autoscale.
+   * @default none (a fixed `count`)
    */
   autoscale?: ClusterAutoscale;
   /**
    * Managed data disks per worker node (required for Kafka clusters).
    * Changing it replaces the cluster.
+   * @default none
    */
   disksPerNode?: number;
 }
@@ -111,18 +113,25 @@ export interface ClusterVirtualNetwork {
 export interface ClusterIdentity {
   /** Identity type. */
   type: "SystemAssigned" | "UserAssigned" | "SystemAssigned, UserAssigned";
-  /** ARM resource IDs of user-assigned identities. */
+  /**
+   * ARM resource IDs of user-assigned identities.
+   * @default []
+   */
   userAssignedIdentityIds?: string[];
 }
 
 export interface ClusterProps {
-  /** Resource group the cluster is created in. Changing it replaces the cluster. */
+  /**
+   * Resource group the cluster is created in. Changing it replaces the cluster.
+   * @default the stack's resource group
+   */
   resourceGroup: string;
   /**
    * Globally unique cluster name (`<name>.azurehdinsight.net`): 3-45
    * letters, digits, and hyphens, starting with a letter. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the cluster.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -130,7 +139,10 @@ export interface ClusterProps {
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
-  /** Availability zones of the cluster. Changing them replaces the cluster. */
+  /**
+   * Availability zones of the cluster. Changing them replaces the cluster.
+   * @default none (no zone pinning)
+   */
   zones?: string[];
   /** Workload type. Changing it replaces the cluster. */
   kind: ClusterKind;
@@ -142,6 +154,7 @@ export interface ClusterProps {
   /**
    * Versions of the workload components, e.g. `{ Spark: "3.3" }`. Changing
    * them replaces the cluster.
+   * @default Azure's default for the `kind` and `clusterVersion`
    */
   componentVersion?: Record<string, string>;
   /**
@@ -170,27 +183,44 @@ export interface ClusterProps {
    * @default `gatewayPassword` when `sshPublicKey` is not given
    */
   sshPassword?: Redacted.Redacted<string>;
-  /** SSH public key (OpenSSH format). Changing it replaces the cluster. */
+  /**
+   * SSH public key (OpenSSH format). Changing it replaces the cluster.
+   * @default none (password SSH sign-in)
+   */
   sshPublicKey?: string;
-  /** Head nodes (always two). Changing them replaces the cluster. */
+  /**
+   * Head nodes (always two). Changing them replaces the cluster.
+   * @default `{ vmSize: "Standard_E4_v3" }`
+   */
   headNode?: ClusterNodeProfile;
-  /** Worker nodes. */
+  /**
+   * Worker nodes.
+   * @default `{ vmSize: "Standard_E4_v3", count: 1 }`
+   */
   workerNode?: ClusterWorkerNodeProfile;
   /**
    * ZooKeeper nodes (three). Omit to let HDInsight pick its default size.
    * Changing them replaces the cluster.
+   * @default HDInsight's default size
    */
   zookeeperNode?: ClusterNodeProfile;
   /** Default storage. Changing the account or container replaces the cluster. */
   storage: ClusterStorage;
-  /** Virtual network for every node. Changing it replaces the cluster. */
+  /**
+   * Virtual network for every node. Changing it replaces the cluster.
+   * @default none (an HDInsight-managed network)
+   */
   virtualNetwork?: ClusterVirtualNetwork;
-  /** Managed identities. Changing them replaces the cluster. */
+  /**
+   * Managed identities. Changing them replaces the cluster.
+   * @default none (the DataLakeGen2 identity is still attached)
+   */
   identity?: ClusterIdentity;
   /**
    * Extra cluster configurations keyed by configuration file, e.g.
    * `{ "core-site": { "fs.trash.interval": "60" } }`. Changing them
    * replaces the cluster.
+   * @default {}
    */
   configurations?: Record<string, Record<string, string>>;
   /**
@@ -208,6 +238,7 @@ export interface ClusterProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -264,16 +295,28 @@ export interface Cluster extends Resource<
 > {}
 
 /**
- * An Azure HDInsight cluster — a managed Hadoop, Spark, Kafka, HBase, or
- * Interactive Query cluster on Azure virtual machines, with Azure Storage
- * or Data Lake Storage Gen2 as its file system.
+ * An Azure HDInsight cluster (`Microsoft.HDInsight/clusters`) — a managed
+ * Hadoop, Spark, Kafka, HBase, or Interactive Query cluster on Azure
+ * virtual machines, with Azure Storage or Data Lake Storage Gen2 as its
+ * file system. See the
+ * [HDInsight overview](https://learn.microsoft.com/azure/hdinsight/hdinsight-overview).
  *
  * Clusters take 20+ minutes to provision and bill for every node while
  * they exist (two head nodes, the worker nodes, and ZooKeeper nodes).
- * Changing the worker count, autoscale, gateway credentials, or tags is
- * applied in place; every other change replaces the cluster.
  *
- * @see https://learn.microsoft.com/azure/hdinsight/hdinsight-overview
+ * :::caution
+ * The subscription needs enough regional vCPU quota for every node: two
+ * head nodes, the worker nodes, and three ZooKeeper nodes.
+ * :::
+ *
+ * :::caution
+ * Changing the worker count, autoscale, gateway credentials, or tags is
+ * applied in place. Changing `resourceGroup`, `name`, `location`, `kind`,
+ * `zones`, `clusterVersion`, `componentVersion`, `tier`, `sshUsername`,
+ * `sshPassword`, `sshPublicKey`, a node `vmSize`, `disksPerNode`,
+ * `storage`, `virtualNetwork`, `identity`, `configurations`,
+ * `minSupportedTlsVersion`, or `encryptionInTransit` replaces the cluster.
+ * :::
  *
  * ### Creating a Cluster
  * **Example:** Spark cluster on a blob container
@@ -282,6 +325,8 @@ export interface Cluster extends Resource<
  * const container = yield* Azure.Storage.BlobContainer("spark", {
  *   storageAccount: account.storageAccountName,
  * });
+ * // an access key of the account, e.g. from `az storage account keys list`
+ * const accountKey = Redacted.make(process.env.STORAGE_ACCOUNT_KEY!);
  * const cluster = yield* Azure.HDInsight.Cluster("spark", {
  *   kind: "spark",
  *   gatewayPassword: Redacted.make(process.env.HDI_PASSWORD!),
@@ -577,9 +622,7 @@ export const ClusterProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* hdinsight
-        .ListClusters({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListClusters", page)));
+      const page = yield* collectAll(hdinsight.ListClusters, { subscriptionId });
       return (page.value ?? []).flatMap((cluster) => {
         const group = resourceGroupOf(cluster.id);
         return hasAnyAlchemyTag(cluster.tags) && group !== undefined && cluster.name !== undefined

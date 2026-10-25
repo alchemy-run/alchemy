@@ -6,13 +6,13 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -64,6 +64,7 @@ export interface WorkspaceProps {
    * Workspace name: 3-33 letters, digits, `-`, and `_`. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the workspace.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -81,37 +82,48 @@ export interface WorkspaceProps {
    * ARM resource ID of the storage account the workspace stores artifacts
    * in. Required for `Default` and `Hub` workspaces. Changing it replaces
    * the workspace.
+   * @default none
    */
   storageAccount?: string;
   /**
    * ARM resource ID of the Key Vault that holds workspace secrets. Required
    * for `Default` and `Hub` workspaces. Changing it replaces the workspace.
+   * @default none
    */
   keyVault?: string;
   /**
    * ARM resource ID of the Application Insights component for telemetry.
    * Can be attached later but not detached.
+   * @default none
    */
   applicationInsights?: string;
   /**
    * ARM resource ID of the container registry that holds environment
    * images. Can be attached later but not detached.
+   * @default none
    */
   containerRegistry?: string;
   /**
    * ARM resource ID of the hub workspace a `Project` belongs to. Changing it
    * replaces the workspace.
+   * @default none
    */
   hubResourceId?: string;
   /**
    * Reduce the diagnostic data Microsoft collects (high business impact).
-   * Set at creation only; changing it replaces the workspace.
+   * Azure accepts it only at creation.
    * @default false
    */
   hbiWorkspace?: boolean;
-  /** Display name shown in the studio. */
+  /**
+   * Display name shown in the studio.
+   * @default none
+   */
   friendlyName?: string;
-  /** Description of the workspace. */
+  /**
+   * Description of the workspace.
+   * @default none
+   */
   description?: string;
   /**
    * Whether the workspace endpoints accept public traffic.
@@ -137,6 +149,7 @@ export interface WorkspaceProps {
   /**
    * ARM resource ID of the user-assigned identity the workspace uses for
    * its own access when `identity` is user-assigned.
+   * @default none
    */
   primaryUserAssignedIdentity?: string;
   /**
@@ -149,6 +162,7 @@ export interface WorkspaceProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -191,22 +205,35 @@ export interface Workspace extends Resource<
 /**
  * An Azure Machine Learning workspace — the top-level resource that holds
  * compute, datastores, connections, endpoints, and experiment history.
- * A `Default` workspace needs a storage account and a Key Vault; `Hub` and
- * `Project` kinds back Azure AI Foundry.
+ * A `Default` workspace needs a storage account, a Key Vault, and an
+ * Application Insights component; `Hub` and `Project` kinds back Azure AI
+ * Foundry.
+ *
+ * ARM type: `Microsoft.MachineLearningServices/workspaces`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/concept-workspace).
  *
  * Deleting the workspace purges it (`forceToPurge`) so its name is
  * immediately reusable; the storage account, Key Vault, and other
  * associated resources are left in place.
  *
- * @see https://learn.microsoft.com/azure/machine-learning/concept-workspace
+ * :::caution
+ * Changing `resourceGroup`, `name`, `location`, `kind`, `storageAccount`,
+ * `keyVault`, or `hubResourceId` replaces the workspace.
+ * :::
  *
  * ### Creating a Workspace
  * **Example:** Workspace with a storage account and Key Vault
  * ```typescript
+ * // An existing Application Insights component for workspace telemetry.
+ * const insightsId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/monitoring/providers/Microsoft.Insights/components/ml-insights";
  * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * // The workspace adds its own access policy to the vault.
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
  * const workspace = yield* Azure.MachineLearning.Workspace("ws", {
  *   storageAccount: storage.storageAccountId,
- *   keyVault: vaultId,
+ *   keyVault: vault.vaultId,
+ *   applicationInsights: insightsId,
  *   friendlyName: "Research",
  * });
  * ```
@@ -282,9 +309,7 @@ export const WorkspaceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* ml
-        .ListWorkspaceBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListWorkspaceBySubscription", page)));
+      const page = yield* collectAll(ml.ListWorkspaceBySubscription, { subscriptionId });
       return (page.value ?? []).flatMap((workspace) => {
         const group = resourceGroupOf(workspace.id);
         return hasAnyAlchemyTag(workspace.tags) &&

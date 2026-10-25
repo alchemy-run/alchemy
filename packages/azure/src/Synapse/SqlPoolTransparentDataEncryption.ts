@@ -46,19 +46,40 @@ export interface SqlPoolTransparentDataEncryption extends Resource<
 > {}
 
 /**
- * Transparent data encryption (TDE) of a dedicated SQL pool — encrypts
- * the pool's data and log files at rest with a service-managed (or
- * workspace customer-managed) key. Changing it encrypts or decrypts the
- * pool in the background.
+ * Transparent data encryption (TDE) of a dedicated SQL pool
+ * (`Microsoft.Synapse/workspaces/sqlPools/transparentDataEncryption`) —
+ * encrypts the pool's data and log files at rest with a service-managed (or
+ * workspace customer-managed) key. Changing it encrypts or decrypts the pool
+ * in the background.
  *
  * This is a singleton setting that always exists on a pool. Destroying the
  * resource re-enables encryption.
+ *
+ * :::caution
+ * Changing `workspace`, `sqlPool`, or `resourceGroup` replaces the setting.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/sql-data-warehouse/sql-data-warehouse-encryption-tde
  *
  * ### Configuring Encryption
  * **Example:** Enable TDE
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
+ * const pool = yield* Azure.Synapse.SqlPool("dw", {
+ *   workspace: workspace.workspaceName,
+ *   sku: "DW100c",
+ * });
  * yield* Azure.Synapse.SqlPoolTransparentDataEncryption("tde", {
  *   workspace: workspace.workspaceName,
  *   sqlPool: pool.sqlPoolName,

@@ -26,7 +26,10 @@ export interface PortalConfigProps {
    * @default true
    */
   enableBasicAuth?: boolean;
-  /** Sign-in settings. */
+  /**
+   * Sign-in settings.
+   * @default not set (Azure's default applies)
+   */
   signin?: {
     /**
      * Redirect anonymous visitors to the sign-in page.
@@ -34,7 +37,10 @@ export interface PortalConfigProps {
      */
     require?: boolean;
   };
-  /** Sign-up settings. */
+  /**
+   * Sign-up settings.
+   * @default not set (Azure's default applies)
+   */
   signup?: {
     /** Terms of service shown on the sign-up page. */
     termsOfService?: {
@@ -47,7 +53,10 @@ export interface PortalConfigProps {
       requireConsent?: boolean;
     };
   };
-  /** Delegation of sign-up and product subscriptions to your own website. */
+  /**
+   * Delegation of sign-up and product subscriptions to your own website.
+   * @default not set (Azure's default applies)
+   */
   delegation?: {
     /**
      * Delegate user registration.
@@ -67,12 +76,18 @@ export interface PortalConfigProps {
      */
     validationKey?: Redacted.Redacted<string>;
   };
-  /** Cross-Origin Resource Sharing (CORS) settings of the portal. */
+  /**
+   * Cross-Origin Resource Sharing (CORS) settings of the portal.
+   * @default not set (Azure's default applies)
+   */
   cors?: {
     /** Allowed origins, e.g. `https://trusted.com`. */
     allowedOrigins?: string[];
   };
-  /** Content Security Policy (CSP) settings of the portal. */
+  /**
+   * Content Security Policy (CSP) settings of the portal.
+   * @default not set (Azure's default applies)
+   */
   csp?: {
     /**
      * CSP mode.
@@ -123,6 +138,11 @@ export interface PortalConfig extends Resource<
  * ### Configuring the Developer Portal
  * **Example:** Require sign-in and allow one CORS origin
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * yield* Azure.ApiManagement.PortalConfig("portal", {
  *   serviceName: apim.serviceName,
  *   signin: { require: true },

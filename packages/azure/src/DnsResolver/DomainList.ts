@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -32,12 +32,14 @@ export interface DomainListProps {
   /**
    * Resource group the domain list is created in. The DNS resolver API rejects resource group names
    * longer than 80 characters. Changing it replaces the list.
+   * @default the stack's resource group
    */
   resourceGroup: string;
   /**
    * Domain list name: 1-80 letters, digits, `_`, and `-`. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the list.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -55,6 +57,7 @@ export interface DomainListProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -83,10 +86,15 @@ export interface DomainList extends Resource<
 > {}
 
 /**
- * An Azure DNS resolver domain list — a named set of domains that DNS
- * security rules allow, alert on, or block.
+ * An Azure DNS resolver domain list
+ * (`Microsoft.Network/dnsResolverDomainLists`) — a named set of domains
+ * that DNS security rules allow, alert on, or block. See
+ * [DNS security policy](https://learn.microsoft.com/azure/dns/dns-security-policy).
  *
- * @see https://learn.microsoft.com/azure/dns/dns-security-policy
+ * :::caution
+ * Changing `resourceGroup`, `name`, or `location` replaces the list and
+ * changes its `domainListId`.
+ * :::
  *
  * ### Creating a Domain List
  * **Example:** Block list of known-bad domains
@@ -139,9 +147,7 @@ export const DomainListProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* dnsresolver
-        .ListDnsResolverDomainLists({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDnsResolverDomainLists", page)));
+      const page = yield* collectAll(dnsresolver.ListDnsResolverDomainLists, { subscriptionId });
       return (page.value ?? []).flatMap((list) => {
         const group = resourceGroupOf(list.id);
         return hasAnyAlchemyTag(list.tags) && group !== undefined && list.name !== undefined

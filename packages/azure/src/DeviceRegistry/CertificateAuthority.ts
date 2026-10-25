@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -47,7 +47,10 @@ export type CertificateAuthorityIssuer =
   | { type: "External" };
 
 export interface CertificateAuthorityProps {
-  /** Resource group of the parent namespace. Changing it replaces the CA. */
+  /**
+   * Resource group of the parent namespace. Changing it replaces the CA.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the parent Device Registry namespace. Changing it replaces the CA. */
   namespace: string;
@@ -55,6 +58,7 @@ export interface CertificateAuthorityProps {
    * Certificate authority name: 3-63 letters, digits, and hyphens, starting
    * with a letter or digit. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the CA.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -76,11 +80,13 @@ export interface CertificateAuthorityProps {
   /**
    * Issuer of an intermediate CA. Required when `type` is `ICA`, not
    * allowed for `Root`. Changing it replaces the CA.
+   * @default unset
    */
   issuer?: CertificateAuthorityIssuer;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -254,17 +260,11 @@ export const CertificateAuthorityProvider = () =>
       const all: CertificateAuthority["Attributes"][] = [];
       for (const ns of namespaces) {
         const page = yield* orUndefinedIfNotFound(
-          deviceregistry
-            .ListCertificateAuthorityByNamespace({
-              subscriptionId,
-              resourceGroupName: ns.resourceGroup,
-              namespaceName: ns.name,
-            })
-            .pipe(
-              Effect.flatMap((page) =>
-                requireSinglePage("ListCertificateAuthorityByNamespace", page),
-              ),
-            ),
+          collectAll(deviceregistry.ListCertificateAuthorityByNamespace, {
+            subscriptionId,
+            resourceGroupName: ns.resourceGroup,
+            namespaceName: ns.name,
+          }),
         );
         for (const ca of page?.value ?? []) {
           if (hasAnyAlchemyTag(ca.tags) && ca.name !== undefined) {

@@ -65,6 +65,7 @@ export interface ComputeProps {
    * Compute name: 2-16 letters, digits, and hyphens, starting with a
    * letter. If omitted, a unique name is generated from the logical ID.
    * Changing it replaces the compute.
+   * @default a unique name generated from the logical ID
    */
   name?: string;
   /**
@@ -80,6 +81,7 @@ export interface ComputeProps {
   /**
    * VM size of the nodes (`AmlCompute`, `ComputeInstance`), e.g.
    * `Standard_DS3_v2`. Changing it replaces the compute.
+   * @default none
    */
   vmSize?: string;
   /**
@@ -89,31 +91,42 @@ export interface ComputeProps {
   vmPriority?: "Dedicated" | "LowPriority";
   /**
    * Autoscale settings of an `AmlCompute` cluster; updated in place.
+   * @default Azure's default
    */
   scaleSettings?: ComputeScaleSettings;
   /**
    * Additional per-type properties sent as-is in `properties.properties`
    * (e.g. `remoteLoginPortPublicAccess`, `enableNodePublicIp`). Changing
    * them replaces the compute.
+   * @default none
    */
   properties?: Record<string, unknown>;
   /**
    * ARM resource ID of an existing compute to attach (`Kubernetes`, `AKS`,
    * `VirtualMachine`, `Databricks`, ...). Changing it replaces the compute.
+   * @default none
    */
   resourceId?: string;
-  /** Description of the compute. Changing it replaces the compute. */
+  /**
+   * Description of the compute. Changing it replaces the compute.
+   * @default none
+   */
   description?: string;
   /**
    * Disable local (key-based) authentication. Changing it replaces the
    * compute.
+   * @default false
    */
   disableLocalAuth?: boolean;
-  /** Managed identity of the compute. Changing it replaces the compute. */
+  /**
+   * Managed identity of the compute. Changing it replaces the compute.
+   * @default none
+   */
   identity?: MachineLearningIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -154,15 +167,32 @@ export interface Compute extends Resource<
  * `AmlCompute` cluster, a `ComputeInstance` development VM, or an
  * attached compute target (Kubernetes, Databricks, ...).
  *
+ * ARM type: `Microsoft.MachineLearningServices/workspaces/computes`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/concept-compute-target).
+ *
  * Cluster autoscale settings are updated in place; every other change
  * replaces the compute. An `AmlCompute` cluster with `minNodeCount: 0`
  * costs nothing while idle.
  *
- * @see https://learn.microsoft.com/azure/machine-learning/concept-compute-target
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `name`, `location`, `computeType`,
+ * `vmSize`, `vmPriority`, `properties`, `resourceId`, `description`,
+ * `disableLocalAuth`, or `identity` replaces the compute.
+ * :::
  *
  * ### Creating Compute
  * **Example:** Autoscaling CPU cluster that scales to zero
  * ```typescript
+ * // An existing Application Insights component for workspace telemetry.
+ * const insightsId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/monitoring/providers/Microsoft.Insights/components/ml-insights";
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const workspace = yield* Azure.MachineLearning.Workspace("ml", {
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ *   applicationInsights: insightsId,
+ * });
  * const cluster = yield* Azure.MachineLearning.Compute("cpu", {
  *   workspace: workspace.workspaceName,
  *   vmSize: "Standard_DS3_v2",

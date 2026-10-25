@@ -5,13 +5,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -39,13 +39,23 @@ export interface BackupPolicyProps {
   /**
    * Policy name. If omitted, a unique name is generated from the app,
    * stage, and logical ID. Changing it replaces the policy.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Number of daily backups to keep (2-1019 combined). */
+  /**
+   * Number of daily backups to keep (2-1019 combined).
+   * @default Azure's default
+   */
   dailyBackupsToKeep?: number;
-  /** Number of weekly backups to keep. */
+  /**
+   * Number of weekly backups to keep.
+   * @default Azure's default
+   */
   weeklyBackupsToKeep?: number;
-  /** Number of monthly backups to keep. */
+  /**
+   * Number of monthly backups to keep.
+   * @default Azure's default
+   */
   monthlyBackupsToKeep?: number;
   /**
    * Whether the policy takes backups.
@@ -55,6 +65,7 @@ export interface BackupPolicyProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -91,11 +102,17 @@ export interface BackupPolicy extends Resource<
  * retention of volume backups stored in a backup vault. The policy itself
  * is free; stored backups are billed.
  *
- * @see https://learn.microsoft.com/azure/azure-netapp-files/backup-configure-policy-based
+ * ARM type: `Microsoft.NetApp/netAppAccounts/backupPolicies`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/azure-netapp-files/backup-configure-policy-based).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `account`, or `name` replaces the policy.
+ * :::
  *
  * ### Creating a Backup Policy
  * **Example:** Keep a week of dailies and a month of weeklies
  * ```typescript
+ * const account = yield* Azure.NetApp.Account("files");
  * const policy = yield* Azure.NetApp.BackupPolicy("backups", {
  *   account: account.accountName,
  *   dailyBackupsToKeep: 7,
@@ -175,13 +192,11 @@ export const BackupPolicyProvider = () =>
         accountRefs(accounts),
         ({ resourceGroup, accountName }) =>
           orUndefinedIfNotFound(
-            netapp
-              .ListBackupPolicies({
-                subscriptionId,
-                resourceGroupName: resourceGroup,
-                accountName,
-              })
-              .pipe(Effect.flatMap((page) => requireSinglePage("ListBackupPolicies", page))),
+            collectAll(netapp.ListBackupPolicies, {
+              subscriptionId,
+              resourceGroupName: resourceGroup,
+              accountName,
+            }),
           ).pipe(Effect.map((page) => page?.value ?? [])),
       );
       return policies.flat().flatMap((policy) => {

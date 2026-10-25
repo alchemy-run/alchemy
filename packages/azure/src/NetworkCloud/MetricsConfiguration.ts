@@ -49,11 +49,15 @@ export interface MetricsConfigurationProps {
   customLocationId: string;
   /** Metrics collection interval in minutes. */
   collectionInterval: number;
-  /** Optional metrics to enable on top of the defaults. */
+  /**
+   * Optional metrics to enable on top of the defaults.
+   * @default none
+   */
   enabledMetrics?: string[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -99,15 +103,23 @@ export interface MetricsConfiguration extends Resource<
  * at most one, always named `default`. Needs a deployed Operator Nexus
  * cluster.
  *
- * @see https://learn.microsoft.com/azure/operator-nexus/howto-configure-metrics
+ * ARM type: `Microsoft.NetworkCloud/clusters/metricsConfigurations`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/operator-nexus/howto-configure-metrics).
+ *
+ * :::caution
+ * Changing `resourceGroup`, `clusterName`, `location`, or `customLocationId`
+ * replaces the configuration.
+ * :::
  *
  * ### Configuring Cluster Metrics
  * **Example:** Collect every 5 minutes
  * ```typescript
+ * // An existing Operator Nexus cluster, "site1", in the stack's resource group.
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/nexus/providers/Microsoft.ExtendedLocation/customLocations/site1-cl";
  * const metrics = yield* Azure.NetworkCloud.MetricsConfiguration("metrics", {
- *   resourceGroup: cluster.resourceGroup,
- *   clusterName: cluster.clusterName,
- *   customLocationId: cluster.clusterExtendedLocationId,
+ *   clusterName: "site1",
+ *   customLocationId,
  *   collectionInterval: 5,
  *   enabledMetrics: ["kubevirt_vmi_cpu_usage_seconds_total"],
  * });

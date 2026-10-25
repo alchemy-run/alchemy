@@ -58,13 +58,17 @@ export interface ManagementGroupSubscription extends Resource<
  * Places a subscription under a management group, so the group's policies
  * and role assignments apply to it.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/governance/management-groups/manage#move-management-groups-and-subscriptions).
+ *
  * A subscription belongs to exactly one management group. Creating this
  * resource moves the subscription out of its current group; deleting it
  * moves the subscription back to the tenant root group. The deploying
  * identity needs Owner on the subscription and
  * `Microsoft.Management/managementGroups/write` on the target group.
  *
- * @see https://learn.microsoft.com/azure/governance/management-groups/manage#move-management-groups-and-subscriptions
+ * :::caution
+ * Changing `managementGroupId`, or `subscriptionId` replaces the association.
+ * :::
  *
  * ### Organizing Subscriptions
  * **Example:** Move the current subscription under a management group

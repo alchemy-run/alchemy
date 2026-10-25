@@ -6,13 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -35,6 +35,7 @@ export interface DeidServiceIdentity {
   /**
    * ARM resource IDs of user-assigned identities (required when `type`
    * includes `UserAssigned`).
+   * @default []
    */
   userAssignedIdentities?: string[];
 }
@@ -43,12 +44,13 @@ export interface DeidServiceProps {
   /**
    * Resource group of the de-identification service. Changing it replaces
    * the service.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the service: 3-24 letters, digits, and hyphens. It forms the
-   * service URL. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the service.
+   * service URL. Changing it replaces the service.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -68,7 +70,10 @@ export interface DeidServiceProps {
    * @default no identity
    */
   identity?: DeidServiceIdentity;
-  /** User tags. Alchemy ownership tags are merged in. */
+  /**
+   * User tags. Alchemy ownership tags are merged in.
+   * @default {}
+   */
   tags?: Record<string, string>;
 }
 
@@ -105,20 +110,20 @@ export interface DeidService extends Resource<
 > {}
 
 /**
- * An Azure Health Data Services de-identification service, which removes or
- * surrogates protected health information (PHI) in unstructured text via
- * realtime calls or batch jobs. Billing is per MB of text processed, so an
- * idle service costs nothing.
+ * An Azure Health Data Services de-identification service
+ * (`Microsoft.HealthDataAIServices/deidServices`). It removes or replaces
+ * protected health information (PHI) in unstructured text through realtime
+ * calls or batch jobs. Billing is per MB of text processed, so an idle
+ * service costs nothing.
  *
  * @see https://learn.microsoft.com/azure/healthcare-apis/deidentification/overview
  *
  * ### Creating a De-identification Service
  * **Example:** De-identification service in East US
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("health", {
+ * const deid = yield* Azure.HealthDataAIServices.DeidService("deid", {
  *   location: "eastus",
  * });
- * const deid = yield* Azure.HealthDataAIServices.DeidService("deid");
  * // deid.serviceUrl is the data-plane endpoint
  * ```
  *
@@ -137,6 +142,11 @@ export interface DeidService extends Resource<
  *   publicNetworkAccess: "Disabled",
  * });
  * ```
+ *
+ * :::caution
+ * Changing `name`, `location`, or `resourceGroup` replaces the service and
+ * changes its `serviceUrl`.
+ * :::
  *
  * @resource
  */
@@ -210,9 +220,9 @@ export const DeidServiceProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* healthdataaiservices
-        .ListDeidServiceBySubscription({ subscriptionId })
-        .pipe(Effect.flatMap((page) => requireSinglePage("ListDeidServiceBySubscription", page)));
+      const page = yield* collectAll(healthdataaiservices.ListDeidServiceBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((service) => {
         const group = resourceGroupOf(service.id);
         return hasAnyAlchemyTag(service.tags) && group !== undefined && service.name !== undefined

@@ -7,13 +7,13 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
-  requireSinglePage,
   resourceGroupOf,
   tagsDiffer,
   userTags,
@@ -28,11 +28,15 @@ import { createDevCenterName, sameArm } from "./Common.ts";
 export type NetworkConnectionDomainJoinType = "AzureADJoin" | "HybridAzureADJoin" | "None";
 
 export interface NetworkConnectionProps {
-  /** Resource group the network connection is created in. Changing it replaces the connection. */
+  /**
+   * Resource group the network connection is created in. Changing it replaces the connection.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Network connection name. If omitted, a unique name is generated from
    * the app, stage, and logical ID. Changing it replaces the connection.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -59,20 +63,31 @@ export interface NetworkConnectionProps {
    * @default `NI_{name}_{location}`
    */
   networkingResourceGroupName?: string;
-  /** Active Directory domain name (hybrid join only), e.g. `corp.contoso.com`. */
+  /**
+   * Active Directory domain name (hybrid join only), e.g. `corp.contoso.com`.
+   * @default unset
+   */
   domainName?: string;
-  /** Organizational unit dev box computer accounts are created in (hybrid join only). */
+  /**
+   * Organizational unit dev box computer accounts are created in (hybrid join only).
+   * @default unset
+   */
   organizationUnit?: string;
-  /** User principal name of the account that joins dev boxes to the domain (hybrid join only). */
+  /**
+   * User principal name of the account that joins dev boxes to the domain (hybrid join only).
+   * @default unset
+   */
   domainUsername?: string;
   /**
    * Password of `domainUsername` (hybrid join only). Azure never returns
    * it, so it is re-sent whenever it changes from the previous deploy.
+   * @default unset
    */
   domainPassword?: Redacted.Redacted<string>;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -105,11 +120,18 @@ export interface NetworkConnection extends Resource<
 > {}
 
 /**
- * A Dev Box network connection — connects dev boxes to a subnet of your
+ * A Dev Box network connection (`Microsoft.DevCenter/networkConnections`)
+ * — connects dev boxes to a subnet of your
  * own virtual network, either Microsoft Entra joined or hybrid joined to
  * an on-premises Active Directory. Attach it to a dev center with an
  * `AttachedNetwork` to use it from pools. Azure runs health checks after
  * every change; the connection itself is free.
+ *
+ * :::caution
+ * Changing `name`, `location`, `resourceGroup`, `subnetId`,
+ * `domainJoinType`, or `networkingResourceGroupName` replaces the
+ * connection.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/dev-box/how-to-configure-network-connections
  *
@@ -201,11 +223,9 @@ export const NetworkConnectionProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* devcenter
-        .ListNetworkConnectionBySubscription({ subscriptionId })
-        .pipe(
-          Effect.flatMap((page) => requireSinglePage("ListNetworkConnectionBySubscription", page)),
-        );
+      const page = yield* collectAll(devcenter.ListNetworkConnectionBySubscription, {
+        subscriptionId,
+      });
       return (page.value ?? []).flatMap((connection) => {
         const group = resourceGroupOf(connection.id);
         return hasAnyAlchemyTag(connection.tags) &&

@@ -44,17 +44,45 @@ export interface WorkspaceGroupUser extends Resource<
 /**
  * The workspace-scoped counterpart of {@link GroupUser}: the same entity inside
  * an API Management {@link Workspace} (Premium and v2 tiers).
+ * The ARM type is `Microsoft.ApiManagement/service/workspaces/groups/users`.
  *
  * Adds a {@link User} to a custom {@link Group} of an API Management
  * service, giving the user visibility of the products the group can see.
  * The membership has no settings; changing the group or user replaces it.
  * Not available on the Consumption tier.
  *
+ * :::caution
+ * Changing `serviceName`, `workspaceName`, `groupName`, `userName`, or
+ * `resourceGroup` replaces the membership.
+ *
+ * Workspaces need a BasicV2, StandardV2, or Premium service ("Method not
+ * allowed in Consumption pricing tier").
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-create-groups
  *
  * ### Managing Group Membership
  * **Example:** Add a developer to the partners group
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   sku: { name: "BasicV2", capacity: 1 },
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
+ * const workspace = yield* Azure.ApiManagement.Workspace("payments", {
+ *   serviceName: apim.serviceName,
+ * });
+ * const partners = yield* Azure.ApiManagement.WorkspaceGroup("partners", {
+ *   serviceName: apim.serviceName,
+ *   workspaceName: workspace.workspaceName,
+ *   displayName: "Partners",
+ * });
+ * const jane = yield* Azure.ApiManagement.User("jane", {
+ *   serviceName: apim.serviceName,
+ *   email: "jane@example.com",
+ *   firstName: "Jane",
+ *   lastName: "Doe",
+ * });
  * yield* Azure.ApiManagement.WorkspaceGroupUser("jane-partners", {
  *   serviceName: apim.serviceName,
  *   workspaceName: workspace.workspaceName,

@@ -20,7 +20,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createAlnumName, getSqlPool, lower, workspaceLocation } from "./common.ts";
 
 export interface SqlPoolProps {
-  /** Resource group of the workspace. Changing it replaces the pool. */
+  /**
+   * Resource group of the workspace. Changing it replaces the pool.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Synapse workspace. Changing it replaces the pool. */
   workspace: string;
@@ -28,6 +31,7 @@ export interface SqlPoolProps {
    * Pool name: up to 60 letters, digits, and underscores. If omitted, a
    * unique name is generated from the app, stage, and logical ID. Changing
    * it replaces the pool.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -42,7 +46,10 @@ export interface SqlPoolProps {
    * @default "DW100c"
    */
   sku?: string;
-  /** Maximum size in bytes. */
+  /**
+   * Maximum size in bytes.
+   * @default not set
+   */
   maxSizeBytes?: number;
   /**
    * Database collation. Changing it replaces the pool.
@@ -59,13 +66,25 @@ export interface SqlPoolProps {
    * @default "Default"
    */
   createMode?: "Default" | "PointInTimeRestore" | "Recovery" | "Restore";
-  /** Source pool ID for `PointInTimeRestore`/`Restore`. */
+  /**
+   * Source pool ID for `PointInTimeRestore`/`Restore`.
+   * @default not set
+   */
   sourceDatabaseId?: string;
-  /** Recoverable (geo-backup) pool ID for `Recovery`. */
+  /**
+   * Recoverable (geo-backup) pool ID for `Recovery`.
+   * @default not set
+   */
   recoverableDatabaseId?: string;
-  /** Restore point (ISO 8601) for `PointInTimeRestore`. */
+  /**
+   * Restore point (ISO 8601) for `PointInTimeRestore`.
+   * @default not set
+   */
   restorePointInTime?: string;
-  /** Deletion time of a dropped source pool for `Restore`. */
+  /**
+   * Deletion time of a dropped source pool for `Restore`.
+   * @default not set
+   */
   sourceDatabaseDeletionDate?: string;
   /**
    * Pause the pool to stop compute billing (storage is still billed).
@@ -75,6 +94,7 @@ export interface SqlPoolProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -109,15 +129,35 @@ export interface SqlPool extends Resource<
 > {}
 
 /**
- * A dedicated SQL pool (formerly SQL Data Warehouse) in a Synapse
- * workspace. Compute is billed per hour by performance level (DW100c is the
- * smallest) while the pool is online; pause it to stop compute charges.
+ * A dedicated SQL pool (formerly SQL Data Warehouse) in a Synapse workspace
+ * (`Microsoft.Synapse/workspaces/sqlPools`). Compute is billed per hour by
+ * performance level (DW100c is the smallest) while the pool is online; pause
+ * it to stop compute charges.
+ *
+ * :::caution
+ * Changing `workspace`, `name`, `location`, `collation`,
+ * `storageAccountType`, `createMode`, `sourceDatabaseId`,
+ * `recoverableDatabaseId`, `restorePointInTime`, or `resourceGroup` replaces
+ * the pool and deletes its data.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/synapse-analytics/sql-data-warehouse/sql-data-warehouse-overview-what-is
  *
  * ### Creating a Dedicated SQL Pool
  * **Example:** Smallest pool
  * ```typescript
+ * const lake = yield* Azure.Storage.StorageAccount("lake", {
+ *   isHnsEnabled: true,
+ * });
+ * const fs = yield* Azure.Storage.BlobContainer("fs", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * const workspace = yield* Azure.Synapse.Workspace("ws", {
+ *   defaultDataLakeStorage: {
+ *     accountUrl: lake.primaryEndpoints.dfs.as<string>(),
+ *     filesystem: fs.containerName,
+ *   },
+ * });
  * const dw = yield* Azure.Synapse.SqlPool("dw", {
  *   workspace: workspace.workspaceName,
  *   sku: "DW100c",

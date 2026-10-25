@@ -21,7 +21,10 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLabResourceName, DEVTESTLAB_NAMESPACE, labLocation } from "./Common.ts";
 
 export interface DiskProps {
-  /** Resource group of the lab. Changing it replaces the disk. */
+  /**
+   * Resource group of the lab. Changing it replaces the disk.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the lab. Changing it replaces the disk. */
   lab: string;
@@ -30,6 +33,7 @@ export interface DiskProps {
   /**
    * Disk name. If omitted, a unique name is generated from the app, stage,
    * and logical ID. Changing it replaces the disk.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Storage type of the disk. Changing it replaces the disk. */
@@ -39,22 +43,26 @@ export interface DiskProps {
   /**
    * Host caching of the disk when attached (`None`, `ReadOnly`,
    * `ReadWrite`). Changing it replaces the disk.
+   * @default unset (Azure's default)
    */
   hostCaching?: "None" | "ReadOnly" | "ReadWrite";
   /**
    * ARM ID of the lab VM the disk is attached to. Changing it detaches the
    * disk from its current VM and attaches it to the new one; omit to keep
    * it detached.
+   * @default unset (detached)
    */
   leasedByLabVmId?: string;
   /**
    * ARM ID of an existing managed disk to import instead of creating an
    * empty one. Changing it replaces the disk.
+   * @default unset (a new empty disk)
    */
   managedDiskId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default no user tags
    */
   tags?: Record<string, string>;
 }
@@ -91,14 +99,26 @@ export interface Disk extends Resource<
 > {}
 
 /**
- * A lab-managed data disk owned by a DevTest Labs user, which can be
- * attached to and detached from the user's lab VMs.
+ * A lab-managed data disk (`Microsoft.DevTestLab/labs/users/disks`) owned
+ * by a DevTest Labs user, which can be attached to and detached from the
+ * user's lab VMs.
+ *
+ * :::caution
+ * Changing `lab`, `user`, `name`, `diskType`, `diskSizeGiB`,
+ * `hostCaching`, `managedDiskId`, or `resourceGroup` replaces the disk.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/devtest-labs/devtest-lab-attach-detach-data-disk
  *
  * ### Creating a Disk
  * **Example:** 32 GiB standard data disk
  * ```typescript
+ * const lab = yield* Azure.DevTestLabs.Lab("team-lab");
+ * const user = yield* Azure.DevTestLabs.User("alice", {
+ *   lab: lab.labName,
+ *   // Entra object ID of the lab user.
+ *   objectId: "00000000-0000-0000-0000-000000000000",
+ * });
  * const disk = yield* Azure.DevTestLabs.Disk("data", {
  *   lab: lab.labName,
  *   user: user.userName,

@@ -31,29 +31,50 @@ export interface DiagnosticProps {
   name?: "applicationinsights" | "azuremonitor";
   /** ARM resource ID of the logger that receives the telemetry (`Logger.loggerId`). */
   loggerId: string;
-  /** Message types that bypass sampling (`allErrors`). */
+  /**
+   * Message types that bypass sampling (`allErrors`).
+   * @default not set (Azure's default applies)
+   */
   alwaysLog?: "allErrors";
-  /** Sampling settings, e.g. `{ samplingType: "fixed", percentage: 50 }`. */
+  /**
+   * Sampling settings, e.g. `{ samplingType: "fixed", percentage: 50 }`.
+   * @default not set (Azure's default applies)
+   */
   sampling?: DiagnosticSampling;
-  /** Headers and body bytes to log for requests/responses between client and gateway. */
+  /**
+   * Headers and body bytes to log for requests/responses between client and gateway.
+   * @default not set (Azure's default applies)
+   */
   frontend?: DiagnosticPipelineSettings;
-  /** Headers and body bytes to log for requests/responses between gateway and backend. */
+  /**
+   * Headers and body bytes to log for requests/responses between gateway and backend.
+   * @default not set (Azure's default applies)
+   */
   backend?: DiagnosticPipelineSettings;
   /**
    * Whether to log the client IP address.
    * @default false
    */
   logClientIp?: boolean;
-  /** Correlation header protocol used for Application Insights. */
+  /**
+   * Correlation header protocol used for Application Insights.
+   * @default not set (Azure's default applies)
+   */
   httpCorrelationProtocol?: DiagnosticCorrelationProtocol;
-  /** Verbosity applied to traces emitted by `trace` policies. */
+  /**
+   * Verbosity applied to traces emitted by `trace` policies.
+   * @default not set (Azure's default applies)
+   */
   verbosity?: DiagnosticVerbosity;
   /**
    * Operation name format in Application Insights telemetry.
    * @default "Name"
    */
   operationNameFormat?: DiagnosticOperationNameFormat;
-  /** Emit custom metrics via the `emit-metric` policy (Application Insights only). */
+  /**
+   * Emit custom metrics via the `emit-metric` policy (Application Insights only).
+   * @default not set (Azure's default applies)
+   */
   metrics?: boolean;
 }
 
@@ -79,16 +100,26 @@ export interface Diagnostic extends Resource<
 /**
  * Service-wide diagnostic settings of an API Management service — sends
  * request telemetry for every API to a {@link Logger}.
+ * The ARM type is `Microsoft.ApiManagement/service/diagnostics`.
+ *
+ * :::caution
+ * Changing `serviceName`, `name`, or `resourceGroup` replaces the
+ * diagnostic.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/api-management/api-management-howto-app-insights
  *
  * ### Sending Telemetry to Application Insights
  * **Example:** Log every API with 50% sampling
  * ```typescript
+ * const apim = yield* Azure.ApiManagement.Service("gateway", {
+ *   publisherEmail: "ops@example.com",
+ *   publisherName: "Example Inc",
+ * });
  * const logger = yield* Azure.ApiManagement.Logger("insights", {
  *   serviceName: apim.serviceName,
  *   loggerType: "applicationInsights",
- *   credentials: { connectionString: Redacted.make(connectionString) },
+ *   credentials: { connectionString: yield* Config.redacted("APPINSIGHTS_CONNECTION_STRING") },
  * });
  * yield* Azure.ApiManagement.Diagnostic("insights", {
  *   serviceName: apim.serviceName,

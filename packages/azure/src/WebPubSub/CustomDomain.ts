@@ -24,7 +24,10 @@ import {
 } from "./internal.ts";
 
 export interface CustomDomainProps {
-  /** Resource group of the Web PubSub service. Changing it replaces the domain. */
+  /**
+   * Resource group of the Web PubSub service. Changing it replaces the domain.
+   * @default the stack's resource group (`<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Web PubSub service the domain points at. Needs the `Premium_P1` tier or
@@ -35,6 +38,7 @@ export interface CustomDomainProps {
    * Name of the custom domain resource. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Changing it replaces the
    * domain.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -72,15 +76,42 @@ export interface CustomDomain extends Resource<
 > {}
 
 /**
- * A custom domain of an Azure Web PubSub service. Clients connect to
+ * A custom domain of an Azure Web PubSub service
+ * (`Microsoft.SignalRService/webPubSub/customDomains`). Clients connect to
  * `https://{domainName}` with the TLS certificate from an
  * `Azure.WebPubSub.CustomCertificate`.
+ *
+ * :::caution
+ * Changing `webPubSub`, `name`, `domainName`, or `resourceGroup` replaces
+ * the custom domain.
+ * :::
+ *
+ * :::caution
+ * Create the CNAME record from `domainName` to the service's host name
+ * before you deploy the domain.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-web-pubsub/howto-custom-domain
  *
  * ### Serving a Custom Domain
  * **Example:** Domain with a Key Vault certificate
  * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("certs");
+ * const webPubSub = yield* Azure.WebPubSub.WebPubSub("realtime", {
+ *   sku: "Premium_P1",
+ *   identity: { type: "SystemAssigned" },
+ * });
+ * yield* Azure.Authorization.RoleAssignment("PubSubReadsSecrets", {
+ *   scope: vault.vaultId,
+ *   principalId: webPubSub.principalId!,
+ *   roleDefinitionId: "4633458b-17de-408a-b874-0445c86b69e6", // Key Vault Secrets User
+ *   principalType: "ServicePrincipal",
+ * });
+ * const certificate = yield* Azure.WebPubSub.CustomCertificate("tls", {
+ *   webPubSub: webPubSub.webPubSubName,
+ *   keyVaultBaseUri: vault.vaultUri,
+ *   keyVaultSecretName: "realtime-example-com",
+ * });
  * // CNAME realtime.example.com -> {webPubSub.webPubSubName}.webpubsub.azure.com
  * const domain = yield* Azure.WebPubSub.CustomDomain("realtime", {
  *   webPubSub: webPubSub.webPubSubName,

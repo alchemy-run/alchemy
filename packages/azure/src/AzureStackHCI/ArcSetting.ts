@@ -25,9 +25,15 @@ export interface ArcServiceConfiguration {
 }
 
 export interface ArcConnectivity {
-  /** Whether connectivity to the cluster's services through Arc is enabled. */
+  /**
+   * Whether connectivity to the cluster's services through Arc is enabled.
+   * @default not set (Azure's default applies)
+   */
   enabled?: boolean;
-  /** Services exposed through Arc connectivity. */
+  /**
+   * Services exposed through Arc connectivity.
+   * @default none
+   */
   serviceConfigurations?: ArcServiceConfiguration[];
 }
 
@@ -47,17 +53,33 @@ export interface ArcSettingProps {
    * create `<cluster>-<cloudId>-Arc-Infra-RG`, which requires the resource
    * provider to hold subscription-level rights. Changing it replaces the
    * Arc setting.
+   * @default not set (Azure tries to create `<cluster>-<cloudId>-Arc-Infra-RG`)
    */
   arcInstanceResourceGroup?: string;
-  /** App (client) ID of the Arc Microsoft Entra application. */
+  /**
+   * App (client) ID of the Arc Microsoft Entra application.
+   * @default not set
+   */
   arcApplicationClientId?: string;
-  /** Tenant ID of the Arc Microsoft Entra application. */
+  /**
+   * Tenant ID of the Arc Microsoft Entra application.
+   * @default not set
+   */
   arcApplicationTenantId?: string;
-  /** Object ID of the Arc application's service principal. */
+  /**
+   * Object ID of the Arc application's service principal.
+   * @default not set
+   */
   arcServicePrincipalObjectId?: string;
-  /** Object ID of the Arc Microsoft Entra application. */
+  /**
+   * Object ID of the Arc Microsoft Entra application.
+   * @default not set
+   */
   arcApplicationObjectId?: string;
-  /** Connectivity to the cluster's services through Arc. */
+  /**
+   * Connectivity to the cluster's services through Arc.
+   * @default not set (no Arc connectivity)
+   */
   connectivityProperties?: ArcConnectivity;
 }
 
@@ -97,9 +119,15 @@ export interface ArcSetting extends Resource<
  * Arc-enabled server resources live, the Arc Microsoft Entra application,
  * and Arc connectivity to cluster services. Extensions are installed under
  * an Arc setting.
+ * The ARM type is `Microsoft.AzureStackHCI/clusters/arcSettings`.
  *
  * The Arc setting has no tags; Alchemy treats it as owned when its parent
  * cluster carries this stack's ownership tags.
+ *
+ * :::caution
+ * Changing `cluster`, `name`, `arcInstanceResourceGroup`, or `resourceGroup`
+ * replaces the Arc setting.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-local/manage/azure-arc-vm-management-overview
  *
@@ -109,16 +137,17 @@ export interface ArcSetting extends Resource<
  * const cluster = yield* Azure.AzureStackHCI.Cluster("site-a");
  * const arc = yield* Azure.AzureStackHCI.ArcSetting("arc", {
  *   cluster: cluster.clusterName,
- *   arcInstanceResourceGroup: group.resourceGroupName,
+ *   arcInstanceResourceGroup: cluster.resourceGroup,
  * });
  * ```
  *
  * ### Arc Connectivity
  * **Example:** Expose Windows Admin Center through Arc
  * ```typescript
+ * const cluster = yield* Azure.AzureStackHCI.Cluster("site-a");
  * const arc = yield* Azure.AzureStackHCI.ArcSetting("arc", {
  *   cluster: cluster.clusterName,
- *   arcInstanceResourceGroup: group.resourceGroupName,
+ *   arcInstanceResourceGroup: cluster.resourceGroup,
  *   connectivityProperties: {
  *     enabled: true,
  *     serviceConfigurations: [{ serviceName: "WAC", port: 6516 }],

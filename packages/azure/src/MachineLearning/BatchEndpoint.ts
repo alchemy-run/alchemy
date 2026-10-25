@@ -39,6 +39,7 @@ export interface BatchEndpointProps {
    * letter, unique within the Azure region (it is part of the scoring
    * URI). If omitted, a unique name is generated from the logical ID.
    * Changing it replaces the endpoint.
+   * @default a unique name generated from the logical ID
    */
   name?: string;
   /**
@@ -52,11 +53,15 @@ export interface BatchEndpointProps {
    * @default "AADToken"
    */
   authMode?: EndpointAuthMode;
-  /** Description of the endpoint. */
+  /**
+   * Description of the endpoint.
+   * @default none
+   */
   description?: string;
   /**
    * Name of the deployment that serves invocations that do not name one.
    * The deployment must exist, so set it in a deploy after it is created.
+   * @default unchanged
    */
   defaultDeployment?: string;
   /**
@@ -67,6 +72,7 @@ export interface BatchEndpointProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -105,13 +111,30 @@ export interface BatchEndpoint extends Resource<
  * stable URI that runs asynchronous scoring jobs over large datasets on
  * an `AmlCompute` cluster through its `BatchDeployment`s.
  *
+ * ARM type: `Microsoft.MachineLearningServices/workspaces/batchEndpoints`.
+ * See the [Azure documentation](https://learn.microsoft.com/azure/machine-learning/concept-endpoints-batch).
+ *
  * An endpoint has no hourly charge; compute is billed only while jobs run.
  *
- * @see https://learn.microsoft.com/azure/machine-learning/concept-endpoints-batch
+ * :::caution
+ * Changing `resourceGroup`, `workspace`, `name`, `location`, or `authMode`
+ * replaces the endpoint.
+ * :::
  *
  * ### Creating an Endpoint
  * **Example:** Batch endpoint
  * ```typescript
+ * const storage = yield* Azure.Storage.StorageAccount("artifacts");
+ * const vault = yield* Azure.KeyVault.Vault("secrets", { enableRbacAuthorization: false });
+ * const hub = yield* Azure.MachineLearning.Workspace("hub", {
+ *   kind: "Hub",
+ *   storageAccount: storage.storageAccountId,
+ *   keyVault: vault.vaultId,
+ * });
+ * const workspace = yield* Azure.MachineLearning.Workspace("project", {
+ *   kind: "Project",
+ *   hubResourceId: hub.workspaceId,
+ * });
  * const endpoint = yield* Azure.MachineLearning.BatchEndpoint("nightly", {
  *   workspace: workspace.workspaceName,
  *   description: "Nightly scoring",

@@ -31,6 +31,7 @@ export interface AksAssessmentProps {
   /**
    * Name of the assessment. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Changing it replaces the assessment.
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -42,6 +43,7 @@ export interface AksAssessmentProps {
    * Workloads to assess, e.g. `{ scopeType: "ServerGroupId", serverGroupId }`
    * with the ARM ID of a `Migrate.Group`. Changing it re-computes the
    * assessment in place.
+   * @default Azure's default
    */
   scope?: AksAssessmentScope;
 }
@@ -71,17 +73,28 @@ export interface AksAssessment extends Resource<
  * Azure Kubernetes Service clusters and cost needed to containerize
  * discovered web applications.
  *
+ * See the [Azure documentation](https://learn.microsoft.com/azure/migrate/concepts-azure-kubernetes-service-assessment-calculation).
+ *
  * The project must hold web apps an appliance discovered; in a project
  * without them Azure rejects the assessment with an HTTP 400 ("Bug
  * Encountered in code."). Assessments cannot be tagged; Alchemy treats an
  * assessment as owned when its assessment project carries this stack's and
  * stage's ownership tags.
  *
- * @see https://learn.microsoft.com/azure/migrate/concepts-azure-kubernetes-service-assessment-calculation
+ * :::caution
+ * Changing `resourceGroup`, `assessmentProject`, or `name` replaces the
+ * assessment.
+ * :::
  *
  * ### Assessing for AKS
  * **Example:** AKS assessment of a group
  * ```typescript
+ * const project = yield* Azure.Migrate.AssessmentProject("assess", {
+ *   location: "centralus",
+ * });
+ * const machines = yield* Azure.Migrate.Group("web-tier", {
+ *   assessmentProject: project.projectName,
+ * });
  * const assessment = yield* Azure.Migrate.AksAssessment("aks", {
  *   assessmentProject: project.projectName,
  *   scope: { scopeType: "ServerGroupId", serverGroupId: machines.groupId },
