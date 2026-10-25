@@ -14,13 +14,20 @@ const IOT_HUB_DATA_CONTRIBUTOR = "4fc6c259-987e-4a07-842e-c321cc9d413f";
 /** First-party "Azure Device Update" application. */
 const DEVICE_UPDATE_APP_ID = "6ee392c4-d339-4083-b04d-6b7947c6cf78";
 
-/** Object ID of the Device Update service principal (deploy time only). */
+/**
+ * Object ID of the Device Update service principal (deploy time only), read
+ * with the deployer's Graph credentials: a Function's init may only require
+ * its ARM credentials, and may only fail with `ConfigError`.
+ */
 const deviceUpdatePrincipalId = globalThis.__ALCHEMY_RUNTIME__
   ? Effect.succeed("")
-  : Effect.map(
-      servicePrincipals.getServicePrincipalByAppId({ appId: DEVICE_UPDATE_APP_ID, select: ["id"] }),
-      (principal) => principal.id ?? "",
-    );
+  : servicePrincipals
+      .getServicePrincipalByAppId({ appId: DEVICE_UPDATE_APP_ID, select: ["id"] })
+      .pipe(
+        Effect.map((principal) => principal.id ?? ""),
+        Effect.provide(Azure.graphFromAuthProvider()),
+        Effect.orDie,
+      );
 
 // S1 rather than F1: the single free hub per subscription is held by the
 // IoT Hub suite.

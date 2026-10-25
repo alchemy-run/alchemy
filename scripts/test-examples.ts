@@ -66,6 +66,7 @@ const examples = [
   // "./examples/aws-website-vite",
   // "./examples/aws-website-vinext",
   // "./examples/aws-website-waku",
+  "./examples/azure-effect-workflows",
   "./examples/azure-website-vite",
   "./examples/fly-app",
   "./examples/fly-service",

@@ -53,7 +53,7 @@ const Stack = Alchemy.Stack(
     const write = yield* WriteTarget;
     const doomed = yield* DoomedTarget;
     // Lets the deployer verify each binding's effect through the data plane.
-    const deployer = yield* callerObjectId;
+    const deployer = yield* callerObjectId.pipe(Effect.orDie);
     yield* Azure.Authorization.RoleAssignment("KvDeployerSecretsOfficer", {
       scope: vault.vaultId,
       roleDefinitionId: KEY_VAULT_SECRETS_OFFICER,

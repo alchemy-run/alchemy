@@ -62,7 +62,7 @@ export interface QueryTableEntities extends Binding.Service<
     (
       request: QueryTableEntitiesRequest,
     ) => Effect.Effect<
-      tables.TableQueryEntitiesResponse,
+      tables.TableEntityQueryResponse,
       tables.TableQueryEntitiesError,
       RuntimeContext
     >

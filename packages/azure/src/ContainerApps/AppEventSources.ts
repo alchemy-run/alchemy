@@ -332,5 +332,7 @@ export const appSchedule = <Req = never>(
     }).pipe(
       Effect.catchCause((cause) => Effect.logError(`schedule ${name} is invalid: ${cron}`, cause)),
     );
-    yield* run(loop);
+    // As for the event sources, the handler's requirements are runtime
+    // services of the running app, not requirements of its init.
+    yield* run(loop as Effect.Effect<void>);
   });

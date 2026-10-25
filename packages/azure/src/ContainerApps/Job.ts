@@ -747,7 +747,8 @@ type CollectedBindings = ReturnType<typeof collectBindings>;
 
 /** Identity with SystemAssigned enabled, as the registry pull and grants need it. */
 const withSystemIdentity = (identity: ContainerAppsIdentity | undefined): ContainerAppsIdentity => {
-  switch (identity?.type) {
+  if (identity === undefined) return { type: "SystemAssigned" };
+  switch (identity.type) {
     case undefined:
     case "None":
       return { type: "SystemAssigned" };
@@ -820,7 +821,8 @@ const toConfiguration = Effect.fn(function* (
     return config;
   }
   if (configuration !== undefined) {
-    const config: JobConfiguration = base;
+    // `base` spreads the optional `configuration`; re-spread the narrowed one.
+    const config: JobConfiguration = { ...base, ...configuration };
     return config;
   }
   const config: JobConfiguration = {

@@ -1628,6 +1628,10 @@ export default defineConfig({
             { label: "Overview", link: "/azure" },
             { label: "Setup", link: "/azure/setup" },
             {
+              label: "Compute",
+              items: [{ label: "Effect workflows", link: "/azure/compute/effect-workflows" }],
+            },
+            {
               label: "Frontend",
               items: [
                 { label: "Overview", link: "/azure/frontend/websites" },

@@ -14,6 +14,7 @@ import {
   ignoreNotFound,
   isOwned,
   orUndefinedIfNotFound,
+  stackAndStage,
   tagsDiffer,
   userTags,
   waitForProvisioned,
@@ -177,20 +178,39 @@ const getGroup = (subscriptionId: string, resourceGroupName: string) =>
 
 /**
  * Fail unless the group holds no resources. ARM's resource list lags the
- * deletes that destroy just finished, so poll for up to a minute.
+ * deletes that destroy just finished, so poll for up to a minute, and for
+ * up to 15 minutes while everything still listed carries this stack's
+ * ownership tags: a deleted Durable Task Scheduler stays listed for 5-15.
  */
 const requireEmpty = (subscriptionId: string, resourceGroupName: string) =>
   Effect.gen(function* () {
-    const listIds = orUndefinedIfNotFound(
+    const { stack, stage } = yield* stackAndStage;
+    const list = orUndefinedIfNotFound(
       resources.ListResourceByResourceGroup({ subscriptionId, resourceGroupName, _top: 50 }),
-    ).pipe(Effect.map((page) => (page?.value ?? []).flatMap((r) => (r.id ? [r.id] : []))));
-    const remaining = yield* listIds.pipe(
+    ).pipe(Effect.map((page) => page?.value ?? []));
+    const ours = (listed: ReadonlyArray<{ tags?: Record<string, string | undefined> }>) =>
+      listed.every(
+        (r) => r.tags?.["alchemy::stack"] === stack && r.tags?.["alchemy::stage"] === stage,
+      );
+    const listed = yield* list.pipe(
       Effect.repeat({
-        until: (ids) => ids.length === 0,
+        until: (all) => all.length === 0,
         schedule: Schedule.spaced("5 seconds"),
         times: 12,
       }),
+      Effect.flatMap((all) =>
+        all.length > 0 && ours(all)
+          ? list.pipe(
+              Effect.repeat({
+                until: (now) => now.length === 0 || !ours(now),
+                schedule: Schedule.spaced("90 seconds"),
+                times: 10,
+              }),
+            )
+          : Effect.succeed(all),
+      ),
     );
+    const remaining = listed.flatMap((r) => (r.id ? [r.id] : []));
     if (remaining.length > 0) {
       return yield* new ResourceGroupNotEmpty({
         resourceGroup: resourceGroupName,

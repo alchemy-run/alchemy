@@ -52,7 +52,7 @@ const Stack = Alchemy.Stack(
     yield* EmbedDeployment;
     yield* BatchDeployment;
     // Lets the deployer read the files and batches out of band.
-    const deployer = yield* callerObjectId;
+    const deployer = yield* callerObjectId.pipe(Effect.orDie);
     yield* Azure.Authorization.RoleAssignment("OpenAIBindDeployerContributor", {
       scope: account.accountId,
       roleDefinitionId: OPENAI_CONTRIBUTOR,

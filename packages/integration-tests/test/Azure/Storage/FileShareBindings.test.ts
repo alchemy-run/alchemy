@@ -6,6 +6,7 @@ import * as Alchemy from "alchemy";
 import { describe, expect } from "alchemy-test";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import type * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -29,8 +30,8 @@ const Stack = Alchemy.Stack(
   Effect.gen(function* () {
     const fn = yield* FileShareBindingsFunction;
     const account = yield* FileAccount;
-    const names: Record<string, unknown> = {};
-    const ids: Record<string, unknown> = {};
+    const names: Record<string, Output.Output<string, never>> = {};
+    const ids: Record<string, Output.Output<string, never>> = {};
     for (const [key, make] of Object.entries(Shares)) {
       const share = yield* make;
       names[key] = share.shareName;
@@ -88,9 +89,11 @@ const get = (path: string) =>
     const { url } = yield* outputs;
     return yield* HttpClient.get(`${url}${path}`).pipe(
       Effect.timeout("60 seconds"),
-      Effect.flatMap((response) =>
-        response.status === 200 ? response.json : Effect.fail(`status ${response.status}`),
+      Effect.filterOrFail(
+        (response) => response.status === 200,
+        (response) => `status ${response.status}`,
       ),
+      Effect.flatMap((response) => response.json),
       Effect.map((body) => body as Body),
       Effect.flatMap((body) =>
         !body.ok && ACCESS_PENDING.has(body.tag ?? "") ? Effect.fail(body) : Effect.succeed(body),

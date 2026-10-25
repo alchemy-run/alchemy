@@ -62,7 +62,7 @@ const Stack = Alchemy.Stack(
       storageAccount: account.storageAccountName,
     });
     // Lets the deployer verify each binding's effect through the data plane.
-    const deployer = yield* callerObjectId;
+    const deployer = yield* callerObjectId.pipe(Effect.orDie);
     yield* Azure.Authorization.RoleAssignment("DtDeployerDataOwner", {
       scope: twins.instanceId,
       roleDefinitionId: DIGITAL_TWINS_DATA_OWNER,

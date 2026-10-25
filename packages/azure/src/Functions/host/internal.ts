@@ -46,6 +46,8 @@ export interface FunctionsBundleProps {
   build?: Bundle.BundleConfig;
   env?: Record<string, unknown>;
   isExternal?: boolean;
+  /** Extra `extensions` entries for host.json (`durableTask` for a WorkflowFunction). */
+  hostExtensions?: Record<string, unknown>;
 }
 
 /**
@@ -137,22 +139,24 @@ export const HOST_STORAGE_ROLES = [
   "0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3", // Storage Table Data Contributor
 ];
 
-const HOST_JSON = `${JSON.stringify(
-  {
-    version: "2.0",
-    extensions: {
-      http: { routePrefix: "" },
-      // Queue messages are plain text, as `Storage.QueueSend` writes them.
-      queues: { messageEncoding: "none" },
+const hostJsonOf = (hostExtensions?: Record<string, unknown>) =>
+  `${JSON.stringify(
+    {
+      version: "2.0",
+      extensions: {
+        http: { routePrefix: "" },
+        // Queue messages are plain text, as `Storage.QueueSend` writes them.
+        queues: { messageEncoding: "none" },
+        ...hostExtensions,
+      },
+      extensionBundle: {
+        id: "Microsoft.Azure.Functions.ExtensionBundle",
+        version: "[4.*, 5.0.0)",
+      },
     },
-    extensionBundle: {
-      id: "Microsoft.Azure.Functions.ExtensionBundle",
-      version: "[4.*, 5.0.0)",
-    },
-  },
-  null,
-  2,
-)}\n`;
+    null,
+    2,
+  )}\n`;
 
 const PACKAGE_JSON = `${JSON.stringify({ type: "module", main: "index.mjs" }, null, 2)}\n`;
 
@@ -205,18 +209,20 @@ export const makeBundler = Effect.gen(function* () {
       },
       props.build,
     );
+    // The scale controller reads host.json itself, so these cannot be app-setting overrides.
+    const hostJson = hostJsonOf(props.hostExtensions);
     const files = [
       ...output.files.map((file) => ({
         path: file.path,
         content:
           typeof file.content === "string" ? new TextEncoder().encode(file.content) : file.content,
       })),
-      { path: "host.json", content: HOST_JSON },
+      { path: "host.json", content: hostJson },
       { path: "package.json", content: PACKAGE_JSON },
     ];
     const codeHash = (yield* sha256Object({
       bundle: output.hash,
-      host: HOST_JSON,
+      host: hostJson,
       package: PACKAGE_JSON,
       envKeys: props.isExternal ? envKeys : [],
     })).slice(0, 16);

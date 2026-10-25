@@ -45,7 +45,7 @@ const Stack = Alchemy.Stack(
     const catalog = yield* Catalog;
     const inbox = yield* Inbox;
     // Lets the deployer seed the catalog and verify each write out of band.
-    const deployer = yield* callerObjectId;
+    const deployer = yield* callerObjectId.pipe(Effect.orDie);
     yield* Azure.Authorization.RoleAssignment("SrchDeployerDataContributor", {
       scope: service.searchServiceId,
       roleDefinitionId: SEARCH_INDEX_DATA_CONTRIBUTOR,

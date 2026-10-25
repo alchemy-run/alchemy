@@ -159,7 +159,7 @@ const observeJobSchedule = (jobScheduleId: string) =>
   }).pipe(Effect.provide(azure));
 
 /** Poll an observation (`"found"` or `"gone"`) until it reports `"gone"`. */
-const untilGone = <E>(observe: Effect.Effect<"found" | "gone", E>) =>
+const untilGone = <E, R>(observe: Effect.Effect<"found" | "gone", E, R>) =>
   observe.pipe(
     Effect.repeat({
       schedule: Schedule.spaced("5 seconds"),

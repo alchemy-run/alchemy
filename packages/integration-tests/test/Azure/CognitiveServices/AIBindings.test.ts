@@ -59,7 +59,7 @@ const Stack = Alchemy.Stack(
     const project = yield* AiProject;
     const model = yield* AiModel;
     // Lets the deployer verify each binding's effect through the data planes.
-    const deployer = yield* callerObjectId;
+    const deployer = yield* callerObjectId.pipe(Effect.orDie);
     yield* Azure.Authorization.RoleAssignment("AiDeployerCognitiveServicesUser", {
       scope: account.accountId,
       roleDefinitionId: COGNITIVE_SERVICES_USER,

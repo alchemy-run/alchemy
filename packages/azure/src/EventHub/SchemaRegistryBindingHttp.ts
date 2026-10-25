@@ -105,7 +105,7 @@ const GrantOnNamespace = Effect.map(
 );
 
 /** The registry endpoint of a namespace: `<namespace>.servicebus.windows.net`. */
-const endpointOf = (namespace: Input<string>) =>
+const endpointOf = (namespace: Output.Output<string, never>) =>
   Output.interpolate`${namespace}.servicebus.windows.net`;
 
 /** Where a schema group's schemas live, resolved per call at runtime. */

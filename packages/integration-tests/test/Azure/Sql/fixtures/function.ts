@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import * as Azure from "@alchemy.run/azure";
+import type { InputProps } from "alchemy/Input";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -46,7 +47,7 @@ export const AllowAzure = Effect.gen(function* () {
   });
 });
 
-const database = (id: string, props: Partial<Azure.Sql.DatabaseProps> = {}) =>
+const database = (id: string, props: Partial<InputProps<Azure.Sql.DatabaseProps>> = {}) =>
   Effect.gen(function* () {
     const primary = yield* Primary;
     return yield* Azure.Sql.Database(id, {

@@ -88,7 +88,8 @@ const restartEvents = (siteId: string, since: string) =>
   Effect.gen(function* () {
     const { subscriptionId } = yield* Azure.AzureEnvironment.current;
     const config = yield* yield* Credentials;
-    const token = yield* config.tokenFor("https://management.azure.com/.default");
+    // `bearerToken` is the ARM token.
+    const token = config.bearerToken;
     const filter = `eventTimestamp ge '${since}' and resourceUri eq '${siteId}'`;
     const response = yield* HttpClient.execute(
       HttpClientRequest.get(

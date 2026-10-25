@@ -186,6 +186,8 @@ export interface FunctionProps<
   tags?: Record<string, string>;
   /** @internal Set automatically by Alchemy. */
   hosting?: FunctionHosting;
+  /** @internal Extra host.json `extensions` (set by `WorkflowFunction`). */
+  hostExtensions?: Record<string, unknown>;
 }
 
 export interface FunctionAttributes {
@@ -226,8 +228,11 @@ export interface Function<Env extends Record<string, any> = Record<string, any>>
 export type FunctionServices = Credentials;
 export type FunctionShape = Main<FunctionServices>;
 
-/** A trigger handler: one invocation, one Effect. A defect fails the invocation. */
-export type TriggerHandler = (invocation: TriggerInvocation) => Effect.Effect<void, never, any>;
+/**
+ * A trigger handler: one invocation, one Effect. A defect fails the
+ * invocation. A durable trigger's value is its return value.
+ */
+export type TriggerHandler = (invocation: TriggerInvocation) => Effect.Effect<unknown, never, any>;
 
 /** Runtime context of an Azure Functions host. */
 export interface FunctionRuntimeContext extends BaseRuntimeContext {

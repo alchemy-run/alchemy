@@ -51,7 +51,7 @@ const Stack = Alchemy.Stack(
     const catalog = yield* Catalog;
     const environmentType = yield* ProjectEnvironmentType;
     // Lets the deployer read every user's dev boxes and environments.
-    const deployer = yield* callerObjectId;
+    const deployer = yield* callerObjectId.pipe(Effect.orDie);
     yield* Azure.Authorization.RoleAssignment("DcDeployerProjectAdmin", {
       scope: project.projectId,
       roleDefinitionId: DEVCENTER_PROJECT_ADMIN,

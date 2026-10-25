@@ -58,7 +58,7 @@ export interface CreateTable extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreateTableRequest,
-    ) => Effect.Effect<tables.CreateTableResponse, tables.CreateTableError, RuntimeContext>
+    ) => Effect.Effect<tables.TableResponse, tables.CreateTableError, RuntimeContext>
   >
 > {}
 

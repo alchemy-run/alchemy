@@ -232,7 +232,7 @@ export const pushProgramImage = Effect.fn(function* (options: PushProgramImageOp
 
   // The program layer.
   const archive = yield* tarFiles(options.files);
-  if ("error" in archive) return yield* fail(archive.error);
+  if (archive.error !== undefined) return yield* fail(archive.error);
   const diffId = yield* digestOf(archive.tar);
   const layerBytes = yield* gzip(archive.tar);
   const layer = yield* uploadBlob(endpoint, repository, layerBytes);

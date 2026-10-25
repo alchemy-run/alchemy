@@ -110,6 +110,7 @@ export const BuiltInRole = {
   EventGridDataSender: "d5a91429-5739-47e2-a06b-3470a27159e7",
   SchemaRegistryReader: "2c56ea50-c6b3-40a6-83c0-9d98858bc7d2",
   SchemaRegistryContributor: "5dffeca3-4936-4216-b2bc-10343a5abb25",
+  DurableTaskDataContributor: "0ad04412-c4d5-4796-b79c-f76d14c8d402",
 } as const;
 
 /**

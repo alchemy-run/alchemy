@@ -48,7 +48,9 @@ const toRequest = (req: IncomingMessage): Request => {
   return new Request(`http://${req.headers.host ?? "localhost"}${req.url ?? "/"}`, {
     method,
     headers,
-    body: hasBody ? (Readable.toWeb(req) as ReadableStream<Uint8Array>) : undefined,
+    // Node's web stream type and the DOM `BodyInit` type are the same
+    // object at runtime but unrelated to the compiler.
+    body: hasBody ? (Readable.toWeb(req) as unknown as ReadableStream<Uint8Array>) : undefined,
     // Required by Node's fetch for a streamed request body.
     ...(hasBody ? { duplex: "half" } : {}),
   } as RequestInit);

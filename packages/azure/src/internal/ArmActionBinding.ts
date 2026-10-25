@@ -89,8 +89,11 @@ const GrantArmActionRole = Effect.gen(function* () {
  */
 export const makeArmActionBinding = <
   Res extends readonly [ResourceLike, ...ResourceLike[]],
-  const K extends string,
-  I extends { readonly [P in K]: string },
+  // `K` is bounded by `keyof I`, not `I` by `K`: `identifiers` is
+  // context-sensitive, so a bound on `I` would be checked against an
+  // uninferred `K` and widen `I` to an index signature.
+  const K extends keyof I & string,
+  I,
   A,
   E,
 >(options: {

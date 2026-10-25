@@ -23,7 +23,7 @@ export const Events = Effect.gen(function* () {
     workspace: workspace.workspaceName,
     name: TABLE_NAME,
     columns: [
-      { name: "TimeGenerated", type: "datetime" },
+      { name: "TimeGenerated", type: "dateTime" },
       { name: "Message", type: "string" },
       { name: "RunId", type: "string" },
     ],

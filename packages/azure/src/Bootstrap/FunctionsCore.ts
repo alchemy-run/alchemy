@@ -144,6 +144,10 @@ const toRpcHttp = async (response: unknown): Promise<RpcTypedData> => {
   };
 };
 
+/** A non-HTTP return value, typed the way `@azure/functions` v4 sends it. */
+const toRpcTypedData = (value: unknown): RpcTypedData =>
+  typeof value === "string" ? { string: value } : { json: JSON.stringify(value) };
+
 const isHttpTrigger = (bindings: Record<string, RpcBindingInfo>) =>
   Object.values(bindings).some((b) => b.type?.toLowerCase() === "httptrigger");
 
@@ -177,8 +181,17 @@ const programmingModel = {
       invokeFunction: async (context, inputs, callback) => await callback(inputs[0], context),
       getResponse: async (_context, result) =>
         http
-          ? { invocationId: core.invocationId, outputData: [], returnValue: await toRpcHttp(result) }
-          : { invocationId: core.invocationId, outputData: [] },
+          ? {
+              invocationId: core.invocationId,
+              outputData: [],
+              returnValue: await toRpcHttp(result),
+            }
+          : // Durable triggers answer with their return value (an orchestrator's state, an activity's result).
+            {
+              invocationId: core.invocationId,
+              outputData: [],
+              ...(result === undefined ? {} : { returnValue: toRpcTypedData(result) }),
+            },
     };
   },
 };
@@ -225,11 +238,14 @@ export const registerHttpFunction = (
     (request) => handler(request as Request),
   );
 
-/** Register a non-HTTP trigger function; a rejected `run` fails the invocation. */
+/**
+ * Register a non-HTTP trigger function; a rejected `run` fails the
+ * invocation, and a value it resolves with is the function's return value.
+ */
 export const registerTriggerFunction = (
   name: string,
   binding: TriggerBinding,
-  run: (invocation: TriggerInvocation) => Promise<void>,
+  run: (invocation: TriggerInvocation) => Promise<unknown>,
 ) =>
   coreApi().registerFunction(
     {

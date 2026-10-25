@@ -21,6 +21,20 @@ export {
   type Config as CredentialsConfig,
 } from "@distilled.cloud/azure";
 
+// Tags the deployer's `Credentials` as `CredentialsLike`, so a Stack effect
+// may read them (`Azure.providers()` provides them).
+declare module "@distilled.cloud/azure/Credentials" {
+  interface Credentials {
+    readonly kind: "Credentials";
+  }
+}
+
+declare module "@distilled.cloud/microsoft-graph/Credentials" {
+  interface Credentials {
+    readonly kind: "Credentials";
+  }
+}
+
 /**
  * Resolve the Azure service principal for the configured profile (or the
  * CI environment). The resolved value is cached for the layer's lifetime.

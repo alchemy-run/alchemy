@@ -35,7 +35,7 @@ const decode = (raw: string | undefined): unknown => {
 };
 
 const readBody = (req: IncomingMessage) =>
-  new Promise<Uint8Array>((resolve, reject) => {
+  new Promise<Uint8Array<ArrayBuffer>>((resolve, reject) => {
     const chunks: Uint8Array[] = [];
     req.on("data", (chunk: Uint8Array) => chunks.push(chunk));
     req.on("end", () => resolve(Buffer.concat(chunks)));

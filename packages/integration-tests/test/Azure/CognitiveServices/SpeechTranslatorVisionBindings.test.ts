@@ -64,7 +64,7 @@ const Stack = Alchemy.Stack(
     const speech = yield* Speech;
     const vision = yield* Vision;
     // Lets the deployer call the data planes out of band.
-    const deployer = yield* callerObjectId;
+    const deployer = yield* callerObjectId.pipe(Effect.orDie);
     for (const [id, account] of [
       ["StvDeployerTranslator", translator],
       ["StvDeployerSpeech", speech],

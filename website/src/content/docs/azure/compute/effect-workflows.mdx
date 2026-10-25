@@ -1,0 +1,278 @@
+---
+title: Effect workflows
+description: Run Effect workflows on Azure Durable Functions with a Durable Task Scheduler backend. Host them in an Azure.Functions.WorkflowFunction, start runs from other functions with Azure.Functions.DurableEngine, and let them sleep and wait durably.
+---
+
+An Effect workflow is a durable process written with `effect/workflow`: a
+series of steps whose results are stored, so a run that's interrupted
+resumes after its last finished step, and a run can wait hours or days for
+a timer or a signal. On Azure they run on Durable Functions, with a
+[Durable Task Scheduler](https://learn.microsoft.com/azure/azure-functions/durable/durable-task-scheduler/durable-task-scheduler)
+task hub as the backend: each run is one orchestration instance.
+
+The same workflow code runs on AWS and Cloudflare too. See
+[Effect workflows on AWS](/aws/compute/effect-workflows) and
+[Effect workflows on Cloudflare](/cloudflare/compute/effect-workflows).
+
+## Define a workflow
+
+`Workflow.make` declares the workflow, and `Workflows.layer` implements it.
+Each step is an `Activity`: a named Effect whose result is stored the first
+time it completes.
+
+```typescript
+// src/orders.ts
+import * as Workflows from "alchemy/Workflows";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { Activity, Workflow } from "effect/workflow";
+
+export const PlaceOrder = Workflow.make("PlaceOrder", {
+  payload: { orderId: Schema.String },
+  success: Schema.String,
+  idempotencyKey: ({ orderId }) => orderId,
+});
+
+export const PlaceOrderLive = Workflows.layer(
+  PlaceOrder,
+  Effect.fn(function* ({ orderId }) {
+    return yield* Activity.make({
+      name: "charge",
+      success: Schema.String,
+      execute: Effect.succeed(`charged ${orderId}`),
+    });
+  }),
+);
+```
+
+## Use bindings in a step
+
+Pass `Workflows.layer` an Effect that returns the handler instead of the
+handler itself. The Effect runs once, when the function starts, so resolve
+bindings there and use them in the steps:
+
+```typescript
+// src/receipts.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Workflows from "alchemy/Workflows";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { Activity, Workflow } from "effect/workflow";
+
+export const Data = Azure.Storage.StorageAccount("Data");
+export const Receipts = Effect.gen(function* () {
+  const account = yield* Data;
+  return yield* Azure.Storage.BlobContainer("Receipts", {
+    storageAccount: account.storageAccountName,
+  });
+});
+
+export const SendReceipt = Workflow.make("SendReceipt", {
+  payload: { orderId: Schema.String },
+  idempotencyKey: ({ orderId }) => orderId,
+});
+
+export const SendReceiptLive = Workflows.layer(
+  SendReceipt,
+  Effect.gen(function* () {
+    const container = yield* Receipts;
+    const receipts = yield* Azure.Storage.BlobContainerReadWrite(container);
+    return Effect.fn(function* ({ orderId }) {
+      yield* Activity.make({
+        name: "receipt",
+        execute: receipts.put(`${orderId}.json`, JSON.stringify({ orderId })).pipe(Effect.orDie),
+      });
+    });
+  }),
+);
+```
+
+The binding grants the workflow function's managed identity
+**Storage Blob Data Contributor** on the container. Provide its
+implementation on the Layer you deploy the function with:
+`SendReceiptLive.pipe(Layer.provide(Azure.Storage.BlobContainerReadWriteHttp))`.
+
+## Host it in a workflow function
+
+`Azure.Functions.WorkflowFunction` is an Azure Function (Flex Consumption)
+that runs workflows. Declare the workflows it runs, then deploy it with the
+Layer that implements them:
+
+```typescript
+// src/OrderWorkflows.ts
+import * as Azure from "@alchemy.run/azure";
+import { PlaceOrder, PlaceOrderLive } from "./orders.ts";
+
+export class OrderWorkflows extends Azure.Functions.WorkflowFunction<OrderWorkflows>()(
+  "OrderWorkflows",
+  { workflows: [PlaceOrder], schedulerLocation: "westus2" },
+) {}
+
+export default OrderWorkflows.make(
+  { main: import.meta.url, location: "westus2" },
+  PlaceOrderLive,
+);
+```
+
+Alchemy creates a Durable Task Scheduler (Consumption tier, billed per
+action) and a task hub for the function, grants the function's managed
+identity **Durable Task Data Contributor** on the hub, and connects
+Durable Functions to it with that identity. Schedulers are offered in
+fewer regions than Functions (not `eastus`), so set `schedulerLocation` to
+one that offers them, and `location` to keep the function next to it.
+
+Each run is one orchestration instance, named after the workflow and the
+run's execution id.
+
+## Host several workflows
+
+One function can run many workflows. List them all, and merge their Layers:
+
+```typescript
+// src/OrderWorkflows.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Layer from "effect/Layer";
+import { PlaceOrder, PlaceOrderLive, RefundOrder, RefundOrderLive } from "./orders.ts";
+
+export class OrderWorkflows extends Azure.Functions.WorkflowFunction<OrderWorkflows>()(
+  "OrderWorkflows",
+  { workflows: [PlaceOrder, RefundOrder], schedulerLocation: "westus2" },
+) {}
+
+export default OrderWorkflows.make(
+  { main: import.meta.url, location: "westus2" },
+  Layer.mergeAll(PlaceOrderLive, RefundOrderLive),
+);
+```
+
+The Layer must implement every workflow the function lists: leaving one out
+is a type error. A workflow's child workflows run as sub-orchestrations in
+the same function, so list them too.
+
+## Start a run from another function
+
+`Azure.Functions.DurableEngine` runs workflows on the functions that host
+them. Provide it to the calling function, and get a client with
+`Workflows.RunWorkflow`:
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Workflows from "alchemy/Workflows";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { OrderWorkflows } from "./OrderWorkflows.ts";
+import { PlaceOrder } from "./orders.ts";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url, location: "westus2" },
+  Effect.gen(function* () {
+    const placeOrder = yield* Workflows.RunWorkflow(PlaceOrder);
+    return {
+      fetch: Effect.gen(function* () {
+        const run = yield* placeOrder.start({ orderId: "o-1" });
+        return HttpServerResponse.text(run.executionId);
+      }),
+    };
+  }).pipe(Effect.provide(Azure.Functions.DurableEngine(OrderWorkflows))),
+) {}
+```
+
+The engine grants the caller **Durable Task Data Contributor** on the
+host's task hub, and starts and reads runs through the Durable Task
+Scheduler's data plane. A caller that isn't an Azure host (a Cloudflare
+Worker, an AWS Lambda) gets an Entra service principal with the role
+instead. `start` returns as soon as the run is scheduled. Starting again
+with the same key returns the run already started, so a retried request
+never starts a second one.
+
+Running a workflow that none of the engine's functions list is a type error.
+
+## Route across functions
+
+Pass every function whose workflows the caller runs. Each run goes to the
+task hub of the function that hosts its workflow:
+
+```typescript
+Effect.provide(Azure.Functions.DurableEngine(OrderWorkflows, BillingWorkflows))
+```
+
+## Read a run
+
+Store the run's `executionId`, and get the run back with `get`:
+
+```typescript
+const run = placeOrder.get(executionId);
+const status = yield* run.status;
+```
+
+`status` is `NotStarted`, `Running`, `Completed` with its result, `Failed`
+with its error, `Interrupted`, or `Died` with a defect. `run.result` waits
+for the run to finish, which suits tests and scripts more than requests.
+
+## Sleep durably
+
+`DurableClock.sleep` is a durable timer: the orchestrator stops, nothing is
+billed while it waits, and the scheduler runs the orchestrator again when
+the timer is due.
+
+```typescript
+yield* DurableClock.sleep({ name: "cool-off", duration: "1 hour" });
+```
+
+Sleeps of a minute or less run in memory by default. Pass
+`inMemoryThreshold: 0` to make a short sleep durable too.
+
+## Wait for a signal
+
+A `DurableDeferred` is a value a run waits for, delivered from outside. The
+run waits for an external event with the deferred's name.
+
+```typescript
+export const Approval = DurableDeferred.make("approval", { success: Schema.String });
+
+const approvedBy = yield* DurableDeferred.await(Approval);
+```
+
+Send it with the run's `signal`:
+
+```typescript
+yield* approve.get(executionId).signal(Approval, "agent-7");
+```
+
+The engine raises the event on the run's orchestration instance. An event
+that arrives before the run reaches its wait is kept, so a signal can be
+sent as soon as the run starts.
+
+## Undo a step when a later one fails
+
+`withCompensation` attaches what to do if the run fails after the step
+succeeded. Compensations run last step first.
+
+```typescript
+yield* Activity.make({ name: "reserve", execute: reserve(order) }).pipe(
+  Checkout.withCompensation(() => Activity.make({ name: "release", execute: release(order) })),
+);
+```
+
+`run.interrupt` raises an interrupt event on the run. The run sees it where
+it next waits (a signal, a timer, a child workflow) or starts a step, and
+finishes there as `Interrupted`, with its compensations run. A run that's
+busy in a step finishes the step first.
+
+## See what a run did
+
+Each step runs in its orchestrator and records its result through the
+`alchemy-step` activity, so the
+[Durable Task Scheduler dashboard](https://learn.microsoft.com/azure/azure-functions/durable/durable-task-scheduler/durable-task-scheduler-dashboard)
+shows every step of a run, with its name (`charge/1`: the step and its
+attempt) and result. The task hub's `dashboardUrl` links to it:
+
+```typescript
+const { taskHub } = yield* OrderWorkflows.durableTask;
+return { dashboard: taskHub.dashboardUrl };
+```
+
+A run's durable waits happen in order: racing two of them inside one run is
+not supported.

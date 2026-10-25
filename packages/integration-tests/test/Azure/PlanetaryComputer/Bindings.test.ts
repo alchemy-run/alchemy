@@ -127,7 +127,7 @@ const Stack = Alchemy.Stack(
   Effect.gen(function* () {
     const fn = yield* GcBindingsFunction;
     const catalog = yield* Catalog;
-    const deployer = yield* callerObjectId;
+    const deployer = yield* callerObjectId.pipe(Effect.orDie);
     yield* Azure.Authorization.RoleAssignment("GcDeployerReader", {
       scope: catalog.catalogId,
       roleDefinitionId: GEOCATALOG_READER,

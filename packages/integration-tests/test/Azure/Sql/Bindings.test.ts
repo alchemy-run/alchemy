@@ -338,7 +338,7 @@ describe("Azure SQL bindings on an Azure Function", { tags: SQL_TAGS }, () => {
           })
           .pipe(Effect.provide(azure));
         const key = keys.keys?.[0]?.value;
-        const storageKey = Redacted.isRedacted(key) ? Redacted.value(key) : (key ?? "");
+        const storageKey = key ?? "";
         const uri = `https://${storageAccountName}.blob.core.windows.net/${containerName}/app.bacpac`;
         const query = new URLSearchParams({ uri, key: storageKey, password: ADMIN_PASSWORD });
         const body = yield* call(`/export-database?${query}`);

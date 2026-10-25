@@ -38,16 +38,13 @@ export const ReadWriteTable = table("CtReadWrite");
  * retry. A `TablePermissionDenied` also answers its `odata.error` body,
  * which names the data action Cosmos DB checked.
  */
-const respond = <E>(effect: Effect.Effect<unknown, E, RuntimeContext>) =>
+const respond = <E extends { readonly _tag: string }>(
+  effect: Effect.Effect<unknown, E, RuntimeContext>,
+) =>
   effect.pipe(
     Effect.flatMap((result) => HttpServerResponse.json({ ok: true, result })),
     Effect.catchIf(
-      (e: E) =>
-        typeof e === "object" &&
-        e !== null &&
-        "_tag" in e &&
-        e._tag === "TablePermissionDenied" &&
-        "body" in e,
+      (e) => e._tag === "TablePermissionDenied" && "body" in e,
       (e) => HttpServerResponse.json({ ok: false, error: JSON.stringify(e) }, { status: 500 }),
     ),
     Effect.catchCause((cause) =>

@@ -107,7 +107,7 @@ const Stack = Alchemy.Stack(
     const fn = yield* DeidBindingsFunction;
     const service = yield* Deid;
     // Lets the deployer read the jobs the bindings create.
-    const deployer = yield* callerObjectId;
+    const deployer = yield* callerObjectId.pipe(Effect.orDie);
     yield* Azure.Authorization.RoleAssignment("DeidDeployerBatchReader", {
       scope: service.deidServiceId,
       roleDefinitionId: DEID_BATCH_DATA_READER,

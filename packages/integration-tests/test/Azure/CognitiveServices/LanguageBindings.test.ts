@@ -49,7 +49,7 @@ const Stack = Alchemy.Stack(
     const fn = yield* LanguageFunction;
     const account = yield* Language;
     // Lets the deployer read the jobs and blocklists out of band.
-    const deployer = yield* callerObjectId;
+    const deployer = yield* callerObjectId.pipe(Effect.orDie);
     yield* Azure.Authorization.RoleAssignment("LangBindDeployerUser", {
       scope: account.accountId,
       roleDefinitionId: COGNITIVE_SERVICES_USER,

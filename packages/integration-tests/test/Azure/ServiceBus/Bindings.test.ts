@@ -267,9 +267,9 @@ const lockOf = (location: string | undefined) => {
 };
 
 /** The out-of-band calls {@link settleThrough} needs, for a queue or a subscription. */
-interface Lockable {
-  peekLock: () => Effect.Effect<{ body?: Uint8Array; location?: string }, unknown>;
-  unlock: (ref: string, lock: string) => Effect.Effect<unknown, unknown>;
+interface Lockable<R> {
+  peekLock: () => Effect.Effect<{ body?: Uint8Array; location?: string }, unknown, R>;
+  unlock: (ref: string, lock: string) => Effect.Effect<unknown, unknown, R>;
 }
 
 /**
@@ -277,7 +277,7 @@ interface Lockable {
  * pair: a failed call releases the lock first, so the next try can lock the
  * message again.
  */
-const settleThrough = (oob: Lockable, route: string) =>
+const settleThrough = <R>(oob: Lockable<R>, route: string) =>
   Effect.gen(function* () {
     const locked = yield* oob.peekLock();
     if (locked.body === undefined) {

@@ -53,7 +53,7 @@ const Stack = Alchemy.Stack(
     yield* DoomedSetting;
     yield* LevelDoomedSetting;
     // Lets the deployer verify each binding's effect through the data plane.
-    const deployer = yield* callerObjectId;
+    const deployer = yield* callerObjectId.pipe(Effect.orDie);
     yield* Azure.Authorization.RoleAssignment("AppConfigDeployerDataOwner", {
       scope: store.configurationStoreId,
       roleDefinitionId: APP_CONFIGURATION_DATA_OWNER,

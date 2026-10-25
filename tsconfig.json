@@ -428,6 +428,9 @@
       "path": "./examples/docker-postgres/tsconfig.json"
     },
     {
+      "path": "./examples/azure-effect-workflows/tsconfig.json"
+    },
+    {
       "path": "./examples/azure-storage/tsconfig.json"
     },
     {

@@ -129,7 +129,7 @@ describe(
           const { principalId, providerId } = yield* stack;
           expectOk(yield* call("/metadata"));
           const scope = providerId.toLowerCase();
-          expect(yield* grantsOf(principalId)).toEqual([
+          expect(yield* grantsOf(principalId ?? "")).toEqual([
             `Microsoft.Attestation/attestationProviders/attestation/read ${scope}`,
             `Microsoft.Attestation/attestationProviders/attestation/write ${scope}`,
           ]);
@@ -279,7 +279,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(
       );
     expect(gone).toEqual("gone");
     // The role-assignment list trails deletes by up to a minute.
-    const remaining = yield* assignmentsOf(principalId).pipe(
+    const remaining = yield* assignmentsOf(principalId ?? "").pipe(
       Effect.repeat({
         schedule: Schedule.spaced("10 seconds"),
         until: (assignments) => assignments.length === 0,

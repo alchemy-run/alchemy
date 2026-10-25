@@ -32,7 +32,7 @@ const Stack = Alchemy.Stack(
   { providers: Azure.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
     // The deployer administers the ledger, so it can verify each binding.
-    ledgerAdmin.objectId = yield* callerObjectId;
+    ledgerAdmin.objectId = yield* callerObjectId.pipe(Effect.orDie);
     const fn = yield* LedgerFunction;
     const group = yield* LedgerGroup;
     const ledger = yield* BindingsLedger;
@@ -160,7 +160,7 @@ describe(
           // Wait for the Function to be reachable, so every grant is applied.
           expectOk(yield* call("/constitution"));
           const user = yield* asDeployer((ledgerEndpoint) =>
-            data.GetLedgerUser({ ledgerEndpoint, userId: principalId }),
+            data.GetLedgerUser({ ledgerEndpoint, userId: principalId ?? "" }),
           );
           expect([...user.assignedRoles].sort()).toEqual(["Contributor", "Reader"]);
         }),

@@ -110,9 +110,11 @@ const get = (path: string) =>
     const { url } = yield* outputs;
     return yield* HttpClient.get(`${url}${path}`).pipe(
       Effect.timeout("60 seconds"),
-      Effect.flatMap((response) =>
-        response.status === 200 ? response.json : Effect.fail(`status ${response.status}`),
+      Effect.filterOrFail(
+        (response) => response.status === 200,
+        (response) => `status ${response.status}`,
       ),
+      Effect.flatMap((response) => response.json),
       Effect.map((body) => body as Body),
       Effect.flatMap((body) =>
         !body.ok && body.tag === "MessagingUnauthorized" ? Effect.fail(body) : Effect.succeed(body),

@@ -44,7 +44,7 @@ const Stack = Alchemy.Stack(
     const fn = yield* KvCertificatesFunction;
     const vault = yield* Vault;
     // Lets the deployer set up and verify each binding's effect through the data plane.
-    const deployer = yield* callerObjectId;
+    const deployer = yield* callerObjectId.pipe(Effect.orDie);
     yield* Azure.Authorization.RoleAssignment("KvDeployerCertificatesOfficer", {
       scope: vault.vaultId,
       roleDefinitionId: KEY_VAULT_CERTIFICATES_OFFICER,
@@ -166,7 +166,10 @@ const deployerOperation = (certificateName: string) =>
   ).pipe(Effect.provide(azure));
 
 /** `"found"` once a read succeeds, or the typed not-found tag it keeps failing with. */
-const outcome = <A, R>(read: Effect.Effect<A, AzureOpError, R>, until: "found" | "gone") =>
+const outcome = <A, E, R>(
+  read: Effect.Effect<A, AzureOpError | E, R>,
+  until: "found" | "gone",
+) =>
   read.pipe(
     Effect.as("found"),
     Effect.catchTag(
@@ -298,7 +301,7 @@ describe(
         const { principalId, vaultId } = yield* stack;
         const scope = vaultId.toLowerCase();
         // Role-assignment lists trail the writes by a few seconds.
-        const grants = yield* grantsOf(principalId).pipe(
+        const grants = yield* grantsOf(principalId ?? "").pipe(
           Effect.repeat({
             schedule: Schedule.spaced("5 seconds"),
             until: (observed) => observed.length >= 13,

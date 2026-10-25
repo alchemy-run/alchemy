@@ -15,7 +15,7 @@ export const tags = ["provider:azure", "provider:azure:confidentialledger", "liv
 export const subscription = Effect.map(Azure.AzureEnvironment.current, (env) => env.subscriptionId);
 
 /** Poll an out-of-band GET until it reports a typed not-found. */
-export const waitGone = <A, R>(get: Effect.Effect<A, AzureOpError, R>) =>
+export const waitGone = <A, E, R>(get: Effect.Effect<A, AzureOpError | E, R>) =>
   get.pipe(
     Effect.as("found" as const),
     Effect.catchTag(["ResourceNotFound", "ResourceGroupNotFound", "NotFound"], () =>

@@ -52,7 +52,7 @@ const Stack = Alchemy.Stack(
     const loadTest = yield* LoadTest;
     const workspace = yield* Workspace;
     // Lets the deployer verify each binding's effect through the data plane.
-    const deployer = yield* callerObjectId;
+    const deployer = yield* callerObjectId.pipe(Effect.orDie);
     yield* Azure.Authorization.RoleAssignment("LtDeployerLoadTestOwner", {
       scope: loadTest.loadTestId,
       roleDefinitionId: LOAD_TEST_OWNER,

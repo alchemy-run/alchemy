@@ -105,7 +105,7 @@ describe.skipIf(!runExpensive)("Redis bindings on an Azure Function", { tags }, 
         expectOk(body);
         expect(body.result).toEqual({ accepted: true });
         const { resourceGroup, cacheName } = yield* stack!;
-        const subscriptionId = yield* subscription;
+        const subscriptionId = yield* subscription.pipe(Effect.provide(azure));
         const state = yield* redis
           .GetRedis({ subscriptionId, resourceGroupName: resourceGroup, name: cacheName })
           .pipe(

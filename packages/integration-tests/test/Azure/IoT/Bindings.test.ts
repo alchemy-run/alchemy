@@ -43,7 +43,7 @@ const Stack = Alchemy.Stack(
     const fn = yield* DpsFunction;
     const service = yield* Dps;
     // Lets the deployer verify each binding's effect through the service API.
-    const deployer = yield* callerObjectId;
+    const deployer = yield* callerObjectId.pipe(Effect.orDie);
     yield* Azure.Authorization.RoleAssignment("DpsDeployerDataContributor", {
       scope: service.provisioningServiceId,
       roleDefinitionId: DPS_DATA_CONTRIBUTOR,

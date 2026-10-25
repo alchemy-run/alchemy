@@ -151,7 +151,7 @@ export const WorkspaceRoleAssignmentProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
+      if (!isResolved<WorkspaceRoleAssignmentProps>(news)) return undefined;
       if (
         news.workspace !== output.workspaceName ||
         news.roleId.toLowerCase() !== output.roleId.toLowerCase() ||

@@ -68,8 +68,8 @@ export const LOG_ANALYTICS_DATA_READER = "3b03c2da-16b3-4a49-8834-0f8130efdd3b";
  * Bind arguments arrive unresolved (`Input<T>` deep-wraps the target), so a
  * field typed `string` may hold an Output or a plain string.
  */
-export const outputOf = (value: string): Output.Output<string, never> =>
-  Output.isOutput(value) ? (value as Output.Output<string, never>) : Output.literal(value);
+export const outputOf = (value: string | Output.Output<string, never>): Output.Output<string, never> =>
+  Output.isOutput(value) ? value : Output.literal(value);
 
 /** Assign `grants` on each scope to the host, creating the custom roles they name. */
 export const GrantMonitorRoles = Effect.gen(function* () {

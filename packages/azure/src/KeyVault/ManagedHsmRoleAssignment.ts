@@ -191,7 +191,7 @@ export const ManagedHsmRoleAssignmentProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
+      if (!isResolved<ManagedHsmRoleAssignmentProps>(news)) return undefined;
       if (
         lower(news.managedHsm) !== lower(output.managedHsm) ||
         normalizeHsmScope(news.scope ?? "/") !== normalizeHsmScope(output.scope) ||

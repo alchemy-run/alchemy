@@ -164,11 +164,12 @@ const covers = (desired: unknown, observed: unknown): boolean => {
 /** An existing field changed in a way Azure only allows by rebuilding the index. */
 const fieldRebuilt = (old: SearchIndexField, next: SearchIndexField | undefined): boolean => {
   if (next === undefined) return true;
-  const keys = new Set([...Object.keys(old), ...Object.keys(next)]);
-  for (const key of keys) {
+  const olds = new Map<string, unknown>(Object.entries(old));
+  const news = new Map<string, unknown>(Object.entries(next));
+  for (const key of new Set([...olds.keys(), ...news.keys()])) {
     if (MUTABLE_FIELD_KEYS.has(key)) continue;
-    const a = (old as Record<string, unknown>)[key];
-    const b = (next as Record<string, unknown>)[key];
+    const a = olds.get(key);
+    const b = news.get(key);
     if (JSON.stringify(a ?? null) !== JSON.stringify(b ?? null)) return true;
   }
   return false;

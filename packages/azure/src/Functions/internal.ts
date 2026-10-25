@@ -23,8 +23,11 @@ export interface TriggerInvocation {
 
 export interface RegisteredTrigger {
   readonly binding: TriggerBinding;
-  /** Runs the handler; a rejection fails the invocation so the host retries it. */
-  readonly run: (invocation: TriggerInvocation) => Promise<void>;
+  /**
+   * Runs the handler; a rejection fails the invocation so the host retries
+   * it. A durable trigger resolves with its return value.
+   */
+  readonly run: (invocation: TriggerInvocation) => Promise<unknown>;
 }
 
 export interface FunctionRegistry {

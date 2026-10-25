@@ -113,8 +113,8 @@ const vmssView = Effect.gen(function* () {
 }).pipe(Effect.provide(azure));
 
 /** Read an instance view until `until` holds (bounded: about 10 minutes). */
-const viewUntil = <A extends { statuses?: Statuses }>(
-  view: Effect.Effect<A, unknown>,
+const viewUntil = <A extends { statuses?: Statuses }, R>(
+  view: Effect.Effect<A, unknown, R>,
   until: (view: A) => boolean,
 ) => view.pipe(Effect.repeat({ schedule: Schedule.spaced("10 seconds"), until, times: 60 }));
 
@@ -160,7 +160,8 @@ const grantsOf = (principalId: string) =>
 const runCommandResult = (location: string) =>
   Effect.gen(function* () {
     const config = yield* yield* Credentials;
-    const token = yield* config.tokenFor("https://management.azure.com/.default");
+    // `bearerToken` is the ARM token.
+    const token = config.bearerToken;
     const response = yield* HttpClient.execute(
       HttpClientRequest.get(location).pipe(HttpClientRequest.bearerToken(Redacted.value(token))),
     );
@@ -171,8 +172,8 @@ const runCommandResult = (location: string) =>
   }).pipe(Effect.provide(azure));
 
 /** Assert an operation route ran: the instance's last operation finished after `before`. */
-const expectNewOperation = <A extends { statuses?: Statuses }>(
-  view: Effect.Effect<A, unknown>,
+const expectNewOperation = <A extends { statuses?: Statuses }, R>(
+  view: Effect.Effect<A, unknown, R>,
   route: string,
 ) =>
   Effect.gen(function* () {
@@ -192,8 +193,8 @@ const expectNewOperation = <A extends { statuses?: Statuses }>(
   });
 
 /** Assert a route moves the instance to `state`. */
-const expectPowerState = <A extends { statuses?: Statuses }>(
-  view: Effect.Effect<A, unknown>,
+const expectPowerState = <A extends { statuses?: Statuses }, R>(
+  view: Effect.Effect<A, unknown, R>,
   route: string,
   state: string,
 ) =>
