@@ -154,8 +154,8 @@ describe.concurrent(
 
           // The canonical domain AND the alias serve the Worker; the
           // redirect host 301s with path and query preserved — and never
-          // invokes the Worker. Confirm DNS over DoH before the first fetch
-          // (see waitForDns in ../Utils/Http.ts).
+          // invokes the Worker. Confirm DNS on the authoritative nameservers
+          // before the first fetch (see waitForDns in ../Utils/Http.ts).
           yield* waitForDns(mainHost);
           yield* waitForDns(aliasHost);
           yield* waitForDns(oldHost);

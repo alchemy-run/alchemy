@@ -367,8 +367,8 @@ test.provider(
         },
       });
 
-      // The proxied record is brand new; confirm it over DoH before the
-      // first fetch so the system resolver never caches NXDOMAIN for it.
+      // The proxied record is brand new; confirm it on the authoritative
+      // nameservers before the first fetch so no resolver caches NXDOMAIN.
       yield* waitForDns(hostname);
       yield* expectUrlRedirect(`https://${hostname}/old-a`, "/new-a");
       yield* expectUrlRedirect(`https://${hostname}/old-b`, "/new-b");
