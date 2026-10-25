@@ -159,6 +159,69 @@ it.live("the CustomerApi round-trips over HTTP, including a streamed watch", () 
 );
 ```
 
+## Test that every surface answers alike
+
+An Api reaches clients through several surfaces: its own client, the AI toolkit and MCP server from `@alchemy.run/domain/Ai`, the HTTP API from `@alchemy.run/domain/Http` and the CLI from `@alchemy.run/domain/Cli`. Each surface is derived from the same Api, so each must give the same answer to the same call. `Surfaces.make` from `@alchemy.run/domain/Surfaces` checks this. It runs one scenario through every surface, in process, and compares each answer as wire JSON.
+
+```typescript
+// packages/server/test/surfaces.test.ts
+import { expect, it } from "@effect/vitest";
+import * as Surfaces from "@alchemy.run/domain/Surfaces";
+import * as Effect from "effect/Effect";
+import { CustomerApi } from "@bank/domain/CustomerApi.api";
+
+// The model and its middleware, as in the tests above. Each surface gets a fresh build of it.
+const parity = Surfaces.make(CustomerApi, { layer: World });
+
+const sam = { authorization: "Bearer customer:c-1" };
+
+it.live("every surface answers alike", () =>
+  Effect.gen(function* () {
+    const [registered, anonymous, notOpen] = yield* parity(
+      { call: "RegisterCustomer", input: { target: "c-1", name: "sam", username: "sam" }, headers: sam },
+      { call: "RegisterCustomer", input: { target: "c-2", name: "alex", username: "alex" } },
+      { call: "DepositMoney", input: { target: "c-9-main", amount: 100 }, headers: sam },
+    );
+    expect(registered).toMatchObject({ _tag: "Success", value: { stream: "Customer/c-1" } });
+    expect(anonymous).toEqual({ _tag: "Failure", error: { _tag: "Unauthorized" } });
+    expect(notOpen).toEqual({ _tag: "Failure", error: { _tag: "NotOpen" } });
+  }),
+);
+```
+
+Each call names a command by its tag, or a read as `<entry>.<operation>` (`AccountSummary.get`, `Statement.list`). Its `input` is the wire JSON a non-Effect caller sends, and its `headers` are what the Api's middleware reads. The scenario runs on these surfaces, in this order:
+
+| Surface   | How the call runs                                                                 |
+| --------- | --------------------------------------------------------------------------------- |
+| `client`  | `testClient`, the reference                                                       |
+| `toolkit` | `toToolkit`: the tool is called by name, with JSON, as a model calls it            |
+| `mcp`     | `toMcp` over its HTTP transport: one session, a `tools/call` per call             |
+| `http`    | `toHttpApi` with every request/response call published                            |
+| `cli`     | `toCli` with `--json`, against the Api's HTTP protocol                            |
+
+Each call gives one outcome on each surface:
+
+| Outcome                         | When                                                                        |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| `{ _tag: "Success", value }`    | The call succeeded. `value` is its wire JSON.                              |
+| `{ _tag: "Failure", error }`    | A rejection, or the error of the middleware that guards the call, with its `_tag` and data. |
+| `{ _tag: "Invalid" }`           | The surface refused the input before the Api ran the call.                  |
+
+If a surface answers a call differently, the scenario fails with `SurfacesDiffer`, which lists what each surface gave. If they agree, it succeeds with the outcomes, so you can check them as well.
+
+Each surface runs the whole scenario in a world of its own. So what depends on time or chance differs between surfaces: an envelope's `at`, or a `commandId` the Api generates. Give a `commandId` in the input, and compare only part of a success with `select`:
+
+```typescript
+{
+  call: "Statement.list",
+  input: { key: "c-1-main" },
+  headers: sam,
+  select: (page) => (page as { entries: ReadonlyArray<{ event: unknown }> }).entries.map((e) => e.event),
+}
+```
+
+To compare fewer surfaces, pass `surfaces: ["client", "http"]`. The first surface in the list is the reference.
+
 ## Test a deployment
 
 The example's integration test deploys the whole bank with `alchemy/Test/Bun` and drives it over the network. A client that isn't a browser can set headers on its WebSockets, so it sends `Authorization` on each live read, as it does on every call.

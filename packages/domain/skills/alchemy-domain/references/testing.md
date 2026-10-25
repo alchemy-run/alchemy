@@ -139,6 +139,34 @@ it.live("only the owner may withdraw", () =>
 
 `testClient` talks to the in-memory host directly. Use `Domain.protocolHttp` with a local HTTP server to cover the wire too.
 
+## Surface parity: every client gets the same answer
+
+When an Api is served as tools, MCP, HTTP or a CLI, check that each surface answers alike. `Surfaces.make(api, { layer })` from `@alchemy.run/domain/Surfaces` runs one scenario through `testClient`, `toToolkit`, `toMcp` (over its HTTP transport), `toHttpApi` and `toCli`, each in a fresh build of `layer`, and compares every answer as wire JSON.
+
+```ts
+// packages/server/test/surfaces.test.ts
+const parity = Surfaces.make(CustomerApi, { layer: World });
+const sam = { authorization: "Bearer customer:c-1" };
+
+it.live("every surface answers alike", () =>
+  Effect.gen(function* () {
+    const [registered, anonymous, notOpen] = yield* parity(
+      { call: "RegisterCustomer", input: { target: "c-1", name: "sam", username: "sam" }, headers: sam },
+      { call: "RegisterCustomer", input: { target: "c-2", name: "alex", username: "alex" } },
+      { call: "DepositMoney", input: { target: "c-9-main", amount: 100 }, headers: sam },
+    );
+    expect(anonymous).toEqual({ _tag: "Failure", error: { _tag: "Unauthorized" } });
+    expect(notOpen).toEqual({ _tag: "Failure", error: { _tag: "NotOpen" } });
+  }),
+);
+```
+
+- `call` is a command's tag or `<entry>.<operation>` (`AccountSummary.get`, `Statement.list`); `input` is wire JSON; `headers` go to the middleware.
+- Each outcome is `{ _tag: "Success", value }`, `{ _tag: "Failure", error }` (a rejection or a middleware error, with its `_tag`) or `{ _tag: "Invalid" }` (the surface refused the input).
+- A difference fails with `SurfacesDiffer`, which lists every surface's answer.
+- Each surface has its own world: give a `commandId` in the input, and `select` the part of a success that does not depend on time (an envelope's `at`).
+- `surfaces: ["client", "http"]` compares fewer surfaces; the first is the reference.
+
 ## Integration: the deployed stack
 
 At the root, deploy `alchemy.run.ts` with `alchemy/Test/Bun` and drive the deployed Api over HTTP and WebSocket. Keep it to one end-to-end flow. Stories carry the behavior.
