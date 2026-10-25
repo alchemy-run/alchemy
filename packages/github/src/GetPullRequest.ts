@@ -4,16 +4,24 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
-export interface GetPullRequestRequest extends Omit<Pulls.GetRequest, "owner" | "repo"> {
-  /** Return the raw `diff` or `patch` text instead of the JSON object. */
-  readonly format?: "diff" | "patch";
+/** The `accept` media types GitHub answers with text instead of JSON. */
+export type PullRequestTextMediaType = Exclude<
+  Pulls.GetRequestAccept,
+  "application/vnd.github+json"
+>;
+
+export interface GetPullRequestRequest extends Omit<Pulls.GetRequest, "owner" | "repo" | "accept"> {
+  /** `application/vnd.github.diff` or `.patch` returns the text instead of the JSON object. */
+  readonly accept?: Pulls.GetRequestAccept;
 }
 
 export type GetPullRequestResponse = Pulls.PullRequest;
 
 /**
- * Get a pull request by number (`pulls.get`). Pass `format: "diff"` or
- * `format: "patch"` to get the raw diff text instead of the JSON object.
+ * Get a pull request by number (`pulls.get`). Like the API, `accept` selects
+ * the media type: `application/vnd.github.diff` or
+ * `application/vnd.github.patch` return the diff or patch text instead of the
+ * JSON object.
  *
  * Provide `GitHub.GetPullRequestHttp` on a Worker or Function, or
  * `GitHub.GetPullRequestLocal` on an Action.
@@ -23,7 +31,10 @@ export type GetPullRequestResponse = Pulls.PullRequest;
  * ```typescript
  * const getPullRequest = yield* GitHub.GetPullRequest(yield* Repo);
  * const pull = yield* getPullRequest({ pull_number: 9 });
- * const diff = yield* getPullRequest({ pull_number: 9, format: "diff" });
+ * const diff = yield* getPullRequest({
+ *   pull_number: 9,
+ *   accept: "application/vnd.github.diff",
+ * });
  * ```
  *
  * @binding
@@ -35,11 +46,11 @@ export interface GetPullRequest extends Binding.Service<
   (
     repo: Repository,
   ) => Effect.Effect<
-    <Format extends "diff" | "patch" | undefined = undefined>(
-      request: GetPullRequestRequest & { readonly format?: Format },
+    <Accept extends GetPullRequestRequest["accept"] = undefined>(
+      request: GetPullRequestRequest & { readonly accept?: Accept },
     ) => Effect.Effect<
-      Format extends "diff" | "patch" ? string : GetPullRequestResponse,
-      Pulls.GetError | Pulls.GetDiffError,
+      Accept extends PullRequestTextMediaType ? string : GetPullRequestResponse,
+      Pulls.GetError,
       RuntimeContext
     >
   >

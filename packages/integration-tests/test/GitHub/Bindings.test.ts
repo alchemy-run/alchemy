@@ -350,7 +350,7 @@ const scenario = (impl: "Http" | "Local", call: Call) => {
         Effect.gen(function* () {
           const diff = yield* ok<string>("GetPullRequest", {
             pull_number: pullNumber,
-            format: "diff",
+            accept: "application/vnd.github.diff",
           });
           expect(diff).toContain(`diff --git a/${path} b/${path}`);
         }),

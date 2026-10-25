@@ -10,17 +10,18 @@ export const getPullRequestOperation = BindingHttp.operation(
   "pulls.get",
   (repo) =>
     ({
-      format,
+      accept,
       ...request
     }: GetPullRequestRequest): Effect.Effect<
       Pulls.PullRequest | string,
-      Pulls.GetError | Pulls.GetDiffError,
+      Pulls.GetError,
       GithubOpContext
     > => {
+      // One branch per overload: the JSON object, or the text media type's text.
       const scope = { owner: repo.owner, repo: repo.repository, ...request };
-      return format === undefined
-        ? Pulls.get(scope)
-        : Pulls.getDiff({ ...scope, accept: `application/vnd.github.${format}` });
+      return accept === undefined || accept === "application/vnd.github+json"
+        ? Pulls.get({ ...scope, accept })
+        : Pulls.get({ ...scope, accept });
     },
 );
 
