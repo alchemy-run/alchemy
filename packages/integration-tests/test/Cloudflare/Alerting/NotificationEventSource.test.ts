@@ -5,6 +5,7 @@ import * as GitHub from "@alchemy.run/github";
 import { Octokit as AmbientOctokit } from "@alchemy.run/github/Octokit";
 import { expect } from "@alchemy.run/test";
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -156,6 +157,94 @@ test.provider(
   },
 );
 
+// Error events the Worker logged inside `checkout.charge` for a card decline,
+// read back through Workers Observability by their log attributes.
+const cardDeclineEvents = (accountId: string, workerName: string) =>
+  // Suspended so every poll asks for a fresh timeframe, ending a minute ahead
+  // to absorb clock skew between this machine and Cloudflare.
+  Effect.suspend(() =>
+    workers.queryObservabilityTelemetry({
+      accountId,
+      queryId: "adhoc-card-declines",
+      view: "events",
+      timeframe: { from: Date.now() - 15 * 60 * 1000, to: Date.now() + 60 * 1000 },
+      limit: 100,
+      parameters: {
+        filters: [
+          { key: "$metadata.service", operation: "eq", type: "string", value: workerName },
+          { key: "spanName", operation: "eq", type: "string", value: "checkout.charge" },
+          { key: "reason", operation: "eq", type: "string", value: "card_declined" },
+        ],
+      },
+    }),
+  ).pipe(Effect.map((response) => response.events?.events ?? []));
+
+test.provider(
+  "a custom alert filters on Effect span names and log annotations",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+
+      const { url, workerName } = yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* Repo;
+          const worker = yield* CheckoutWorker;
+          return { url: worker.url.as<string>(), workerName: worker.workerName };
+        }),
+      );
+      const base = url.replace(/\/+$/, "");
+      yield* getWhenReady(base);
+
+      const client = yield* HttpClient.HttpClient;
+      yield* Effect.forEach(["ord-1", "ord-2", "ord-3"], (order) =>
+        client.get(`${base}/charge?order=${order}`),
+      );
+
+      // Each error log carries the span name and its annotations as attributes.
+      const events = yield* cardDeclineEvents(accountId, workerName).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          until: (events) => events.length >= 3,
+          times: 18,
+        }),
+      );
+      expect(events).toHaveLength(3);
+      expect(events.map((event) => event.metadata?.level)).toEqual(["error", "error", "error"]);
+      expect(events.map((event) => event.metadata?.message)).toEqual([
+        "payment declined",
+        "payment declined",
+        "payment declined",
+      ]);
+      expect(
+        events.map((event) => (event.source as { orderId?: string } | undefined)?.orderId).sort(),
+      ).toEqual(["ord-1", "ord-2", "ord-3"]);
+
+      // The alert Cloudflare accepted queries those attributes.
+      const policies = yield* alerting.listPolicies.items({ accountId }).pipe(Stream.runCollect);
+      const selectors = Array.from(policies)
+        .filter((policy) => policy.alertType === "custom_analytics")
+        .flatMap(
+          (policy) => (policy.filters as { selectors?: string[] } | undefined)?.selectors ?? [],
+        )
+        .filter((query) => query.includes(workerName));
+      expect(selectors).toHaveLength(1);
+      expect(selectors[0]).toContain("attributes['spanName'] = 'checkout.charge'");
+      expect(selectors[0]).toContain("attributes['reason'] = 'card_declined'");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    timeout: 180_000,
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:alerting",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+  },
+);
+
 // Slow: Cloudflare delivers the alert about six minutes after the errors are
 // logged, and resolves it a minute or two later.
 test.provider.skipIf(!!process.env.FAST)(
@@ -176,10 +265,9 @@ test.provider.skipIf(!!process.env.FAST)(
       const base = url.replace(/\/+$/, "");
       yield* getWhenReady(base);
 
-      // Five declined payments: the alert's query counts the error logs, and
-      // three or more within five minutes fire it.
+      // Five card declines: three or more within five minutes fire the alert.
       const client = yield* HttpClient.HttpClient;
-      yield* Effect.forEach([1, 2, 3, 4, 5], () => client.get(`${base}/charge`), {
+      yield* Effect.forEach([1, 2, 3, 4, 5], (n) => client.get(`${base}/charge?order=ord-${n}`), {
         discard: true,
       });
 

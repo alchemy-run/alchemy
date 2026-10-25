@@ -200,27 +200,34 @@ export type CustomAlert = Resource<
  * ```
  *
  * ### Handling alerts in code
- * **Example:** Open a GitHub issue when a Worker's payments start failing
- * Declare the alert in the Worker, over its own logs. `Effect.logError` is
- * recorded at `error` level, so the query can filter on `level`. Cloudflare
- * notifies when the alert starts and again when it resolves.
+ * **Example:** Open a GitHub issue when card declines spike
+ * Effect logs in a Worker land in Workers Logs at their level, with their
+ * annotations and the active span's name as `attributes`. Declare the alert in
+ * the Worker, over its own logs. Cloudflare notifies when the alert starts and
+ * again when it resolves.
  * ```typescript
+ * const charge = (orderId: string) =>
+ *   Effect.logError("payment declined").pipe(
+ *     Effect.annotateLogs({ orderId, reason: "card_declined" }),
+ *     Effect.withSpan("checkout.charge"),
+ *   );
+ *
  * const self = yield* Cloudflare.Worker;
  * const createIssue = yield* GitHub.CreateIssue(yield* Repo);
  *
- * const paymentFailures = yield* Cloudflare.Alerting.CustomAlert("PaymentFailures", {
+ * const cardDeclines = yield* Cloudflare.Alerting.CustomAlert("CardDeclines", {
  *   query: Output.interpolate`
  *     SELECT count() AS value FROM logs.workersLogs
  *     WHERE accountTag = '${self.accountId}'
  *       AND scriptName = '${self.workerName}'
- *       AND level = 'error'
- *       AND message LIKE '%payment declined%'`,
+ *       AND attributes['spanName'] = 'checkout.charge'
+ *       AND attributes['reason'] = 'card_declined'`,
  *   trigger: { type: "threshold", operator: ">=", value: 3, window: "5m" },
  * });
  *
- * yield* Cloudflare.Alerting.consumeNotifications(paymentFailures, (notification) =>
+ * yield* Cloudflare.Alerting.consumeNotifications(cardDeclines, (notification) =>
  *   notification.alertEvent === "ALERT_STATE_EVENT_START"
- *     ? createIssue({ title: "Payment failures spiking", body: notification.text })
+ *     ? createIssue({ title: "Card declines spiking", body: notification.text })
  *     : Effect.void,
  * );
  * ```
