@@ -11,7 +11,7 @@ import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { expectUrlRedirect } from "../Utils/Http.ts";
+import { expectUrlRedirect, waitForDns } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -367,6 +367,9 @@ test.provider(
         },
       });
 
+      // The proxied record is brand new; confirm it over DoH before the
+      // first fetch so the system resolver never caches NXDOMAIN for it.
+      yield* waitForDns(hostname);
       yield* expectUrlRedirect(`https://${hostname}/old-a`, "/new-a");
       yield* expectUrlRedirect(`https://${hostname}/old-b`, "/new-b");
 

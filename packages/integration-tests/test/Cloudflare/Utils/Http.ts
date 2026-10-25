@@ -39,6 +39,47 @@ export class HttpMarkerPresent extends Data.TaggedError("HttpMarkerPresent")<{
   bodyExcerpt: string;
 }> {}
 
+export class DnsNotReady extends Data.TaggedError("DnsNotReady")<{
+  hostname: string;
+  type: string;
+}> {}
+
+/**
+ * Wait until `hostname` resolves for every record type in `types`, querying
+ * 1.1.1.1 over DNS-over-HTTPS. Call it before the first fetch of a hostname
+ * the test just created: the system resolver must not be asked before the
+ * record is live, because an early lookup negative-caches NXDOMAIN for the
+ * zone's SOA minimum TTL (30 minutes on Cloudflare) and poisons every later
+ * fetch on this machine. DoH bypasses that cache entirely.
+ */
+export const waitForDns = Effect.fn(function* (
+  hostname: string,
+  types: ReadonlyArray<"A" | "AAAA"> = ["A", "AAAA"],
+) {
+  yield* Effect.forEach(
+    types,
+    (type) =>
+      Effect.tryPromise({
+        try: async (signal) => {
+          const res = await fetch(`https://1.1.1.1/dns-query?name=${hostname}&type=${type}`, {
+            headers: { accept: "application/dns-json" },
+            signal,
+          });
+          const body = (await res.json()) as { Answer?: unknown[] };
+          if (!body.Answer?.length) throw new Error("no answer");
+        },
+        catch: () => new DnsNotReady({ hostname, type }),
+      }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "DnsNotReady",
+          schedule: Schedule.spaced("5 seconds"),
+          times: 36,
+        }),
+      ),
+    { discard: true },
+  );
+});
+
 export interface ExpectUrlContainsOptions {
   /** Request headers, e.g. an explicit HTML Accept header for content negotiation. */
   headers?: Record<string, string>;
