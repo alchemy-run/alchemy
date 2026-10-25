@@ -1,8 +1,9 @@
 import type { HttpEffect } from "alchemy/Http";
 import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 import type * as Aggregate from "./Aggregate.ts";
+import { DefinitionError } from "./Kernel.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -504,3 +505,42 @@ export class Platform extends Context.Service<
     readonly stream: (stream: DomainStream.Any, kit: StreamKit) => Effect.Effect<StreamStore>;
   }
 >()("alchemy/Domain/Platform") {}
+
+/**
+ * Make a platform refuse to host the same aggregate, view, policy,
+ * projection or stream twice. Two models that share a member and are hosted
+ * side by side would each host it, and its events would reach only one
+ * model's consumers; compose them into one model instead.
+ *
+ * @internal
+ */
+export const hostOnce = (platform: Platform["Service"]): Platform["Service"] => {
+  const hosted = new Set<string>();
+  const once =
+    <E, K, S>(
+      kind: string,
+      nameOf: (entity: E) => string,
+      factory: (entity: E, kit: K) => Effect.Effect<S>,
+    ) =>
+    (entity: E, kit: K): Effect.Effect<S> =>
+      Effect.suspend(() => {
+        const name = nameOf(entity);
+        const key = `${kind} ${name}`;
+        if (hosted.has(key)) {
+          return Effect.die(
+            new DefinitionError(
+              `${key} is hosted twice on one platform: compose the models that share it into one, with \`models: [...]\``,
+            ),
+          );
+        }
+        hosted.add(key);
+        return factory(entity, kit);
+      });
+  return {
+    aggregate: once("Aggregate", (a: Aggregate.Any) => a.aggregateName, platform.aggregate),
+    view: once("View", (v: View.Any) => v.viewName, platform.view),
+    policy: once("Policy", (p: Policy.Any) => p.policyName, platform.policy),
+    projection: once("Projection", (p: Projection.Any) => p.projectionName, platform.projection),
+    stream: once("Stream", (s: DomainStream.Any) => s.streamName, platform.stream),
+  };
+};

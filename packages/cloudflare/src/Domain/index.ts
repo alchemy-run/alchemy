@@ -7,6 +7,7 @@ import {
   type Delivery,
   emptySnapshot,
   emptyStreamMeta,
+  hostOnce,
   Platform,
   type Json,
   type PolicyKit,
@@ -802,7 +803,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
     const inInit = <A, E>(effect: Effect.Effect<A, E, Worker>): Effect.Effect<A, E> =>
       Effect.provide(effect, init);
 
-    return Platform.of({
+    const platform = Platform.of({
       aggregate: (aggregate, kit) =>
         inInit(
           Effect.gen(function* () {
@@ -933,6 +934,8 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
           }),
         ),
     });
+    // Two models that share a member must be composed into one, not hosted side by side.
+    return hostOnce(platform);
   }),
 );
 

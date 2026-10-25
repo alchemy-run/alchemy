@@ -74,3 +74,4 @@ Metrics: `domain.commands`, `domain.command.duration`, `domain.events`, `domain.
 - Durable Object calls right after a fresh deploy can briefly hit alchemy's placeholder script. The Domain platform retries its own calls, so make test readiness probes retry the first real request.
 - Never keep per-request objects (sockets, promises) across events in a Durable Object or Worker. Resolve services at init, and do I/O per request.
 - Handlers may require `RuntimeContext` (for bindings); every platform provides it when it runs them.
+- Host several models in one Worker as one composed model (`models: [...]`). Two side-by-side model Layers that share an aggregate would declare its Durable Object class twice, and only one model would get its events; the platform refuses that.

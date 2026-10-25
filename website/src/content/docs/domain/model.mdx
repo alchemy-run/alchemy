@@ -212,6 +212,26 @@ export const BankInMemory = Bank.layer(BankHandlers).pipe(Layer.provide(Domain.I
 
 `Domain.InMemory` keeps everything in memory, which is what tests want. Swap it for another platform and the model runs there unchanged; every platform keeps the guarantees above. See [Hosting](/domain/cloudflare).
 
+## Host several models together
+
+Several models that run in one process (one Worker) are hosted as one. List them in `models`, and provide every model's handlers to its `layer`:
+
+```typescript
+// src/App.model.ts
+import * as Domain from "@alchemy.run/domain";
+import * as Layer from "effect/Layer";
+import { Billing, BillingHandlers } from "./Billing.model.ts";
+import { Support, SupportHandlers } from "./Support.model.ts";
+
+export class App extends Domain.Model("App", { models: [Billing, Support] }) {}
+
+export const AppInMemory = App.layer(Layer.mergeAll(BillingHandlers, SupportHandlers)).pipe(
+  Layer.provide(Domain.InMemory),
+);
+```
+
+A member that two models list, such as an aggregate both react to, is hosted once, so its events reach the views, policies and projections of both. A composed model can also list members of its own. Hosting two models that share a member side by side, each with its own `layer`, fails while the Layer is built: each would host its own copy, and the shared member's events would reach only one of them.
+
 ## Call it from your code
 
 Inside the hosted model, each aggregate and view is a service. `yield* Account` gives you a client for every account, and `send` takes the target id and the command.

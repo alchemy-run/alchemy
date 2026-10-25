@@ -308,4 +308,4 @@ export const BankHandlers = Layer.mergeAll(
 );
 ```
 
-`Bank.layer(BankHandlers)` hosts the model on whatever platform is provided: `Domain.InMemory` or `DomainCloudflare.DurableObjects`.
+`Bank.layer(BankHandlers)` hosts the model on whatever platform is provided: `Domain.InMemory` or `DomainCloudflare.DurableObjects`. To host several models in one Worker, compose them: `Domain.Model("App", { models: [Bank, Support] })`, then `App.layer(Layer.mergeAll(BankHandlers, SupportHandlers))`. A member they share is hosted once.

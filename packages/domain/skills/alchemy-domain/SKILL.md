@@ -44,7 +44,7 @@ A rule that spans aggregates never becomes a cross-aggregate transaction. Give t
 - **A block's implementation sits in its file** (`TransferExecutionLive` in `TransferExecution.policy.ts`), unless it touches infrastructure. Then it lives in the server package.
 - **Folders are subdomains** (`Account/`, `Transfer/`). The model, Apis, middleware and request context sit at the package root.
 - **The domain package imports only `@alchemy.run/domain` and `effect`.** Cloudflare, Stripe, databases and HTTP session handling belong to the server package.
-- **One domain package per model (bounded context).** A second model is a second domain package; one server can host several.
+- **One domain package per model (bounded context).** A second model is a second domain package; one server can host several. Host them as one composed model, `Domain.Model("App", { models: [Billing, Support] })`, never as two side-by-side `layer`s: a member they share would be hosted twice.
 
 ## Rules that keep a model correct
 

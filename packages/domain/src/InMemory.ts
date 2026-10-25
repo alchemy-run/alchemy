@@ -11,6 +11,7 @@ import {
   type Delivery,
   emptySnapshot,
   emptyStreamMeta,
+  hostOnce,
   Platform,
   type Json,
   type SendResult,
@@ -579,7 +580,7 @@ export const make = (
 
   return {
     layer: Layer.mergeAll(
-      Layer.succeed(Platform, platform),
+      Layer.succeed(Platform, hostOnce(platform)),
       Layer.succeed(WorkflowEngine.WorkflowEngine, workflows),
     ),
     control,
