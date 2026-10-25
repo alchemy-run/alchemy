@@ -4,7 +4,7 @@ import { WorkerBundle } from "@alchemy.run/cloudflare/Workers/Sources/Rolldown";
 import { watchBundleDirectory } from "@alchemy.run/cloudflare/Workers/Sources/shared";
 import nextjsSource from "@alchemy.run/frontend-frameworks/nextjs/source";
 import { createComputeArchive } from "@alchemy.run/prisma/ComputeArchive";
-import { expect, layer } from "alchemy-test";
+import { expect, layer } from "@alchemy.run/test";
 import { AlchemyContext, dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import { createTempBundleDir, getStableContextDir } from "alchemy/Bundle/TempRoot";
 import { hashDirectory } from "alchemy/Command/Memo";

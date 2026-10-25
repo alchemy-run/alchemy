@@ -98,7 +98,7 @@ catalog:
   "@octokit/webhooks": "^14.2.0"
   "@opennextjs/aws": "4.1.9"
   "@opennextjs/cloudflare": "1.20.1"
-  "@opentui/core": "latest"
+  "@opentui/core": "^0.6.6"
   "@oxc-project/types": "^0.153.0"
   "@playwright/test": "^1.64.0"
   "@prisma/orm-family-sql": "^8.0.0-rc.11"
@@ -179,7 +179,7 @@ catalog:
   better-auth: "^1.7.5"
   capnp-es: "^0.0.16"
   capnweb: "^0.12.0"
-  changelogithub: "^13.16.1"
+  changelogen: "^0.6.2"
   chokidar: "^5.0.0"
   cookie: "^2.0.1"
   cuelume: "^0.2.4"
@@ -187,8 +187,8 @@ catalog:
   devalue: "5.8.1"
   diff: "^9.0.0"
   dotenv: "^17.4.2"
-  drizzle-kit: "1.0.0-rc.5-ab785fc"
-  drizzle-orm: "1.0.0-rc.5-ab785fc"
+  drizzle-kit: "1.0.0-rc.5"
+  drizzle-orm: "1.0.0-rc.5"
   effect: "^4.0.5"
   esbuild: "^0.28.1"
   fflate: "^0.8.3"
@@ -242,7 +242,7 @@ catalog:
   takumi-js: "^2.15.1"
   termcut: "1.4.4"
   toucan-js: "4.1.1"
-  tsdown: "^0.22.4"
+  tsdown: "0.23.1"
   tsrs: "0.18.0-ts7.1.0-dev.20260929"
   tsx: "^4.23.15"
   typescript: "^7.0.2"
@@ -303,13 +303,16 @@ overrides:
   "@effect/platform-browser": 4.0.5
   "@effect/sql-d1": 4.0.5
   "@effect/sql-sqlite-do": 4.0.5
-  drizzle-kit: 1.0.0-rc.5-ab785fc
-  drizzle-orm: 1.0.0-rc.5-ab785fc
+  drizzle-kit: 1.0.0-rc.5
+  drizzle-orm: 1.0.0-rc.5
   # Keep drizzle-orm's optional peer graph identical across workspace
   # packages so TypeScript sees one drizzle-orm identity.
   mysql2: 3.24.5
   zod: 4.5.4
   rolldown: 1.2.13
+  # Old glob majors are deprecated; their dependents (archiver-utils,
+  # @node-minify/core) only use `sync`/`globSync`, which glob 13 keeps.
+  "glob@<11": ^13.0.6
 
 patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
@@ -351,3 +354,5 @@ minimumReleaseAgeExclude:
   - miniflare@5.20260930.0-alpha
   - wrangler@4.145.0
   - "@foldkit/ui@0.167.0"
+  - drizzle-kit@1.0.0-rc.5
+  - drizzle-orm@1.0.0-rc.5

@@ -95,7 +95,6 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
   Effect.gen(function* () {
     const store = yield* CredentialsStore;
     const fs = yield* FileSystem.FileSystem;
-    const interaction = Interaction.accessors;
     const tokenCache = yield* Ref.make<
       { accessToken: string; expirationMs: number; project: string } | undefined
     >(undefined);
@@ -162,50 +161,42 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
     };
 
     const loginStored = Effect.fn(function* (profileName: string) {
-      const kind = yield* interaction.prompt
-        .select({
-          message: "GCP stored credential type",
-          options: [
-            {
-              value: "token" as const,
-              label: "Access token",
-              description: "paste a bearer token from gcloud auth print-access-token",
-            },
-            {
-              value: "serviceAccount" as const,
-              label: "Service account JSON",
-              description: "paste the key file contents",
-            },
-          ],
-        })
-        .pipe(mapPromptCancellation);
+      const kind = yield* Interaction.select({
+        message: "GCP stored credential type",
+        options: [
+          {
+            value: "token" as const,
+            label: "Access token",
+            description: "paste a bearer token from gcloud auth print-access-token",
+          },
+          {
+            value: "serviceAccount" as const,
+            label: "Service account JSON",
+            description: "paste the key file contents",
+          },
+        ],
+      }).pipe(mapPromptCancellation);
 
-      const project = yield* interaction.prompt
-        .text({
-          message: "GCP project id",
-          validate: (v) => (v.length === 0 ? "Required" : undefined),
-        })
-        .pipe(mapPromptCancellation);
+      const project = yield* Interaction.text({
+        message: "GCP project id",
+        validate: (v) => (v.length === 0 ? "Required" : undefined),
+      }).pipe(mapPromptCancellation);
 
       if (kind === "token") {
-        const accessToken = yield* interaction.prompt
-          .password({
-            message: "Google access token",
-            validate: (v) => (v.length === 0 ? "Required" : undefined),
-          })
-          .pipe(mapPromptCancellation);
+        const accessToken = yield* Interaction.password({
+          message: "Google access token",
+          validate: (v) => (v.length === 0 ? "Required" : undefined),
+        }).pipe(mapPromptCancellation);
         yield* store.write(profileName, GCP_AUTH_PROVIDER_NAME, GcpStoredCredentialsSchema, {
           type: "token",
           accessToken,
           project,
         });
       } else {
-        const json = yield* interaction.prompt
-          .password({
-            message: "Service account JSON",
-            validate: (v) => (v.length === 0 ? "Required" : undefined),
-          })
-          .pipe(mapPromptCancellation);
+        const json = yield* Interaction.password({
+          message: "Service account JSON",
+          validate: (v) => (v.length === 0 ? "Required" : undefined),
+        }).pipe(mapPromptCancellation);
         yield* parseServiceAccountKey(json);
         yield* store.write(profileName, GCP_AUTH_PROVIDER_NAME, GcpStoredCredentialsSchema, {
           type: "serviceAccount",
@@ -213,53 +204,47 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
           project,
         });
       }
-      yield* interaction.output.success("GCP: credentials saved.");
+      yield* Interaction.success("GCP: credentials saved.");
       return { method: "stored" as const };
     });
 
     const configureInteractive = (profileName: string) =>
-      interaction.prompt
-        .select({
-          message: "GCP authentication method",
-          options,
-        })
-        .pipe(
-          mapPromptCancellation,
-          Effect.flatMap((method) =>
-            Match.value(method).pipe(
-              Match.when("env", () => Effect.succeed({ method: "env" as const })),
-              Match.when("serviceAccount", () =>
-                interaction.prompt
-                  .text({
-                    message: "Path to service-account JSON (Enter for ADC env)",
-                    placeholder: `$${GOOGLE_APPLICATION_CREDENTIALS_ENV}`,
-                  })
-                  .pipe(
-                    mapPromptCancellation,
-                    Effect.map((path) => {
-                      const trimmed = (path ?? "").trim();
-                      return {
-                        method: "serviceAccount" as const,
-                        ...(trimmed.length > 0 ? { credentialsFile: trimmed } : {}),
-                      };
-                    }),
-                  ),
-              ),
-              Match.when("stored", () => loginStored(profileName)),
-              Match.exhaustive,
-            ),
-          ),
-        );
-
-    const promptRegion = interaction.prompt
-      .text({
-        message: "Default GCP region",
-        placeholder: DEFAULT_GCP_REGION,
-      })
-      .pipe(
+      Interaction.select({
+        message: "GCP authentication method",
+        options,
+      }).pipe(
         mapPromptCancellation,
-        Effect.map((value) => (value ?? "").trim() || DEFAULT_GCP_REGION),
+        Effect.flatMap((method) =>
+          Match.value(method).pipe(
+            Match.when("env", () => Effect.succeed({ method: "env" as const })),
+            Match.when("serviceAccount", () =>
+              Interaction.text({
+                message: "Path to service-account JSON (Enter for ADC env)",
+                placeholder: `$${GOOGLE_APPLICATION_CREDENTIALS_ENV}`,
+              }).pipe(
+                mapPromptCancellation,
+                Effect.map((path) => {
+                  const trimmed = (path ?? "").trim();
+                  return {
+                    method: "serviceAccount" as const,
+                    ...(trimmed.length > 0 ? { credentialsFile: trimmed } : {}),
+                  };
+                }),
+              ),
+            ),
+            Match.when("stored", () => loginStored(profileName)),
+            Match.exhaustive,
+          ),
+        ),
       );
+
+    const promptRegion = Interaction.text({
+      message: "Default GCP region",
+      placeholder: DEFAULT_GCP_REGION,
+    }).pipe(
+      mapPromptCancellation,
+      Effect.map((value) => (value ?? "").trim() || DEFAULT_GCP_REGION),
+    );
 
     const configureCredentials = (_profileName: string) =>
       configureInteractive(_profileName).pipe(
@@ -434,7 +419,7 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
         Match.when({ method: "stored" }, () =>
           store
             .delete(profileName, GCP_AUTH_PROVIDER_NAME)
-            .pipe(Effect.andThen(interaction.output.success("GCP: stored credentials removed"))),
+            .pipe(Effect.andThen(Interaction.success("GCP: stored credentials removed"))),
         ),
         Match.exhaustive,
       );

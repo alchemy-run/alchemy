@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/git",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.84",
   "description": "Git hosting building blocks for Alchemy: protocol, stores, hasher and server.",
   "keywords": [
     "alchemy",

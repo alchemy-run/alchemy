@@ -56,7 +56,7 @@ export namespace Target {
 
   /**
    * Constructs a cached target resolver for a subscriber.
-   * This reuses the same fetcher if the debug port address hasn't changed.
+   * This reuses the same fetcher while the target's debug port address and workerd instance are unchanged.
    * The `toFetcher` function should use the debug port binding to create a fetcher for the target service.
    */
   export function makeResolver<T extends Subscriber>(
@@ -66,19 +66,26 @@ export namespace Target {
     const key = resolvedTargetKey(subscriber);
     let fetcher: Fetcher | undefined;
     let debugPortAddress: string | undefined;
+    let instanceId: string | undefined;
     return {
       resolve: () => {
         const target = value[key] as ResolvedTarget<T> | undefined;
         if (!target) {
           fetcher = undefined;
           debugPortAddress = undefined;
+          instanceId = undefined;
           return undefined;
         }
-        if (fetcher && debugPortAddress === target.debugPortAddress) {
+        if (
+          fetcher &&
+          debugPortAddress === target.debugPortAddress &&
+          instanceId === target.instanceId
+        ) {
           return fetcher;
         }
         fetcher = toFetcher(target);
         debugPortAddress = target.debugPortAddress;
+        instanceId = target.instanceId;
         return fetcher;
       },
     };

@@ -1,8 +1,8 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { waitForOperation } from "@alchemy.run/gcp/Operation";
+import { expect } from "@alchemy.run/test";
 import * as container from "@distilled.cloud/gcp/container_v1";
-import { expect } from "alchemy-test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

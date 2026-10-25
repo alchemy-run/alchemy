@@ -1,4 +1,4 @@
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import { PlanTree } from "@/Cli/components/view/PlanView.tsx";
 import { formatPlanLines } from "@/Cli/LoggingCli.ts";
 /**

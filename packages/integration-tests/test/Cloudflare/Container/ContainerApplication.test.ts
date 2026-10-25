@@ -2,8 +2,8 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { ContainerPlatform } from "@alchemy.run/cloudflare/Containers/ContainerPlatform";
 import { Docker } from "@alchemy.run/docker/Docker";
+import { assert, describe, expect } from "@alchemy.run/test";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import { assert, describe, expect } from "alchemy-test";
 import * as Deploy from "alchemy/Deploy";
 import * as Destroy from "alchemy/Destroy";
 import * as Drift from "alchemy/Drift";
@@ -34,7 +34,7 @@ import MyContainerLive, { MyContainer } from "./fixtures/effectful/container.ts"
 import EffectfulContainerWorker from "./fixtures/effectful/worker.ts";
 import { ExternalContainer } from "./fixtures/external/object.ts";
 import ExternalContainerWorker from "./fixtures/external/worker.ts";
-import { applications } from "./fixtures/identity/applications.ts";
+import { applications, cyclicApplication } from "./fixtures/identity/applications.ts";
 import {
   publicationApplications,
   sharedApplication,
@@ -107,6 +107,43 @@ const patchRow = <A extends Record<string, any>>(fqn: string, patch: (attr: A) =
     const row = (yield* state.get(key)) as ResourceState;
     yield* state.set({ ...key, value: { ...row, attr: patch(row.attr as A) } });
   });
+
+/**
+ * Deploys `CyclicOriginal`, then forgets it, leaving an application owned by
+ * another logical id. Returns a step that remembers it again, so destroy
+ * removes it through normal stack cleanup.
+ */
+const plantForeignApplication = Effect.fn(function* (stack: Scratch) {
+  yield* stack.destroy();
+  const original = yield* stack.deploy(
+    Cloudflare.Container("CyclicOriginal", {
+      image: "mendhak/http-https-echo:41",
+      maxInstances: 1,
+    }).Application,
+  );
+  const key = { stack: stack.name, stage: stack.stage, fqn: "CyclicOriginal" };
+  const row = yield* Effect.gen(function* () {
+    const state = yield* yield* State;
+    const value = yield* state.get(key);
+    yield* state.delete(key);
+    return value!;
+  }).pipe(Effect.provide(stack.state));
+  const restore = Effect.gen(function* () {
+    const state = yield* yield* State;
+    yield* state.set({ ...key, value: row });
+  }).pipe(Effect.provide(stack.state));
+  return { original, restore };
+});
+
+const waitForApplicationDeleted = (accountId: string, applicationId: string) =>
+  Containers.getContainerApplication({ accountId, applicationId }).pipe(
+    Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (app) => app === undefined,
+      times: 8,
+    }),
+  );
 
 // Every test owns a name-namespaced scratch stack and scopes its buildx
 // builder through `DockerEnvironment`, so they all run concurrently.
@@ -224,6 +261,57 @@ describe.concurrent(
             );
             expect(deleted).toBeUndefined();
           }
+        }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+
+    // A cycle precreates on unresolved props, before `read` can check
+    // ownership; precreate would adopt and update an application by name.
+    // An explicit name never establishes ownership, so `observe` refuses it.
+    for (const scoped of [undefined, false]) {
+      test.provider(
+        `a cyclic precreate refuses an explicitly named application (scoped adoption ${scoped})`,
+        (stack) =>
+          Effect.gen(function* () {
+            const { original, restore } = yield* plantForeignApplication(stack);
+            const request = {
+              accountId: original.accountId,
+              applicationId: original.applicationId,
+            };
+            const before = yield* Containers.getContainerApplication(request);
+            const program = cyclicApplication(original.applicationName, scoped);
+            expect((yield* stack.plan(program)).resources.CyclicDifferent?.action).toBe("create");
+            const error = yield* stack.deploy(program).pipe(Effect.flip);
+            expect(error).toMatchObject({
+              _tag: "OwnedBySomeoneElse",
+              logicalId: "CyclicDifferent",
+            });
+            expect(yield* Containers.getContainerApplication(request)).toEqual(before);
+            yield* stack.destroy();
+            yield* restore;
+            yield* stack.destroy();
+            expect(
+              yield* waitForApplicationDeleted(original.accountId, original.applicationId),
+            ).toBeUndefined();
+          }).pipe(logLevel),
+        { timeout: 120_000 },
+      );
+    }
+
+    test.provider(
+      "a cyclic precreate takes over an explicitly named application with adopt(true)",
+      (stack) =>
+        Effect.gen(function* () {
+          const { original, restore } = yield* plantForeignApplication(stack);
+          const adopted = yield* stack.deploy(cyclicApplication(original.applicationName, true));
+          expect(adopted.applicationId).toBe(original.applicationId);
+          yield* stack.destroy();
+          expect(
+            yield* waitForApplicationDeleted(original.accountId, original.applicationId),
+          ).toBeUndefined();
+          // The original row still names the taken-over application; deleting it again is a no-op.
+          yield* restore;
+          yield* stack.destroy();
         }).pipe(logLevel),
       { timeout: 120_000 },
     );

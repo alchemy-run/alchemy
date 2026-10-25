@@ -1,5 +1,5 @@
 import { waitForContainerImage } from "@alchemy.run/cloudflare/Containers/ContainerImagePreparation";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import type { NoteKind } from "alchemy/Report";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

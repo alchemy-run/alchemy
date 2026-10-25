@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { describe, expect } from "@alchemy.run/test";
 import * as kv from "@distilled.cloud/cloudflare/kv";
-import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -692,6 +692,70 @@ describe.concurrent(
           yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["provider:cloudflare:kv"], timeout: 360_000 },
+    );
+
+    // ─────────────────────────────────────────────────────────────────────
+    // A file-level `output: "static"` is honored (#1765)
+    //
+    // With no `astro.output` prop, the project's own `astro.config.mjs`
+    // decides: an existing static site stays assets-only on its first
+    // deploy instead of silently gaining a Worker script and a session
+    // namespace.
+    // ─────────────────────────────────────────────────────────────────────
+
+    test.provider(
+      "Astro: a config-file output 'static' deploys assets-only without the astro.output prop",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(staticFixtureDir, {
+            prefix: "alchemy-astro-static-config-",
+            tempRoot,
+            entries: ["package.json", "public", "src"],
+          });
+          yield* fs.writeFileString(
+            path.join(rootDir, "astro.config.mjs"),
+            'import { defineConfig } from "astro/config";\n\nexport default defineConfig({ output: "static" });\n',
+          );
+
+          const site = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Website.Astro("AstroStaticConfigSite", {
+                rootDir,
+                workersDev: { enabled: true, previewsEnabled: true },
+                compatibility: { date: "2026-03-10" },
+                assets: { notFoundHandling: "404-page" },
+              });
+            }),
+          );
+
+          // No server bundle was produced or uploaded.
+          expect(site.hash?.assets).toBeDefined();
+          expect(site.hash?.bundle).toBeUndefined();
+          yield* expectWorkerExists(site.workerName, accountId);
+          yield* expectUrlContains(`${site.url!}/`, "static-home", {
+            timeout: "120 seconds",
+            label: "static home page",
+          });
+          yield* expectNotFoundPage(`${site.url!}/definitely-not-a-page`, "static-404");
+
+          // A static site never provisions the session namespace.
+          const sessionNamespace = yield* kv.listNamespaces.items({ accountId }).pipe(
+            Stream.filter((ns) => ns.title.includes("AstroStaticConfigSiteSession")),
+            Stream.runHead,
+            Effect.map(Option.getOrUndefined),
+          );
+          expect(sessionNamespace).toBeUndefined();
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:kv"], timeout: 240_000 },
     );
 
     // ─────────────────────────────────────────────────────────────────────

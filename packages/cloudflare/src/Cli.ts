@@ -1,8 +1,8 @@
-import * as CliKit from "alchemy/Cli/CliKit";
 import { movedCommand } from "alchemy/Cli/commands/compat";
 import { confirmOrDecline } from "alchemy/Cli/commands/confirm";
 import { envFile, yes } from "alchemy/Cli/commands/flags";
 import { instrumentCommand } from "alchemy/Cli/commands/instrument";
+import * as Interaction from "alchemy/Interaction";
 import { loadConfigProvider } from "alchemy/Util/ConfigProvider";
 import { Command, Flag } from "effect/cli";
 import * as Config from "effect/Config";
@@ -104,7 +104,7 @@ const createTokenCommand = Command.make(
     "alchemy.all_permissions": a.allPermissions,
   }))(
     Effect.fn(function* ({ envFile, allPermissions, name, accountId, yes: approved }) {
-      const prompt = yield* CliKit.CliKit;
+      const prompt = yield* Interaction.Interaction;
       const provider = yield* loadConfigProvider(envFile);
       const read = <A>(config: Config.Config<Option.Option<A>>) =>
         config.pipe(

@@ -1,5 +1,5 @@
 import * as AWS from "@alchemy.run/aws";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -79,6 +79,69 @@ describe(
           yield* expectUrlContains(`${url}/`, "VITE_AWS_PAGE_MARKER_V2", {
             timeout: "90 seconds",
             label: "index page after edit",
+          });
+
+          yield* stack.destroy();
+        }),
+      { timeout: 600_000 },
+    );
+
+    // #1654: a dev proxy target in `vite.config.*` comes from another
+    // resource's `Output`, handed to the dev server through `env`.
+    test.provider(
+      "dev applies resource-resolved env to the Vite dev server",
+      (stack) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+
+          yield* stack.destroy();
+
+          const apiDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-vite-aws-local-api-",
+            tempRoot,
+            entries: fixtureEntries,
+          });
+          const webDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-vite-aws-local-web-",
+            tempRoot,
+            entries: [...fixtureEntries, "vite.proxy.config.mjs"],
+          });
+          // The proxied site serves a distinct robots.txt so a hit through
+          // the proxy can't be confused with the frontend's own file.
+          yield* fs.writeFileString(
+            path.join(apiDir, "public", "robots.txt"),
+            "VITE_AWS_PROXY_TARGET_MARKER\n",
+          );
+
+          const deployed = yield* stack.deploy(
+            Effect.gen(function* () {
+              const api = yield* AWS.Website.Vite("ApiSite", { rootDir: apiDir });
+              const web = yield* AWS.Website.Vite("WebSite", {
+                rootDir: webDir,
+                config: "vite.proxy.config.mjs",
+                env: {
+                  API_PROXY_TARGET: api.url,
+                  VITE_SITE_ENV: "VITE_AWS_DEV_ENV_MARKER",
+                },
+              });
+              return { api, web };
+            }),
+          );
+
+          const url = deployed.web.url! as string;
+          expect(url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1|\[[0-9a-fA-F:]+\])/);
+          expect(deployed.web.distribution).toBeUndefined();
+
+          // vite.config read the resolved Output from process.env: `/api`
+          // proxies to the other site's dev server.
+          yield* expectUrlContains(`${url}/api/robots.txt`, "VITE_AWS_PROXY_TARGET_MARKER", {
+            timeout: "120 seconds",
+            label: "dev proxy to resource-resolved target",
+          });
+          // `VITE_*` entries reach the client through `import.meta.env`.
+          yield* expectUrlContains(`${url}/src/main.ts`, "VITE_AWS_DEV_ENV_MARKER", {
+            label: "VITE_* env in dev module",
           });
 
           yield* stack.destroy();

@@ -22,6 +22,28 @@ function git(args, cwd) {
   }).trim();
 }
 
+// Parallel checkouts (several `git worktree add` at once) run this hook
+// concurrently against the same shared config files. Retry briefly when another
+// hook holds a lock instead of failing the checkout.
+function gitLocked(args, cwd) {
+  for (let attempt = 1; ; attempt++) {
+    const result = spawnSync("git", args, { cwd, env, encoding: "utf8" });
+    if (result.status === 0) return result.stdout.trim();
+    const locked = /could not lock|Unable to create '.*\.lock'/.test(result.stderr);
+    if (!locked || attempt === 50) {
+      process.stderr.write(result.stderr);
+      throw new Error(`Command failed: git ${args.join(" ")}`);
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+  }
+}
+
+// Skip the write, and its lock, when the value is already set.
+function setConfig(file, key, value, cwd) {
+  if (tryGit(["config", "--file", file, "--get", key], cwd) === value) return;
+  gitLocked(["config", "--file", file, key, value], cwd);
+}
+
 function tryGit(args, cwd) {
   const result = spawnSync("git", args, { cwd, env, encoding: "utf8" });
   return result.status === 0 ? result.stdout.trim() : undefined;
@@ -86,7 +108,7 @@ export function bootstrap(root, previousHead) {
   // (overriding a lock would require --force twice). Do not prune other entries.
   git(["worktree", "add", "--force", "--detach", checkout, pin], mainCheckout);
   isolateWorktreeConfig(mainRoot);
-  git(["submodule", "init", "--", "submodules/distilled"], root);
+  gitLocked(["submodule", "init", "--", "submodules/distilled"], root);
 }
 
 function isolateWorktreeConfig(mainRoot) {
@@ -112,13 +134,13 @@ function isolateWorktreeConfig(mainRoot) {
   // ones. Submodule sync/update can write core.worktree to the shared config;
   // explicit per-worktree overrides prevent that from redirecting any checkout.
   for (const [admin, path] of configs) {
-    git(["config", "--file", resolve(admin, "config.worktree"), "core.worktree", path], mainRoot);
+    setConfig(resolve(admin, "config.worktree"), "core.worktree", path, mainRoot);
   }
   const config = resolve(commonDir, "config");
-  git(["config", "--file", config, "extensions.worktreeConfig", "true"], mainRoot);
+  setConfig(config, "extensions.worktreeConfig", "true", mainRoot);
   // New worktrees must not inherit a path before their override is installed.
   if (tryGit(["config", "--file", config, "--get", "core.worktree"], mainRoot) !== undefined) {
-    git(["config", "--file", config, "--unset-all", "core.worktree"], mainRoot);
+    gitLocked(["config", "--file", config, "--unset-all", "core.worktree"], mainRoot);
   }
 }
 

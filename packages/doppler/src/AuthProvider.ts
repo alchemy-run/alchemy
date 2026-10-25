@@ -78,34 +78,18 @@ const awaitApproval = (authorization: { polling_code: string | Redacted.Redacted
  * `profile refresh`; reading credentials or loading secrets never logs in.
  */
 export const login = Effect.gen(function* () {
-  const interaction = yield* Interaction.Interaction;
-
   const authorization = yield* generateCliAuth(client).pipe(
     Retry.none,
     Effect.timeout(API_TIMEOUT),
   );
 
-  const openFailed = yield* Interaction.openUrl(authorization.auth_url).pipe(
-    Effect.as(false),
-    Effect.orElseSucceed(() => true),
-  );
-
-  // Show the "waiting" prompt for as long as polling takes; the prompt itself
-  // never resolves, so the race is decided by approval (or the timeout).
-  const waitingPrompt = interaction.prompt
-    .awaitExternal({
-      message: "Log in to Doppler",
-      waitingLabel: "Waiting for Doppler authorization (up to 5 minutes)…",
-      url: authorization.auth_url,
-      code: authorization.code,
-      openFailed,
-      allowManualInput: false,
-    })
-    .pipe(mapPromptCancellation, Effect.andThen(Effect.never));
-
-  const credentials = yield* Effect.raceFirst(awaitApproval(authorization), waitingPrompt).pipe(
-    Effect.timeout(LOGIN_TIMEOUT),
-  );
+  const credentials = yield* Interaction.browserLogin({
+    provider: "Doppler",
+    waitingLabel: "Waiting for Doppler authorization (up to 5 minutes)…",
+    url: authorization.auth_url,
+    code: authorization.code,
+    waitFor: awaitApproval(authorization),
+  }).pipe(mapPromptCancellation, Effect.timeout(LOGIN_TIMEOUT));
 
   const config: DopplerAuthConfig = {
     method: "login",
@@ -128,40 +112,36 @@ const tokenFields: ReadonlyArray<ConfigureField> = [
 ];
 
 /** Interactive alternative to {@link login}: paste a service or personal token. */
-const promptForToken = Interaction.accessors.prompt
-  .password({
-    message: "Doppler API token",
-    description: "A service token or personal token. Stored in your Alchemy profile.",
-    validate: (value) => (value.trim().length ? undefined : "Required"),
-  })
-  .pipe(
-    mapPromptCancellation,
-    Effect.map((token): DopplerAuthConfig => ({
-      method: "api-token",
-      token: token.trim(),
-    })),
-  );
+const promptForToken = Interaction.password({
+  message: "Doppler API token",
+  description: "A service token or personal token. Stored in your Alchemy profile.",
+  validate: (value) => (value.trim().length ? undefined : "Required"),
+}).pipe(
+  mapPromptCancellation,
+  Effect.map((token): DopplerAuthConfig => ({
+    method: "api-token",
+    token: token.trim(),
+  })),
+);
 
-const chooseMethod = Interaction.accessors.prompt
-  .select({
-    message: "Doppler authentication method",
-    options: [
-      {
-        value: "login" as const,
-        label: "Login",
-        description: "Login using your browser",
-      },
-      {
-        value: "api-token" as const,
-        label: "API token",
-        description: "Use a service token or personal token",
-      },
-    ],
-  })
-  .pipe(
-    mapPromptCancellation,
-    Effect.flatMap((method) => (method === "login" ? login : promptForToken)),
-  );
+const chooseMethod = Interaction.select({
+  message: "Doppler authentication method",
+  options: [
+    {
+      value: "login" as const,
+      label: "Login",
+      description: "Login using your browser",
+    },
+    {
+      value: "api-token" as const,
+      label: "API token",
+      description: "Use a service token or personal token",
+    },
+  ],
+}).pipe(
+  mapPromptCancellation,
+  Effect.flatMap((method) => (method === "login" ? login : promptForToken)),
+);
 
 /** Browser-login tokens are revocable; API tokens were minted elsewhere and are left alone. */
 const revokeLoginToken = (config: DopplerAuthConfig) =>

@@ -2,10 +2,10 @@
 /** @jsxImportSource @alchemy.run/sigil */
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import { Interaction } from "../../../Interaction.ts";
 import type { Result as NukeResult, Target } from "../../../Nuke.ts";
 import type { ProviderMode } from "../../../ProviderMode.ts";
 import { Progress, type ProgressEvent } from "../../../Report.ts";
-import { CliKit } from "../../CliKit/index.ts";
 import {
   LiveStore,
   ProgressBar,
@@ -109,11 +109,11 @@ export const renderNukeScan =
   () =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
-      const cli = yield* CliKit;
+      const cli = yield* Interaction;
       const store = new NukeProgressStore();
       const live =
         cli.terminal.input && !process.env.DEBUG
-          ? yield* cli.live.open(<NukeProgress store={store} />)
+          ? yield* cli.live(<NukeProgress store={store} />)
           : undefined;
       return yield* effect.pipe(
         Effect.provideService(Progress, (event) =>
@@ -131,7 +131,7 @@ export const renderNukeDelete =
   (targets: ReadonlyArray<Pick<Target, "providerId" | "displayName">>, mode: ProviderMode) =>
   <A extends NukeResult, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
-      const cli = yield* CliKit;
+      const cli = yield* Interaction;
       const tree = new PlanTree(nukePlan(targets, { mode }), {
         mode: "apply",
         label: "Deleting resources",
@@ -139,7 +139,7 @@ export const renderNukeDelete =
       });
       const live =
         cli.terminal.input && !process.env.DEBUG
-          ? yield* cli.live.open(<Plan tree={tree} />, { persistOnClose: true })
+          ? yield* cli.live(<Plan tree={tree} />, { persistOnClose: true })
           : undefined;
       return yield* effect.pipe(
         Effect.provideService(Progress, (event) =>
@@ -210,7 +210,7 @@ export const reviewNuke = Effect.fn(function* (
     dryRun: boolean;
   },
 ) {
-  const cli = yield* CliKit;
+  const cli = yield* Interaction;
   const plan = nukePlan(targets, options);
   if (options.yes || options.dryRun) {
     yield* cli.output.print(
@@ -226,7 +226,7 @@ export const reviewNuke = Effect.fn(function* (
     );
     return true;
   }
-  return yield* cli.prompt.custom(
+  return yield* cli.prompt.screen(
     planDecisionScreen({
       plan,
       label: "Nuke",

@@ -1,11 +1,11 @@
 import * as Neon from "@alchemy.run/neon";
 import { Credentials } from "@alchemy.run/neon/Credentials";
+import { expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, it } from "alchemy-test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { AuthProviders } from "alchemy/Auth/AuthProvider";
-import * as CliKit from "alchemy/Cli/CliKit";
+import * as Interaction from "alchemy/Interaction";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -51,7 +51,7 @@ it.live(
           Layer.sync(ArtifactStore, createArtifactStore),
           NodeServices.layer,
           FetchHttpClient.layer,
-          CliKit.layer({ input: false }),
+          Interaction.layerNonInteractive(),
         ),
       ),
     ),

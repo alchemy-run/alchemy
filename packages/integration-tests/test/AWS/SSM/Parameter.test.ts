@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { Parameter } from "@alchemy.run/aws/SSM";
+import { expect } from "@alchemy.run/test";
 import * as ssm from "@distilled.cloud/aws/ssm";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

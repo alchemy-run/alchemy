@@ -50,7 +50,8 @@ integration on top.
   sites (or a site plus an API), routed at the edge.
 
 Every resource shares the same surface: `domain` (ACM certificate +
-Route 53 records), server configuration (`timeout`, `env`,
+Route 53 records, or records on another
+[DNS host](/infrastructure-as-code/dns-adapters)), server configuration (`timeout`, `env`,
 `maxConcurrencyPerEnvironment`, `maxEnvironments`), `assets`, `edge`
 customizations, and `invalidation`.
 All builds are memoized by content-hashing the input files — an

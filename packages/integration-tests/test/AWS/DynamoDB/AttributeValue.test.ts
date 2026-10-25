@@ -6,8 +6,8 @@ import {
   toAttributeType,
   toAttributeValue,
 } from "@alchemy.run/aws/DynamoDB/AttributeValue";
+import { describe, expect, test } from "@alchemy.run/test";
 import type { AttributeValue } from "@distilled.cloud/aws/dynamodb";
-import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
 

@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";

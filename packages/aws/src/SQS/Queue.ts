@@ -292,14 +292,18 @@ class QueueStillExists extends Data.TaggedError("QueueStillExists")<{
  *
  * ### Event Sources
  * Process messages from a queue using a Lambda event source mapping.
- * Messages are automatically deleted after successful processing.
+ * Messages are deleted once the handler succeeds; any listed in
+ * `batchItemFailures` are retried.
  *
  * **Example:** Process queue messages
  * ```typescript
  * // init
- * yield* SQS.consumeQueueMessages(queue,
- *   Effect.fn(function* (message) {
- *     yield* Effect.log(`Received: ${message.body}`);
+ * yield* SQS.consumeQueueMessages(
+ *   queue,
+ *   Effect.fn(function* (event) {
+ *     for (const message of event.Records) {
+ *       yield* Effect.log(`Received: ${message.body}`);
+ *     }
  *   }),
  * );
  * ```

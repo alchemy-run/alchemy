@@ -13,6 +13,7 @@ import { ResourceContext } from "../ResourceContext.ts";
 import { StackContext } from "../StackContext.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import { bundleAnalyzerPlugin, type BundleAnalyzerPluginOptions } from "./BundleAnalyzerPlugin.ts";
+import { namespaceImportPlugin } from "./NamespaceImportPlugin.ts";
 import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
 import { rawPlugin } from "./RawPlugin.ts";
 import { unreachableChunksPlugin } from "./UnreachableChunksPlugin.ts";
@@ -185,9 +186,18 @@ const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> = 
  * framework flags win over any caller-provided keys) and
  * {@link ALCHEMY_MODULE_TYPES} into the caller's `moduleTypes` (caller
  * keys win, so an extension can be remapped or disabled per bundle).
+ *
+ * Also enables `experimental.lazyBarrel` unless the caller sets it, so a
+ * runtime importing one service from `@alchemy.run/aws` (a barrel of every
+ * AWS service) compiles that service, not all of them. See
+ * {@link namespaceImportPlugin} for `import * as AWS`.
  */
 const withAlchemyDefine = (inputOptions: rolldown.InputOptions): rolldown.InputOptions => ({
   ...inputOptions,
+  experimental: {
+    lazyBarrel: true,
+    ...inputOptions.experimental,
+  },
   transform: {
     ...inputOptions.transform,
     define: {
@@ -563,6 +573,7 @@ async function builtInPlugins(extra?: BundleExtraOptions): Promise<rolldown.Roll
     extra?.bundleAnalyzer
       ? await bundleAnalyzerPlugin(extra.bundleAnalyzer === true ? {} : extra.bundleAnalyzer)
       : undefined,
+    namespaceImportPlugin(),
     extra?.pure !== false ? purePlugin(extra?.pure ?? {}) : undefined,
     rawPlugin(),
     unreachableChunksPlugin(),

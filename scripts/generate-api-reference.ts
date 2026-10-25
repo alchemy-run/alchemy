@@ -490,6 +490,7 @@ function declName(node: Node): string {
   }
   if (
     ts.isClassDeclaration(node) ||
+    ts.isFunctionDeclaration(node) ||
     ts.isInterfaceDeclaration(node) ||
     ts.isTypeAliasDeclaration(node)
   ) {
@@ -599,6 +600,10 @@ export function findTaggedPrimary(
     ...sourceFile.statements
       .filter(ts.isInterfaceDeclaration)
       .filter((i) => Boolean(i.modifierFlags & ts.ModifierFlags.Export)),
+    // An overloaded function carries its JSDoc on the first signature.
+    ...sourceFile.statements
+      .filter(ts.isFunctionDeclaration)
+      .filter((f) => Boolean(f.modifierFlags & ts.ModifierFlags.Export)),
   ];
 
   for (const node of candidates) {

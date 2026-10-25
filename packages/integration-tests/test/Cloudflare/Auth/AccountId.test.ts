@@ -1,5 +1,5 @@
 import { validateAccountId } from "@alchemy.run/cloudflare/Auth/AuthConfig";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 
 /**

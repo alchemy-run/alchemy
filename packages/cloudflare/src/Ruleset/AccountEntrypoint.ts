@@ -23,8 +23,9 @@ export type AccountEntrypointProps = {
   /**
    * Ruleset phase entrypoint to own (e.g. `http_request_firewall_custom`,
    * `ddos_l4`, `magic_transit`). Changing the phase triggers a
-   * replacement. Account-level phases are Enterprise-gated — on lower
+   * replacement. Most account-level phases are Enterprise-gated — on lower
    * plans, deploys fail with the typed `PhaseNotEntitled` error.
+   * `http_request_redirect` (Bulk Redirects) is available on every plan.
    */
   phase: Phase;
   /**
@@ -86,8 +87,9 @@ export type AccountEntrypoint = Resource<
  * `magic_transit` rules). The entrypoint is a per-phase singleton — destroy
  * empties its rules rather than deleting the phase.
  *
- * Account-level phases require an Enterprise plan; on lower plans deploys
- * fail with the typed `PhaseNotEntitled` error.
+ * Most account-level phases require an Enterprise plan; on lower plans
+ * deploys fail with the typed `PhaseNotEntitled` error. The
+ * `http_request_redirect` phase (Bulk Redirects) is available on every plan.
  * ### Account WAF Deployment
  * **Example:** Deploy a custom ruleset across all zones
  * ```typescript
@@ -115,7 +117,39 @@ export type AccountEntrypoint = Resource<
  * });
  * ```
  *
+ * ### Bulk Redirects
+ * **Example:** Redirect every mapping in a list with one rule
+ * ```typescript
+ * const redirects = yield* Cloudflare.Rules.List("Redirects", {
+ *   kind: "redirect",
+ *   items: [
+ *     {
+ *       redirect: {
+ *         sourceUrl: "example.com/old",
+ *         targetUrl: "https://example.com/new",
+ *         statusCode: 301,
+ *       },
+ *     },
+ *   ],
+ * });
+ *
+ * yield* Cloudflare.Ruleset.AccountEntrypoint("BulkRedirects", {
+ *   phase: "http_request_redirect",
+ *   rules: [
+ *     {
+ *       ref: "redirects",
+ *       expression: Output.interpolate`http.request.full_uri in $${redirects.name}`,
+ *       action: "redirect",
+ *       actionParameters: {
+ *         fromList: { name: redirects.name, key: "http.request.full_uri" },
+ *       },
+ *     },
+ *   ],
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/waf/account/
+ * @see https://developers.cloudflare.com/rules/url-forwarding/bulk-redirects/
  *
  * @resource
  * @product Rulesets

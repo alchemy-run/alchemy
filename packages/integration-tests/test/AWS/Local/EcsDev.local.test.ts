@@ -25,7 +25,7 @@ import { spawnSync } from "node:child_process";
  * Requires Docker (floci runs as a container); skipped when unavailable.
  */
 import * as AWS from "@alchemy.run/aws";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Command from "alchemy/Command";
 import * as Output from "alchemy/Output";
 import { Stack } from "alchemy/Stack";

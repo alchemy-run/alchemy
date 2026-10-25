@@ -1,6 +1,6 @@
 import { execFile, spawnSync } from "node:child_process";
 import * as Floci from "@alchemy.run/aws/Local/Floci";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 /**
  * Lifecycle tests for `ensureFloci`, the manager that owns the floci

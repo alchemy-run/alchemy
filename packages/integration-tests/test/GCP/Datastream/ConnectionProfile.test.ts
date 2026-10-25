@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
 import * as datastream from "@distilled.cloud/gcp/datastream_v1";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { LOCATION, logLevel, currentProject, runLifecycle, waitUntilGone } from "./common.ts";

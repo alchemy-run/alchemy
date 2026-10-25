@@ -4,8 +4,8 @@ import {
   validateOrganizationSpendingLimit,
 } from "@alchemy.run/neon/OrganizationSpendingLimit";
 import { providers } from "@alchemy.run/neon/Providers";
+import { expect } from "@alchemy.run/test";
 import * as SDK from "@distilled.cloud/neon";
-import { expect } from "alchemy-test";
 import { adopt, stripUnowned, Unowned } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
@@ -271,6 +271,6 @@ test.provider.skipIf(!enabled)(
   {
     tags: ["provider:neon", "provider:neon:organizationspendinglimit", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "neon:governance",
   },
 );

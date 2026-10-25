@@ -8,13 +8,13 @@ import { DBCluster, DBInstance, MigrationRunner, type DBInstanceProps } from "@a
 import { Aurora, type AuroraProps } from "@alchemy.run/aws/RDS/Aurora";
 import { DBParameterGroup } from "@alchemy.run/aws/RDS/DBParameterGroup";
 import { DBSubnetGroup } from "@alchemy.run/aws/RDS/DBSubnetGroup";
-import { importPg } from "@alchemy.run/sql/PostgresDriver";
+import { describe, expect } from "@alchemy.run/test";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as rds from "@distilled.cloud/aws/rds";
 import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
-import { describe, expect } from "alchemy-test";
+import * as PgClient from "@effect/sql-pg/PgClient";
 import * as Drift from "alchemy/Drift";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
@@ -2482,6 +2482,91 @@ lifecycle(2, process.env.RDS_TEST_LIFECYCLE)(
   },
 );
 
+// Regression for #2317: a deploy whose core modify resets the master
+// password and also enables IAM authentication. RDS keeps reporting
+// `available` for a few seconds after accepting the reset, so the follow-up
+// IAM modify used to reach a busy instance and fail with
+// `InvalidDBInstanceStateFault`.
+lifecycle(7, process.env.RDS_TEST_LIFECYCLE)(
+  "master password: a password reset followed by an IAM change in one deploy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const startedAt = yield* Effect.sync(() => new Date());
+      const deployInstance = (password: string, iam: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const net = yield* Network("ResetIamNet", {
+              cidrBlock: "10.43.0.0/16",
+            });
+            const subnetGroup = yield* DBSubnetGroup("ResetIamSubnetGroup", {
+              description: "alchemy password reset + IAM lifecycle",
+              subnetIds: net.privateSubnetIds,
+            });
+            return yield* DBInstance("ResetIamInstance", {
+              engine: "postgres",
+              dbInstanceClass: "db.t3.micro",
+              allocatedStorage: 20,
+              masterUsername: "alchemy",
+              masterUserPassword: Redacted.make(password),
+              enableIAMDatabaseAuthentication: iam,
+              deletionProtection: false,
+              dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+              publiclyAccessible: false,
+            });
+          }),
+        );
+
+      const created = yield* deployInstance("ResetIamPass1", false);
+      // The race is a few seconds wide, so give it several chances: each
+      // round resets the password and flips IAM authentication together.
+      const rounds = [
+        { password: "ResetIamPass2", iam: true },
+        { password: "ResetIamPass3", iam: false },
+        { password: "ResetIamPass4", iam: true },
+      ];
+      for (const { password, iam } of rounds) {
+        const updated = yield* deployInstance(password, iam);
+        expect(updated.dbInstanceArn).toBe(created.dbInstanceArn);
+        const instance = (yield* rds.describeDBInstances({
+          DBInstanceIdentifier: updated.dbInstanceIdentifier,
+        })).DBInstances?.[0];
+        expect(instance?.IAMDatabaseAuthenticationEnabled).toBe(iam);
+      }
+
+      // Every password reset really applied, so each IAM modify followed one.
+      const resets = yield* rds
+        .describeEvents({
+          SourceIdentifier: created.dbInstanceIdentifier,
+          SourceType: "db-instance",
+          StartTime: startedAt,
+        })
+        .pipe(
+          Effect.map((response) =>
+            (response.Events ?? []).filter((event) =>
+              /reset master credentials/i.test(event.Message ?? ""),
+            ),
+          ),
+          Effect.repeat({
+            schedule: Schedule.min([
+              Schedule.exponential("5 seconds"),
+              Schedule.spaced("1 minute"),
+            ]),
+            until: (found) => found.length >= rounds.length,
+            times: 10,
+          }),
+        );
+      expect(resets).toHaveLength(rounds.length);
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: INSTANCE_TIMEOUT,
+  },
+);
+
 // Both guards fire while the stack is built, before any cloud call.
 test.provider(
   "Aurora rejects the Data API transport without the Data API, and non-Aurora engines",
@@ -2684,25 +2769,20 @@ lifecycle(4, process.env.AWS_TEST_RDS_DBINSTANCE)(
 
       // Out-of-band: read the bookkeeping rows over our own connection.
       const credentials = yield* readSecretCredentials(updated.masterUserSecretArn!);
-      const rows = yield* Effect.acquireUseRelease(
-        Effect.tryPromise(async () => {
-          const { Client } = await importPg();
-          const client = new Client({
+      const rows = yield* Effect.gen(function* () {
+        const sql = yield* PgClient.PgClient;
+        return yield* sql`SELECT name FROM __alchemy_migrations ORDER BY id`;
+      }).pipe(
+        Effect.provide(
+          PgClient.layer({
             host: updated.endpointAddress,
             port: updated.endpointPort,
             database: "app",
-            user: credentials.username,
-            password: credentials.password,
+            username: credentials.username,
+            password: Redacted.make(credentials.password),
             ssl: { rejectUnauthorized: false },
-          });
-          await client.connect();
-          return client;
-        }),
-        (client) =>
-          Effect.tryPromise(() =>
-            client.query("SELECT name FROM __alchemy_migrations ORDER BY id;"),
-          ).pipe(Effect.map((result) => result.rows)),
-        (client) => Effect.promise(() => client.end()),
+          }),
+        ),
       );
       expect(rows).toEqual([{ name: "0001_users.sql" }, { name: "0002_posts.sql" }]);
 

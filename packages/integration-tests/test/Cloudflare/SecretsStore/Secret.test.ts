@@ -1,12 +1,14 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -45,62 +47,118 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:secretsstore", "live"] },
 );
 
-// A Secret with no state is found by name. The store's listing order is not
-// stable across pages, so the lookup asks the API to search by name rather
-// than scanning every page; seed more than one page (the API pages by 20) so
-// the lookup runs against a paginated store.
+class UnexpectedSecretValue extends Data.TaggedError("UnexpectedSecretValue")<{
+  status: number;
+  value: string | undefined;
+}> {}
+
+// Reads the secret back through a deployed Worker binding (the Secrets Store
+// API never returns values). Fresh workers.dev URLs and freshly patched
+// secrets take a moment to propagate, so retry until the expected value shows.
+const readSecretValue = (url: string, expected: string) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* client.get(url);
+    const value = res.status === 200 ? ((yield* res.json) as { value: string }).value : undefined;
+    if (value !== expected) {
+      return yield* Effect.fail(new UnexpectedSecretValue({ status: res.status, value }));
+    }
+    return value;
+  }).pipe(
+    Effect.retry({
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.spaced("5 seconds")]),
+      times: 20,
+    }),
+  );
+
+// #2441: changing only `value` updates the secret in place — same secret id,
+// and a Worker bound to it reads the new value.
+test.provider(
+  "changing value updates the secret in place",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (value: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const store = yield* Cloudflare.SecretsStore.Store("UpdateSecretStore");
+            const secret = yield* Cloudflare.SecretsStore.Secret("UpdateSecret", {
+              store,
+              value: Redacted.make(value),
+            });
+            const worker = yield* Cloudflare.Worker("UpdateSecretWorker", {
+              main: new URL("./fixtures/value-worker.ts", import.meta.url).pathname,
+              workersDev: { enabled: true, previewsEnabled: false },
+              env: { MY_SECRET: secret },
+            });
+            return { secret, worker };
+          }),
+        );
+
+      const v1 = yield* deploy("sk-update-v1");
+      expect(yield* readSecretValue(v1.worker.url!, "sk-update-v1")).toBe("sk-update-v1");
+
+      const v2 = yield* deploy("sk-update-v2");
+      expect(v2.secret.secretId).toBe(v1.secret.secretId);
+      expect(v2.secret.secretName).toBe(v1.secret.secretName);
+      expect(yield* readSecretValue(v2.worker.url!, "sk-update-v2")).toBe("sk-update-v2");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 300_000, tags: ["provider:cloudflare", "provider:cloudflare:secretsstore", "live"] },
+);
+
+// A Secret with no state of its own is found by name. The store's listing
+// order is not stable across pages, so the lookup asks the API to search by
+// name rather than scanning every page. Deploy more than one page of secrets
+// (the API pages by 20), then adopt one of them by name under a second
+// logical id, which sends `read` through the lookup.
 test.provider(
   "adopts a secret by name from a store with more than one page of secrets",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const store = yield* stack.deploy(Cloudflare.SecretsStore.Store("PagedSecretStore"));
-      const key = { accountId: store.accountId, storeId: store.storeId };
-      const seeded = yield* secretsStore.createStoreSecret({
-        ...key,
-        body: [
-          ...Array.from({ length: 21 }, (_, i) => ({
-            name: `paged-secret-filler-${i}`,
-            scopes: ["workers" as const],
-            value: "filler",
-          })),
-          { name: "paged-secret-target", scopes: ["workers" as const], value: "sk-paged" },
-        ],
-      });
-      const fillers = seeded.result.filter((s) => s.name !== "paged-secret-target");
-      const target = seeded.result.find((s) => s.name === "paged-secret-target")!;
-
-      yield* Effect.gen(function* () {
-        const deployed = yield* stack.deploy(
+      const deploy = (adoptTarget: boolean) =>
+        stack.deploy(
           Effect.gen(function* () {
             const store = yield* Cloudflare.SecretsStore.Store("PagedSecretStore");
-            return yield* Cloudflare.SecretsStore.Secret("PagedSecret", {
+            yield* Effect.forEach(
+              Array.from({ length: 21 }, (_, i) => i),
+              (i) =>
+                Cloudflare.SecretsStore.Secret(`PagedFiller${i}`, {
+                  store,
+                  name: `paged-secret-filler-${i}`,
+                  value: Redacted.make("filler"),
+                }),
+              { concurrency: "unbounded", discard: true },
+            );
+            const target = yield* Cloudflare.SecretsStore.Secret("PagedTarget", {
               store,
               name: "paged-secret-target",
               value: Redacted.make("sk-paged"),
-            }).pipe(adopt(true));
+            });
+            const adopted = adoptTarget
+              ? yield* Cloudflare.SecretsStore.Secret("PagedTargetAdopted", {
+                  store,
+                  name: "paged-secret-target",
+                  value: Redacted.make("sk-paged"),
+                }).pipe(adopt(true))
+              : undefined;
+            return { target, adopted };
           }),
         );
-        expect(deployed.secretId).toEqual(target.id);
-      }).pipe(
-        Effect.ensuring(
-          Effect.forEach(
-            fillers,
-            (s) =>
-              secretsStore
-                .deleteStoreSecret({ ...key, secretId: s.id })
-                .pipe(Effect.catchTag("SecretNotFound", () => Effect.void)),
-            { concurrency: 5, discard: true },
-          ).pipe(Effect.orDie),
-        ),
-      );
+
+      const { target } = yield* deploy(false);
+      const { adopted } = yield* deploy(true);
+      expect(adopted?.secretId).toEqual(target.secretId);
 
       yield* stack.destroy();
     }).pipe(logLevel),
   {
     tags: ["provider:cloudflare", "provider:cloudflare:secretsstore", "live"],
-    timeout: 120_000,
+    timeout: 180_000,
   },
 );
 

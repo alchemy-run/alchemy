@@ -34,6 +34,7 @@ export type StoreSecretProps = {
   name?: string;
   /**
    * The secret value. Treated as redacted and never logged.
+   * Changing it updates the secret in place, keeping its secret ID.
    */
   value: Redacted.Redacted<string>;
   /**
@@ -75,9 +76,10 @@ const asSecretStatus = (status: string): SecretStatus => status as SecretStatus;
 /**
  * A single secret stored inside a Cloudflare Secrets Store.
  *
- * The secret value is treated as redacted and is only ever sent to
- * Cloudflare at create time. Updating `scopes` or `comment` issues a
- * PATCH; changing `value` or `name` replaces the secret.
+ * The secret value is treated as redacted and never logged. Changing
+ * `value`, `scopes`, or `comment` updates the secret in place (same
+ * secret ID); changing `name` or moving it to another store replaces it.
+ *
  * ### Creating a Secret
  * **Example:** Basic Secret
  * ```typescript

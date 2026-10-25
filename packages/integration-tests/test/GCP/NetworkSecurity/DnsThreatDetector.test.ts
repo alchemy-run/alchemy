@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
 import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -106,6 +106,6 @@ test.provider(
   {
     tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
     timeout: 90_000,
-    exclusive: true,
+    exclusive: "gcp:dns-threat-detector",
   },
 );

@@ -1,5 +1,5 @@
+import { assert, describe, expect, it, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { assert, describe, expect, it, layer } from "alchemy-test";
 import * as Command from "effect/cli/Command";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -7,9 +7,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Alchemist from "@/Alchemist/index.ts";
-import * as CliKit from "@/Cli/CliKit/index.ts";
 import { providerCommand } from "@/Cli/commands/provider.ts";
 import * as Contributions from "@/Contributions.ts";
+import * as Interaction from "@/Interaction.ts";
 
 interface Dependency {
   /** `package.json` of the dependency; omit to leave it uninstalled. */
@@ -459,7 +459,7 @@ describe("alchemy provider", { tags: ["unit", "local"] }, () => {
       const command = yield* Effect.promise(() => providerCommand([brokenCli, workingCli]));
       const run = (args: ReadonlyArray<string>) =>
         Command.runWith(command, { version: "test" })(args).pipe(
-          Effect.provide(Layer.mergeAll(Alchemist.layer(), CliKit.layer({ input: false }))),
+          Effect.provide(Layer.mergeAll(Alchemist.layer(), Interaction.layerNonInteractive())),
         );
       yield* run(["working"]);
       const error = yield* Effect.flip(run(["broken"]));

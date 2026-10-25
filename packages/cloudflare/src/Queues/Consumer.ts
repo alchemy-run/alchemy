@@ -32,7 +32,12 @@ export type ConsumerProps = {
    */
   scriptName: string;
   /**
-   * Optional dead letter queue name for failed messages.
+   * Name of the queue that receives messages after `maxRetries` failed
+   * deliveries.
+   *
+   * Cloudflare does not drain or alert on a dead-letter queue. A message
+   * left there expires after the queue's retention period, so give the
+   * dead-letter queue its own consumer.
    */
   deadLetterQueue?: string;
   /**
@@ -128,6 +133,48 @@ export type Consumer = Resource<
  *     maxRetries: 5,
  *     maxWaitTimeMs: 10000,
  *   },
+ * });
+ * ```
+ *
+ * ### Dead-Lettering Failed Messages
+ * **Example:** Consume the dead-letter queue
+ * ```typescript
+ * const dlq = yield* Cloudflare.Queues.Queue("MyDeadLetterQueue");
+ *
+ * yield* Cloudflare.Queues.Consumer("MyConsumer", {
+ *   queueId: queue.queueId,
+ *   scriptName: worker.workerName,
+ *   deadLetterQueue: dlq.queueName,
+ *   settings: { maxRetries: 3 },
+ * });
+ *
+ * // Without a consumer, dead-lettered messages expire unseen.
+ * yield* Cloudflare.Queues.Consumer("MyDeadLetterConsumer", {
+ *   queueId: dlq.queueId,
+ *   scriptName: worker.workerName,
+ * });
+ * ```
+ *
+ * **Example:** Dead-letter to a queue in another stack
+ * ```typescript
+ * const dlq = yield* Cloudflare.Queues.Queue.ref("DeadLetters", {
+ *   stack: "shared",
+ *   stage: "production",
+ * });
+ *
+ * yield* Cloudflare.Queues.Consumer("MyConsumer", {
+ *   queueId: queue.queueId,
+ *   scriptName: worker.workerName,
+ *   deadLetterQueue: dlq.queueName,
+ * });
+ * ```
+ *
+ * **Example:** Dead-letter to a queue by name
+ * ```typescript
+ * yield* Cloudflare.Queues.Consumer("MyConsumer", {
+ *   queueId: queue.queueId,
+ *   scriptName: worker.workerName,
+ *   deadLetterQueue: "orders-dead-letters",
  * });
  * ```
  *

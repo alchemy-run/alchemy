@@ -959,8 +959,8 @@ export const LiveContainerProvider = () =>
           return String(error);
         };
 
-        // Engine has cleared us via `read` (foreign-named applications are
-        // surfaced as `Unowned`). Re-fetch the existing application to fold
+        // Engine has cleared us via `read` or `observe` (foreign-named
+        // applications are surfaced as `Unowned`). Re-fetch the existing application to fold
         // it into the upsert path.
         const existingByName = yield* findApplicationByName(name);
 
@@ -1283,6 +1283,18 @@ export const LiveContainerProvider = () =>
           if (imageHash !== output.hash?.image || !deepEqual(dev, output.dev)) {
             return { action: "update" } as const;
           }
+        }),
+        observe: Effect.fn(function* ({ id, news = {} }) {
+          // Precreate creates — or adopts and updates — the application
+          // named here; ownership follows `read`.
+          if (!isResolved(nameOf(news))) return undefined;
+          const name = yield* createApplicationName(id, nameOf(news));
+          const existing = yield* findApplicationByName(name);
+          if (existing === undefined) return undefined;
+          const observed = toAttributes(existing);
+          // Generated names identify this instance by its random suffix.
+          // Explicit names alone do not establish ownership.
+          return nameOf(news) === undefined ? observed : Unowned(observed);
         }),
         precreate: Effect.fn(function* ({ id, news = {}, session }) {
           yield* validateContainerConfiguration(news);
