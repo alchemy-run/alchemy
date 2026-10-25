@@ -33,9 +33,3 @@ export const deck: DeckItem[] = [
  * `intro/loop.ts`. The presenter opens it by default; `?deck=talk` opens `deck`.
  */
 export const loopDeck: DeckItem[] = [{ kind: "intro", id: "loop" }];
-
-/**
- * A short talk on what Alchemy is, built from `intro/what.ts` (the "What is
- * Alchemy?" docs page as a sequence). `?deck=what` opens it in the presenter.
- */
-export const whatDeck: DeckItem[] = [{ kind: "intro", id: "what" }];

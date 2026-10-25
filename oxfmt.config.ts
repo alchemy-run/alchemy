@@ -30,7 +30,5 @@ export default defineConfig({
     "examples/prisma-tanstack-start/src/prisma/contract.d.ts",
     "examples/prisma-tanstack-start/src/prisma/contract.json",
     "**/fixtures/chart/templates/**",
-    // Code shown on slides: its line breaks are part of the layout.
-    "demos/effect-prezzy/intro/snippets/**",
   ],
 } satisfies OxfmtConfig);

@@ -1,9 +1,8 @@
 /**
  * Resolves `intro/steps.ts` into `out/capture/intro/intro.json` for Remotion:
  *
- * - type-checks every file in `snippets/` with the real compiler: the
- *   deck's normal files must pass; its `*.error.ts` files must fail, and
- *   their error is shown
+ * - type-checks every file in `snippets/` with the real compiler: normal
+ *   files must pass; `*.error.ts` files must fail, and their error is shown
  * - cuts each snippet down to its `// #region` blocks
  * - highlights code with Shiki (VS Code's Dark+ colours)
  * - turns text anchors for marks, tints and errors into line/column ranges
@@ -26,12 +25,11 @@ import type {
 } from "../shared/intro.ts";
 import type { CodeSpec, Find, StepSpec } from "./steps.ts";
 
-/** Which deck to build: `intro` (intro/steps.ts), `loop` (intro/loop.ts) or `what` (intro/what.ts). */
+/** Which deck to build: `intro` (intro/steps.ts) or `loop` (intro/loop.ts). */
 const deckName = process.argv[2] ?? "intro";
 const decks: Record<string, () => Promise<StepSpec[]>> = {
   intro: async () => (await import("./steps.ts")).steps,
   loop: async () => (await import("./loop.ts")).steps,
-  what: async () => (await import("./what.ts")).steps,
 };
 if (!decks[deckName])
   throw new Error(`unknown deck ${deckName}: expected ${Object.keys(decks).join(" | ")}`);
@@ -124,11 +122,8 @@ if (cached?.stamp !== stamp) {
   await writeFile(cacheFile, JSON.stringify({ stamp, diagnostics: [...diagnostics] }));
 }
 
-/**
- * A deck fails only on the snippets it shows: normal files must pass,
- * `*.error.ts` files must fail. Another deck's stale snippet doesn't block it.
- */
-const checkSnippet = (file: string) => {
+const snippetFiles = (await Promise.all(projects.map(listTs))).flat();
+for (const file of snippetFiles) {
   const list = diagnostics.get(file) ?? [];
   const errorFile = file.endsWith(".error.ts");
   if (errorFile && list.length === 0)
@@ -138,34 +133,12 @@ const checkSnippet = (file: string) => {
       `${file} must type-check:\n${list.map((d) => `  ${d.line + 1}:${d.col + 1} ${d.message.join("\n    ")}`).join("\n")}`,
     );
   }
-};
+}
 
 // ── snippets: keep only the named regions ────────────────────────────────
 const REGION = /^\s*\/\/ #(end)?region\b/;
 /** Code that must be there to type-check but isn't worth showing: `/*hide*\/ … /*end*\/`. */
-const HIDDEN = /\s*\/\*hide\*\/.*?\/\*end\*\//g;
-/**
- * The formatter may break a hidden span over several lines. Join each such span
- * onto its first line (keeping that line's number), so HIDDEN removes it whole.
- */
-const joinHidden = (lines: string[]): [string, number][] => {
-  const out: [string, number][] = [];
-  let open: [string, number] | undefined;
-  lines.forEach((line, i) => {
-    if (open) {
-      open[0] += `\n${line}`;
-      if (!line.includes("/*end*/")) return;
-      out.push([open[0].replace(/\s*\/\*hide\*\/[\s\S]*?\/\*end\*\//g, ""), open[1]]);
-      open = undefined;
-      return;
-    }
-    const at = line.lastIndexOf("/*hide*/");
-    if (at >= 0 && !line.slice(at).includes("/*end*/")) open = [line, i];
-    else out.push([line, i]);
-  });
-  if (open) out.push(open);
-  return out;
-};
+const HIDDEN = /\/\*hide\*\/.*?\/\*end\*\//g;
 /** `// @slide code` is a comment in the real file and `code` on the slide (e.g. a stand-in closing line). */
 const SLIDE_ONLY = /^(\s*)\/\/ @slide (.*)$/;
 interface Cut {
@@ -175,7 +148,7 @@ interface Cut {
   regions: Map<string, [number, number]>;
 }
 const cut = (text: string, keep?: string[], omit: string[] = [], fold: string[] = []): Cut => {
-  const lines = joinHidden(text.split("\n"));
+  const lines = text.split("\n");
   const open: string[] = [];
   const kept: string[] = [];
   const origin: number[] = [];
@@ -183,7 +156,7 @@ const cut = (text: string, keep?: string[], omit: string[] = [], fold: string[] 
   const starts = new Map<string, number>();
   /** Lines of a folded region, collapsed to one line (like an editor fold) when it closes. */
   let folding: { name: string; lines: [string, number][] } | undefined;
-  lines.forEach(([line, i]) => {
+  lines.forEach((line, i) => {
     const marker = line.match(/^\s*\/\/ #(end)?region\s+(\S+)/);
     if (marker) {
       const name = marker[2]!;
@@ -290,7 +263,6 @@ const resolveCode = async (spec: CodeSpec, split = false): Promise<CodeStep> => 
   let regions = new Map<string, [number, number]>();
   let error: CodeError | undefined;
   if ("snippet" in spec.src) {
-    checkSnippet(spec.src.snippet);
     const file = path.join(snippetsDir, spec.src.snippet);
     const text = await readFile(file, "utf8");
     const c = cut(text, spec.src.regions, spec.src.omit, spec.src.fold);
@@ -501,7 +473,6 @@ for (const spec of steps) {
     const fill = (values: string[]) =>
       spec.template.replace(/⟨(\d+)⟩/g, (_, i) => values[Number(i)]!);
     const verify = async (values: string[], check: string) => {
-      checkSnippet(check);
       const shown = cut(await readFile(path.join(snippetsDir, check), "utf8"), ["show"]).code;
       if (shown.trim() !== fill(values).trim()) {
         throw new Error(
