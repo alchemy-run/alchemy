@@ -352,6 +352,9 @@ export interface Ruleset extends Resource<
  * ```
  *
  * ### Merge Queue
+ * GitHub only supports merge queues on branch rulesets in
+ * organization-owned repositories.
+ *
  * **Example:** Merge Through a Squash Merge Queue
  * ```typescript
  * yield* GitHub.Ruleset("merge-queue", {
