@@ -1258,6 +1258,66 @@ describe.concurrent(
       { tags: ["live"], timeout: 180_000 },
     );
 
+    // #2533: a cyclic dispatch-namespace Worker precreates a stub that uploads
+    // nothing. Its namespace is still unresolved, so the stub records none.
+    // When the upload then fails, destroy must not read that as an
+    // account-level Worker and delete the same-name script there.
+    test.provider(
+      "destroy preserves the account Worker after an interrupted dispatch precreate",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* stack.destroy();
+          const name = scriptName(stack, "stub-cleanup");
+          // An account-level script tagged for `Api`, unknown to state.
+          yield* stack.deploy(Cloudflare.Worker("Api", { main, name, workersDev: false }));
+          const restore = yield* forget(stack, "Api");
+          yield* Effect.gen(function* () {
+            const deployments = () =>
+              workers.listScriptDeployments({ accountId, scriptName: name });
+            const before = yield* deployments();
+            // The namespace derives from a new output and doesn't exist, so
+            // the dispatch upload fails after precreate wrote its stub.
+            const error = yield* stack
+              .deploy(
+                Effect.gen(function* () {
+                  const late = yield* Cloudflare.KV.Namespace("StubScopeMarker");
+                  const worker = yield* Cloudflare.Worker("Api", {
+                    main,
+                    name,
+                    namespace: Output.map(late.namespaceId, () =>
+                      scriptName(stack, "unavailable-ns"),
+                    ),
+                    env: { KV: late },
+                  });
+                  yield* worker.bind`SELF_NAME`({
+                    bindings: [{ type: "plain_text", name: "SELF_NAME", text: worker.workerName }],
+                  });
+                  return worker;
+                }),
+              )
+              .pipe(Effect.flip);
+            expect(error).toBeDefined();
+            const checkpoint = yield* Effect.gen(function* () {
+              const state = yield* yield* State;
+              return yield* state.get({ stack: stack.name, stage: stack.stage, fqn: "Api" });
+            }).pipe(Effect.provide(stack.state));
+            expect(checkpoint).toMatchObject({ status: "creating" });
+            if (!isResourceState(checkpoint))
+              return yield* Effect.die("Missing resource checkpoint");
+            expect(checkpoint.attr).toMatchObject({ workerId: "" });
+            expect(checkpoint.attr?.namespace).toBeUndefined();
+            expect(yield* deployments()).toEqual(before);
+
+            yield* stack.destroy();
+            // The account-level script survived the destroy, untouched.
+            expect(yield* deployments()).toEqual(before);
+          }).pipe(Effect.ensuring(restore.pipe(Effect.andThen(stack.destroy()), Effect.orDie)));
+          yield* waitForWorkerToBeDeleted(name, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 180_000 },
+    );
+
     // First-deploy behaviour: the default (omitting `workersDev`) must enable
     // the workers.dev subdomain, and `workersDev: false` must disable it. Both
     // are asserted against live Cloudflare state via `getScriptSubdomain`,
