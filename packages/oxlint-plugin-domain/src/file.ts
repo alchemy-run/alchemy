@@ -7,6 +7,7 @@ import {
   getProperty,
   importBindings,
   localFunctions,
+  unwrap,
 } from "./ast.ts";
 import { moduleIndex, resolveImport } from "./files.ts";
 import type { Context, Node } from "./types.ts";
@@ -39,6 +40,18 @@ const SUFFIX_KIND: Readonly<Record<string, Kind>> = {
   model: "Model",
   context: "RequestContext",
   middleware: "Middleware",
+};
+
+/**
+ * The names a `rejects` property lists: `[]` without one, `undefined` when it
+ * is not an array of plain names (`rejects: shared`, `[...shared, A]`).
+ */
+export const rejectsNames = (property: Node | undefined): ReadonlyArray<string> | undefined => {
+  if (property === undefined) return [];
+  const value = unwrap(property.value);
+  if (value?.type !== "ArrayExpression") return undefined;
+  const ids = arrayIdentifiers(value);
+  return ids.length === value.elements.length ? ids.map((id) => id.name) : undefined;
 };
 
 /** `./Account/Account.aggregate.ts` → `Aggregate`. */
@@ -82,9 +95,8 @@ export const domainFile = (context: Context, program: Node): DomainFile => {
       const local = byName.get(name);
       if (local) {
         if (local.definition === undefined) return undefined;
-        return arrayIdentifiers(getProperty(local.definition, "rejects")?.value).map((id) =>
-          this.originalName(id.name),
-        );
+        const listed = rejectsNames(getProperty(local.definition, "rejects"));
+        return listed?.map((name) => this.originalName(name));
       }
       const found = imported(name);
       return found?.index?.rejects.get(found.binding.imported);

@@ -98,6 +98,22 @@ const kindOfCallee = (callee: string): Kind | undefined => {
   return undefined;
 };
 
+/**
+ * The names in a `rejects: [A, B]` list: `[]` when there is no `rejects`, and
+ * `undefined` when the list is not a plain array of names (`rejects: shared`,
+ * `[...shared, A]`), so a caller does not report what it cannot read.
+ */
+const rejectsList = (body: string): ReadonlyArray<string> | undefined => {
+  if (!/\brejects\s*:/.test(body)) return [];
+  const listed = /\brejects\s*:\s*\[([^\]]*)\]/.exec(body);
+  if (listed === null) return undefined;
+  const entries = listed[1]!
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
+  return entries.every((entry) => /^[A-Za-z_$][\w$]*$/.test(entry)) ? entries : undefined;
+};
+
 export const indexText = (text: string): ModuleIndex => {
   const kinds = new Map<string, Kind>();
   const rejects = new Map<string, ReadonlyArray<string>>();
@@ -107,18 +123,10 @@ export const indexText = (text: string): ModuleIndex => {
     const kind = kindOfCallee(match[3]!);
     if (kind === undefined) return;
     kinds.set(name, kind);
-    if (kind === "Command" || kind === "View" || kind === "Saga") {
+    if (kind === "Command" || kind === "View" || kind === "Saga" || kind === "Stream") {
       const body = text.slice(match.index!, matches[i + 1]?.index ?? text.length);
-      const listed = /\brejects\s*:\s*\[([^\]]*)\]/.exec(body);
-      rejects.set(
-        name,
-        listed
-          ? listed[1]!
-              .split(",")
-              .map((entry) => entry.trim())
-              .filter((entry) => /^[A-Za-z_$][\w$]*$/.test(entry))
-          : [],
-      );
+      const listed = rejectsList(body);
+      if (listed !== undefined) rejects.set(name, listed);
     }
   });
   return { kinds, rejects };

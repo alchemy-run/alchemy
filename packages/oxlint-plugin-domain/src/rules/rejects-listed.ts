@@ -1,5 +1,5 @@
-import { arrayIdentifiers, getProperty, propertyName, unwrap, walkWithHelpers } from "../ast.ts";
-import { type DomainFile, domainFile } from "../file.ts";
+import { getProperty, propertyName, unwrap, walkWithHelpers } from "../ast.ts";
+import { type DomainFile, domainFile, rejectsNames } from "../file.ts";
 import type { Context, Node, Rule } from "../types.ts";
 
 /**
@@ -42,11 +42,15 @@ export const rejectsListed: Rule = {
             }
             const read = getProperty(block.definition, "read")?.value;
             const validate = getProperty(read, "validate");
-            if (validate) {
-              const listed = arrayIdentifiers(getProperty(read, "rejects")?.value).map((id) =>
-                file.originalName(id.name),
+            const listed = rejectsNames(getProperty(read, "rejects"));
+            if (validate && listed) {
+              check(
+                context,
+                file,
+                validate.value,
+                `${block.name}.read`,
+                listed.map((name) => file.originalName(name)),
               );
-              check(context, file, validate.value, `${block.name}.read`, listed);
             }
           } else if (block.kind === "View" || block.kind === "Stream") {
             const validate = getProperty(block.definition, "validate");
