@@ -101,6 +101,8 @@ export interface ViewClient<V extends View.Any> {
   readonly list: (
     key: Aggregate.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
+      /** Wait until the view has applied this write (a command's `stream` and `version`). */
+      readonly atLeast?: { readonly stream: string; readonly version: number };
       readonly where?: Filter<View.EventOf<V>>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
@@ -110,6 +112,19 @@ export interface ViewClient<V extends View.Any> {
     View.Page<View.Entry<View.StateOf<V>, View.EventOf<V>, Aggregate.IdOf<View.KeyOf<V>>>>,
     ReadError<V["definition"]>
   >;
+  /**
+   * The key's state and the cursor it is valid at, read together. Render the
+   * state, then follow `events(key, { after: cursor })`: every later change
+   * arrives once, and none is missed.
+   */
+  readonly snapshot: (
+    key: Aggregate.IdOf<View.KeyOf<V>>,
+    options?: CallOptions & {
+      /** Wait until the view has applied this write (a command's `stream` and `version`). */
+      readonly atLeast?: { readonly stream: string; readonly version: number };
+      readonly where?: Filter<View.StateOf<V>>;
+    },
+  ) => Effect.Effect<View.Snapshot<View.StateOf<V>>, ReadError<V["definition"]>>;
 }
 
 /** The typed client of a stream exposed in an Api. */
@@ -465,19 +480,32 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
               ),
             ),
         );
-        handlers[`${name}.list`] = effect(rpcs.list!, ({ key: id, where, order, take, after }) =>
-          host.query(refOf(id)).pipe(
+        handlers[`${name}.snapshot`] = effect(rpcs.snapshot!, ({ key: id, atLeast, where }) =>
+          host.snapshot(refOf(id), { atLeast }).pipe(
             Effect.orDie,
-            Effect.flatMap((found) => check("list", refOf(id))(Option.getOrNull(found))),
-            Effect.andThen(
-              host.list(refOf(id), {
-                where: where as Filter<unknown> | undefined,
-                order,
-                take,
-                after: after === undefined ? undefined : String(after),
-              }),
+            Effect.flatMap(({ state, cursor }) =>
+              check(
+                "get",
+                refOf(id),
+              )(state).pipe(Effect.as({ state: visible(state, where), cursor })),
             ),
           ),
+        );
+        handlers[`${name}.list`] = effect(
+          rpcs.list!,
+          ({ key: id, atLeast, where, order, take, after }) =>
+            host.query(refOf(id), { atLeast }).pipe(
+              Effect.orDie,
+              Effect.flatMap((found) => check("list", refOf(id))(Option.getOrNull(found))),
+              Effect.andThen(
+                host.list(refOf(id), {
+                  where: where as Filter<unknown> | undefined,
+                  order,
+                  take,
+                  after: after === undefined ? undefined : String(after),
+                }),
+              ),
+            ),
         );
         continue;
       }
@@ -670,7 +698,13 @@ const nest = (entries: ReadonlyArray<Entry>, flat: Flat): unknown => {
       };
     client[name] =
       entry.kind === "View"
-        ? { get: call("get"), watch: call("watch"), events: call("events"), list: call("list") }
+        ? {
+            get: call("get"),
+            watch: call("watch"),
+            events: call("events"),
+            list: call("list"),
+            snapshot: call("snapshot"),
+          }
         : entry.kind === "Stream"
           ? { peek: call("peek"), watch: call("watch"), events: call("events"), list: call("list") }
           : { get: call("get"), watch: call("watch"), events: call("events") };

@@ -256,6 +256,16 @@ export interface Entry<S, E, Id = string> {
 }
 
 /**
+ * A key's state and the cursor it is valid at: the `seq` of the last event
+ * the key had emitted when the state was read (`"0"` before any).
+ */
+export interface Snapshot<S> {
+  readonly state: S | null;
+  /** Pass as `after` to `events` to receive every later entry, once. */
+  readonly cursor: string;
+}
+
+/**
  * A page of entries.
  */
 export interface Page<Entry> {
@@ -285,6 +295,19 @@ export interface Host<S, Key extends Aggregate.Any, E> {
       readonly timeout?: Duration.Input;
     },
   ) => Effect.Effect<Option.Option<S>, ConsistencyTimeout>;
+  /**
+   * Read the current state of a key together with its cursor: the `seq` of
+   * the last event the key emitted when the state was read. Pass the cursor
+   * to `events` as `after` to follow every later change once.
+   */
+  readonly snapshot: (
+    key: Aggregate.Ref<Key>,
+    options?: {
+      /** Wait until the view has applied this write (a command's `stream` and `version`). */
+      readonly atLeast?: { readonly stream: string; readonly version: number };
+      readonly timeout?: Duration.Input;
+    },
+  ) => Effect.Effect<Snapshot<S>, ConsistencyTimeout>;
   /** Wait until a key's state matches a filter. */
   readonly waitFor: (
     key: Aggregate.Ref<Key>,

@@ -60,6 +60,8 @@ export interface ReadRpcs {
   readonly watch: Rpc.Any;
   readonly events: Rpc.Any;
   readonly list?: Rpc.Any;
+  /** Views only: the state and the cursor it is valid at. */
+  readonly snapshot?: Rpc.Any;
 }
 
 export const contractOf = (entry: Readable): Read.AnyContract => {
@@ -179,6 +181,9 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
         Rpc.make(`${name}.list`, {
           payload: {
             key,
+            atLeast: Schema.optional(
+              Schema.Struct({ stream: Schema.String, version: Schema.Number }),
+            ),
             where: Schema.optional(Schema.Unknown),
             order: Schema.optional(Schema.Literals(["asc", "desc"])),
             take: Schema.optional(Schema.Number),
@@ -188,6 +193,19 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
             entries: Schema.Array(recorded),
             cursor: Schema.NullOr(Schema.String),
           }),
+          error,
+        }),
+      ),
+      snapshot: guard(
+        Rpc.make(`${name}.snapshot`, {
+          payload: {
+            key,
+            atLeast: Schema.optional(
+              Schema.Struct({ stream: Schema.String, version: Schema.Number }),
+            ),
+            where: Schema.optional(Schema.Unknown),
+          },
+          success: Schema.Struct({ state, cursor: Schema.String }),
           error,
         }),
       ),

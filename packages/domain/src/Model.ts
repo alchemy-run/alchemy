@@ -544,36 +544,53 @@ const viewHost = (
         },
       ),
     );
-  return {
-    query: (key, options) => {
-      const read = store.read(key.id);
-      const atLeast = options?.atLeast;
-      if (!atLeast)
-        return read.pipe(Effect.map((snapshot) => decodeSnapshot(kernel, view, snapshot)));
-      return read.pipe(
-        Effect.flatMap((snapshot) =>
-          (snapshot.checkpoints[atLeast.stream] ?? 0) >= atLeast.version
-            ? Effect.succeed(snapshot)
-            : Effect.fail("stale" as const),
-        ),
-        Effect.retry({
-          schedule: Schedule.spaced("25 millis"),
-          times: Math.ceil(
-            Duration.toMillis(Duration.fromInputUnsafe(options?.timeout ?? "10 seconds")) / 25,
-          ),
-        }),
-        Effect.map((snapshot) => decodeSnapshot(kernel, view, snapshot)),
-        Effect.mapError(
-          () =>
-            new View.ConsistencyTimeout({
-              view: view.viewName,
-              key: key.id,
-              stream: atLeast.stream,
-              version: atLeast.version,
-            }),
-        ),
-      );
+  /** The stored snapshot of a key, once it has applied `atLeast` (if given). */
+  const readAtLeast = (
+    key: Aggregate.Ref,
+    options?: {
+      readonly atLeast?: { readonly stream: string; readonly version: number };
+      readonly timeout?: Duration.Input;
     },
+  ) => {
+    const read = store.read(key.id);
+    const atLeast = options?.atLeast;
+    if (!atLeast) return read;
+    return read.pipe(
+      Effect.flatMap((snapshot) =>
+        (snapshot.checkpoints[atLeast.stream] ?? 0) >= atLeast.version
+          ? Effect.succeed(snapshot)
+          : Effect.fail("stale" as const),
+      ),
+      Effect.retry({
+        schedule: Schedule.spaced("25 millis"),
+        times: Math.ceil(
+          Duration.toMillis(Duration.fromInputUnsafe(options?.timeout ?? "10 seconds")) / 25,
+        ),
+      }),
+      Effect.mapError(
+        () =>
+          new View.ConsistencyTimeout({
+            view: view.viewName,
+            key: key.id,
+            stream: atLeast.stream,
+            version: atLeast.version,
+          }),
+      ),
+    );
+  };
+  return {
+    query: (key, options) =>
+      readAtLeast(key, options).pipe(
+        Effect.map((snapshot) => decodeSnapshot(kernel, view, snapshot)),
+      ),
+    // State and seq come from one stored snapshot, so the cursor matches the state.
+    snapshot: (key, options) =>
+      readAtLeast(key, options).pipe(
+        Effect.map((snapshot) => ({
+          state: Option.getOrNull(decodeSnapshot(kernel, view, snapshot)),
+          cursor: String(snapshot.seq),
+        })),
+      ),
     waitFor: (key, where, options) =>
       watch(key, { where }).pipe(
         Stream.filter(Option.isSome),
