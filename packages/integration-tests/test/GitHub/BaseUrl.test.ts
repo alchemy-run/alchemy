@@ -4,7 +4,7 @@ import {
   normalizeGitHubBaseUrl,
   resolveGitHubBaseUrlFromEnv,
 } from "@alchemy.run/github/BaseUrl";
-import { configFor, gitHubBaseUrlChanged, graphqlUrl } from "@alchemy.run/github/Client";
+import { configFor, gitHubBaseUrlChanged } from "@alchemy.run/github/Client";
 import { fromToken } from "@alchemy.run/github/Credentials";
 import { describe, expect, test } from "@alchemy.run/test";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -227,21 +227,5 @@ describe("configFor", { tags: ["unit", "provider:github", "local"] }, () => {
 
   test("defaults to api.github.com", () => {
     expect(apiBaseUrlOf(undefined, undefined)).toBe("https://api.github.com");
-  });
-});
-
-describe("graphqlUrl", { tags: ["unit", "provider:github", "local"] }, () => {
-  test("github.com serves GraphQL at api.github.com/graphql", () => {
-    expect(graphqlUrl("https://api.github.com")).toBe("https://api.github.com/graphql");
-  });
-
-  test("GitHub Enterprise Server serves GraphQL at /api/graphql", () => {
-    expect(graphqlUrl("https://github.example.com/api/v3")).toBe(
-      "https://github.example.com/api/graphql",
-    );
-  });
-
-  test("data residency hosts serve GraphQL under the api. host", () => {
-    expect(graphqlUrl("https://api.acme.ghe.com")).toBe("https://api.acme.ghe.com/graphql");
   });
 });

@@ -3,14 +3,12 @@ import {
   DEFAULT_API_BASE_URL,
   type Config,
 } from "@distilled.cloud/github/Credentials";
+import * as Meta from "@distilled.cloud/github/meta";
 import * as Repos from "@distilled.cloud/github/repos";
 import type { AuthError } from "alchemy/Auth/AuthProvider";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Option from "effect/Option";
-import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { normalizeGitHubBaseUrl } from "./BaseUrl.ts";
 import { GitHubCredentials } from "./Credentials.ts";
@@ -145,43 +143,22 @@ export class GitHubGraphqlError extends Data.TaggedError("GitHubGraphqlError")<{
 }> {}
 
 /**
- * The GraphQL endpoint for a REST API base URL: `api.github.com/graphql`,
- * and `<host>/api/graphql` on GitHub Enterprise Server (whose REST root is
- * `<host>/api/v3`).
- */
-export const graphqlUrl = (apiBaseUrl: string) =>
-  `${apiBaseUrl.replace(/\/api\/v3\/?$/, "/api").replace(/\/+$/, "")}/graphql`;
-
-/**
  * Run a GraphQL document against a resource's GitHub host, for the few
  * operations REST doesn't offer (e.g. toggling a pull request's draft state).
+ * GitHub reports GraphQL failures in `errors` with a 200 response; they fail
+ * with {@link GitHubGraphqlError}.
  */
 export const graphql = Effect.fn(function* (
   baseUrl: string | undefined,
   query: string,
   variables: Record<string, unknown>,
 ) {
-  const config = yield* configFor(baseUrl);
-  const client = yield* HttpClient.HttpClient;
-  const response = yield* client.execute(
-    HttpClientRequest.post(graphqlUrl(config.apiBaseUrl)).pipe(
-      HttpClientRequest.bearerToken(Redacted.value(config.token)),
-      HttpClientRequest.setHeader("User-Agent", config.userAgent),
-      HttpClientRequest.bodyJsonUnsafe({ query, variables }),
-    ),
-  );
-  const body = (yield* response.json) as {
-    data?: unknown;
-    errors?: ReadonlyArray<{ message: string }>;
-    message?: string;
-  };
-  if (body.errors?.length || response.status >= 400) {
+  const github = yield* githubFor(baseUrl);
+  const response = yield* github(Meta.graphql({ query, variables }));
+  if (response.errors?.length) {
     return yield* new GitHubGraphqlError({
-      message:
-        body.errors?.map((error) => error.message).join("; ") ??
-        body.message ??
-        `HTTP ${response.status}`,
+      message: response.errors.map((error) => error.message).join("; "),
     });
   }
-  return body.data;
+  return response.data;
 });
