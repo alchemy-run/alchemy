@@ -104,11 +104,12 @@ decide: { WithdrawMoney: (s) => (s.frozen ? new Frozen() : []) }, // error: Froz
 
 ### `no-throw`
 
-No `throw`. Fail with a `Domain.Rejection` or a `Schema.TaggedError`.
+No `throw` for an outcome a caller handles. Fail with a `Domain.Rejection` or a `Schema.TaggedError`. The one exception is a guard in an aggregate's `evolve`: an event that cannot apply to the state is a bug in `decide`, so `evolve` throws, the command dies, and nothing commits. The guard may sit in a local helper that only `evolve` calls (and `reply`, which reads the same next state). A `throw` in `decide`, `reply`, a view, a policy, a projection or a saga is reported.
 
 ```ts
-if (!s.open) return yield* new NotOpen(); // ok
-if (!s.open) throw new Error("not open"); // error
+decide: { WithdrawMoney: (s) => (s.open ? [] : new NotOpen()) }, // ok
+evolve: { MoneyWithdrawn: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }) }, // ok: a guard
+decide: { WithdrawMoney: (s) => { if (!s.open) throw new Error("not open"); return []; } }, // error
 ```
 
 ### `no-cross-aggregate-import`
