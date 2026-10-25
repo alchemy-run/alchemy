@@ -527,8 +527,8 @@ const isBundledService = (props: ServiceProps): props is BundledServiceProps =>
 
 /**
  * A `docker service update` that swarm rolled back or paused instead of
- * completing. `--detach=false` exits 0 in both cases, so the provider reads
- * the service's `UpdateStatus` after the update.
+ * completing. `--detach=false` exits 0 on a rollback and 1 on a pause, so the
+ * provider reads the service's `UpdateStatus` after the update.
  */
 export class DockerServiceUpdateFailed extends Data.TaggedError("DockerServiceUpdateFailed")<{
   readonly service: string;
@@ -546,7 +546,6 @@ type ServiceInspect = {
   UpdatedAt?: string;
   UpdateStatus?: {
     State?: string;
-    StartedAt?: string;
     Message?: string;
   };
   Spec: {
@@ -816,14 +815,13 @@ export const ServiceProvider = () =>
                 );
 
               const updated = yield* inspectOrDie(inspect, output.id, desired.context);
-              // A new `StartedAt` marks a rollout started by this update; an
-              // unchanged one is a stale status from an earlier update.
+              // Swarm clears `UpdateStatus` whenever it accepts an update, so
+              // any status here belongs to this update.
               const status = updated.UpdateStatus;
               if (
-                status?.StartedAt !== current.UpdateStatus?.StartedAt &&
-                (status?.State === "rollback_completed" ||
-                  status?.State === "rollback_paused" ||
-                  status?.State === "paused")
+                status?.State === "rollback_completed" ||
+                status?.State === "rollback_paused" ||
+                status?.State === "paused"
               ) {
                 return yield* new DockerServiceUpdateFailed({
                   service: updated.Spec.Name,

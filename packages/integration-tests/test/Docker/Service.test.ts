@@ -198,9 +198,8 @@ describe(
             .pipe(Effect.map((output) => JSON.parse(output.stdout)));
           expect(healthcheck).toEqual(["CMD-SHELL", "test -d /etc"]);
 
-          // A label change starts no rollout, so the service still reports
-          // the earlier `rollback_completed`; that stale status must not fail
-          // this deploy.
+          // The rolled-back deploy doesn't block the next one: swarm clears
+          // `rollback_completed` when it accepts this update.
           const relabeled = yield* deploy(["CMD-SHELL", "test -d /etc"], { after: "rollback" });
           expect(relabeled.id).toBe(first.id);
           expect(relabeled.labels.after).toBe("rollback");

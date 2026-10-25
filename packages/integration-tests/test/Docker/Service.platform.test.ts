@@ -136,9 +136,8 @@ test.provider(
       );
       expect(previousImageGone).toBe(true);
 
-      // A non-code update keeps the content hash, and swarm stores the image
-      // ref with a resolved digest, so the running image must not be mistaken
-      // for a previous bundle and removed.
+      // A non-code update keeps the content hash and must not remove the
+      // image the service is running.
       const scaled = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* TestServiceV2Scaled;
