@@ -1,0 +1,114 @@
+---
+title: Query
+description: How a query exposes a projection's store through an Api, guarded by middleware like a command, and how a client reads its own write with atLeast.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+A [projection](/domain/projection) writes events into a store you own: a table, a search index, a warehouse. A query is how a client asks that store a question, such as a search, a count or a report. It goes on an [Api](/domain/api) next to commands and views, so every client of the Api can call it, typed, with the same middleware.
+
+<DAG
+  nodes={[
+    { id: "client", label: "Client", type: "bank.LedgerSearch(...)", kind: "client" },
+    { id: "query", label: "LedgerSearch", type: "Domain.Query", kind: "query" },
+    { id: "table", label: "ledger table", type: "your store" },
+    { id: "ledger", label: "Ledger", type: "writes it", kind: "projection" },
+  ]}
+  edges={[
+    { from: "client", to: "query" },
+    { from: "query", to: "table" },
+    { from: "ledger", to: "table", dashed: true },
+  ]}
+  caption="The projection writes the store. The query reads it, for any client of the Api."
+/>
+
+## Declare it
+
+A query names the projection whose store it reads, its input, its output, and the rejections and middleware a command or view would also declare. The output is any Schema: a list, a page, a count.
+
+```typescript title="packages/domain/src/Ledger/LedgerSearch.query.ts"
+export class LedgerSearch extends Domain.Query("LedgerSearch", {
+  projection: Ledger,
+  input: { accountId: AccountId, kind: Schema.optional(Schema.String) },
+  output: Schema.Array(LedgerRow),
+  middleware: [Session],
+  rejects: [NotOwner],
+}) {}
+```
+
+## Implement it as a Layer
+
+The handler lives in a Layer, like a projection's. The Layer resolves the store once; the handler reads it for each call.
+
+```typescript title="packages/domain/src/Ledger/LedgerSearch.query.ts"
+export const LedgerSearchLive = LedgerSearch.toLayer(
+  Effect.gen(function* () {
+    const store = yield* LedgerStore;
+    return Effect.fn(function* ({ accountId, kind }) {
+      const actor = yield* CurrentActor;
+      if (!(yield* owns(actor, accountId))) return yield* new NotOwner();
+      return yield* store.search(accountId, kind);
+    });
+  }),
+);
+```
+
+The handler may read what the query's middleware provides, here `CurrentActor`, and the runtime it runs in (`RuntimeContext`), as a database binding needs. A query has no `validate`: there is no key state to judge, so the handler is the check.
+
+## Expose it
+
+List the query in an Api and provide its Layer where the Api is served, next to the middleware.
+
+```typescript title="packages/domain/src/CustomerApi.api.ts"
+export class CustomerApi extends Domain.Api(
+  "CustomerApi",
+  DepositMoney,
+  WithdrawMoney,
+  AccountSummary,
+  LedgerSearch,
+) {}
+```
+
+```typescript title="packages/server/src/BankWorker.ts"
+const BankLive = Layer.mergeAll(SessionLive, LedgerSearchLive).pipe(
+  Layer.provideMerge(Bank.layer(BankHandlers)),
+  Layer.provideMerge(D1LedgerStore),
+  Layer.provide(DomainCloudflare.DurableObjects),
+);
+```
+
+The handler runs where the Api is served: on Cloudflare, in the Worker, so it reads D1 through the Worker's binding. The Api refuses to serve a query whose projection its model does not host.
+
+## Call it
+
+A query is a method on the client, like a command. It takes the input, and returns the output or one of the declared rejections.
+
+```typescript title="packages/server/test/apiEntries.ts"
+const rows = yield* bank.LedgerSearch({ accountId, kind: "MoneyDeposited" });
+```
+
+## Read your own write
+
+Your store is eventually consistent with the model. Right after a command, the projection may not have written its row yet. Pass the command's receipt as `atLeast`, and the query waits until the projection has handled that write before it reads.
+
+```typescript title="packages/server/test/apiEntries.ts"
+const receipt = yield* bank.WithdrawMoney({ target: accountId, amount: 2_000 });
+const rows = yield* bank.LedgerSearch({ accountId }, { atLeast: receipt });
+```
+
+`atLeast` takes a write's `stream` and `version`. The query waits for every event of that stream, up to that version, that the projection consumes, using its [progress](/domain/projection#read-your-own-write). An event the projection ignores is not waited for. It waits up to 10 seconds, then fails the call, as a view's `get` with `atLeast` does.
+
+It covers events the projection consumes directly from an aggregate. Events that reach it through a view are not waited for.
+
+## Test it
+
+Call the query through the Api's test client, over the in-memory platform and a store in memory.
+
+```typescript title="packages/server/test/CustomerApi.test.ts"
+const sam = yield* CustomerApi.testClient;
+const receipt = yield* sam.DepositMoney({ target: accountId, amount: 250 });
+const rows = yield* sam.LedgerSearch({ accountId }, { atLeast: receipt });
+expect(rows.map((row) => row.amount)).toEqual([250]);
+```
+
+Next, [Stream](/domain/stream) is the store the model keeps and serves for a projection, with live reads.

@@ -256,6 +256,31 @@ export const LedgerLive = Ledger.toLayer(
 
 The server provides `LedgerStore` with D1; a story provides it with memory.
 
+## Query
+
+```ts
+// Ledger/LedgerSearch.query.ts: a client's question to the projection's store
+export class LedgerSearch extends Domain.Query("LedgerSearch", {
+  projection: Ledger,                       // `atLeast` waits for this projection
+  input: { accountId: AccountId, kind: Schema.optional(Schema.String) },
+  output: Schema.Array(LedgerRow),          // any Schema: a list, a page, a count
+  middleware: [Session],
+  rejects: [NotOwner],
+}) {}
+
+export const LedgerSearchLive = LedgerSearch.toLayer(
+  Effect.gen(function* () {
+    const store = yield* LedgerStore;       // resolved once
+    return Effect.fn(function* ({ accountId, kind }) {
+      yield* mustOwnAccount(accountId);     // reads what `middleware` provides
+      return yield* store.search(accountId, kind);
+    });
+  }),
+);
+```
+
+Put the query in an Api and provide `LedgerSearchLive` where the Api is served. Clients call it as a method: `bank.LedgerSearch({ accountId }, { atLeast: receipt })`. `atLeast` (a command's receipt) waits until the projection has handled that write.
+
 ## Stream
 
 ```ts
@@ -283,10 +308,11 @@ export class CustomerApi extends Domain.Api(
   Account,                                          // aggregates with `read`
   AccountSummary, Statement,                        // views
   AccountCard,                                      // streams
+  LedgerSearch,                                     // queries: client methods
 ) {}
 ```
 
-Clients call commands as methods (`bank.WithdrawMoney({ target, amount }, { headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A stream has `peek`, `watch`, `events` and `list`. Each Api entry authorizes itself.
+Clients call commands and queries as methods (`bank.WithdrawMoney({ target, amount }, { headers })`, `bank.LedgerSearch({ accountId })`) and the other reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A stream has `peek`, `watch`, `events` and `list`. Each Api entry authorizes itself.
 
 ## Model
 

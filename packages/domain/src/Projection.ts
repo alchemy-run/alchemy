@@ -97,13 +97,16 @@ export type ProgressIdentifier<P extends Any> = P extends Any
 export interface Progress {
   /**
    * Wait until the projection has handled every event of a command that it
-   * consumes, so a read of your store sees that write.
+   * consumes, so a read of your store sees that write. Without `events` (a
+   * client's receipt carries only `stream` and `version`), it waits for
+   * every event of `stream` up to `version` that the projection consumes,
+   * reading them from the aggregate.
    */
   readonly caughtUp: (
     receipt: {
       readonly stream: string;
       readonly version: number;
-      readonly events: ReadonlyArray<unknown>;
+      readonly events?: ReadonlyArray<unknown>;
     },
     options?: { readonly timeout?: Duration.Input },
   ) => Effect.Effect<void, View.ConsistencyTimeout>;
@@ -198,6 +201,19 @@ export interface Definition<
  * ```typescript
  * const receipt = yield* accounts.send(accountId, new DepositMoney({ amount: 100 }));
  * yield* Ledger.caughtUp(receipt);
+ * ```
+ *
+ * ### Serving its store through an Api
+ * A `Domain.Query` of the projection reads its store for any client of an
+ * Api, and takes a receipt as `atLeast` to read your own write.
+ *
+ * **Example:** A query of the ledger
+ * ```typescript
+ * export class LedgerSearch extends Domain.Query("LedgerSearch", {
+ *   projection: Ledger,
+ *   input: { accountId: AccountId },
+ *   output: Schema.Array(LedgerRow),
+ * }) {}
  * ```
  *
  * @primitive

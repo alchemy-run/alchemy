@@ -29,6 +29,7 @@ my-app/
           FraudReview.policy.ts
         Ledger/
           Ledger.projection.ts        projection + its Live handler
+          LedgerSearch.query.ts       query of the projection's store + its Live handler
           LedgerStore.ts              the port it writes through (+ a memory implementation)
         Session.middleware.ts         RpcMiddleware declaration + its error + client helper
         CurrentActor.context.ts       Domain.RequestContext

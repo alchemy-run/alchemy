@@ -55,6 +55,8 @@ export class Internals extends Context.Service<
     readonly viewHosts: ReadonlyMap<string, View.Host<unknown, Aggregate.Any, unknown>>;
     /** Each stream's API, by stream name. */
     readonly streamHosts: ReadonlyMap<string, DomainStream.Host<Aggregate.Any, unknown>>;
+    /** Each projection's progress, by projection name. */
+    readonly projections: ReadonlyMap<string, Projection.Progress>;
   }
 >()("alchemy/Domain/ModelInternals") {}
 
@@ -320,14 +322,13 @@ const build = <A, E, R>(
       streamHosts.set(stream.streamName, host);
       hosts = Context.add(hosts, stream, host);
     }
+    const progresses = new Map<string, Projection.Progress>();
     for (const projection of definitions.projections) {
-      hosts = Context.add(
-        hosts,
-        projection.Progress,
-        projectionProgress(kernel, projection, () =>
-          projectionStores.get(projection.projectionName)!,
-        ),
+      const progress = projectionProgress(kernel, projection, aggregateStores, () =>
+        projectionStores.get(projection.projectionName)!,
       );
+      progresses.set(projection.projectionName, progress);
+      hosts = Context.add(hosts, projection.Progress, progress);
     }
 
     // Sagas run on the platform's workflow engine.
@@ -399,6 +400,7 @@ const build = <A, E, R>(
       commands,
       viewHosts,
       streamHosts,
+      projections: progresses,
     });
   });
 
@@ -723,25 +725,54 @@ const streamHost = (
 const projectionProgress = (
   kernel: Kernel.Kernel,
   projection: Projection.Any,
+  aggregates: ReadonlyMap<string, AggregateStore>,
   store: () => ProjectionStore,
 ): Projection.Progress => ({
   caughtUp: (receipt, options) =>
     Effect.gen(function* () {
       const [aggregate, ...rest] = receipt.stream.split("/");
       const id = rest.join("/");
-      const first = receipt.version - receipt.events.length + 1;
+      const timeout = () =>
+        new View.ConsistencyTimeout({
+          view: projection.projectionName,
+          key: id,
+          stream: receipt.stream,
+          version: receipt.version,
+        });
+      // A receipt from a client carries no events: read the stream's, up to its version.
+      const events: ReadonlyArray<{ readonly event: unknown; readonly seq: number }> =
+        receipt.events
+          ? receipt.events.map((event, index) => ({
+              event,
+              seq: receipt.version - receipt.events!.length + 1 + index,
+            }))
+          : yield* committedUpTo(aggregates.get(aggregate!), id, receipt.version).pipe(
+              Effect.map((stored) =>
+                stored.map(({ event, envelope }) => ({
+                  event: kernel.decodeEvent(event),
+                  seq: envelope.seq,
+                })),
+              ),
+              Effect.timeoutOption(options?.timeout ?? "10 seconds"),
+              Effect.flatMap(
+                Option.match({
+                  onNone: () => Effect.fail(timeout()),
+                  onSome: Effect.succeed,
+                }),
+              ),
+            );
       const waits = new Map<string, number>();
-      receipt.events.forEach((event, index) => {
+      for (const { event, seq } of events) {
         for (const key of kernel.projectionKeys(
           projection,
           aggregate!,
           id,
           event as { readonly _tag: string },
-          first + index,
+          seq,
         )) {
-          waits.set(key, Math.max(waits.get(key) ?? 0, first + index));
+          waits.set(key, Math.max(waits.get(key) ?? 0, seq));
         }
-      });
+      }
       yield* Effect.forEach(
         waits,
         ([key, seq]) =>
@@ -768,3 +799,13 @@ const projectionProgress = (
       );
     }),
 });
+
+/** An aggregate instance's committed events up to `version` (none for an unknown aggregate). */
+const committedUpTo = (store: AggregateStore | undefined, id: string, version: number) =>
+  !store || version < 1
+    ? Effect.succeed([])
+    : store.tail(id, 0).pipe(
+        Stream.takeUntil((stored) => stored.envelope.seq >= version),
+        Stream.runCollect,
+        Effect.map((stored) => [...stored]),
+      );

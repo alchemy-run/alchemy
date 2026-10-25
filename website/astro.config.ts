@@ -1577,6 +1577,7 @@ export default defineConfig({
                 { label: "Aggregate", link: "/domain/aggregate" },
                 { label: "View", link: "/domain/view" },
                 { label: "Projection", link: "/domain/projection" },
+                { label: "Query", link: "/domain/query" },
                 { label: "Stream", link: "/domain/stream" },
                 { label: "Policy", link: "/domain/policy" },
                 { label: "Saga", link: "/domain/saga" },

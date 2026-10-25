@@ -25,6 +25,7 @@ import * as ExternalSystemModule from "./ExternalSystem.ts";
 import * as ModelModule from "./Model.ts";
 import * as PolicyModule from "./Policy.ts";
 import * as ProjectionModule from "./Projection.ts";
+import * as QueryModule from "./Query.ts";
 import * as RejectionModule from "./Rejection.ts";
 import * as RequestContextModule from "./RequestContext.ts";
 import * as SagaModule from "./Saga.ts";
@@ -138,6 +139,15 @@ export declare namespace Projection {
 /** Consumes events into a store you own, in order per key; replayable, never sends commands. See {@link ProjectionModule.make}. */
 export const Projection = ProjectionModule.make;
 
+export declare namespace Query {
+  /** Any Query class. */
+  export type Any = QueryModule.Any;
+  export type InputOf<Q extends QueryModule.Any> = QueryModule.InputOf<Q>;
+  export type OutputOf<Q extends QueryModule.Any> = QueryModule.OutputOf<Q>;
+}
+/** A typed read of a projection's store, exposed through an Api. See {@link QueryModule.make}. */
+export const Query = QueryModule.make;
+
 export declare namespace Stream {
   /** Any Stream class. */
   export type Any = StreamModule.Any;
@@ -158,7 +168,7 @@ export declare namespace ExternalSystem {
 export const ExternalSystem = ExternalSystemModule.make;
 
 export declare namespace Api {
-  /** What an Api may expose: commands, views, and aggregates with a `read` contract. */
+  /** What an Api may expose: commands, views, streams, queries, and aggregates with a `read` contract. */
   export type Entry = ApiModule.Entry;
   /** The typed client of an Api. */
   export type Client<E extends ApiModule.Entry> = ApiModule.ApiClient<E>;
@@ -167,6 +177,9 @@ export declare namespace Api {
   export type ViewClient<V extends ViewModule.Any> = ApiModule.ViewClient<V>;
   export type StreamClient<S extends StreamModule.Any> = ApiModule.StreamClient<S>;
   export type AggregateClient<A extends AggregateModule.Any> = ApiModule.AggregateClient<A>;
+  export type QueryClient<Q extends QueryModule.Any> = ApiModule.QueryClient<Q>;
+  /** Everything a query can fail with. */
+  export type QueryError<Q extends QueryModule.Any> = ApiModule.QueryError<Q>;
   /** Everything a read can fail with. */
   export type ReadError<D> = ApiModule.ReadError<D>;
 }

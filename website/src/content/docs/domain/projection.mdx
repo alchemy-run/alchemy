@@ -5,7 +5,7 @@ description: How a projection consumes events into a store you own, in order per
 
 import DAG from "../../../components/DAG.astro";
 
-A projection consumes events into a store you own: a database table, a search index, a warehouse, or a [`Domain.Stream`](/domain/stream). Where a [view](/domain/view) is a read model the platform stores and serves for you, a projection writes wherever you choose and leaves serving it to you.
+A projection consumes events into a store you own: a database table, a search index, a warehouse, or a [`Domain.Stream`](/domain/stream). Where a [view](/domain/view) is a read model the platform stores and serves for you, a projection writes wherever you choose, and a [query](/domain/query) serves what it wrote.
 
 It shares the view's routing and ordering, and differs from a [policy](/domain/policy) in one way that shapes everything else: a projection never sends commands. Its only effect is on its own store, so it can always be replayed.
 
@@ -174,11 +174,23 @@ export const ledgerAfterWithdrawal = Effect.fn(function* (accountId: AccountId) 
 });
 ```
 
-`caughtUp` waits until the projection has handled every event in the receipt that it consumes directly from that aggregate.
+`caughtUp` waits until the projection has handled every event in the receipt that it consumes directly from that aggregate. A receipt from an Api client carries only `stream` and `version`; `caughtUp` takes that too, and then waits for every event of the stream up to that version that the projection consumes.
 
-## Serve it yourself
+## Serve it through an Api
 
-A projection's store is yours, so its API is too. The bank serves the ledger from a plain route on its Worker, authorizing the caller itself.
+To let clients read the store, declare a [query](/domain/query) of the projection and put it on an Api. It is called like a command, guarded by the same middleware, and takes `atLeast` to read your own write.
+
+```typescript title="packages/domain/src/Ledger/LedgerSearch.query.ts"
+export class LedgerSearch extends Domain.Query("LedgerSearch", {
+  projection: Ledger,
+  input: { accountId: AccountId },
+  output: Schema.Array(LedgerRow),
+  middleware: [Session],
+  rejects: [NotOwner],
+}) {}
+```
+
+The store is still yours, so you can also serve it from a plain route. The bank serves the ledger that way on its Worker, authorizing the caller itself.
 
 ```typescript title="packages/server/src/BankWorker.ts"
 const summary = yield* summaries.query(Account.ref(accountId)).pipe(Effect.orDie);
@@ -206,4 +218,4 @@ yield* ledgerStory(
 ).pipe(Effect.provide(ledger.layer));
 ```
 
-Next, [Stream](/domain/stream) is the store the model keeps and serves for a projection.
+Next, [Query](/domain/query) serves a projection's store through an Api.
