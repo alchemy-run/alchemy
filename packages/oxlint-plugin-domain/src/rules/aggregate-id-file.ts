@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import { getProperty, unwrap } from "../ast.ts";
-import { domainFile } from "../file.ts";
+import { domainFile, isTestFile } from "../file.ts";
 import { exists, resolveImport } from "../files.ts";
 import { fileNoun, naming, namingSchema } from "../naming.ts";
 import type { Rule } from "../types.ts";
@@ -11,7 +11,20 @@ import type { Rule } from "../types.ts";
  * `Account.aggregate.ts` has a sibling `Account.id.ts`, and the aggregate's
  * `id:` schema is imported from it. With `fileCase: "kebab"`,
  * `gateway-job.aggregate.ts` has a sibling `gateway-job.id.ts`.
+ *
+ * An aggregate keyed by a value that already exists (SKILL.md: "`UsernameClaim`
+ * keyed by username") imports its `id` from that value's module
+ * (`./Username.ts`, `../Account/Account.id.ts`) and needs no id file of its
+ * own. Test files are skipped: a test may declare a model inline.
  */
+const squash = (name: string) => name.replace(/[-_]/g, "").toLowerCase();
+
+/** `./dog.id.ts` is the own id file of `Dog`, in another case; `./Username.ts` is not. */
+const isOwnIdFile = (source: string, aggregate: string): boolean => {
+  const match = /^(.*)\.id(?:\.[cm]?[jt]sx?)?$/.exec(path.basename(source));
+  return match !== null && squash(match[1]!) === squash(aggregate);
+};
+
 export const aggregateIdFile: Rule = {
   meta: {
     type: "suggestion",
@@ -28,12 +41,17 @@ export const aggregateIdFile: Rule = {
     const { fileCase } = naming(context);
     return {
       Program(program) {
+        if (isTestFile(context.filename)) return;
         const file = domainFile(context, program);
         const aggregate = file.blocks.find((block) => block.kind === "Aggregate");
         if (aggregate === undefined) return;
         const expected = `${fileNoun(aggregate.name, fileCase)}.id.ts`;
         const expectedPath = path.join(path.dirname(context.filename), expected);
+        const id = getProperty(aggregate.definition, "id");
+        const value = unwrap(id?.value);
+        const binding = value?.type === "Identifier" ? file.imports.get(value.name) : undefined;
         if (!exists(expectedPath)) {
+          if (binding !== undefined && !isOwnIdFile(binding.source, aggregate.name)) return;
           context.report({
             node: aggregate.id,
             messageId: "missing",
@@ -41,10 +59,7 @@ export const aggregateIdFile: Rule = {
           });
           return;
         }
-        const id = getProperty(aggregate.definition, "id");
-        const value = unwrap(id?.value);
         if (id === undefined || value?.type !== "Identifier") return;
-        const binding = file.imports.get(value.name);
         const source = binding?.source ?? "this file";
         const resolved = binding ? resolveImport(context.filename, binding.source) : undefined;
         if (resolved !== expectedPath) {
