@@ -740,73 +740,80 @@ export const ServiceProvider = () =>
                     ]
                   : [],
               );
-              yield* docker.service.update({
-                context: desired.context,
-                id: output.id,
-                image,
-                replicas: desired.replicas,
-                "endpoint-mode": desired.endpointMode,
-                // Attaching a network the service is already on fails, so
-                // every attachment is detached and the desired set re-added.
-                "network-rm": (current.Spec.TaskTemplate?.Networks ?? []).flatMap((n) =>
-                  n.Target ? [n.Target] : [],
-                ),
-                "network-add": desired.networks.map(formatNetwork),
-                "constraint-rm": constraintsToRemove,
-                "constraint-add": constraintsToAdd,
-                "replicas-max-per-node": desired.maxReplicasPerNode,
-                "update-parallelism": desired.updateConfig?.parallelism,
-                "update-delay": desired.updateConfig?.delay,
-                "update-monitor": desired.updateConfig?.monitor,
-                "update-failure-action": desired.updateConfig?.failureAction,
-                "update-max-failure-ratio": desired.updateConfig?.maxFailureRatio,
-                "update-order": desired.updateConfig?.order,
-                "rollback-parallelism": desired.rollbackConfig?.parallelism,
-                "rollback-delay": desired.rollbackConfig?.delay,
-                "rollback-monitor": desired.rollbackConfig?.monitor,
-                "rollback-failure-action": desired.rollbackConfig?.failureAction,
-                "rollback-max-failure-ratio": desired.rollbackConfig?.maxFailureRatio,
-                "rollback-order": desired.rollbackConfig?.order,
-                "restart-condition": desired.restartPolicy?.condition,
-                "restart-delay": desired.restartPolicy?.delay,
-                "restart-max-attempts": desired.restartPolicy?.maxAttempts,
-                "restart-window": desired.restartPolicy?.window,
-                "health-cmd": desired.healthcheck
-                  ? healthcheckCommand(desired.healthcheck.cmd)
-                  : undefined,
-                "no-healthcheck":
-                  desired.healthcheck !== undefined &&
-                  isHealthcheckDisabled(desired.healthcheck.cmd),
-                "health-interval": desired.healthcheck?.interval,
-                "health-timeout": desired.healthcheck?.timeout,
-                "health-retries": desired.healthcheck?.retries,
-                "health-start-period": desired.healthcheck?.startPeriod,
-                "stop-grace-period": desired.stopGracePeriod,
-                "mount-rm": mountsToRemove,
-                "mount-add": desired.volumes.map(formatMount),
-                // Re-adding a ref that is still attached conflicts on its
-                // target, so every attached ref is removed and the desired
-                // set re-added in the same update.
-                "secret-rm": (spec?.Secrets ?? []).flatMap((s) =>
-                  s.SecretName ? [s.SecretName] : [],
-                ),
-                "secret-add": desired.secrets.map(formatRef),
-                "config-rm": (spec?.Configs ?? []).flatMap((c) =>
-                  c.ConfigName ? [c.ConfigName] : [],
-                ),
-                "config-add": desired.configs.map(formatRef),
-                "read-only": desired.readOnlyRootFs || undefined,
-                "publish-rm": portsToRemove,
-                "publish-add": desired.ports.map(formatPublish),
-                "label-add": allDesiredLabels,
-                "label-rm": labelsToRemove,
-                "env-rm": envToRemove,
-                "env-add": environment,
-                args:
-                  desired.command.length > 0
-                    ? desired.command.concat(desired.args).join(" ")
+              // A rollback exits 0 but a paused rollout exits 1, so the
+              // outcome is read from `UpdateStatus` either way.
+              const updateError = yield* docker.service
+                .update({
+                  context: desired.context,
+                  id: output.id,
+                  image,
+                  replicas: desired.replicas,
+                  "endpoint-mode": desired.endpointMode,
+                  // Attaching a network the service is already on fails, so
+                  // every attachment is detached and the desired set re-added.
+                  "network-rm": (current.Spec.TaskTemplate?.Networks ?? []).flatMap((n) =>
+                    n.Target ? [n.Target] : [],
+                  ),
+                  "network-add": desired.networks.map(formatNetwork),
+                  "constraint-rm": constraintsToRemove,
+                  "constraint-add": constraintsToAdd,
+                  "replicas-max-per-node": desired.maxReplicasPerNode,
+                  "update-parallelism": desired.updateConfig?.parallelism,
+                  "update-delay": desired.updateConfig?.delay,
+                  "update-monitor": desired.updateConfig?.monitor,
+                  "update-failure-action": desired.updateConfig?.failureAction,
+                  "update-max-failure-ratio": desired.updateConfig?.maxFailureRatio,
+                  "update-order": desired.updateConfig?.order,
+                  "rollback-parallelism": desired.rollbackConfig?.parallelism,
+                  "rollback-delay": desired.rollbackConfig?.delay,
+                  "rollback-monitor": desired.rollbackConfig?.monitor,
+                  "rollback-failure-action": desired.rollbackConfig?.failureAction,
+                  "rollback-max-failure-ratio": desired.rollbackConfig?.maxFailureRatio,
+                  "rollback-order": desired.rollbackConfig?.order,
+                  "restart-condition": desired.restartPolicy?.condition,
+                  "restart-delay": desired.restartPolicy?.delay,
+                  "restart-max-attempts": desired.restartPolicy?.maxAttempts,
+                  "restart-window": desired.restartPolicy?.window,
+                  "health-cmd": desired.healthcheck
+                    ? healthcheckCommand(desired.healthcheck.cmd)
                     : undefined,
-              });
+                  "no-healthcheck":
+                    desired.healthcheck !== undefined &&
+                    isHealthcheckDisabled(desired.healthcheck.cmd),
+                  "health-interval": desired.healthcheck?.interval,
+                  "health-timeout": desired.healthcheck?.timeout,
+                  "health-retries": desired.healthcheck?.retries,
+                  "health-start-period": desired.healthcheck?.startPeriod,
+                  "stop-grace-period": desired.stopGracePeriod,
+                  "mount-rm": mountsToRemove,
+                  "mount-add": desired.volumes.map(formatMount),
+                  // Re-adding a ref that is still attached conflicts on its
+                  // target, so every attached ref is removed and the desired
+                  // set re-added in the same update.
+                  "secret-rm": (spec?.Secrets ?? []).flatMap((s) =>
+                    s.SecretName ? [s.SecretName] : [],
+                  ),
+                  "secret-add": desired.secrets.map(formatRef),
+                  "config-rm": (spec?.Configs ?? []).flatMap((c) =>
+                    c.ConfigName ? [c.ConfigName] : [],
+                  ),
+                  "config-add": desired.configs.map(formatRef),
+                  "read-only": desired.readOnlyRootFs || undefined,
+                  "publish-rm": portsToRemove,
+                  "publish-add": desired.ports.map(formatPublish),
+                  "label-add": allDesiredLabels,
+                  "label-rm": labelsToRemove,
+                  "env-rm": envToRemove,
+                  "env-add": environment,
+                  args:
+                    desired.command.length > 0
+                      ? desired.command.concat(desired.args).join(" ")
+                      : undefined,
+                })
+                .pipe(
+                  Effect.as(undefined),
+                  Effect.catchTag("PlatformError", (error) => Effect.succeed(error)),
+                );
 
               const updated = yield* inspectOrDie(inspect, output.id, desired.context);
               // A new `StartedAt` marks a rollout started by this update; an
@@ -823,6 +830,9 @@ export const ServiceProvider = () =>
                   state: status.State,
                   reason: status.Message ?? "",
                 });
+              }
+              if (updateError) {
+                return yield* updateError;
               }
 
               // Best-effort: the service now runs the new content-addressed
