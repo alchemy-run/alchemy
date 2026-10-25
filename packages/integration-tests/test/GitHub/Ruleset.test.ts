@@ -92,6 +92,15 @@ test.provider(
             requireExtraApprovalForUnattributedChanges: false,
           },
           requiredStatusChecks: { checks: [{ context: "ci/test" }] },
+          mergeQueue: {
+            mergeMethod: "SQUASH",
+            groupingStrategy: "HEADGREEN",
+            maxEntriesToBuild: 2,
+            minEntriesToMerge: 1,
+            maxEntriesToMerge: 1,
+            minEntriesToMergeWaitMinutes: 1,
+            checkResponseTimeoutMinutes: 30,
+          },
         },
       });
       expect(created.rulesetId).toBeGreaterThan(0);
@@ -101,6 +110,7 @@ test.provider(
       expect(fetched?.enforcement).toBe("active");
       expect(fetched?.rules?.map((rule) => rule.type).sort()).toEqual([
         "deletion",
+        "merge_queue",
         "non_fast_forward",
         "pull_request",
         "required_status_checks",
@@ -111,6 +121,15 @@ test.provider(
       ).toMatchObject({
         allowed_merge_methods: ["squash"],
         require_extra_approval_for_unattributed_changes: false,
+      });
+      expect(fetched?.rules?.find((rule) => rule.type === "merge_queue")?.parameters).toEqual({
+        merge_method: "SQUASH",
+        grouping_strategy: "HEADGREEN",
+        max_entries_to_build: 2,
+        min_entries_to_merge: 1,
+        max_entries_to_merge: 1,
+        min_entries_to_merge_wait_minutes: 1,
+        check_response_timeout_minutes: 30,
       });
       expect(fetched?.bypass_actors).toEqual([
         { actor_type: "RepositoryRole", actor_id: 5, bypass_mode: "always" },
@@ -129,6 +148,7 @@ test.provider(
           update: true,
           pullRequest: {},
           requiredStatusChecks: { checks: [{ context: "ci/test" }] },
+          mergeQueue: {},
         },
       });
       expect(relaxed.rulesetId).toBe(created.rulesetId);
@@ -138,6 +158,16 @@ test.provider(
       ).toMatchObject({
         allowed_merge_methods: ["merge", "squash", "rebase"],
         require_extra_approval_for_unattributed_changes: true,
+      });
+      // An empty merge queue converges to GitHub's defaults.
+      expect(afterRelax?.rules?.find((rule) => rule.type === "merge_queue")?.parameters).toEqual({
+        merge_method: "MERGE",
+        grouping_strategy: "ALLGREEN",
+        max_entries_to_build: 5,
+        min_entries_to_merge: 1,
+        max_entries_to_merge: 5,
+        min_entries_to_merge_wait_minutes: 5,
+        check_response_timeout_minutes: 60,
       });
 
       const updated = yield* deploy({
