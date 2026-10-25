@@ -1,24 +1,36 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { notificationPath } from "@alchemy.run/cloudflare/Alerting/NotificationEventSource";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import * as GitHub from "@alchemy.run/github";
+import { Octokit as AmbientOctokit } from "@alchemy.run/github/Octokit";
 import { expect } from "@alchemy.run/test";
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
-import NotificationWorker, { IssuePolicy } from "./fixtures/notification-worker.ts";
+import NotificationWorker, {
+  IssuePolicy,
+  owner,
+  Repo,
+  repository,
+} from "./fixtures/notification-worker.ts";
 
-const { test } = Test.make({ providers: Cloudflare.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
+});
 const { executeWhenReady, getWhenReady } = Test;
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
+// Out-of-band verification with the provider's credentials.
+const Octokit = AmbientOctokit.pipe(Effect.provide(GitHub.providers()));
+
 const Stack = Effect.gen(function* () {
+  yield* Repo;
   const policy = yield* IssuePolicy;
   const worker = yield* NotificationWorker;
   yield* Cloudflare.Workers.IssueAutomation("BoomIssues", {
@@ -26,27 +38,36 @@ const Stack = Effect.gen(function* () {
     service: worker.workerName,
     afterOccurrences: 1,
   });
-  return { policyId: policy.policyId, url: worker.url.as<string>() };
+  return {
+    policyId: policy.policyId,
+    workerName: worker.workerName,
+    url: worker.url.as<string>(),
+  };
 });
 
-const Received = Schema.Struct({
-  notifications: Schema.Array(
-    Schema.Struct({
-      alertType: Schema.optional(Schema.String),
-      policyId: Schema.optional(Schema.String),
-      text: Schema.String,
-    }),
-  ),
-});
+// Open issues the Worker opened about itself since `since`. The Worker's name
+// is stable across runs, so the creation time singles out this run's issues.
+const issuesFor = (workerName: string, since: string) =>
+  Effect.gen(function* () {
+    const octokit = yield* Octokit;
+    const { data } = yield* Effect.tryPromise(() =>
+      octokit.rest.issues.listForRepo({ owner, repo: repository, state: "open", since }),
+    );
+    return data.filter(
+      (issue) =>
+        !issue.pull_request && issue.created_at >= since && issue.title.includes(workerName),
+    );
+  });
 
 test.provider(
-  "consumeNotifications receives a Workers Issues notification",
+  "consumeNotifications opens a GitHub issue for a Workers issue",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       yield* stack.destroy();
 
-      const { policyId, url } = yield* stack.deploy(Stack);
+      const since = new Date().toISOString();
+      const { policyId, workerName, url } = yield* stack.deploy(Stack);
       const base = url.replace(/\/+$/, "");
       const deliveryUrl = `${base}${notificationPath({ LogicalId: "IssuePolicy" })}`;
 
@@ -72,24 +93,39 @@ test.provider(
       );
       expect(forged.status).toBe(401);
 
-      // A 5xx response is a Workers issue occurrence; the automation notifies the
-      // policy, which delivers to the Worker.
+      // A 5xx response is a Workers issue occurrence. The automation notifies
+      // the policy, Cloudflare delivers to the Worker, and the Worker opens a
+      // GitHub issue through the `GitHub.CreateIssue` binding.
       const client = yield* HttpClient.HttpClient;
       yield* Effect.forEach([1, 2, 3], () => client.get(`${base}/boom`), { discard: true });
 
-      const received = yield* client.get(`${base}/received`).pipe(
-        Effect.flatMap(HttpClientResponse.schemaBodyJson(Received)),
-        Effect.map(({ notifications }) => notifications),
+      const issues = yield* issuesFor(workerName, since).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("5 seconds"),
-          until: (notifications) => notifications.length > 0,
+          until: (issues) => issues.length > 0,
           times: 18,
         }),
       );
-      expect(received[0]).toMatchObject({
-        alertType: "workers_observability_real_time_issue",
-        policyId,
-      });
+      expect(issues.length).toBeGreaterThan(0);
+      // Titled with the summary line, with Cloudflare's report as the body.
+      expect(issues[0]!.title).toMatch(/^Real-Time Issue '.*' detected in /);
+      expect(issues[0]!.body).toContain(`/workers/services/view/${workerName}/production/issues/`);
+
+      // The fixture repository is retained across runs: close this run's issues.
+      const octokit = yield* Octokit;
+      yield* Effect.forEach(
+        issues,
+        (issue) =>
+          Effect.tryPromise(() =>
+            octokit.rest.issues.update({
+              owner,
+              repo: repository,
+              issue_number: issue.number,
+              state: "closed",
+            }),
+          ),
+        { discard: true },
+      );
 
       yield* stack.destroy();
       yield* alerting.getDestinationWebhook({ accountId, webhookId: webhookIds[0]! }).pipe(
@@ -108,6 +144,7 @@ test.provider(
       "provider:cloudflare",
       "provider:cloudflare:alerting",
       "provider:cloudflare:worker",
+      "provider:github",
       "live",
     ],
   },

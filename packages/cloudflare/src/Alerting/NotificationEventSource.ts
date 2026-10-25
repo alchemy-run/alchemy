@@ -77,10 +77,12 @@ export interface ConsumeNotificationsProps {
  *   alertType: "workers_observability_real_time_issue",
  * });
  *
+ * // `text` is Cloudflare's report: a summary line, then details and links.
+ * const createIssue = yield* GitHub.CreateIssue(yield* Repo);
  * yield* Cloudflare.Alerting.consumeNotifications(policy, (notification) =>
- *   github.createIssue({
- *     title: notification.text,
- *     body: JSON.stringify(notification.data, null, 2),
+ *   createIssue({
+ *     title: notification.text.split("\n")[0],
+ *     body: notification.text,
  *   }),
  * );
  * ```
