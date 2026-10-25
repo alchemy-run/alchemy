@@ -224,13 +224,6 @@ export interface RulesetProps {
   };
 
   /**
-   * @deprecated Set each rule directly on the ruleset props instead, e.g.
-   * `nonFastForward: true` rather than `rules: { nonFastForward: true }`.
-   * A rule set at the top level takes precedence over the same rule here.
-   */
-  rules?: RulesetRules;
-
-  /**
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
@@ -241,38 +234,31 @@ export interface RulesetProps {
 }
 
 /**
- * The rules a {@link Ruleset} enforces on its targeted refs.
+ * Props as persisted before the rules moved from a nested `rules` object to
+ * the top level. Only previously deployed state can still have this shape.
  */
-export type RulesetRules = Pick<RulesetProps, (typeof ruleKeys)[number]>;
-
-const ruleKeys = [
-  "requiredStatusChecks",
-  "requiredSignatures",
-  "pullRequest",
-  "creation",
-  "update",
-  "deletion",
-  "requiredLinearHistory",
-  "nonFastForward",
-  "mergeQueue",
-] as const;
-
-/**
- * Resolves each rule from the top-level props, falling back to the
- * deprecated nested `rules` object (and to state persisted before the rules
- * moved to the top level).
- */
-const rulesOf = (props: RulesetProps): RulesetRules =>
-  Object.fromEntries(ruleKeys.map((key) => [key, props[key] ?? props.rules?.[key]]));
-
-/**
- * The props in their top-level shape, so a move from `rules: { ... }` to
- * top-level rules compares equal.
- */
-const normalize = (props: RulesetProps) => {
-  const { rules: _, ...rest } = props;
-  return { ...rest, ...rulesOf(props) };
+type PersistedRulesetProps = RulesetProps & {
+  rules?: Pick<
+    RulesetProps,
+    | "requiredStatusChecks"
+    | "requiredSignatures"
+    | "pullRequest"
+    | "creation"
+    | "update"
+    | "deletion"
+    | "requiredLinearHistory"
+    | "nonFastForward"
+    | "mergeQueue"
+  >;
 };
+
+/**
+ * Lifts the rules of persisted props out of the legacy nested `rules` object.
+ */
+const upgradeProps = ({ rules, ...props }: PersistedRulesetProps): RulesetProps => ({
+  ...rules,
+  ...props,
+});
 
 export interface Ruleset extends Resource<
   "GitHub.Ruleset",
@@ -454,9 +440,10 @@ export const RulesetProvider = () =>
   Provider.succeed(Ruleset, {
     stables: ["rulesetId", "nodeId"],
 
-    diff: Effect.fn(function* ({ news, olds }) {
+    diff: Effect.fn(function* ({ news, olds: persisted }) {
       if (!isResolved(news)) return;
-      if (olds === undefined) return;
+      if (persisted === undefined) return;
+      const olds = upgradeProps(persisted);
       if (
         news.owner !== olds.owner ||
         news.repository !== olds.repository ||
@@ -464,12 +451,9 @@ export const RulesetProvider = () =>
       ) {
         return { action: "replace" };
       }
-      // Moving rules out of the deprecated `rules` object (or reading state
-      // persisted before they moved) changes nothing on GitHub.
-      if (
-        (olds.rules !== undefined || news.rules !== undefined) &&
-        deepEqual(normalize(olds), normalize(news), { stripNullish: true })
-      ) {
+      // State persisted with nested rules declares the same ruleset as the
+      // top-level rules it upgrades to.
+      if ("rules" in persisted && deepEqual(olds, news, { stripNullish: true })) {
         return { action: "noop" };
       }
     }),
@@ -479,34 +463,33 @@ export const RulesetProvider = () =>
 
       let observed = output === undefined ? undefined : yield* getRuleset(news, output.rulesetId);
 
-      const declared = rulesOf(news);
       const rules: NonNullable<
         NonNullable<Parameters<typeof octokit.rest.repos.createRepoRuleset>[0]>["rules"]
       > = [];
 
-      if (declared.creation) {
+      if (news.creation) {
         rules.push({ type: "creation" });
       }
-      if (declared.update) {
+      if (news.update) {
         rules.push({
           type: "update",
           parameters: { update_allows_fetch_and_merge: false },
         });
       }
-      if (declared.deletion) {
+      if (news.deletion) {
         rules.push({ type: "deletion" });
       }
-      if (declared.nonFastForward) {
+      if (news.nonFastForward) {
         rules.push({ type: "non_fast_forward" });
       }
-      if (declared.requiredLinearHistory) {
+      if (news.requiredLinearHistory) {
         rules.push({ type: "required_linear_history" });
       }
-      if (declared.requiredSignatures) {
+      if (news.requiredSignatures) {
         rules.push({ type: "required_signatures" });
       }
-      if (declared.pullRequest) {
-        const pullRequest = declared.pullRequest;
+      if (news.pullRequest) {
+        const pullRequest = news.pullRequest;
         // `require_extra_approval_for_unattributed_changes` is accepted by the API but missing
         // from its OpenAPI description, so it is added outside the typed literal.
         const parameters = {
@@ -525,8 +508,8 @@ export const RulesetProvider = () =>
         };
         rules.push({ type: "pull_request", parameters });
       }
-      if (declared.mergeQueue) {
-        const mergeQueue = declared.mergeQueue;
+      if (news.mergeQueue) {
+        const mergeQueue = news.mergeQueue;
         rules.push({
           type: "merge_queue",
           parameters: {
@@ -540,16 +523,16 @@ export const RulesetProvider = () =>
           },
         });
       }
-      if (declared.requiredStatusChecks) {
+      if (news.requiredStatusChecks) {
         rules.push({
           type: "required_status_checks",
           parameters: {
-            required_status_checks: declared.requiredStatusChecks.checks.map((check) => ({
+            required_status_checks: news.requiredStatusChecks.checks.map((check) => ({
               context: check.context,
               integration_id: check.integrationId,
             })),
             strict_required_status_checks_policy:
-              declared.requiredStatusChecks.strictRequiredStatusChecksPolicy ?? false,
+              news.requiredStatusChecks.strictRequiredStatusChecksPolicy ?? false,
           },
         });
       }

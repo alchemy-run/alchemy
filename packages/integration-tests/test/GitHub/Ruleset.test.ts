@@ -6,6 +6,7 @@ import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
+import { State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
@@ -208,7 +209,7 @@ test.provider(
 );
 
 test.provider(
-  "rules declared in the deprecated rules object move to the top level without an update",
+  "state persisted with nested rules diffs and reconciles against top-level rules",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -224,30 +225,51 @@ test.provider(
             ...props,
           }).pipe(destroy());
         });
+      const ruleTypes = (rulesetId: number) =>
+        Effect.map(getRuleset(repo, rulesetId), (ruleset) =>
+          ruleset?.rules?.map((rule) => rule.type).sort(),
+        );
 
-      const legacy = yield* stack.deploy(
-        ruleset({ rules: { nonFastForward: true, deletion: true } }),
-      );
-      const ruleTypes = Effect.map(getRuleset(repo, legacy.rulesetId), (ruleset) =>
-        ruleset?.rules?.map((rule) => rule.type).sort(),
-      );
-      expect(yield* ruleTypes).toEqual(["deletion", "non_fast_forward"]);
+      // Rewrites the persisted props into the shape written before the rules
+      // moved to the top level: `rules: { nonFastForward, deletion, ... }`.
+      const persistNestedRules = Effect.gen(function* () {
+        const state = yield* yield* State;
+        const scope = { stack: stack.name, stage: stack.stage, fqn: "LegacyRules" };
+        const row = yield* state.get(scope);
+        if (row === undefined || !("props" in row)) {
+          return yield* Effect.die("LegacyRules has no persisted props");
+        }
+        const { nonFastForward, deletion, requiredLinearHistory, ...props } =
+          row.props as GitHub.RulesetProps;
+        yield* state.set({
+          ...scope,
+          value: {
+            ...row,
+            props: { ...props, rules: { nonFastForward, deletion, requiredLinearHistory } },
+          },
+        });
+      });
 
-      // State persisted with the nested shape plans a noop against the same
-      // rules at the top level, and deploying it leaves GitHub untouched.
-      const flat = ruleset({ nonFastForward: true, deletion: true });
-      const plan = yield* stack.plan(flat);
+      const created = yield* stack.deploy(ruleset({ nonFastForward: true, deletion: true }));
+      expect(yield* ruleTypes(created.rulesetId)).toEqual(["deletion", "non_fast_forward"]);
+
+      // The same rules plan a noop against the nested state and leave GitHub untouched.
+      yield* persistNestedRules;
+      const plan = yield* stack.plan(ruleset({ nonFastForward: true, deletion: true }));
       expect(plan.resources["LegacyRules"]).toMatchObject({ action: "noop" });
-      const migrated = yield* stack.deploy(flat);
-      expect(migrated.rulesetId).toBe(legacy.rulesetId);
-      expect((yield* getRuleset(repo, legacy.rulesetId))?.updated_at).toBe(legacy.updatedAt);
+      const unchanged = yield* stack.deploy(ruleset({ nonFastForward: true, deletion: true }));
+      expect(unchanged.rulesetId).toBe(created.rulesetId);
+      expect((yield* getRuleset(repo, created.rulesetId))?.updated_at).toBe(created.updatedAt);
 
-      // A top-level rule takes precedence over the same rule in `rules`.
-      const overridden = yield* stack.deploy(
-        ruleset({ rules: { nonFastForward: true, deletion: true }, nonFastForward: false }),
-      );
-      expect(overridden.rulesetId).toBe(legacy.rulesetId);
-      expect(yield* ruleTypes).toEqual(["deletion"]);
+      // Changed rules update the ruleset in place from the nested state.
+      yield* persistNestedRules;
+      const changed = ruleset({ deletion: true, requiredLinearHistory: true });
+      expect((yield* stack.plan(changed)).resources["LegacyRules"]).toMatchObject({
+        action: "update",
+      });
+      const updated = yield* stack.deploy(changed);
+      expect(updated.rulesetId).toBe(created.rulesetId);
+      expect(yield* ruleTypes(created.rulesetId)).toEqual(["deletion", "required_linear_history"]);
 
       yield* stack.deploy(repository(repo));
       expect(yield* getRulesets(repo)).toEqual([]);
