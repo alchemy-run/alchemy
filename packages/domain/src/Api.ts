@@ -41,6 +41,7 @@ import {
   type Subscription,
   type ViewStore,
 } from "./Platform.ts";
+import type * as Query from "./Query.ts";
 import type * as Read from "./Read.ts";
 import { contractOf, nameOf, readRpcs } from "./ReadRpcs.ts";
 import * as RequestContext from "./RequestContext.ts";
@@ -50,14 +51,18 @@ import * as Watch from "./Watch.ts";
 
 /**
  * What an Api exposes: commands (writes); views, streams, and aggregates that
- * declare a `read` contract (reads).
+ * declare a `read` contract (reads of one key); queries (reads across keys).
  */
-export type Entry = Command.Any | View.Any | Aggregate.Any | DomainStream.Any;
+export type Entry = Command.Any | View.Any | Aggregate.Any | DomainStream.Any | Query.Any;
 
 type Commands<E extends Entry> = Extract<E, Command.Any>;
 type Views<E extends Entry> = Extract<E, View.Any>;
 type Streams<E extends Entry> = Extract<E, DomainStream.Any>;
-type Aggregates<E extends Entry> = Exclude<E, Command.Any | View.Any | DomainStream.Any>;
+type Queries<E extends Entry> = Extract<E, Query.Any>;
+type Aggregates<E extends Entry> = Exclude<
+  E,
+  Command.Any | View.Any | DomainStream.Any | Query.Any
+>;
 
 // ---------------------------------------------------------------- client types
 
@@ -265,11 +270,36 @@ export type CommandClient<C extends Command.Any> =
     : never;
 
 /**
- * The typed client of an Api: commands as methods (`bank.WithdrawMoney(...)`),
- * views and aggregates as namespaces (`bank.AccountSummary.watch(...)`).
+ * Everything a query can fail with: its rejections, `ConsistencyTimeout` when
+ * it reads from projections, its middleware's errors, transport.
+ */
+export type QueryError<Q extends Query.Any> =
+  | Query.FailureOf<Q>
+  | Middleware.Errors<Q["middleware"]>
+  | RpcClientError.RpcClientError;
+
+/** The typed client of a query exposed in an Api: one method. */
+export type QueryClient<Q extends Query.Any> = (
+  input: Query.InputOf<Q>,
+  options?: CallOptions & {
+    /** Wait until the query's projections have handled this write (a command's `stream` and `version`). */
+    readonly atLeast?: { readonly stream: string; readonly version: number };
+    /** The cursor of the previous page, for a paged query. */
+    readonly after?: string;
+    /** Rows per page, for a paged query; capped by the query's `take.max`. */
+    readonly take?: number;
+  },
+) => Effect.Effect<Query.ResultOf<Q>, QueryError<Q>>;
+
+/**
+ * The typed client of an Api: commands and queries as methods
+ * (`bank.WithdrawMoney(...)`, `bank.AccountLedger(...)`), views and
+ * aggregates as namespaces (`bank.AccountSummary.watch(...)`).
  */
 export type ApiClient<E extends Entry> = {
   readonly [C in Commands<E> as C["tag"]]: CommandClient<C>;
+} & {
+  readonly [Q in Queries<E> as Q["queryName"]]: QueryClient<Q>;
 } & {
   readonly [V in Views<E> as V["viewName"]]: ViewClient<V>;
 } & {
@@ -382,7 +412,7 @@ export interface ApiClass<
   >;
 }
 
-type EntryMiddleware<E> = E extends Command.Any
+type EntryMiddleware<E> = E extends Command.Any | Query.Any
   ? E["middleware"][number]
   : E extends View.Any | DomainStream.Any
     ? NonNullable<E["definition"]["middleware"]>[number]
@@ -409,7 +439,7 @@ type MiddlewareClients<Entries extends ReadonlyArray<Entry>> =
     : never;
 
 const rpcsOf = (entry: Entry): ReadonlyArray<Rpc.Any> =>
-  entry.kind === "Command" ? [entry.rpc] : Object.values(readRpcs(entry));
+  entry.kind === "Command" || entry.kind === "Query" ? [entry.rpc] : Object.values(readRpcs(entry));
 
 // ---------------------------------------------------------------- handlers
 
@@ -444,6 +474,11 @@ interface CommandPayload {
   readonly target: string;
   readonly commandId?: string;
   readonly input: object;
+}
+
+/** The wire payload of a query: its input, and the page and write to read at least. */
+interface QueryPayload extends Query.RunOptions {
+  readonly input: unknown;
 }
 
 interface ReadPayload {
@@ -514,6 +549,20 @@ const handlersOf = (
               })),
             ),
           );
+        continue;
+      }
+      if (entry.kind === "Query") {
+        const query = internals.queries.get(entry.queryName);
+        if (!query) {
+          return yield* Effect.die(
+            new Error(`No model in the Domain answers the query ${entry.queryName}`),
+          );
+        }
+        const declared = declaredOnly(entry.rpc);
+        // Runs inside the query's middleware, so `validate`, `visible` and the
+        // handler read the context it provides.
+        handlers[entry.queryName] = ({ input, after, take, atLeast }: QueryPayload) =>
+          declared.effect(query.run(input, { after, take, atLeast }));
         continue;
       }
       const name = nameOf(entry);
@@ -777,7 +826,7 @@ const liveReads = (
     }
   >();
   for (const entry of entries) {
-    if (entry.kind === "Command") continue;
+    if (entry.kind === "Command" || entry.kind === "Query") continue;
     const name = nameOf(entry);
     const store =
       entry.kind === "View"
@@ -865,7 +914,7 @@ const liveReads = (
 
 type Flat = Record<string, (payload: unknown, options?: CallOptions) => unknown>;
 
-/** Shape the flat Effect RPC client into commands plus view and aggregate namespaces. */
+/** Shape the flat Effect RPC client into commands and queries, plus view and aggregate namespaces. */
 const nest = (entries: ReadonlyArray<Entry>, flat: Flat): unknown => {
   const client: Record<string, unknown> = {};
   for (const entry of entries) {
@@ -876,6 +925,14 @@ const nest = (entries: ReadonlyArray<Entry>, flat: Flat): unknown => {
         input: object = {},
         { commandId, ...options }: CommandOptions = {},
       ) => send({ target, commandId, input }, options);
+      continue;
+    }
+    if (entry.kind === "Query") {
+      const name = entry.queryName;
+      client[name] = (input: unknown, options: CallOptions & Query.RunOptions = {}) => {
+        const { headers, ...rest } = options;
+        return flat[name]!({ input, ...rest }, { headers });
+      };
       continue;
     }
     const name = nameOf(entry);
@@ -1038,8 +1095,8 @@ const build = (
 
 /**
  * The public surface of a domain for one kind of client: the commands it may
- * send, and the views and aggregates (with a `read` contract) it may read.
- * Nothing in an Api needs a handler. The class is an Effect: `yield* MyApi`
+ * send, the views, streams and aggregates (with a `read` contract) it may
+ * read, and the queries it may ask. Nothing in an Api needs a handler. The class is an Effect: `yield* MyApi`
  * gives a Worker its `fetch`. Call it with a typed client over
  * `Domain.protocolHttp`, `Domain.protocolWebSocket` or
  * `Domain.protocolInProcess`, or with `clientHttp`, `clientWebSocket` or
@@ -1121,12 +1178,20 @@ const build = (
 export const make = <const Name extends string, const Entries extends ReadonlyArray<Entry>>(
   name: Name,
   ...entries: Entries
-): ApiClass<Name, Entries> =>
-  build(
+): ApiClass<Name, Entries> => {
+  const rpcs = entries.flatMap(rpcsOf);
+  const tags = new Set<string>();
+  for (const rpc of rpcs) {
+    if (tags.has(rpc._tag))
+      throw new Error(`Api '${name}' exposes two entries named '${rpc._tag}'`);
+    tags.add(rpc._tag);
+  }
+  return build(
     name,
     entries,
-    RpcGroup.make(...entries.flatMap(rpcsOf)) as unknown as RpcGroup.RpcGroup<Rpc.Any>,
+    RpcGroup.make(...rpcs) as unknown as RpcGroup.RpcGroup<Rpc.Any>,
   ) as ApiClass<Name, Entries>;
+};
 
 /**
  * The HTTP protocol for an Api client (NDJSON, so streams work). Live reads

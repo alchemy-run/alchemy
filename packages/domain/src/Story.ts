@@ -10,6 +10,7 @@ import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import type { DurableDeferred, WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
@@ -18,6 +19,7 @@ import * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
 import type * as Key from "./Key.ts";
 import * as Model from "./Model.ts";
+import type * as Query from "./Query.ts";
 import type * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
@@ -110,6 +112,13 @@ export type Step =
       /** A ref, or the value of a Schema key. */
       readonly key: Key.RefOf<Key.Any>;
       readonly events: ReadonlyArray<{ readonly _tag: string }>;
+    }
+  | {
+      readonly _tag: "Query";
+      readonly query: Query.Any;
+      readonly input: unknown;
+      readonly expected: unknown;
+      readonly page: { readonly take?: number; readonly after?: string } | undefined;
     }
   | {
       readonly _tag: "Call";
@@ -325,6 +334,27 @@ const streamed = <S extends DomainStream.Any>(
   key,
   events: events as ReadonlyArray<{ readonly _tag: string }>,
 });
+
+/** What a query step expects: the rows of a page, a (partial) result, or a function over it. */
+type QueryExpectation<Q extends Query.Any> =
+  | (Query.ResultOf<Q> extends View.Page<infer Row>
+      ? ReadonlyArray<Partial<Row>>
+      : Partial<Query.ResultOf<Q>>)
+  | ((result: Query.ResultOf<Q>) => void);
+
+/**
+ * Ask a query, as the context `provide` set: `validate`, the handler, then
+ * `visible`, with the result through its wire schema and back, as a client
+ * gets it. Expect the rows of a paged query in order, each a partial match;
+ * a partial result; or a function over the result. Without `expected`, the
+ * query must be rejected, and the next step asserts it with `rejected`.
+ */
+const queryStep = <Q extends Query.Any>(
+  query: Q,
+  input: Query.InputOf<Q>,
+  expected?: QueryExpectation<Q>,
+  page?: { readonly take?: number; readonly after?: string },
+): Step => ({ _tag: "Query", query, input, expected, page });
 
 /**
  * A call to an external system was made with these (partial) arguments:
@@ -567,6 +597,16 @@ const describeStep = (s: Step): string => {
       return `${s.view.viewName}(${Aggregate.targetId(s.key)})${typeof s.expected === "function" ? "" : `: ${summarizeAll(s.expected as ReadonlyArray<unknown>)}`}`;
     case "Streamed":
       return `${s.stream.streamName}/${Aggregate.targetId(s.key)}: ${summarizeAll(s.events)}`;
+    case "Query":
+      return `${s.query.queryName} ${summarize(s.input)}${
+        s.expected === undefined
+          ? ""
+          : typeof s.expected === "function"
+            ? ""
+            : Array.isArray(s.expected)
+              ? `: ${summarizeAll(s.expected, "no rows")}`
+              : `: ${summarize(s.expected)}`
+      }`;
     case "Call":
       return `${callName(s.tag, s.op)} ${summarize(s.args)}`;
     case "Answer":
@@ -846,9 +886,15 @@ const make =
         let last:
           | { readonly _tag: "Accepted"; readonly receipt: Aggregate.Receipt }
           | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } }
+          | { readonly _tag: "Answered"; readonly result: unknown }
           | undefined;
         let unassertedRejection:
-          | { readonly step: number; readonly rejection: { readonly _tag: string } }
+          | {
+              readonly step: number;
+              readonly rejection: { readonly _tag: string };
+              /** What was rejected: a command, or a query by name. */
+              readonly what?: string;
+            }
           | undefined;
         let provided = Context.empty() as Context.Context<unknown>;
         const assertedDeaths = new Set<string>();
@@ -889,7 +935,7 @@ const make =
         const rejectionNotAsserted = (rejected: NonNullable<typeof unassertedRejection>) =>
           new StepFailed({
             step: rejected.step,
-            message: `the command was rejected with ${rejected.rejection._tag}, which no step asserts`,
+            message: `${rejected.what ?? "the command"} was rejected with ${rejected.rejection._tag}, which no step asserts`,
             detail: `rejected ${summarize(rejected.rejection)}`,
           });
 
@@ -1005,10 +1051,19 @@ const make =
             case "Rejected": {
               if (last?._tag !== "Rejected")
                 return yield* fail(
-                  `expected a rejection, the command was ${last ? "accepted" : "never sent"}`,
+                  `expected a rejection, the ${
+                    last?._tag === "Answered"
+                      ? "query was answered"
+                      : `command was ${last ? "accepted" : "never sent"}`
+                  }`,
                   {
                     expected: summarize(s.rejection),
-                    actual: last ? `accepted ${summarize(last.receipt.reply)}` : "never sent",
+                    actual:
+                      last?._tag === "Answered"
+                        ? `answered ${summarize(last.result)}`
+                        : last
+                          ? `accepted ${summarize(last.receipt.reply)}`
+                          : "never sent",
                   },
                 );
               const expected = encodeInstance(s.rejection);
@@ -1022,6 +1077,10 @@ const make =
               break;
             }
             case "Replied": {
+              if (last?._tag === "Answered")
+                return yield* fail(
+                  "the last step asked a query; replied asserts a command's reply",
+                );
               if (last?._tag !== "Accepted")
                 return yield* fail("the last command was not accepted");
               if (!equal(last.receipt.reply, s.reply)) {
@@ -1134,6 +1193,79 @@ const make =
                 );
               }
               cursors.set(id, from + expected.length);
+              break;
+            }
+            case "Query": {
+              const name = s.query.queryName;
+              const host = internals.queries.get(name);
+              if (!host) return yield* fail(`${name} is not in the model's \`queries\``);
+              const exit = yield* host
+                .run(s.input, s.page ?? {})
+                .pipe(Effect.provide(provided), Effect.exit);
+              if (Exit.isFailure(exit)) {
+                const error = Cause.findErrorOption(exit.cause);
+                if (Option.isNone(error)) {
+                  return yield* fail(`${name} died: ${String(Cause.squash(exit.cause))}`);
+                }
+                const rejection = error.value as { readonly _tag: string };
+                if (s.expected !== undefined) {
+                  return yield* fail(`${name} was rejected with ${show(rejection)}`, {
+                    expected: "a result",
+                    actual: `rejected ${summarize(rejection)}`,
+                  });
+                }
+                last = { _tag: "Rejected", rejection };
+                unassertedRejection = { step, rejection, what: `the query ${name}` };
+                break;
+              }
+              // Through the wire schema and back: what a client of the query receives.
+              const codec = Schema.toCodecJson(
+                (s.query.rpc as Rpc.AnyWithProps).successSchema as Schema.Codec<unknown, unknown>,
+              ) as Schema.Codec<unknown, unknown>;
+              const wire = yield* Schema.encodeUnknownEffect(codec)(exit.value).pipe(
+                Effect.flatMap(Schema.decodeUnknownEffect(codec)),
+                Effect.mapError((error) =>
+                  fail(`${name}'s handler returned a result its schema refuses: ${error.message}`),
+                ),
+              );
+              last = { _tag: "Answered", result: wire };
+              if (s.expected === undefined) {
+                return yield* fail(`expected ${name} to be rejected, it answered`, {
+                  expected: "a rejection",
+                  actual: summarize(wire),
+                });
+              }
+              if (typeof s.expected === "function") {
+                const assert = s.expected as (result: unknown) => void;
+                yield* Effect.try({ try: () => assert(wire), catch: (e) => fail(String(e)) });
+                break;
+              }
+              const label = `${name}(${brief(s.input)})`;
+              if (s.query.definition.row) {
+                const rows = (wire as View.Page<unknown>).entries;
+                const expected = s.expected as ReadonlyArray<unknown>;
+                const ok =
+                  expected.length === rows.length && expected.every((e, i) => partial(e, rows[i]));
+                if (!ok) {
+                  return yield* fail(
+                    `${label}\n  expected ${show(expected)}\n  actual   ${show(rows)}`,
+                    {
+                      label,
+                      expected: summarizeAll(expected, "no rows"),
+                      actual: summarizeAll(rows, "no rows"),
+                    },
+                  );
+                }
+              } else if (!partial(s.expected, wire)) {
+                return yield* fail(
+                  `${label}\n  expected ${show(s.expected)}\n  actual   ${show(wire)}`,
+                  {
+                    label,
+                    expected: summarize(s.expected),
+                    actual: summarize(wire),
+                  },
+                );
+              }
               break;
             }
             case "Call": {
@@ -1393,11 +1525,12 @@ const make =
 
 /**
  * Given / when / then specifications of a domain model, run against the real
- * model in memory: policies run for real, calls to stubbed external systems
- * wait until you answer them, calls to the others run through their adapters
- * while the story records them, and a clock you control stamps commands and
- * fires scheduled ones. A story fails on any committed event, rejection,
- * external system call or saga defect it doesn't account for.
+ * model in memory: policies, projections and queries run for real, calls to
+ * stubbed external systems wait until you answer them, calls to the others
+ * run through their adapters while the story records them, and a clock you
+ * control stamps commands and fires scheduled ones. A story fails on any
+ * committed event, rejection, external system call or saga defect it doesn't
+ * account for.
  *
  * ### Writing a story
  * **Example:** A withdrawal and an overdraft
@@ -1458,6 +1591,16 @@ const make =
  * Story.die(LockVendor.deleteCode, new Error("socket closed")),
  * ```
  *
+ * ### Queries
+ * **Example:** Ask a query as a caller, and as one it refuses
+ * ```typescript
+ * Story.provide(CurrentActor, sam),
+ * Story.query(AccountLedger, { account: account.id }, [{ kind: "MoneyDeposited", amount: 100 }]),
+ * Story.provide(CurrentActor, alex),
+ * Story.query(AccountLedger, { account: account.id }),
+ * Story.rejected(new NotOwner()),
+ * ```
+ *
  * ### Sagas
  * **Example:** Check where a saga run is, and send it a signal
  * ```typescript
@@ -1482,6 +1625,7 @@ export const Story = {
   view,
   emitted,
   streamed,
+  query: queryStep,
   call: callStep,
   succeed,
   fail,
