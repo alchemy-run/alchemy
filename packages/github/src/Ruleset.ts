@@ -76,156 +76,151 @@ export interface RulesetProps {
   }>;
 
   /**
-   * Rules to enforce on the targeted refs.
+   * Require status checks to pass before merging.
    */
-  rules?: {
+  requiredStatusChecks?: {
     /**
-     * Require status checks to pass before merging.
+     * Status checks that must pass. Each entry is a context name or
+     * integration ID.
      */
-    requiredStatusChecks?: {
+    checks: Array<{
       /**
-       * Status checks that must pass. Each entry is a context name or
-       * integration ID.
+       * The status check context name.
        */
-      checks: Array<{
-        /**
-         * The status check context name.
-         */
-        context: string;
-
-        /**
-         * Optional integration ID.
-         */
-        integrationId?: number;
-      }>;
+      context: string;
 
       /**
-       * Whether to require branches to be up to date before merging.
-       * @default false
+       * Optional integration ID.
        */
-      strictRequiredStatusChecksPolicy?: boolean;
-    };
+      integrationId?: number;
+    }>;
 
     /**
-     * Require commits to be signed.
+     * Whether to require branches to be up to date before merging.
+     * @default false
      */
-    requiredSignatures?: boolean;
+    strictRequiredStatusChecksPolicy?: boolean;
+  };
+
+  /**
+   * Require commits to be signed.
+   */
+  requiredSignatures?: boolean;
+
+  /**
+   * Require pull request before merging.
+   */
+  pullRequest?: {
+    /**
+     * Number of required approving reviews.
+     */
+    requiredApprovingReviewCount?: number;
 
     /**
-     * Require pull request before merging.
+     * Dismiss stale reviews when new commits are pushed.
      */
-    pullRequest?: {
-      /**
-       * Number of required approving reviews.
-       */
-      requiredApprovingReviewCount?: number;
-
-      /**
-       * Dismiss stale reviews when new commits are pushed.
-       */
-      dismissStaleReviewsOnPush?: boolean;
-
-      /**
-       * Require review from code owners.
-       */
-      requireCodeOwnerReview?: boolean;
-
-      /**
-       * Require approval of the most recent reviewable push.
-       */
-      requireLastPushApproval?: boolean;
-
-      /**
-       * Required review thread resolution.
-       */
-      requiredReviewThreadResolution?: boolean;
-
-      /**
-       * Merge methods allowed for pull requests. GitHub allows all three when omitted.
-       */
-      allowedMergeMethods?: Array<"merge" | "squash" | "rebase">;
-
-      /**
-       * Require another approval for changes pushed by someone other than the commit author.
-       * @default true
-       */
-      requireExtraApprovalForUnattributedChanges?: boolean;
-    };
+    dismissStaleReviewsOnPush?: boolean;
 
     /**
-     * Prevent creation of matching refs.
+     * Require review from code owners.
      */
-    creation?: boolean;
+    requireCodeOwnerReview?: boolean;
 
     /**
-     * Prevent updates to matching refs.
+     * Require approval of the most recent reviewable push.
      */
-    update?: boolean;
+    requireLastPushApproval?: boolean;
 
     /**
-     * Prevent deletion of matching refs.
+     * Required review thread resolution.
      */
-    deletion?: boolean;
+    requiredReviewThreadResolution?: boolean;
 
     /**
-     * Require linear history.
+     * Merge methods allowed for pull requests. GitHub allows all three when omitted.
      */
-    requiredLinearHistory?: boolean;
+    allowedMergeMethods?: Array<"merge" | "squash" | "rebase">;
 
     /**
-     * Prevent force pushes.
+     * Require another approval for changes pushed by someone other than the commit author.
+     * @default true
      */
-    nonFastForward?: boolean;
+    requireExtraApprovalForUnattributedChanges?: boolean;
+  };
+
+  /**
+   * Prevent creation of matching refs.
+   */
+  creation?: boolean;
+
+  /**
+   * Prevent updates to matching refs.
+   */
+  update?: boolean;
+
+  /**
+   * Prevent deletion of matching refs.
+   */
+  deletion?: boolean;
+
+  /**
+   * Require linear history.
+   */
+  requiredLinearHistory?: boolean;
+
+  /**
+   * Prevent force pushes.
+   */
+  nonFastForward?: boolean;
+
+  /**
+   * Require pull requests to merge through a merge queue. Only applies to
+   * branch rulesets in organization-owned repositories.
+   */
+  mergeQueue?: {
+    /**
+     * Method used to merge the queued pull requests.
+     * @default "MERGE"
+     */
+    mergeMethod?: "MERGE" | "SQUASH" | "REBASE";
 
     /**
-     * Require pull requests to merge through a merge queue. Only applies to
-     * branch rulesets in organization-owned repositories.
+     * `ALLGREEN` requires every entry's checks to pass; `HEADGREEN` only
+     * requires the checks of the group's head commit.
+     * @default "ALLGREEN"
      */
-    mergeQueue?: {
-      /**
-       * Method used to merge the queued pull requests.
-       * @default "MERGE"
-       */
-      mergeMethod?: "MERGE" | "SQUASH" | "REBASE";
+    groupingStrategy?: "ALLGREEN" | "HEADGREEN";
 
-      /**
-       * `ALLGREEN` requires every entry's checks to pass; `HEADGREEN` only
-       * requires the checks of the group's head commit.
-       * @default "ALLGREEN"
-       */
-      groupingStrategy?: "ALLGREEN" | "HEADGREEN";
+    /**
+     * Maximum number of queued pull requests building at the same time.
+     * @default 5
+     */
+    maxEntriesToBuild?: number;
 
-      /**
-       * Maximum number of queued pull requests building at the same time.
-       * @default 5
-       */
-      maxEntriesToBuild?: number;
+    /**
+     * Minimum number of pull requests merged together in a group.
+     * @default 1
+     */
+    minEntriesToMerge?: number;
 
-      /**
-       * Minimum number of pull requests merged together in a group.
-       * @default 1
-       */
-      minEntriesToMerge?: number;
+    /**
+     * Maximum number of pull requests merged together in a group.
+     * @default 5
+     */
+    maxEntriesToMerge?: number;
 
-      /**
-       * Maximum number of pull requests merged together in a group.
-       * @default 5
-       */
-      maxEntriesToMerge?: number;
+    /**
+     * Minutes to wait for `minEntriesToMerge` pull requests after the first
+     * one is queued before merging a smaller group.
+     * @default 5
+     */
+    minEntriesToMergeWaitMinutes?: number;
 
-      /**
-       * Minutes to wait for `minEntriesToMerge` pull requests after the first
-       * one is queued before merging a smaller group.
-       * @default 5
-       */
-      minEntriesToMergeWaitMinutes?: number;
-
-      /**
-       * Minutes to wait for a required status check before treating it as failed.
-       * @default 60
-       */
-      checkResponseTimeoutMinutes?: number;
-    };
+    /**
+     * Minutes to wait for a required status check before treating it as failed.
+     * @default 60
+     */
+    checkResponseTimeoutMinutes?: number;
   };
 
   /**
@@ -237,6 +232,33 @@ export interface RulesetProps {
    */
   baseUrl?: string;
 }
+
+/**
+ * Props as persisted before the rules moved from a nested `rules` object to
+ * the top level. Only previously deployed state can still have this shape.
+ */
+type PersistedRulesetProps = RulesetProps & {
+  rules?: Pick<
+    RulesetProps,
+    | "requiredStatusChecks"
+    | "requiredSignatures"
+    | "pullRequest"
+    | "creation"
+    | "update"
+    | "deletion"
+    | "requiredLinearHistory"
+    | "nonFastForward"
+    | "mergeQueue"
+  >;
+};
+
+/**
+ * Lifts the rules of persisted props out of the legacy nested `rules` object.
+ */
+const upgradeProps = ({ rules, ...props }: PersistedRulesetProps): RulesetProps => ({
+  ...rules,
+  ...props,
+});
 
 export interface Ruleset extends Resource<
   "GitHub.Ruleset",
@@ -299,11 +321,9 @@ export interface Ruleset extends Resource<
  *   conditions: {
  *     include: ["refs/heads/main"],
  *   },
- *   rules: {
- *     nonFastForward: true,
- *     deletion: true,
- *     requiredLinearHistory: true,
- *   },
+ *   nonFastForward: true,
+ *   deletion: true,
+ *   requiredLinearHistory: true,
  * })
  * ```
  *
@@ -317,13 +337,11 @@ export interface Ruleset extends Resource<
  *   conditions: {
  *     include: ["refs/heads/main", "refs/heads/release/*"],
  *   },
- *   rules: {
- *     pullRequest: {
- *       requiredApprovingReviewCount: 2,
- *       requireCodeOwnerReview: true,
- *       dismissStaleReviewsOnPush: true,
- *       requiredReviewThreadResolution: true,
- *     },
+ *   pullRequest: {
+ *     requiredApprovingReviewCount: 2,
+ *     requireCodeOwnerReview: true,
+ *     dismissStaleReviewsOnPush: true,
+ *     requiredReviewThreadResolution: true,
  *   },
  * })
  * ```
@@ -339,14 +357,12 @@ export interface Ruleset extends Resource<
  *   conditions: {
  *     include: ["refs/heads/main"],
  *   },
- *   rules: {
- *     requiredStatusChecks: {
- *       checks: [
- *         { context: "ci/test" },
- *         { context: "ci/lint" },
- *       ],
- *       strictRequiredStatusChecksPolicy: true,
- *     },
+ *   requiredStatusChecks: {
+ *     checks: [
+ *       { context: "ci/test" },
+ *       { context: "ci/lint" },
+ *     ],
+ *     strictRequiredStatusChecksPolicy: true,
  *   },
  * })
  * ```
@@ -364,14 +380,12 @@ export interface Ruleset extends Resource<
  *   conditions: {
  *     include: ["~DEFAULT_BRANCH"],
  *   },
- *   rules: {
- *     mergeQueue: {
- *       mergeMethod: "SQUASH",
- *       groupingStrategy: "ALLGREEN",
- *       maxEntriesToBuild: 2,
- *       maxEntriesToMerge: 1,
- *       minEntriesToMergeWaitMinutes: 1,
- *     },
+ *   mergeQueue: {
+ *     mergeMethod: "SQUASH",
+ *     groupingStrategy: "ALLGREEN",
+ *     maxEntriesToBuild: 2,
+ *     maxEntriesToMerge: 1,
+ *     minEntriesToMergeWaitMinutes: 1,
  *   },
  * })
  * ```
@@ -390,9 +404,7 @@ export interface Ruleset extends Resource<
  *   bypassActors: [
  *     { actorType: "RepositoryRole", actorId: 5 },
  *   ],
- *   rules: {
- *     nonFastForward: true,
- *   },
+ *   nonFastForward: true,
  * })
  * ```
  *
@@ -412,10 +424,8 @@ export interface Ruleset extends Resource<
  *   conditions: {
  *     include: ["~DEFAULT_BRANCH"],
  *   },
- *   rules: {
- *     deletion: true,
- *     nonFastForward: true,
- *   },
+ *   deletion: true,
+ *   nonFastForward: true,
  * }).pipe(adopt(true))
  * ```
  *
@@ -430,15 +440,21 @@ export const RulesetProvider = () =>
   Provider.succeed(Ruleset, {
     stables: ["rulesetId", "nodeId"],
 
-    diff: Effect.fn(function* ({ news, olds }) {
+    diff: Effect.fn(function* ({ news, olds: persisted }) {
       if (!isResolved(news)) return;
-      if (olds === undefined) return;
+      if (persisted === undefined) return;
+      const olds = upgradeProps(persisted);
       if (
         news.owner !== olds.owner ||
         news.repository !== olds.repository ||
         (yield* gitHubBaseUrlChanged(olds, news))
       ) {
         return { action: "replace" };
+      }
+      // State persisted with nested rules declares the same ruleset as the
+      // top-level rules it upgrades to.
+      if ("rules" in persisted && deepEqual(olds, news, { stripNullish: true })) {
+        return { action: "noop" };
       }
     }),
 
@@ -451,29 +467,29 @@ export const RulesetProvider = () =>
         NonNullable<Parameters<typeof octokit.rest.repos.createRepoRuleset>[0]>["rules"]
       > = [];
 
-      if (news.rules?.creation) {
+      if (news.creation) {
         rules.push({ type: "creation" });
       }
-      if (news.rules?.update) {
+      if (news.update) {
         rules.push({
           type: "update",
           parameters: { update_allows_fetch_and_merge: false },
         });
       }
-      if (news.rules?.deletion) {
+      if (news.deletion) {
         rules.push({ type: "deletion" });
       }
-      if (news.rules?.nonFastForward) {
+      if (news.nonFastForward) {
         rules.push({ type: "non_fast_forward" });
       }
-      if (news.rules?.requiredLinearHistory) {
+      if (news.requiredLinearHistory) {
         rules.push({ type: "required_linear_history" });
       }
-      if (news.rules?.requiredSignatures) {
+      if (news.requiredSignatures) {
         rules.push({ type: "required_signatures" });
       }
-      if (news.rules?.pullRequest) {
-        const pullRequest = news.rules.pullRequest;
+      if (news.pullRequest) {
+        const pullRequest = news.pullRequest;
         // `require_extra_approval_for_unattributed_changes` is accepted by the API but missing
         // from its OpenAPI description, so it is added outside the typed literal.
         const parameters = {
@@ -492,8 +508,8 @@ export const RulesetProvider = () =>
         };
         rules.push({ type: "pull_request", parameters });
       }
-      if (news.rules?.mergeQueue) {
-        const mergeQueue = news.rules.mergeQueue;
+      if (news.mergeQueue) {
+        const mergeQueue = news.mergeQueue;
         rules.push({
           type: "merge_queue",
           parameters: {
@@ -507,16 +523,16 @@ export const RulesetProvider = () =>
           },
         });
       }
-      if (news.rules?.requiredStatusChecks) {
+      if (news.requiredStatusChecks) {
         rules.push({
           type: "required_status_checks",
           parameters: {
-            required_status_checks: news.rules.requiredStatusChecks.checks.map((check) => ({
+            required_status_checks: news.requiredStatusChecks.checks.map((check) => ({
               context: check.context,
               integration_id: check.integrationId,
             })),
             strict_required_status_checks_policy:
-              news.rules.requiredStatusChecks.strictRequiredStatusChecksPolicy ?? false,
+              news.requiredStatusChecks.strictRequiredStatusChecksPolicy ?? false,
           },
         });
       }
