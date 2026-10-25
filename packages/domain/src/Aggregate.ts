@@ -24,6 +24,12 @@ export type Inst<C> = C extends abstract new (...args: any[]) => infer I ? I : n
 export interface DecideContext<Id> {
   /** The id of the aggregate instance handling the command. */
   readonly id: Id;
+  /** The exact native command identity for this decision. */
+  readonly commandId: string;
+  /** The exact event stream this decision will commit to. */
+  readonly stream: string;
+  /** The held native stream version before this decision. */
+  readonly version: number;
   /** The time the command is being handled. Controlled by stories via `clock`. */
   readonly now: DateTime.Utc;
 }
