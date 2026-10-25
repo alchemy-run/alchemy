@@ -53,9 +53,9 @@ import { Story } from "@alchemy.run/domain/Story";
 import { Account } from "../src/Account.aggregate.ts";
 import { AccountSummary } from "../src/AccountSummary.view.ts";
 import { Bank } from "../src/Bank.model.ts";
-import { DepositMoney } from "../src/DepositMoney.command.ts";
+import { DepositMoney, MoneyDeposited } from "../src/DepositMoney.command.ts";
 import { AccountOpened } from "../src/OpenAccount.command.ts";
-import { WithdrawMoney } from "../src/WithdrawMoney.command.ts";
+import { MoneyWithdrawn, WithdrawMoney } from "../src/WithdrawMoney.command.ts";
 
 const story = Story.make(Bank);
 const account = Account.ref("a-1");
@@ -65,6 +65,11 @@ it.effect("the summary follows the balance", () =>
     Story.given(account, new AccountOpened({ owner: "sam" })),
     Story.when(account, new DepositMoney({ amount: 100 })),
     Story.when(account, new WithdrawMoney({ amount: 30 })),
+    Story.then(
+      account,
+      new MoneyDeposited({ amount: 100, balanceAfter: 100 }),
+      new MoneyWithdrawn({ amount: 30, balanceAfter: 70 }),
+    ),
     Story.view(AccountSummary, account, { owner: "sam", balance: 70 }),
   ),
 );
@@ -136,10 +141,10 @@ export class Bank extends Domain.Model("Bank", {
 
 ```diff lang="typescript"
 // test/views.test.ts
-import { DepositMoney } from "../src/DepositMoney.command.ts";
+import { DepositMoney, MoneyDeposited } from "../src/DepositMoney.command.ts";
 import { AccountOpened } from "../src/OpenAccount.command.ts";
 +import { Statement } from "../src/Statement.view.ts";
-import { WithdrawMoney } from "../src/WithdrawMoney.command.ts";
+import { MoneyWithdrawn, WithdrawMoney } from "../src/WithdrawMoney.command.ts";
   // ...
   ),
 );
@@ -149,6 +154,11 @@ import { WithdrawMoney } from "../src/WithdrawMoney.command.ts";
 +    Story.given(account, new AccountOpened({ owner: "sam" })),
 +    Story.when(account, new DepositMoney({ amount: 100 })),
 +    Story.when(account, new WithdrawMoney({ amount: 30 })),
++    Story.then(
++      account,
++      new MoneyDeposited({ amount: 100, balanceAfter: 100 }),
++      new MoneyWithdrawn({ amount: 30, balanceAfter: 70 }),
++    ),
 +    Story.emitted(Statement, account, [
 +      { kind: "deposit", amount: 100, balance: 100 },
 +      { kind: "withdrawal", amount: 30, balance: 70 },

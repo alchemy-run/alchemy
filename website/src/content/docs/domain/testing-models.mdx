@@ -66,7 +66,7 @@ Run stories with Vitest and `@effect/vitest`: each story is an Effect, so `it.ef
 
 ## Check every outcome
 
-The test above uses most of the checks. `then` checks the next events recorded on an instance; with no events, it checks that nothing new was recorded. `replied` checks the last command's reply, and `rejected` checks that it was refused with exactly this rejection. `state` checks an instance's current state directly.
+The test above uses most of the checks. `then` checks the next events recorded on an instance; with no events, it checks that nothing new was recorded. Every recorded event needs a `then`, on every instance, including the ones a policy writes; to check only the events you name, make the runner with `Story.make(Bank, { strict: false })`. `replied` checks the last command's reply, and `rejected` checks that it was refused with exactly this rejection. `state` checks an instance's current state directly.
 
 Views and streams are checked as a client would read them. `view` checks a view key's state, or part of it, and `emitted` checks every event a view key has emitted. `streamed` checks the next entries a projection appended to a stream key.
 
@@ -173,7 +173,7 @@ A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it to 
 
 ## Trust a passing story
 
-A story fails if a command is rejected and no `rejected` step checks it, if a call is answered or asserted before a `call` step checks it, if a stubbed call is left waiting at the end, or if no step asserts how a real call ended. A passing story has accounted for every outcome.
+A story fails if an event is committed and no `then` step checks it, if a command is rejected and no `rejected` step checks it, if a call is answered or asserted before a `call` step checks it, if a stubbed call is left waiting at the end, or if no step asserts how a real call ended. A passing story has accounted for every outcome.
 
 :::note
 Test what clients see through an Api in [Testing an Api](/domain/testing-apis).

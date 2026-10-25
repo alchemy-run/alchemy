@@ -277,6 +277,7 @@ describe("Domain telemetry", () => {
         Story.clock("2026-01-01T00:00:00Z"),
         Story.given(alice, new Opened({ balance: 100 })),
         Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
+        Story.then(alice, new Debited({ amount: 40, note: Redacted.make("rent") })),
         Story.then(ledger, new Audited({ wallet: "alice" })),
         Story.clock("2026-01-01T01:00:00Z"),
         Story.then(ledger, new Reminded()),
@@ -299,6 +300,7 @@ describe("Domain telemetry", () => {
       yield* reviewStory(
         Story.given(alice, new Opened({ balance: 100 })),
         Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
+        Story.then(alice, new Debited({ amount: 40, note: Redacted.make("rent") })),
         Story.call(Scorer.score, { wallet: "alice" }),
         Story.succeed(Scorer.score, { risk: 0.9 }),
         Story.then(ledger, new Audited({ wallet: "alice" })),
@@ -333,6 +335,7 @@ describe("Domain telemetry", () => {
       yield* reviewStory(
         Story.given(alice, new Opened({ balance: 100 })),
         Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
+        Story.then(alice, new Debited({ amount: 40, note: Redacted.make("rent") })),
         Story.call(Scorer.score, { wallet: "alice" }),
         Story.succeed(Scorer.score, { risk: 0.1 }),
       ).pipe(Effect.withTracer(tracer));

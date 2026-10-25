@@ -56,6 +56,16 @@ export interface Control {
     readonly executionId: string;
     readonly defect: unknown;
   }>;
+  /**
+   * Every event a command committed (seeded events excluded), in commit
+   * order: its aggregate, instance id, and position in the instance's
+   * events, from 0.
+   */
+  readonly commits: ReadonlyArray<{
+    readonly aggregate: string;
+    readonly id: string;
+    readonly index: number;
+  }>;
 }
 
 /**
@@ -75,6 +85,7 @@ export const make = (
   let suspended = 0;
   const failures: Array<unknown> = [];
   const deaths: Array<{ saga: string; executionId: string; defect: unknown }> = [];
+  const commits: Array<{ aggregate: string; id: string; index: number }> = [];
   // Scheduled commands by `aggregate/id/commandId`, so rescheduling replaces.
   const timers = new Map<string, { readonly at: number; readonly fire: Effect.Effect<void> }>();
 
@@ -148,6 +159,7 @@ export const make = (
       }),
     failures,
     deaths,
+    commits,
   };
 
   const platform = Platform.of({
@@ -208,6 +220,8 @@ export const make = (
               if (result._tag === "Rejected") return result satisfies SendResult;
               current.state = result.state;
               current.version = result.version;
+              for (let i = 0; i < result.events.length; i++)
+                commits.push({ aggregate: kit.name, id, index: current.events.length + i });
               current.events.push(...result.events);
               const sent: SendResult = {
                 _tag: "Accepted",
