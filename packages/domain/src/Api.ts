@@ -43,6 +43,8 @@ import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
 import * as Watch from "./Watch.ts";
 
+export { Catalog, describe, Operation } from "./ApiCatalog.ts";
+
 /**
  * What an Api exposes: commands (writes); views, streams, and aggregates that
  * declare a `read` contract (reads).
@@ -794,6 +796,20 @@ const build = (
  * yield* bank.AccountSummary.watch(accountId).pipe(
  *   Stream.runForEach((s) => Effect.log(s?.balance)),
  * );
+ * ```
+ *
+ * ### Describing it
+ * `Domain.Api.describe` lists every call the Api serves, with the JSON
+ * Schemas of its input, its success and its typed failures. Build tool
+ * lists, CLI help or OpenAPI from it, or snapshot it in a test so a change to
+ * the public surface shows up in review.
+ *
+ * **Example:** The catalog of an Api
+ * ```typescript
+ * const catalog = Domain.Api.describe(CustomerApi);
+ * const writes = catalog.operations.filter((op) => op.access === "write");
+ * // [{ api: "CustomerApi", entry: "DepositMoney", kind: "Command", operation: "send",
+ * //    rpc: "DepositMoney", access: "write", stream: false, input, success, error }, ...]
  * ```
  *
  * @primitive

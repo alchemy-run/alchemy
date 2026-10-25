@@ -19,6 +19,7 @@
  */
 import * as AggregateModule from "./Aggregate.ts";
 import * as ApiModule from "./Api.ts";
+import * as ApiCatalogModule from "./ApiCatalog.ts";
 import * as CommandModule from "./Command.ts";
 import * as EventModule from "./Event.ts";
 import * as ExternalSystemModule from "./ExternalSystem.ts";
@@ -169,9 +170,18 @@ export declare namespace Api {
   export type AggregateClient<A extends AggregateModule.Any> = ApiModule.AggregateClient<A>;
   /** Everything a read can fail with. */
   export type ReadError<D> = ApiModule.ReadError<D>;
+  /** What an Api serves, one operation per call. See {@link ApiCatalogModule.describe}. */
+  export type Catalog = ApiCatalogModule.Catalog;
+  /** One call an Api serves, with the JSON Schemas of its input, success and error. */
+  export type Operation = ApiCatalogModule.Operation;
 }
 /** The public surface of a domain for one client. See {@link ApiModule.make}. */
-export const Api = ApiModule.make;
+export const Api = Object.assign(ApiModule.make, {
+  /** A machine-readable catalog of an Api: one record per call it serves. */
+  describe: ApiCatalogModule.describe,
+  /** The schema of what `describe` returns, to decode a stored catalog. */
+  Catalog: ApiCatalogModule.Catalog,
+});
 /** An Api client protocol: everything over HTTP, live reads as streamed responses. */
 export const protocolHttp = ApiModule.protocolHttp;
 /** An Api client protocol: calls over HTTP, each live read a WebSocket to the object that owns it. */

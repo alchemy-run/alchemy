@@ -231,4 +231,45 @@ const bank = yield* CustomerApi.Client;
 
 See [Integrate with foldkit](/domain/foldkit) for a full browser app.
 
+## Describe it for tools
+
+`Domain.Api.describe` gives a catalog of the Api as plain JSON: one operation for each call it serves. Use it to build an MCP tool list, CLI help, an OpenAPI document or docs from the Api, without a second list to keep in sync.
+
+```typescript
+const catalog = Domain.Api.describe(CustomerApi);
+for (const op of catalog.operations) {
+  console.log(op.rpc, op.access, op.stream ? "stream" : "call");
+}
+// DepositMoney write call
+// AccountSummary.get read call
+// AccountSummary.watch read stream
+// ...
+```
+
+Each operation has these fields:
+
+| Field         | Value                                                                         |
+| ------------- | ----------------------------------------------------------------------------- |
+| `api`         | The Api's name.                                                               |
+| `entry`       | The command's tag, or the view's, stream's or aggregate's name.               |
+| `kind`        | `Command`, `View`, `Aggregate` or `Stream`.                                   |
+| `operation`   | `send` for a command; `get`, `peek`, `watch`, `events` or `list` for a read.  |
+| `rpc`         | The RPC tag the server answers to, like `AccountSummary.get`.                 |
+| `access`      | `write` for a command, `read` for everything else.                            |
+| `stream`      | `true` for `watch` and `events`, which answer with a stream of values.        |
+| `input`       | The JSON Schema of the payload: a command's `target`, `commandId` and input, or a read's `key` and options. |
+| `success`     | The JSON Schema of the result, or of each value a stream emits.              |
+| `error`       | The JSON Schema of every typed failure: the entry's rejections and its middleware's errors. |
+| `description` | The entry's `description` annotation, when it has one.                       |
+
+The catalog is read from the same RPCs the server answers, so it can't drift from them. The schemas are JSON Schema draft 2020-12 for the JSON on the wire, with shared definitions under `$defs`. The operations come in the order the Api lists its entries, and the catalog is the same on every call. A snapshot test of it catches a change to the public surface:
+
+```typescript
+it("CustomerApi keeps its public surface", () => {
+  expect(Domain.Api.describe(CustomerApi)).toMatchSnapshot();
+});
+```
+
+`Domain.Api.Catalog` is the catalog's Schema, to decode a catalog stored as JSON.
+
 To test an Api end to end, including its middleware and every rejection, see [Testing an Api](/domain/testing-apis).
