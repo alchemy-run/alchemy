@@ -159,6 +159,56 @@ const listFiles = (dir: string, out: Array<string>): void => {
   }
 };
 
+const SOURCE_FILE = /\.[cm]?tsx?$/;
+
+const listSources = (dir: string, out: Array<string>): void => {
+  let entries: Array<fs.Dirent>;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith(".") || SKIP_DIRS.has(entry.name)) continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) listSources(full, out);
+    else if (
+      entry.isFile() &&
+      SOURCE_FILE.test(entry.name) &&
+      !STORY_FILE.test(entry.name) &&
+      !entry.name.endsWith(".d.ts")
+    ) {
+      out.push(full);
+    }
+  }
+};
+
+const sagaOrCommandRejects = new Map<string, Cached<ReadonlyMap<string, ReadonlySet<string>>>>();
+
+/**
+ * The rejections a story can assert, by the file that lists them: the
+ * `rejects` of every command (`Story.rejected`) and saga (its `Rejected`
+ * status) in a package's source. A view's or a read's rejections come from
+ * `validate`, which only an Api test reaches.
+ */
+export const storyRejections = (root: string): ReadonlyMap<string, ReadonlySet<string>> =>
+  cached(sagaOrCommandRejects, root, () => {
+    const files: Array<string> = [];
+    listSources(root, files);
+    const byFile = new Map<string, ReadonlySet<string>>();
+    for (const file of files) {
+      const index = moduleIndex(file);
+      if (index === undefined) continue;
+      const names = new Set<string>();
+      for (const [owner, listed] of index.rejects) {
+        const kind = index.kinds.get(owner);
+        if (kind === "Command" || kind === "Saga") listed.forEach((name) => names.add(name));
+      }
+      if (names.size > 0) byFile.set(file, names);
+    }
+    return byFile;
+  });
+
 const stories = new Map<string, Cached<string>>();
 
 /** The text of every story file of a package (files that import `@alchemy.run/domain/Story`). */
