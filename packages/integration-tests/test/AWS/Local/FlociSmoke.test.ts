@@ -1,5 +1,3 @@
-import { spawnSync } from "node:child_process";
-import { createHash, createHmac } from "node:crypto";
 /**
  * Floci local-emulator smoke test.
  *
@@ -37,105 +35,13 @@ import { Queue } from "@alchemy.run/aws/SQS";
 import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
-import * as HttpBody from "effect/http/HttpBody";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-
-const FLOCI_ENDPOINT = "http://localhost:4566";
-
-// skipIf gate: floci runs as a Docker container. `docker info` proves the
-// daemon is reachable (a mere `docker --version` would pass with the daemon
-// down). Sync probe at collection time — skipIf needs a plain boolean.
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
+import { dockerAvailable, rawAwsJson, rawS3GetBucket, regionOfArn } from "./fixtures/raw.ts";
 
 const providers = AWS.providers();
 
 // `dev: true` runs the same topology as the real `alchemy dev` command
 // (including the RPC sidecar default for RPC-backed providers).
 const { test } = Test.make({ providers, dev: true });
-
-/**
- * Raw (non-distilled) call against the emulator gateway — out-of-band proof
- * that a resource exists IN THE EMULATOR, not the real cloud. The dummy
- * SigV4 Authorization header is never verified by the emulator; it only
- * carries the service/region/account scoping the gateway routes by.
- */
-const rawAwsJson = Effect.fn(function* (options: {
-  service: string;
-  region: string;
-  target: string;
-  contentType: string;
-  body: Record<string, unknown>;
-}) {
-  const client = yield* HttpClient.HttpClient;
-  return yield* client.execute(
-    HttpClientRequest.post(`${FLOCI_ENDPOINT}/`).pipe(
-      HttpClientRequest.setHeaders({
-        "content-type": options.contentType,
-        "x-amz-target": options.target,
-        "x-amz-date": "20260101T000000Z",
-        authorization: `AWS4-HMAC-SHA256 Credential=test/20260101/${options.region}/${options.service}/aws4_request, SignedHeaders=host;x-amz-date, Signature=dummy`,
-      }),
-      HttpClientRequest.setBody(HttpBody.text(JSON.stringify(options.body), options.contentType)),
-    ),
-  );
-});
-
-const sha256Hex = (value: string) => createHash("sha256").update(value).digest("hex");
-const hmac = (key: string | Buffer, value: string) =>
-  createHmac("sha256", key).update(value).digest();
-
-/**
- * Path-style S3 GET against the gateway (list the bucket's objects). Unlike the JSON calls above,
- * it carries a real SigV4 signature for Floci's `test`/`test` credentials: the suite runs Floci
- * with S3 auth enforcement, which verifies S3 signatures.
- */
-const rawS3GetBucket = Effect.fn(function* (bucketName: string) {
-  const client = yield* HttpClient.HttpClient;
-  const headers = yield* Effect.sync(() => {
-    const amzDate = new Date()
-      .toISOString()
-      .replace(/[-:]/g, "")
-      .replace(/\.\d{3}/, "");
-    const day = amzDate.slice(0, 8);
-    const host = new URL(FLOCI_ENDPOINT).host;
-    const payloadHash = sha256Hex("");
-    const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
-    const canonicalRequest = [
-      "GET",
-      `/${bucketName}`,
-      "",
-      `host:${host}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`,
-      signedHeaders,
-      payloadHash,
-    ].join("\n");
-    const scope = `${day}/us-east-1/s3/aws4_request`;
-    const stringToSign = ["AWS4-HMAC-SHA256", amzDate, scope, sha256Hex(canonicalRequest)].join(
-      "\n",
-    );
-    const signingKey = hmac(hmac(hmac(hmac("AWS4test", day), "us-east-1"), "s3"), "aws4_request");
-    const signature = createHmac("sha256", signingKey).update(stringToSign).digest("hex");
-    return {
-      "x-amz-date": amzDate,
-      "x-amz-content-sha256": payloadHash,
-      authorization: `AWS4-HMAC-SHA256 Credential=test/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
-    };
-  });
-  return yield* client.execute(
-    HttpClientRequest.get(`${FLOCI_ENDPOINT}/${bucketName}`).pipe(
-      HttpClientRequest.setHeaders(headers),
-    ),
-  );
-});
-
-/** Region segment of an ARN (`arn:aws:sqs:REGION:ACCOUNT:name`). */
-const regionOfArn = (arn: string) => arn.split(":")[3]!;
 
 test.provider.skipIf(!dockerAvailable)(
   "deploys S3 + SQS + DynamoDB into floci and destroys them",
