@@ -29,7 +29,7 @@ import type * as Projection from "./Projection.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as Telemetry from "./Telemetry.ts";
-import type * as View from "./View.ts";
+import * as View from "./View.ts";
 
 /**
  * The entities of a Domain.
@@ -272,8 +272,8 @@ export const make = (
     }
     return entry!;
   };
-  /** The aggregate whose refs identify a source's instances. */
-  const keyAggregateOf = (entry: SourceEntry) =>
+  /** The key that identifies a source's instances: its aggregate, or a view's key. */
+  const keyAggregateOf = (entry: SourceEntry): View.KeySource =>
     entry.kind === "aggregate" ? entry.aggregate : entry.view.definition.key;
 
   for (const stream of definitions.streams) {
@@ -327,7 +327,8 @@ export const make = (
   /** What routing sees of an event. */
   interface RouteInput {
     readonly event: unknown;
-    readonly source: Aggregate.Ref;
+    /** The source instance: a ref, or a Schema-keyed view's key value. */
+    readonly source: unknown;
     readonly envelope: Aggregate.Envelope;
     readonly state: unknown;
     /** The source stream, e.g. `Account/a-1`. */
@@ -358,7 +359,7 @@ export const make = (
   /** How a consumer keyed by `def.key` routes `tag` from `source`. */
   const keyRoute = (
     owner: string,
-    def: { readonly key: Aggregate.Any; readonly keyOf?: unknown },
+    def: { readonly key: View.KeySource; readonly keyOf?: unknown },
     upstream: SourceEntry,
     source: string,
     tag: string,
@@ -370,10 +371,11 @@ export const make = (
       state: input.state,
       envelope: input.envelope,
     });
+    // A route returns a ref for an aggregate key, or the value of a Schema key.
     if (typeof custom === "function") {
       return (input) => {
-        const ref = custom(routing(input)) as Aggregate.Ref | undefined;
-        return ref ? [{ key: ref.id as string }] : [];
+        const ref = custom(routing(input));
+        return ref === undefined ? [] : [{ key: Aggregate.targetId(ref) }];
       };
     }
     if (custom) {
@@ -381,19 +383,20 @@ export const make = (
       return (input) => {
         const byKey = new Map<string, Array<string>>();
         for (const [route, fn] of routes) {
-          const ref = fn?.(routing(input)) as Aggregate.Ref | undefined;
-          if (!ref) continue;
-          const list = byKey.get(ref.id as string) ?? [];
-          byKey.set(ref.id as string, list);
+          const ref = fn?.(routing(input));
+          if (ref === undefined) continue;
+          const key = Aggregate.targetId(ref);
+          const list = byKey.get(key) ?? [];
+          byKey.set(key, list);
           list.push(route);
         }
         return [...byKey].map(([key, names]) => ({ key, routes: names }));
       };
     }
     if (keyAggregateOf(upstream) === def.key)
-      return (input) => [{ key: input.source.id as string }];
+      return (input) => [{ key: Aggregate.targetId(input.source) }];
     throw new DefinitionError(
-      `${owner} consumes '${tag}' from ${source}, which is not keyed by ${def.key.aggregateName}: add keyOf.${tag}`,
+      `${owner} consumes '${tag}' from ${source}, which is not keyed by ${View.isAggregateKey(def.key) ? def.key.aggregateName : "its key schema"}: add keyOf.${tag}`,
     );
   };
 
@@ -838,7 +841,7 @@ export const make = (
         let changed = false;
         const entries: Array<ViewEntry> = [];
         const downstream: Array<Delivery> = [];
-        const keyRef = Aggregate.makeRef(def.key, key);
+        const keyRef = View.refOf(def.key, key);
         const stream = `${view.viewName}/${key}`;
         for (const delivery of batch) {
           if ((checkpoints[delivery.source] ?? 0) >= delivery.seq) continue;
@@ -849,7 +852,7 @@ export const make = (
           const envelope = decodeEnvelope(delivery.envelope);
           const context = {
             key: keyRef,
-            source: Aggregate.makeRef(keyAggregateOf(origin), envelope.id),
+            source: View.refOf(keyAggregateOf(origin), envelope.id),
             state: sourceState(origin, delivery.state),
             envelope,
             at: envelope.at,
@@ -929,7 +932,7 @@ export const make = (
         if (delivery.history) return Effect.void;
         const upstream = sources.get(delivery.origin)!;
         const envelope = decodeEnvelope(delivery.envelope);
-        const source = Aggregate.makeRef(keyAggregateOf(upstream), envelope.id);
+        const source = View.refOf(keyAggregateOf(upstream), envelope.id);
         const key = keyAggregate ? Aggregate.makeRef(keyAggregate, delivery.key) : source;
         const event = decodeEvent(delivery.event);
         const state = sourceState(upstream, delivery.state);
@@ -989,7 +992,7 @@ export const make = (
     for (const { delivery, position } of batch) {
       const upstream = sources.get(delivery.origin)!;
       const envelope = decodeEnvelope(delivery.envelope);
-      const source = Aggregate.makeRef(keyAggregateOf(upstream), envelope.id);
+      const source = View.refOf(keyAggregateOf(upstream), envelope.id);
       const event = decodeEvent(delivery.event);
       const state = sourceState(upstream, delivery.state);
       // Shared by every route the delivery takes, so their appends count up together.

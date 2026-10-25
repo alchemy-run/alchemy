@@ -89,13 +89,15 @@ export type Step =
   | {
       readonly _tag: "View";
       readonly view: View.Any;
-      readonly key: Aggregate.Ref;
+      /** A ref, or the value of a Schema key. */
+      readonly key: View.RefOf<View.KeySource>;
       readonly expected: unknown;
     }
   | {
       readonly _tag: "Emitted";
       readonly view: View.Any;
-      readonly key: Aggregate.Ref;
+      /** A ref, or the value of a Schema key. */
+      readonly key: View.RefOf<View.KeySource>;
       readonly expected: unknown;
     }
   | {
@@ -199,7 +201,7 @@ const state = <A extends Aggregate.Any>(
 /** Assert on a view key: an expected (partial) state, a function, or {@link none}. */
 const view = <V extends View.Any>(
   view: V,
-  key: Aggregate.Ref<View.KeyOf<V>>,
+  key: View.RefOf<View.KeyOf<V>>,
   expected: Partial<View.StateOf<V>> | ((state: View.StateOf<V>) => void) | typeof none,
 ): Step => ({ _tag: "View", view, key, expected });
 
@@ -209,7 +211,7 @@ const view = <V extends View.Any>(
  */
 const emitted = <V extends View.Any>(
   view: V,
-  key: Aggregate.Ref<View.KeyOf<V>>,
+  key: View.RefOf<View.KeyOf<V>>,
   expected:
     | ReadonlyArray<Partial<View.EventOf<V>>>
     | ((entries: ReadonlyArray<View.Entry<View.StateOf<V>, View.EventOf<V>>>) => void),
@@ -434,9 +436,9 @@ const describeStep = (s: Step): string => {
     case "State":
       return refName(s.ref);
     case "View":
-      return `${s.view.viewName}(${s.key.id})${s.expected === none ? ": none" : typeof s.expected === "function" ? "" : `: ${summarize(s.expected)}`}`;
+      return `${s.view.viewName}(${Aggregate.targetId(s.key)})${s.expected === none ? ": none" : typeof s.expected === "function" ? "" : `: ${summarize(s.expected)}`}`;
     case "Emitted":
-      return `${s.view.viewName}(${s.key.id})${typeof s.expected === "function" ? "" : `: ${summarizeAll(s.expected as ReadonlyArray<unknown>)}`}`;
+      return `${s.view.viewName}(${Aggregate.targetId(s.key)})${typeof s.expected === "function" ? "" : `: ${summarizeAll(s.expected as ReadonlyArray<unknown>)}`}`;
     case "Streamed":
       return `${s.stream.streamName}/${s.key.id}: ${summarizeAll(s.events)}`;
     case "Call":
@@ -878,22 +880,22 @@ const make =
             case "View": {
               const host = yield* s.view as unknown as Context.Key<
                 never,
-                View.Host<unknown, Aggregate.Any, unknown>
+                View.Host<unknown, View.KeySource, unknown>
               >;
               const current = yield* host.query(s.key).pipe(Effect.orDie);
               if (s.expected === none) {
                 if (Option.isSome(current))
                   return yield* fail(
-                    `expected ${s.view.viewName}(${s.key.id}) to not exist, got ${show(current.value)}`,
+                    `expected ${s.view.viewName}(${Aggregate.targetId(s.key)}) to not exist, got ${show(current.value)}`,
                     {
-                      label: `${s.view.viewName}(${s.key.id})`,
+                      label: `${s.view.viewName}(${Aggregate.targetId(s.key)})`,
                       expected: "none",
                       actual: summarize(current.value),
                     },
                   );
                 break;
               }
-              const viewLabel = `${s.view.viewName}(${s.key.id})`;
+              const viewLabel = `${s.view.viewName}(${Aggregate.targetId(s.key)})`;
               if (Option.isNone(current))
                 return yield* fail(`${viewLabel} does not exist`, {
                   label: viewLabel,
@@ -921,7 +923,7 @@ const make =
             case "Emitted": {
               const host = yield* s.view as unknown as Context.Key<
                 never,
-                View.Host<unknown, Aggregate.Any, unknown>
+                View.Host<unknown, View.KeySource, unknown>
               >;
               const { entries } = yield* host.list(s.key);
               if (typeof s.expected === "function") {
@@ -935,7 +937,7 @@ const make =
                   expected.every((e, i) => partial(e, events[i]));
                 if (!ok)
                   return yield* fail(
-                    `${s.view.viewName}(${s.key.id})\n  expected ${show(expected)}\n  actual   ${show(events)}`,
+                    `${s.view.viewName}(${Aggregate.targetId(s.key)})\n  expected ${show(expected)}\n  actual   ${show(events)}`,
                   );
               }
               break;

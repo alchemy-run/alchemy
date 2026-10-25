@@ -94,6 +94,10 @@ export declare namespace View {
   export type StateOf<V extends ViewModule.Any> = ViewModule.StateOf<V>;
   export type EventOf<V extends ViewModule.Any> = ViewModule.EventOf<V>;
   export type KeyOf<V extends ViewModule.Any> = ViewModule.KeyOf<V>;
+  /** What keys a view: an aggregate, or a string Schema. */
+  export type KeySource = ViewModule.KeySource;
+  /** How one instance of a key is addressed: a ref, or a Schema key's value. */
+  export type RefOf<K> = ViewModule.RefOf<K>;
   /** An event a view emitted, with its state after it. */
   export type Entry<S, E, Id = string> = ViewModule.Entry<S, E, Id>;
   export type Page<E> = ViewModule.Page<E>;

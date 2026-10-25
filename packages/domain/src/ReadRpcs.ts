@@ -5,6 +5,7 @@ import type * as Event from "./Event.ts";
 import * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
 import type * as DomainStream from "./Stream.ts";
+import { idSchemaOf } from "./View.ts";
 import type * as View from "./View.ts";
 
 /**
@@ -134,7 +135,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
     };
   } else if (entry.kind === "View") {
     const def = entry.definition;
-    const key = def.key.definition.id;
+    const key = idSchemaOf(def.key);
     const state = Schema.NullOr(def.state ?? Schema.Null);
     const recorded = Schema.Struct({
       event: union(outputEvents(entry)),

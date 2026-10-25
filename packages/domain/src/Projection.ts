@@ -17,8 +17,8 @@ export interface Input<Key extends Aggregate.Any, S, E> {
   readonly key: Aggregate.Ref<Key>;
   /** The route named in `keyOf` that brought it here, if any. */
   readonly route: string | undefined;
-  /** The aggregate or view instance the event came from. */
-  readonly source: Aggregate.Ref<View.SourceKey<S>>;
+  /** The aggregate or view instance the event came from (a view key's value for a Schema-keyed view). */
+  readonly source: View.RefOf<View.SourceKey<S>>;
   readonly event: E;
   readonly envelope: Aggregate.Envelope;
   /** For a view source: the view's state after the event. */

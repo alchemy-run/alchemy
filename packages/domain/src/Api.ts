@@ -40,7 +40,7 @@ import type * as Read from "./Read.ts";
 import { contractOf, nameOf, readRpcs } from "./ReadRpcs.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
-import type * as View from "./View.ts";
+import * as View from "./View.ts";
 import * as Watch from "./Watch.ts";
 
 /**
@@ -74,7 +74,7 @@ interface CallOptions {
 export interface ViewClient<V extends View.Any> {
   /** The key's current state (`null` if it does not exist or the filter excludes it). */
   readonly get: (
-    key: Aggregate.IdOf<View.KeyOf<V>>,
+    key: View.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
       /** Wait until the view has applied this write (a command's `stream` and `version`). */
       readonly atLeast?: { readonly stream: string; readonly version: number };
@@ -83,23 +83,23 @@ export interface ViewClient<V extends View.Any> {
   ) => Effect.Effect<View.StateOf<V> | null, ReadError<V["definition"]>>;
   /** The key's state, then every change. Ends with a rejection when `validate` stops allowing it. */
   readonly watch: (
-    key: Aggregate.IdOf<View.KeyOf<V>>,
+    key: View.IdOf<View.KeyOf<V>>,
     options?: CallOptions & { readonly where?: Filter<View.StateOf<V>> },
   ) => Stream.Stream<View.StateOf<V> | null, ReadError<V["definition"]>>;
   /** The events the key emitted, each with the state after it: history, then live. */
   readonly events: (
-    key: Aggregate.IdOf<View.KeyOf<V>>,
+    key: View.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
       readonly after?: string;
       readonly where?: Filter<View.EventOf<V>>;
     },
   ) => Stream.Stream<
-    View.Entry<View.StateOf<V>, View.EventOf<V>, Aggregate.IdOf<View.KeyOf<V>>>,
+    View.Entry<View.StateOf<V>, View.EventOf<V>, View.IdOf<View.KeyOf<V>>>,
     ReadError<V["definition"]>
   >;
   /** A page of the key's emitted events. */
   readonly list: (
-    key: Aggregate.IdOf<View.KeyOf<V>>,
+    key: View.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
       readonly where?: Filter<View.EventOf<V>>;
       readonly order?: "asc" | "desc";
@@ -107,7 +107,7 @@ export interface ViewClient<V extends View.Any> {
       readonly after?: string;
     },
   ) => Effect.Effect<
-    View.Page<View.Entry<View.StateOf<V>, View.EventOf<V>, Aggregate.IdOf<View.KeyOf<V>>>>,
+    View.Page<View.Entry<View.StateOf<V>, View.EventOf<V>, View.IdOf<View.KeyOf<V>>>>,
     ReadError<V["definition"]>
   >;
 }
@@ -433,7 +433,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
       if (entry.kind === "View") {
         const host = internals.viewHosts.get(name)!;
         const key = entry.definition.key;
-        const refOf = (id: string) => ({ aggregate: key.aggregateName, id }) as Aggregate.Ref;
+        const refOf = (id: string) => View.refOf(key, id);
         const visible = (state: unknown, where: unknown) =>
           state !== null && matches(where as Filter<unknown> | undefined, state) ? state : null;
         handlers[`${name}.get`] = effect(rpcs.get, ({ key: id, atLeast, where }) =>

@@ -22,7 +22,7 @@ import type * as Read from "./Read.ts";
 import { contractOf, nameOf, readRpcs } from "./ReadRpcs.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
-import type * as View from "./View.ts";
+import * as View from "./View.ts";
 
 /**
  * Pushing to live reads. A platform that holds subscriptions on its objects
@@ -81,7 +81,7 @@ interface Item {
 const encode = (
   entry: View.Any | Aggregate.Any | DomainStream.Any,
   subscription: Subscription,
-  ref: Aggregate.Ref,
+  ref: unknown,
   items: ReadonlyArray<Item>,
   cursor: number,
 ): Effect.Effect<Push> =>
@@ -140,7 +140,7 @@ export const viewPush =
     entries: ReadonlyArray<ViewEntry>,
   ): Effect.Effect<Push> =>
     Effect.suspend(() => {
-      const ref = { aggregate: view.definition.key.aggregateName, id: key } as Aggregate.Ref;
+      const ref = View.refOf(view.definition.key, key);
       if (subscription.mode === "watch") {
         if (snapshot.version <= subscription.cursor) {
           return Effect.succeed({ messages: [], subscription, done: false });

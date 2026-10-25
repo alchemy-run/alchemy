@@ -52,7 +52,7 @@ export class Internals extends Context.Service<
     /** The client of the aggregate that handles each command, by command tag. */
     readonly commands: ReadonlyMap<string, Aggregate.ClientImpl>;
     /** Each view's read API, by view name. */
-    readonly viewHosts: ReadonlyMap<string, View.Host<unknown, Aggregate.Any, unknown>>;
+    readonly viewHosts: ReadonlyMap<string, View.Host<unknown, View.KeySource, unknown>>;
     /** Each stream's API, by stream name. */
     readonly streamHosts: ReadonlyMap<string, DomainStream.Host<Aggregate.Any, unknown>>;
   }
@@ -308,7 +308,7 @@ const build = <A, E, R>(
       hosts = Context.add(hosts, aggregate, client);
       for (const command of aggregate.definition.commands) commands.set(command.tag, client);
     }
-    const viewHosts = new Map<string, View.Host<unknown, Aggregate.Any, unknown>>();
+    const viewHosts = new Map<string, View.Host<unknown, View.KeySource, unknown>>();
     for (const view of definitions.views) {
       const host = viewHost(kernel, view, viewStores.get(view.viewName)!);
       viewHosts.set(view.viewName, host);
@@ -504,9 +504,9 @@ const viewHost = (
   kernel: Kernel.Kernel,
   view: View.Any,
   store: ViewStore,
-): View.Host<unknown, Aggregate.Any, unknown> => {
-  const watch = (key: Aggregate.Ref, options?: View.WatchOptions<unknown>) =>
-    store.changes(key.id).pipe(
+): View.Host<unknown, View.KeySource, unknown> => {
+  const watch = (key: View.RefOf<View.KeySource>, options?: View.WatchOptions<unknown>) =>
+    store.changes(Aggregate.targetId(key)).pipe(
       Stream.map((snapshot) =>
         Option.filter(decodeSnapshot(kernel, view, snapshot), (state) =>
           matches(options?.where, state),
@@ -520,12 +520,20 @@ const viewHost = (
     );
   const watchEach = <P, E, R>(
     parent: Stream.Stream<P, E, R>,
-    keysOf: (parent: P) => ReadonlyArray<Aggregate.Ref>,
+    keysOf: (parent: P) => ReadonlyArray<View.RefOf<View.KeySource>>,
     options?: View.WatchOptions<unknown>,
-  ): Stream.Stream<readonly [P, ReadonlyArray<readonly [Aggregate.Ref, unknown]>], E, R> =>
+  ): Stream.Stream<
+    readonly [P, ReadonlyArray<readonly [View.RefOf<View.KeySource>, unknown]>],
+    E,
+    R
+  > =>
     parent.pipe(
       Stream.switchMap(
-        (p): Stream.Stream<readonly [P, ReadonlyArray<readonly [Aggregate.Ref, unknown]>]> => {
+        (
+          p,
+        ): Stream.Stream<
+          readonly [P, ReadonlyArray<readonly [View.RefOf<View.KeySource>, unknown]>]
+        > => {
           const keys = keysOf(p);
           if (keys.length === 0) return Stream.succeed([p, []]);
           return Stream.zipLatestAll(
@@ -546,7 +554,7 @@ const viewHost = (
     );
   return {
     query: (key, options) => {
-      const read = store.read(key.id);
+      const read = store.read(Aggregate.targetId(key));
       const atLeast = options?.atLeast;
       if (!atLeast)
         return read.pipe(Effect.map((snapshot) => decodeSnapshot(kernel, view, snapshot)));
@@ -567,7 +575,7 @@ const viewHost = (
           () =>
             new View.ConsistencyTimeout({
               view: view.viewName,
-              key: key.id,
+              key: Aggregate.targetId(key),
               stream: atLeast.stream,
               version: atLeast.version,
             }),
@@ -583,18 +591,20 @@ const viewHost = (
         Effect.flatMap((result) =>
           Option.isSome(result) && Option.isSome(result.value)
             ? Effect.succeed(result.value.value)
-            : Effect.fail(new View.WaitTimeout({ view: view.viewName, key: key.id })),
+            : Effect.fail(
+                new View.WaitTimeout({ view: view.viewName, key: Aggregate.targetId(key) }),
+              ),
         ),
       ),
     watch,
     watchEach,
     events: (key, options) =>
-      store.tail(key.id, options?.after ? Number(options.after) : 0).pipe(
+      store.tail(Aggregate.targetId(key), options?.after ? Number(options.after) : 0).pipe(
         Stream.map((entry) => kernel.decodeViewEntry(view, entry)),
         Stream.filter((entry) => matches(options?.where, entry.event)),
       ),
     list: (key, options) =>
-      store.list(key.id).pipe(
+      store.list(Aggregate.targetId(key)).pipe(
         Effect.map((stored) => {
           const desc = options?.order === "desc";
           const after = options?.after === undefined ? undefined : Number(options.after);

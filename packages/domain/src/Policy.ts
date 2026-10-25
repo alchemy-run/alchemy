@@ -14,17 +14,17 @@ export type SourcesOf<F> = F extends ReadonlyArray<infer S> ? S : F;
 /**
  * What a policy receives for each event it subscribes to.
  */
-export interface Trigger<F, E, Key extends Aggregate.Any = View.SourceKey<SourcesOf<F>>> {
+export interface Trigger<F, E, Key extends View.KeySource = View.SourceKey<SourcesOf<F>>> {
   /** The key the event was routed to: the source instance, unless the policy declares `key`. */
-  readonly key: Aggregate.Ref<Key>;
+  readonly key: View.RefOf<Key>;
   /** The route named in `keyOf` that brought it here, if any. */
   readonly route: string | undefined;
-  /** The aggregate or view instance the event came from. */
-  readonly source: Aggregate.Ref<View.SourceKey<SourcesOf<F>>>;
+  /** The aggregate or view instance the event came from (a view key's value for a Schema-keyed view). */
+  readonly source: View.RefOf<View.SourceKey<SourcesOf<F>>>;
   /** The event. */
   readonly event: E;
   /** The event's envelope. */
-  readonly envelope: Aggregate.Envelope<Aggregate.IdOf<View.SourceKey<SourcesOf<F>>>>;
+  readonly envelope: Aggregate.Envelope<View.IdOf<View.SourceKey<SourcesOf<F>>>>;
   /** For a view source: the view's state after the event. */
   readonly state: View.SourceState<SourcesOf<F>>;
 }
@@ -222,7 +222,7 @@ export interface PolicyClass<
   Name extends string,
   F extends From,
   On extends ReadonlyArray<Event.Any>,
-  Key extends Aggregate.Any,
+  Key extends View.KeySource,
 > extends Context.ServiceClass<
   PolicyKey<Name>,
   string,
