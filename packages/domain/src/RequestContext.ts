@@ -2,17 +2,28 @@ import * as EffectContext from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import { DefinitionError } from "./DefinitionError.ts";
 
 /** The JSON form of a request's context, by service key. */
 export type Json = Readonly<Record<string, unknown>>;
 
 interface Registered {
   readonly tag: EffectContext.Key<unknown, unknown>;
+  readonly codec: Schema.Codec<unknown, unknown>;
   readonly encode: (value: unknown) => unknown;
   readonly decode: (json: unknown) => unknown;
 }
 
 const registry = new Map<string, Registered>();
+
+/** The JSON shape a codec puts on the wire, to compare two declarations. */
+const wireShape = (codec: Schema.Codec<unknown, unknown>): string | undefined => {
+  try {
+    return JSON.stringify(Schema.toJsonSchemaDocument(codec));
+  } catch {
+    return undefined;
+  }
+};
 
 /**
  * The class type returned by {@link make}.
@@ -32,6 +43,10 @@ export interface RequestContextClass<
  * and a read carries it to `validate`. Both may run elsewhere, such as in a
  * Durable Object, so it has a schema. Policies provide it themselves when
  * they send commands.
+ *
+ * The key names the value on the wire, so it must be unique: a second request
+ * context with the same key and a different schema throws a
+ * `DefinitionError`.
  *
  * ### Declaring a request context
  * **Example:** The current actor
@@ -72,8 +87,21 @@ export const make =
     const codec = Schema.toCodecJson(
       schema as unknown as Schema.Codec<unknown, unknown>,
     ) as Schema.Codec<unknown, unknown>;
+    // The same declaration may run twice (a module evaluated again on hot
+    // reload). Another context under the same key would take over how the
+    // first one travels, so it is refused.
+    const existing = registry.get(key);
+    if (existing) {
+      const shape = wireShape(codec);
+      if (shape === undefined || shape !== wireShape(existing.codec)) {
+        throw new DefinitionError(
+          `Two request contexts use the key '${key}' with different schemas: give each its own key`,
+        );
+      }
+    }
     registry.set(key, {
       tag: Tag as unknown as EffectContext.Key<unknown, unknown>,
+      codec,
       encode: Schema.encodeUnknownSync(codec),
       decode: Schema.decodeUnknownSync(codec),
     });

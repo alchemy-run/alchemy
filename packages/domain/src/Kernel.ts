@@ -1,6 +1,5 @@
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
-import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -8,6 +7,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
+import { DefinitionError } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
 import type {
   Accepted,
@@ -65,17 +65,8 @@ export interface InputMetaValue {
   appends: number;
 }
 
-/**
- * A domain definition error (duplicate tag, missing `keyOf`, …), raised while
- * the kernel is built.
- */
-export class DefinitionError extends Data.TaggedError("DefinitionError")<{
-  readonly message: string;
-}> {
-  constructor(message: string) {
-    super({ message });
-  }
-}
+/** A problem in the definitions, raised while the kernel is built. */
+export { DefinitionError };
 
 interface JsonCodec {
   readonly encode: (value: unknown) => Json;

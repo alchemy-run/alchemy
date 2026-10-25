@@ -44,7 +44,7 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
 }) {}
 ```
 
-A rejection with no fields: `class NotOpen extends Domain.Rejection("NotOpen") {}` in `NotOpen.rejection.ts`. Events and rejections take `attributes` as a third argument: `Domain.Event("MoneyWithdrawn", { ... }, { attributes: (e) => ({ ... }) })`. Nothing from a payload is traced unless `attributes` returns it, and `Redacted` values record as `<redacted>`.
+`target` and `commandId` are taken by the payload a client sends, so `input` can't use them. A rejection with no fields: `class NotOpen extends Domain.Rejection("NotOpen") {}` in `NotOpen.rejection.ts`. Events and rejections take `attributes` as a third argument: `Domain.Event("MoneyWithdrawn", { ... }, { attributes: (e) => ({ ... }) })`. Nothing from a payload is traced unless `attributes` returns it, and `Redacted` values record as `<redacted>`.
 
 ## Aggregate
 
@@ -81,7 +81,7 @@ export class Account extends Domain.Aggregate("Account", {
 ## Request context and middleware
 
 ```ts
-// CurrentActor.context.ts
+// CurrentActor.context.ts: the key must be unique across every request context
 export class CurrentActor extends Domain.RequestContext<CurrentActor>()("Bank/CurrentActor", Actor) {}
 
 // Session.middleware.ts (domain): the declaration, its error, and a client helper

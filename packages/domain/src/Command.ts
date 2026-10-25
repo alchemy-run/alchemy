@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
+import { DefinitionError } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
 import type { Data, Fields } from "./Event.ts";
 import * as Middleware from "./Middleware.ts";
@@ -44,6 +45,22 @@ export type ContextOf<C extends Any> = Middleware.Provides<C["middleware"]>;
 export type ReplySchema<Reply extends Fields | undefined> = Reply extends Fields
   ? Schema.Struct<Reply>
   : undefined;
+
+/** The payload fields a command's input may not declare: the payload uses them itself. */
+export type ReservedField = "target" | "commandId";
+
+const reserved: Record<ReservedField, string> = {
+  target: "its target id",
+  commandId: "its idempotency key",
+};
+
+/**
+ * An input with no {@link ReservedField}: each reserved field it declares is
+ * `never`, so declaring one is a type error at that field.
+ */
+export type Input<F extends Fields> = F & {
+  readonly [K in Extract<keyof F, ReservedField>]: never;
+};
 
 /** What a client sends: the target, an optional idempotency key, and the input. */
 export type PayloadFields<Target extends TargetSchema, F extends Fields> = F & {
@@ -205,8 +222,8 @@ export const make = <
   options: {
     /** The id schema of the aggregate this command addresses. */
     readonly target: Target;
-    /** The command's fields. */
-    readonly input?: F;
+    /** The command's fields. `target` and `commandId` are taken by its payload. */
+    readonly input?: Input<F>;
     /**
      * Middleware that guards the command when an Api exposes it, in order.
      * What it provides is what `decide` may read.
@@ -235,6 +252,13 @@ export const make = <
   Ms,
   Middleware.Apply<CommandRpc<Tag, Target, F, Rejects, ReplySchema<Reply>>, Ms>
 > => {
+  for (const field of Object.keys(options.input ?? {})) {
+    if (field in reserved) {
+      throw new DefinitionError(
+        `${tag} declares the input field '${field}', which the command's payload uses for ${reserved[field as ReservedField]}`,
+      );
+    }
+  }
   const rejects = options.rejects ?? [];
   const rpc = Rpc.make(tag, {
     payload: {

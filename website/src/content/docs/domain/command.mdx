@@ -74,6 +74,8 @@ WithdrawMoney: (s, cmd) =>
 
 The schemas also decode the command when it arrives from a client, so `decide` only ever sees well-formed input. A command with no input, like a request to close an account, leaves `input` out.
 
+Two names are taken. A client sends `target` and `commandId` in the same payload as the input, so an input field with either name is a type error, and declaring the command throws a `DefinitionError`.
+
 ## Declare every outcome
 
 A command can end in one of two ways: the aggregate records events, or it refuses. `events` lists the events the command may record, and `rejects` lists the refusals it may return.

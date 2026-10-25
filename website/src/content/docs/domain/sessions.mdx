@@ -25,6 +25,8 @@ export class CurrentActor extends Domain.RequestContext<CurrentActor>()(
 ) {}
 ```
 
+The key (`"Bank/CurrentActor"`) names the value when it travels with a request, so each request context needs its own. A second request context with the same key and a different schema throws a `DefinitionError` when it is declared.
+
 ```typescript
 // packages/domain/src/Actor.ts
 import * as Schema from "effect/Schema";
