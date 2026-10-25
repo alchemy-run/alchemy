@@ -9961,20 +9961,25 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
       crash: Set<string>;
       /** Replace even when the name is unchanged, re-claiming the same identity. */
       replaceSameName: boolean;
-      /** Like an explicitly named Container application: nothing existing is provably owned. */
+      /**
+       * Like an explicitly named Container application: only the generation
+       * being replaced is provably owned.
+       */
       unprovable: boolean;
-      /** The `tag` each reconciled name carries. */
-      tags: Map<string, string>;
     }
   >()("CyclicPrecreateObservationCloud") {}
-  const ownership = (cloud: Cloud["Service"], id: string, name: string) => {
+  const ownership = (
+    cloud: Cloud["Service"],
+    id: string,
+    name: string,
+    previous: { name: string } | undefined,
+  ) => {
     const owner = cloud.owners.get(name);
     if (owner === undefined) return undefined;
-    const observed = { name, tag: cloud.tags.get(name) };
-    return owner === id && !cloud.unprovable ? observed : Unowned(observed);
+    const owned = owner === id && (!cloud.unprovable || previous?.name === name);
+    return owned ? { name } : Unowned({ name });
   };
   const providers = Provider.succeed(Watched, {
-    // `observe`/`read` report every stable, so a previous generation is recognized.
     stables: ["name", "tag"],
     diff: Effect.fn(function* ({ olds, news }) {
       const cloud = yield* Cloud;
@@ -9982,16 +9987,16 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
       if ("name" in news && news.name === olds.name && !cloud.replaceSameName) return undefined;
       return { action: "replace" as const, deleteFirst: cloud.deleteFirst };
     }),
-    observe: Effect.fn(function* ({ id, news }) {
+    observe: Effect.fn(function* ({ id, news, previous }) {
       const cloud = yield* Cloud;
       cloud.events.push(`observe ${news.name}`);
-      return ownership(cloud, id, news.name);
+      return ownership(cloud, id, news.name, previous);
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const cloud = yield* Cloud;
       const name = output?.name ?? olds?.name;
       cloud.events.push(`read ${name}`);
-      return name === undefined ? undefined : ownership(cloud, id, name);
+      return name === undefined ? undefined : ownership(cloud, id, name, previous);
     }),
     precreate: Effect.fn(function* ({ id, news }) {
       const cloud = yield* Cloud;
@@ -10004,7 +10009,6 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
       cloud.events.push(`reconcile ${news.name}`);
       cloud.owners.set(news.name, id);
       if (cloud.crash.has(news.name)) return yield* new ResourceFailure();
-      cloud.tags.set(news.name, news.tag);
       return { name: news.name, tag: news.tag };
     }),
     delete: Effect.fn(function* ({ output }) {
@@ -10023,7 +10027,6 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
           crash: new Set<string>(),
           replaceSameName: false,
           unprovable: false,
-          tags: new Map<string, string>(),
         })),
       ),
     ),
@@ -10054,7 +10057,6 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
     cloud.deleteFirst = false;
     cloud.replaceSameName = false;
     cloud.unprovable = false;
-    cloud.tags.clear();
     cloud.events.length = 0;
     return cloud;
   });
@@ -10242,8 +10244,8 @@ describe("cyclic precreate observation", { tags: ["unit", "local"] }, () => {
       }),
   );
 
-  // A provider that cannot prove ownership of a name reports our own previous
-  // generation as `Unowned`. Matching its stables shows it is ours.
+  // A provider that cannot prove ownership of a name by metadata recognizes our
+  // own previous generation from the `previous` attributes the engine passes.
   for (const [label, opts] of [
     ["observed in a cycle", {}],
     ["read once resolved", { resolved: true }],
@@ -10680,7 +10682,7 @@ describe("scoped identity admission", { tags: ["unit", "local"] }, () => {
     }),
   );
 
-  // ── #2542: a partial observation cannot prove a previous generation ──
+  // ── #2542: the engine never infers a previous generation from attributes ──
 
   test.provider(
     "a shared name alone does not make a foreign target the previous generation",

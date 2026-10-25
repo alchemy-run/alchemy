@@ -267,9 +267,19 @@ say nothing exists there. The engine checks the resolved identity before
 since it can't check the target before deleting the old resource.
 `precreate` must not write to an identity it can't resolve.
 
-To recognize the resource's own previous generation, include every one
-of your `stables` in the attributes. A partial match, like a shared
-name without the scoped id, doesn't count.
+During a replacement, `observe` and `read` also get `previous`, the
+attributes of the generation being replaced. A provider that can't tell
+its own resource apart by tags, like an explicitly named Container
+application, reports that generation as owned:
+
+```typescript
+read: Effect.fn(function* ({ olds, previous }) {
+  const live = yield* lookup(olds.name);
+  if (!live) return undefined;
+  const attrs = { productId: live.id, name: live.name };
+  return live.id === previous?.productId ? attrs : Unowned(attrs);
+}),
+```
 
 ### `list`
 

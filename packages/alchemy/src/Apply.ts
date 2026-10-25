@@ -172,27 +172,8 @@ const instrumentLifecycle =
       }),
     );
 
-/**
- * Whether `observed` is this resource's previous generation: it reports every
- * stable property that generation recorded, all matching. A partial
- * observation proves nothing — a shared name without the scoped id may be a
- * different resource. A provider that cannot prove who owns a name it does
- * not tag — an explicitly named Container application — reports even our own
- * resource as `Unowned`.
- */
-const isPreviousGeneration = (
-  observed: { readonly [key: string]: any },
-  stables: readonly string[] | undefined,
-  previous: { attr?: any } | undefined,
-): boolean => {
-  const attr = previous?.attr;
-  if (attr === undefined) return false;
-  const keys = (stables ?? []).filter((key) => attr[key] !== undefined);
-  return keys.length > 0 && keys.every((key) => observed[key] === attr[key]);
-};
-
 type AdmissionNode = {
-  provider: Pick<ProviderService<any>, "observe" | "read" | "stables">;
+  provider: Pick<ProviderService<any>, "observe" | "read">;
   props: any;
   deferredAdoption?: { adopt: boolean };
   resource: { Type: string };
@@ -211,21 +192,16 @@ const observeBeforePrecreate = Effect.fn(function* (
   fqn: string,
   logicalId: string,
   instanceId: string,
-  previous?: { attr?: any },
+  previous?: any,
 ) {
   if (node.provider.observe === undefined || node.deferredAdoption === undefined) {
     return "unchecked" as const;
   }
   const observed = yield* node.provider
-    .observe({ id: logicalId, fqn, instanceId, news: node.props })
+    .observe({ id: logicalId, fqn, instanceId, news: node.props, previous })
     .pipe(instrumentLifecycle("observe", fqn, node.resource.Type, logicalId, instanceId));
   if (observed === Unresolved) return "unresolved" as const;
-  if (
-    observed !== undefined &&
-    Unowned.is(observed) &&
-    !node.deferredAdoption.adopt &&
-    !isPreviousGeneration(observed, node.provider.stables, previous)
-  ) {
+  if (observed !== undefined && Unowned.is(observed) && !node.deferredAdoption.adopt) {
     return yield* new OwnedBySomeoneElse({
       message:
         `Cannot pre-create resource '${fqn}' (${node.resource.Type}): ` +
@@ -246,7 +222,8 @@ class UnresolvedObservation extends Data.TaggedError("UnresolvedObservation")<{
 
 /**
  * Reports what exists at the resolved identity reconcile will claim: `read`
- * when the provider implements it, `observe` otherwise.
+ * when the provider implements it, `observe` otherwise. A replacement passes
+ * its `previous` generation's attributes, so the provider can recognize it.
  */
 const observeResolved = Effect.fn(function* (
   node: AdmissionNode,
@@ -254,10 +231,11 @@ const observeResolved = Effect.fn(function* (
   fqn: string,
   logicalId: string,
   instanceId: string,
+  previous?: any,
 ) {
   if (node.provider.read) {
     return yield* node.provider
-      .read({ id: logicalId, fqn, instanceId, olds: news, output: undefined })
+      .read({ id: logicalId, fqn, instanceId, olds: news, output: undefined, previous })
       .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
   }
   const observed = yield* node.provider.observe!({
@@ -265,6 +243,7 @@ const observeResolved = Effect.fn(function* (
     fqn,
     instanceId,
     news,
+    previous,
   }).pipe(instrumentLifecycle("observe", fqn, node.resource.Type, logicalId, instanceId));
   if (observed === Unresolved) {
     return yield* Effect.die(
@@ -1327,13 +1306,16 @@ const executeNode = (
       let admitted = attr !== undefined || node.deferredAdoption === undefined;
       const admit = Effect.fn(function* (props: Record<string, any>) {
         admitted = true;
-        const observed = yield* observeResolved(node, props, fqn, logicalId, instanceId);
+        const observed = yield* observeResolved(
+          node,
+          props,
+          fqn,
+          logicalId,
+          instanceId,
+          replState.old?.attr,
+        );
         if (observed === undefined) return;
-        if (
-          Unowned.is(observed) &&
-          !node.deferredAdoption?.adopt &&
-          !isPreviousGeneration(observed, node.provider.stables, replState.old)
-        ) {
+        if (Unowned.is(observed) && !node.deferredAdoption?.adopt) {
           return yield* new OwnedBySomeoneElse({
             message:
               `Cannot replace resource '${fqn}' (${node.resource.Type}): ` +
@@ -1364,7 +1346,7 @@ const executeNode = (
           fqn,
           logicalId,
           instanceId,
-          replState.old,
+          replState.old?.attr,
         );
         admitted = observation !== "unresolved";
         if (!admitted && node.deleteFirst && !node.deferredAdoption?.adopt) {

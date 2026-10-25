@@ -269,6 +269,14 @@ export interface ProviderService<
     olds: Props<Res>;
     // what is the ARN?
     output: Res["Attributes"] | undefined; // current state -> synced state
+    /**
+     * When the engine checks the identity a replacement will claim, the
+     * attributes of the generation it replaces. A provider that can't tell
+     * our resource from a foreign one by ownership metadata alone (e.g. an
+     * explicitly named resource without tags) reports a resource that is
+     * this previous generation as owned, not `Unowned`.
+     */
+    previous?: Res["Attributes"];
   }): Effect.Effect<Res["Attributes"] | undefined, any, ReadReq>;
   /**
    * Properties that are always stable across any update.
@@ -305,9 +313,9 @@ export interface ProviderService<
    * `Unresolved` when the identity depends on props that have not resolved
    * yet: the engine then checks the resolved identity before `reconcile`.
    *
-   * The attributes may be partial. The engine recognizes an `Unowned`
-   * previous generation of this resource only when they include every
-   * {@link stables} attribute that generation recorded, all matching.
+   * The attributes may be partial. During a replacement, `previous` holds
+   * the attributes of the generation being replaced: report a resource that
+   * is that generation as owned. The engine compares no attributes itself.
    *
    * Without {@link read}, the engine also calls `observe` with resolved props
    * to check an identity before `reconcile` claims it.
@@ -324,6 +332,8 @@ export interface ProviderService<
     fqn: string;
     news: Props<Res>;
     instanceId: string;
+    /** During a replacement, the attributes of the generation being replaced. */
+    previous?: Res["Attributes"];
   }): Effect.Effect<Partial<Res["Attributes"]> | Unresolved | undefined, any, PrecreateReq>;
   precreate?(input: {
     id: string;
