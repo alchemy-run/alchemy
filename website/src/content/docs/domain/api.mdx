@@ -276,4 +276,70 @@ To give an agent the Api's calls as tools, in the app or over MCP, see [Agents a
 
 To serve chosen calls as a plain HTTP JSON API with an OpenAPI document, see [Plain HTTP and OpenAPI](/domain/http-api).
 
+## Call it from a terminal
+
+`toCli` from `@alchemy.run/domain/Cli` builds an [Effect CLI](https://effect.website) command from an Api. The command is a client of the deployed Api over its HTTP protocol, so a person or an agent in a terminal can run every call that answers once. It's a separate module: an app that builds no CLI never loads `effect/cli`.
+
+```typescript title="packages/cli/src/bank.ts"
+import * as Domain from "@alchemy.run/domain";
+import { toCli } from "@alchemy.run/domain/Cli";
+import { BunRuntime, BunServices } from "@effect/platform-bun";
+import * as Command from "effect/cli/Command";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Redacted from "effect/Redacted";
+import { CustomerApi } from "@acme/domain/CustomerApi.api";
+
+const bank = toCli(CustomerApi, {
+  name: "bank",
+  // The session middleware runs on the server; the CLI sends its token.
+  headers: Config.redacted("BANK_TOKEN").pipe(
+    Effect.map((token) => ({ authorization: `Bearer ${Redacted.value(token)}` })),
+  ),
+});
+
+Command.run(bank, { version: "1.0.0" }).pipe(
+  Effect.provide(Domain.protocolHttp("https://bank.example.com/api")),
+  Effect.provide(FetchHttpClient.layer),
+  Effect.provide(BunServices.layer),
+  BunRuntime.runMain,
+);
+```
+
+```sh
+$ bank deposit-money --target a-1 --amount 1000
+{
+  "reply": { "balance": 1000 },
+  "stream": "Account/a-1",
+  "version": 1
+}
+$ bank account-summary get --key a-1
+{ "balance": 1000 }
+$ bank withdraw-money --target a-1 --amount 5000   # stderr, exit code 1
+{ "_tag": "InsufficientFunds", "balance": 1000, "requested": 5000 }
+```
+
+The command tree comes from `Domain.Api.describe`, with these rules:
+
+| On the Api                              | On the command line                                                                                       |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| An entry                                | A subcommand, in kebab-case: `DepositMoney` is `deposit-money`, `AccountSummary` is `account-summary`.    |
+| A command                               | Runs as its subcommand.                                                                                   |
+| A view, a stream or an aggregate        | One subcommand per call: `get`, `peek` and `list`. `watch` and `events` stream, so the CLI leaves them out. |
+| A payload field                         | A flag, in kebab-case: `--target`, `--command-id`, `--key`.                                               |
+| A string, number, boolean or string literals | A typed flag: `--amount 1000`, `--order desc`, `--express`.                                          |
+| Any other field (a struct, an array, a date) | A flag that takes JSON: `--at-least '{"stream":"Account/a-1","version":1}'`. Text that isn't JSON is sent as a string. |
+| The whole input                         | `--json '{"target":"a-1","amount":1000}'`. Flags override its fields.                                      |
+
+The CLI decodes the input against the call's schema before it sends anything. Then:
+
+| Result                                         | Output                         | Exit code |
+| ---------------------------------------------- | ------------------------------ | --------- |
+| Success                                        | The result's wire JSON, on stdout | 0      |
+| A rejection, or an error of the call's middleware | Its wire JSON, on stderr (the run fails with `CallRejected`) | 1 |
+| Invalid input, or the Api can't be reached     | A message, on stderr (`CliError.UserError`) | 1   |
+
+`headers` takes fixed headers, or an Effect that makes them on each run. `toCli` throws when two entries or two fields get the same name, or when a field would take a flag the CLI reserves (`--json`, `--help`, `--version`, `--wizard`, `--completions`, `--log-level`).
+
 To test an Api end to end, including its middleware and every rejection, see [Testing an Api](/domain/testing-apis).

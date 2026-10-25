@@ -302,6 +302,8 @@ const BankMcp = DomainAi.toMcp(CustomerApi).pipe(
 
 `toHttpApi(CustomerApi, { include })` from `@alchemy.run/domain/Http` publishes the calls you list as a plain HTTP JSON API with an OpenAPI document. See [hosting.md](hosting.md#plain-http-and-openapi).
 
+`toCli(CustomerApi, { name: "bank", headers })` from `@alchemy.run/domain/Cli` is an Effect CLI `Command` that calls the deployed Api over HTTP (provide `Domain.protocolHttp(url)` and an `HttpClient`). Each entry is a kebab-case subcommand (`bank deposit-money`, `bank account-summary get`); each payload field is a kebab-case flag (`--target`, `--command-id`, `--key`); structs, arrays and dates take JSON, and `--json` takes the whole input. It prints the result's wire JSON on stdout. A rejection or a middleware error goes to stderr as wire JSON with exit code 1. `watch` and `events` are not commands. Pass a session's bearer token in `headers`; the middleware runs on the server.
+
 ## Model
 
 ```ts
