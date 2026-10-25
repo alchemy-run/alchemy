@@ -1176,6 +1176,34 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
                                             )}
                                         </g>
                                     )}
+                                    {/* Shown once Lambda has moved: the same cursor on
+                                        DynamoDB. The script places it on the box. */}
+                                    {t.modes && (
+                                        <g
+                                            class="dg-hint is-hidden"
+                                            data-hint-next
+                                            aria-hidden="true"
+                                        >
+                                            <g data-hint-at>
+                                                <text data-hint-text text-anchor="end">
+                                                    now me!
+                                                </text>
+                                                <g class="dg-hint__demo">
+                                                    <rect
+                                                        class="dg-hint__ghost"
+                                                        y="-15"
+                                                        height="30"
+                                                        rx="8"
+                                                    />
+                                                    <path
+                                                        class="dg-hint__cursor"
+                                                        transform="translate(2 -2)"
+                                                        d="M0 0 L0 17 L4.6 12.8 L7.6 19.6 L10.4 18.4 L7.4 11.6 L13 11.6 Z"
+                                                    />
+                                                </g>
+                                            </g>
+                                        </g>
+                                    )}
                                 </svg>
                             </div>
                         </figure>
@@ -1379,6 +1407,7 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
         };
 
         const hint = svg.querySelector<SVGGElement>("[data-hint]");
+        const hintNext = svg.querySelector<SVGGElement>("[data-hint-next]");
         const NET_Y = 85;
         const NAMES: Record<string, string> = {
             fn: "Lambda",
@@ -1402,6 +1431,42 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
             return modes.find(
                 (m) => laneOf("fn", m) === fn && laneOf("db", m) === db,
             )!;
+        };
+
+        // Once Lambda has moved, act out the same drag on DynamoDB, up or
+        // down depending on its lane. Gone for good once DynamoDB moves.
+        let nextState: "waiting" | "shown" | "done" = "waiting";
+        let nextTimer = 0;
+        const placeNext = () => {
+            if (!hintNext) return;
+            const i = boxes.findIndex((g) => g.dataset.drag === "db");
+            const s = current.slots[i]!;
+            const up = laneOf("db") === "c";
+            hintNext.querySelector<SVGGElement>("[data-hint-at]")!.style.transform =
+                `translate(${s.x}px, ${s.y}px)`;
+            const ghost = hintNext.querySelector("rect")!;
+            ghost.setAttribute("x", String(-s.w / 2));
+            ghost.setAttribute("width", String(s.w));
+            const text = hintNext.querySelector("[data-hint-text]")!;
+            text.setAttribute("x", String(-s.w / 2 - 14));
+            text.setAttribute("y", up ? "-66" : "76");
+            hintNext.classList.toggle("is-up", up);
+        };
+        const afterMove = (key: string) => {
+            if (!hintNext || nextState === "done") return;
+            clearTimeout(nextTimer);
+            if (key === "db") {
+                nextState = "done";
+                hintNext.classList.add("is-hidden");
+                return;
+            }
+            // Wait for the boxes to land, then show it on DynamoDB's new spot.
+            hintNext.classList.add("is-hidden");
+            nextTimer = window.setTimeout(() => {
+                placeNext();
+                nextState = "shown";
+                hintNext.classList.remove("is-hidden");
+            }, reduced ? 0 : MOVE_MS + 150);
         };
 
         const switchTo = (next: ModeData, from: ModeData) => {
@@ -1490,6 +1555,7 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
                 g.setPointerCapture(e.pointerId);
                 fig.classList.add("is-switching", "is-dragging");
                 hint?.classList.add("is-hidden");
+                if (key === "db") hintNext?.classList.add("is-hidden");
                 e.preventDefault();
             });
             g.addEventListener("pointermove", (e) => {
@@ -1511,7 +1577,11 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
                 drag = null;
                 g.classList.remove("is-over");
                 fig.classList.remove("is-dragging");
+                const before = current;
                 switchTo(target(key, s.y > NET_Y ? "c" : "m"), from);
+                if (current !== before) afterMove(key);
+                else if (key === "db" && nextState === "shown")
+                    hintNext?.classList.remove("is-hidden");
             };
             g.addEventListener("pointerup", drop);
             g.addEventListener("pointercancel", drop);
@@ -1519,6 +1589,7 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
                 if (e.key !== "Enter" && e.key !== " ") return;
                 e.preventDefault();
                 switchTo(target(key, laneOf(key) === "c" ? "m" : "c"), current);
+                afterMove(key);
             });
         }
         describe();
@@ -2168,6 +2239,9 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
         stroke-width: 1.4;
         stroke-linejoin: round;
     }
+    .dg-hint.is-up .dg-hint__demo {
+        animation-name: dg-hint-drag-up;
+    }
     .dg-hint.is-hidden .dg-hint__demo,
     .dg-hint.is-hidden .dg-hint__ghost {
         animation: none;
@@ -2196,6 +2270,32 @@ const ALCHEMY_MODE_DATA = ALCHEMY_MODES.map((m) => {
         100% {
             opacity: 0;
             transform: translate(0, 70px) scale(1);
+        }
+    }
+    @keyframes dg-hint-drag-up {
+        0% {
+            opacity: 0;
+            transform: translate(14px, 10px);
+        }
+        12% {
+            opacity: 1;
+            transform: translate(0, 0) scale(1);
+        }
+        20% {
+            transform: translate(0, 0) scale(0.88);
+        }
+        58% {
+            opacity: 1;
+            transform: translate(0, -70px) scale(0.88);
+        }
+        66% {
+            opacity: 1;
+            transform: translate(0, -70px) scale(1);
+        }
+        80%,
+        100% {
+            opacity: 0;
+            transform: translate(0, -70px) scale(1);
         }
     }
     @keyframes dg-hint-ghost {
