@@ -8,14 +8,15 @@ import { Statement } from "./Account/Statement.view.ts";
 import { WithdrawMoney } from "./Account/WithdrawMoney.command.ts";
 import { CustomerDashboard } from "./Customer/CustomerDashboard.view.ts";
 import { RegisterCustomer } from "./Customer/RegisterCustomer.command.ts";
+import { AccountLedger } from "./Ledger/AccountLedger.query.ts";
 import { AccountTransfers } from "./Transfer/AccountTransfers.view.ts";
 import { RequestTransfer } from "./Transfer/RequestTransfer.command.ts";
 import { TransferStatus } from "./Transfer/TransferStatus.view.ts";
 
 /**
- * What the customer app reaches: commands to change things, and the Account
- * aggregate and views to read and watch. Each entry authorizes itself,
- * through its `decide` or `validate`.
+ * What the customer app reaches: commands to change things, the Account
+ * aggregate and views to read and watch, and the ledger to page through.
+ * Each entry authorizes itself, through its `decide` or `validate`.
  */
 export class CustomerApi extends Domain.Api(
   "CustomerApi",
@@ -31,4 +32,5 @@ export class CustomerApi extends Domain.Api(
   Statement,
   AccountTransfers,
   TransferStatus,
+  AccountLedger,
 ) {}
