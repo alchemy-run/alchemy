@@ -112,6 +112,15 @@ The statuses are `NotStarted`, `Running`, `Completed`, `Rejected`, `Interrupted`
 
 For every command, cover the happy path, each rejection, and each authorization case (owner, other customer, agent). For every policy, cover the reaction, the reaction when its command is rejected, and the reaction when an external call fails with its declared error. For every saga, cover completion, each failure with its compensation, and each wait (signal, timeout via `clock`). For every view, check its state after the events it folds.
 
+`Story.coverage(Model)` reports what the stories in this process ran. `missing()` lists each part of the model no story ran, as `command C`, `rejection C/R`, `reaction Policy/Event`, `view V`, `projection J`, `saga S` and `call System.op` lines. Check it after the stories, in the same process, such as in an `afterAll` of the file that runs them:
+
+```ts
+afterAll(() => {
+  const missing = Story.coverage(Bank).missing();
+  expect(missing.filter((line) => /^(command|rejection) /.test(line))).toEqual([]);
+});
+```
+
 ## Api tests: the client's view
 
 In the server package, host the model in memory with the real middleware, and drive it through the Api client. This checks authentication, `validate`, and live reads.

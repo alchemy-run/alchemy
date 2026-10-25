@@ -23,6 +23,8 @@ export interface Host {
   readonly failed: (cause: unknown) => void;
   /** Record a run that ended with a defect, so a story can report it. */
   readonly died: (workflow: string, executionId: string, defect: unknown) => void;
+  /** Record a new execution, so a story can report which sagas ran. */
+  readonly started?: (workflow: string, executionId: string) => void;
 }
 
 type Execute = (
@@ -127,6 +129,7 @@ export const make = (host: Host): WorkflowEngine.WorkflowEngine["Service"] => {
             result: undefined,
           };
           executions.set(key, execution);
+          host.started?.(workflow._tag, options.executionId);
           yield* wake(key);
         }
         if (options.discard) return undefined;

@@ -268,6 +268,20 @@ describe("Domain Projection", () => {
     ).pipe(Effect.provide(Ledger.memory)),
   );
 
+  it.effect("coverage counts the projections a story fed", () =>
+    story(
+      Story.when(sam, new Deposit({ amount: 50 })),
+      Story.then(sam, new Deposited({ amount: 50, balance: 50 })),
+    ).pipe(
+      Effect.map(() =>
+        expect(Story.coverage(Wallets).covered()).toEqual(
+          expect.arrayContaining(["projection WalletLedger", "projection WalletCards"]),
+        ),
+      ),
+      Effect.provide(Ledger.memory),
+    ),
+  );
+
   it.effect("a keyed policy runs per route, over two sources", () =>
     story(
       Story.when(sam, new Deposit({ amount: 150 })),

@@ -171,6 +171,20 @@ The story records every real call. `call` checks what a call was sent, and `retu
 
 A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it to an ISO string, epoch milliseconds or a `DateTime`. Commands are stamped with it, so time-based rules like a daily limit are easy to test, and scheduled commands fire when it passes their time. See [Deadlines](/domain/deadlines).
 
+## Find what no story covers
+
+`Story.coverage` collects what every story of a model ran, in this process: the commands each aggregate handled and the rejections it returned, the events each policy reacted to, the views and projections that received events, the sagas that started, and the external system calls. `missing()` lists what the model declares and no story ran:
+
+```typescript title="packages/domain/test/coverage.test.ts"
+afterAll(() => {
+  expect(Story.coverage(Bank).missing()).toEqual([]);
+});
+```
+
+Each line names one part, such as `command WithdrawMoney`, `rejection WithdrawMoney/InsufficientFunds`, `reaction FraudReview/MoneyWithdrawn`, `view AccountSummary`, `saga ExecuteTransfer` or `call FraudCheck.score`. Filter the lines to require only some kinds. Commands that policies and sagas send count too. The calls listed are every operation of each system a story stubbed or called.
+
+The registry lives in memory and fills as stories run, so check it after the stories it should see, in the same process: an `afterAll` in the file that runs them works with any runner.
+
 ## Trust a passing story
 
 A story fails if a command is rejected and no `rejected` step checks it, if a call is answered or asserted before a `call` step checks it, if a stubbed call is left waiting at the end, or if no step asserts how a real call ended. A passing story has accounted for every outcome.

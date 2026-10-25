@@ -48,6 +48,12 @@ export interface Control {
   readonly idle: Effect.Effect<boolean>;
   /** Mark the current policy run as suspended while `effect` runs (story external systems). */
   readonly suspended: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
+  /**
+   * What ran, in order (story coverage): each command an aggregate handled
+   * with the rejection's tag if it was rejected, each delivery queued for a
+   * view, policy or projection, and each saga execution started.
+   */
+  readonly activity: ReadonlyArray<Activity>;
   /** Defects raised by policy and projection runs. */
   readonly failures: ReadonlyArray<unknown>;
   /** Saga runs that ended with a defect, in the order they died. */
@@ -57,6 +63,24 @@ export interface Control {
     readonly defect: unknown;
   }>;
 }
+
+/** One entry of {@link Control.activity}. */
+export type Activity =
+  | {
+      readonly _tag: "Command";
+      readonly aggregate: string;
+      readonly command: string;
+      readonly rejection: string | undefined;
+    }
+  | {
+      readonly _tag: "Delivery";
+      readonly kind: Delivery["target"]["kind"];
+      readonly name: string;
+      readonly event: string;
+      /** Seeded history (story `given`), which policies ignore. */
+      readonly history: boolean;
+    }
+  | { readonly _tag: "Saga"; readonly saga: string };
 
 /**
  * Build an in-memory platform and its control surface.
@@ -77,6 +101,8 @@ export const make = (
   const deaths: Array<{ saga: string; executionId: string; defect: unknown }> = [];
   // Scheduled commands by `aggregate/id/commandId`, so rescheduling replaces.
   const timers = new Map<string, { readonly at: number; readonly fire: Effect.Effect<void> }>();
+  // What ran, for story coverage.
+  const activity: Array<Activity> = [];
 
   /** Send every scheduled command that is due on the platform's clock. */
   const fireDue: Effect.Effect<void> = Effect.suspend(() => {
@@ -108,7 +134,18 @@ export const make = (
   const enqueue = (
     deliveries: ReadonlyArray<Delivery>,
     deliver: (d: Delivery) => Effect.Effect<void>,
-  ) => enqueueWork(deliveries.map((delivery) => deliver(delivery)));
+  ) =>
+    Effect.suspend(() => {
+      for (const { target, tag, history } of deliveries)
+        activity.push({
+          _tag: "Delivery",
+          kind: target.kind,
+          name: target.name,
+          event: tag,
+          history: history === true,
+        });
+      return enqueueWork(deliveries.map((delivery) => deliver(delivery)));
+    });
 
   /** Fire `fire` at `at`: from `drain` as a story's clock moves, otherwise in real time. */
   const timer = (key: string, at: number, fire: Effect.Effect<void>) =>
@@ -136,6 +173,7 @@ export const make = (
     timer,
     failed: (cause) => void failures.push(cause),
     died: (saga, executionId, defect) => void deaths.push({ saga, executionId, defect }),
+    started: (saga) => void activity.push({ _tag: "Saga", saga }),
   });
 
   const control: Control = {
@@ -146,6 +184,7 @@ export const make = (
         suspended++;
         return effect.pipe(Effect.ensuring(Effect.sync(() => suspended--)));
       }),
+    activity,
     failures,
     deaths,
   };
@@ -204,6 +243,15 @@ export const make = (
                 correlationId: meta.correlationId,
                 trace: meta.trace,
                 link: meta.link,
+              });
+              activity.push({
+                _tag: "Command",
+                aggregate: kit.name,
+                command: (command as { readonly _tag: string })._tag,
+                rejection:
+                  result._tag === "Rejected"
+                    ? (result.rejection as { readonly _tag: string })._tag
+                    : undefined,
               });
               if (result._tag === "Rejected") return result satisfies SendResult;
               current.state = result.state;

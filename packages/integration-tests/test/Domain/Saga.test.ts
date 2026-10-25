@@ -314,6 +314,23 @@ describe("Domain.Saga", () => {
     ),
   );
 
+  it.effect("coverage counts the sagas a story started", () =>
+    story(
+      Story.given(alice, new Opened({ balance: 10 })),
+      Story.given(bob, new Opened({ balance: 0 })),
+      Story.when(transfer, request(40)),
+      Story.then(
+        transfer,
+        new Requested({ from: "alice", to: "bob", amount: 40, approval: false }),
+      ),
+      Story.then(alice),
+      Story.saga(MoveMoney, "t-1", {
+        _tag: "Rejected",
+        rejection: new Insufficient({ balance: 10 }),
+      }),
+    ).pipe(Effect.map(() => expect(Story.coverage(Bank).covered()).toContain("saga MoveMoney"))),
+  );
+
   it.effect("a failed step undoes the steps before it", () =>
     story(
       Story.given(alice, new Opened({ balance: 100 })),
