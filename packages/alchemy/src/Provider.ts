@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import type * as Stream from "effect/Stream";
+import type { Unresolved } from "./AdoptPolicy.ts";
 import type { Artifacts } from "./Artifacts.ts";
 import type { Diff } from "./Diff.ts";
 import type { Input } from "./Input.ts";
@@ -300,9 +301,16 @@ export interface ProviderService<
    * It receives the same raw props as `precreate` and must derive the same
    * identity. Report what exists there the way {@link read} does: `undefined`
    * when nothing does, its attributes when it belongs to this
-   * stack/stage/logical-id, and `Unowned(attrs)` otherwise. The attributes
-   * may be partial, but should include the {@link stables} the provider can
-   * observe, so the engine recognizes a previous generation of this resource.
+   * stack/stage/logical-id, and `Unowned(attrs)` otherwise. Return
+   * `Unresolved` when the identity depends on props that have not resolved
+   * yet: the engine then checks the resolved identity before `reconcile`.
+   *
+   * The attributes may be partial. The engine recognizes an `Unowned`
+   * previous generation of this resource only when they include every
+   * {@link stables} attribute that generation recorded, all matching.
+   *
+   * Without {@link read}, the engine also calls `observe` with resolved props
+   * to check an identity before `reconcile` claims it.
    *
    * Opt-in: implement it whenever `precreate` can write to a resource that
    * already exists. Without it, such a cycle precreates unchecked.
@@ -316,7 +324,7 @@ export interface ProviderService<
     fqn: string;
     news: Props<Res>;
     instanceId: string;
-  }): Effect.Effect<Partial<Res["Attributes"]> | undefined, any, PrecreateReq>;
+  }): Effect.Effect<Partial<Res["Attributes"]> | Unresolved | undefined, any, PrecreateReq>;
   precreate?(input: {
     id: string;
     /**

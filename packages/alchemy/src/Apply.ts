@@ -11,7 +11,13 @@ import * as Predicate from "effect/Predicate";
 import type { Simplify } from "effect/Types";
 import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
-import { OwnedBySomeoneElse, stripUnowned, Unowned } from "./AdoptPolicy.ts";
+import {
+  OwnedBySomeoneElse,
+  stripUnowned,
+  Unowned,
+  Unresolved,
+  UnverifiableReplacement,
+} from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
 import {
   Artifacts,
@@ -167,43 +173,53 @@ const instrumentLifecycle =
     );
 
 /**
- * Whether `observed` is this resource's previous generation: it matches that
- * generation's attributes on every stable property it reports. A provider
- * that cannot prove who owns a name it does not tag — an explicitly named
- * Container application — reports even our own resource as `Unowned`.
+ * Whether `observed` is this resource's previous generation: it reports every
+ * stable property that generation recorded, all matching. A partial
+ * observation proves nothing — a shared name without the scoped id may be a
+ * different resource. A provider that cannot prove who owns a name it does
+ * not tag — an explicitly named Container application — reports even our own
+ * resource as `Unowned`.
  */
 const isPreviousGeneration = (
   observed: { readonly [key: string]: any },
   stables: readonly string[] | undefined,
   previous: { attr?: any } | undefined,
 ): boolean => {
-  const keys = (stables ?? []).filter((key) => observed[key] !== undefined);
   const attr = previous?.attr;
-  return keys.length > 0 && attr !== undefined && keys.every((key) => attr[key] === observed[key]);
+  if (attr === undefined) return false;
+  const keys = (stables ?? []).filter((key) => attr[key] !== undefined);
+  return keys.length > 0 && keys.every((key) => observed[key] === attr[key]);
+};
+
+type AdmissionNode = {
+  provider: Pick<ProviderService<any>, "observe" | "read" | "stables">;
+  props: any;
+  deferredAdoption?: { adopt: boolean };
+  resource: { Type: string };
 };
 
 /**
  * A dependency cycle precreates on raw props, before `read` can check
  * ownership. Ask the provider's `observe` what exists at the identity
  * precreate would claim, and refuse a foreign resource unless adoption is
- * allowed. A provider without `observe` precreates unchecked.
+ * allowed. A provider without `observe` precreates `unchecked`; one whose
+ * identity has not resolved yet reports it `unresolved`, so the engine must
+ * check the resolved identity before reconcile claims it.
  */
 const observeBeforePrecreate = Effect.fn(function* (
-  node: {
-    provider: Pick<ProviderService<any>, "observe" | "stables">;
-    props: any;
-    deferredAdoption?: { adopt: boolean };
-    resource: { Type: string };
-  },
+  node: AdmissionNode,
   fqn: string,
   logicalId: string,
   instanceId: string,
   previous?: { attr?: any },
 ) {
-  if (node.provider.observe === undefined || node.deferredAdoption === undefined) return;
+  if (node.provider.observe === undefined || node.deferredAdoption === undefined) {
+    return "unchecked" as const;
+  }
   const observed = yield* node.provider
     .observe({ id: logicalId, fqn, instanceId, news: node.props })
     .pipe(instrumentLifecycle("observe", fqn, node.resource.Type, logicalId, instanceId));
+  if (observed === Unresolved) return "unresolved" as const;
   if (
     observed !== undefined &&
     Unowned.is(observed) &&
@@ -220,6 +236,44 @@ const observeBeforePrecreate = Effect.fn(function* (
       logicalId,
     });
   }
+  return "admitted" as const;
+});
+
+/** A provider's `observe` reported `Unresolved` for fully resolved props. */
+class UnresolvedObservation extends Data.TaggedError("UnresolvedObservation")<{
+  message: string;
+}> {}
+
+/**
+ * Reports what exists at the resolved identity reconcile will claim: `read`
+ * when the provider implements it, `observe` otherwise.
+ */
+const observeResolved = Effect.fn(function* (
+  node: AdmissionNode,
+  news: Record<string, any>,
+  fqn: string,
+  logicalId: string,
+  instanceId: string,
+) {
+  if (node.provider.read) {
+    return yield* node.provider
+      .read({ id: logicalId, fqn, instanceId, olds: news, output: undefined })
+      .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
+  }
+  const observed = yield* node.provider.observe!({
+    id: logicalId,
+    fqn,
+    instanceId,
+    news,
+  }).pipe(instrumentLifecycle("observe", fqn, node.resource.Type, logicalId, instanceId));
+  if (observed === Unresolved) {
+    return yield* Effect.die(
+      new UnresolvedObservation({
+        message: `The provider for '${fqn}' (${node.resource.Type}) reported its identity as Unresolved, but its props are resolved.`,
+      }),
+    );
+  }
+  return observed;
 });
 
 export const apply = <P extends Plan>(
@@ -866,6 +920,8 @@ const executeNode = (
       }
 
       let attr: any = node.state?.attr;
+      // Whether the identity reconcile claims has passed the ownership check.
+      let admitted = node.deferredAdoption === undefined;
 
       if (attr !== undefined) {
         // Precreate/read may already have produced a usable output snapshot. Publish
@@ -879,7 +935,9 @@ const executeNode = (
       // Durable Object classes are empty) can serve traffic while the real
       // version propagates.
       if (inCycle && node.provider.precreate && attr === undefined) {
-        yield* observeBeforePrecreate(node, fqn, logicalId, instanceId);
+        // Without `observe`, precreate and reconcile claim the identity unchecked.
+        admitted =
+          (yield* observeBeforePrecreate(node, fqn, logicalId, instanceId)) !== "unresolved";
         // Some resources need a placeholder physical resource before their real
         // create can finish. Persist that stub so downstream evaluation can proceed.
         yield* report("pre-creating");
@@ -900,7 +958,9 @@ const executeNode = (
           instanceId,
           resourceType: node.resource.Type,
           props: node.props,
-          attr,
+          // A stub for an unresolved identity claims nothing. Leave the
+          // checkpoint without it, so a retry checks the identity again.
+          attr: admitted ? attr : undefined,
           providerVersion: node.provider.version ?? 0,
           bindings: excludeDeletedBindings(node.bindings),
           downstream: node.downstream,
@@ -926,8 +986,8 @@ const executeNode = (
 
       const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
 
-      if (attr === undefined && node.deferredAdoption && node.provider.read) {
-        const checkpoint = () =>
+      if (!admitted) {
+        const checkpoint = (attr: any) =>
           commit<CreatingResourceState>({
             status: "creating",
             fqn,
@@ -943,13 +1003,12 @@ const executeNode = (
             providerMode: node.mode,
             adoptionBlocked: node.adoptionBlocked,
           });
-        // Refusal or interruption must retain identity, never foreign attributes.
-        yield* checkpoint();
-        const observed = yield* node.provider
-          .read({ id: logicalId, fqn, instanceId, olds: news, output: undefined })
-          .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
+        // Refusal or interruption must retain identity, never foreign
+        // attributes, nor a stub for an identity not yet checked.
+        yield* checkpoint(undefined);
+        const observed = yield* observeResolved(node, news, fqn, logicalId, instanceId);
         if (observed !== undefined) {
-          if (Unowned.is(observed) && !node.deferredAdoption.adopt) {
+          if (Unowned.is(observed) && !node.deferredAdoption?.adopt) {
             return yield* new OwnedBySomeoneElse({
               message:
                 `Cannot adopt resource '${fqn}' (${node.resource.Type}): ` +
@@ -960,9 +1019,10 @@ const executeNode = (
               logicalId,
             });
           }
-          attr = stripUnowned(observed);
+          // Reconcile keeps a precreated stub as its output.
+          attr ??= stripUnowned(observed);
           // A creating checkpoint retains olds: undefined on retry.
-          yield* checkpoint();
+          yield* checkpoint(attr);
         }
       }
 
@@ -1267,13 +1327,7 @@ const executeNode = (
       let admitted = attr !== undefined || node.deferredAdoption === undefined;
       const admit = Effect.fn(function* (props: Record<string, any>) {
         admitted = true;
-        const observed = yield* node.provider.read!({
-          id: logicalId,
-          fqn,
-          instanceId,
-          olds: props,
-          output: undefined,
-        }).pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
+        const observed = yield* observeResolved(node, props, fqn, logicalId, instanceId);
         if (observed === undefined) return;
         if (
           Unowned.is(observed) &&
@@ -1292,7 +1346,8 @@ const executeNode = (
         }
         // A delete-first target may be the previous generation itself, which
         // is about to be deleted — never hand its attributes to reconcile.
-        if (!node.deleteFirst) attr = stripUnowned(observed);
+        // Reconcile keeps a precreated stub as its output.
+        if (!node.deleteFirst) attr ??= stripUnowned(observed);
       });
 
       if (!admitted && isResolved(node.props)) {
@@ -1300,13 +1355,35 @@ const executeNode = (
       }
 
       // A cycle precreates before its props resolve, so `observe` admits the
-      // identity precreate will claim — before delete-first, too.
+      // identity precreate will claim — before delete-first, too. Without
+      // `observe`, precreate and reconcile claim it unchecked. An unresolved
+      // identity is admitted once it resolves, before reconcile.
       if (!admitted && inCycle) {
-        yield* observeBeforePrecreate(node, fqn, logicalId, instanceId, replState.old);
+        const observation = yield* observeBeforePrecreate(
+          node,
+          fqn,
+          logicalId,
+          instanceId,
+          replState.old,
+        );
+        admitted = observation !== "unresolved";
+        if (!admitted && node.deleteFirst && !node.deferredAdoption?.adopt) {
+          return yield* new UnverifiableReplacement({
+            message:
+              `Cannot replace resource '${fqn}' (${node.resource.Type}): ` +
+              "it must be deleted before its replacement is pre-created, but " +
+              "the replacement's identity depends on outputs that are not " +
+              "resolved yet, so its ownership cannot be checked first. Re-run " +
+              "with `--adopt` (or wrap the effect in `adopt(true)`) to replace it anyway.",
+            resourceType: node.resource.Type,
+            logicalId,
+          });
+        }
       }
 
       // A cycle must delete before precreate claims the identity. Plan has
-      // already refused one whose identity could not be admitted first.
+      // already refused one whose identity could not be admitted first
+      // without `observe`; the check above refuses an unresolved one.
       // Otherwise the previous generation survives until reconcile is
       // about to run, so a failed upstream never leaves the resource missing.
       let deletedFirst = false;
@@ -1340,7 +1417,9 @@ const executeNode = (
           instanceId,
           resourceType: node.resource.Type,
           props: node.props,
-          attr,
+          // A stub for an unresolved identity claims nothing. Leave the
+          // checkpoint without it, so a retry checks the identity again.
+          attr: admitted ? attr : undefined,
           providerVersion: node.provider.version ?? 0,
           bindings: excludeDeletedBindings(node.bindings),
           downstream: node.downstream,
@@ -1366,7 +1445,7 @@ const executeNode = (
 
       const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
 
-      if (!admitted && attr === undefined) {
+      if (!admitted) {
         yield* admit(news);
       }
       if (node.deleteFirst && !deletedFirst) {

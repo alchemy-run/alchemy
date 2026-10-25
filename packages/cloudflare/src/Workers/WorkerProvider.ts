@@ -3,7 +3,7 @@ import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects"
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import * as Artifacts from "alchemy/Artifacts";
 import { havePropsChanged, isResolved, stripEffects } from "alchemy/Diff";
@@ -4685,7 +4685,7 @@ export const LiveWorkerProvider = () =>
           // parent's script and claims none of its own.
           if (news.version?.parent != null || news.preview?.of != null) return undefined;
           // Neither name nor namespace can be checked until it resolves.
-          if (!isResolved(news.name) || !isResolved(news.namespace)) return undefined;
+          if (!isResolved(news.name) || !isResolved(news.namespace)) return Unresolved;
           const { accountId } = yield* yield* CloudflareEnvironment;
           const name = yield* createWorkerName(id, news.name);
           const settings = yield* getScriptSettings(
