@@ -1,11 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
 import * as Stripe from "@alchemy.run/stripe";
-import { Account } from "@bank/domain/Account/Account.aggregate";
-import { AccountSummary } from "@bank/domain/Account/AccountSummary.view";
 import { Bank, BankHandlers } from "@bank/domain/Bank.model";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
-import { LedgerStore } from "@bank/domain/Ledger/LedgerStore";
 import { SupportApi } from "@bank/domain/SupportApi.api";
 import * as Telemetry from "alchemy/Telemetry";
 import * as Effect from "effect/Effect";
@@ -44,29 +41,12 @@ const BankLive = Layer.mergeAll(
   ),
 );
 
-/** `/api/ledger/<account>`: the ledger is a store the bank owns, so it is served by a plain route. */
-const LEDGER = /^\/api\/ledger\/([^/]+)$/;
-
 export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
   "BankWorker",
   { main: import.meta.url },
   Effect.gen(function* () {
     const customerApi = yield* CustomerApi;
     const supportApi = yield* SupportApi;
-    const ledger = yield* LedgerStore;
-    const summaries = yield* AccountSummary;
-    const ledgerRoute = (accountId: string) =>
-      Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const actor = actorOf(request.headers);
-        if (Option.isNone(actor)) return HttpServerResponse.empty({ status: 401 });
-        const summary = yield* summaries.query(Account.ref(accountId)).pipe(Effect.orDie);
-        const owner = Option.getOrNull(summary)?.customerId;
-        if (actor.value._tag === "Customer" && owner !== actor.value.customerId) {
-          return HttpServerResponse.empty({ status: 404 });
-        }
-        return yield* HttpServerResponse.json(yield* ledger.forAccount(accountId));
-      });
     // The app's own telemetry, collected here and forwarded with the bank's
     // credentials, so no ingest token reaches a browser. Signed-in users only.
     const telemetry = Telemetry.relay({
@@ -83,8 +63,6 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
         const request = yield* HttpServerRequest;
         const path = new URL(request.url, "http://localhost").pathname;
         if (path === "/api/session") return yield* sessionRoute;
-        const ledgerPath = LEDGER.exec(path);
-        if (ledgerPath) return yield* ledgerRoute(decodeURIComponent(ledgerPath[1]!));
         if (path.startsWith("/api/telemetry/")) return yield* telemetry;
         if (path.startsWith("/api")) return yield* customerApi.fetch;
         if (path.startsWith("/support")) return yield* supportApi.fetch;

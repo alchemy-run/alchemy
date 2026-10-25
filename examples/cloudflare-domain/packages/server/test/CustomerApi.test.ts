@@ -103,6 +103,40 @@ it.live("a view is a security boundary: owners and agents read it, others are re
   ),
 );
 
+it.live(
+  "the ledger is a query: read your own write, a page at a time, as the owner or an agent",
+  () =>
+    inBank(
+      Effect.gen(function* () {
+        const sam = yield* asCustomer("c-1");
+        const alex = yield* asCustomer("c-2");
+        const support = yield* asAgent("support-7");
+        const accountId = yield* register(sam, "c-1", "sam");
+        yield* sam.DepositMoney({ target: accountId, amount: 100 });
+        const receipt = yield* sam.WithdrawMoney({ target: accountId, amount: 30 }, mfa);
+
+        // The Ledger projection batches its writes; `atLeast` waits until it has this one.
+        const first = yield* sam.AccountLedger(
+          { account: accountId },
+          { atLeast: receipt, take: 1 },
+        );
+        expect(first.entries.map((row) => [row.kind, row.amount])).toEqual([
+          ["MoneyDeposited", 100],
+        ]);
+        const rest = yield* sam.AccountLedger({ account: accountId }, { after: first.cursor! });
+        expect(rest).toMatchObject({
+          entries: [{ kind: "MoneyWithdrawn", amount: 30 }],
+          cursor: null,
+        });
+
+        const all = yield* support.AccountLedger({ account: accountId });
+        expect(all.entries).toHaveLength(2);
+        const refused = yield* alex.AccountLedger({ account: accountId }).pipe(Effect.flip);
+        expect(refused._tag).toBe("NotOwner");
+      }),
+    ),
+);
+
 it.live("a customer watches their account's own events; others are rejected", () =>
   inBank(
     Effect.gen(function* () {
