@@ -7,6 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
+import TestServiceV2 from "./fixtures/service-v2.ts";
 import TestService, { SERVICE_EXTERNAL_PORT } from "./fixtures/service.ts";
 import { ensureDockerSwarm } from "./Runtime.ts";
 
@@ -100,11 +101,44 @@ test.provider(
       expect(redeployed.id).toBe(service.id);
       expect(redeployed.code?.hash).toBe(service.code?.hash);
 
-      const imageRef = service.image;
+      // A code change rolls the same service onto the new content-addressed
+      // image and drops the image built for the previous bundle.
+      const updatePlan = yield* stack.plan(
+        Effect.gen(function* () {
+          return yield* TestServiceV2;
+        }),
+      );
+      expect(updatePlan.resources.DockerPlatformService).toMatchObject({ action: "update" });
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* TestServiceV2;
+        }),
+      );
+      expect(updated.id).toBe(service.id);
+      expect(updated.code?.hash).not.toBe(service.code?.hash);
+      expect(updated.image).toContain(updated.code!.hash);
+
+      const v2 = yield* HttpClient.get(`${base}/health`).pipe(
+        Effect.flatMap((res) => res.json),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (body) => (body as { version?: number }).version === 2,
+          times: 30,
+        }),
+      );
+      expect(v2).toEqual({ ok: true, version: 2 });
+
+      const docker = yield* Docker.Docker;
+      const previousImageGone = yield* docker.image.inspect(service.image).pipe(
+        Effect.map(() => false),
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(true)),
+      );
+      expect(previousImageGone).toBe(true);
+
+      const imageRef = updated.image;
       yield* stack.destroy();
 
       // The swarm service is gone after destroy.
-      const docker = yield* Docker.Docker;
       const gone = yield* docker.service.inspect(service.id).pipe(
         Effect.map(() => false),
         Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(true)),

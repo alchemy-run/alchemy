@@ -237,6 +237,42 @@ describe(
     );
 
     test.provider(
+      "replaces a service when one of two ports sharing a target is dropped",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* ensureDockerSwarm;
+          const docker = yield* Docker.Docker;
+          const service = (external: number[]) =>
+            Docker.Service("shared-target-service", {
+              name: "alchemy-test-service-shared-target",
+              image: "nginx:alpine",
+              ports: external.map((port) => ({ external: port, internal: 80 })),
+            });
+
+          yield* stack.deploy(service([43121, 43122]));
+          // `--publish-rm target=80` would drop both ports and
+          // `--publish-add` skips the one already in the spec.
+          const plan = yield* stack.plan(service([43122]));
+          expect(plan.resources["shared-target-service"]).toMatchObject({ action: "replace" });
+          const second = yield* stack.deploy(service([43122]));
+
+          const published = yield* docker
+            .run(["service", "inspect", second.id, "--format", "{{json .Spec.EndpointSpec.Ports}}"])
+            .pipe(
+              Effect.map((output) =>
+                (JSON.parse(output.stdout) as Array<{ PublishedPort: number }>).map(
+                  (port) => port.PublishedPort,
+                ),
+              ),
+            );
+          expect(published).toEqual([43122]);
+
+          yield* stack.destroy();
+        }),
+      { timeout: 240_000 },
+    );
+
+    test.provider(
       "updates the image of a service with secrets attached",
       (stack) =>
         Effect.gen(function* () {

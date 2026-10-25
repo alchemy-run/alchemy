@@ -820,6 +820,14 @@ export const ServiceProvider = () =>
                 });
               }
 
+              // Best-effort: the service now runs the new content-addressed
+              // image, so drop the one built for the previous bundle.
+              if (output.code && output.code.hash !== resolved.codeHash) {
+                yield* docker.image
+                  .remove(output.image, true, desired.context)
+                  .pipe(Effect.catchCause(() => Effect.void));
+              }
+
               return toServiceAttributes(updated, desired.context, code);
             }
           }
@@ -1005,7 +1013,20 @@ const clearsSetting = (olds: unknown, news: unknown): boolean => {
   );
 };
 
+/**
+ * `--publish-rm` matches target, protocol and mode, and `--publish-add` skips
+ * a port already in the spec. Dropping one of several ports that share a
+ * target therefore drops the kept ones too, so that change replaces.
+ */
+const dropsSharedTargetPort = (olds: DesiredService, news: DesiredService): boolean => {
+  const kept = new Set(news.ports.map(formatPublish));
+  const key = (port: Service.PortMapping) => `${port.internal}/${port.protocol}/${port.mode}`;
+  const removedKeys = new Set(olds.ports.filter((p) => !kept.has(formatPublish(p))).map(key));
+  return olds.ports.some((p) => kept.has(formatPublish(p)) && removedKeys.has(key(p)));
+};
+
 const requiresReplacement = (olds: DesiredService, news: DesiredService): boolean =>
+  dropsSharedTargetPort(olds, news) ||
   (Object.keys(news) as Array<keyof DesiredService>).some(
     (key) =>
       !deepEqual(olds[key], news[key]) &&
