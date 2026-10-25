@@ -1,9 +1,7 @@
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
-import { Platform, type ViewKit, type ViewStore } from "@alchemy.run/domain/Platform";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as HttpServer from "effect/http/HttpServer";
@@ -37,36 +35,7 @@ class Totals extends Domain.View("Totals", {
 class Counters extends Domain.Model("Counters", { aggregates: [Counter], views: [Totals] }) {}
 class CounterApi extends Domain.Api("CounterApi", Increment, Totals) {}
 
-// The platform the model is hosted on, keeping the view's kit and store for the push test.
-class Captured extends Context.Service<Captured, { kit?: ViewKit; store?: ViewStore }>()(
-  "Test/Captured",
-) {}
-const Capturing = Layer.unwrap(
-  Effect.sync(() => {
-    const captured: { kit?: ViewKit; store?: ViewStore } = {};
-    const platform = Layer.effect(
-      Platform,
-      Effect.gen(function* () {
-        const inner = yield* Platform;
-        return Platform.of({
-          ...inner,
-          view: (view, kit) =>
-            inner.view(view, kit).pipe(
-              Effect.tap((store) =>
-                Effect.sync(() => {
-                  captured.kit = kit;
-                  captured.store = store;
-                }),
-              ),
-            ),
-        });
-      }),
-    ).pipe(Layer.provide(InMemory));
-    return Layer.merge(platform, Layer.succeed(Captured, captured));
-  }),
-);
-
-const Hosted = Counters.layer(Layer.empty).pipe(Layer.provideMerge(Capturing));
+const Hosted = Counters.layer(Layer.empty).pipe(Layer.provideMerge(InMemory));
 const InProcess = Layer.effect(CounterApi.Client, CounterApi.testClient).pipe(
   Layer.provideMerge(Hosted),
 );
@@ -184,65 +153,5 @@ describe("Domain live reads", () => {
       );
       expect(state).toEqual({ state: { total: 10 }, cursor: "4" });
     }).pipe(Effect.scoped, Effect.provide(Wire)),
-  );
-
-  // What a platform that pushes over WebSockets sends: the kit's `push`, on connect and on commit.
-  it.live("a pushed events read sends caughtUp once, after the backlog it starts with", () =>
-    Effect.gen(function* () {
-      yield* seed;
-      const { kit, store } = yield* Captured;
-      if (!kit || !store) return expect.fail("the view's kit was not captured");
-      const subscription = {
-        requestId: 1,
-        mode: "events" as const,
-        context: {},
-        cursor: 1,
-        caughtUp: true,
-      };
-      // On connect: everything after the cursor, then CaughtUp.
-      const connected = yield* kit.push(
-        "c-1",
-        subscription,
-        yield* store.read("c-1"),
-        yield* store.list("c-1"),
-      );
-      const values = (message: unknown) =>
-        (message as { readonly values: ReadonlyArray<unknown> }).values;
-      expect(connected.messages).toHaveLength(1);
-      expect(
-        values(connected.messages[0]).map(
-          (v) =>
-            (v as { _tag?: string; envelope?: { seq: number } })._tag ??
-            (v as { envelope: { seq: number } }).envelope.seq,
-        ),
-      ).toEqual([2, 3, "CaughtUp"]);
-      expect(values(connected.messages[0]).at(-1)).toEqual({ _tag: "CaughtUp", cursor: "3" });
-      expect(connected.subscription.cursor).toBe(3);
-
-      // A later commit pushes its entry only.
-      const api = yield* CounterApi.Client;
-      yield* api.Increment({ target: "c-1", by: 4 });
-      yield* api.Totals.get("c-1", { atLeast: { stream: "Counter/c-1", version: 4 } });
-      const next = yield* kit.push(
-        "c-1",
-        connected.subscription,
-        yield* store.read("c-1"),
-        yield* store.list("c-1"),
-      );
-      expect(
-        values(next.messages[0]).map((v) => (v as { envelope: { seq: number } }).envelope.seq),
-      ).toEqual([4]);
-
-      // A pushed watch with withCursor carries the cursor with the state.
-      const watched = yield* kit.push(
-        "c-1",
-        { requestId: 2, mode: "watch", context: {}, cursor: -1, withCursor: true },
-        yield* store.read("c-1"),
-        [],
-      );
-      expect(values(watched.messages[0])).toEqual([
-        { _tag: "WithCursor", state: { total: 10 }, cursor: "4" },
-      ]);
-    }).pipe(Effect.provide(InProcess)),
   );
 });

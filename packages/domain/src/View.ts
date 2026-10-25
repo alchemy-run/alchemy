@@ -277,10 +277,8 @@ export interface CaughtUp {
 }
 
 /** Is a frame of `events(key, { caughtUp: true })` the {@link CaughtUp} marker? */
-export const isCaughtUp = (frame: unknown): frame is CaughtUp =>
-  typeof frame === "object" &&
-  frame !== null &&
-  (frame as { readonly _tag?: unknown })._tag === "CaughtUp";
+export const isCaughtUp = <A extends object>(frame: A | CaughtUp): frame is CaughtUp =>
+  "_tag" in frame && frame._tag === "CaughtUp";
 
 /**
  * A page of entries.
