@@ -4,14 +4,25 @@ import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 
-// One Function consuming a DynamoDB stream whose Table's tags change across
-// deploys. Retagging updates the Table in place, so its stream (and the
-// EventSourceMapping reading it) must survive the deploy.
+// One Function consuming a DynamoDB stream. Each deploy varies the Table or the
+// stream subscription to drive a different EventSourceMapping transition.
 export class EventSourceMappingTableFunction extends Lambda.Function<EventSourceMappingTableFunction>()(
   "EventSourceMappingTableFunction",
 ) {}
 
-export const makeTableFunction = (tags: Record<string, string>) =>
+export interface TableFunctionOptions {
+  tags?: Record<string, string>;
+  partitionKey?: string;
+  streamViewType?: "NEW_AND_OLD_IMAGES" | "KEYS_ONLY";
+  startingPosition?: "LATEST" | "TRIM_HORIZON";
+}
+
+export const makeTableFunction = ({
+  tags = {},
+  partitionKey = "pk",
+  streamViewType = "NEW_AND_OLD_IMAGES",
+  startingPosition = "LATEST",
+}: TableFunctionOptions = {}) =>
   EventSourceMappingTableFunction.make(
     {
       main: import.meta.url,
@@ -19,12 +30,16 @@ export const makeTableFunction = (tags: Record<string, string>) =>
     },
     Effect.gen(function* () {
       const table = yield* DynamoDB.Table("EventSourceMappingTable", {
-        partitionKey: "pk",
-        attributes: { pk: "S" },
+        partitionKey,
+        attributes: { [partitionKey]: "S" },
         tags,
       });
 
-      yield* DynamoDB.consumeTableChanges(table, { startingPosition: "LATEST" }, () => Effect.void);
+      yield* DynamoDB.consumeTableChanges(
+        table,
+        { streamViewType, startingPosition },
+        () => Effect.void,
+      );
 
       return {
         fetch: Effect.gen(function* () {
@@ -34,4 +49,4 @@ export const makeTableFunction = (tags: Record<string, string>) =>
     }).pipe(Effect.provide(Layer.mergeAll(Lambda.TableEventSource))),
   );
 
-export default makeTableFunction({ version: "1" });
+export default makeTableFunction();

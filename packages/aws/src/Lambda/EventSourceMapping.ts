@@ -629,36 +629,50 @@ export const EventSourceMappingProvider = () =>
       return {
         stables: ["uuid", "eventSourceMappingArn"],
         diff: Effect.fn(function* ({ news, olds }) {
-          // An unresolved event source ARN may or may not change: a replaced
-          // queue gets a new ARN, but a Table updated in place keeps its stream
-          // ARN while exposing it as unstable. Update in place and let
-          // `reconcile` move the mapping if the source really changed, so the
-          // mapping's identity is not stable for downstream consumers.
-          if ("eventSourceArn" in news && !isResolved(news.eventSourceArn)) {
-            return { action: "update", stables: [] } as const;
-          }
-          if (!isResolved(news)) return;
-          if ((news.eventSourceArn as string) !== (olds.eventSourceArn as string)) {
+          // `functionName` is required, so this narrows `news` to the props object.
+          if (!("functionName" in news)) return;
+          const sourceArn = news.eventSourceArn;
+          if (isResolved(sourceArn) && sourceArn !== olds.eventSourceArn) {
             return { action: "replace" } as const;
           }
-          if (news.startingPosition !== olds.startingPosition) {
-            return { action: "replace" } as const;
+          // Lambda allows one mapping per function and source, so a replacement
+          // on the same source must delete the old mapping first.
+          const replace = { action: "replace", deleteFirst: true } as const;
+          if (
+            isResolved(news.startingPosition) &&
+            news.startingPosition !== olds.startingPosition
+          ) {
+            return replace;
           }
           if (
+            isResolved(news.startingPositionTimestamp) &&
             news.startingPositionTimestamp?.getTime() !== olds.startingPositionTimestamp?.getTime()
           ) {
-            return { action: "replace" } as const;
-          }
-          if (!deepEqual(news.selfManagedEventSource, olds.selfManagedEventSource)) {
-            return { action: "replace" } as const;
+            return replace;
           }
           if (
-            news.amazonManagedKafkaEventSourceConfig?.ConsumerGroupId !==
-              olds.amazonManagedKafkaEventSourceConfig?.ConsumerGroupId ||
-            news.selfManagedKafkaEventSourceConfig?.ConsumerGroupId !==
-              olds.selfManagedKafkaEventSourceConfig?.ConsumerGroupId
+            isResolved(news.selfManagedEventSource) &&
+            !deepEqual(news.selfManagedEventSource, olds.selfManagedEventSource)
           ) {
-            return { action: "replace" } as const;
+            return replace;
+          }
+          if (
+            (isResolved(news.amazonManagedKafkaEventSourceConfig) &&
+              news.amazonManagedKafkaEventSourceConfig?.ConsumerGroupId !==
+                olds.amazonManagedKafkaEventSourceConfig?.ConsumerGroupId) ||
+            (isResolved(news.selfManagedKafkaEventSourceConfig) &&
+              news.selfManagedKafkaEventSourceConfig?.ConsumerGroupId !==
+                olds.selfManagedKafkaEventSourceConfig?.ConsumerGroupId)
+          ) {
+            return replace;
+          }
+          // An unresolved source ARN may or may not change: a replaced queue
+          // gets a new ARN, but a Table updated in place keeps its stream ARN
+          // while exposing it as unstable. Update in place and let `reconcile`
+          // move the mapping if the source really changed, so the mapping's
+          // identity is not stable for downstream consumers.
+          if (!isResolved(sourceArn)) {
+            return { action: "update", stables: [] } as const;
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
