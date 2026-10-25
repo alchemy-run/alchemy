@@ -883,6 +883,9 @@ importers:
       oxlint-tsgolint:
         specifier: 'catalog:'
         version: 7.0.2003
+      rolldown:
+        specifier: 1.2.13
+        version: 1.2.13
       tsrs:
         specifier: 'catalog:'
         version: 0.18.0-ts7.1.0-dev.20260929
