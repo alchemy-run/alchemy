@@ -1,38 +1,18 @@
-import * as SigV4 from "@distilled.cloud/aws4signer";
+import * as AwsCredentials from "@distilled.cloud/aws/Credentials";
+import * as AwsEndpoint from "@distilled.cloud/aws/Endpoint";
+import type { RegionName } from "@distilled.cloud/aws/Region";
+import * as s3 from "@distilled.cloud/aws/s3";
 import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import * as user from "@distilled.cloud/cloudflare/user";
 import { sha256 } from "alchemy/Util/sha256";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 import { Credentials } from "../../Credentials.ts";
 import type { Bucket } from "../Bucket.ts";
 import { liveEndpoint } from "../S3CredentialsBinding.ts";
-
-/** An S3 API request against R2 failed. */
-export class R2S3RequestError extends Data.TaggedError("R2S3RequestError")<{
-  method: string;
-  url: string;
-  status: number;
-  body: string;
-}> {
-  override get message() {
-    return `R2 S3 API ${this.method} ${this.url} failed with ${this.status}: ${this.body}`;
-  }
-}
-
-interface S3Credentials {
-  endpoint: string;
-  accessKeyId: string;
-  secretAccessKey: Redacted.Redacted<string>;
-}
-
-interface Upload {
-  key: string;
-  uploadId: string;
-}
 
 /**
  * The outcome of {@link abortMultipartUploads}: how many uploads were
@@ -55,127 +35,76 @@ export const abortMultipartUploads = Effect.fn("R2.abortMultipartUploads")(
   function* (accountId: string, bucketName: string, jurisdiction: Bucket.Jurisdiction) {
     const resolved = yield* yield* Credentials;
     if (resolved.type !== "apiToken") {
-      return { skipped: `alchemy is authenticated with ${resolved.type}, not an API token` };
+      return {
+        skipped: `alchemy is authenticated with ${resolved.type}, not an API token`,
+      } as AbortMultipartUploadsResult;
     }
     // Account-owned and user-owned tokens verify on different routes.
-    const tokenId = yield* accounts.verifyToken({ accountId }).pipe(
-      Effect.catch(() => user.verifyToken({})),
-      Effect.map((token) => token.id),
+    const { id: accessKeyId } = yield* accounts
+      .verifyToken({ accountId })
+      .pipe(Effect.catch(() => user.verifyToken({})));
+    const secretAccessKey = yield* sha256(Redacted.value(resolved.apiToken));
+    const r2S3 = Layer.mergeAll(
+      Layer.succeed(
+        AwsCredentials.Credentials,
+        Effect.succeed({
+          accessKeyId: Redacted.make(accessKeyId),
+          secretAccessKey: Redacted.make(secretAccessKey),
+          sessionToken: undefined,
+          // R2 signs with the `auto` region.
+          region: "auto" as RegionName,
+        }),
+      ),
+      AwsEndpoint.of(liveEndpoint(accountId, jurisdiction)),
     );
-    const credentials: S3Credentials = {
-      endpoint: liveEndpoint(accountId, jurisdiction),
-      accessKeyId: tokenId,
-      secretAccessKey: Redacted.make(yield* sha256(Redacted.value(resolved.apiToken))),
-    };
-    let aborted = 0;
-    let markers: { keyMarker?: string; uploadIdMarker?: string } = {};
-    // Bounded: 100 pages of 1000 uploads.
-    for (let page = 0; page < 100; page++) {
-      const listed = yield* listMultipartUploads(credentials, bucketName, markers);
-      yield* Effect.forEach(
-        listed.uploads,
-        (upload) => abortMultipartUpload(credentials, bucketName, upload),
-        { concurrency: 10, discard: true },
-      );
-      aborted += listed.uploads.length;
-      if (!listed.next) break;
-      markers = listed.next;
-    }
+
+    const aborted = yield* Stream.paginate(
+      {
+        keyMarker: undefined as string | undefined,
+        uploadIdMarker: undefined as string | undefined,
+      },
+      (markers) =>
+        s3
+          .listMultipartUploads({
+            Bucket: bucketName,
+            KeyMarker: markers.keyMarker,
+            UploadIdMarker: markers.uploadIdMarker,
+          })
+          .pipe(
+            Effect.map(
+              (page) =>
+                [
+                  page.Uploads ?? [],
+                  page.IsTruncated && (page.NextKeyMarker || page.NextUploadIdMarker)
+                    ? Option.some({
+                        keyMarker: page.NextKeyMarker,
+                        uploadIdMarker: page.NextUploadIdMarker,
+                      })
+                    : Option.none(),
+                ] as const,
+            ),
+          ),
+    ).pipe(
+      Stream.filter(
+        (upload): upload is s3.MultipartUpload & { Key: string; UploadId: string } =>
+          upload.Key !== undefined && upload.UploadId !== undefined,
+      ),
+      Stream.mapEffect(
+        (upload) =>
+          s3
+            .abortMultipartUpload({
+              Bucket: bucketName,
+              Key: upload.Key,
+              UploadId: upload.UploadId,
+            })
+            // Completed or aborted by someone else in the meantime.
+            .pipe(Effect.catchTag("NoSuchUpload", () => Effect.void)),
+        { concurrency: 10 },
+      ),
+      Stream.runCount,
+      Effect.provide(r2S3),
+    );
     return { aborted } as AbortMultipartUploadsResult;
   },
   Effect.catch((error) => Effect.succeed<AbortMultipartUploadsResult>({ skipped: error.message })),
 );
-
-const listMultipartUploads = Effect.fn(function* (
-  credentials: S3Credentials,
-  bucketName: string,
-  markers: { keyMarker?: string; uploadIdMarker?: string },
-) {
-  const url = new URL(`${credentials.endpoint}/${encodeURIComponent(bucketName)}`);
-  url.searchParams.set("uploads", "");
-  if (markers.keyMarker !== undefined) url.searchParams.set("key-marker", markers.keyMarker);
-  if (markers.uploadIdMarker !== undefined) {
-    url.searchParams.set("upload-id-marker", markers.uploadIdMarker);
-  }
-  const xml = yield* s3Request(credentials, "GET", url);
-  const uploads = [...xml.matchAll(/<Upload>([\s\S]*?)<\/Upload>/g)].flatMap(([, body]) => {
-    const key = xmlField(body!, "Key");
-    const uploadId = xmlField(body!, "UploadId");
-    return key !== undefined && uploadId !== undefined ? [{ key, uploadId }] : [];
-  });
-  const truncated = xmlField(xml, "IsTruncated") === "true";
-  const keyMarker = xmlField(xml, "NextKeyMarker");
-  const uploadIdMarker = xmlField(xml, "NextUploadIdMarker");
-  return {
-    uploads,
-    next: truncated && (keyMarker || uploadIdMarker) ? { keyMarker, uploadIdMarker } : undefined,
-  };
-});
-
-const abortMultipartUpload = (credentials: S3Credentials, bucketName: string, upload: Upload) => {
-  const key = upload.key.split("/").map(encodeURIComponent).join("/");
-  const url = new URL(`${credentials.endpoint}/${encodeURIComponent(bucketName)}/${key}`);
-  url.searchParams.set("uploadId", upload.uploadId);
-  return s3Request(credentials, "DELETE", url).pipe(
-    // Already completed or aborted by someone else.
-    Effect.catchIf(
-      (error) => error._tag === "R2S3RequestError" && error.status === 404,
-      () => Effect.succeed(""),
-    ),
-  );
-};
-
-/**
- * Send one SigV4-signed request to R2's S3 API and return the response body.
- */
-const s3Request = (credentials: S3Credentials, method: "GET" | "DELETE", url: URL) =>
-  Effect.gen(function* () {
-    const client = yield* HttpClient.HttpClient;
-    const signed = yield* SigV4.sign({
-      method,
-      url: url.toString(),
-      accessKeyId: credentials.accessKeyId,
-      secretAccessKey: credentials.secretAccessKey,
-      service: "s3",
-      region: "auto",
-      hashPayload: true,
-    });
-    const response = yield* client.execute(
-      HttpClientRequest.make(method)(signed.url).pipe(HttpClientRequest.setHeaders(signed.headers)),
-    );
-    const body = yield* response.text;
-    if (response.status < 200 || response.status >= 300) {
-      return yield* new R2S3RequestError({
-        method,
-        url: `${url.origin}${url.pathname}`,
-        status: response.status,
-        body,
-      });
-    }
-    return body;
-  });
-
-const xmlField = (xml: string, name: string): string | undefined => {
-  const match = new RegExp(`<${name}>([\\s\\S]*?)</${name}>`).exec(xml);
-  return match ? unescapeXml(match[1]!) : undefined;
-};
-
-const unescapeXml = (value: string) =>
-  value.replace(/&(lt|gt|quot|apos|amp|#\d+|#x[0-9a-fA-F]+);/g, (_, entity: string) => {
-    switch (entity) {
-      case "lt":
-        return "<";
-      case "gt":
-        return ">";
-      case "quot":
-        return '"';
-      case "apos":
-        return "'";
-      case "amp":
-        return "&";
-      default:
-        return String.fromCodePoint(
-          entity.startsWith("#x") ? parseInt(entity.slice(2), 16) : parseInt(entity.slice(1), 10),
-        );
-    }
-  });

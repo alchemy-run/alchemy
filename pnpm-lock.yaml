@@ -8343,6 +8343,9 @@ importers:
       '@alchemy.run/sql':
         specifier: workspace:*
         version: link:../sql
+      '@distilled.cloud/aws':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/aws
       '@distilled.cloud/aws4signer':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws4signer
