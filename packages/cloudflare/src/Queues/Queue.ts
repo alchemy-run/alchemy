@@ -1,5 +1,6 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as workers from "@distilled.cloud/cloudflare/workers";
+import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as RpcProvider from "alchemy/Local/RpcProvider";
@@ -7,6 +8,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { isResourceOfType, Resource } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as MutableHashMap from "effect/MutableHashMap";
@@ -28,13 +30,65 @@ import { detachQueueConsumersOfScript } from "./Consumer.ts";
 export const isQueue = (value: unknown): value is Queue =>
   isResourceOfType(value, "Cloudflare.Queues.Queue");
 
+/**
+ * Where Cloudflare stores and processes a queue's messages.
+ */
+export type QueueJurisdiction = "eu" | "us" | "fedramp";
+
+export interface QueueSettings {
+  /**
+   * Seconds an unconsumed message is kept before it is deleted. Cloudflare
+   * allows 60 seconds to 14 days (1209600). Workers Free plans can't change it.
+   * @default 345600 (4 days)
+   */
+  messageRetentionPeriod?: number;
+  /**
+   * Seconds to delay delivery of every message to consumers (max 43200).
+   * @default 0
+   */
+  deliveryDelay?: number;
+  /**
+   * Pause delivery of messages to consumers. Producers can still send.
+   * @default false
+   */
+  deliveryPaused?: boolean;
+}
+
 export type QueueProps = {
   /**
    * Name of the queue. If omitted, a unique name will be generated.
+   * Queue names are unique per account across all jurisdictions.
    * @default ${app}-${stage}-${id}
    */
   name?: string;
+  /**
+   * Queue settings. Only the settings you declare are managed: a setting
+   * you never declared keeps its current value, and a setting you remove
+   * goes back to the Cloudflare default.
+   */
+  settings?: QueueSettings;
+  /**
+   * Restrict where Cloudflare stores and processes the queue's messages.
+   * Workers can still produce to and consume from it from any location.
+   * Cloudflare only accepts it when the queue is created, so changing it
+   * replaces the queue and drops the messages still in it. A dead-letter
+   * queue must be in the same jurisdiction as its source queue.
+   * @default undefined (global)
+   */
+  jurisdiction?: QueueJurisdiction;
 };
+
+/**
+ * The queue found by name is in a different jurisdiction than the one
+ * declared. Cloudflare can't move a queue between jurisdictions, so it is
+ * not adopted.
+ */
+export class QueueJurisdictionMismatch extends Data.TaggedError("QueueJurisdictionMismatch")<{
+  readonly message: string;
+  readonly queueName: string;
+  readonly expected: QueueJurisdiction | undefined;
+  readonly actual: QueueJurisdiction | undefined;
+}> {}
 
 export type Queue = Resource<
   "Cloudflare.Queues.Queue",
@@ -43,6 +97,10 @@ export type Queue = Resource<
     queueId: string;
     queueName: string;
     accountId: string;
+    /** The queue's jurisdiction, or `undefined` for a global queue. */
+    jurisdiction: QueueJurisdiction | undefined;
+    /** The queue's current settings. */
+    settings: Required<QueueSettings>;
   },
   never,
   Providers
@@ -64,6 +122,34 @@ export type Queue = Resource<
  * ```typescript
  * const queue = yield* Cloudflare.Queues.Queue("MyQueue", {
  *   name: "my-app-queue",
+ * });
+ * ```
+ *
+ * ### Configuring Settings
+ * Settings are in seconds, matching the Cloudflare API.
+ *
+ * **Example:** Dead-letter queue that keeps messages for 14 days
+ * ```typescript
+ * const deadLetters = yield* Cloudflare.Queues.Queue("DeadLetters", {
+ *   settings: { messageRetentionPeriod: 14 * 24 * 60 * 60 },
+ * });
+ * ```
+ *
+ * **Example:** Delay and pause delivery
+ * ```typescript
+ * const queue = yield* Cloudflare.Queues.Queue("MyQueue", {
+ *   settings: { deliveryDelay: 30, deliveryPaused: true },
+ * });
+ * ```
+ *
+ * ### Data Residency
+ * **Example:** Queue restricted to the EU
+ * ```typescript
+ * const queue = yield* Cloudflare.Queues.Queue("EuQueue", {
+ *   jurisdiction: "eu",
+ * });
+ * const deadLetters = yield* Cloudflare.Queues.Queue("EuDeadLetters", {
+ *   jurisdiction: "eu",
  * });
  * ```
  *
@@ -128,11 +214,18 @@ export const ProviderLive = () =>
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
       const name = news.name ?? oldName;
-      if (name !== oldName) {
-        return { action: "replace" } as const;
+      const oldJurisdiction = output ? output.jurisdiction : olds.jurisdiction;
+      if (name !== oldName || oldJurisdiction !== news.jurisdiction) {
+        // Queue names are unique per account across jurisdictions, so a
+        // replacement that keeps an explicit name can't coexist with its
+        // predecessor. Delete the old generation first. Generated names
+        // change with the new instance id, so they stay create-first.
+        return news.name !== undefined && news.name === oldName
+          ? ({ action: "replace", deleteFirst: true } as const)
+          : ({ action: "replace" } as const);
       }
     }),
-    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const queueName = yield* createQueueName(id, news.name);
       const acct = output?.accountId ?? accountId;
@@ -140,7 +233,7 @@ export const ProviderLive = () =>
       // Observe — re-fetch the cached queue; fall back to a name scan
       // when the cached id is gone (out-of-band delete or partial
       // state-persistence failure).
-      let observed: { queueId?: string | null; queueName?: string | null } | undefined;
+      let observed: ObservedQueue | undefined;
       // A `dev:` id (a mis-stamped legacy local row) is not a real queue id —
       // skip the lookup (Cloudflare rejects it as a malformed parameter) and
       // fall through to the name scan.
@@ -167,6 +260,7 @@ export const ProviderLive = () =>
           .createQueue({
             accountId: acct,
             queueName,
+            jurisdiction: news.jurisdiction,
           })
           .pipe(
             Effect.catchTag("QueueAlreadyExists", () =>
@@ -183,13 +277,46 @@ export const ProviderLive = () =>
           );
       }
 
-      // Sync — Cloudflare Queues have no mutable per-queue settings
-      // here (the queue name itself is treated as a replace by diff),
-      // so observed state is the answer.
+      // Jurisdiction is create-only. A queue found by name (adoption, a
+      // crashed peer) in another jurisdiction can't be converged.
+      const jurisdiction = toJurisdiction(observed.jurisdiction);
+      if (jurisdiction !== news.jurisdiction) {
+        return yield* new QueueJurisdictionMismatch({
+          message:
+            `Queue "${queueName}" exists in jurisdiction ${jurisdiction ?? "global"}, ` +
+            `not ${news.jurisdiction ?? "global"}. A queue's jurisdiction can't be changed.`,
+          queueName,
+          expected: news.jurisdiction,
+          actual: jurisdiction,
+        });
+      }
+
+      // Sync settings — diff the observed settings against the declared
+      // ones and patch only the delta.
+      const current = toSettings(observed.settings);
+      const desired = desiredSettings(news.settings, olds?.settings);
+      const delta: QueueSettings = {};
+      for (const key of Object.keys(desired) as (keyof QueueSettings)[]) {
+        if (desired[key] !== undefined && desired[key] !== current[key]) {
+          (delta as Record<string, unknown>)[key] = desired[key];
+        }
+      }
+      let settings = current;
+      if (Object.keys(delta).length > 0) {
+        const patched = yield* queues.patchQueue({
+          accountId: acct,
+          queueId: observed.queueId!,
+          settings: delta,
+        });
+        settings = toSettings(patched.settings);
+      }
+
       return {
         queueId: observed.queueId!,
         queueName: observed.queueName!,
         accountId: acct,
+        jurisdiction,
+        settings,
       };
     }),
     delete: Effect.fn(function* ({ output }) {
@@ -248,11 +375,7 @@ export const ProviderLive = () =>
                 (q): q is typeof q & { queueId: string; queueName: string } =>
                   q.queueId != null && q.queueName != null,
               )
-              .map((q) => ({
-                queueId: q.queueId,
-                queueName: q.queueName,
-                accountId,
-              })),
+              .map((q) => toAttributes(q, accountId)),
           ),
         ),
       );
@@ -266,26 +389,80 @@ export const ProviderLive = () =>
             queueId: output.queueId,
           })
           .pipe(
-            Effect.map((queue) => ({
-              queueId: queue.queueId!,
-              queueName: queue.queueName!,
-              accountId: output.accountId,
-            })),
+            Effect.map((queue) => toAttributes(queue, output.accountId)),
             Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.succeed(undefined)),
           );
       }
       const queueName = yield* createQueueName(id, olds?.name);
       const match = yield* findQueueByName(queueName);
       if (match && match.queueId && match.queueName) {
-        return {
-          queueId: match.queueId,
-          queueName: match.queueName,
-          accountId,
-        };
+        // A queue in another jurisdiction can't be converged, only
+        // replaced — and replacing it deletes whatever owns that name.
+        // Report it as foreign so the engine refuses it without `--adopt`
+        // (and still admits our own previous generation on replacement).
+        const attrs = toAttributes(match, accountId);
+        return attrs.jurisdiction !== olds?.jurisdiction ? Unowned(attrs) : attrs;
       }
       return undefined;
     }),
   });
+
+type ObservedQueue = {
+  queueId?: string | null;
+  queueName?: string | null;
+  jurisdiction?: string | null;
+  settings?: {
+    messageRetentionPeriod?: number | null;
+    deliveryDelay?: number | null;
+    deliveryPaused?: boolean | null;
+  } | null;
+};
+
+const DEFAULT_SETTINGS: Required<QueueSettings> = {
+  messageRetentionPeriod: 345600,
+  deliveryDelay: 0,
+  deliveryPaused: false,
+};
+
+// Cloudflare omits `jurisdiction` for a global queue and `deliveryPaused`
+// while delivery runs.
+const toJurisdiction = (jurisdiction: string | null | undefined) =>
+  (jurisdiction || undefined) as QueueJurisdiction | undefined;
+
+const toSettings = (settings: ObservedQueue["settings"]): Required<QueueSettings> => ({
+  messageRetentionPeriod:
+    settings?.messageRetentionPeriod ?? DEFAULT_SETTINGS.messageRetentionPeriod,
+  deliveryDelay: settings?.deliveryDelay ?? DEFAULT_SETTINGS.deliveryDelay,
+  deliveryPaused: settings?.deliveryPaused ?? DEFAULT_SETTINGS.deliveryPaused,
+});
+
+/**
+ * The settings to converge to: every declared setting, plus the Cloudflare
+ * default for each setting that was declared before and has been removed.
+ * Settings never declared are left as they are.
+ */
+const desiredSettings = (
+  news: QueueSettings | undefined,
+  olds: QueueSettings | undefined,
+): QueueSettings => {
+  const desired: QueueSettings = {};
+  for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof QueueSettings)[]) {
+    const value = news?.[key] ?? (olds?.[key] !== undefined ? DEFAULT_SETTINGS[key] : undefined);
+    if (value !== undefined) (desired as Record<string, unknown>)[key] = value;
+  }
+  return desired;
+};
+
+const toAttributes = (
+  queue: ObservedQueue & { queueId?: string | null; queueName?: string | null },
+  accountId: string,
+): Queue["Attributes"] => ({
+  queueId: queue.queueId!,
+  queueName: queue.queueName!,
+  accountId,
+  jurisdiction: toJurisdiction(queue.jurisdiction),
+  settings: toSettings(queue.settings),
+});
 
 const createQueueName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
@@ -391,8 +568,20 @@ export const ProviderLocal = () =>
           const oldName = output?.queueName
             ? yield* createQueueName(id, olds.name)
             : yield* createQueueName(id, olds.name);
-          if (name !== oldName || output.accountId !== accountId) {
+          if (
+            name !== oldName ||
+            output.accountId !== accountId ||
+            output.jurisdiction !== news.jurisdiction
+          ) {
             return { action: "replace" };
+          }
+          const settings = toSettings(news.settings);
+          if (
+            (Object.keys(settings) as (keyof QueueSettings)[]).some(
+              (key) => settings[key] !== output.settings?.[key],
+            )
+          ) {
+            return { action: "update" };
           }
           // If the resource is a noop, add it to the local runtime state so it's available downstream.
           // We do it here instead of in the reconcile function so it doesn't appear as an update.
@@ -415,6 +604,8 @@ export const ProviderLocal = () =>
               output?.queueId && !isLiveId(output.queueId) ? output.queueId : generateLocalId(),
             queueName: yield* createQueueName(id, news.name),
             accountId: output?.accountId ?? accountId,
+            jurisdiction: news.jurisdiction,
+            settings: toSettings(news.settings),
           };
           MutableHashMap.set(localRuntimeState.queues, queue.queueId, queue);
           return queue;
