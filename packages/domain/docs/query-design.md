@@ -97,7 +97,7 @@ The options:
 | `take` | Page size: `{ default, max }`, by default `{ default: 50, max: 500 }`. |
 | `attributes` | Span attributes for the input, like a command's. Nothing is recorded unless returned here. |
 
-`validate` and `visible` may read what the middleware provides and what the hosted model provides (its views, aggregates and streams), so a rule can look up a relationship ("the caller is on this trial's team") in a view. A requirement neither provides becomes a requirement of the model's Layer, so it fails to type-check rather than at run time.
+`validate` and `visible` may read what the middleware provides and what the hosted model provides (its views, aggregates, streams, sagas and projection progress), so a rule can look up a relationship ("the caller is on this trial's team") in a view. Both are checked by type: anything else fails at the declaration, and a member the model does not host becomes a requirement of the model's Layer that nothing can satisfy, so it fails to type-check rather than at run time. At run time the model's members are merged under the request's own services, so the request always wins.
 
 ## Implementation
 
@@ -169,7 +169,7 @@ Views authorize every read with `validate(request, state)`: the middleware says 
 
 **Per request: `validate(input, { atLeast })`.** It runs before the store is read and judges whether this caller may ask this question at all: the caller owns the account, is on the trial's team, has the role. It fails with a declared rejection, which reaches the client typed. It is the query's counterpart of a view's `validate`, and it is where most rules belong.
 
-`validate` runs before the `atLeast` wait. An unauthorized caller is refused at once, and cannot make the server wait on a projection. When the rule reads a view that the same write updates (the caller was just added to a team), `validate` receives `atLeast` and can pass it to that view's `query(key, { atLeast })`.
+`validate` runs before the `atLeast` wait. An unauthorized caller is refused at once, and cannot make the server wait on a projection. When the rule reads a view that the same write updates (the caller was just added to a team), `validate` receives `atLeast` and can pass it to that view's `query(key, { atLeast })`. Only for a write to an aggregate that view consumes: a view's checkpoint for a stream it never receives stays at 0, so the read would wait out the timeout.
 
 **Per row: `visible(row, input)`.** It runs on every row of a paged result and drops the rows it refuses. It never rejects: rejecting a whole page because one row is hidden would leak that the row exists, and would break paging. The span records how many rows were hidden (`domain.query.hidden`).
 
