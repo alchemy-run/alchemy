@@ -4435,10 +4435,9 @@ export const LiveWorkerProvider = () =>
                       ? [
                           {
                             accountId,
-                            // Practically always present; an empty value
-                            // is healed by the per-script read.
-                            // The name when the tag is missing — never
-                            // the provisional "" a precreate stub records.
+                            // Practically always present. Fall back to the
+                            // name (healed by the per-script read), never
+                            // the "" that marks an unuploaded stub.
                             workerId: script.tag ?? script.id,
                             workerName: script.id,
                             namespace: undefined,
