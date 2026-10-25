@@ -3,7 +3,7 @@ title: Agents and MCP
 description: Give an agent the commands and reads of an Api as tools, inside the app with Effect AI, or outside it over MCP.
 ---
 
-An Api already lists what one kind of client may do. `@alchemy.run/domain/ai` turns that list into tools for an agent: an Effect AI `Toolkit` for an agent inside your app, and an MCP server for agents outside it. You declare nothing twice. Each tool calls the Api, so its middleware, its `decide` and `validate` checks and its rejections work for an agent as they do for every other client.
+An Api already lists what one kind of client may do. `@alchemy.run/domain/Ai` turns that list into tools for an agent: an Effect AI `Toolkit` for an agent inside your app, and an MCP server for agents outside it. You declare nothing twice. Each tool calls the Api, so its middleware, its `decide` and `validate` checks and its rejections work for an agent as they do for every other client.
 
 ## Tools from an Api
 
@@ -19,7 +19,7 @@ An Api already lists what one kind of client may do. `@alchemy.run/domain/ai` tu
 `watch` and `events` are streams, not one result, so they are not tools. Clients that need them use the Api's own client.
 
 ```typescript
-import * as DomainAi from "@alchemy.run/domain/ai";
+import * as DomainAi from "@alchemy.run/domain/Ai";
 
 const { toolkit, layer } = DomainAi.toToolkit(CustomerApi);
 Object.keys(toolkit.tools);
@@ -38,7 +38,7 @@ Object.keys(toolkit.tools);
 Give the toolkit to `LanguageModel`, and provide `layer` with the model:
 
 ```typescript
-import * as DomainAi from "@alchemy.run/domain/ai";
+import * as DomainAi from "@alchemy.run/domain/Ai";
 import { LanguageModel } from "effect/ai";
 import * as Effect from "effect/Effect";
 
@@ -60,7 +60,7 @@ A rejection (`InsufficientFunds`) or a middleware error (`Unauthenticated`) come
 `DomainAi.toMcp` registers the tools on Effect's `McpServer`. Provide a transport and the model:
 
 ```typescript
-import * as DomainAi from "@alchemy.run/domain/ai";
+import * as DomainAi from "@alchemy.run/domain/Ai";
 import { McpProtocol, McpServer } from "effect/ai";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as Layer from "effect/Layer";

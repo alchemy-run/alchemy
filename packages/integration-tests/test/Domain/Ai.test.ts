@@ -1,5 +1,5 @@
 import * as Domain from "@alchemy.run/domain";
-import * as DomainAi from "@alchemy.run/domain/ai";
+import * as DomainAi from "@alchemy.run/domain/Ai";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
 import { McpProtocol, McpServer, Tool } from "effect/ai";
@@ -102,7 +102,7 @@ const ToolsLive = walletTools.layer.pipe(Layer.provideMerge(WalletsLive));
 
 // ---------------------------------------------------------------- tests
 
-describe("Domain ai: toToolkit", () => {
+describe("Domain Ai: toToolkit", () => {
   it("has one tool per call that returns once, with the Api's schemas", () => {
     const { toolkit } = DomainAi.toToolkit(WalletApi);
     expect(Object.keys(toolkit.tools)).toEqual([
@@ -229,7 +229,7 @@ const mcpClient = (handler: (request: Request) => Promise<Response>) => {
   };
 };
 
-describe("Domain ai: toMcp", () => {
+describe("Domain Ai: toMcp", () => {
   it.live("serves the tools over MCP; a call carries the request's headers to the Api", () =>
     Effect.gen(function* () {
       const { handler, dispose } = HttpRouter.toWebHandler(

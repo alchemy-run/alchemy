@@ -28,7 +28,6 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
-    "./ai": "./src/ai/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -38,11 +37,6 @@
         "types": "./lib/index.d.ts",
         "bun": "./src/index.ts",
         "default": "./lib/index.js"
-      },
-      "./ai": {
-        "types": "./lib/ai/index.d.ts",
-        "bun": "./src/ai/index.ts",
-        "default": "./lib/ai/index.js"
       },
       "./internal": null,
       "./*": {

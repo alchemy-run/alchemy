@@ -8,8 +8,8 @@ import type * as Rpc from "effect/rpc/Rpc";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import type { Entry } from "../Api.ts";
-import { describe, failures, type Operation } from "../ApiCatalog.ts";
+import type { Entry } from "./Api.ts";
+import { describe, failures, type Operation } from "./ApiCatalog.ts";
 
 /** What {@link toToolkit} reads from an Api class. */
 export interface Toolable {
@@ -184,7 +184,7 @@ const requestHeaders: Effect.Effect<Headers.Input | undefined> = Effect.map(
  *
  * **Example:** Tools for an in-app agent
  * ```typescript
- * import * as DomainAi from "@alchemy.run/domain/ai";
+ * import * as DomainAi from "@alchemy.run/domain/Ai";
  * import { LanguageModel } from "effect/ai";
  *
  * const { toolkit, layer } = DomainAi.toToolkit(CustomerApi, {
@@ -248,7 +248,7 @@ export const toToolkit = <A extends Toolable, R = never>(
  *
  * **Example:** An MCP server for an Api
  * ```typescript
- * import * as DomainAi from "@alchemy.run/domain/ai";
+ * import * as DomainAi from "@alchemy.run/domain/Ai";
  * import { McpProtocol, McpServer } from "effect/ai";
  * import * as HttpRouter from "effect/http/HttpRouter";
  *
