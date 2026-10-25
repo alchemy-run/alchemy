@@ -72,6 +72,8 @@ type Validate = (request: Read.Request<unknown>, state: unknown) => Effect.Effec
 interface Item {
   readonly state: unknown;
   readonly value: Option.Option<unknown>;
+  /** A marker (`CaughtUp`), sent as is: `validate` does not judge it. */
+  readonly marker?: true;
 }
 
 /**
@@ -94,7 +96,7 @@ const encode = (
     const values: Array<unknown> = [];
     let rejection: Option.Option<unknown> = Option.none();
     for (const item of items) {
-      if (validate) {
+      if (validate && !item.marker) {
         const judged = yield* validate({ mode: subscription.mode, key: ref }, item.state).pipe(
           Effect.provideContext(context),
           Effect.result,
@@ -147,11 +149,14 @@ export const viewPush =
         }
         const state = snapshot.state === null ? null : kernel.decodeViewState(view, snapshot.state);
         const visible = state !== null && matches(where(subscription), state) ? state : null;
+        const value = subscription.withCursor
+          ? { _tag: "WithCursor", state: visible, cursor: String(snapshot.seq) }
+          : visible;
         return encode(
           view,
           subscription,
           ref,
-          [{ state, value: Option.some(visible) }],
+          [{ state, value: Option.some(value) }],
           snapshot.version,
         );
       }
@@ -164,6 +169,15 @@ export const viewPush =
         };
       });
       const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.seq : subscription.cursor;
+      // The first push of a read is its backlog: mark its end once, if the client asked.
+      if (subscription.caughtUp && !subscription.caughtUpSent) {
+        items.push({
+          state: null,
+          value: Option.some({ _tag: "CaughtUp", cursor: String(cursor) }),
+          marker: true,
+        });
+        return encode(view, { ...subscription, caughtUpSent: true }, ref, items, cursor);
+      }
       return encode(view, subscription, ref, items, cursor);
     });
 

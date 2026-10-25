@@ -256,6 +256,33 @@ export interface Entry<S, E, Id = string> {
 }
 
 /**
+ * A key's state and the cursor it is valid at: the `seq` of the last event
+ * the key had emitted when the state was read (`"0"` before any).
+ */
+export interface Snapshot<S> {
+  readonly state: S | null;
+  /** Pass as `after` to `events` to receive every later entry, once. */
+  readonly cursor: string;
+}
+
+/**
+ * The frame `events(key, { caughtUp: true })` sends once it has sent the
+ * key's backlog: every entry up to `cursor` was delivered (or filtered out),
+ * and what follows is live.
+ */
+export interface CaughtUp {
+  readonly _tag: "CaughtUp";
+  /** The `seq` of the last entry of the backlog (`"0"` for none); resume `events` after it. */
+  readonly cursor: string;
+}
+
+/** Is a frame of `events(key, { caughtUp: true })` the {@link CaughtUp} marker? */
+export const isCaughtUp = (frame: unknown): frame is CaughtUp =>
+  typeof frame === "object" &&
+  frame !== null &&
+  (frame as { readonly _tag?: unknown })._tag === "CaughtUp";
+
+/**
  * A page of entries.
  */
 export interface Page<Entry> {

@@ -23,6 +23,13 @@ export const EnvelopeSchema = Schema.Struct({
   commandId: Schema.String,
 });
 
+/** The marker after a live read's backlog (`events` with `caughtUp`). */
+export const CaughtUpSchema = Schema.TaggedStruct("CaughtUp", { cursor: Schema.String });
+
+/** A view state with its cursor, as `watch` with `withCursor` sends it. */
+export const withCursorSchema = (state: Schema.Top) =>
+  Schema.TaggedStruct("WithCursor", { state, cursor: Schema.String });
+
 /** Something an Api can expose for reading. */
 export type Readable = View.Any | Aggregate.Any | DomainStream.Any;
 
@@ -157,8 +164,12 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
       ),
       watch: guard(
         Rpc.make(`${name}.watch`, {
-          payload: { key, where: Schema.optional(Schema.Unknown) },
-          success: state,
+          payload: {
+            key,
+            where: Schema.optional(Schema.Unknown),
+            withCursor: Schema.optional(Schema.Boolean),
+          },
+          success: Schema.Union([withCursorSchema(state), state]),
           error,
           stream: true,
         }),
@@ -169,8 +180,9 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
             key,
             after: Schema.optional(Schema.String),
             where: Schema.optional(Schema.Unknown),
+            caughtUp: Schema.optional(Schema.Boolean),
           },
-          success: recorded,
+          success: Schema.Union([CaughtUpSchema, recorded]),
           error,
           stream: true,
         }),

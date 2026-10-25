@@ -80,6 +80,8 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
 
 Watch state with `View.watch(key)`, and watch emitted events with `View.events(key)` (e.g. statement lines). A failed `validate` ends the watch with its rejection.
 
+Pass `caughtUp: true` to `View.events` to get a `CaughtUp { cursor }` frame after the history (`Domain.View.isCaughtUp(frame)`): show the feed as live only then, and resume a dropped feed with `after: cursor`. `View.watch(key, { withCursor: true })` gives `{ state, cursor }`.
+
 ## Tracing from the browser
 
 foldkit wraps every Command in a span, and Api calls carry the trace to the server (live reads too). Put a tracer in `resources` that exports to the app's own origin, and collect it in the server Worker with `Telemetry.relay`, which forwards it with the server's credentials:
