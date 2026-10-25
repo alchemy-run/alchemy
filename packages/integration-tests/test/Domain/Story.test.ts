@@ -627,6 +627,25 @@ describe("Domain Story", () => {
         "NotAnOperator",
       );
 
+      // A read without a session fails with the middleware's error, and the client's type has it.
+      const anonymous = [
+        yield* client.Totals.get("c-1").pipe(
+          Effect.catchTag("Unauthenticated", (e) => Effect.succeed(e._tag)),
+        ),
+        yield* client.Totals.watch("c-1").pipe(
+          Stream.runCollect,
+          Effect.catchTag("Unauthenticated", (e) => Effect.succeed(e._tag)),
+        ),
+        yield* client.Counter.get("c-1").pipe(
+          Effect.catchTag("Unauthenticated", (e) => Effect.succeed(e._tag)),
+        ),
+        yield* client.Counter.watch("c-1").pipe(
+          Stream.runCollect,
+          Effect.catchTag("Unauthenticated", (e) => Effect.succeed(e._tag)),
+        ),
+      ];
+      expect(anonymous).toEqual(Array(4).fill("Unauthenticated"));
+
       // A watch sees the current state, then each change.
       const totals = yield* client.Totals.watch("c-1", sam).pipe(
         Stream.take(2),
