@@ -178,6 +178,53 @@ export const Website = Cloudflare.Website.Astro("Website", {
 });
 ```
 
+## Route caching
+
+Astro's route cache runs on Workers Cache. Set the cache provider to
+`cacheCloudflare()` and give each route a rule in `routeRules`:
+
+```typescript
+// astro.config.ts
+import { defineConfig } from "astro/config";
+import { cacheCloudflare } from "@alchemy.run/frontend-frameworks/astro/cache";
+
+export default defineConfig({
+  cache: { provider: cacheCloudflare() },
+  routeRules: {
+    "/insights": { maxAge: 600, swr: 86400 },
+  },
+});
+```
+
+Alchemy sees the provider and turns on Workers Cache for the Worker.
+The edge then serves `/insights` for 10 minutes without running the
+Worker. A route with no rule is never cached.
+
+Import `cacheCloudflare` from `@alchemy.run/frontend-frameworks`, not
+`@astrojs/cloudflare/cache`. The upstream package needs Wrangler.
+
+Set a rule from a page with `Astro.cache.set()`:
+
+```astro
+---
+// src/pages/blog/[slug].astro
+Astro.cache.set({ maxAge: 300, tags: ["blog"] });
+---
+```
+
+Each response is tagged with its path. Purge a path or a tag with
+`Astro.cache.invalidate()`:
+
+```typescript
+// src/pages/api/publish.ts
+import type { APIRoute } from "astro";
+
+export const POST: APIRoute = async ({ cache }) => {
+  await cache.invalidate({ tags: ["blog"] });
+  return new Response("purged");
+};
+```
+
 ## Fully static sites
 
 With `astro: { output: "static" }` every page is prerendered at
