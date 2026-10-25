@@ -48,7 +48,7 @@ Keep the statement, the transaction count and the monthly totals out of here. Th
 
 ```typescript title="src/Account.aggregate.ts"
 WithdrawMoney: (s, cmd) =>
-  s._tag !== "Open"
+  !isOpen(s)
     ? new NotOpen()
     : cmd.amount > s.balance
       ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
@@ -68,30 +68,35 @@ A handler can also return an empty array. The command is accepted, but there's n
 ```typescript title="src/Account.aggregate.ts"
 evolve: {
   AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-  MoneyDeposited: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
-  MoneyWithdrawn: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
+  MoneyDeposited: (s, e) => {
+    if (!isOpen(s)) throw new Error(`MoneyDeposited on a ${s._tag} account`);
+    return { ...s, balance: e.balanceAfter };
+  },
+  MoneyWithdrawn: (s, e) => {
+    if (!isOpen(s)) throw new Error(`MoneyWithdrawn on a ${s._tag} account`);
+    return { ...s, balance: e.balanceAfter };
+  },
 },
 ```
 
 Keeping `evolve` separate from `decide` is what lets the state be derived from events. `decide` runs once, when the command arrives, and may refuse. `evolve` must always accept, because it applies events that have already been recorded, and applying the same events must always give the same state.
 
-An event in a state where it can't happen, like a deposit to an unopened account, means `decide` has a bug. `mustBeOpen` throws in that case, and the command that produced the event rolls back instead of committing a broken state.
+An event in a state where it can't happen, like a deposit to an unopened account, means `decide` has a bug. The `evolve` handler throws in that case, and the command that produced the event rolls back instead of committing a broken state.
+
+`decide` and `evolve` share the rule as a pure predicate. `decide` turns it into a rejection, and `evolve` into a guard. The `throw` stays in the `evolve` handler itself, so reading one function shows whether it can throw.
 
 ```typescript title="src/Account.aggregate.ts"
-const mustBeOpen = (s: State) => {
-  if (s._tag !== "Open") throw new Error(`expected an open account, got ${s._tag}`);
-  return s;
-};
+const isOpen = (s: State): s is Extract<State, { _tag: "Open" }> => s._tag === "Open";
 ```
 
 ## Reply from the new state
 
-A command that declares a `reply` gets one from a `reply` handler. It runs after `evolve`, on the state the events produced.
+A command that declares a `reply` gets one from a `reply` handler. It runs after `evolve`, on the state the events produced. It only reads that state: `evolve` has already guarded it, so the account is open here, and the other branch is only there for the types.
 
 ```typescript title="src/Account.aggregate.ts"
 reply: {
-  DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }),
-  WithdrawMoney: (s) => ({ balance: mustBeOpen(s).balance }),
+  DepositMoney: (s) => ({ balance: isOpen(s) ? s.balance : 0 }),
+  WithdrawMoney: (s) => ({ balance: isOpen(s) ? s.balance : 0 }),
 },
 ```
 

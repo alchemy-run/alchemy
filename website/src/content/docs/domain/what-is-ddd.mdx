@@ -112,6 +112,8 @@ That makes the size of an aggregate a design decision. It should contain exactly
 Here is the whole account: how it decides each command, and how each event changes its state.
 
 ```typescript title="src/Account.aggregate.ts"
+const isOpen = (s: State): s is Extract<State, { _tag: "Open" }> => s._tag === "Open";
+
 export class Account extends Domain.Aggregate("Account", {
   id: AccountId,
   state: State,
@@ -121,11 +123,11 @@ export class Account extends Domain.Aggregate("Account", {
     OpenAccount: (s, cmd) =>
       s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
     DepositMoney: (s, cmd) =>
-      s._tag !== "Open"
+      !isOpen(s)
         ? new NotOpen()
         : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
     WithdrawMoney: (s, cmd) =>
-      s._tag !== "Open"
+      !isOpen(s)
         ? new NotOpen()
         : cmd.amount > s.balance
           ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
@@ -133,12 +135,18 @@ export class Account extends Domain.Aggregate("Account", {
   },
   evolve: {
     AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-    MoneyDeposited: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
-    MoneyWithdrawn: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
+    MoneyDeposited: (s, e) => {
+      if (!isOpen(s)) throw new Error(`MoneyDeposited on a ${s._tag} account`);
+      return { ...s, balance: e.balanceAfter };
+    },
+    MoneyWithdrawn: (s, e) => {
+      if (!isOpen(s)) throw new Error(`MoneyWithdrawn on a ${s._tag} account`);
+      return { ...s, balance: e.balanceAfter };
+    },
   },
   reply: {
-    DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }),
-    WithdrawMoney: (s) => ({ balance: mustBeOpen(s).balance }),
+    DepositMoney: (s) => ({ balance: isOpen(s) ? s.balance : 0 }),
+    WithdrawMoney: (s) => ({ balance: isOpen(s) ? s.balance : 0 }),
   },
 }) {}
 ```

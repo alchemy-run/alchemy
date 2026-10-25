@@ -55,7 +55,7 @@ A rule that spans aggregates never becomes a cross-aggregate transaction. Give t
 - Don't wait for a saga in a policy. `start` it, keyed by the aggregate it's about, and react to the events its steps record.
 - A handler resolves its dependencies once in `toLayer` and requires nothing per call.
 - Build one Layer and provide it once (`Layer.mergeAll`, `Layer.provide`). Never chain `Effect.provide`.
-- Never `throw` for an outcome a caller handles. Fail with tagged errors (`Domain.Rejection`, `Schema.TaggedError`). The one exception is an `evolve` guard: an event that cannot apply to the current state is a bug in `decide`, so `evolve` throws, the command dies, and nothing commits.
+- `throw` appears only inside an aggregate's `evolve` handler, as a guard for an event that cannot apply to the current state. That is a bug in `decide`, so the command dies and nothing commits. Everywhere else, fail with tagged errors (`Domain.Rejection`, `Schema.TaggedError`): `decide` returns a rejection, `reply` only reads state, and no helper throws. Share the rule as a pure predicate (`isOpen(s)`): `decide` does `if (!isOpen(s)) return new NotOpen()`, `evolve` does `if (!isOpen(s)) throw new Error(...)`.
 - Tracing is automatic. Record payload values only through a declaration's `attributes`, or with `Effect.annotateCurrentSpan` in an effectful handler. Make secrets `Schema.Redacted`, so they never reach a trace or a log.
 - Test what the model does, through stories: events, replies, rejections, views and saga outcomes. Don't test a saga's internal steps.
 

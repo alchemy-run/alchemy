@@ -50,13 +50,17 @@ const AccountState = Schema.Union([
 ]);
 type AccountState = typeof AccountState.Type;
 
+// The one rule every block shares: is the account open? A predicate, never a
+// throw, so `decide` turns it into a rejection and `evolve` into a guard.
+const isOpen = (s: AccountState): s is Open => s._tag === "Open";
+
 // Lenses on the narrowed Open state: they cannot miss, so nothing is hidden.
 const balance = Optic.id<Open>().key("balance");
 const frozen = Optic.id<Open>().key("frozen");
 
 // Authorization: customers may act on their own accounts; agents and the system on any.
 const openFor = (s: AccountState, actor: Actor): Open | NotOpen | NotOwner =>
-  s._tag !== "Open"
+  !isOpen(s)
     ? new NotOpen()
     : actor._tag === "Customer" && actor.customerId !== s.customerId
       ? new NotOwner()
@@ -68,12 +72,6 @@ const authorized = Effect.fn(function* (s: AccountState) {
   if (o._tag !== "Open") return yield* o;
   return o;
 });
-
-// evolve guard: an event in the wrong state is a bug, so the command rolls back.
-const mustBeOpen = (s: AccountState, what: string): Open => {
-  if (s._tag !== "Open") throw new Error(`${what} in state ${s._tag}`);
-  return s;
-};
 
 const dayOf = (t: DateTime.Utc) => DateTime.formatIsoDate(t);
 
@@ -106,7 +104,7 @@ export class Account extends Domain.Aggregate("Account", {
         : [new AccountOpened({ customerId: cmd.customerId, owner: cmd.owner })],
 
     ChangeOwner: Effect.fn(function* (s, cmd) {
-      if (s._tag !== "Open") return yield* new NotOpen();
+      if (!isOpen(s)) return yield* new NotOpen();
       const actor = yield* CurrentActor;
       if (actor._tag !== "Agent") return yield* new NotPermitted();
       return [new OwnerChanged({ previous: s.customerId, customerId: cmd.customerId, by: actor })];
@@ -156,7 +154,7 @@ export class Account extends Domain.Aggregate("Account", {
     },
 
     CreditTransfer: (s, cmd) =>
-      s._tag !== "Open"
+      !isOpen(s)
         ? new NotOpen()
         : [
             new TransferCredited({
@@ -167,7 +165,7 @@ export class Account extends Domain.Aggregate("Account", {
           ],
 
     RefundTransfer: (s, cmd) =>
-      s._tag === "Open"
+      isOpen(s)
         ? [
             new TransferRefunded({
               transferId: cmd.transferId,
@@ -178,7 +176,7 @@ export class Account extends Domain.Aggregate("Account", {
         : [new RefundStranded({ transferId: cmd.transferId, amount: cmd.amount })],
 
     RecordSettlement: (s, cmd) =>
-      s._tag === "Open"
+      isOpen(s)
         ? [
             new SettlementReceived({
               settlementId: cmd.settlementId,
@@ -198,28 +196,52 @@ export class Account extends Domain.Aggregate("Account", {
       frozen: null,
       today: { day: "", withdrawn: 0 },
     }),
-    OwnerChanged: (s, e) => ({ ...mustBeOpen(s, "OwnerChanged"), customerId: e.customerId }),
-    MoneyDeposited: (s, e) => balance.replace(e.balanceAfter, mustBeOpen(s, "MoneyDeposited")),
-    TransferDebited: (s, e) => balance.replace(e.balanceAfter, mustBeOpen(s, "TransferDebited")),
-    TransferCredited: (s, e) => balance.replace(e.balanceAfter, mustBeOpen(s, "TransferCredited")),
-    TransferRefunded: (s, e) => balance.replace(e.balanceAfter, mustBeOpen(s, "TransferRefunded")),
-    SettlementReceived: (s, e) =>
-      balance.replace(e.balanceAfter, mustBeOpen(s, "SettlementReceived")),
-    MoneyWithdrawn: (s, e, { at }) => {
-      const o = mustBeOpen(s, "MoneyWithdrawn");
-      const day = dayOf(at);
-      const withdrawn = (o.today.day === day ? o.today.withdrawn : 0) + e.amount;
-      return { ...balance.replace(e.balanceAfter, o), today: { day, withdrawn } };
+    // A guard throws only here, in evolve: an event in the wrong state is a bug
+    // in decide, so the command dies and nothing commits.
+    OwnerChanged: (s, e) => {
+      if (!isOpen(s)) throw new Error(`OwnerChanged in state ${s._tag}`);
+      return { ...s, customerId: e.customerId };
     },
-    AccountFrozen: (s, e) => frozen.replace(e.reason, mustBeOpen(s, "AccountFrozen")),
+    MoneyDeposited: (s, e) => {
+      if (!isOpen(s)) throw new Error(`MoneyDeposited in state ${s._tag}`);
+      return balance.replace(e.balanceAfter, s);
+    },
+    TransferDebited: (s, e) => {
+      if (!isOpen(s)) throw new Error(`TransferDebited in state ${s._tag}`);
+      return balance.replace(e.balanceAfter, s);
+    },
+    TransferCredited: (s, e) => {
+      if (!isOpen(s)) throw new Error(`TransferCredited in state ${s._tag}`);
+      return balance.replace(e.balanceAfter, s);
+    },
+    TransferRefunded: (s, e) => {
+      if (!isOpen(s)) throw new Error(`TransferRefunded in state ${s._tag}`);
+      return balance.replace(e.balanceAfter, s);
+    },
+    SettlementReceived: (s, e) => {
+      if (!isOpen(s)) throw new Error(`SettlementReceived in state ${s._tag}`);
+      return balance.replace(e.balanceAfter, s);
+    },
+    MoneyWithdrawn: (s, e, { at }) => {
+      if (!isOpen(s)) throw new Error(`MoneyWithdrawn in state ${s._tag}`);
+      const day = dayOf(at);
+      const withdrawn = (s.today.day === day ? s.today.withdrawn : 0) + e.amount;
+      return { ...balance.replace(e.balanceAfter, s), today: { day, withdrawn } };
+    },
+    AccountFrozen: (s, e) => {
+      if (!isOpen(s)) throw new Error(`AccountFrozen in state ${s._tag}`);
+      return frozen.replace(e.reason, s);
+    },
     AccountClosed: () => ({ _tag: "Closed" as const }),
     RefundStranded: (s) => s,
     SettlementOnClosedAccount: (s) => s,
   },
 
+  // reply only reads: evolve has already guarded the state, so the account
+  // is open here, and the fallback exists only for the types.
   reply: {
-    DepositMoney: (s) => ({ balance: balance.get(mustBeOpen(s, "DepositMoney reply")) }),
-    WithdrawMoney: (s) => ({ balance: balance.get(mustBeOpen(s, "WithdrawMoney reply")) }),
+    DepositMoney: (s) => ({ balance: isOpen(s) ? s.balance : 0 }),
+    WithdrawMoney: (s) => ({ balance: isOpen(s) ? s.balance : 0 }),
   },
   // Clients may read and watch the account itself (its state and committed
   // events) through an Api, judged like a view against its current state.
@@ -227,7 +249,7 @@ export class Account extends Domain.Aggregate("Account", {
     middleware: [Session],
     rejects: [NotOwner],
     validate: Effect.fn(function* (_request, s) {
-      yield* mustOwn(s._tag === "Open" ? s.customerId : null);
+      yield* mustOwn(isOpen(s) ? s.customerId : null);
     }),
   },
 }) {}
