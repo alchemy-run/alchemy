@@ -22,6 +22,7 @@ const fixtureNames = [
   "alchemy-pr-1570-ruleset-replace-a",
   "alchemy-pr-1570-ruleset-replace-b",
   "alchemy-pr-1570-ruleset-adopt",
+  "alchemy-pr-1570-ruleset-legacy-rules",
 ];
 
 // Retain public fixtures: the gh token lacks delete_repo, and private rulesets are plan-gated.
@@ -83,24 +84,22 @@ test.provider(
         name: "main protection",
         conditions: { include: ["refs/heads/main"] },
         bypassActors: [{ actorType: "RepositoryRole", actorId: 5 }],
-        rules: {
-          nonFastForward: true,
-          deletion: true,
-          update: true,
-          pullRequest: {
-            allowedMergeMethods: ["squash"],
-            requireExtraApprovalForUnattributedChanges: false,
-          },
-          requiredStatusChecks: { checks: [{ context: "ci/test" }] },
-          mergeQueue: {
-            mergeMethod: "SQUASH",
-            groupingStrategy: "HEADGREEN",
-            maxEntriesToBuild: 2,
-            minEntriesToMerge: 1,
-            maxEntriesToMerge: 1,
-            minEntriesToMergeWaitMinutes: 1,
-            checkResponseTimeoutMinutes: 30,
-          },
+        nonFastForward: true,
+        deletion: true,
+        update: true,
+        pullRequest: {
+          allowedMergeMethods: ["squash"],
+          requireExtraApprovalForUnattributedChanges: false,
+        },
+        requiredStatusChecks: { checks: [{ context: "ci/test" }] },
+        mergeQueue: {
+          mergeMethod: "SQUASH",
+          groupingStrategy: "HEADGREEN",
+          maxEntriesToBuild: 2,
+          minEntriesToMerge: 1,
+          maxEntriesToMerge: 1,
+          minEntriesToMergeWaitMinutes: 1,
+          checkResponseTimeoutMinutes: 30,
         },
       });
       expect(created.rulesetId).toBeGreaterThan(0);
@@ -142,14 +141,12 @@ test.provider(
         name: "main protection",
         conditions: { include: ["refs/heads/main"] },
         bypassActors: [{ actorType: "RepositoryRole", actorId: 5 }],
-        rules: {
-          nonFastForward: true,
-          deletion: true,
-          update: true,
-          pullRequest: {},
-          requiredStatusChecks: { checks: [{ context: "ci/test" }] },
-          mergeQueue: {},
-        },
+        nonFastForward: true,
+        deletion: true,
+        update: true,
+        pullRequest: {},
+        requiredStatusChecks: { checks: [{ context: "ci/test" }] },
+        mergeQueue: {},
       });
       expect(relaxed.rulesetId).toBe(created.rulesetId);
       const afterRelax = yield* getRuleset(repo, created.rulesetId);
@@ -174,7 +171,9 @@ test.provider(
         name: "updated main protection",
         enforcement: "disabled",
         conditions: { include: ["refs/heads/main", "refs/heads/release/*"] },
-        rules: { nonFastForward: true, requiredLinearHistory: true, update: false },
+        nonFastForward: true,
+        requiredLinearHistory: true,
+        update: false,
       });
       expect(updated.rulesetId).toBe(created.rulesetId);
       expect(updated.nodeId).toBe(created.nodeId);
@@ -202,6 +201,55 @@ test.provider(
       // Delete the ruleset while its repository is still managed, then release the fixture.
       yield* stack.deploy(repository(repo));
       expect(yield* getRuleset(repo, created.rulesetId)).toBeUndefined();
+      expect(yield* getRulesets(repo)).toEqual([]);
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:github", "provider:github:repository", "provider:github:ruleset", "live"] },
+);
+
+test.provider(
+  "rules declared in the deprecated rules object move to the top level without an update",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const repo = fixtureNames[5]!;
+      const ruleset = (props: Omit<GitHub.RulesetProps, "owner" | "repository" | "name">) =>
+        Effect.gen(function* () {
+          const fixture = yield* repository(repo);
+          return yield* GitHub.Ruleset("LegacyRules", {
+            owner,
+            repository: repoName(fixture),
+            name: "legacy rules",
+            conditions: { include: ["refs/heads/main"] },
+            ...props,
+          }).pipe(destroy());
+        });
+
+      const legacy = yield* stack.deploy(
+        ruleset({ rules: { nonFastForward: true, deletion: true } }),
+      );
+      const ruleTypes = Effect.map(getRuleset(repo, legacy.rulesetId), (ruleset) =>
+        ruleset?.rules?.map((rule) => rule.type).sort(),
+      );
+      expect(yield* ruleTypes).toEqual(["deletion", "non_fast_forward"]);
+
+      // State persisted with the nested shape plans a noop against the same
+      // rules at the top level, and deploying it leaves GitHub untouched.
+      const flat = ruleset({ nonFastForward: true, deletion: true });
+      const plan = yield* stack.plan(flat);
+      expect(plan.resources["LegacyRules"]).toMatchObject({ action: "noop" });
+      const migrated = yield* stack.deploy(flat);
+      expect(migrated.rulesetId).toBe(legacy.rulesetId);
+      expect((yield* getRuleset(repo, legacy.rulesetId))?.updated_at).toBe(legacy.updatedAt);
+
+      // A top-level rule takes precedence over the same rule in `rules`.
+      const overridden = yield* stack.deploy(
+        ruleset({ rules: { nonFastForward: true, deletion: true }, nonFastForward: false }),
+      );
+      expect(overridden.rulesetId).toBe(legacy.rulesetId);
+      expect(yield* ruleTypes).toEqual(["deletion"]);
+
+      yield* stack.deploy(repository(repo));
       expect(yield* getRulesets(repo)).toEqual([]);
       yield* stack.destroy();
     }),
@@ -241,7 +289,8 @@ test.provider(
               repository: repoName(fixture),
               name: "adopted protection",
               conditions: { include: ["~DEFAULT_BRANCH"] },
-              rules: { deletion: true, nonFastForward: true },
+              deletion: true,
+              nonFastForward: true,
             }).pipe(adopt(enabled), destroy());
           }),
         );
@@ -284,7 +333,7 @@ test.provider(
             repository: repoName(fixture),
             name: "listed tag protection",
             target: "tag",
-            rules: { deletion: true },
+            deletion: true,
           }).pipe(destroy());
         }),
       );
@@ -358,7 +407,7 @@ test.provider(
               owner,
               repository: repoName(repos[destination]),
               name: "replacement protection",
-              rules: { nonFastForward: true },
+              nonFastForward: true,
             }).pipe(destroy());
           }),
         );
