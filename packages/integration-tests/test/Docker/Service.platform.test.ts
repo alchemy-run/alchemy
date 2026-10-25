@@ -7,6 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
+import TestServiceV2Scaled from "./fixtures/service-v2-scaled.ts";
 import TestServiceV2 from "./fixtures/service-v2.ts";
 import TestService, { SERVICE_EXTERNAL_PORT } from "./fixtures/service.ts";
 import { ensureDockerSwarm } from "./Runtime.ts";
@@ -135,7 +136,24 @@ test.provider(
       );
       expect(previousImageGone).toBe(true);
 
-      const imageRef = updated.image;
+      // A non-code update keeps the content hash, and swarm stores the image
+      // ref with a resolved digest, so the running image must not be mistaken
+      // for a previous bundle and removed.
+      const scaled = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* TestServiceV2Scaled;
+        }),
+      );
+      expect(scaled.id).toBe(service.id);
+      expect(scaled.replicas).toBe(2);
+      expect(scaled.code?.hash).toBe(updated.code?.hash);
+      const runningImagePresent = yield* docker.image.inspect(scaled.image).pipe(
+        Effect.map(() => true),
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(false)),
+      );
+      expect(runningImagePresent).toBe(true);
+
+      const imageRef = scaled.image;
       yield* stack.destroy();
 
       // The swarm service is gone after destroy.
