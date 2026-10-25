@@ -122,7 +122,8 @@ export interface Definition<
   };
   /**
    * One handler per event: folds a committed event into state. Throw when an
-   * event cannot apply to the current state; that is a bug, not a rejection.
+   * event cannot apply to the current state; that is a bug in `decide`, not a
+   * rejection. The command then dies and none of its events commit.
    */
   readonly evolve: {
     readonly [T in E["tag"]]: (

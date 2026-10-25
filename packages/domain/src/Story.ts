@@ -85,7 +85,7 @@ export type Step =
     }
   | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } }
   | { readonly _tag: "Replied"; readonly reply: unknown }
-  | { readonly _tag: "State"; readonly ref: Aggregate.Ref; readonly assert: (state: any) => void }
+  | { readonly _tag: "State"; readonly ref: Aggregate.Ref; readonly expected: unknown }
   | {
       readonly _tag: "View";
       readonly view: View.Any;
@@ -186,15 +186,11 @@ const rejected = (rejection: { readonly _tag: string }): Step => ({
 /** The last command's reply. */
 const replied = (reply: unknown): Step => ({ _tag: "Replied", reply });
 
-/** Assert on an aggregate instance's current state. */
+/** Assert on an aggregate instance's current state: an expected (partial) state, or a function. */
 const state = <A extends Aggregate.Any>(
   ref: Aggregate.Ref<A>,
-  assert: (state: Aggregate.StateOf<A>) => void,
-): Step => ({
-  _tag: "State",
-  ref,
-  assert,
-});
+  expected: Partial<Aggregate.StateOf<A>> | ((state: Aggregate.StateOf<A>) => void),
+): Step => ({ _tag: "State", ref, expected });
 
 /** Assert on a view key: an expected (partial) state, a function, or {@link none}. */
 const view = <V extends View.Any>(
@@ -432,7 +428,7 @@ const describeStep = (s: Step): string => {
     case "Replied":
       return summarize(s.reply);
     case "State":
-      return refName(s.ref);
+      return `${refName(s.ref)}${typeof s.expected === "function" ? "" : `: ${summarize(s.expected)}`}`;
     case "View":
       return `${s.view.viewName}(${s.key.id})${s.expected === none ? ": none" : typeof s.expected === "function" ? "" : `: ${summarize(s.expected)}`}`;
     case "Emitted":
@@ -872,7 +868,16 @@ const make =
                 Aggregate.ClientImpl
               >;
               const current = yield* client.state(s.ref);
-              yield* Effect.try({ try: () => s.assert(current), catch: (e) => fail(String(e)) });
+              if (typeof s.expected === "function") {
+                const assert = s.expected as (state: unknown) => void;
+                yield* Effect.try({ try: () => assert(current), catch: (e) => fail(String(e)) });
+              } else if (!partial(s.expected, current)) {
+                const label = refName(s.ref);
+                return yield* fail(
+                  `${label}\n  expected ${show(s.expected)}\n  actual   ${show(current)}`,
+                  { label, expected: summarize(s.expected), actual: summarize(current) },
+                );
+              }
               break;
             }
             case "View": {
