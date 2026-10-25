@@ -169,6 +169,10 @@ export declare namespace Api {
   export type AggregateClient<A extends AggregateModule.Any> = ApiModule.AggregateClient<A>;
   /** Everything a read can fail with. */
   export type ReadError<D> = ApiModule.ReadError<D>;
+  /** The surfaces an entry declares it may be published on: `mcp`, `cli`, `http`. */
+  export type Expose = ApiModule.Expose;
+  /** The surfaces that may publish an entry, with every default filled in. */
+  export type Exposure = ApiModule.Exposure;
 }
 /** The public surface of a domain for one client. See {@link ApiModule.make}. */
 export const Api = ApiModule.make;
@@ -176,6 +180,8 @@ export const Api = ApiModule.make;
 export const protocolHttp = ApiModule.protocolHttp;
 /** An Api client protocol: calls over HTTP, each live read a WebSocket to the object that owns it. */
 export const protocolWebSocket = ApiModule.protocolWebSocket;
+/** The surfaces (MCP, CLI, public HTTP) that may publish an Api entry. See {@link ApiModule.exposureOf}. */
+export const exposureOf = ApiModule.exposureOf;
 
 export declare namespace Model {
   /** Any Model class. */

@@ -1,5 +1,6 @@
 import type * as Effect from "effect/Effect";
 import type * as Aggregate from "./Aggregate.ts";
+import type * as Api from "./Api.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Rejection from "./Rejection.ts";
 
@@ -46,6 +47,12 @@ export interface Contract<
     request: Request<Ref>,
     state: St,
   ) => Effect.Effect<void, Aggregate.Inst<Rejects[number]>, Middleware.Provides<Ms>>;
+  /**
+   * The surfaces built from an Api that may publish the read: `mcp`, `cli`
+   * (both default `true`) and a public `http` API (default `false`). Read it
+   * back with `Domain.exposureOf`.
+   */
+  readonly expose?: Api.Expose;
 }
 
 /** The read contract a View or aggregate declares, widened. @internal */
@@ -53,4 +60,5 @@ export interface AnyContract {
   readonly middleware?: Middleware.List;
   readonly rejects?: ReadonlyArray<Rejection.Any>;
   readonly validate?: (request: never, state: never) => Effect.Effect<void, unknown, unknown>;
+  readonly expose?: Api.Expose;
 }

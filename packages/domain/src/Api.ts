@@ -950,3 +950,63 @@ export const protocolWebSocket = (
       });
     }),
   );
+
+// ---------------------------------------------------------------- surfaces
+
+/**
+ * The surfaces built from an Api that may publish an entry, as an entry
+ * declares them in `expose`. Each flag is optional; {@link exposureOf} fills
+ * in the defaults. The Api's own clients (RPC, `client`, `testClient`) serve
+ * every entry, whatever `expose` says.
+ */
+export interface Expose {
+  /** A tool or resource on an MCP server built from the Api. Default `true`. */
+  readonly mcp?: boolean;
+  /** A command of a CLI built from the Api. Default `true`. */
+  readonly cli?: boolean;
+  /**
+   * A path of a public HTTP API (and its OpenAPI document) built from the
+   * Api. Default `false`: once a client calls a public path, it has to stay.
+   */
+  readonly http?: boolean;
+}
+
+/** Where an entry is published, with every default filled in. */
+export interface Exposure {
+  readonly mcp: boolean;
+  readonly cli: boolean;
+  readonly http: boolean;
+}
+
+/** Where an entry declares its `expose`: a command's options, or its read contract. */
+const exposeOf = (entry: Entry): Expose | undefined =>
+  entry.kind === "Command"
+    ? entry.expose
+    : entry.kind === "Aggregate"
+      ? entry.definition.read?.expose
+      : entry.definition.expose;
+
+/**
+ * The surfaces that may publish an Api entry: what its `expose` declares,
+ * with the defaults for the rest. MCP and the CLI default to `true`, and a
+ * public HTTP API to `false`. Exposure is not permission: an entry on a
+ * surface still runs its middleware on every call.
+ *
+ * **Example:** A command published on MCP, but not on the CLI
+ * ```typescript
+ * export class UnlockDoor extends Domain.Command("UnlockDoor", {
+ *   target: DoorId,
+ *   expose: { cli: false },
+ * }) {}
+ *
+ * Domain.exposureOf(UnlockDoor); // { mcp: true, cli: false, http: false }
+ * ```
+ */
+export const exposureOf = (entry: Entry): Exposure => {
+  const expose = exposeOf(entry);
+  return {
+    mcp: expose?.mcp ?? true,
+    cli: expose?.cli ?? true,
+    http: expose?.http ?? false,
+  };
+};

@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
+import type * as Api from "./Api.ts";
 import type * as Event from "./Event.ts";
 import type { Data, Fields } from "./Event.ts";
 import * as Middleware from "./Middleware.ts";
@@ -29,6 +30,7 @@ export interface Any extends Schema.Top {
   readonly reply: Schema.Top | undefined;
   readonly middleware: Middleware.List;
   readonly rpc: Rpc.Any;
+  readonly expose?: Api.Expose | undefined;
   new (...args: any[]): { readonly _tag: string };
 }
 
@@ -97,6 +99,8 @@ export interface CommandClass<
   readonly rpc: R;
   /** Span attributes the command adds for its input, if it declares any. */
   readonly attributes: Telemetry.Attributes<Instance<Tag, F>> | undefined;
+  /** The surfaces that may publish the command, as declared. Read it with `Domain.exposureOf`. */
+  readonly expose: Api.Expose | undefined;
 }
 
 interface Options {
@@ -107,6 +111,7 @@ interface Options {
   readonly rejects?: ReadonlyArray<Rejection.Any>;
   readonly reply?: Fields;
   readonly attributes?: Telemetry.Attributes<any>;
+  readonly expose?: Api.Expose;
 }
 
 const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
@@ -125,6 +130,7 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
     static readonly middleware = options.middleware ?? [];
     static readonly rpc = rpc;
     static readonly attributes = options.attributes;
+    static readonly expose = options.expose;
   };
 };
 
@@ -224,6 +230,12 @@ export const make = <
      * here, and a `Redacted` value is recorded as `<redacted>`.
      */
     readonly attributes?: Telemetry.Attributes<Instance<Tag, F>>;
+    /**
+     * The surfaces built from an Api that may publish the command: `mcp`,
+     * `cli` (both default `true`) and a public `http` API (default `false`).
+     * Read it back with `Domain.exposureOf`.
+     */
+    readonly expose?: Api.Expose;
   },
 ): CommandClass<
   Tag,
