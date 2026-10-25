@@ -808,6 +808,58 @@ export const make = <const Name extends string, const Entries extends ReadonlyAr
     RpcGroup.make(...entries.flatMap(rpcsOf)) as unknown as RpcGroup.RpcGroup<Rpc.Any>,
   ) as ApiClass<Name, Entries>;
 
+// ---------------------------------------------------------------- descriptions
+
+/** What a read entry's examples name: its key, in wire form. */
+type KeyExample<A extends Aggregate.Any> = Read.Example<A["definition"]["id"]["Encoded"]>;
+
+/**
+ * An example an Api entry declares, in wire form: a command's call (target
+ * and input), or a read's key.
+ */
+export type ExampleOf<E extends Entry> = E extends Command.Any
+  ? NonNullable<E["examples"]>[number]
+  : E extends View.Any
+    ? KeyExample<View.KeyOf<E>>
+    : E extends DomainStream.Any
+      ? KeyExample<DomainStream.KeyOf<E>>
+      : E extends Aggregate.Any
+        ? KeyExample<E>
+        : never;
+
+/** Where an entry keeps its description and examples. */
+const docsOf = (entry: Entry): { readonly description?: string; readonly examples?: unknown } =>
+  entry.kind === "Command"
+    ? entry
+    : entry.kind === "Aggregate"
+      ? (entry.definition.read ?? {})
+      : entry.definition;
+
+/**
+ * The `description` an Api entry declares: a command's, or the read contract
+ * of a view, stream or aggregate. `undefined` when it declares none.
+ *
+ * **Example:** One text for every surface
+ * ```typescript
+ * Domain.descriptionOf(WithdrawMoney); // "Take money out of an account. The amount is in cents."
+ * Domain.descriptionOf(AccountSummary); // "An account's balance and owner."
+ * ```
+ */
+export const descriptionOf = (entry: Entry): string | undefined => docsOf(entry).description;
+
+/**
+ * The `examples` an Api entry declares, in wire form: a command's calls, or a
+ * read's keys. Empty when it declares none.
+ *
+ * **Example:** A command's example calls
+ * ```typescript
+ * Domain.examplesOf(WithdrawMoney); // [{ target: "a-1", amount: 2_000 }]
+ * Domain.examplesOf(AccountSummary); // [{ key: "a-1" }]
+ * ```
+ */
+export const examplesOf = <E extends Entry>(entry: E): ReadonlyArray<ExampleOf<E>> =>
+  (docsOf(entry).examples ?? []) as ReadonlyArray<ExampleOf<E>>;
+
 /**
  * The HTTP protocol for an Api client (NDJSON, so streams work). Live reads
  * are streamed responses, which the platform feeds by polling the key; use

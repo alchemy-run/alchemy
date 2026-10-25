@@ -144,9 +144,10 @@ export interface Definition<
   /**
    * Let an Api expose this aggregate's state and committed events to clients
    * (`get`, `watch`, `events`): its middleware, rejections, and `validate`,
-   * which judges each read against the instance's current state.
+   * which judges each read against the instance's current state. Its
+   * `description` and `examples` describe the read for tools and API docs.
    */
-  readonly read?: Read.Contract<{ readonly id: Id["Type"] }, S["Type"], Ms, Rejects>;
+  readonly read?: Read.Contract<{ readonly id: Id["Type"] }, S["Type"], Ms, Rejects, Id["Encoded"]>;
 }
 
 /**

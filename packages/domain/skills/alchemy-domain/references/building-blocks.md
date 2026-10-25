@@ -41,6 +41,8 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
   rejects: [NotOpen, DailyLimitExceeded],  // every way it can be refused
   reply: { balance: Cents },               // optional typed reply
   attributes: (cmd) => ({ "bank.amount": cmd.amount }),  // optional: what its spans record
+  description: "Take money out of an account, within the balance and the daily limit.",  // optional
+  examples: [{ target: "a-1", amount: 2_000 }],  // optional: example calls, in wire form
 }) {}
 ```
 
@@ -287,6 +289,8 @@ export class CustomerApi extends Domain.Api(
 ```
 
 Clients call commands as methods (`bank.WithdrawMoney({ target, amount }, { headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A stream has `peek`, `watch`, `events` and `list`. Each Api entry authorizes itself.
+
+Give every entry a `description` (and optional `examples`, in wire form) on its declaration: a command in its options, a view or stream next to its `middleware`, an aggregate in its `read` contract. A read's example names a key: `examples: [{ key: "a-1" }]`. Tools, CLIs and API docs built from an Api read them with `Domain.descriptionOf(entry)` and `Domain.examplesOf(entry)`; write the text for the person or agent who calls the entry.
 
 ## Model
 

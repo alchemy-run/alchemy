@@ -195,7 +195,13 @@ export interface Definition<
   Computed extends Record<string, unknown>,
   Ms extends Middleware.List = readonly [],
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
-> extends Read.Contract<Aggregate.Ref<Key>, StateType<S> | null, Ms, Rejects> {
+> extends Read.Contract<
+  Aggregate.Ref<Key>,
+  StateType<S> | null,
+  Ms,
+  Rejects,
+  Key["definition"]["id"]["Encoded"]
+> {
   /** The aggregates and views this view consumes. */
   readonly from: From;
   /** The aggregate whose refs key this view's instances. */
@@ -389,6 +395,17 @@ export interface ViewKey<Name extends string> {
  *     in: ({ event }) => Account.ref(event.to),
  *   },
  * },
+ * ```
+ *
+ * ### Describing it
+ * `description` says what the view answers, and `examples` name keys to read,
+ * in wire form. Tools, CLIs and API docs built from an Api read them with
+ * `Domain.descriptionOf` and `Domain.examplesOf`.
+ *
+ * **Example:** A described view
+ * ```typescript
+ * description: "An account's balance and owner.",
+ * examples: [{ key: "a-1" }],
  * ```
  *
  * ### Validating reads

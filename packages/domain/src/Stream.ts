@@ -51,7 +51,8 @@ export interface Definition<
   Aggregate.Ref<Key>,
   Entry<Aggregate.Inst<Entries[number]>, Aggregate.IdOf<Key>> | null,
   Ms,
-  Rejects
+  Rejects,
+  Key["definition"]["id"]["Encoded"]
 > {
   /** The aggregate whose refs key this stream: one ordered log per key. */
   readonly key: Key;
@@ -162,6 +163,16 @@ export interface StreamKey<Name extends string> {
  *     });
  *   }),
  * );
+ * ```
+ *
+ * ### Describing it
+ * Like a view, a stream takes a `description` and `examples` (keys, in wire
+ * form) for the surfaces built from an Api.
+ *
+ * **Example:** A described stream
+ * ```typescript
+ * description: "Every change to an account's card, oldest first.",
+ * examples: [{ key: "a-1" }],
  * ```
  *
  * ### Reading it

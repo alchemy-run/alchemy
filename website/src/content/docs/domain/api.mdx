@@ -84,6 +84,35 @@ const history = bank.Account.events(accountId, { after: 0 });
 
 Reading an aggregate directly is handy for an account's own screen. For anything shaped for a question, like a statement or a dashboard, prefer a view: it keeps the aggregate's state free to change with its rules.
 
+## Describe each entry
+
+Every kind of entry takes a `description` and `examples`. Write them once, on the declaration, and each surface built from the Api shows the same text: a tool list for an agent, CLI help, or API docs.
+
+```typescript title="src/WithdrawMoney.command.ts"
+export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
+  target: AccountId,
+  input: { amount: Schema.Int },
+  events: [MoneyWithdrawn],
+  rejects: [NotOpen, InsufficientFunds],
+  description: "Take money out of an account. The amount is in cents.",
+  examples: [{ target: "a-1", amount: 2_000 }],
+}) {}
+```
+
+An example is in wire form: what a client sends, with each field encoded, so a branded id or a date is a string. A command's example is a call: its target and its input. A read's example names a key. A view and a stream take both fields next to their middleware; an aggregate takes them in its `read` contract.
+
+```typescript title="src/AccountSummary.view.ts"
+description: "An account's balance and owner.",
+examples: [{ key: "a-1" }],
+```
+
+`Domain.descriptionOf` and `Domain.examplesOf` read them back from any entry. Both are plain data and change nothing at runtime.
+
+```typescript
+Domain.descriptionOf(WithdrawMoney); // "Take money out of an account. The amount is in cents."
+Domain.examplesOf(AccountSummary); // [{ key: "a-1" }]
+```
+
 ## List what a client may reach
 
 The tutorial's bank exposes registration, deposits, withdrawals and the account summary.
