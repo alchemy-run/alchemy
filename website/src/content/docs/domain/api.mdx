@@ -212,6 +212,21 @@ export const withdraw = Effect.fn(function* (bank: CustomerClient, accountId: Ac
 });
 ```
 
+## Write helpers for any Api
+
+`Domain.Api.Any` is the type of every Api. Use it for code you write once for all your Apis, such as a helper that turns each command into a UI action. `Domain.Api.commandsOf` gives an Api's command classes, and `Domain.Api.rejectionSchema` gives one Schema for every rejection they declare:
+
+```typescript
+const actionsOf = <A extends Domain.Api.Any>(api: A) =>
+  Domain.Api.commandsOf(api).map((command) => ({ tag: command.tag, rejects: command.rejects }));
+
+const Rejection = Domain.Api.rejectionSchema(CustomerApi);
+// decodes to InsufficientFunds | NotOwner | ... instances, with their fields
+const Refused = Schema.TaggedStruct("Refused", { commandId: Schema.String, rejection: Rejection });
+```
+
+`Domain.Api.CommandsOf<A>`, `Domain.Api.RejectionsOf<A>` and `Domain.Api.ClientOf<A>` are the matching types.
+
 ## Provide the client to an app
 
 An app usually wants one client for its whole lifetime. `CustomerApi.Client` is the client as a service, and `CustomerApi.layerClient` provides it. The app's entry point provides it once, with the protocol to use:
