@@ -484,6 +484,13 @@ const aggregateClient = (
           spanOptions(target),
         ),
       ),
+    unschedule: (target, commandId) =>
+      store.unschedule(Aggregate.targetId(target), commandId).pipe(
+        Effect.withSpan(`Domain.unschedule ${aggregate.aggregateName}`, {
+          ...spanOptions(target),
+          attributes: { ...spanOptions(target).attributes, "domain.command_id": commandId },
+        }),
+      ),
     state: (target) =>
       store
         .state(Aggregate.targetId(target))

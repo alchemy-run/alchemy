@@ -223,6 +223,11 @@ export interface AggregateStore {
     meta: Aggregate.SendMeta,
     due: Aggregate.Due,
   ) => Effect.Effect<void>;
+  /**
+   * Cancel the pending scheduled command with this `commandId` on one
+   * instance, durably. Does nothing when none is pending.
+   */
+  readonly unschedule: (id: string, commandId: string) => Effect.Effect<void>;
   /** Read the stored state of an instance. */
   readonly state: (
     id: string,

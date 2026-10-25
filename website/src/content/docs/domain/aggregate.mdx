@@ -158,7 +158,7 @@ yield* accounts
   .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
 ```
 
-The same client reads an instance's current state with `accounts.state(id)`, and schedules a command for later with `accounts.schedule(id, command, { after })`. See [Deadlines](/domain/deadlines).
+The same client reads an instance's current state with `accounts.state(id)`, schedules a command for later with `accounts.schedule(id, command, { after })`, and cancels a pending one with `accounts.unschedule(id, commandId)`. See [Deadlines](/domain/deadlines).
 
 Clients outside the model send commands through an [Api](/domain/api). An aggregate with a `read` contract can also be read through one, so a client can fetch an account, watch it change, and follow its events.
 

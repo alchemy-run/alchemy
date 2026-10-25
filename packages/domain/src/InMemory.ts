@@ -235,6 +235,8 @@ export const make = (
                 send(id, command, meta).pipe(Effect.asVoid),
               );
             }),
+          unschedule: (id, commandId) =>
+            Effect.sync(() => void timers.delete(`${kit.name}/${id}/${commandId}`)),
           state: (id) =>
             Effect.sync(() => ({ state: instance(id).state, version: instance(id).version })),
           events: (id) => Effect.sync(() => [...instance(id).events]),

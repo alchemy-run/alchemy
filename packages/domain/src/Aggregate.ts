@@ -266,6 +266,12 @@ export interface Client<Def extends AnyDefinition> {
     command: Cmd,
     options: ScheduleOptions,
   ) => Effect.Effect<void, never, Command.ContextOf<CommandClassOf<Def, Cmd>>>;
+  /**
+   * Cancel a pending scheduled command by the command id it was scheduled
+   * with. Does nothing when no such command is pending (it already fired, or
+   * was never scheduled), so it is safe to call again.
+   */
+  readonly unschedule: (target: Target<Def>, commandId: string) => Effect.Effect<void>;
   /** Read the current state of an instance. */
   readonly state: (target: Target<Def>) => Effect.Effect<Def["state"]["Type"]>;
 }
@@ -292,6 +298,7 @@ export interface ClientImpl {
     command: { readonly _tag: string },
     options: ScheduleOptions,
   ) => Effect.Effect<void>;
+  readonly unschedule: (target: unknown, commandId: string) => Effect.Effect<void>;
   readonly state: (target: unknown) => Effect.Effect<unknown>;
 }
 
@@ -417,7 +424,8 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  * ```typescript
  * const accounts = yield* Account;
  * const { reply } = yield* accounts.send(accountId, new WithdrawMoney({ amount: 30 }));
- * yield* accounts.schedule(accountId, new SendStatement(), { after: "30 days" });
+ * yield* accounts.schedule(accountId, new SendStatement(), { after: "30 days", commandId: "statement" });
+ * yield* accounts.unschedule(accountId, "statement"); // cancel it while it is pending
  * ```
  *
  * @primitive

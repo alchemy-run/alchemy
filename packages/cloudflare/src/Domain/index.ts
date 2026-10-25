@@ -421,6 +421,7 @@ const aggregateObject = (kit: AggregateKit) =>
                 : { after: due.afterMillis, payload: { id, command, meta } },
             ),
           ),
+        unschedule: (commandId: string) => reportDefects(timers.cancel(commandId)),
         state: () => reportDefects(currentMeta),
         after: (after: number) => reportDefects(eventsAfter(after)),
         // A live read of this instance: accept its WebSocket, then push on every commit.
@@ -815,6 +816,8 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
                 unwrapDefects(namespace.getByName(id).send(id, command, meta)),
               schedule: (id, command, meta, due) =>
                 unwrapDefects(namespace.getByName(id).schedule(id, command, meta, due)),
+              unschedule: (id, commandId) =>
+                unwrapDefects(namespace.getByName(id).unschedule(commandId)),
               state: (id) => unwrapDefects(namespace.getByName(id).state()),
               // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
               changes: (id) =>

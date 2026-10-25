@@ -159,7 +159,7 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
 );
 ```
 
-The handler receives `{ key, source, event, envelope, state }` (`state` for a view source). It must handle every rejection. A policy has no session, so it provides context itself: `.pipe(Effect.provideService(CurrentActor, system("FraudReview")))`. To send a command later, durably, use `transfers.schedule(ref, new ExpireTransfer(), { after: "24 hours" })`. Only commands that never reject can be scheduled.
+The handler receives `{ key, source, event, envelope, state }` (`state` for a view source). It must handle every rejection. A policy has no session, so it provides context itself: `.pipe(Effect.provideService(CurrentActor, system("FraudReview")))`. To send a command later, durably, use `transfers.schedule(ref, new ExpireTransfer(), { after: "24 hours" })`. Only commands that never reject can be scheduled. To cancel one that no longer applies, schedule it with a known `commandId` and call `transfers.unschedule(ref, commandId)`; don't guard against a stale timer when it fires.
 
 ## Saga
 
