@@ -31,7 +31,7 @@ That route:
 - returns untyped JSON (`LedgerRow` is a TypeScript interface, not a schema);
 - has no typed client, no `atLeast` (`Ledger.caughtUp(receipt)` exists only on the server), no pagination, and no story coverage.
 
-Each such route is a new, improvised design. That costs consistency, especially when agents write the code, and it costs authorization most, which is the motivating case: health data with per-row access rules.
+Each such route is a new, improvised design. That costs consistency, especially when agents write the code, and it costs authorization most: every route re-decides who may read what.
 
 Prior art agrees on the shape of the fix. Axon declares `@QueryHandler`s for query messages sent through a `QueryGateway`. Marten exposes projections as queryable documents. Commanded keeps a thin Ecto read side. In each, queries are messages, declared next to commands with input and result types and authorization, and the read side stays thin, with no domain logic.
 
@@ -44,14 +44,6 @@ Prior art agrees on the shape of the fix. Axon declares `@QueryHandler`s for que
 5. Testable in stories, against the in-memory platform and memory stores.
 6. Traced like the other blocks: a `Domain.query` span, input attributes opt-in only, `Redacted` respected.
 7. A clear answer for pagination and for per-row versus per-request authorization.
-
-## Differences from the brief
-
-The brief was written against a pkg.alchemy.run build of PR #2392. This design is against `main` (`085974d10`), which differs:
-
-- There is no `SqlStorage.ts` or `StoragePlatform.ts` on `main`. Platforms are `Domain.InMemory` and `@alchemy.run/cloudflare/Domain`'s `DurableObjects`. A query needs no platform support, so nothing changes for a future storage platform either.
-- `Filter` and `OrderBy` exist on `main` as TypeScript types with in-memory evaluators (`matches`, `sort`). They are not schemas; on the wire a view's `where` is `Schema.Unknown`.
-- On `main`, `LedgerStore` (the port) and `LedgerLive` (the projection's implementation) live in the bank's domain package; only `D1LedgerStore` is in the server package.
 
 ## Declaration
 
@@ -97,7 +89,7 @@ The options:
 | `take` | Page size: `{ default, max }`, by default `{ default: 50, max: 500 }`. |
 | `attributes` | Span attributes for the input, like a command's. Nothing is recorded unless returned here. |
 
-`validate` and `visible` may read what the middleware provides and what the hosted model provides (its views, aggregates, streams, sagas and projection progress), so a rule can look up a relationship ("the caller is on this trial's team") in a view. Both are checked by type: anything else fails at the declaration, and a member the model does not host becomes a requirement of the model's Layer that nothing can satisfy, so it fails to type-check rather than at run time. At run time the model's members are merged under the request's own services, so the request always wins.
+`validate` and `visible` may read what the middleware provides and what the hosted model provides (its views, aggregates, streams, sagas and projection progress), so a rule can look up a relationship ("the caller holds this account") in a view. Both are checked by type: anything else fails at the declaration, and a member the model does not host becomes a requirement of the model's Layer that nothing can satisfy, so it fails to type-check rather than at run time. At run time the model's members are merged under the request's own services, so the request always wins.
 
 ## Implementation
 
@@ -167,15 +159,15 @@ The client's error type is `QueryError<Q>`: the declared rejections, the middlew
 
 Views authorize every read with `validate(request, state)`: the middleware says who is asking, and the key's own state says what they ask about. A query has no single key, so it splits that in two.
 
-**Per request: `validate(input, { atLeast })`.** It runs before the store is read and judges whether this caller may ask this question at all: the caller owns the account, is on the trial's team, has the role. It fails with a declared rejection, which reaches the client typed. It is the query's counterpart of a view's `validate`, and it is where most rules belong.
+**Per request: `validate(input, { atLeast })`.** It runs before the store is read and judges whether this caller may ask this question at all: the caller owns the account, or is an agent. It fails with a declared rejection, which reaches the client typed. It is the query's counterpart of a view's `validate`, and it is where most rules belong.
 
-`validate` runs before the `atLeast` wait. An unauthorized caller is refused at once, and cannot make the server wait on a projection. When the rule reads a view that the same write updates (the caller was just added to a team), `validate` receives `atLeast` and can pass it to that view's `query(key, { atLeast })`. Only for a write to an aggregate that view consumes: a view's checkpoint for a stream it never receives stays at 0, so the read would wait out the timeout.
+`validate` runs before the `atLeast` wait. An unauthorized caller is refused at once, and cannot make the server wait on a projection. When the rule reads a view that the same write updates (the caller was just made a joint holder of the account), `validate` receives `atLeast` and can pass it to that view's `query(key, { atLeast })`. Only for a write to an aggregate that view consumes: a view's checkpoint for a stream it never receives stays at 0, so the read would wait out the timeout.
 
 **Per row: `visible(row, input)`.** It runs on every row of a paged result and drops the rows it refuses. It never rejects: rejecting a whole page because one row is hidden would leak that the row exists, and would break paging. The span records how many rows were hidden (`domain.query.hidden`).
 
 How they fit together:
 
-1. The handler scopes its store query by the caller where the rule allows (a `WHERE` on the owner, the site, the team). That is the only way to return full pages from a large store.
+1. The handler scopes its store query by the caller where the rule allows (a `WHERE` on the owner, or on the agent's branch). That is the only way to return full pages from a large store.
 2. `visible` states the rule in the domain, and is checked on every row the handler returns. A handler that forgets a scope, or a row whose access changed after the projection wrote it, is caught there. It is the guarantee, not the filter.
 3. Keep `visible` cheap: compare row fields with what the middleware provides. A rule that needs a lookup belongs in `validate`, once per request, not once per row.
 
@@ -214,6 +206,7 @@ Paging is cursor-based, and the cursor is opaque to the framework.
 - The handler receives `{ after, take }` and returns `{ entries, cursor }`, with `cursor: null` on the last page. It chooses the cursor's encoding: keyset paging on the store's sort key (`"<at>:<id>"`) is stable under concurrent writes; an offset is not.
 - `visible` may drop rows, so a page can be shorter than `take` without being the last. Clients page until `cursor` is `null`, as they do for a view's `list`.
 - Sorting and filtering are input fields. A query declares the filters and sort orders it supports, and the store indexes them.
+- The cursor follows the sort. Keyset paging needs a total order, so the store sorts by the requested key, then by `id` to break ties, and the cursor holds both values (`"<amount>:<id>"` for "largest first"). Each declared sort needs its own index, which is why a sort is a declared value (`Schema.Literals(["newest", "largest"])`), not a free-form column name. A cursor only means something under the sort that produced it: the store encodes the sort in the cursor, and a handler given a cursor from another sort fails with a declared rejection rather than returning a wrong page.
 
 `Filter` and `OrderBy` from `src/Filter.ts` are deliberately not part of the input:
 

@@ -5,7 +5,7 @@ description: How a query serves a projection's store to clients across keys, typ
 
 import DAG from "../../../components/DAG.astro";
 
-A query is a question a client asks across keys: "an account's ledger, a page at a time", "sites matching a trial, by country, sorted by score". A [view](/domain/view) answers questions about one key. A [projection](/domain/projection) writes the store that can answer the others. A query serves that store.
+A query is a question a client asks across keys: "an account's ledger, a page at a time", "withdrawals over 1,000 across all accounts, largest first". A [view](/domain/view) answers questions about one key. A [projection](/domain/projection) writes the store that can answer the others. A query serves that store.
 
 Like a command, a query is a message. It declares its input and its result, the middleware that guards it, the rejections it may return, and who may ask and see what. Its Layer reads the store. An Api gives clients a typed method for it.
 
@@ -132,7 +132,24 @@ The cursor means nothing to the framework: the store chooses it. Page on the sto
 } ORDER BY at, id LIMIT ?`,
 ```
 
-Filters and sort orders are fields of the input. A query states exactly what a client may ask, so the store can index it and `validate` can judge it.
+## Sort it
+
+Filters and sort orders are fields of the input. A query states exactly what a client may ask, so the store can index it and `validate` can judge it. To let a client choose the order, declare the orders it may choose from:
+
+```typescript
+input: { account: AccountId, sort: Schema.Literals(["newest", "largest"]) },
+```
+
+Keyset paging works under any order, as long as the order is total: sort by the requested field, then by `id` to break ties, and put both values in the cursor. For "largest first", the store reads the next page after the last row's amount and id:
+
+```sql
+SELECT ... FROM ledger
+WHERE account_id = ? AND (amount < ? OR (amount = ? AND id < ?))
+ORDER BY amount DESC, id DESC LIMIT ?
+```
+
+- Each order needs its own index (here on `account_id, amount, id`). That is why an order is one of a few declared values, not a column name the client sends.
+- A cursor only means something under the order that produced it. Encode the order in the cursor (`largest:9000:l-42`), and when a client sends a cursor from another order, fail with a declared rejection rather than return a wrong page. A client that changes the order starts again from the first page.
 
 ## Decide who may ask, and who sees each row
 
@@ -144,7 +161,7 @@ A paged query can also judge each row with `visible`. Rows it refuses are droppe
 
 ```typescript
 visible: Effect.fn(function* (row) {
-  return row.siteId === (yield* CurrentActor).siteId;
+  return row.branchId === (yield* CurrentActor).branchId;
 }),
 ```
 

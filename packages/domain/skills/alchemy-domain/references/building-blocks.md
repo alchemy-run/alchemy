@@ -292,7 +292,7 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
     yield* mustOwn(Option.getOrNull(summary)?.customerId ?? null);
   }),
   // optional, per row: rows it refuses are dropped, never rejected. Keep it cheap.
-  // visible: Effect.fn(function* (row) { return row.siteId === (yield* CurrentActor).siteId; }),
+  // visible: Effect.fn(function* (row) { return row.branchId === (yield* CurrentActor).branchId; }),
 }) {}
 
 export const AccountLedgerLive = AccountLedger.toLayer(
