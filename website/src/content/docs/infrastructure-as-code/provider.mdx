@@ -249,7 +249,7 @@ identity `precreate` would claim, without writing:
 
 ```typescript
 observe: Effect.fn(function* ({ id, news }) {
-  if (!isResolved(news.name)) return undefined;
+  if (!isResolved(news.name)) return Unresolved;
   const live = yield* lookup(news.name);
   if (!live) return undefined;
   const attrs = { productId: live.id, name: live.name };
@@ -259,9 +259,17 @@ observe: Effect.fn(function* ({ id, news }) {
 
 The engine refuses an `Unowned` result before `precreate` runs, unless
 adoption is allowed. Implement it whenever `precreate` can write to a
-resource that already exists, and include your `stables` in the
-attributes so the engine recognizes the resource's own previous
-generation.
+resource that already exists.
+
+Return `Unresolved` when the identity isn't known yet. `undefined` would
+say nothing exists there. The engine checks the resolved identity before
+`reconcile` claims it. It refuses a delete-first replacement outright,
+since it can't check the target before deleting the old resource.
+`precreate` must not write to an identity it can't resolve.
+
+To recognize the resource's own previous generation, include every one
+of your `stables` in the attributes. A partial match, like a shared
+name without the scoped id, doesn't count.
 
 ### `list`
 
