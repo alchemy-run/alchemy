@@ -1,6 +1,6 @@
 /**
- * Rebuilds out/capture/intro/intro.json whenever intro/steps.ts, a snippet,
- * or the shared intro types change. Remotion Studio's `intro-live`
+ * Rebuilds every deck's intro.json whenever a deck file (intro/steps.ts,
+ * intro/loop.ts, intro/what.ts), a snippet, or the shared intro types change. Remotion Studio's `intro-live`
  * composition picks up each rebuild without a reload. Started by `pnpm dev`.
  */
 import { spawn } from "node:child_process";
@@ -8,6 +8,7 @@ import { watch } from "node:fs";
 import path from "node:path";
 
 const dir = import.meta.dirname;
+const DECKS = ["intro", "loop", "what"];
 let running = false;
 let again = false;
 
@@ -18,12 +19,13 @@ const build = () => {
   }
   running = true;
   const started = Date.now();
-  // Both decks, one after the other: they share the snippet type-check cache.
+  // Every deck, one after the other: they share the snippet type-check cache.
+  // One deck failing doesn't stop the others from rebuilding.
   const child = spawn(
     "sh",
     [
       "-c",
-      `"${process.execPath}" "${path.join(dir, "build.ts")}" intro && "${process.execPath}" "${path.join(dir, "build.ts")}" loop`,
+      `failed=0; ${DECKS.map((deck) => `"${process.execPath}" "${path.join(dir, "build.ts")}" ${deck} || failed=1`).join("; ")}; exit $failed`,
     ],
     {
       stdio: ["ignore", "pipe", "pipe"],
@@ -55,12 +57,11 @@ watch(dir, { recursive: true }, (_, file) => {
   if (
     file &&
     file.startsWith(`snippets${path.sep}`) === false &&
-    file !== "steps.ts" &&
-    file !== "loop.ts"
+    !DECKS.some((deck) => file === (deck === "intro" ? "steps.ts" : `${deck}.ts`))
   )
     return;
   schedule(file);
 });
 watch(path.join(dir, "..", "shared"), (_, file) => schedule(file));
-console.log("● watching intro/steps.ts, intro/loop.ts and intro/snippets");
+console.log("● watching intro/steps.ts, intro/loop.ts, intro/what.ts and intro/snippets");
 build();

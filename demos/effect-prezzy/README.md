@@ -33,3 +33,18 @@ const url = await s.terminal(async (t) => { /* tcut session in the project folde
 await s.browser.open(url); // real page capture
 s.pause(2);
 ```
+
+## Talks you step through
+
+The presenter also plays talks drawn entirely in Remotion, one step per
+press of →, with the talk track in each step's `notes`:
+
+```sh
+pnpm dev                                   # rebuilds decks on save, serves the presenter
+open "http://localhost:5199/?deck=what"    # What is Alchemy? (intro/what.ts)
+open "http://localhost:5199/?deck=loop"    # the agent feedback loop (intro/loop.ts)
+```
+
+→ plays the next step, ← the previous one, Space pauses, F goes
+fullscreen. Code on screen comes from `intro/snippets/` and is type-checked
+when the deck builds (`node intro/build.ts what`).

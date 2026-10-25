@@ -10,7 +10,8 @@
  *   F              presentation mode: fullscreen, video only (F or Esc to leave)
  *
  * The current step lives in the URL hash, so a reload lands on the same step.
- * Opens the agent-loop talk (intro/loop.ts); `?deck=talk` opens the original one.
+ * Opens the agent-loop talk (intro/loop.ts); `?deck=talk` opens the original one,
+ * `?deck=what` the "What is Alchemy?" talk (intro/what.ts).
  */
 import { Player, type PlayerRef } from "@remotion/player";
 import { StrictMode, useCallback, useEffect, useRef, useState, type ComponentType } from "react";

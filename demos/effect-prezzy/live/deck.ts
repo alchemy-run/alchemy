@@ -1,4 +1,4 @@
-import { deck, loopDeck } from "../deck.ts";
+import { deck, loopDeck, whatDeck } from "../deck.ts";
 import { schedule } from "../remotion/scene/schedule.ts";
 import { introTimeline, type IntroJson } from "../shared/intro.ts";
 import { VIDEO, type DeckItem, type SceneCapture } from "../shared/types.ts";
@@ -49,7 +49,7 @@ const terminalPauses = async (id: string): Promise<number[]> => {
 export const loadDeck = async (name = "loop") => {
   const items: LiveItem[] = [];
   const steps: LiveStep[] = [];
-  for (const item of name === "talk" ? deck : loopDeck) {
+  for (const item of name === "talk" ? deck : name === "what" ? whatDeck : loopDeck) {
     const index = items.length;
     if (item.kind === "slide") {
       const frames = Math.round((item.seconds ?? 2) * VIDEO.fps);
