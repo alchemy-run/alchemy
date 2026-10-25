@@ -152,7 +152,11 @@ export const Stream = StreamModule.make;
 export declare namespace ExternalSystem {
   /** Any ExternalSystem class. */
   export type Any = ExternalSystemModule.Any;
-  export type Op<Args = unknown, Success = unknown> = ExternalSystemModule.Op<Args, Success>;
+  export type Op<Args = unknown, Success = unknown, Error = unknown> = ExternalSystemModule.Op<
+    Args,
+    Success,
+    Error
+  >;
 }
 /** An outside system the model calls, as an Effect service. See {@link ExternalSystemModule.make}. */
 export const ExternalSystem = ExternalSystemModule.make;

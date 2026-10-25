@@ -75,11 +75,12 @@ const recordOps = (
 
 /**
  * One operation of an external system: its arguments, success value and business errors.
+ * `error` is one schema, or a list of them when the vendor can refuse in several ways.
  */
 export interface OpSpec {
   readonly args?: Fields;
   readonly success?: Fields | Schema.Top;
-  readonly error?: Schema.Top;
+  readonly error?: Schema.Top | ReadonlyArray<Schema.Top>;
 }
 
 type ArgsOf<S extends OpSpec> = S["args"] extends Fields ? Schema.Struct<S["args"]>["Type"] : void;
@@ -88,7 +89,12 @@ type SuccessOf<S extends OpSpec> = S["success"] extends Schema.Top
   : S["success"] extends Fields
     ? Schema.Struct<S["success"]>["Type"]
     : void;
-type ErrorOf<S extends OpSpec> = S["error"] extends Schema.Top ? S["error"]["Type"] : never;
+type ErrorOf<S extends OpSpec> =
+  S["error"] extends ReadonlyArray<Schema.Top>
+    ? S["error"][number]["Type"]
+    : S["error"] extends Schema.Top
+      ? S["error"]["Type"]
+      : never;
 
 /**
  * The service shape of an external system: one Effect-returning function per operation.
