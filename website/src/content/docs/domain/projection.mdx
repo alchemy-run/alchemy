@@ -5,7 +5,7 @@ description: How a projection consumes events into a store you own, in order per
 
 import DAG from "../../../components/DAG.astro";
 
-A projection consumes events into a store you own: a database table, a search index, a warehouse, or a [`Domain.Stream`](/domain/stream). Where a [view](/domain/view) is a read model the platform stores and serves for you, a projection writes wherever you choose and leaves serving it to you.
+A projection consumes events into a store you own: a database table, a search index, a warehouse, or a [`Domain.Stream`](/domain/stream). Where a [view](/domain/view) is a read model the platform stores and serves for you, a projection writes wherever you choose, and a [query](/domain/query) serves what it wrote.
 
 It shares the view's routing and ordering, and differs from a [policy](/domain/policy) in one way that shapes everything else: a projection never sends commands. Its only effect is on its own store, so it can always be replayed.
 
@@ -95,16 +95,18 @@ Each input carries the `key` it was routed to, the `event`, its `envelope`, the 
 
 ## Depend on a store, not a database
 
-The projection asks for `LedgerStore`, a service you define in the domain package, rather than a D1 binding. The server package provides it with D1; a story provides it with memory.
+The projection asks for `LedgerStore`, a service you define in the domain package, rather than a D1 binding. The server package provides it with D1; a story provides it with memory. The query that serves the ledger reads through the same port.
 
 ```typescript title="packages/domain/src/Ledger/LedgerStore.ts"
 export class LedgerStore extends Context.Service<
   LedgerStore,
   {
     readonly record: (rows: ReadonlyArray<LedgerRow>) => Effect.Effect<void, never, RuntimeContext>;
+    /** One page of an account's movements, oldest first. */
     readonly forAccount: (
       accountId: string,
-    ) => Effect.Effect<ReadonlyArray<LedgerRow>, never, RuntimeContext>;
+      page: Domain.Query.PageRequest,
+    ) => Effect.Effect<Domain.View.Page<LedgerRow>, never, RuntimeContext>;
   }
 >()("Bank/LedgerStore") {}
 ```
@@ -196,41 +198,46 @@ export const ledgerAfterWithdrawal = Effect.fn(function* (accountId: AccountId) 
   const accounts = yield* Account;
   const receipt = yield* accounts.send(accountId, new WithdrawMoney({ amount: 2_000 }));
   yield* Ledger.caughtUp(receipt);
-  return yield* (yield* LedgerStore).forAccount(accountId);
+  return yield* (yield* LedgerStore).forAccount(accountId, { after: undefined, take: 50 });
 });
 ```
 
-`caughtUp` waits until the projection has handled every event in the receipt that it consumes directly from that aggregate.
+`caughtUp` waits until the projection has handled every event of the command that it consumes directly from that aggregate. A client's receipt carries only `stream` and `version`; given that, `caughtUp` reads the command's events back from the aggregate. That's how a [query](/domain/query) waits for its caller's write: `atLeast: receipt`.
 
-## Serve it yourself
+## Serve it with a query
 
-A projection's store is yours, so its API is too. The example bank serves the ledger from a plain route on its Worker, authorizing the caller itself.
+A projection's store is yours, and a [query](/domain/query) serves it to clients: a typed method on the Api, with middleware, rejections, `validate` per request, `visible` per row, cursor paging and read-your-own-write. The example bank's ledger is the `AccountLedger` query, as private as the account it's about.
 
-```typescript title="packages/server/src/BankWorker.ts"
-const summary = yield* summaries.query(Account.ref(accountId)).pipe(Effect.orDie);
-const owner = Option.getOrNull(summary)?.customerId;
-if (actor.value._tag === "Customer" && owner !== actor.value.customerId) {
-  return HttpServerResponse.empty({ status: 404 });
-}
-return yield* HttpServerResponse.json(yield* ledger.forAccount(accountId));
+```typescript title="packages/domain/src/Ledger/AccountLedger.query.ts"
+export class AccountLedger extends Domain.Query("AccountLedger", {
+  input: { account: AccountId },
+  row: LedgerRow,
+  from: [Ledger],
+  middleware: [Session],
+  rejects: [NotOwner],
+  validate: Effect.fn(function* ({ account }) {
+    const summaries = yield* AccountSummary;
+    const summary = yield* summaries.query(Account.ref(account)).pipe(Effect.orDie);
+    yield* mustOwn(Option.getOrNull(summary)?.customerId ?? null);
+  }),
+}) {}
 ```
 
-Clients that want to know when to refetch can follow the same events the projection consumed, through the Api.
-
-To have the model serve a projection's output for you, with live updates and `validate`, write a [stream](/domain/stream) instead.
+To have the model keep a projection's output per key for you, with live updates, write a [stream](/domain/stream) instead.
 
 ## Test it
 
-Projections run for real in a [story](/domain/story). Give the story a store you can read back.
+Projections run for real in a [story](/domain/story). Read back what one wrote through the query that serves it.
 
 ```typescript title="packages/domain/test/Bank.story.test.ts"
-const ledger = memoryLedger();
-yield* ledgerStory(
-  given(a1, opened(), new MoneyDeposited({ amount: 10_000, balanceAfter: 10_000 })),
-  as(sam),
-  when(a1, new WithdrawMoney({ amount: 2_500 })),
-  then(a1, new MoneyWithdrawn({ amount: 2_500, balanceAfter: 7_500 })),
-).pipe(Effect.provide(ledger.layer));
+given(a1, opened(), new MoneyDeposited({ amount: 10_000, balanceAfter: 10_000 })),
+as(sam),
+when(a1, new WithdrawMoney({ amount: 2_500 })),
+then(a1, new MoneyWithdrawn({ amount: 2_500, balanceAfter: 7_500 })),
+query(AccountLedger, { account: a1.id }, [
+  { kind: "MoneyDeposited", amount: 10_000, balanceAfter: 10_000 },
+  { kind: "MoneyWithdrawn", amount: 2_500, balanceAfter: 7_500 },
+]),
 ```
 
 Next, [Stream](/domain/stream): a store the model keeps and serves for a projection.

@@ -324,6 +324,40 @@ A projection with `writes: [AccountCard]` appends entries with `yield* cards.app
 
 More: [Stream](https://alchemy.run/domain/stream).
 
+## Query
+
+A question across keys, answered from a store a projection writes. Never serve such a store with a hand-written route.
+
+```ts
+// Ledger/AccountLedger.query.ts
+export class AccountLedger extends Domain.Query("AccountLedger", {
+  input: { account: AccountId },   // filters, sort orders and scopes are input fields
+  row: LedgerRow,                  // a Schema; paged result { entries, cursor }. Or `success:` for one result
+  from: [Ledger],                  // projections it reads: `atLeast` waits on them
+  middleware: [Session],
+  rejects: [NotOwner],
+  take: { default: 50, max: 200 },
+  // per request, before the store is read; may read middleware context and the model's views
+  validate: Effect.fn(function* ({ account }) {
+    const summary = yield* (yield* AccountSummary).query(Account.ref(account)).pipe(Effect.orDie);
+    yield* mustOwn(Option.getOrNull(summary)?.customerId ?? null);
+  }),
+  // optional, per row: rows it refuses are dropped, never rejected. Keep it cheap.
+  // visible: Effect.fn(function* (row) { return row.siteId === (yield* CurrentActor).siteId; }),
+}) {}
+
+export const AccountLedgerLive = AccountLedger.toLayer(
+  Effect.gen(function* () {
+    const store = yield* LedgerStore;                                  // resolved once
+    return ({ account }, page) => store.forAccount(account, page);    // page: { after, take }
+  }),
+);
+```
+
+List it in the model's `queries` and its Live Layer in the handlers. The port returns `{ entries, cursor }`, with `cursor: null` on the last page; page by keyset on the store's sort key (`"<at>:<id>"`), never by offset. Scope the store query by the caller in the handler, so pages are full; `visible` is the guarantee. Clients call it as a method: `bank.AccountLedger({ account }, { atLeast: receipt, take, after })`.
+
+More: [Query](https://alchemy.run/domain/query).
+
 ## Api
 
 ```ts
@@ -334,10 +368,11 @@ export class CustomerApi extends Domain.Api(
   Account,                                          // aggregates with `read`
   AccountSummary, Statement,                        // views
   AccountCard,                                      // streams
+  AccountLedger,                                    // queries: client methods
 ) {}
 ```
 
-Clients call commands as methods (`bank.WithdrawMoney(accountId, { amount }, { commandId, headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. Each Api entry authorizes itself.
+Clients call commands and queries as methods (`bank.WithdrawMoney(accountId, { amount }, { commandId, headers })`, `bank.AccountLedger({ account }, { take })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. Each Api entry authorizes itself.
 
 More: [Api](https://alchemy.run/domain/api).
 
@@ -352,12 +387,13 @@ export class Bank extends Domain.Model("Bank", {
   projections: [Ledger, AccountCards],
   streams: [AccountCard],
   sagas: [ExecuteTransfer],
+  queries: [AccountLedger],
 }) {}
 
-/** Every policy, saga and projection implementation, as one Layer. */
+/** Every policy, saga, projection and query implementation, as one Layer. */
 export const BankHandlers = Layer.mergeAll(
   UsernameReservationLive, MainAccountProvisioningLive, TransferExecutionLive,
-  ExecuteTransferLive, LedgerLive, AccountCardsLive,
+  ExecuteTransferLive, LedgerLive, AccountCardsLive, AccountLedgerLive,
 );
 ```
 

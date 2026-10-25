@@ -1,0 +1,199 @@
+---
+title: Query
+description: How a query serves a projection's store to clients across keys, typed, authorized per request and per row, paged by cursor, and consistent with the caller's own writes.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+A query is a question a client asks across keys: "an account's ledger, a page at a time", "sites matching a trial, by country, sorted by score". A [view](/domain/view) answers questions about one key. A [projection](/domain/projection) writes the store that can answer the others. A query serves that store.
+
+Like a command, a query is a message. It declares its input and its result, the middleware that guards it, the rejections it may return, and who may ask and see what. Its Layer reads the store. An Api gives clients a typed method for it.
+
+<DAG
+  nodes={[
+    { id: "account", label: "Account a-1", type: "MoneyWithdrawn", kind: "aggregate" },
+    { id: "ledger", label: "Ledger", type: "projection", kind: "projection" },
+    { id: "table", label: "ledger table", type: "D1" },
+    { id: "query", label: "AccountLedger", type: "query · validate", kind: "query" },
+    { id: "client", label: "Client", type: "typed from the Api", kind: "client" },
+  ]}
+  edges={[
+    { from: "account", to: "ledger", dashed: true },
+    { from: "ledger", to: "table" },
+    { from: "table", to: "query" },
+    { from: "query", to: "client" },
+  ]}
+  caption="The projection writes the store. The query reads it for a client, after judging who is asking."
+/>
+
+## Declare it
+
+The bank's ledger is a table the `Ledger` projection writes. `AccountLedger` reads one account's rows from it, a page at a time.
+
+```typescript title="packages/domain/src/Ledger/AccountLedger.query.ts"
+export class AccountLedger extends Domain.Query("AccountLedger", {
+  input: { account: AccountId },
+  row: LedgerRow,
+  from: [Ledger],
+  middleware: [Session],
+  rejects: [NotOwner],
+  take: { default: 50, max: 200 },
+  attributes: ({ account }) => ({ "bank.account": account }),
+  validate: Effect.fn(function* ({ account }) {
+    const summaries = yield* AccountSummary;
+    const summary = yield* summaries.query(Account.ref(account)).pipe(Effect.orDie);
+    yield* mustOwn(Option.getOrNull(summary)?.customerId ?? null);
+  }),
+}) {}
+```
+
+- `input` holds the query's fields, like a command's. Filters, sort orders and scopes are fields too.
+- `row` makes it a paged query: its result is `{ entries, cursor }`. A query with one result declares `success` instead.
+- `from` names the projections whose store it reads, so a read can wait for a write.
+- `middleware`, `rejects` and `validate` work as they do for commands and views.
+- `take` limits page sizes, and `attributes` chooses what of the input reaches a trace.
+
+`LedgerRow` is a schema, so the rows are checked and encoded on the way to the client:
+
+```typescript title="packages/domain/src/Ledger/LedgerStore.ts"
+export const LedgerRow = Schema.Struct({
+  id: Schema.String,
+  accountId: Schema.String,
+  kind: Schema.String,
+  amount: Cents,
+  balanceAfter: Cents,
+  at: Schema.Number,
+});
+```
+
+Add the query to the model's `queries`, like a projection.
+
+```typescript title="packages/domain/src/Bank.model.ts"
+projections: [Ledger, AccountCards],
+streams: [AccountCard],
+sagas: [ExecuteTransfer],
+queries: [AccountLedger],
+```
+
+## Implement it as a Layer
+
+The handler lives in a Layer, built once with everything it needs. It receives the input and, for a paged query, the page asked for: `after`, the cursor of the previous page, and `take`, already capped by the query's `take.max`.
+
+```typescript title="packages/domain/src/Ledger/AccountLedger.query.ts"
+export const AccountLedgerLive = AccountLedger.toLayer(
+  Effect.gen(function* () {
+    const store = yield* LedgerStore;
+    return ({ account }, page) => store.forAccount(account, page);
+  }),
+);
+```
+
+It reads through the same `LedgerStore` port the projection writes through, so it sits next to the declaration in the domain package. The server provides the port with D1, and a story with memory. Merge the Layer into the model's handlers, with the projections and policies.
+
+The handler may also read what the query's middleware provides, such as the current actor, to scope its store query by the caller. It may require `RuntimeContext`, as a database binding does.
+
+## Ask it
+
+An Api lists a query next to commands and reads, and its client calls the query as a method.
+
+```typescript title="packages/domain/src/CustomerApi.api.ts"
+export class CustomerApi extends Domain.Api(
+  "CustomerApi",
+  RegisterCustomer,
+  DepositMoney,
+  WithdrawMoney,
+  AccountSummary,
+  AccountLedger,
+) {}
+```
+
+```typescript
+const page = yield* bank.AccountLedger({ account: accountId }, { take: 20 });
+```
+
+The result is decoded from the row schema. The error type lists the query's rejections, its middleware's errors, `ConsistencyTimeout` when it reads from projections, and `RpcClientError`, so `Effect.catchTag` handles each.
+
+## Page through it
+
+Paging is by cursor. The handler returns `cursor: null` on the last page; otherwise the client passes the cursor back as `after`.
+
+```typescript
+const first = yield* bank.AccountLedger({ account: accountId }, { take: 20 });
+if (first.cursor) {
+  const next = yield* bank.AccountLedger({ account: accountId }, { after: first.cursor, take: 20 });
+}
+```
+
+The cursor means nothing to the framework: the store chooses it. Page on the store's sort key (keyset paging), so a row written between two pages is neither skipped nor repeated. The bank's ledger sorts by time, then id:
+
+```typescript title="packages/server/src/Ledger/D1LedgerStore.ts"
+`SELECT id, account_id AS accountId, kind, amount, balance_after AS balanceAfter, at FROM ledger WHERE account_id = ?${
+  from ? " AND (at > ? OR (at = ? AND id > ?))" : ""
+} ORDER BY at, id LIMIT ?`,
+```
+
+Filters and sort orders are fields of the input. A query states exactly what a client may ask, so the store can index it and `validate` can judge it.
+
+## Decide who may ask, and who sees each row
+
+`validate` runs on every request, before the store is read. It judges whether this caller may ask this question at all: here, whether the caller owns the account or is an agent, through the same `mustOwn` rule the account's views use. Its rejection reaches the client typed. A refused caller never waits on a projection.
+
+`validate` may read what the middleware provides and the model's members (views, aggregates and streams), so a rule can look up a relationship in a view. When the rule reads a view that the caller's own write changes, `validate` receives the client's `atLeast` to pass to that view's `query`. Only pass it for a write to an aggregate the view consumes: a view waits for streams it never receives until it times out.
+
+A paged query can also judge each row with `visible`. Rows it refuses are dropped from the page, never rejected: a rejection would reveal that the row exists.
+
+```typescript
+visible: Effect.fn(function* (row) {
+  return row.siteId === (yield* CurrentActor).siteId;
+}),
+```
+
+Use both, in this order:
+
+1. The handler scopes its store query by the caller, so pages come back full.
+2. `visible` states the rule in the model, and holds for every row the handler returns. A handler that forgets a scope, or a row whose access changed after the projection wrote it, is caught.
+3. Keep `visible` cheap: compare the row with the caller. A rule that needs a lookup belongs in `validate`, once per request.
+
+A page `visible` trimmed can be shorter than `take` without being the last one, so a client pages until the cursor is `null`. Like a view, a query is a security boundary: to show another audience other rows, declare another query.
+
+## Read your own write
+
+The projection's store is eventually consistent with the model. A client that has just sent a command passes the command's result as `atLeast`, and the query waits until every projection in `from` has handled that command's events.
+
+```typescript
+const receipt = yield* bank.WithdrawMoney({ target: accountId, amount: 30 }, mfa);
+const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt });
+```
+
+The client's receipt carries only the command's `stream` and `version`, so the server reads that command's events back from its aggregate to know which keys to wait on. A wait that lasts longer than 10 seconds fails with `ConsistencyTimeout`, typed, so the client can retry or show that the data is behind.
+
+Without `from`, `atLeast` waits for nothing. A command handled by a saga or a policy (here, the debit of a transfer) is not the client's own write: poll for it, or watch a view.
+
+## Test it
+
+A story asks a query with the context `Story.provide` set, as it sends commands: `validate`, the handler and `visible` run, and the result goes through its schema as a client would get it. Give the story a store, with the other handlers.
+
+```typescript title="packages/domain/test/Bank.story.test.ts"
+it.effect("the ledger is as private as the account: agents read it, other customers can't", () =>
+  story(
+    given(a1, opened(), new MoneyDeposited({ amount: 10_000, balanceAfter: 10_000 })),
+    as(agent("support-7")),
+    query(AccountLedger, { account: a1.id }, [{ kind: "MoneyDeposited", amount: 10_000 }]),
+    as(alex),
+    query(AccountLedger, { account: a1.id }),
+    rejected(new NotOwner()),
+  ),
+);
+```
+
+Expect the rows in order, each a partial match; a partial result, for a query with one result; or a function over the result, to check a cursor. Without an expectation, the query must be rejected, and the next step asserts how. Projections run to the end after every `when`, so a story needs no `atLeast`.
+
+To check the middleware and `atLeast` too, ask it through the Api's `testClient`. See [Testing an Api](/domain/testing-apis).
+
+## Where it runs
+
+A query runs where its Api runs: on Cloudflare, in the Worker, like a view's `get`. It has no key, so no Durable Object owns it, and the store it reads is bound to the Worker. Its `validate` reads views from their Durable Objects, and `atLeast` reads checkpoints from the projection's.
+
+Each run is a `Domain.query AccountLedger` span with its outcome, the rows it returned and the rows `visible` hid. See [Observability](/domain/observability).
+
+Next, [Policy](/domain/policy) reacts to events by acting on the world.

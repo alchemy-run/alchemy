@@ -32,6 +32,8 @@ Every screen or report is a view, keyed by what it's about: `AccountSummary` key
 
 A view is a security boundary. Its `validate` judges every read from who is asking. Make a separate view per audience instead of filtering by caller.
 
+A question across keys (an account's ledger, paged; "sites matching this trial, by country, sorted by score") is not a view. A projection writes it to a store you own, and a query serves it: `AccountLedger` reads the `Ledger` projection's table. Its input holds the filters and sort orders it supports, its `validate` judges the request and its `visible` each row.
+
 More: [View](https://alchemy.run/domain/view).
 
 ## 5. Find the reactions
@@ -48,13 +50,13 @@ More: [Saga](https://alchemy.run/domain/saga).
 
 ## 7. Find what's outside
 
-Calls to other systems are external systems: typed operations declared in the domain and implemented in the server (`FraudCheck.score`, `Payments.refund`). Writes to stores outside the model are projections (`Ledger` writes rows through a `LedgerStore` port). A per-key log that clients read is a stream (`AccountCard`), written by a projection.
+Calls to other systems are external systems: typed operations declared in the domain and implemented in the server (`FraudCheck.score`, `Payments.refund`). Writes to stores outside the model are projections (`Ledger` writes rows through a `LedgerStore` port), and queries read them back for clients (`AccountLedger`). A per-key log that clients read is a stream (`AccountCard`), written by a projection.
 
 More: [External System](https://alchemy.run/domain/external-system).
 
 ## 8. Decide who sees what
 
-Group commands and reads into Apis by audience (`CustomerApi`, `SupportApi`). Middleware authenticates (`Session` provides `CurrentActor`; `MfaChallenge` guards sensitive commands). Each command's `decide` and each read's `validate` authorizes against the current state.
+Group commands and reads into Apis by audience (`CustomerApi`, `SupportApi`). Middleware authenticates (`Session` provides `CurrentActor`; `MfaChallenge` guards sensitive commands). Each command's `decide` and each read's `validate` authorizes against the current state. A query authorizes twice: `validate` per request, before the store is read, and `visible` per row, dropping what the caller may not see.
 
 More: [Views as security boundaries](https://alchemy.run/domain/view-security).
 
@@ -62,6 +64,7 @@ More: [Views as security boundaries](https://alchemy.run/domain/view-security).
 
 - A command that touches two aggregates. Split it, and connect the parts with a policy or a saga.
 - A view that filters by caller. Make one view per audience.
+- A hand-written route that reads a projection's store. Declare a query: it gets the middleware, typed rejections, paging, `atLeast` and stories for free.
 - A policy that waits for a result. Use a saga, and react to the events it records.
 - An event named after a field change (`BalanceSet`). Name the business fact instead.
 - A rejection without evidence. Add the fields a client needs to explain it.
