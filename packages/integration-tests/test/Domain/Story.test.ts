@@ -264,6 +264,25 @@ const real = (...steps: ReadonlyArray<Step>) =>
 // @ts-expect-error Approval is not provided
 export const unprovided: Effect.Effect<void, unknown, never> = unstubbed();
 
+// Each step is checked against the last command: `rejected` takes only a
+// rejection it declares, `replied` only its reply type, and a command whose
+// middleware provides a service needs a `provide` step for it first.
+export const typed = () => [
+  story(Story.when(c1, new Increment({ by: 11 })), Story.rejected(new TooBig({ max: 10 }))),
+  story(Story.when(c1, new Increment({ by: 1 })), Story.replied({ total: 1 })),
+  story(Story.provide(Operator, "sam"), Story.when(c1, new ResetCounter())),
+  // @ts-expect-error Increment does not reject with NotAnOperator
+  story(Story.when(c1, new Increment({ by: 1 })), Story.rejected(new NotAnOperator())),
+  // @ts-expect-error Increment replies with a number total
+  story(Story.when(c1, new Increment({ by: 1 })), Story.replied({ total: "1" })),
+  // @ts-expect-error Cap declares no reply
+  story(Story.when(c1, new Cap()), Story.replied({ total: 1 })),
+  // @ts-expect-error ResetCounter's middleware provides Operator, and no step does
+  story(Story.when(c1, new ResetCounter())),
+  // A step typed as a plain Step may be a `provide`, so it turns the checks off.
+  story(Story.provide(Operator, "sam") as Step, Story.when(c1, new ResetCounter())),
+];
+
 const c1 = Counter.ref("c-1");
 const c2 = Counter.ref("c-2");
 const m1 = Move.ref("m-1");
@@ -560,6 +579,7 @@ describe("Domain Story", () => {
   );
 
   it.effect("a command without its context fails", () =>
+    // @ts-expect-error ResetCounter's middleware provides Operator, and no step does
     story(Story.when(c1, new ResetCounter())).pipe(
       Effect.flip,
       Effect.map((failure) => expect(String(failure)).toContain("Test/Operator")),

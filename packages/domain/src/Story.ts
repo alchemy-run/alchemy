@@ -11,6 +11,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import type { DurableDeferred, WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
+import type * as Command from "./Command.ts";
 import * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
 import * as Model from "./Model.ts";
@@ -145,22 +146,122 @@ export type Step =
       readonly value: unknown;
     };
 
+/** The step with this `_tag`. */
+export type StepOf<Tag extends Step["_tag"]> = Extract<Step, { readonly _tag: Tag }>;
+
+/**
+ * A `when` step. Its type carries the command's class, so the steps after it
+ * are checked against what the command declares.
+ */
+export interface WhenStep<C = unknown> extends StepOf<"When"> {
+  readonly "~command"?: C;
+}
+
+/** A `rejected` step; its type carries the rejection. */
+export interface RejectedStep<R = unknown> extends StepOf<"Rejected"> {
+  readonly "~rejection"?: R;
+}
+
+/** A `replied` step; its type carries the reply. */
+export interface RepliedStep<A = unknown> extends StepOf<"Replied"> {
+  readonly "~reply"?: A;
+}
+
+/** A `provide` step; its type carries the service it provides. */
+export interface ProvideStep<I = unknown> extends StepOf<"Provide"> {
+  readonly "~provides"?: I;
+}
+
+/** Marks a `when` whose command reads a service that no earlier `provide` step gives. */
+export interface MissingProvide<I> {
+  readonly "Story.provide is missing for": I;
+}
+
+type CommandClassOf<A extends Aggregate.Any, Cmd> = Extract<
+  A["definition"]["commands"][number],
+  { readonly tag: Cmd extends { readonly _tag: infer T } ? T : never }
+>;
+type RejectionOf<C extends Command.Any> = Aggregate.Inst<C["rejects"][number]>;
+type ReplyOf<C extends Command.Any> = C["reply"] extends Schema.Top ? C["reply"]["Type"] : void;
+
+/**
+ * The steps of a story, checked in order: a `rejected` step takes only a
+ * rejection the last `when` command declares, a `replied` step only its reply
+ * type, and a `when` needs a `provide` step before it for every service its
+ * command's middleware provides. A step typed as plain {@link Step} turns the
+ * checks off until the next `when`, since it may be any step.
+ */
+export type Checked<
+  S extends ReadonlyArray<Step>,
+  C = unknown,
+  P = never,
+  Out extends ReadonlyArray<Step> = [],
+> = S extends readonly [infer H extends Step, ...infer T extends ReadonlyArray<Step>]
+  ? [H] extends [WhenStep<infer K>]
+    ? K extends Command.Any
+      ? Checked<
+          T,
+          K,
+          P,
+          [
+            ...Out,
+            [Exclude<Command.ContextOf<K>, P>] extends [never]
+              ? H
+              : H & MissingProvide<Exclude<Command.ContextOf<K>, P>>,
+          ]
+        >
+      : Checked<T, unknown, P, [...Out, H]>
+    : [H] extends [ProvideStep<infer I>]
+      ? Checked<T, C, P | I, [...Out, H]>
+      : [H] extends [RejectedStep<infer R>]
+        ? Checked<
+            T,
+            C,
+            P,
+            [
+              ...Out,
+              C extends Command.Any
+                ? [R] extends [RejectionOf<C>]
+                  ? H
+                  : RejectedStep<RejectionOf<C>>
+                : H,
+            ]
+          >
+        : [H] extends [RepliedStep<infer A>]
+          ? Checked<
+              T,
+              C,
+              P,
+              [
+                ...Out,
+                C extends Command.Any
+                  ? [A] extends [ReplyOf<C>]
+                    ? H
+                    : RepliedStep<ReplyOf<C>>
+                  : H,
+              ]
+            >
+          : [Step] extends [H]
+            ? Checked<T, unknown, any, [...Out, H]>
+            : Checked<T, C, P, [...Out, H]>
+  : [...Out, ...S];
+
 /** History: events already committed on a stream before the story starts. */
 const given = <A extends Aggregate.Any>(
   ref: Aggregate.Ref<A>,
   ...events: ReadonlyArray<Aggregate.EventOf<A>>
-): Step => ({
+): StepOf<"Given"> => ({
   _tag: "Given",
   ref,
   events: events as ReadonlyArray<{ readonly _tag: string }>,
 });
 
 /** Send a command. Its policies run until they finish or suspend on an external system call. */
-const when = <A extends Aggregate.Any>(
+const when = <A extends Aggregate.Any, Cmd extends Aggregate.CommandOf<A>>(
   ref: Aggregate.Ref<A>,
-  command: Aggregate.CommandOf<A>,
+  command: Cmd,
   options?: { readonly commandId?: string },
-): Step => ({
+): WhenStep<CommandClassOf<A, Cmd>> => ({
   _tag: "When",
   ref,
   command: command as { readonly _tag: string },
@@ -171,26 +272,29 @@ const when = <A extends Aggregate.Any>(
 const then = <A extends Aggregate.Any>(
   ref: Aggregate.Ref<A>,
   ...events: ReadonlyArray<Aggregate.EventOf<A>>
-): Step => ({
+): StepOf<"Then"> => ({
   _tag: "Then",
   ref,
   events: events as ReadonlyArray<{ readonly _tag: string }>,
 });
 
-/** The last command was rejected with exactly this rejection. */
-const rejected = (rejection: { readonly _tag: string }): Step => ({
+/**
+ * The last command was rejected with exactly this rejection. It must be one
+ * the last `when` command declares in `rejects`.
+ */
+const rejected = <R extends { readonly _tag: string }>(rejection: R): RejectedStep<R> => ({
   _tag: "Rejected",
   rejection,
 });
 
-/** The last command's reply. */
-const replied = (reply: unknown): Step => ({ _tag: "Replied", reply });
+/** The last command's reply, of the type the last `when` command declares. */
+const replied = <A>(reply: A): RepliedStep<A> => ({ _tag: "Replied", reply });
 
 /** Assert on an aggregate instance's current state. */
 const state = <A extends Aggregate.Any>(
   ref: Aggregate.Ref<A>,
   assert: (state: Aggregate.StateOf<A>) => void,
-): Step => ({
+): StepOf<"State"> => ({
   _tag: "State",
   ref,
   assert,
@@ -201,7 +305,7 @@ const view = <V extends View.Any>(
   view: V,
   key: Aggregate.Ref<View.KeyOf<V>>,
   expected: Partial<View.StateOf<V>> | ((state: View.StateOf<V>) => void) | typeof none,
-): Step => ({ _tag: "View", view, key, expected });
+): StepOf<"View"> => ({ _tag: "View", view, key, expected });
 
 /**
  * Assert on every event a view key has emitted: the expected (partial) events
@@ -213,7 +317,7 @@ const emitted = <V extends View.Any>(
   expected:
     | ReadonlyArray<Partial<View.EventOf<V>>>
     | ((entries: ReadonlyArray<View.Entry<View.StateOf<V>, View.EventOf<V>>>) => void),
-): Step => ({ _tag: "Emitted", view, key, expected });
+): StepOf<"Emitted"> => ({ _tag: "Emitted", view, key, expected });
 
 /**
  * The next entries appended to a stream key (by its projection). With no
@@ -223,7 +327,7 @@ const streamed = <S extends DomainStream.Any>(
   stream: S,
   key: Aggregate.Ref<DomainStream.KeyOf<S>>,
   ...events: ReadonlyArray<DomainStream.EventOf<S>>
-): Step => ({
+): StepOf<"Streamed"> => ({
   _tag: "Streamed",
   stream,
   key,
@@ -238,15 +342,18 @@ const streamed = <S extends DomainStream.Any>(
  * that call, so a later step can answer or assert exactly it.
  */
 const callStep: {
-  <Args>(op: ExternalSystem.Op<Args, any>, args: Partial<Args>): Step;
-  <Args>(tag: string, op: ExternalSystem.Op<Args, any>, args: Partial<Args>): Step;
-} = (...a: ReadonlyArray<any>): Step =>
+  <Args>(op: ExternalSystem.Op<Args, any>, args: Partial<Args>): StepOf<"Call">;
+  <Args>(tag: string, op: ExternalSystem.Op<Args, any>, args: Partial<Args>): StepOf<"Call">;
+} = (...a: ReadonlyArray<any>): StepOf<"Call"> =>
   typeof a[0] === "string"
     ? { _tag: "Call", tag: a[0], op: a[1], args: a[2] }
     : { _tag: "Call", tag: undefined, op: a[0], args: a[1] };
 
 /** Answer a pending call with an exit; the tag, when given, comes first. */
-const answer = (a: ReadonlyArray<any>, exit: (value: any) => Exit.Exit<unknown, unknown>): Step =>
+const answer = (
+  a: ReadonlyArray<any>,
+  exit: (value: any) => Exit.Exit<unknown, unknown>,
+): StepOf<"Answer"> =>
   typeof a[0] === "string"
     ? { _tag: "Answer", tag: a[0], op: a[1], exit: exit(a[2]) }
     : { _tag: "Answer", tag: undefined, op: a[0], exit: exit(a[1]) };
@@ -257,30 +364,34 @@ const answer = (a: ReadonlyArray<any>, exit: (value: any) => Exit.Exit<unknown, 
  * pending call to the operation, and fails if several are pending.
  */
 const succeed: {
-  <Success>(op: ExternalSystem.Op<any, Success>, value: Success): Step;
-  <Success>(tag: string, op: ExternalSystem.Op<any, Success>, value: Success): Step;
-} = (...a: ReadonlyArray<any>): Step => answer(a, Exit.succeed);
+  <Success>(op: ExternalSystem.Op<any, Success>, value: Success): StepOf<"Answer">;
+  <Success>(tag: string, op: ExternalSystem.Op<any, Success>, value: Success): StepOf<"Answer">;
+} = (...a: ReadonlyArray<any>): StepOf<"Answer"> => answer(a, Exit.succeed);
 
 /**
  * Fail an external system call with one of the operation's declared errors,
  * as when the vendor refuses. Finds the call the same way `succeed` does.
  */
 const fail: {
-  <Error>(op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
-  <Error>(tag: string, op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
-} = (...a: ReadonlyArray<any>): Step => answer(a, Exit.fail);
+  <Error>(op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): StepOf<"Answer">;
+  <Error>(
+    tag: string,
+    op: ExternalSystem.Op<any, any, Error>,
+    error: NoInfer<Error>,
+  ): StepOf<"Answer">;
+} = (...a: ReadonlyArray<any>): StepOf<"Answer"> => answer(a, Exit.fail);
 
 /**
  * Fail an external system call with a defect, as when the transport breaks.
  * Finds the call the same way `succeed` does.
  */
 const die: {
-  (op: ExternalSystem.Op, defect: unknown): Step;
-  (tag: string, op: ExternalSystem.Op, defect: unknown): Step;
-} = (...a: ReadonlyArray<any>): Step => answer(a, Exit.die);
+  (op: ExternalSystem.Op, defect: unknown): StepOf<"Answer">;
+  (tag: string, op: ExternalSystem.Op, defect: unknown): StepOf<"Answer">;
+} = (...a: ReadonlyArray<any>): StepOf<"Answer"> => answer(a, Exit.die);
 
 /** Assert how a real call to a system that is not stubbed ended; the tag, when given, comes first. */
-const outcome = (a: ReadonlyArray<any>, expected: (value: any) => any): Step =>
+const outcome = (a: ReadonlyArray<any>, expected: (value: any) => any): StepOf<"Returned"> =>
   typeof a[0] === "string"
     ? { _tag: "Returned", tag: a[0], op: a[1], expected: expected(a[2]) }
     : { _tag: "Returned", tag: undefined, op: a[0], expected: expected(a[1]) };
@@ -292,27 +403,33 @@ const outcome = (a: ReadonlyArray<any>, expected: (value: any) => any): Step =>
  * `returned`, `failed` or `died`.
  */
 const returned: {
-  <Success>(op: ExternalSystem.Op<any, Success>, value: Success): Step;
-  <Success>(tag: string, op: ExternalSystem.Op<any, Success>, value: Success): Step;
-} = (...a: ReadonlyArray<any>): Step => outcome(a, (value) => ({ _tag: "Success", value }));
+  <Success>(op: ExternalSystem.Op<any, Success>, value: Success): StepOf<"Returned">;
+  <Success>(tag: string, op: ExternalSystem.Op<any, Success>, value: Success): StepOf<"Returned">;
+} = (...a: ReadonlyArray<any>): StepOf<"Returned"> =>
+  outcome(a, (value) => ({ _tag: "Success", value }));
 
 /** A real call to an external system that is not stubbed failed with this declared error. */
 const failed: {
-  <Error>(op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
-  <Error>(tag: string, op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
-} = (...a: ReadonlyArray<any>): Step => outcome(a, (error) => ({ _tag: "Failure", error }));
+  <Error>(op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): StepOf<"Returned">;
+  <Error>(
+    tag: string,
+    op: ExternalSystem.Op<any, any, Error>,
+    error: NoInfer<Error>,
+  ): StepOf<"Returned">;
+} = (...a: ReadonlyArray<any>): StepOf<"Returned"> =>
+  outcome(a, (error) => ({ _tag: "Failure", error }));
 
 /** A real call to an external system that is not stubbed died with a defect. */
 const died: {
-  (op: ExternalSystem.Op): Step;
-  (tag: string, op: ExternalSystem.Op): Step;
-} = (...a: ReadonlyArray<any>): Step =>
+  (op: ExternalSystem.Op): StepOf<"Returned">;
+  (tag: string, op: ExternalSystem.Op): StepOf<"Returned">;
+} = (...a: ReadonlyArray<any>): StepOf<"Returned"> =>
   typeof a[0] === "string"
     ? { _tag: "Returned", tag: a[0], op: a[1], expected: { _tag: "Died" } }
     : { _tag: "Returned", tag: undefined, op: a[0], expected: { _tag: "Died" } };
 
 /** Move the clock: later commands are stamped with it, and scheduled commands now due fire. */
-const clock = (at: string | number | DateTime.DateTime): Step => ({ _tag: "Clock", at });
+const clock = (at: string | number | DateTime.DateTime): StepOf<"Clock"> => ({ _tag: "Clock", at });
 
 type SagaClientOf<S> = S extends Context.Key<any, infer C> ? C : never;
 type SagaKeyOf<S> =
@@ -326,7 +443,7 @@ const signal = <S extends Saga.Any, Success extends Schema.Constraint>(
   key: SagaKeyOf<S>,
   deferred: DurableDeferred.DurableDeferred<Success, any>,
   value: Success["Type"],
-): Step => ({ _tag: "Signal", saga, key, deferred, value });
+): StepOf<"Signal"> => ({ _tag: "Signal", saga, key, deferred, value });
 
 /**
  * Check where a saga run is: running, completed with a result, rejected,
@@ -337,7 +454,7 @@ const saga = <S extends Saga.Any>(
   saga: S,
   key: SagaKeyOf<S>,
   expected: SagaStatusOf<S> | { readonly _tag: "Died" },
-): Step => ({
+): StepOf<"Saga"> => ({
   _tag: "Saga",
   saga,
   key,
@@ -358,7 +475,7 @@ const statusJson = (status: Saga.Status<unknown, unknown> | { readonly _tag: "Di
  * Provide a service to subsequent commands, as their middleware would (for
  * example the current actor). Replaces any earlier value of the same service.
  */
-const provide = <I, S>(service: Context.Key<I, S>, value: S): Step => ({
+const provide = <I, S>(service: Context.Key<I, S>, value: S): ProvideStep<I> => ({
   _tag: "Provide",
   service: service as unknown as Context.Key<unknown, unknown>,
   value,
@@ -617,8 +734,8 @@ const make =
       ? [options?: StoryOptions<Policies, LE, LR, Systems>]
       : [options: StoryOptions<Policies, LE, LR, Systems> & { readonly layer: unknown }]
   ) =>
-  (
-    ...steps: ReadonlyArray<Step>
+  <const S extends ReadonlyArray<Step>>(
+    ...steps: S & Checked<S>
   ): Effect.Effect<
     void,
     StoryFailure | LE,
