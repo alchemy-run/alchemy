@@ -54,6 +54,25 @@ export class Account extends Domain.Aggregate("Account", {
       code: aggregate(`Unknown: () => new Frozen()`),
     },
     {
+      // A `rejects` list the rule cannot read (a shared constant, a spread) is skipped.
+      filename,
+      code: `${header}
+const shared = [Frozen, NotOpen];
+export class Freeze extends Domain.Command("Freeze", { rejects: shared }) {}
+export class Thaw extends Domain.Command("Thaw", { rejects: [...shared] }) {}
+export class Account extends Domain.Aggregate("Account", {
+  decide: { Freeze: () => new Frozen(), Thaw: () => new NotOpen() },
+}) {}`,
+    },
+    {
+      // The same, for a command in another file.
+      filename,
+      code: `${header}import { ReopenAccount } from "./ReopenAccount.command.ts";
+export class Account extends Domain.Aggregate("Account", {
+  decide: { ReopenAccount: () => new Frozen() },
+}) {}`,
+    },
+    {
       filename,
       code: aggregate(
         `OpenAccount: () => []`,
