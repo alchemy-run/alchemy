@@ -13,6 +13,7 @@ import { localAccountId } from "../LocalAccount.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
+import { abortMultipartUploads } from "./internal/MultipartUploads.ts";
 
 export const isBucket = (value: any): value is Bucket =>
   isResourceOfType(value, "Cloudflare.R2.Bucket");
@@ -265,10 +266,11 @@ export type BucketProps = {
    * to `true` for buckets whose contents are disposable (caches, previews,
    * test fixtures).
    *
-   * Incomplete multipart uploads also hold a bucket, and alchemy cannot
-   * abort them: destroying a bucket that has them fails with
-   * `BucketNotEmpty`. Abort them, or add an `abortMultipartUploadsTransition`
-   * lifecycle rule, before destroying.
+   * Incomplete multipart uploads also hold a bucket. Only R2's S3 API can
+   * abort them, so alchemy aborts them only when it is authenticated with
+   * an API token that may write the bucket's objects (it never creates a
+   * token). Otherwise destroying fails with `BucketNotEmpty`: abort them,
+   * or add an `abortMultipartUploadsTransition` lifecycle rule, first.
    *
    * `alchemy unsafe nuke` empties buckets regardless, since it is an
    * explicitly operator-confirmed account teardown.
@@ -1517,7 +1519,7 @@ export const ProviderLive = () =>
           // alarm finishing a job while the stack tears down) can land an
           // object between the sweep and the delete: re-empty and retry,
           // bounded.
-          yield* deleteBucket.pipe(
+          const deleteEmptied = deleteBucket.pipe(
             Effect.catchTag("BucketNotEmpty", (error) =>
               Effect.sleep("2 seconds").pipe(
                 Effect.andThen(emptyBucket(output.bucketName, output.jurisdiction)),
@@ -1528,22 +1530,47 @@ export const ProviderLive = () =>
               while: (error) => error._tag === "BucketNotEmpty",
               times: 5,
             }),
-            // Every object is gone and R2 still refuses: incomplete
-            // multipart uploads hold the bucket. The object listing doesn't
-            // show them and the REST API can't abort them, so say so.
-            Effect.catchTag("BucketNotEmpty", (error) =>
-              Effect.fail(
-                new BucketNotEmpty({
-                  bucketName: output.bucketName,
-                  message:
-                    `${error.message} forceDestroy deleted every object, so incomplete multipart ` +
-                    `uploads are likely holding it. Abort them (S3 API AbortMultipartUpload, or ` +
-                    `the R2 binding's resumeMultipartUpload(key, uploadId).abort()), or add a ` +
-                    `lifecycle rule { abortMultipartUploadsTransition: { condition: { type: "Age", ` +
-                    `maxAge: 86400 } } } and retry once R2 has applied it. R2 aborts them on its ` +
-                    `own after 7 days.`,
-                }),
-              ),
+          );
+          yield* deleteBucket.pipe(
+            // Incomplete multipart uploads also hold a bucket, and the
+            // object listing doesn't show them. Only R2's S3 API can abort
+            // them, which works when alchemy is authenticated with an API
+            // token — try that once, best effort, then re-empty and retry.
+            Effect.catchTag("BucketNotEmpty", () =>
+              Effect.gen(function* () {
+                const result = yield* abortMultipartUploads(
+                  output.accountId,
+                  output.bucketName,
+                  output.jurisdiction,
+                );
+                if ("aborted" in result && result.aborted > 0) {
+                  yield* Effect.logInfo(
+                    `Aborted ${result.aborted} incomplete multipart upload(s) in R2 bucket ${output.bucketName}`,
+                  );
+                }
+                yield* emptyBucket(output.bucketName, output.jurisdiction);
+                yield* deleteEmptied.pipe(
+                  Effect.catchTag("BucketNotEmpty", (error) =>
+                    Effect.fail(
+                      new BucketNotEmpty({
+                        bucketName: output.bucketName,
+                        message:
+                          `${error.message} forceDestroy deleted every object, so incomplete ` +
+                          `multipart uploads are likely holding it` +
+                          ("skipped" in result
+                            ? `, and alchemy could not abort them (${result.skipped}). `
+                            : `. `) +
+                          `Only R2's S3 API can abort them: authenticate alchemy with a ` +
+                          `Cloudflare API token that has the "Workers R2 Storage Write" ` +
+                          `permission and destroy again. Or add a lifecycle rule ` +
+                          `{ abortMultipartUploadsTransition: { condition: { type: "Age", ` +
+                          `maxAge: 86400 } } } and retry once R2 has applied it; R2 aborts ` +
+                          `them on its own after 7 days.`,
+                      }),
+                    ),
+                  ),
+                );
+              }),
             ),
           );
         }),

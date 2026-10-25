@@ -195,23 +195,24 @@ test.provider(
 );
 
 // An incomplete multipart upload holds a bucket but is invisible to the
-// object listing, and only the S3 API or a Worker binding can abort it, so
-// forceDestroy can't clear it. Destroy must fail and say why.
+// object listing; only R2's S3 API can abort it, with S3 credentials derived
+// from the API token alchemy is authenticated with.
 // See https://github.com/alchemy-run/alchemy/issues/2478.
 test.provider(
-  "forceDestroy names incomplete multipart uploads when they hold the bucket",
+  "forceDestroy aborts incomplete multipart uploads with the API token",
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 
-      const declaration = Effect.gen(function* () {
-        const bucket = yield* MultipartBucket;
-        const worker = yield* MultipartWorker;
-        return { bucket, worker };
-      });
-      const { bucket, worker } = yield* stack.deploy(declaration);
+      const { bucket, worker } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* MultipartBucket;
+          const worker = yield* MultipartWorker;
+          return { bucket, worker };
+        }),
+      );
 
       const key = "big/entry.bin";
       const client = yield* HttpClient.HttpClient;
@@ -226,23 +227,17 @@ test.provider(
           ),
           Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
         );
-      const { uploadId } = (yield* post(
-        `${worker.url}/start-upload?key=${encodeURIComponent(key)}`,
-      )) as { uploadId: string };
+      yield* post(`${worker.url}/start-upload?key=${encodeURIComponent(key)}`);
 
       // The upload lists no objects, yet R2 refuses to delete the bucket.
       expect(yield* listKeysWhenReady(accountId, bucket.bucketName, 0)).toEqual([]);
+      const refused = yield* r2
+        .deleteBucket({ accountId, bucketName: bucket.bucketName })
+        .pipe(Effect.flip);
+      expect(refused._tag).toEqual("BucketNotEmpty");
 
-      const destroyed = yield* Effect.result(stack.destroy());
-      expect(Result.isFailure(destroyed)).toBe(true);
-      expect(String(destroyed)).toContain("BucketNotEmpty");
-      expect(String(destroyed)).toContain("incomplete multipart uploads");
-
-      // Following the advice — abort the upload — lets the destroy finish.
-      const redeployed = yield* stack.deploy(declaration);
-      yield* post(
-        `${redeployed.worker.url}/abort-upload?key=${encodeURIComponent(key)}&uploadId=${encodeURIComponent(uploadId)}`,
-      );
+      // The testing profile authenticates with an API token, so destroy
+      // aborts the upload through R2's S3 API and deletes the bucket.
       yield* stack.destroy();
 
       yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);

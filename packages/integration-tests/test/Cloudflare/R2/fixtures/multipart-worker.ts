@@ -11,7 +11,6 @@ export const MultipartBucket = Cloudflare.R2.Bucket("MultipartUploadBucket", {
 /**
  * `POST /start-upload?key=` starts a multipart upload, uploads one part, and
  * never completes it — the upload stays in the bucket.
- * `POST /abort-upload?key=&uploadId=` aborts it.
  */
 export default class MultipartWorker extends Cloudflare.Worker<MultipartWorker>()(
   "R2MultipartWorker",
@@ -27,13 +26,6 @@ export default class MultipartWorker extends Cloudflare.Worker<MultipartWorker>(
           const upload = yield* r2.createMultipartUpload(key).pipe(Effect.orDie);
           yield* upload.uploadPart(1, "part").pipe(Effect.orDie);
           return yield* HttpServerResponse.json({ uploadId: upload.uploadId });
-        }
-        if (request.method === "POST" && url.pathname === "/abort-upload") {
-          const key = url.searchParams.get("key") ?? "";
-          const uploadId = url.searchParams.get("uploadId") ?? "";
-          const upload = yield* r2.resumeMultipartUpload(key, uploadId).pipe(Effect.orDie);
-          yield* upload.abort().pipe(Effect.orDie);
-          return yield* HttpServerResponse.json({ aborted: true });
         }
         return HttpServerResponse.text("Not Found", { status: 404 });
       }),
