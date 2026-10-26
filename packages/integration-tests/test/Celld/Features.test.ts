@@ -65,7 +65,7 @@ describe.skipIf(!!process.env.FAST)(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* sharedStack.destroy();
+        if (!process.env.NO_DESTROY) yield* sharedStack.destroy();
         const { url } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             const app = yield* Celld.Application("FeaturesApp", {

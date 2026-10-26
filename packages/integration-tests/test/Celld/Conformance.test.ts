@@ -64,7 +64,7 @@ describe.skipIf(!!process.env.FAST)(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* sharedStack.destroy();
+        if (!process.env.NO_DESTROY) yield* sharedStack.destroy();
         const { apiUrl } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* ConformanceApplication;

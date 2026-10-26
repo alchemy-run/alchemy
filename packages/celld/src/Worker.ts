@@ -535,31 +535,38 @@ export const bindWorker = <Shape = {}>(
     const target = yield* worker;
     const secret = yield* mintGatewaySecret(target.LogicalId);
     // Resolving this binding requires activation, not merely Worker staging.
-    const FleetUrl = yield* Output.all(
-      app.revision,
-      app.workerName,
-      app.fleetId,
-      app.fleetUrl,
-      target.workerName,
-      target.fleetId,
-    ).pipe(
-      Output.mapEffect(([revision, root, fleet, url, workerName, workerFleet]) =>
-        !revision || !url || !root || !fleet
-          ? Effect.die(
-              new WorkerUnreachable({
-                message: "Celld.bindWorker requires an activated Application.",
-              }),
-            )
-          : root !== workerName || fleet !== workerFleet
+    if (!globalThis.__ALCHEMY_RUNTIME__) {
+      // Deploy-time only: resolving this Output fails the caller's deploy
+      // unless the Application is activated and `worker` is its root. Its
+      // bound key is derived from the expression (closure source included),
+      // so the runtime never reads it back — it reads `fleetUrl` below.
+      yield* Output.all(
+        app.revision,
+        app.workerName,
+        app.fleetId,
+        app.fleetUrl,
+        target.workerName,
+        target.fleetId,
+      ).pipe(
+        Output.mapEffect(([revision, root, fleet, url, workerName, workerFleet]) =>
+          !revision || !url || !root || !fleet
             ? Effect.die(
                 new WorkerUnreachable({
-                  message:
-                    "Celld.bindWorker can only target the Application's root Worker in the same fleet.",
+                  message: "Celld.bindWorker requires an activated Application.",
                 }),
               )
-            : Effect.succeed(url),
-      ),
-    );
+            : root !== workerName || fleet !== workerFleet
+              ? Effect.die(
+                  new WorkerUnreachable({
+                    message:
+                      "Celld.bindWorker can only target the Application's root Worker in the same fleet.",
+                  }),
+                )
+              : Effect.succeed(revision),
+        ),
+      );
+    }
+    const FleetUrl = yield* app.fleetUrl;
     const Secret = yield* secret.text;
 
     if (!globalThis.__ALCHEMY_RUNTIME__) {

@@ -216,6 +216,9 @@ export const makeDurableObjectInstance = ({
               callServices?.((promise) => void background.push(promise)) ?? Context.empty(),
             ),
             Layer.succeed(Scope.Scope, scope),
+            // The instance's decorated runtime context (its durable callback
+            // factory) wins over any the engine services carry.
+            Layer.succeed(RuntimeContext, Context.get(services, RuntimeContext)),
             // The configured telemetry exporters, on their own scope:
             // flushed into `waitUntil` once the call's scope has closed and
             // its background work has settled (the instance scope never
