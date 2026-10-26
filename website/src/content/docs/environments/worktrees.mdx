@@ -86,19 +86,28 @@ dev stage here.
 
 ## Test
 
-`Test.make` detects linked worktrees on its own. Its default stage
-is `test_$USER` with the worktree's name appended.
+`Test.make` deploys to `test_$USER` by default, so tests need a
+worktree stage too. Pass it to the `alchemy-test` runner with
+`--stage`.
 
-```sh
-pnpm test   # test_sam in the main checkout
-            # test_sam_feat-x in the feat-x worktree
+```json
+{
+  "scripts": {
+    "test": "alchemy-test --stage test_${USER}_$(basename \"$(git rev-parse --show-toplevel)\")"
+  }
+}
 ```
 
-Set `ALCHEMY_TEST_STAGE` when several worktrees should share one test
-stack on purpose.
+`pnpm test` in `feat-x` now deploys every test stack to
+`test_sam_feat-x`. `--stage` sets `ALCHEMY_TEST_STAGE`, so with
+`bun test` or `vitest` set the variable yourself.
 
-```sh
-ALCHEMY_TEST_STAGE=test_shared pnpm test
+```json
+{
+  "scripts": {
+    "test": "ALCHEMY_TEST_STAGE=test_${USER}_$(basename \"$(git rev-parse --show-toplevel)\") bun test"
+  }
+}
 ```
 
 ## Tell your agents
@@ -110,9 +119,9 @@ Agents follow the scripts they find. Spell out the rule in
 ## Stages
 
 This repo is worked on from several git worktrees at once.
-Never run `alchemy deploy`, `alchemy dev`, or `alchemy destroy` directly.
-Use `pnpm run deploy`, `pnpm run dev`, `pnpm run destroy`, and `pnpm run dev:destroy`,
-which pick a stage named after this worktree.
+Never run `alchemy deploy`, `alchemy dev`, `alchemy destroy`, or the test runner directly.
+Use `pnpm run deploy`, `pnpm run dev`, `pnpm run destroy`, `pnpm run dev:destroy`,
+and `pnpm test`, which pick a stage named after this worktree.
 Before deleting the worktree, run `pnpm run dev:destroy` and `pnpm run destroy`.
 ```
 

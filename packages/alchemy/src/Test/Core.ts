@@ -1,5 +1,4 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
-import { readFileSync } from "node:fs";
 import * as Config from "effect/Config";
 import { ConfigProvider } from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -164,45 +163,13 @@ const sidecarOmitEnv = (options: MakeOptions): ReadonlyArray<string> =>
   typeof options.sidecar === "object" ? [...(options.sidecar.omitEnv ?? [])].sort() : [];
 
 /**
- * Name of the linked git worktree containing `dir`, or `undefined` in a main
- * checkout or outside git. A linked worktree's `.git` is a file pointing at
- * `<common>/.git/worktrees/<name>`; a submodule's `.git` file points at
- * `.git/modules/...`, so the walk continues up to its superproject.
- */
-export const gitWorktreeName = (dir: string): string | undefined => {
-  for (let current = dir; ;) {
-    let dotGit: string | undefined;
-    try {
-      dotGit = readFileSync(`${current}/.git`, "utf8");
-    } catch (error) {
-      // EISDIR: a main checkout's `.git` directory.
-      if ((error as NodeJS.ErrnoException).code === "EISDIR") return undefined;
-    }
-    const name = dotGit?.match(/^gitdir:\s*.*[\\/]worktrees[\\/]([^\\/\s]+)[\\/]?\s*$/m)?.[1];
-    if (name !== undefined) return name;
-    const parent = current.replace(/[\\/][^\\/]*$/, "");
-    if (parent === current || parent === "") return undefined;
-    current = parent;
-  }
-};
-
-/**
  * Default test stage: `ALCHEMY_TEST_STAGE`, then `test_$USER` (or
- * `test_$USERNAME` / `test_unknown`). Inside a linked git worktree the
- * worktree's name is appended (`test_sam_feat-x`), so concurrent worktrees
- * sharing a cloud account never resolve each other's resources.
+ * `test_$USERNAME` / `test_unknown`). Set an explicit test stage to isolate
+ * concurrent worktrees that share a cloud account.
  * Matches the CLI's `live_$USER` / `dev_$USER` per-developer isolation.
  */
 export const defaultStage = (): string =>
-  process.env.ALCHEMY_TEST_STAGE ||
-  Effect.runSync(
-    Effect.gen(function* () {
-      const stage = yield* userStage("test");
-      const worktree = yield* Effect.sync(() => gitWorktreeName(process.cwd()));
-      const safe = worktree?.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "");
-      return safe ? `${stage}_${safe}` : stage;
-    }),
-  );
+  process.env.ALCHEMY_TEST_STAGE || Effect.runSync(userStage("test"));
 
 /** File-level stage: a string override, otherwise {@link defaultStage}. */
 export const resolveStage = (options: { stage?: string }): string =>

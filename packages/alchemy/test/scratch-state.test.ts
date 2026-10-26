@@ -1,7 +1,5 @@
 import { describe, expect } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
@@ -77,48 +75,12 @@ describe("test.provider scratch state durability", { tags: ["unit", "local"] }, 
   test(
     "scratch stacks default to test_${USER}",
     Effect.sync(() => {
-      const user = `test_${process.env.USER || process.env.USERNAME || "unknown"}`;
-      const worktree = Core.gitWorktreeName(process.cwd());
-      const expected = worktree === undefined ? user : `${user}_${worktree}`;
+      const expected = `test_${process.env.USER || process.env.USERNAME || "unknown"}`;
       expect(Core.defaultStage()).toBe(expected);
       const scratch = Core.scratchStack(options, NAME, FILE);
       expect(scratch.stage).toBe(expected);
       const overridden = Core.scratchStack({ ...options, stage: "custom" }, NAME, FILE);
       expect(overridden.stage).toBe("custom");
     }),
-  );
-
-  test(
-    "linked git worktrees get their own default stage",
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectoryScoped({ prefix: "worktree-stage-" });
-
-      // Main checkout: `.git` is a directory.
-      const main = path.join(root, "main");
-      yield* fs.makeDirectory(path.join(main, ".git", "worktrees", "feat-a"), { recursive: true });
-      expect(Core.gitWorktreeName(path.join(main))).toBeUndefined();
-
-      // Linked worktree: `.git` is a file naming `.git/worktrees/<name>`,
-      // found from any nested directory.
-      const linked = path.join(root, "feat-a");
-      yield* fs.makeDirectory(path.join(linked, "packages", "pkg"), { recursive: true });
-      yield* fs.writeFileString(
-        path.join(linked, ".git"),
-        `gitdir: ${path.join(main, ".git", "worktrees", "feat-a")}\n`,
-      );
-      expect(Core.gitWorktreeName(path.join(linked, "packages", "pkg"))).toBe("feat-a");
-
-      // A submodule's `.git` file points at `.git/modules/...`; the walk
-      // continues up to the worktree that contains it.
-      const submodule = path.join(linked, "submodules", "dep");
-      yield* fs.makeDirectory(submodule, { recursive: true });
-      yield* fs.writeFileString(
-        path.join(submodule, ".git"),
-        `gitdir: ${path.join(main, ".git", "worktrees", "feat-a", "modules", "dep")}\n`,
-      );
-      expect(Core.gitWorktreeName(submodule)).toBe("feat-a");
-    }).pipe(Effect.scoped),
   );
 });

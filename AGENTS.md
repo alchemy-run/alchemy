@@ -1141,6 +1141,7 @@ Additional flags beyond vitest:
 | ----------------- | ------- | ------------------------------------------------------------- |
 | `-t <regex>`      | —       | Test-name pattern (regex, like bun/vitest) tested against the full nested title (`file > describes > name`), so any fragment matches regardless of nesting. An invalid regex degrades to a literal substring instead of erroring. Remember to escape regex metacharacters when filtering literally: `-t "create \(default\)"` |
 | `--profile <name>` | —      | Sets `ALCHEMY_PROFILE` before any test module is imported. Use `--profile testing` for live-cloud suites instead of an `ALCHEMY_PROFILE=testing` env prefix |
+| `--stage <name>`  | —       | Sets `ALCHEMY_TEST_STAGE` before any test module is imported, replacing `Test.make`'s default `test_$USER` stage for the run (e.g. one stage per git worktree) |
 | `--fast`          | off     | Sets `FAST=1` before imports — suites `skipIf(process.env.FAST)` their slow tests (long-provisioning resources, smoke tests). Replaces the `FAST=1` env prefix |
 | `--timeout <ms>`  | 120000  | Default per-test timeout                                      |
 | `--retry <n>`     | 2       | Re-runs of a failing test body (use `--retry 0` when debugging) |

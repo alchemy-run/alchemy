@@ -37,8 +37,7 @@ For every option, hook, and variant, see the [Test harness](/testing/test-harnes
 Tests default to `test_$USER` (e.g. `test_sam`), matching how
 `alchemy deploy` uses `live_$USER` and `alchemy dev` uses
 `dev_$USER` — so they never touch your live or local-dev
-deployments, and two people running the same suite don't collide.
-A linked git worktree appends its name (`test_sam_feat-x`). A
+deployments, and two people running the same suite don't collide. A
 unique stage per PR lets CI suites run in parallel against the same
 account:
 
