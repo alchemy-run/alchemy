@@ -47,6 +47,8 @@ export interface BuiltDurableObject {
   readonly instance: DurableObjectInstanceShape;
   readonly services: Context.Context<never>;
   readonly context: Context.Context<any>;
+  /** The instance's decorated runtime context. */
+  readonly runtime: RuntimeContext["Service"];
   readonly telemetry: () => Layer.Layer<never, any, any> | undefined;
 }
 
@@ -166,6 +168,7 @@ export const makeDurableObjectInstance = ({
           instance: built as DurableObjectInstanceShape,
           services: Context.add(services, RuntimeContext, instanceRuntimeContext),
           context,
+          runtime: instanceRuntimeContext,
           telemetry,
         })),
         Effect.runPromise,
@@ -205,7 +208,7 @@ export const makeDurableObjectInstance = ({
       ),
     );
 
-    const { instance: shape, services, context, telemetry } = await instance;
+    const { instance: shape, services, context, runtime, telemetry } = await instance;
 
     return fn(shape)
       .pipe(
@@ -218,7 +221,7 @@ export const makeDurableObjectInstance = ({
             Layer.succeed(Scope.Scope, scope),
             // The instance's decorated runtime context (its durable callback
             // factory) wins over any the engine services carry.
-            Layer.succeed(RuntimeContext, Context.get(services, RuntimeContext)),
+            Layer.succeed(RuntimeContext, runtime),
             // The configured telemetry exporters, on their own scope:
             // flushed into `waitUntil` once the call's scope has closed and
             // its background work has settled (the instance scope never

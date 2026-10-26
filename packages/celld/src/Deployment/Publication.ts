@@ -104,6 +104,12 @@ export interface PublishApplicationOptions {
   readonly priorRevision?: string;
   /** Explicit permission to replace an unclaimed non-bootstrap root, not a foreign claim or queue. */
   readonly adopt?: boolean;
+  /**
+   * Explicit permission (`--adopt`) to take over a publication another
+   * Application instance claimed — the recovery path when that instance's
+   * state was lost. An active foreign publisher lock still refuses.
+   */
+  readonly takeover?: boolean;
 }
 export interface PublicationResult {
   /** Alchemy publication identity, including cron-only changes. */
@@ -277,7 +283,7 @@ const checkCronTransition = (
   Effect.gen(function* () {
     let manifest: Node.Manifest;
     if (previous) {
-      if (!(yield* same(previous.owner, options.owner)))
+      if (!options.takeover && !(yield* same(previous.owner, options.owner)))
         return yield* refuse(
           "ownership",
           "Publication receipt belongs to a different Application instance.",
@@ -323,7 +329,7 @@ const planPublication = (
 ) =>
   Effect.gen(function* () {
     const previous = yield* observeReceipt(store);
-    if (previous && !(yield* same(previous.receipt.owner, options.owner)))
+    if (previous && !options.takeover && !(yield* same(previous.receipt.owner, options.owner)))
       return yield* refuse(
         "ownership",
         "Publication receipt belongs to a different Application instance.",
@@ -567,6 +573,9 @@ export const publishApplication = <E = never, R = never>(
         manifests: all.map((prepared) => prepared.manifest),
         priorRevision: options.priorRevision ?? null,
         adopt: options.adopt ?? false,
+        // Only a takeover changes the fingerprint, so revisions of ordinary
+        // publications stay stable.
+        ...(options.takeover ? { takeover: true } : {}),
       }),
     );
     const revision = yield* digest(
@@ -575,11 +584,15 @@ export const publishApplication = <E = never, R = never>(
     const journalKey = `alchemy/application/v1/transactions/${options.transactionId}.json`;
     const claimBody = yield* encode(options.owner);
     const claim = yield* store.get(APPLICATION_CLAIM_KEY);
-    if (claim && !(yield* equalBytes(claim.body, claimBody)))
-      return yield* refuse(
-        "ownership",
-        "This fleet is permanently claimed by another Application FQN or instance.",
-      );
+    if (claim && !(yield* equalBytes(claim.body, claimBody))) {
+      if (!options.takeover)
+        return yield* refuse(
+          "ownership",
+          "This fleet is claimed by another Application FQN or instance; adopt it explicitly to take it over.",
+        );
+      // Transfer the claim only from the exact claim observed.
+      yield* conditionalPut(store, APPLICATION_CLAIM_KEY, claimBody, claim);
+    }
     const lockBody = yield* encode({
       owner: options.owner,
       transactionId: options.transactionId,

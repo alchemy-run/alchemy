@@ -1,3 +1,4 @@
+import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import * as Provider from "alchemy/Provider";
@@ -221,6 +222,7 @@ const publishMembers = (
   receipt: PublicationReceipt | undefined,
   recovery: Effect.Success<ReturnType<typeof readPublicationRecovery>>,
   note: (message: string) => Effect.Effect<void>,
+  takeover = false,
 ) =>
   Effect.gen(function* () {
     const { prepared, candidates } = graph;
@@ -252,6 +254,7 @@ const publishMembers = (
         owner,
         transactionId,
         priorRevision,
+        takeover,
       },
       (publication) =>
         Effect.gen(function* () {
@@ -283,8 +286,17 @@ export const readApplication = (props: ApplicationResourceProps, owner: Applicat
     const storage = yield* FleetStorage;
     const store = yield* storage(connection);
     const receipt = yield* readPublicationReceipt(store);
+    // A publication another instance owns (e.g. this resource's state was
+    // lost) is reported as foreign: the engine refuses it unless adoption is
+    // explicitly allowed, and an adopting reconcile then takes it over.
     if (receipt && !deepEqual(receipt.owner, owner))
-      return yield* refuse("ownership", "Application publication belongs to another owner.");
+      return Unowned({
+        ...connection,
+        url: props.publicUrl ?? props.entrypoint.url,
+        workerName: receipt.root.script_name ?? "",
+        revision: receipt.revision,
+        candidates: [],
+      } satisfies ApplicationAttributes);
     const recovery = yield* readPublicationRecovery(store, owner);
     if (!receipt) return undefined;
     if (recovery && recovery.transactionId !== receipt.transactionId) return undefined;
@@ -307,6 +319,7 @@ export const reconcileApplication = (
   props: ApplicationResourceProps,
   owner: ApplicationOwner,
   note: (message: string) => Effect.Effect<void> = () => Effect.void,
+  takeover = false,
 ) =>
   Effect.gen(function* () {
     const { connection, members } = yield* applicationMembers(props);
@@ -314,10 +327,23 @@ export const reconcileApplication = (
     const store = yield* storage(connection);
     const graph = yield* prepareMembers(store, members);
     const receipt = yield* readPublicationReceipt(store);
-    if (receipt && !deepEqual(receipt.owner, owner))
-      return yield* refuse("ownership", "Application publication belongs to another owner.");
+    if (receipt && !takeover && !deepEqual(receipt.owner, owner))
+      return yield* refuse(
+        "ownership",
+        "Application publication belongs to another owner; adopt it explicitly to take it over.",
+      );
     const recovery = yield* readPublicationRecovery(store, owner);
-    return yield* publishMembers(store, owner, connection, props, graph, receipt, recovery, note);
+    return yield* publishMembers(
+      store,
+      owner,
+      connection,
+      props,
+      graph,
+      receipt,
+      recovery,
+      note,
+      takeover,
+    );
   });
 
 export const ApplicationProvider = () =>
@@ -332,8 +358,15 @@ export const ApplicationProvider = () =>
     read: Effect.fn(function* ({ olds, fqn, instanceId }) {
       return yield* readApplication(olds, yield* catalogOwner(fqn, instanceId));
     }),
-    reconcile: Effect.fn(function* ({ news, fqn, instanceId, session }) {
-      return yield* reconcileApplication(news, yield* catalogOwner(fqn, instanceId), session.note);
+    reconcile: Effect.fn(function* ({ news, olds, output, fqn, instanceId, session }) {
+      return yield* reconcileApplication(
+        news,
+        yield* catalogOwner(fqn, instanceId),
+        session.note,
+        // Output without prior props: the engine adopted a publication `read`
+        // reported as foreign, with explicit permission.
+        output !== undefined && olds === undefined,
+      );
     }),
     delete: () => Effect.void,
   });

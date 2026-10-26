@@ -208,11 +208,17 @@ describe("Celld external Worker binding", { tags: ["unit", "local", "provider:ce
     ["Application without a revision", { application: { revision: "" } }],
     ["Application without a root identity", { application: { workerName: "" } }],
   ] as const) {
-    test.effect(`rejects ${name} before dispatch`, () => {
+    test.effect(`rejects ${name} when the caller's binding resolves`, () => {
       const f = fixture(options);
       return Effect.gen(function* () {
-        const client = yield* bindWorker(app, worker);
-        const result = yield* Effect.exit(client.fetch(HttpClientRequest.get("/")));
+        yield* bindWorker(app, worker);
+        // The deploy-time validation binding: resolving it fails the
+        // caller's deploy, so a misdirected caller never reaches runtime.
+        const validation = Object.entries(f.outputs).find(([key]) =>
+          key.includes("mapEffect"),
+        )?.[1];
+        expect(validation).toBeDefined();
+        const result = yield* Effect.exit(Output.evaluate(validation!, f.values));
         expect(Exit.isFailure(result)).toBe(true);
         if (Exit.isFailure(result))
           expect(Cause.squash(result.cause)).toBeInstanceOf(WorkerUnreachable);

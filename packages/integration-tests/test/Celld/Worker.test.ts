@@ -7,12 +7,12 @@ import { makeCelldVirtualEntry } from "@alchemy.run/celld/FleetEntry";
 import { FleetStorage } from "@alchemy.run/celld/FleetStorage";
 import { Providers } from "@alchemy.run/celld/Providers";
 import {
-  CelldWorkerProvider,
   Worker,
   type CelldWorker,
   type CelldWorkerAttributes,
   type CelldWorkerResourceProps,
 } from "@alchemy.run/celld/Worker";
+import { CelldWorkerProvider } from "@alchemy.run/celld/WorkerProvider";
 import { expect } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { isResolved, stripEffects } from "alchemy/Diff";
