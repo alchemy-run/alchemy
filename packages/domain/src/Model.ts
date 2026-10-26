@@ -274,7 +274,7 @@ const build = <A, E, R>(
 ) =>
   Effect.gen(function* () {
     const platform = yield* Platform;
-    const kernel = Kernel.make(definitions, telemetry);
+    const kernel = yield* Kernel.make(definitions, telemetry);
 
     const aggregateStores = new Map<string, AggregateStore>();
     const viewStores = new Map<string, ViewStore>();

@@ -1,7 +1,9 @@
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
@@ -129,6 +131,9 @@ describe("Domain verify", () => {
         ),
       ).pipe(Effect.scoped, Effect.provide(InMemory)) as Effect.Effect<unknown>,
     );
-    expect(String(exit)).toContain(first!.message);
+    expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
+      _tag: "DefinitionError",
+      message: first!.message,
+    });
   });
 });

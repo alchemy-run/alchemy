@@ -174,35 +174,39 @@ export interface Kernel {
 
 /**
  * Build the kernel for a set of definitions. Validates tags and routing, and
- * throws a {@link DefinitionError} on the first problem.
+ * dies with a {@link DefinitionError} for the first problem.
  */
 export const make = (
   definitions: Definitions,
   telemetry: Telemetry.Resolved = Telemetry.resolve(undefined),
-): Kernel =>
-  build(definitions, telemetry, (problem) => {
-    throw problem;
+): Effect.Effect<Kernel> =>
+  Effect.suspend(() => {
+    const { kernel, problems } = collect(definitions, telemetry);
+    return problems.length > 0 ? Effect.die(problems[0]) : Effect.succeed(kernel);
   });
 
 /**
- * Every problem {@link make} would throw on, without building anything.
+ * Every problem {@link make} would die with, without building anything.
  * Empty when the definitions are valid.
  */
-export const verify = (definitions: Definitions): ReadonlyArray<DefinitionError> => {
+export const verify = (definitions: Definitions): ReadonlyArray<DefinitionError> =>
+  collect(definitions, Telemetry.resolve(undefined)).problems;
+
+/** Build the kernel and collect every definition problem, each once, in order. */
+const collect = (definitions: Definitions, telemetry: Telemetry.Resolved) => {
   const problems: Array<DefinitionError> = [];
   const seen = new Set<string>();
-  build(definitions, Telemetry.resolve(undefined), (problem) => {
+  const kernel = build(definitions, telemetry, (problem) => {
     if (seen.has(problem.message)) return;
     seen.add(problem.message);
     problems.push(problem);
   });
-  return problems;
+  return { kernel, problems };
 };
 
 /**
- * Build the kernel. Each definition problem goes to `report`, which throws
- * (for {@link make}) or collects and lets the build go on past it (for
- * {@link verify}).
+ * Build the kernel. Each definition problem goes to `report`, and the build
+ * goes on past it, so {@link verify} sees every problem.
  */
 const build = (
   definitions: Definitions,
