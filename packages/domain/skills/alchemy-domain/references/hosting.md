@@ -45,6 +45,7 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 ```
 
 - Swap `DomainCloudflare.DurableObjects` for `Domain.InMemory` and nothing else changes. That's how the Api tests host the model.
+- To host outside Cloudflare, see [Hosting on a database](#hosting-on-a-database).
 - Resources the adapters need, like a D1 database, are declared in the server package and bound through alchemy bindings (`Cloudflare.D1.QueryDatabase(db)` inside the adapter's Layer).
 - Webhooks and event sources, like a Stripe webhook, are yielded in the Worker's init and send commands into the model.
 - `alchemy dev` runs everything locally in workerd: Durable Objects, sagas and the foldkit app.
@@ -68,6 +69,24 @@ Every command, event and reaction is traced automatically:
 All of them carry `domain.correlation_id`, the first command of the flow, which finds a whole flow across traces. Export to an OpenTelemetry backend to see each flow as one connected trace: declare an `Axiom.Dataset` per signal and an `Axiom.ApiToken` that may ingest into them, and add `Axiom.Telemetry({ token, traces, logs })` to the Worker's single `Effect.provide` (or `Alchemy.Telemetry.layerOtlp` for any OTLP endpoint). Name datasets per stage. `Cloudflare.Telemetry()` shows spans in Cloudflare's dashboard instead, but Cloudflare starts a new trace per Worker or Durable Object event, so flows don't connect and browser spans can't be added.
 
 Metrics: `domain.commands`, `domain.command.duration`, `domain.events`, `domain.lag` (commit to handling), `domain.runs`, `domain.projection.batch_size`, `domain.external.calls`. Turn off view spans with `Bank.layer(handlers, { telemetry: { views: false } })`.
+
+## Hosting on a database
+
+`Domain.StoragePlatform` hosts the same model on any `Domain.Storage`. `Domain.SqlStorage` implements it over an Effect `SqlClient` (Postgres, MySQL, SQLite or libSQL). It keeps everything in three tables (`domain_kv`, `domain_partition`, `domain_timer`, created on first use) and locks one partition row per write. Any number of server processes can share one database.
+
+```ts
+const BankLive = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
+  Layer.provideMerge(Bank.layer(BankHandlers)),
+  Layer.provide(Layer.mergeAll(SiftFraudCheck, PgLedgerStore, Domain.StoragePlatform)),
+  Layer.provide(Domain.SqlStorage),
+  Layer.provide(PgClient.layerConfig({ url: Config.Redacted("DATABASE_URL") })),
+);
+```
+
+- It runs background work (deliveries, timers, sagas), so host it in a long-running process like a server or container, not a Worker or Lambda.
+- Live reads are streamed responses (`Domain.protocolHttp`): local commits push at once, and other processes' commits arrive on the next poll (`StoragePlatform.layer({ watchMillis })`).
+- Sagas persist to the same storage; no separate workflow engine is needed.
+- For another database, implement `Domain.Storage` (`transact`, `read`, `due`). `transact` must be exclusive per partition across processes, and atomic.
 
 ## Pitfalls
 

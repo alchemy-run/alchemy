@@ -2152,6 +2152,15 @@ importers:
         specifier: 4.0.5
         version: 4.0.5
     devDependencies:
+      '@effect/sql-libsql':
+        specifier: 'catalog:'
+        version: 4.0.5(effect@4.0.5)
+      '@effect/sql-mysql2':
+        specifier: 'catalog:'
+        version: 4.0.5(@types/node@26.6.5)(effect@4.0.5)
+      '@effect/sql-pg':
+        specifier: 'catalog:'
+        version: 4.0.5(effect@4.0.5)
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))

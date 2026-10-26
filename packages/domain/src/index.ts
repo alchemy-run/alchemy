@@ -192,5 +192,8 @@ export { InMemory } from "./InMemory.ts";
 export type * as Middleware from "./Middleware.ts";
 export { Platform } from "./Platform.ts";
 export type * as Read from "./Read.ts";
+export { SqlStorage } from "./SqlStorage.ts";
+export { Storage, StorageError } from "./Storage.ts";
+export { StoragePlatform } from "./StoragePlatform.ts";
 /** Trace attributes, hosting options and the metrics a model records. */
 export * as Telemetry from "./Telemetry.ts";
