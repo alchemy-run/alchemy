@@ -45,7 +45,7 @@ import {
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
 import type { Worker } from "../Workers/Worker.ts";
-import { durableObjectEngine } from "../Workflows/DurableObjectEngine.ts";
+import { durableObjectEngine, withJurisdiction } from "../Workflows/DurableObjectEngine.ts";
 
 const pad = (n: number) => n.toString().padStart(12, "0");
 
@@ -847,7 +847,7 @@ const durableObjectPlatform = (
   Platform,
   Effect.gen(function* () {
       const place = (namespace: Namespace): Namespace =>
-        options.jurisdiction ? namespace.jurisdiction(options.jurisdiction) : namespace;
+        withJurisdiction(namespace, options.jurisdiction);
     // Factories run while the Domain's Layer is built, inside the Worker's
     // init phase; declaring a Durable Object needs that context.
     const init = yield* captureContext<Worker>();
@@ -1078,6 +1078,10 @@ export interface DurableObjectsOptions {
    * data does not move that data: the model starts empty in the
    * jurisdiction, and the old objects are left as they were. Choose it before
    * the first deploy, or migrate deliberately.
+   *
+   * Like a D1 database, R2 bucket or Queue declared with a jurisdiction, it is
+   * enforced when deployed and not emulated in `alchemy dev`: local workerd
+   * does not implement jurisdictions, so the model runs unrestricted there.
    *
    * @default undefined (no jurisdiction restriction)
    */

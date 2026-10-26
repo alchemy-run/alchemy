@@ -100,6 +100,9 @@ export interface DurableObjectEngineOptions {
    * object from the one with the same name outside it, so setting this does
    * not move executions that already exist.
    *
+   * Enforced when deployed, not emulated in `alchemy dev` (local workerd does
+   * not implement jurisdictions).
+   *
    * @default undefined (no jurisdiction restriction)
    */
   readonly jurisdiction?: DurableObjectJurisdiction;
@@ -141,10 +144,7 @@ export function durableObjectEngine(
               `${workflow._tag.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
               executionObject({ workflow: workflow as AnyWorkflow, execute, engine: () => engine }),
             ).pipe(Effect.provide(init));
-            namespaces.set(
-              workflow._tag,
-              options.jurisdiction ? namespace.jurisdiction(options.jurisdiction) : namespace,
-            );
+            namespaces.set(workflow._tag, withJurisdiction(namespace, options.jurisdiction));
           }),
 
         execute: (workflow, options) =>
@@ -589,3 +589,30 @@ const declare = CloudflareDurableObject as unknown as (
   name: string,
   impl: ObjectImpl,
 ) => Effect.Effect<Namespace, never, Worker>;
+
+/**
+ * The namespace restricted to `jurisdiction`, when one is set. Local workerd
+ * (`alchemy dev`) does not implement jurisdictions, so there the unrestricted
+ * namespace is used, the same way a D1 database, R2 bucket or Queue declared
+ * with a jurisdiction runs unrestricted on the local simulator.
+ *
+ * @internal
+ */
+export const withJurisdiction = <
+  N extends { readonly jurisdiction: (j: DurableObjectJurisdiction) => N },
+>(
+  namespace: N,
+  jurisdiction: DurableObjectJurisdiction | undefined,
+): N => {
+  if (jurisdiction === undefined) return namespace;
+  try {
+    return namespace.jurisdiction(jurisdiction);
+  } catch (error) {
+    if (isJurisdictionNotEmulated(error)) return namespace;
+    throw error;
+  }
+};
+
+/** Local workerd's answer to a jurisdiction-restricted namespace. */
+const isJurisdictionNotEmulated = (error: unknown) =>
+  error instanceof Error && error.message.includes("Jurisdiction restrictions are not implemented");
