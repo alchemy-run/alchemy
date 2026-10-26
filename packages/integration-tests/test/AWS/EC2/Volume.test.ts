@@ -281,10 +281,10 @@ test.provider(
 );
 
 // `read` observes the volume, so drift sees it unchanged after a deploy and
-// missing once it is deleted outside the stack. The next deploy creates a
-// replacement under a new ClientToken.
+// missing once it is deleted outside the stack. Repair recreates it under a
+// new ClientToken.
 test.provider(
-  "a volume deleted outside the stack drifts as missing and is recreated",
+  "drift reports a volume deleted outside the stack as missing and repair recreates it",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -308,7 +308,11 @@ test.provider(
       yield* assertVolumeDeleted(volume.volumeId);
       expect((yield* detect).resources.DriftVolume?.action).toBe("missing");
 
-      const recreated = yield* stack.deploy(program);
+      const repaired = yield* Drift.repair({ name: stack.name, stage: stack.stage }).pipe(
+        Effect.provide(stack.state),
+      );
+      expect(repaired.resources.DriftVolume?.action).toBe("recreated");
+      const recreated = repaired.resources.DriftVolume?.attr as typeof volume;
       expect(recreated.volumeId).not.toBe(volume.volumeId);
       expect(recreated.state).toBe("available");
 

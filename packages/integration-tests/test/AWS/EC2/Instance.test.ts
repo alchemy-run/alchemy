@@ -364,10 +364,10 @@ echo ${queue.queueUrl}
   );
 
   // EC2 keeps listing a terminated instance for a while. `read` must report
-  // it as missing, so drift sees the instance gone rather than changed, and
-  // the next deploy launches a replacement under a new ClientToken.
+  // it as missing, so drift sees the instance gone rather than changed.
+  // Repair relaunches it under a new ClientToken.
   test.provider(
-    "an instance terminated outside the stack drifts as missing and is relaunched",
+    "drift reports an instance terminated outside the stack as missing and repair relaunches it",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
@@ -395,15 +395,17 @@ echo ${queue.queueUrl}
         );
         expect(drift.resources.DriftInstance?.action).toBe("missing");
 
-        const relaunched = yield* stack.deploy(program);
-        expect(relaunched.instance.instanceId).not.toBe(deployed.instance.instanceId);
-        const live = yield* ec2.describeInstances({
-          InstanceIds: [relaunched.instance.instanceId],
-        });
+        const repaired = yield* Drift.repair({ name: stack.name, stage: stack.stage }).pipe(
+          Effect.provide(stack.state),
+        );
+        expect(repaired.resources.DriftInstance?.action).toBe("recreated");
+        const relaunched = repaired.resources.DriftInstance?.attr as typeof deployed.instance;
+        expect(relaunched.instanceId).not.toBe(deployed.instance.instanceId);
+        const live = yield* ec2.describeInstances({ InstanceIds: [relaunched.instanceId] });
         expect(live.Reservations?.[0]?.Instances?.[0]?.State?.Name).toBe("running");
 
         yield* stack.destroy();
-        yield* assertInstanceTerminated(relaunched.instance.instanceId);
+        yield* assertInstanceTerminated(relaunched.instanceId);
         yield* assertVpcGone(deployed.vpc.vpcId);
       }).pipe(logLevel),
     { timeout: 600_000 },
