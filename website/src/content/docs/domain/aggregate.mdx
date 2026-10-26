@@ -61,6 +61,43 @@ Read it as the business rule it is: an account that isn't open can't be withdraw
 
 A handler can also return an empty array. The command is accepted, but there's nothing to record, like freezing an account that's already frozen. The caller still gets a receipt.
 
+So every handler picks one of three answers. Record events when the command changes something. Return `[]` when the state already is what the command asks for. Return a rejection when the command can't be done, so the caller sees why in its type.
+
+## Name the rules decide shares
+
+Most commands check the same thing first: the account must be open. Write that check once, as a pure function that returns the narrowed state or the rejection.
+
+```typescript title="src/Account.aggregate.ts"
+type Open = Extract<State, { _tag: "Open" }>;
+
+const openFor = (s: State): Open | NotOpen => (s._tag === "Open" ? s : new NotOpen());
+```
+
+Each handler starts from it. After the check, `o` is an `Open` account, so the rest of the rule reads its balance without another test.
+
+```typescript title="src/Account.aggregate.ts"
+DepositMoney: (s, cmd) => {
+  const o = openFor(s);
+  if (o._tag !== "Open") return o;
+  return [new MoneyDeposited({ amount: cmd.amount, balanceAfter: o.balance + cmd.amount })];
+},
+```
+
+A handler written with `Effect.fn` fails with the rejection instead: `if (o._tag !== "Open") return yield* o;`.
+
+## Record the facts evolve needs
+
+An event carries the outcome `decide` worked out, not just the request. `MoneyDeposited` records `balanceAfter`, so `evolve` copies it and never repeats the arithmetic.
+
+```typescript title="src/DepositMoney.command.ts"
+export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
+  amount: Schema.Int,
+  balanceAfter: Schema.Int,
+}) {}
+```
+
+The rules then live in one place. A view or a policy reading the event sees the same balance the account does.
+
 ## Apply events with evolve
 
 `evolve` has one handler per event. It receives the current state and the event, and returns the next state.
@@ -75,7 +112,7 @@ evolve: {
 
 Keeping `evolve` separate from `decide` is what lets the state be derived from events. `decide` runs once, when the command arrives, and may refuse. `evolve` must always accept, because it applies events that have already been recorded, and applying the same events must always give the same state.
 
-`evolve` never fails either. Refusing is `decide`'s job, and it does it with a typed rejection: every command that records `MoneyDeposited` first returns `NotOpen` when the account isn't open. So each `evolve` handler only has to cover every state, and keeps any state its event can't follow.
+`evolve` never fails either, and never throws. Refusing is `decide`'s job: every command that records `MoneyDeposited` has already returned `NotOpen` for an account that isn't open. So each handler covers every state, and keeps a state its event can't follow. An event that moves the account to another stage, like `AccountOpened`, returns the new state whole.
 
 ## Reply from the new state
 
@@ -88,7 +125,51 @@ reply: {
 },
 ```
 
-The reply is stored with the events, so a retried command returns the same reply as the first time.
+Like `evolve`, `reply` covers every state and never fails. The reply is stored with the events, so a retried command returns the same reply as the first time.
+
+## Focus on a state with optics
+
+Once many handlers repeat the same `s._tag === "Open" ? ... : s`, an optic from `effect/Optic` can say it once. It focuses on the `Open` state, and leaves any other state unchanged.
+
+```typescript title="src/Account.aggregate.ts"
+import * as Optic from "effect/Optic";
+
+const open = Optic.id<State>().tag("Open");
+const balance = open.key("balance");
+```
+
+A handler that sets one field replaces it through the optic.
+
+```typescript title="src/Account.aggregate.ts"
+MoneyDeposited: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+```
+
+A handler that changes several fields modifies the focused state.
+
+```typescript title="src/Account.aggregate.ts"
+OwnerChanged: (s, e) => open.modify((o) => ({ ...o, owner: e.owner }))(s),
+```
+
+Optics are optional. They give the same states as the plain checks, with less repetition. The [example bank](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain) uses them for its account.
+
+## Never refuse a compensation
+
+Some commands undo a step another process already took, like refunding a transfer whose credit failed. Refusing one would strand the money, so its handler records a fact for every state instead of rejecting.
+
+```typescript title="packages/domain/src/Account/Account.aggregate.ts"
+RefundTransfer: (s, cmd) =>
+  s._tag === "Open"
+    ? [
+        new TransferRefunded({
+          transferId: cmd.transferId,
+          amount: cmd.amount,
+          balanceAfter: s.balance + cmd.amount,
+        }),
+      ]
+    : [new RefundStranded({ transferId: cmd.transferId, amount: cmd.amount })],
+```
+
+`RefundStranded` tells a policy or a person that the account closed before the money came back. The [saga](/domain/saga) that sent the refund never has to handle a refusal it can do nothing about.
 
 ## Use context in decisions
 
