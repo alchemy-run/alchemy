@@ -4,6 +4,7 @@ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeStdio from "@effect/platform-node/NodeStdio";
+import * as NodeTerminal from "@effect/platform-node/NodeTerminal";
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Self } from "alchemy/Self";
@@ -237,12 +238,24 @@ const getSharedBuild = (entrypoint: any, stack: { name: string; stage: string })
 
   const layer = makeEntrypointLayer(tag, entrypoint);
 
-  // `NodeServices.layer` minus `NodeTerminal`, which reads `process.stdin`
-  // while it builds — and workerd's `process` has no usable `stdin` on
-  // compatibility dates before Node.js process v2.
+  // `NodeServices.layer`, except `NodeTerminal` is only built when
+  // `process.stdin` is usable: it calls `process.stdin.once` while it builds,
+  // and workerd's `process` has no `stdin` on compatibility dates before
+  // Node.js process v2.
+  const terminal = Layer.unwrap(
+    Effect.sync(() =>
+      typeof globalThis.process?.stdin?.once === "function" ? NodeTerminal.layer : Layer.empty,
+    ),
+  );
   const platformServices = Layer.provideMerge(
     NodeChildProcessSpawner.layer,
-    Layer.mergeAll(NodeFileSystem.layer, NodeCrypto.layer, NodePath.layer, NodeStdio.layer),
+    Layer.mergeAll(
+      NodeFileSystem.layer,
+      NodeCrypto.layer,
+      NodePath.layer,
+      NodeStdio.layer,
+      terminal,
+    ),
   );
 
   const platform = Layer.mergeAll(
