@@ -1556,24 +1556,31 @@ describe.concurrent(
           expect(first.app.configuration.image).toMatch(
             /^registry\.cloudflare\.com\/.*@sha256:[a-f0-9]{64}$/,
           );
+          // #2602: the "no effective changes" path saves the configuration as
+          // `read` reports it (with Cloudflare's defaults filled in), not as
+          // requested, so drift reports nothing.
+          const afterNoop = yield* Drift.detect(scratch);
+          expect(afterNoop.resources.DigestReuse?.action).toBe("unchanged");
 
           // A genuinely different image still updates and rolls out. The API
           // reports the ACTIVE configuration (and version) until the rollout
-          // completes, so poll until the new digest is live.
+          // completes, and the deploy waits for it, so the new digest is
+          // already live when it returns.
           const third = yield* deployImage(scratch, "mendhak/http-https-echo:40");
           expect(third.app.applicationId).toBe(first.app.applicationId);
           expect(third.app.configuration.image).toMatch(
             /^registry\.cloudflare\.com\/.*@sha256:[a-f0-9]{64}$/,
           );
           expect(third.app.configuration.image).not.toBe(first.app.configuration.image);
-          const rolledOut = yield* waitForImage(
-            accountId,
-            first.app.applicationId,
-            third.app.configuration.image!,
-          );
+          const rolledOut = yield* live(accountId, first.app.applicationId);
           expect(rolledOut.image).toBe(third.app.configuration.image);
           expect(first.app.version).toEqual(expect.any(Number));
           expect(rolledOut.version).toBeGreaterThan(first.app.version!);
+          // #2602: reconcile saves the application after the rollout, so the
+          // saved version and configuration match what `read` returns.
+          expect(third.app.version).toBe(rolledOut.version);
+          const afterRollout = yield* Drift.detect(scratch);
+          expect(afterRollout.resources.DigestReuse?.action).toBe("unchanged");
 
           yield* scratch.destroy();
         }).pipe(logLevel),

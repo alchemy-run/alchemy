@@ -1103,9 +1103,10 @@ export const LiveContainerProvider = () =>
             `Cloudflare Container update: ${existing.applicationName} has no effective changes`,
           );
           yield* session.note(`Container application ${existing.applicationName} is unchanged.`);
+          // `existing` is the observed application; keep its configuration,
+          // which `read` reports with Cloudflare's defaults filled in.
           return {
             ...existing,
-            configuration,
             hash: {
               image: imageHash,
               digest: imageDigest,
@@ -1165,10 +1166,32 @@ export const LiveContainerProvider = () =>
             configuration,
             rollout: news.rollout,
           });
+          yield* session.note(`Waiting for the rollout of ${updated.applicationName} to land...`);
+        }
+        // Cloudflare keeps reporting the previous version and configuration
+        // until the rollout lands, then reports the configuration with its
+        // defaults filled in. Save the application as `read` will see it.
+        const observed = yield* retryForContainerApplicationReadiness(
+          "read",
+          updated.applicationId,
+          Containers.getContainerApplication({ accountId, applicationId: updated.applicationId }),
+        ).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (app) => !hasActiveRollout(app),
+            times: 30,
+          }),
+        );
+        if (hasActiveRollout(observed)) {
+          yield* Effect.logInfo(
+            `Cloudflare Container update: rollout of ${updated.applicationName} is still in progress`,
+          );
+          yield* session.note(
+            `Rollout of ${updated.applicationName} is still in progress; saved the application as it was before the rollout.`,
+          );
         }
         return {
-          ...updated,
-          configuration,
+          ...toAttributes(observed),
           hash: {
             image: imageHash,
             digest: imageDigest,
@@ -1753,6 +1776,10 @@ const isOwnedApplication = (
   observed: { applicationId: string },
   previous: { applicationId: string } | undefined,
 ) => explicitName === undefined || observed.applicationId === previous?.applicationId;
+
+// Durable Object applications have no rollouts.
+const hasActiveRollout = (application: Containers.GetContainerApplicationResponse) =>
+  "activeRolloutId" in application && !!application.activeRolloutId;
 
 const toAttributes = (
   application:
