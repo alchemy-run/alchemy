@@ -20,7 +20,7 @@ import { IngestToken } from "./IngestToken.ts";
  * - `otel.alchemy.run`     — primary OTLP entrypoint
  * - `analytics.alchemy.run` — first-party PostHog ingest (defeats ad-blockers)
  *
- * Environment (set by `stacks/otel.ts`):
+ * Environment (set by `stacks/src/otel.ts`):
  * - `AXIOM_TRACES_ENDPOINT`  — full Axiom OTLP traces URL
  * - `AXIOM_LOGS_ENDPOINT`    — full Axiom OTLP logs URL
  * - `AXIOM_METRICS_ENDPOINT` — full Axiom OTLP metrics URL
