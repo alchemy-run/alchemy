@@ -105,25 +105,14 @@ The rules then live in one place. A view or a policy reading the event sees the 
 ```typescript title="src/Account.aggregate.ts"
 evolve: {
   AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-  MoneyDeposited: (s, e) => Optic.replace(s, balance, e.balanceAfter),
-  MoneyWithdrawn: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+  MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
+  MoneyWithdrawn: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
 },
 ```
 
 Keeping `evolve` separate from `decide` is what lets the state be derived from events. `decide` runs once, when the command arrives, and may refuse. `evolve` must always accept, because it applies events that have already been recorded, and applying the same events must always give the same state.
 
-`evolve` never fails either, and never throws. Refusing is `decide`'s job: every command that records `MoneyDeposited` has already returned `NotOpen` for an account that isn't open. So each handler covers every state, and keeps a state its event can't follow.
-
-An optic from `effect/Optic` focused on the `Open` state does exactly that. `balance` reaches the balance of an open account, and on any other state `Optic.replace` returns it unchanged.
-
-```typescript title="src/Account.aggregate.ts"
-import * as Optic from "effect/Optic";
-
-const open = Optic.id<State>().tag("Open");
-const balance = open.key("balance");
-```
-
-An event that changes several fields uses `modify` on the same focus: `open.modify((o) => ({ ...o, owner: e.owner }))(s)`. An event that moves the account to another stage, like `AccountOpened`, returns the new state whole.
+`evolve` never fails either, and never throws. Refusing is `decide`'s job: every command that records `MoneyDeposited` has already returned `NotOpen` for an account that isn't open. So each handler covers every state, and keeps a state its event can't follow. An event that moves the account to another stage, like `AccountOpened`, returns the new state whole.
 
 ## Reply from the new state
 
@@ -137,6 +126,31 @@ reply: {
 ```
 
 Like `evolve`, `reply` covers every state and never fails. The reply is stored with the events, so a retried command returns the same reply as the first time.
+
+## Focus on a state with optics
+
+Once many handlers repeat the same `s._tag === "Open" ? ... : s`, an optic from `effect/Optic` can say it once. It focuses on the `Open` state, and leaves any other state unchanged.
+
+```typescript title="src/Account.aggregate.ts"
+import * as Optic from "effect/Optic";
+
+const open = Optic.id<State>().tag("Open");
+const balance = open.key("balance");
+```
+
+A handler that sets one field replaces it through the optic.
+
+```typescript title="src/Account.aggregate.ts"
+MoneyDeposited: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+```
+
+A handler that changes several fields modifies the focused state.
+
+```typescript title="src/Account.aggregate.ts"
+OwnerChanged: (s, e) => open.modify((o) => ({ ...o, owner: e.owner }))(s),
+```
+
+Optics are optional. They give the same states as the plain checks, with less repetition. The [example bank](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain) uses them for its account.
 
 ## Never refuse a compensation
 
