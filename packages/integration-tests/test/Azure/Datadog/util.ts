@@ -30,7 +30,7 @@ export const subscription = Effect.map(Azure.AzureEnvironment.current, (env) => 
 /** Owner of the test Datadog organization (any reachable mailbox works). */
 export const userInfo = {
   name: "Alchemy Test",
-  emailAddress: process.env.AZURE_TEST_DATADOG_EMAIL ?? "alchemy-test@example.com",
+  emailAddress: "alchemy-test@example.com",
 };
 
 /**

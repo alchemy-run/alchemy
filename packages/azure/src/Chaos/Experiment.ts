@@ -34,6 +34,7 @@ export interface ExperimentActionParameter {
 
 /** Run a fault for a fixed duration (most faults). */
 export interface ExperimentContinuousAction {
+  /** Action kind: a fault that runs for `duration`. */
   type: "continuous";
   /** Fault URN, e.g. a capability's `urn`. */
   name: string;
@@ -47,6 +48,7 @@ export interface ExperimentContinuousAction {
 
 /** Run a fault once (e.g. a virtual machine redeploy). */
 export interface ExperimentDiscreteAction {
+  /** Action kind: a fault that runs once. */
   type: "discrete";
   /** Fault URN, e.g. a capability's `urn`. */
   name: string;
@@ -58,6 +60,7 @@ export interface ExperimentDiscreteAction {
 
 /** Pause the branch. */
 export interface ExperimentDelayAction {
+  /** Action kind: a pause of `duration`. */
   type: "delay";
   /** Delay URN, `urn:csci:microsoft:chaosStudio:TimedDelay/1.0`. */
   name: string;
@@ -88,6 +91,7 @@ export interface ExperimentStep {
 
 /** Filter that narrows the targets of a selector. */
 export interface ExperimentSelectorFilter {
+  /** Filter kind. `Simple` is the only kind. */
   type: "Simple";
   /** Filter parameters. */
   parameters?: {
@@ -98,6 +102,7 @@ export interface ExperimentSelectorFilter {
 
 /** Selects an explicit list of Chaos targets. */
 export interface ExperimentListSelector {
+  /** Selector kind: an explicit list of targets. */
   type: "List";
   /** Selector ID referenced by action `selectorId`s. */
   id: string;
@@ -109,6 +114,7 @@ export interface ExperimentListSelector {
 
 /** Selects Chaos targets with an Azure Resource Graph query. */
 export interface ExperimentQuerySelector {
+  /** Selector kind: targets from an Azure Resource Graph query. */
   type: "Query";
   /** Selector ID referenced by action `selectorId`s. */
   id: string;

@@ -31,11 +31,11 @@ const getInstance = (resourceGroupName: string, instanceName: string) =>
 const program = (props: { name?: string; description: string; tags: Record<string, string> }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
-      location: location(),
+      location,
     });
     const instance = yield* Azure.IoTOperations.Instance("Instance", {
       resourceGroup: group.resourceGroupName,
-      location: location(),
+      location,
       customLocationId: customLocationId(),
       schemaRegistryId: schemaRegistryId(),
       description: props.description,

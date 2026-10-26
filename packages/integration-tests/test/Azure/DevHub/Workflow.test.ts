@@ -100,12 +100,11 @@ test.provider.skipIf(!runDevHub)(
 
 // Ungated probe: without the GitHub OAuth grant the provider surfaces the
 // typed rejection and nothing is left behind.
-test.provider(
+test.provider.skipIf(runDevHub)(
   "workflow create without a GitHub grant fails with DevHubGitHubNotAuthorized",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      if (runDevHub) return;
       const error = yield* stack.deploy(program({})).pipe(Effect.flip);
       expect(error._tag).toEqual("DevHubGitHubNotAuthorized");
       const { subscriptionId } = yield* Azure.AzureEnvironment.current;

@@ -25,7 +25,7 @@ const getCluster = (connectedClusterResourceUri: string) =>
 
 const deployGroup = Effect.gen(function* () {
   const group = yield* Azure.Resources.ResourceGroup("Group", {
-    location: hciLocation(),
+    location: hciLocation,
   });
   return { group };
 });
@@ -58,9 +58,9 @@ const program = (
 
 // An AKS Arc cluster runs its VMs on Azure Local hardware (the cloud side is
 // free; on-prem compute only) behind an Arc custom location, which the free
-// trial does not have. Set AZURE_TEST_PAID=1, AZURE_TEST_HCI_CUSTOM_LOCATION,
-// AZURE_TEST_HCI_LOCATION and AZURE_TEST_AKSARC_LOGICAL_NETWORK on a
-// subscription with an Azure Local cluster. Create + replace take ~30-60
+// trial does not have. Set AZURE_TEST_PAID=1, AZURE_TEST_HCI_CUSTOM_LOCATION
+// and AZURE_TEST_AKSARC_LOGICAL_NETWORK on a subscription with an Azure
+// Local cluster in `hciLocation`. Create + replace take ~30-60
 // minutes, so the timeout is the contract maximum and may need raising.
 // Skipped: failed in the last live run. BadRequest: Property id '' at path 'extendedLocation.name'
 // is invalid. Expect fully qualified resource Id that start with '/subscriptions/{subscriptionId}'
@@ -72,7 +72,7 @@ test.provider.skip(
       yield* stack.destroy();
       const { group } = yield* stack.deploy(deployGroup);
 
-      yield* withConnectedCluster(group.resourceGroupName, hciLocation(), (connectedClusterId) =>
+      yield* withConnectedCluster(group.resourceGroupName, hciLocation, (connectedClusterId) =>
         Effect.gen(function* () {
           const { cluster } = yield* stack.deploy(
             program(connectedClusterId, {

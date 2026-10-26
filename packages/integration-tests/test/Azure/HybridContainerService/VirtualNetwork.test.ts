@@ -29,11 +29,11 @@ const getVirtualNetwork = (resourceGroupName: string, name: string) =>
 const program = (props: { vlanID: number; tags: Record<string, string> }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
-      location: hciLocation(),
+      location: hciLocation,
     });
     const resource = yield* Azure.HybridContainerService.VirtualNetwork("VirtualNetwork", {
       resourceGroup: group.resourceGroupName,
-      location: hciLocation(),
+      location: hciLocation,
       extendedLocation: { name: customLocationId() },
       hci: {
         mocGroup: process.env.AZURE_TEST_AKSARC_MOC_GROUP ?? "target-group",
@@ -54,9 +54,8 @@ const program = (props: { vlanID: number; tags: Record<string, string> }) =>
 // An AKS Arc virtual network is free but needs a deployed Azure Local
 // cluster with the Arc Resource Bridge and a custom location; the free
 // trial has no Azure Local hardware. Set AZURE_TEST_PAID=1,
-// AZURE_TEST_HCI_CUSTOM_LOCATION, AZURE_TEST_HCI_LOCATION and the
-// AZURE_TEST_AKSARC_MOC_* inputs on a subscription with an Azure Local
-// cluster. ~5 minutes.
+// AZURE_TEST_HCI_CUSTOM_LOCATION and the AZURE_TEST_AKSARC_MOC_* inputs on
+// a subscription with an Azure Local cluster in `hciLocation`. ~5 minutes.
 // Skipped: failed in the last live run. BadRequest: Property id '' at path 'extendedLocation.name'
 // is invalid. Expect fully qualified resource Id that start with '/subscriptions/{subscriptionId}'
 // or '/providers/{resourceProviderNamespace}/'.

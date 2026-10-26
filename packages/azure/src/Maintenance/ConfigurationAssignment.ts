@@ -10,6 +10,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import {
+  collectAll,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
@@ -493,7 +494,7 @@ export const ConfigurationAssignmentProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const configs = yield* orUndefinedIfNotFound(
-        maintenance.ListMaintenanceConfigurations({ subscriptionId }),
+        collectAll(maintenance.ListMaintenanceConfigurations, { subscriptionId }),
       );
       const owned = new Set(
         (configs?.value ?? []).flatMap((config) =>

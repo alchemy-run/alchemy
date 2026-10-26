@@ -26,6 +26,9 @@ export type GenerateClientTokenClient = (
  * `role` (`webpubsub.sendToGroup`, `webpubsub.joinLeaveGroup`, …) and
  * `group` set what the connection may do and which groups it joins.
  *
+ * The `token` comes back `Redacted`; read it with `Redacted.value` where
+ * you build the client URL.
+ *
  * Binding assigns a custom role (`AzureWebPubSubGenerateTokenRole`, one per stack)
  * with exactly the data action `WebPubSub/clientConnection/generateToken/action`, on the hub's
  * Web PubSub service (Web PubSub checks roles on the service, not on a

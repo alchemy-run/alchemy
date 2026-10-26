@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
@@ -170,7 +171,7 @@ export const ConfigurationProfileProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* automanage.ListConfigurationProfileBySubscription({
+      const page = yield* collectAll(automanage.ListConfigurationProfileBySubscription, {
         subscriptionId,
       });
       return (page.value ?? []).flatMap((profile) => {

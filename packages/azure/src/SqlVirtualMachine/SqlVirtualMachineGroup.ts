@@ -364,7 +364,7 @@ export const SqlVirtualMachineGroupProvider = () =>
       yield* waitUntilGone(
         `listeners of SQL virtual machine group ${output.sqlVirtualMachineGroupName}`,
         orUndefinedIfNotFound(
-          sqlvm.ListAvailabilityGroupListenerByGroup({
+          collectAll(sqlvm.ListAvailabilityGroupListenerByGroup, {
             subscriptionId,
             resourceGroupName: output.resourceGroup,
             sqlVirtualMachineGroupName: output.sqlVirtualMachineGroupName,

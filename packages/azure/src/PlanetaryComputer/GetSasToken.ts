@@ -13,6 +13,9 @@ export interface GetSasTokenRequest extends Omit<geocatalog.GetSasTokenRequest, 
 /**
  * Get a SAS token for a collection's storage, to read its assets directly.
  *
+ * The `token` comes back `Redacted`; read it with `Redacted.value` where
+ * you use it.
+ *
  * Binding assigns the built-in **GeoCatalog Reader** role on the bound catalog
  * only. `Microsoft.Orbital` has no data actions; the GeoCatalog data plane
  * checks this role's `Microsoft.Orbital/geoCatalogs/read`.

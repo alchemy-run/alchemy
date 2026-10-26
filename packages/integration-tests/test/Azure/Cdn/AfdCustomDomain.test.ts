@@ -20,7 +20,7 @@ const { test } = Test.make({ providers: Azure.providers() });
  * validated (no TXT record is published), so any syntactically valid
  * domain works for the lifecycle.
  */
-const domain = process.env.AZURE_TEST_FRONTDOOR_DOMAIN ?? "alchemy-test.example.com";
+const domain = "alchemy-test.example.com";
 
 const getDomain = (resourceGroupName: string, profileName: string, customDomainName: string) =>
   Effect.gen(function* () {

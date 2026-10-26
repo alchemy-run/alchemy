@@ -3,6 +3,7 @@ import * as queues from "@distilled.cloud/azure/storage-queue";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import { BuiltInRole } from "../Authorization/RoleAssignment.ts";
 import * as AzureBindings from "../AzureBindings.ts";
 import { QueueEventSource as ServiceBusQueueSource } from "../ServiceBus/QueueEventSource.ts";
@@ -49,6 +50,16 @@ const decodeBody = (text: string): unknown => {
     return text;
   }
 };
+
+/**
+ * Retry a data-plane call on its typed errors (4 retries, about 15 s in
+ * total), logging each failure.
+ */
+const retryLogged = <A, E, R>(label: string, call: Effect.Effect<A, E, R>) =>
+  call.pipe(
+    Effect.tapError((error) => Effect.logWarning(`${label} failed; retrying`, error)),
+    Effect.retry({ schedule: Schedule.exponential("1 second"), times: 4 }),
+  );
 
 /**
  * Register `drain` as a runner of `host`, under the context its init had.
@@ -151,12 +162,16 @@ export const JobStorageQueueEventSource = Layer.effect(
         host,
         Effect.gen(function* () {
           const target = { url: yield* url, queueName: yield* name };
+          const label = `Storage queue ${queue.LogicalId}`;
           for (let batch = 0; batch < MAX_BATCHES; batch++) {
-            const messages = yield* dequeue({
-              ...target,
-              numofmessages: BATCH_SIZE,
-              visibilitytimeout: VISIBILITY_TIMEOUT,
-            });
+            const messages = yield* retryLogged(
+              `${label} dequeue`,
+              dequeue({
+                ...target,
+                numofmessages: BATCH_SIZE,
+                visibilitytimeout: VISIBILITY_TIMEOUT,
+              }),
+            );
             if (messages.length === 0) return;
             for (const message of messages) {
               yield* handler({
@@ -166,14 +181,28 @@ export const JobStorageQueueEventSource = Layer.effect(
                 insertionTime: message.InsertionTime,
                 metadata: { ...message },
               });
-              yield* remove({
-                ...target,
-                messageid: message.MessageId,
-                popreceipt: message.PopReceipt,
-              });
+              // A message that is not deleted reappears after the visibility timeout.
+              yield* retryLogged(
+                `${label} delete of message ${message.MessageId}`,
+                remove({
+                  ...target,
+                  messageid: message.MessageId,
+                  popreceipt: message.PopReceipt,
+                }),
+              ).pipe(
+                Effect.catch((error) =>
+                  Effect.logError(`${label} delete of message ${message.MessageId} failed`, error),
+                ),
+              );
             }
           }
-        }).pipe(Effect.orDie),
+        }).pipe(
+          // Dequeue still failing after its retries: end this execution; the
+          // scaler starts another while the queue has messages.
+          Effect.catch((error) =>
+            Effect.logError(`Storage queue ${queue.LogicalId} drain stopped`, error),
+          ),
+        ),
       );
     });
   }),
@@ -229,8 +258,12 @@ export const JobServiceBusQueueEventSource = Layer.effect(
         host,
         Effect.gen(function* () {
           const target = { namespaceName: yield* namespace, queueName: yield* name };
+          const label = `Service Bus queue ${queue.LogicalId}`;
           for (let taken = 0; taken < BATCH_SIZE * MAX_BATCHES; taken++) {
-            const message = yield* receive({ ...target, timeout: 5 });
+            const message = yield* retryLogged(
+              `${label} receive`,
+              receive({ ...target, timeout: 5 }),
+            );
             const props = message.brokerProperties;
             if (message.body === undefined || props?.lockToken === undefined) return;
             const applicationProperties: Record<string, unknown> = {};
@@ -246,13 +279,24 @@ export const JobServiceBusQueueEventSource = Layer.effect(
               applicationProperties,
               metadata: { ...props },
             });
-            yield* complete({
-              ...target,
-              messageId: props.messageId ?? String(props.sequenceNumber ?? ""),
-              lockToken: props.lockToken,
-            });
+            const messageId = props.messageId ?? String(props.sequenceNumber ?? "");
+            // A message that is not completed is redelivered when its lock expires.
+            yield* retryLogged(
+              `${label} complete of message ${messageId}`,
+              complete({ ...target, messageId, lockToken: props.lockToken }),
+            ).pipe(
+              Effect.catch((error) =>
+                Effect.logError(`${label} complete of message ${messageId} failed`, error),
+              ),
+            );
           }
-        }).pipe(Effect.orDie),
+        }).pipe(
+          // Receive still failing after its retries: end this execution; the
+          // scaler starts another while the queue has messages.
+          Effect.catch((error) =>
+            Effect.logError(`Service Bus queue ${queue.LogicalId} drain stopped`, error),
+          ),
+        ),
       );
     });
   }),

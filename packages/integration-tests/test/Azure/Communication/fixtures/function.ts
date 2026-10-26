@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { distilledFromSource } from "./distilled-source.ts";
 
 // Resources the fixture binds. Module-scope so the test stack yields the
@@ -25,10 +26,27 @@ export const Acs = Effect.gen(function* () {
   });
 });
 
+/**
+ * `value` with each `Redacted` member (an access token) sent as
+ * `{ redacted: value }`, so the test sees the binding returned it `Redacted`.
+ */
+const exposeRedacted = (value: unknown): unknown =>
+  Redacted.isRedacted(value)
+    ? { redacted: Redacted.value(value) }
+    : Array.isArray(value)
+      ? value.map(exposeRedacted)
+      : value !== null &&
+          typeof value === "object" &&
+          Object.getPrototypeOf(value) === Object.prototype
+        ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, exposeRedacted(v)]))
+        : value;
+
 /** Answer `{ ok, result }`, or `{ ok: false, error }` with a 500 so callers retry. */
 const respond = (effect: Effect.Effect<unknown, unknown, RuntimeContext>) =>
   effect.pipe(
-    Effect.flatMap((result) => HttpServerResponse.json({ ok: true, result: result ?? null })),
+    Effect.flatMap((result) =>
+      HttpServerResponse.json({ ok: true, result: exposeRedacted(result) ?? null }),
+    ),
     Effect.catchCause((cause) =>
       HttpServerResponse.json({ ok: false, error: Cause.pretty(cause) }, { status: 500 }),
     ),

@@ -13,6 +13,9 @@ export interface StartProjectDatasetUploadRequest extends Omit<
  * Start a new or get an existing pending upload of a dataset for a specific
  * version.
  *
+ * The `blobReference.credential.sasUri` comes back `Redacted`; read it
+ * with `Redacted.value` where you use it.
+ *
  * Binding assigns a custom role (`AzureAIProjectAssetsWriteRole`, one per
  * stack) with exactly the data action `AIServices/assets/write` (under
  * `Microsoft.CognitiveServices/accounts/`), on the Foundry project only. The

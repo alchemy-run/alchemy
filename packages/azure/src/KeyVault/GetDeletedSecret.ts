@@ -13,6 +13,8 @@ export interface GetDeletedSecretRequest extends Omit<
  * Read a soft-deleted Azure Key Vault secret (its attributes, recovery ID,
  * and scheduled purge date) from any host.
  *
+ * The secret's `value` comes back `Redacted`.
+ *
  * Binding assigns a custom role (`AzureKeyVaultGetSecretRole`, one per
  * stack, shared with {@link GetSecret}) with exactly the data action
  * `secrets/getSecret/action`, on the secret only: Key Vault authorizes

@@ -29,16 +29,16 @@ const program = (props: { name: string; message: string; description?: string; e
   });
 
 const request = (
+  subscriptionId: string,
   resourceGroupName: string,
   automationAccountName: string,
   configurationName: string,
-) =>
-  Effect.map(subscription, (subscriptionId) => ({
-    subscriptionId,
-    resourceGroupName,
-    automationAccountName,
-    configurationName,
-  }));
+) => ({
+  subscriptionId,
+  resourceGroupName,
+  automationAccountName,
+  configurationName,
+});
 
 // Free: uploading a configuration does not compile or run it; seconds.
 test.provider(
@@ -51,12 +51,13 @@ test.provider(
         const { where, configuration } = yield* stack.deploy(
           program({ name: "AlchemyTest", message: "one", env: "a" }),
         );
-        const req = (name: string) => request(where.resourceGroup, where.automationAccount, name);
-        const observed = yield* automation.GetDscConfiguration(yield* req("AlchemyTest"));
+        const subscriptionId = yield* subscription;
+        const req = (name: string) =>
+          request(subscriptionId, where.resourceGroup, where.automationAccount, name);
+        const observed = yield* automation.GetDscConfiguration(req("AlchemyTest"));
         expect(observed.tags?.env).toEqual("a");
-        expect(yield* automation.GetDscConfigurationContent(yield* req("AlchemyTest"))).toContain(
-          '"one"',
-        );
+        const content = yield* automation.GetDscConfigurationContent(req("AlchemyTest"));
+        expect(content).toContain('"one"');
 
         // In-place: script, description, and tags.
         const updated = yield* stack.deploy(
@@ -68,10 +69,9 @@ test.provider(
           }),
         );
         expect(updated.configuration.configurationId).toEqual(configuration.configurationId);
-        expect(yield* automation.GetDscConfigurationContent(yield* req("AlchemyTest"))).toContain(
-          '"two"',
-        );
-        const reobserved = yield* automation.GetDscConfiguration(yield* req("AlchemyTest"));
+        const updatedContent = yield* automation.GetDscConfigurationContent(req("AlchemyTest"));
+        expect(updatedContent).toContain('"two"');
+        const reobserved = yield* automation.GetDscConfiguration(req("AlchemyTest"));
         expect(reobserved.properties?.description).toEqual("second");
         expect(reobserved.tags?.env).toEqual("b");
 
@@ -80,14 +80,12 @@ test.provider(
           program({ name: "AlchemyTestTwo", message: "two", env: "b" }),
         );
         expect(replaced.configuration.configurationName).toEqual("AlchemyTestTwo");
-        expect(yield* waitGone(automation.GetDscConfiguration(yield* req("AlchemyTest")))).toEqual(
-          "gone",
-        );
+        const original = yield* waitGone(automation.GetDscConfiguration(req("AlchemyTest")));
+        expect(original).toEqual("gone");
 
         yield* stack.destroy();
-        expect(
-          yield* waitGone(automation.GetDscConfiguration(yield* req("AlchemyTestTwo"))),
-        ).toEqual("gone");
+        const final = yield* waitGone(automation.GetDscConfiguration(req("AlchemyTestTwo")));
+        expect(final).toEqual("gone");
       }),
     ).pipe(logLevel),
   { tags, timeout: 600_000 },

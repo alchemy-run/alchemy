@@ -52,6 +52,10 @@ const failureTag = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E
     Effect.catch((error) => Effect.succeed(error._tag)),
   );
 
+/** A secret member as `{ redacted: value }`, so the test sees the binding returned it `Redacted`. */
+const exposeRedacted = (value: string | Redacted.Redacted<string> | undefined) =>
+  Redacted.isRedacted(value) ? { redacted: Redacted.value(value) } : value;
+
 const versionOf = (id: string | undefined) => id?.split("/").pop();
 const nameOf = (id: string | undefined) => id?.split("/secrets/")[1]?.split("/")[0];
 
@@ -108,7 +112,11 @@ export default class KvSecretsFunction extends Azure.Functions.Function<KvSecret
                 const pinned = yield* getSecret({ secretVersion: versionOf(latest.id) });
                 // Ask for a version that does not exist once access works.
                 const missing = yield* failureTag(getSecret({ secretVersion: "0".repeat(32) }));
-                return { value: latest.value, pinned: pinned.value, missing };
+                return {
+                  value: exposeRedacted(latest.value),
+                  pinned: exposeRedacted(pinned.value),
+                  missing,
+                };
               }),
             );
           case "/versions":

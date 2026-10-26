@@ -7,6 +7,7 @@ import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
@@ -336,7 +337,7 @@ export const MaintenanceConfigurationProvider = () =>
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
       const page = yield* orUndefinedIfNotFound(
-        maintenance.ListMaintenanceConfigurations({ subscriptionId }),
+        collectAll(maintenance.ListMaintenanceConfigurations, { subscriptionId }),
       );
       return (page?.value ?? []).flatMap((config) => {
         const group = resourceGroupOf(config.id);

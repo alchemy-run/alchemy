@@ -94,8 +94,15 @@ export interface FunctionEventSubscription {
  * - `eventSubscriptions` are created once the code is deployed.
  */
 export interface FunctionBinding {
+  /** Roles granted to the app's system-assigned identity, each on one scope. */
   roleAssignments?: FunctionRoleAssignment[];
+  /**
+   * App settings the binding contributes. Strings are set as-is; other
+   * values are packed into a string. The Function's own `env` wins on a
+   * key clash.
+   */
   env?: Record<string, unknown>;
+  /** Event Grid subscriptions created once the code is deployed. */
   eventSubscriptions?: FunctionEventSubscription[];
 }
 
@@ -112,10 +119,15 @@ export interface FunctionAppRef {
  * @internal
  */
 export interface FunctionHosting {
+  /** ARM ID of the `FC1` App Service plan the app runs on. */
   serverFarmId: string;
+  /** Name of the storage account the Functions host uses. */
   storageAccountName: string;
+  /** ARM ID of the host's storage account. */
   storageAccountId: string;
+  /** Primary blob endpoint of the host's storage account. */
   blobEndpoint: string;
+  /** Name of the blob container that holds deployment packages. */
   deploymentContainer: string;
 }
 
@@ -415,13 +427,13 @@ const transformFunctionProps = (id: string, props: FunctionProps) =>
  * `node_modules` ship: every dependency is bundled. A deploy runs only when
  * the bundle's hash changes. Pass `build` to tune Rolldown.
  *
- * **Example:** Keep a package out of the bundle
+ * **Example:** Ship a source map
  * ```typescript
  * export default class Api extends Azure.Functions.Function<Api>()(
  *   "Api",
  *   {
  *     main: import.meta.url,
- *     build: { input: { external: ["sharp"] } },
+ *     build: { output: { sourcemap: true } },
  *   },
  *   program,
  * ) {}

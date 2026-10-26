@@ -68,6 +68,7 @@ const program = (link?: { requestMessage: string }) =>
     return { group, vault, watcher, link: l };
   });
 
+// ~$0.05/run, 15 min (watcher create/delete dominates; see `program`).
 test.provider.skipIf(!runExpensive)(
   "create, replace, and delete a database watcher shared private link",
   (stack) =>

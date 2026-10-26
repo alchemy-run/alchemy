@@ -6,18 +6,11 @@ import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { runExpensive } from "../gates.ts";
-import { logLevel, subscriptionId, waitGone } from "./helpers.ts";
+import { cosmosPrincipalId, logLevel, subscriptionId, waitGone } from "./helpers.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
 const LOCATION = "eastus";
-
-/**
- * Object ID of the "Azure Cosmos DB" service principal (app ID
- * `a232010e-820c-4083-83bb-3ace5fc29d0b`) in the test tenant:
- * `az ad sp show --id a232010e-820c-4083-83bb-3ace5fc29d0b --query id -o tsv`.
- */
-const cosmosPrincipal = process.env.AZURE_COSMOS_DB_SP_OBJECT_ID;
 
 const NETWORK_CONTRIBUTOR = "4d97b98b-1d4f-4787-a291-c67834d212e7";
 
@@ -30,7 +23,11 @@ const getCluster = (resourceGroupName: string, clusterName: string) =>
     }),
   );
 
-const clusterProgram = (props: { tags: Record<string, string>; repairEnabled: boolean }) =>
+const clusterProgram = (props: {
+  principalId: string;
+  tags: Record<string, string>;
+  repairEnabled: boolean;
+}) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: LOCATION,
@@ -52,7 +49,7 @@ const clusterProgram = (props: { tags: Record<string, string>; repairEnabled: bo
     const grant = yield* Azure.Authorization.RoleAssignment("CosmosNetwork", {
       scope: vnet.virtualNetworkId,
       roleDefinitionId: NETWORK_CONTRIBUTOR,
-      principalId: cosmosPrincipal!,
+      principalId: props.principalId,
       principalType: "ServicePrincipal",
     });
     const cluster = yield* Azure.CosmosDB.CassandraCluster("Cluster", {
@@ -71,17 +68,16 @@ const clusterProgram = (props: { tags: Record<string, string>; repairEnabled: bo
   });
 
 // The management plane alone has no VM cost, but creation and deletion take
-// 10-40 minutes, over the ~10 minute budget for ungated tests. Needs the
-// "Azure Cosmos DB" service principal object ID in
-// AZURE_COSMOS_DB_SP_OBJECT_ID.
-test.provider.skipIf(!runExpensive || !cosmosPrincipal)(
+// 10-40 minutes, over the ~10 minute budget for ungated tests.
+test.provider.skipIf(!runExpensive)(
   "create, update, and delete a Managed Cassandra cluster",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const principalId = yield* cosmosPrincipalId;
 
       const { group, subnet, cluster } = yield* stack.deploy(
-        clusterProgram({ tags: { env: "test" }, repairEnabled: true }),
+        clusterProgram({ principalId, tags: { env: "test" }, repairEnabled: true }),
       );
       expect(cluster.delegatedManagementSubnetId.toLowerCase()).toEqual(
         subnet.subnetId.toLowerCase(),
@@ -92,7 +88,7 @@ test.provider.skipIf(!runExpensive || !cosmosPrincipal)(
 
       // In-place update: tags and repair setting.
       const updated = yield* stack.deploy(
-        clusterProgram({ tags: { env: "prod" }, repairEnabled: false }),
+        clusterProgram({ principalId, tags: { env: "prod" }, repairEnabled: false }),
       );
       expect(updated.cluster.clusterId).toEqual(cluster.clusterId);
       const reobserved = yield* getCluster(group.resourceGroupName, cluster.clusterName);

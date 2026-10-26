@@ -96,9 +96,19 @@ export type ContainerAppScaleRule = app.ScaleRule;
  * - `minReplicas` raises the template's minimum replica count (schedules).
  */
 export interface ContainerAppBinding {
+  /** Roles granted to the app's system-assigned identity, each on one scope. */
   roleAssignments?: HostRoleAssignment[];
+  /**
+   * Container env vars the binding contributes. `Redacted` values are
+   * stored as app secrets and referenced with `secretRef`.
+   */
   env?: Record<string, unknown>;
+  /** KEDA scale rules added to the template's own rules. */
   scaleRules?: ContainerAppScaleRule[];
+  /**
+   * Minimum replica count the binding needs. The app runs the highest of
+   * this and `template.scale.minReplicas`.
+   */
   minReplicas?: number;
 }
 
@@ -108,10 +118,15 @@ export interface ContainerAppBinding {
  * @internal
  */
 export interface ContainerAppRegistry {
+  /** Name of the container registry. */
   registryName: string;
+  /** Resource group of the registry. */
   resourceGroup: string;
+  /** Login server of the registry, e.g. `myregistry.azurecr.io`. */
   loginServer: string;
+  /** Name of the pull-only registry token the app signs in with. */
   tokenName: string;
+  /** Password of the pull token, stored as an app secret. */
   tokenPassword: Redacted.Redacted<string> | undefined;
 }
 

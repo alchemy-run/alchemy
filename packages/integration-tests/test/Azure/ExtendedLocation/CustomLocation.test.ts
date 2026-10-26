@@ -23,7 +23,8 @@ const tags = ["provider:azure", "provider:azure:extendedlocation", "live"];
  */
 const hostResourceId = process.env.AZURE_TEST_CUSTOM_LOCATION_HOST_ID;
 const clusterExtensionId = process.env.AZURE_TEST_CUSTOM_LOCATION_EXTENSION_ID;
-const hostLocation = process.env.AZURE_TEST_CUSTOM_LOCATION_REGION ?? "eastus";
+/** Region of the host cluster. */
+const hostLocation = "eastus";
 
 const getCustomLocation = (resourceGroupName: string, resourceName: string) =>
   Effect.gen(function* () {

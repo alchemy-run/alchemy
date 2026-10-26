@@ -23,7 +23,8 @@ export const app = Effect.gen(function* () {
       const [, operation, name, id] = url.pathname.split("/");
       // Ready once the caller's task hub role works: a run nobody started reads as NotStarted.
       if (operation === "ready") {
-        return yield* HttpServerResponse.json(yield* workflows.Greet.get("ready").status);
+        const status = yield* workflows.Greet.get("ready").status;
+        return yield* HttpServerResponse.json(status);
       }
       const workflow = workflows[name as keyof typeof workflows] as typeof workflows.Checkout;
       if (!workflow || !id) return HttpServerResponse.text("Not Found", { status: 404 });
@@ -40,8 +41,10 @@ export const app = Effect.gen(function* () {
           const run = yield* workflow.start(payload);
           return yield* HttpServerResponse.json({ executionId: run.executionId });
         }
-        case "status":
-          return yield* HttpServerResponse.json(yield* workflow.get(executionId).status);
+        case "status": {
+          const status = yield* workflow.get(executionId).status;
+          return yield* HttpServerResponse.json(status);
+        }
         case "approve": {
           yield* workflow.get(executionId).signal(Approval, url.searchParams.get("by") ?? "nobody");
           return HttpServerResponse.text("ok");

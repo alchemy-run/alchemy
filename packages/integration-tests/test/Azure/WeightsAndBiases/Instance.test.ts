@@ -32,7 +32,7 @@ const marketplace = {
 const user = {
   firstName: "Alchemy",
   lastName: "Test",
-  emailAddress: process.env.AZURE_TEST_WANDB_EMAIL ?? "alchemy-test@example.com",
+  emailAddress: "alchemy-test@example.com",
 };
 
 const subscription = Effect.map(Azure.AzureEnvironment.current, (env) => env.subscriptionId);

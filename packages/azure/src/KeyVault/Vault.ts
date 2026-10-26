@@ -640,7 +640,8 @@ export const VaultProvider = () =>
       if (output.purgeOnDelete === false || output.enablePurgeProtection) {
         return;
       }
-      // Purge frees the globally unique name; it runs asynchronously.
+      // Purge frees the globally unique name; it runs asynchronously and was
+      // seen live to take more than 5 minutes.
       yield* ignoreNotFound(
         keyvault.PurgeVaultDeleted({
           subscriptionId,
@@ -651,7 +652,7 @@ export const VaultProvider = () =>
       yield* waitUntilGone(
         `deleted key vault ${name}`,
         getDeletedVault(subscriptionId, output.location, name),
-        { interval: "5 seconds", times: 60 },
+        { interval: "10 seconds", times: 72 },
       );
     }),
 

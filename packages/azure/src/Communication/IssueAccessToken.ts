@@ -12,6 +12,9 @@ export interface IssueAccessTokenRequest extends Omit<
 /**
  * Issue a user access token for an existing Communication Services identity.
  *
+ * The `token` comes back `Redacted`; read it with `Redacted.value` where
+ * you use it.
+ *
  * Binding assigns a custom role (`AzureCommunicationIdentityRole`, one per
  * stack) with exactly the action
  * `Microsoft.Communication/CommunicationServices/Write`, on the communication
@@ -30,7 +33,7 @@ export interface IssueAccessTokenRequest extends Omit<
  *
  * // runtime
  * const token = yield* issueAccessToken({ id: userId, scopes: ["chat"], expiresInMinutes: 60 });
- * // token.token, token.expiresOn
+ * // token.token (Redacted), token.expiresOn
  * ```
  *
  * @binding

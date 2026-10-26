@@ -633,14 +633,46 @@ export const StorageAccountProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      const where = {
+        subscriptionId,
+        resourceGroupName: output.resourceGroup,
+        accountName: output.storageAccountName,
+      };
+      const deleteAccount = storage
+        .DeleteStorageAccount(where)
+        .pipe(Effect.retry(whileGeoChangePending));
       yield* ignoreNotFound(
-        storage
-          .DeleteStorageAccount({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-            accountName: output.storageAccountName,
-          })
-          .pipe(Effect.retry(whileGeoChangePending)),
+        deleteAccount.pipe(
+          // ARM refuses to delete an account that still holds blob access
+          // point configurations (`CannotDeleteResource`); they belong to the
+          // account, so remove them and delete again.
+          Effect.catchTag("CannotDeleteResource", () =>
+            Effect.gen(function* () {
+              const configs = yield* collectAll(
+                storage.ListBlobAccessPointConfigurationByStorageAccount,
+                where,
+              );
+              for (const config of configs.value) {
+                // `name` may come back as `<account>/<configuration>`.
+                const name = (config.id ?? config.name)?.split("/").pop();
+                if (name === undefined) continue;
+                yield* ignoreNotFound(
+                  storage.DeleteBlobAccessPointConfiguration({
+                    ...where,
+                    blobAccessPointConfigurationName: name,
+                  }),
+                );
+              }
+              yield* deleteAccount.pipe(
+                Effect.retry({
+                  while: (e) => e._tag === "CannotDeleteResource",
+                  schedule: Schedule.spaced("10 seconds"),
+                  times: 12,
+                }),
+              );
+            }),
+          ),
+        ),
       );
       yield* waitUntilGone(
         `storage account ${output.storageAccountName}`,

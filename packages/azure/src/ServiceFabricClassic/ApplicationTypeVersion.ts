@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
@@ -193,7 +194,7 @@ export const ApplicationTypeVersionProvider = () =>
       const all: ApplicationTypeVersion["Attributes"][] = [];
       for (const { resourceGroup, clusterName } of yield* listClusters) {
         const types = yield* orUndefinedIfNotFound(
-          servicefabric.ListApplicationTypes({
+          collectAll(servicefabric.ListApplicationTypes, {
             subscriptionId,
             resourceGroupName: resourceGroup,
             clusterName,
@@ -202,7 +203,7 @@ export const ApplicationTypeVersionProvider = () =>
         for (const type of types?.value ?? []) {
           if (type.name === undefined) continue;
           const versions = yield* orUndefinedIfNotFound(
-            servicefabric.ListApplicationTypeVersions({
+            collectAll(servicefabric.ListApplicationTypeVersions, {
               subscriptionId,
               resourceGroupName: resourceGroup,
               clusterName,

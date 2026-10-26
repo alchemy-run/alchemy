@@ -26,6 +26,7 @@ const getJob = (resourceGroupName: string, amlFilesystemName: string, autoImport
   });
 
 const program = (props: {
+  rpObjectId: string;
   conflictResolutionMode: "Skip" | "OverwriteIfDirty";
   adminStatus: "Enable" | "Disable";
   tags?: Record<string, string>;
@@ -34,6 +35,7 @@ const program = (props: {
     const { group, subnet, hsm, grants } = yield* lustreDependencies({
       hsm: true,
       group: "alchemy-test-storagecache-import",
+      rpObjectId: props.rpObjectId,
     });
     const fs = yield* Azure.StorageCache.AmlFilesystem("Lustre", {
       resourceGroup: group.resourceGroupName,
@@ -59,16 +61,16 @@ const program = (props: {
 // Needs a 4 TiB AMLFS-Durable-Premium-500 file system with blob integration
 // (~$2-3/hour, 10-30 minutes to create, 5-20 minutes to delete) and a
 // storage account with the blob change feed: estimated ~$5 and ~60 minutes
-// per run. Also needs AZURE_HPC_CACHE_RP_OBJECT_ID (see util.ts) and AMLFS
-// quota, which free-trial subscriptions lack.
-test.provider.skipIf(!runExpensive || !hpcCacheRpObjectId)(
+// per run. Also needs AMLFS quota, which free-trial subscriptions lack.
+test.provider.skipIf(!runExpensive)(
   "create, update, replace, and delete an auto import job",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const rpObjectId = yield* hpcCacheRpObjectId;
 
       const { group, fs, job } = yield* stack.deploy(
-        program({ conflictResolutionMode: "Skip", adminStatus: "Enable" }),
+        program({ rpObjectId, conflictResolutionMode: "Skip", adminStatus: "Enable" }),
       );
       const get = (name: string) => getJob(group.resourceGroupName, fs.amlFilesystemName, name);
       expect(job.provisioningState).toEqual("Succeeded");
@@ -79,6 +81,7 @@ test.provider.skipIf(!runExpensive || !hpcCacheRpObjectId)(
       // In place: disable the job and add a tag.
       const updated = yield* stack.deploy(
         program({
+          rpObjectId,
           conflictResolutionMode: "Skip",
           adminStatus: "Disable",
           tags: { team: "hpc" },
@@ -92,6 +95,7 @@ test.provider.skipIf(!runExpensive || !hpcCacheRpObjectId)(
       // Replacement: the conflict resolution mode is immutable.
       const replaced = yield* stack.deploy(
         program({
+          rpObjectId,
           conflictResolutionMode: "OverwriteIfDirty",
           adminStatus: "Disable",
           tags: { team: "hpc" },

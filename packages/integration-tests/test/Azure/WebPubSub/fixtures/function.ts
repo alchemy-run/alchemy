@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { distilledFromSource } from "./distilled-source.ts";
 
 // Resources the fixture binds. Module-scope so the test stack yields the
@@ -32,6 +33,10 @@ const respond = (effect: Effect.Effect<unknown, unknown, RuntimeContext>) =>
       HttpServerResponse.json({ ok: false, error: Cause.pretty(cause) }, { status: 500 }),
     ),
   );
+
+/** A credential as `{ redacted: value }`, so the test sees the binding returned it `Redacted`. */
+const exposeRedacted = (value: string | Redacted.Redacted<string>) =>
+  Redacted.isRedacted(value) ? { redacted: Redacted.value(value) } : value;
 
 const list = (value: string | null) => (value ? value.split(",") : undefined);
 
@@ -119,7 +124,10 @@ export default class WebPubSubBindingsFunction extends Azure.Functions.Function<
             return yield* respond(connectionExists({ connectionId }));
           case "/generateClientToken":
             return yield* respond(
-              generateClientToken({ userId: userId || undefined, group: list(q("groups")) }),
+              Effect.map(
+                generateClientToken({ userId: userId || undefined, group: list(q("groups")) }),
+                ({ token }) => ({ token: exposeRedacted(token) }),
+              ),
             );
           case "/getServiceStatus":
             return yield* respond(Effect.as(getServiceStatus(), "healthy"));

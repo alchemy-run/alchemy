@@ -168,9 +168,11 @@ export const InterconnectBlockProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
+      // `InvalidResourceType`: the allow-listed type is not exposed to this
+      // subscription, so no interconnect block can exist.
       const page = yield* collectAll(compute.ListInterconnectBlockBySubscription, {
         subscriptionId,
-      });
+      }).pipe(Effect.catchTag("InvalidResourceType", () => Effect.succeed({ value: [] })));
       return page.value.flatMap((block) => {
         const resourceGroup = resourceGroupOf(block.id);
         return hasAnyAlchemyTag(block.tags) &&

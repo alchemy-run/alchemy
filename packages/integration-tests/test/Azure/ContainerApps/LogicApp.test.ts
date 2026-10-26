@@ -18,8 +18,7 @@ const { test } = Test.make({ providers: Azure.providers() });
 const tags = ["provider:azure", "provider:azure:containerapps", "live"];
 
 /** Logic Apps Standard runtime image for the `workflowapp` host. */
-const LOGIC_APPS_IMAGE =
-  process.env.AZURE_TEST_CONTAINERAPPS_LOGICAPPS_IMAGE ?? "default/logicapps-base:latest";
+const LOGIC_APPS_IMAGE = "default/logicapps-base:latest";
 
 /** Name of a container app that does not exist (probes). */
 const MISSING_APP = "alchemy-missing-app";
@@ -40,7 +39,7 @@ const program = (props: { withLogicApp: boolean }) =>
     const { group, env } = yield* connectedEnvironmentStack;
     const host = yield* Azure.ContainerApps.ContainerApp("Workflows", {
       resourceGroup: group.resourceGroupName,
-      location: arcLocation(),
+      location: arcLocation,
       environmentId: env.environmentId,
       customLocationId: customLocationId(),
       kind: "workflowapp",

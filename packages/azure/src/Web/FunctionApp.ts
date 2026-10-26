@@ -441,6 +441,46 @@ const transformFunctionAppProps = (_id: string, props: FunctionAppProps) =>
  * });
  * ```
  *
+ * ### Packaging
+ * With `main`, Alchemy bundles the program and its imports with Rolldown
+ * into one ESM file, `index.mjs`, for Node.js. It zips the bundle with a
+ * `host.json` and a `package.json` and deploys the zip with Kudu
+ * OneDeploy, with no remote build. No `node_modules` ship, so every import
+ * must be in the bundle. A deploy uploads a new package only when the
+ * package changes. Pass Rolldown options on `build`.
+ *
+ * **Example:** Ship a source map
+ * ```typescript
+ * export default class Api extends Azure.Web.FunctionApp<Api>()(
+ *   "Api",
+ *   Effect.gen(function* () {
+ *     const plan = yield* Plan;
+ *     return {
+ *       main: import.meta.url,
+ *       serverFarmId: plan.appServicePlanId,
+ *       build: { output: { sourcemap: true } },
+ *     };
+ *   }),
+ *   program,
+ * ) {}
+ * ```
+ *
+ * **Example:** Mark more packages as side-effect free
+ * ```typescript
+ * export default class Api extends Azure.Web.FunctionApp<Api>()(
+ *   "Api",
+ *   Effect.gen(function* () {
+ *     const plan = yield* Plan;
+ *     return {
+ *       main: import.meta.url,
+ *       serverFarmId: plan.appServicePlanId,
+ *       build: { pure: { packages: ["zod"] } },
+ *     };
+ *   }),
+ *   program,
+ * ) {}
+ * ```
+ *
  * ### Storage Bindings
  * Bindings grant the app's managed identity the smallest data role on the
  * bound resource only, and hand the program a typed client. The app runs

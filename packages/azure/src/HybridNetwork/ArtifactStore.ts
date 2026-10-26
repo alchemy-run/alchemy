@@ -362,7 +362,9 @@ export const ArtifactStoreProvider = () =>
             // already in flight (e.g. from an interrupted run) is waited out
             // until the retried delete reports the store gone.
             Effect.retry({
-              while: (e) => e._tag === "HybridNetworkOperationInProgress",
+              while: (e) =>
+                e._tag === "HybridNetworkOperationInProgress" ||
+                e._tag === "DeleteOperationInProgress",
               schedule: Schedule.spaced("10 seconds"),
               times: 60,
             }),

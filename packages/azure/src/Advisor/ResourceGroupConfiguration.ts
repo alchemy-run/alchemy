@@ -6,7 +6,13 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
-import { ensureRegistered, ignoreNotFound, orUndefinedIfNotFound, stackAndStage } from "../Arm.ts";
+import {
+  collectAll,
+  ensureRegistered,
+  ignoreNotFound,
+  orUndefinedIfNotFound,
+  stackAndStage,
+} from "../Arm.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
@@ -93,7 +99,7 @@ const configurationIdOf = (subscriptionId: string, resourceGroup: string) =>
  */
 const observe = Effect.fn(function* (subscriptionId: string, resourceGroup: string) {
   const listed = yield* orUndefinedIfNotFound(
-    advisor.ListConfigurationByResourceGroup({ subscriptionId, resourceGroup }),
+    collectAll(advisor.ListConfigurationByResourceGroup, { subscriptionId, resourceGroup }),
   );
   if (listed === undefined) return undefined;
   const config = (listed.value ?? []).find(

@@ -8,10 +8,12 @@
     "url": "git+https://github.com/alchemy-run/alchemy.git",
     "directory": "examples/azure-storage"
   },
+  "type": "module",
   "scripts": {
     "build": "tsc -b",
     "deploy": "alchemy deploy",
-    "destroy": "alchemy destroy"
+    "destroy": "alchemy destroy",
+    "test": "bun test"
   },
   "dependencies": {
     "@alchemy.run/azure": "workspace:*",

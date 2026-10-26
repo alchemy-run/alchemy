@@ -13,6 +13,9 @@ export interface ExchangeTeamsExtensionTokenRequest extends Omit<
  * Exchange a Teams Phone extensibility token for a Communication Services
  * user access token.
  *
+ * The `accessToken.token` comes back `Redacted`; read it with
+ * `Redacted.value` where you use it.
+ *
  * Binding assigns a custom role (`AzureCommunicationIdentityRole`, one per
  * stack) with exactly the action
  * `Microsoft.Communication/CommunicationServices/Write`, on the communication

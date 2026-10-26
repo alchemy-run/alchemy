@@ -12,6 +12,9 @@ export interface GetProjectConnectionWithCredentialsRequest extends Omit<
 /**
  * Get a connection by name, with its connection credentials.
  *
+ * The credential's `key` (`ApiKey`) or `SAS` comes back `Redacted`; read
+ * it with `Redacted.value` where you use it.
+ *
  * Binding assigns a custom role (`AzureAIProjectConnectionSecretsRole`, one
  * per stack) with exactly the data action
  * `AIServices/connections/listSecrets/action` (under

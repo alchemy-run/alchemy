@@ -2,7 +2,7 @@ import * as network from "@distilled.cloud/azure/network";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { orUndefinedIfNotFound } from "../Arm.ts";
+import { collectAll, orUndefinedIfNotFound } from "../Arm.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { connectionApprovalProvider } from "./connectionApprovalShared.ts";
@@ -87,7 +87,7 @@ export const ApplicationGatewayConnectionApprovalProvider = () =>
       label: "application gateway",
       parent: "applicationGateway",
       list: (subscriptionId, resourceGroupName, applicationGatewayName) =>
-        network.ListApplicationGatewayPrivateEndpointConnections({
+        collectAll(network.ListApplicationGatewayPrivateEndpointConnections, {
           subscriptionId,
           resourceGroupName,
           applicationGatewayName,

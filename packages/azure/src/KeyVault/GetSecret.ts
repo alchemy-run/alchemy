@@ -13,6 +13,9 @@ export interface GetSecretRequest extends Omit<
  * Read the value of an Azure Key Vault secret (the latest version, or one
  * version) from any host.
  *
+ * The secret's `value` comes back `Redacted`; read it with `Redacted.value`
+ * where you use it.
+ *
  * Binding assigns a custom role (`AzureKeyVaultGetSecretRole`, one per stack)
  * with exactly the data action `secrets/getSecret/action`, on the secret only.
  * The smallest built-in role, **Key Vault Secrets User**, also grants
@@ -33,6 +36,7 @@ export interface GetSecretRequest extends Omit<
  * // runtime
  * const latest = yield* getSecret();
  * const pinned = yield* getSecret({ secretVersion: version });
+ * // latest.value is Redacted
  * // …provided with Effect.provide(Azure.KeyVault.GetSecretHttp)
  * ```
  *

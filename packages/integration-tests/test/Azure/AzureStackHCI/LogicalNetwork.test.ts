@@ -29,11 +29,11 @@ const vmSwitchName = process.env.AZURE_TEST_HCI_VM_SWITCH ?? "ConvergedSwitch(co
 const program = (props: { second: boolean; tags: Record<string, string> }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
-      location: process.env.AZURE_TEST_HCI_LOCATION ?? "eastus",
+      location: "eastus",
     });
     const resource = yield* Azure.AzureStackHCI.LogicalNetwork("LogicalNetwork", {
       resourceGroup: group.resourceGroupName,
-      location: process.env.AZURE_TEST_HCI_LOCATION ?? "eastus",
+      location: "eastus",
       extendedLocation: { name: customLocationId() },
       ...(props.second
         ? {

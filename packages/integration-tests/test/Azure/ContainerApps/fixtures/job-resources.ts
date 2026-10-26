@@ -12,7 +12,7 @@ import { CONSUMPTION_PROFILES } from "./shared.ts";
  * environment per subscription, so this suite keeps away from the other
  * Container Apps suites' `westus2`.
  */
-export const JOB_LOCATION = process.env.AZURE_TEST_CONTAINERAPPS_JOB_LOCATION ?? "westus3";
+export const JOB_LOCATION = "westus3";
 
 /** One standard environment for every job in the suite (jobs cannot run on Express). */
 export const JobEnv = Azure.ContainerApps.ManagedEnvironment("JobEnv", {

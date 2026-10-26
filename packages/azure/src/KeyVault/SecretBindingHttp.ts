@@ -208,7 +208,7 @@ export const makeReadSecretClient = Effect.gen(function* () {
           message: `Key Vault secret ${where.secretName} has no value`,
         });
       }
-      return Redacted.make(bundle.value);
+      return Redacted.isRedacted(bundle.value) ? bundle.value : Redacted.make(bundle.value);
     }),
     versions: Effect.fn(`${address.tag}.versions`)(function* () {
       const where = yield* address.at;

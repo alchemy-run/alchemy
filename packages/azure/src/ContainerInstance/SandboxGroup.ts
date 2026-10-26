@@ -168,7 +168,11 @@ export const SandboxGroupProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* collectAll(aci.ListSandboxGroupBySubscription, { subscriptionId });
+      // `InvalidResourceType`: the type is not rolled out to this subscription,
+      // so no sandbox group can exist.
+      const page = yield* collectAll(aci.ListSandboxGroupBySubscription, { subscriptionId }).pipe(
+        Effect.catchTag("InvalidResourceType", () => Effect.succeed({ value: [] })),
+      );
       return (page.value ?? []).flatMap((observed) => {
         const group = resourceGroupOf(observed.id);
         return hasAnyAlchemyTag(observed.tags) && group !== undefined && observed.name !== undefined

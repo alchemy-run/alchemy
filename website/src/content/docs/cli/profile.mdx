@@ -146,6 +146,7 @@ properties. `stored` is the pasted-credential method every provider shares:
 | AWS         | `stored`   | `accessKeyId`, `secretAccessKey`, `region`, optional `sessionToken`  |
 | AWS         | `sso`      | `ssoProfile` (from `~/.aws/config`)                                  |
 | Axiom       | `stored`   | `token`, optional `orgId`, `apiBaseUrl`                              |
+| Azure       | `stored`   | `tenantId`, `clientId`, `clientSecret`, `subscriptionId`, optional `location` |
 | Cloudflare  | `stored`   | `accountId` plus either `apiToken`, or `apiKey` and `email`          |
 | Fly         | `stored`   | `apiKey`, optional `apiBaseUrl`                                      |
 | GitHub      | `stored`   | `token`, optional `baseUrl`                                          |

@@ -21,7 +21,7 @@ const getEdgeMachineDisk = (resourceGroupName: string, edgeMachineName: string, 
 const program = (props: { second: boolean }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
-      location: process.env.AZURE_TEST_HCI_LOCATION ?? "eastus",
+      location: "eastus",
     });
     const machine = yield* Azure.AzureStackHCI.EdgeMachine("Machine", {
       resourceGroup: group.resourceGroupName,

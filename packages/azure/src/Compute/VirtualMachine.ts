@@ -103,7 +103,12 @@ export interface VirtualMachineRoleAssignment {
  * - `env` becomes the program's environment.
  */
 export interface VirtualMachineBinding {
+  /** Roles granted to the VM's system-assigned identity, each on one scope. */
   roleAssignments?: VirtualMachineRoleAssignment[];
+  /**
+   * Program env the binding contributes. The VM's own `env` wins on a key
+   * clash.
+   */
   env?: Record<string, unknown>;
 }
 
@@ -112,9 +117,13 @@ export interface VirtualMachineBinding {
  * @internal
  */
 export interface VirtualMachineHosting {
+  /** Resource group of the staging storage account. */
   resourceGroup: string;
+  /** Name of the storage account that stages releases. */
   storageAccountName: string;
+  /** Primary blob endpoint of the staging storage account. */
   blobEndpoint: string;
+  /** Name of the blob container that holds the release blobs. */
   containerName: string;
 }
 
@@ -628,6 +637,34 @@ const transformVirtualMachineProps = (id: string, props: VirtualMachineProps) =>
  *     vmSize: "Standard_D2as_v5",
  *     osDiskStorageAccountType: "StandardSSD_LRS",
  *     build: { output: { sourcemap: true } },
+ *     networkInterfaceIds: [nic.networkInterfaceId],
+ *     adminUsername: "azureuser",
+ *     sshPublicKeys: [publicKey],
+ *   },
+ *   program,
+ * ) {}
+ * ```
+ *
+ * ### Packaging
+ * With `main`, Alchemy bundles the program and its imports with Rolldown
+ * into one ESM file, `index.mjs`, for Node.js 22, next to a `package.json`.
+ * No `node_modules` ship, so every import must be in the bundle. Alchemy
+ * uploads the bundle and the program's env as one release blob to the
+ * staging storage account. A managed run command downloads it with a
+ * one-hour read SAS, unpacks it to `/opt/alchemy/<unit>/current`, and
+ * restarts the systemd unit, which runs `node index.mjs`. The command
+ * installs Node.js 22 under `/opt/alchemy` the first time. A deploy runs
+ * the command again only when the bundle or the env changes. Pass Rolldown
+ * options on `build`.
+ *
+ * **Example:** Mark more packages as side-effect free
+ * ```typescript
+ * export default class Api extends Azure.Compute.VirtualMachine<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     vmSize: "Standard_B1s",
+ *     build: { pure: { packages: ["zod"] } },
  *     networkInterfaceIds: [nic.networkInterfaceId],
  *     adminUsername: "azureuser",
  *     sshPublicKeys: [publicKey],

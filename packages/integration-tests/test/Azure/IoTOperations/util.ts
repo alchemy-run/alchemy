@@ -14,7 +14,8 @@ import * as Schedule from "effect/Schedule";
  *
  *   AZURE_TEST_IOT_OPERATIONS_CUSTOM_LOCATION  custom location ARM ID
  *   AZURE_TEST_IOT_OPERATIONS_SCHEMA_REGISTRY  schema registry ARM ID
- *   AZURE_TEST_IOT_OPERATIONS_LOCATION         region (default eastus)
+ *
+ * Both must live in `location` (eastus).
  *
  * A cluster hosts one IoT Operations instance, and each lifecycle test
  * deploys its own, so run the directory with `--concurrency 1`.
@@ -29,7 +30,7 @@ export const tags = ["provider:azure", "provider:azure:iotoperations", "live"];
 
 export const subscription = Effect.map(Azure.AzureEnvironment.current, (env) => env.subscriptionId);
 
-export const location = () => process.env.AZURE_TEST_IOT_OPERATIONS_LOCATION ?? "eastus";
+export const location = "eastus";
 
 export const customLocationId = () => process.env.AZURE_TEST_IOT_OPERATIONS_CUSTOM_LOCATION ?? "";
 
@@ -58,11 +59,11 @@ export const waitGone = <A, R>(get: Effect.Effect<A, AzureOpError, R>) =>
 /** Resource group + IoT Operations instance for child lifecycle tests. */
 export const instanceStack = Effect.gen(function* () {
   const group = yield* Azure.Resources.ResourceGroup("Group", {
-    location: location(),
+    location,
   });
   const instance = yield* Azure.IoTOperations.Instance("Instance", {
     resourceGroup: group.resourceGroupName,
-    location: location(),
+    location,
     customLocationId: customLocationId(),
     schemaRegistryId: schemaRegistryId(),
   });

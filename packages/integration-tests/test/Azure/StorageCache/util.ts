@@ -1,6 +1,8 @@
 import * as Azure from "@alchemy.run/azure";
 import type { AzureOpError } from "@distilled.cloud/azure";
 import * as storage from "@distilled.cloud/azure/storage";
+import * as servicePrincipals from "@distilled.cloud/microsoft-graph/servicePrincipals";
+import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -17,14 +19,22 @@ export const tags = ["provider:azure", "provider:azure:storagecache", "live"];
 
 export const subscription = Effect.map(Azure.AzureEnvironment.current, (env) => env.subscriptionId);
 
+/** First-party "HPC Cache Resource Provider" application. */
+const HPC_CACHE_RP_APP_ID = "4392ab71-2ce2-4b0d-8770-b352745c73f5";
+
 /**
- * Object ID of the "HPC Cache Resource Provider" service principal
- * (appId 4392ab71-2ce2-4b0d-8770-b352745c73f5) in the test tenant. Blob
- * integration needs it to hold Storage Account Contributor and Storage Blob
- * Data Contributor on the storage account. Look it up with
- * `az ad sp show --id 4392ab71-2ce2-4b0d-8770-b352745c73f5 --query id`.
+ * Object ID of the HPC Cache Resource Provider service principal in this
+ * tenant. Blob integration needs it to hold Storage Account Contributor and
+ * Storage Blob Data Contributor on the storage account.
  */
-export const hpcCacheRpObjectId = process.env.AZURE_HPC_CACHE_RP_OBJECT_ID;
+export const hpcCacheRpObjectId = Effect.gen(function* () {
+  const principal = yield* servicePrincipals.getServicePrincipalByAppId({
+    appId: HPC_CACHE_RP_APP_ID,
+    select: ["id"],
+  });
+  expect(principal.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  return principal.id!;
+});
 
 /** Built-in "Storage Account Contributor" role. */
 export const StorageAccountContributor = "17d1049b-9a84-46fb-8f53-869881c3d3ab";
@@ -47,9 +57,9 @@ export const waitGone = <A, R>(get: Effect.Effect<A, AzureOpError, R>, times = 2
  * Network + blob integration dependencies shared by the file system and job
  * tests: a VNet with a dedicated /24 Lustre subnet, and (optionally) a
  * storage account with data + logging containers the HPC Cache resource
- * provider may use.
+ * provider (`rpObjectId`, from `hpcCacheRpObjectId`) may use.
  */
-export const lustreDependencies = (opts: { hsm: boolean; group: string }) =>
+export const lustreDependencies = (opts: { hsm: boolean; group: string; rpObjectId?: string }) =>
   Effect.gen(function* () {
     // Microsoft.StorageCache rejects resource group names over 80 characters
     // ("Resource group name can not be more than 80 characters"), which the
@@ -99,13 +109,13 @@ export const lustreDependencies = (opts: { hsm: boolean; group: string }) =>
     const accountGrant = yield* Azure.Authorization.RoleAssignment("RpAccountContributor", {
       scope: account.storageAccountId,
       roleDefinitionId: StorageAccountContributor,
-      principalId: hpcCacheRpObjectId ?? "",
+      principalId: opts.rpObjectId ?? "",
       principalType: "ServicePrincipal",
     });
     const blobGrant = yield* Azure.Authorization.RoleAssignment("RpBlobContributor", {
       scope: account.storageAccountId,
       roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataContributor,
-      principalId: hpcCacheRpObjectId ?? "",
+      principalId: opts.rpObjectId ?? "",
       principalType: "ServicePrincipal",
     });
     return {

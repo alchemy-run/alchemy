@@ -26,13 +26,17 @@ const program = (props: {
     return { where, runbook };
   });
 
-const request = (resourceGroupName: string, automationAccountName: string, runbookName: string) =>
-  Effect.map(subscription, (subscriptionId) => ({
-    subscriptionId,
-    resourceGroupName,
-    automationAccountName,
-    runbookName,
-  }));
+const request = (
+  subscriptionId: string,
+  resourceGroupName: string,
+  automationAccountName: string,
+  runbookName: string,
+) => ({
+  subscriptionId,
+  resourceGroupName,
+  automationAccountName,
+  runbookName,
+});
 
 // Free: an Automation account plus one runbook (no jobs run), < 1 minute.
 test.provider(
@@ -49,14 +53,15 @@ test.provider(
             env: "a",
           }),
         );
-        const req = (name: string) => request(where.resourceGroup, where.automationAccount, name);
+        const subscriptionId = yield* subscription;
+        const req = (name: string) =>
+          request(subscriptionId, where.resourceGroup, where.automationAccount, name);
         expect(runbook.state).toEqual("Published");
-        const observed = yield* automation.GetRunbook(yield* req(runbook.runbookName));
+        const observed = yield* automation.GetRunbook(req(runbook.runbookName));
         expect(observed.properties?.runbookType).toEqual("PowerShell72");
         expect(observed.tags?.env).toEqual("a");
-        expect(yield* automation.GetRunbookContent(yield* req(runbook.runbookName))).toContain(
-          'Write-Output "one"',
-        );
+        const content = yield* automation.GetRunbookContent(req(runbook.runbookName));
+        expect(content).toContain('Write-Output "one"');
 
         // In-place: content, description, log flags, tags.
         const updated = yield* stack.deploy(
@@ -69,10 +74,9 @@ test.provider(
         );
         expect(updated.runbook.runbookId).toEqual(runbook.runbookId);
         expect(updated.runbook.state).toEqual("Published");
-        expect(yield* automation.GetRunbookContent(yield* req(runbook.runbookName))).toContain(
-          'Write-Output "two"',
-        );
-        const reobserved = yield* automation.GetRunbook(yield* req(runbook.runbookName));
+        const updatedContent = yield* automation.GetRunbookContent(req(runbook.runbookName));
+        expect(updatedContent).toContain('Write-Output "two"');
+        const reobserved = yield* automation.GetRunbook(req(runbook.runbookName));
         expect(reobserved.properties?.description).toEqual("second");
         expect(reobserved.properties?.logVerbose).toEqual(true);
         expect(reobserved.tags?.env).toEqual("b");
@@ -88,14 +92,12 @@ test.provider(
         );
         expect(replaced.runbook.runbookName).not.toEqual(runbook.runbookName);
         expect(replaced.runbook.runbookType).toEqual("Python3");
-        expect(yield* waitGone(automation.GetRunbook(yield* req(runbook.runbookName)))).toEqual(
-          "gone",
-        );
+        const original = yield* waitGone(automation.GetRunbook(req(runbook.runbookName)));
+        expect(original).toEqual("gone");
 
         yield* stack.destroy();
-        expect(
-          yield* waitGone(automation.GetRunbook(yield* req(replaced.runbook.runbookName))),
-        ).toEqual("gone");
+        const final = yield* waitGone(automation.GetRunbook(req(replaced.runbook.runbookName)));
+        expect(final).toEqual("gone");
       }),
     ).pipe(logLevel),
   { tags, timeout: 600_000 },

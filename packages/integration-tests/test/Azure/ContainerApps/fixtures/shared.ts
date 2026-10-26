@@ -27,10 +27,9 @@ export const withStandardEnvironment = <A, E, R>(
 
 /**
  * Region for standard environments. Most regions allow one environment per
- * subscription, so parallel runs of different files pick distinct regions
- * via `AZURE_TEST_CONTAINERAPPS_LOCATION`.
+ * subscription; tests that create one hold `withManagedEnvironment`.
  */
-export const STANDARD_LOCATION = process.env.AZURE_TEST_CONTAINERAPPS_LOCATION ?? "westus2";
+export const STANDARD_LOCATION = "westus2";
 
 /** A Consumption workload profile (no reserved vCPUs). */
 export const CONSUMPTION_PROFILES = [{ name: "Consumption", workloadProfileType: "Consumption" }];

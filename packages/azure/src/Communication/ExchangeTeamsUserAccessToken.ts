@@ -13,6 +13,9 @@ export interface ExchangeTeamsUserAccessTokenRequest extends Omit<
  * Exchange a Microsoft Entra access token of a Teams user for a
  * Communication Services access token (Teams interoperability).
  *
+ * The `token` comes back `Redacted`; read it with `Redacted.value` where
+ * you use it.
+ *
  * Binding assigns a custom role (`AzureCommunicationIdentityRole`, one per
  * stack) with exactly the action
  * `Microsoft.Communication/CommunicationServices/Write`, on the communication

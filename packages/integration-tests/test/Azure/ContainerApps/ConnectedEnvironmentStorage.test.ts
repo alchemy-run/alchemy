@@ -50,7 +50,7 @@ const program = (mount?: { accountKey: string; accessMode: "ReadOnly" | "ReadWri
     const { group, env } = yield* connectedEnvironmentStack;
     const account = yield* Azure.Storage.StorageAccount("Files", {
       resourceGroup: group.resourceGroupName,
-      location: arcLocation(),
+      location: arcLocation,
     });
     const share = yield* Azure.Storage.FileShare("Share", {
       resourceGroup: group.resourceGroupName,

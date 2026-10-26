@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as acr from "@distilled.cloud/azure/containerregistry-data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -5,14 +6,9 @@ import * as AzureBindings from "../AzureBindings.ts";
 import { makeRegistryCompositeBinding, RegistryRole } from "./BindingHttp.ts";
 import { UploadBlob, type UploadBlobRequest } from "./UploadBlob.ts";
 
-/** `sha256:<hex>` of `bytes` (Web Crypto: runs on every host). */
+/** `sha256:<hex>` of `bytes`. */
 const sha256Digest = (bytes: Uint8Array) =>
-  Effect.promise(() => crypto.subtle.digest("SHA-256", new Uint8Array(bytes))).pipe(
-    Effect.map(
-      (hash) =>
-        `sha256:${Array.from(new Uint8Array(hash), (b) => b.toString(16).padStart(2, "0")).join("")}`,
-    ),
-  );
+  Effect.sync(() => `sha256:${createHash("sha256").update(bytes).digest("hex")}`);
 
 /**
  * Implementation of {@link UploadBlob} over the distilled

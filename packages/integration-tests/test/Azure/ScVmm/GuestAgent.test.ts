@@ -66,7 +66,8 @@ test.provider(
           return { group };
         }),
       );
-      yield* ensureRegistered(yield* subscription, "Microsoft.ScVmm");
+      const subscriptionId = yield* subscription;
+      yield* ensureRegistered(subscriptionId, "Microsoft.ScVmm");
       yield* withArcMachineRecord(group.resourceGroupName, (machineId) =>
         Effect.gen(function* () {
           const error = yield* scvmm

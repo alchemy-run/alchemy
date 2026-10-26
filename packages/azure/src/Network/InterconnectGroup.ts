@@ -142,7 +142,10 @@ export const InterconnectGroupProvider = () =>
           interconnectGroupName: path.name,
           tags,
         }),
-      listAll: (subscriptionId) => collectAll(network.ListInterconnectGroupAll, { subscriptionId }),
+      listAll: (subscriptionId) =>
+        collectAll(network.ListInterconnectGroupAll, { subscriptionId }).pipe(
+          Effect.catchTag("InvalidResourceType", () => Effect.succeed({ value: [] })),
+        ),
       body: (news, { location, tags }) => ({
         location,
         tags,

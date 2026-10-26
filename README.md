@@ -52,7 +52,7 @@ One `ReadWriteBucket(Uploads)` call adds the Worker binding at deploy time and h
 - **One program, one language.** Resources, Lambdas/Workers, IAM, and SDKs live in the same Effect program — no YAML, no second runtime.
 - **Bindings, not glue code.** `AWS.S3.GetObject(bucket)` wires the IAM policy, env var, and a typed SDK call in a single line.
 - **Errors in the type system.** Every cloud API failure is a tagged Effect error you handle — or don't — on purpose.
-- **Many clouds, one model.** AWS, Cloudflare, GCP, Fly, Hetzner, Kubernetes, Railway, Neon, PlanetScale, Stripe, and more.
+- **Many clouds, one model.** AWS, Azure, Cloudflare, GCP, Fly, Hetzner, Kubernetes, Railway, Neon, PlanetScale, Stripe, and more.
 - **Same code, every stage.** Local dev, `plan` / `deploy`, smoke tests, and CI all share one mental model.
 
 ```sh

@@ -87,6 +87,9 @@ const program = (props: { description: string; ports: string[] }) =>
     return { group, manager, configuration, collection, rule };
   });
 
+// ~$0/run, 3 min. Preview feature: needs AZURE_TEST_PAID=1 and AZURE_TEST_AVNM_SECURITY_USER=1
+// on a subscription with security user rules enabled; elsewhere ARM answers
+// SubscriptionFeatureNotRegistered (asserted by the ungated probe below).
 test.provider.skipIf(!runPaidOnly || !allowListed)(
   "create, update, and delete a security user configuration (with a collection and rule)",
   (stack) =>

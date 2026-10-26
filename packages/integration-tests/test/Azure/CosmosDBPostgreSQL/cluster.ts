@@ -5,7 +5,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
 /** Region the trial accepts Cosmos DB for PostgreSQL clusters in. */
-export const COSMOS_PG_TEST_LOCATION = process.env.AZURE_COSMOS_PG_LOCATION ?? "centralus";
+export const COSMOS_PG_TEST_LOCATION = "centralus";
 
 export const tags = ["provider:azure", "provider:azure:cosmosdbpostgresql", "live"];
 

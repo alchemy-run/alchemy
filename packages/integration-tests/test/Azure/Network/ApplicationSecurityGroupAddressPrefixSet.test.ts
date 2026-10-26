@@ -46,6 +46,9 @@ const program = (prefixes: string[]) =>
     return { group, asg, set };
   });
 
+// ~$0/run, 2 min. Allow-listed preview: needs AZURE_TEST_PAID=1 and AZURE_TEST_ASG_PREFIX_SETS=1
+// on a subscription with the feature; elsewhere ARM answers NetworkFeatureNotSupported
+// (asserted by the ungated probe below).
 test.provider.skipIf(!runPaidOnly || !allowListed)(
   "create, update, and delete an application security group address prefix set",
   (stack) =>

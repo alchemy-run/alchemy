@@ -30,11 +30,11 @@ const getEnvironment = (resourceGroupName: string, connectedEnvironmentName: str
 const program = (props: { name?: string; tags: Record<string, string> }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
-      location: arcLocation(),
+      location: arcLocation,
     });
     const env = yield* Azure.ContainerApps.ConnectedEnvironment("ArcEnv", {
       resourceGroup: group.resourceGroupName,
-      location: arcLocation(),
+      location: arcLocation,
       customLocationId: customLocationId(),
       name: props.name,
       tags: props.tags,

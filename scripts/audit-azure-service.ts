@@ -154,6 +154,11 @@ const RUNTIME_ACTION =
   /^(start|stop|restart|run|execute|trigger|cancel|resume|suspend|pause|purge|flush|publish|query|refresh|sync|backup|restore|failover|deallocate|powerOff|redeploy|reboot|send|invoke|upload|download|import|export|scale|abort|retry|rerun|replay|wake|hibernate|reset|swap|clear)/i;
 
 const classifyArm = (method: string, uri: string): { category: Category; reason: string } => {
+  // Data-plane modules (`keyvault-secrets`, `storage-blob`, ...) address the
+  // service's own host, never an ARM `/subscriptions/...` or `/providers/...` path.
+  if (uri !== "?" && !uri.includes("/providers/") && !/^\/subscriptions(\/|$)/i.test(uri)) {
+    return { category: "binding", reason: "data-plane operation" };
+  }
   for (const [re, reason] of INTERNAL_RULES) {
     if (re.test(uri)) return { category: "internal", reason };
   }
@@ -213,13 +218,21 @@ const usage = new Map<string, Set<string>>();
 /** alchemy file → resource types declared there. */
 const declaredTypes = new Map<string, string[]>();
 const bindingServices: { name: string; file: string }[] = [];
+/** alchemy files that implement a runtime binding layer (a `*Http` layer or an ARM action binding). */
+const bindingFiles = new Set<string>();
 for (const file of alchemyFiles) {
   const text = fs.readFileSync(file, "utf8");
   const rel = path.relative(repo, file);
+  if (/Http\.ts$/.test(file) || /make\w*Binding\(|Binding\.Service</.test(text)) {
+    bindingFiles.add(rel);
+  }
   const types = [
-    ...text.matchAll(/=\s*(?:Grouped)?Resource<\w+>\(\s*"(Azure\.[\w.]+)"/g),
-    ...text.matchAll(/Platform\((\w+TypeId)/g),
-  ].map((m) => m[1]!);
+    ...[...text.matchAll(/=\s*(?:Grouped)?Resource<\w+>\(\s*"(Azure\.[\w.]+)"/g)].map((m) => m[1]!),
+    // Runtimes: `Platform(FunctionTypeId, ...)` with `const FunctionTypeId = "Azure.…"`.
+    ...[...text.matchAll(/Platform\((\w+TypeId)/g)].flatMap(
+      (m) => text.match(new RegExp(`const ${m[1]}\\s*=\\s*"(Azure\\.[\\w.]+)"`))?.[1] ?? [],
+    ),
+  ];
   if (types.length > 0) declaredTypes.set(rel, types);
   for (const m of text.matchAll(/Binding\.Service<\w+>\(\s*"(Azure\.[\w.]+)"/g)) {
     bindingServices.push({ name: m[1]!, file: rel });
@@ -309,6 +322,50 @@ const OUT_OF_SCOPE: [RegExp, string][] = [
   [/^Microsoft\.Web\/(publishingUsers|sourcecontrols)$/i, "user-level credentials or OAuth tokens"],
   [/^Microsoft\.Help\//i, "action, not desired state"],
   [/^Microsoft\.Network\/firstPartyServiceTags$/i, "Microsoft first-party only"],
+  [/^Microsoft\.RecommendationsService\//i, "retired or closed to new customers (2026-03-31)"],
+  [
+    /^Microsoft\.DocumentDB\/databaseAccounts\/notebookWorkspaces$/i,
+    "retired or closed to new customers (2024-03-30)",
+  ],
+  [
+    /^Microsoft\.HardwareSecurityModules\/dedicatedHSMs$/i,
+    "retired or closed to new customers (Dedicated HSM)",
+  ],
+  [
+    /^Microsoft\.Web\/hostingEnvironments\/(multiRolePools|workerPools)$/i,
+    "retired or closed to new customers (App Service Environment v1/v2)",
+  ],
+  [/^Microsoft\.Web\/kubeEnvironments$/i, "needs external systems (App Service on Azure Arc)"],
+  [
+    /^Microsoft\.DataMigration\/(databaseMigrations|services\/(serviceTasks|projects\/(tasks|files)))$/i,
+    "action or run record, not desired state",
+  ],
+  [
+    /^Microsoft\.ServiceBus\/namespaces\/migrationConfigurations$/i,
+    "action or run record, not desired state",
+  ],
+  [/^Microsoft\.Mission\/approvals$/i, "action or run record, not desired state"],
+  [/^Microsoft\.Monitor\/accounts\/issues$/i, "action or run record, not desired state"],
+  [
+    /^Microsoft\.DeviceRegistry\/namespaces\/discovered(Assets|Devices)$/i,
+    "read-only mirror of discovered edge inventory (system-managed)",
+  ],
+  [
+    /^Microsoft\.Workloads\/sapVirtualInstances\/(applicationInstances|centralInstances|databaseInstances)$/i,
+    "system-managed child of the SAP Virtual Instance",
+  ],
+  [/^Microsoft\.Edge\/disconnectedOperations\/hardwareSettings$/i, "hardware order"],
+  [
+    /^Microsoft\.AzureSphere\/catalogs\/(products\/deviceGroups\/devices|images)$/i,
+    "needs external hardware (Azure Sphere devices)",
+  ],
+  [
+    /^Microsoft\.RecoveryServices\/vaults\/(replicationFabrics\/(replicationvCenters|replicationRecoveryServicesProviders|replicationProtectionContainers\/replicationMigrationItems)|replicationProtectionIntents)$/i,
+    "needs external systems (on-premises vCenter / Hyper-V site recovery)",
+  ],
+  [/^Microsoft\.Resources\/tagNames(\/tagValues)?$/i, "duplicate of per-resource tags"],
+  [/^Microsoft\.GraphServices\/accounts$/i, "billing, subscription, quota, or support object"],
+  [/^Microsoft\.Solutions\/jitRequests$/i, "approval request (action), not desired state"],
 ];
 
 // ============ Build the report ============
@@ -378,6 +435,21 @@ const report = services.map((service) => {
   return { service, ops, resourceTypes, bindingOps };
 });
 
+// Several distilled modules carry the same ARM type (`resources` also models
+// Microsoft.Solutions); a type implemented from one module is done everywhere.
+const implementedArmTypes = new Map<string, string>();
+for (const r of report)
+  for (const t of r.resourceTypes)
+    if (t.status === "implemented") implementedArmTypes.set(t.armType.toLowerCase(), r.service);
+for (const r of report)
+  for (const t of r.resourceTypes) {
+    const owner = implementedArmTypes.get(t.armType.toLowerCase());
+    if (t.status === "missing" && owner !== undefined && owner !== r.service) {
+      t.status = "out-of-scope";
+      t.reason = `duplicate of another resource (implemented from the \`${owner}\` module)`;
+    }
+  }
+
 // ============ Data plane ============
 
 const EXISTING_DATA_PLANE_BINDINGS: [RegExp, string][] = [
@@ -411,6 +483,15 @@ const OUT_OF_SCOPE_GROUPS: [RegExp, string][] = [
   [/^purview\|/, "data-governance catalog content (end-user data)"],
   [/^marketplacecatalog\|/, "marketplace catalog (billing/marketplace)"],
   [/^servicefabric\|/, "cluster management API of self-hosted Service Fabric"],
+];
+
+/** Generated data-plane modules (`src/services/<service>-<group>.ts`) outside binding scope. */
+const DATA_PLANE_MODULE_OUT_OF_SCOPE: [RegExp, string][] = [
+  [/^(datalake-analytics|datalake-store|timeseriesinsights)/, "retired service"],
+  [/^machinelearningservices-/, "ML workspace run records (end-user data)"],
+  [/^purview-/, "data-governance catalog content (end-user data)"],
+  [/^marketplacecatalog/, "marketplace catalog (billing/marketplace)"],
+  [/^servicefabric-/, "cluster management API of self-hosted Service Fabric"],
 ];
 
 const dataPlane: DataPlaneOperation[] = [];
@@ -604,6 +685,70 @@ interface Row {
   note: string;
 }
 
+/**
+ * Latest live result per Azure test file, from the alchemy-test run logs
+ * (`.alchemy/log/test/*.log`, pruned after a week). A file is green when its
+ * most recent run passed at least one case and failed none.
+ */
+// `var`: renderIndex runs from the `--write` block above this declaration.
+var latestRunsCache: Map<string, { log: string; pass: number; fail: number }> | undefined;
+function latestRuns() {
+  return (latestRunsCache ??= readLatestRuns());
+}
+function readLatestRuns() {
+  const dirs = [
+    path.join(repo, "packages/integration-tests/.alchemy/log/test"),
+    path.join(repo, ".alchemy/log/test"),
+  ];
+  const logs = dirs
+    .filter((d) => fs.existsSync(d))
+    .flatMap((d) => fs.readdirSync(d).map((f) => path.join(d, f)))
+    .sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
+  const latest = new Map<string, { log: string; pass: number; fail: number }>();
+  for (const log of logs) {
+    const per = new Map<string, { pass: number; fail: number }>();
+    for (const m of fs
+      .readFileSync(log, "utf8")
+      .matchAll(/^(PASS|FAIL) test\/Azure\/([^ ]+\.test\.ts) /gm)) {
+      const r = per.get(m[2]!) ?? { pass: 0, fail: 0 };
+      if (m[1] === "PASS") r.pass++;
+      else r.fail++;
+      per.set(m[2]!, r);
+    }
+    for (const [file, r] of per) latest.set(file, { log: path.basename(log), ...r });
+  }
+  return latest;
+}
+
+/**
+ * Statuses the factory agents reported for each resource in their workflow
+ * results (`<catalog>/agent-results.json`, extracted from the workflow
+ * journals). Used only when the local test logs have no run of the file.
+ */
+var agentResultsCache: Record<string, string> | undefined;
+function agentResults(): Record<string, string> {
+  if (agentResultsCache) return agentResultsCache;
+  const file = path.join(repo, "processes/Azure/catalog/agent-results.json");
+  agentResultsCache = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+  return agentResultsCache!;
+}
+
+/** The `//` comment block right above the first test gated on `gate`. */
+function gateComment(text: string, gate: string): string | undefined {
+  const lines = text.split("\n");
+  const at = lines.findIndex((l) => l.includes(`skipIf(!${gate}`));
+  if (at === -1) return undefined;
+  const comment: string[] = [];
+  let start = at - 1;
+  while (start >= 0 && lines[start]!.trim() === "") start--;
+  for (let i = start; i >= 0 && /^\s*\/\//.test(lines[i]!); i--) {
+    comment.unshift(lines[i]!.replace(/^\s*\/\/\s?/, ""));
+  }
+  const joined = comment.join(" ").replace(/\s+/g, " ").trim();
+  if (joined === "") return undefined;
+  return joined.length > 240 ? `${joined.slice(0, 237)}...` : joined;
+}
+
 /** Status of an implemented resource from its own test file. */
 function resourceRow(alchemyType: string): Row {
   const [, service, name] = alchemyType.split(".");
@@ -623,7 +768,10 @@ function resourceRow(alchemyType: string): Row {
     };
   }
   if (ungated === 0 && /skipIf\(!runExpensive/.test(text)) {
-    const cost = text.match(/\/\/ [^\n]*(~\$[^\n]*|hour[^\n]*)/)?.[0]?.replace(/^\/\/ /, "") ?? "";
+    const cost =
+      gateComment(text, "runExpensive") ??
+      text.match(/\/\/ [^\n]*(~\$[^\n]*|hour[^\n]*)/)?.[0]?.replace(/^\/\/ /, "") ??
+      "AZURE_TEST_EXPENSIVE (no cost comment)";
     return { kind: "resource", name: alchemyType, status: "blocked: cost", note: cost };
   }
   if (ungated === 0 && /skipIf\(!runPaidOnly/.test(text)) {
@@ -631,14 +779,35 @@ function resourceRow(alchemyType: string): Row {
       kind: "resource",
       name: alchemyType,
       status: "blocked: paid",
-      note: "AZURE_TEST_PAID (partner SaaS, hardware, gated preview, or external system)",
+      note:
+        gateComment(text, "runPaidOnly") ??
+        "AZURE_TEST_PAID (partner SaaS, hardware, gated preview, or external system)",
+    };
+  }
+  const run = latestRuns().get(`${service}/${name}.test.ts`);
+  if (run && run.fail === 0 && run.pass > 0) {
+    return {
+      kind: "resource",
+      name: alchemyType,
+      status: "tested",
+      note: `${run.pass} passed (${run.log})`,
+    };
+  }
+  if (run === undefined && agentResults()[alchemyType] === "tested") {
+    return {
+      kind: "resource",
+      name: alchemyType,
+      status: "tested",
+      note: "live pass reported by its factory agent (catalog/agent-results.json)",
     };
   }
   return {
     kind: "resource",
     name: alchemyType,
     status: "implemented",
-    note: "ungated test file; not run this round",
+    note: run
+      ? `last run: ${run.fail} failed, ${run.pass} passed (${run.log})`
+      : "ungated test file; no run in the local test logs",
   };
 }
 
@@ -655,42 +824,41 @@ function deliverableRows(): Row[] {
     rows.push({ kind, name, status: done ? "implemented" : "missing", note });
 
   // Distilled (Phase 2).
+  const distilled = (p: string) => path.join(repo, "submodules/distilled/packages/azure", p);
+  const distilledText = (p: string) =>
+    fs.existsSync(distilled(p)) ? fs.readFileSync(distilled(p), "utf8") : "";
+  const dataPlaneModules = fs.readdirSync(distilledServices).filter((f) => f.includes("-"));
   row(
     "distilled",
     "data-plane modules from specification/*/data-plane",
-    false,
-    `${dataPlaneGroups.filter((g) => g.scope === "in scope").length} in-scope groups, ${dataPlane.filter((o) => o.category === "binding").length} operations`,
+    dataPlaneModules.length > 0,
+    `${dataPlaneModules.length} modules in src/services`,
   );
   row(
     "distilled",
     "XML bodies, SAS, per-data-plane token audience in the protocol",
-    false,
-    "Storage blob/queue/file are XML; Key Vault, Storage, Service Bus each need their own audience",
+    distilledText("src/storage.ts") !== "" && /tokenFor/.test(distilledText("src/protocol.ts")),
+    "src/storage.ts; protocol asks Credentials.tokenFor(audience)",
   );
-  row(
-    "distilled",
-    "manual spec: Service Bus messaging REST (send/receive/peek-lock/complete)",
-    false,
-    "no Swagger upstream",
-  );
-  row("distilled", "manual spec: Event Hubs send REST", false, "no Swagger upstream");
-  row(
-    "distilled",
-    "manual spec: Cosmos DB NoSQL REST (documents, queries)",
-    false,
-    "no Swagger upstream; Tables is in specs",
-  );
-  row(
-    "distilled",
-    "manual spec: Kudu OneDeploy / zip deploy",
-    false,
-    "used by Functions.Function and Website.AppDeployment",
-  );
+  for (const [spec, label] of [
+    ["servicebus-messaging", "Service Bus messaging REST (send/receive/peek-lock/complete)"],
+    ["eventhubs-messaging", "Event Hubs send REST"],
+    ["cosmos-nosql", "Cosmos DB NoSQL REST (documents, queries)"],
+    ["kudu", "Kudu OneDeploy / zip deploy"],
+    ["durabletask-data", "Durable Task Scheduler data plane"],
+  ] as const) {
+    row(
+      "distilled",
+      `manual spec: ${label}`,
+      fs.existsSync(distilled(`manual-specs/${spec}.json`)),
+      `manual-specs/${spec}.json`,
+    );
+  }
   row(
     "distilled",
     "managed-identity credentials provider (IMDS + IDENTITY_ENDPOINT)",
-    false,
-    "replaces Binding.ts/Token.ts token caches; model on AWS fromContainerMetadata",
+    /export const fromManagedIdentity\b/.test(distilledText("src/credentials.ts")),
+    "fromManagedIdentity, fromWorkloadIdentity, fromClientSecret, fromEnv",
   );
   row(
     "distilled",
@@ -700,9 +868,9 @@ function deliverableRows(): Row[] {
   );
   row(
     "distilled",
-    "per-operation typed errors",
-    false,
-    "errors are client-level only (AZURE_ERROR_CODE_MAP)",
+    "typed errors",
+    /AZURE_ERROR_CODE_MAP/.test(distilledText("src/errors.ts")),
+    "ARM codes client-level (AZURE_ERROR_CODE_MAP); data-plane errors per operation via patches/<module>/",
   );
 
   // Bindings infrastructure.
@@ -718,34 +886,73 @@ function deliverableRows(): Row[] {
     exists("packages/integration-tests/test/Azure/ExternalHost/CloudflareWorker.test.ts"),
     "",
   );
-  row("bindings", "Azure hosts in other providers' ExternalHost suites", false, "");
+  row(
+    "bindings",
+    "Azure hosts in other providers' ExternalHost suites",
+    fs
+      .readdirSync(path.join(repo, "packages/integration-tests/test"))
+      .filter((d) => d !== "Azure")
+      .some((d) => {
+        const dir = path.join(repo, "packages/integration-tests/test", d, "ExternalHost");
+        return walk(dir).some((f) => /@alchemy\.run\/azure/.test(fs.readFileSync(f, "utf8")));
+      }),
+    "an Azure Function/Container App calling another provider's bindings",
+  );
 
   // Runtimes.
-  const runtimes: [string, string, boolean][] = [
-    ["Azure.Functions.Function", "packages/azure/src/Functions/Function.ts", true],
-    ["Azure.Web.FunctionApp", "packages/azure/src/Web/FunctionApp.ts", false],
-    ["Azure.Web.WebApp", "packages/azure/src/Web/WebApp.ts", false],
-    ["Azure.ContainerApps.ContainerApp", "packages/azure/src/ContainerApps/ContainerApp.ts", false],
-    ["Azure.ContainerApps.Job", "packages/azure/src/ContainerApps/Job.ts", false],
+  const runtimes: [string, string, string][] = [
+    [
+      "Azure.Functions.Function",
+      "packages/azure/src/Functions/Function.ts",
+      "Functions/fixtures/{effect,async}-function.ts",
+    ],
+    [
+      "Azure.Web.FunctionApp",
+      "packages/azure/src/Web/FunctionApp.ts",
+      "Web/fixtures/{effect,async}-function-app.ts",
+    ],
+    [
+      "Azure.Web.WebApp",
+      "packages/azure/src/Web/WebApp.ts",
+      "Web/fixtures/{effect,async}-webapp.ts",
+    ],
+    [
+      "Azure.ContainerApps.ContainerApp",
+      "packages/azure/src/ContainerApps/ContainerApp.ts",
+      "ContainerApps/fixtures/{effect,async}-app.ts",
+    ],
+    [
+      "Azure.ContainerApps.Job",
+      "packages/azure/src/ContainerApps/Job.ts",
+      "ContainerApps/fixtures/{effect,async}-job.ts",
+    ],
     [
       "Azure.ContainerInstance.ContainerGroup",
       "packages/azure/src/ContainerInstance/ContainerGroup.ts",
-      false,
+      "ContainerInstance/fixtures/{effect,async}-container.ts",
     ],
-    ["Azure.Compute.VirtualMachine", "packages/azure/src/Compute/VirtualMachine.ts", false],
+    [
+      "Azure.Compute.VirtualMachine",
+      "packages/azure/src/Compute/VirtualMachine.ts",
+      "Compute/fixtures/{effect,async}-vm.ts",
+    ],
   ];
-  for (const [name, file, effectful] of runtimes) {
+  for (const [name, file, fixtures] of runtimes) {
     const text = fs.existsSync(path.join(repo, file))
       ? fs.readFileSync(path.join(repo, file), "utf8")
       : "";
+    const examples = (text.match(/\*\*Example:\*\*/g) ?? []).length;
+    row("runtime", `${name} effectful form`, /Platform\(/.test(text), "on Platform");
+    row("runtime", `${name} async form`, /### Async/.test(text), `${examples} JSDoc examples`);
+    const fixtureFiles = ["effect", "async"].map((form) =>
+      path.join(alchemyTests, fixtures.replace("{effect,async}", form)),
+    );
     row(
       "runtime",
-      `${name} effectful form`,
-      effectful && /Platform\(/.test(text),
-      effectful ? "on Platform; bindings never attach (host allowlist)" : "plain resource",
+      `${name} tests for both forms`,
+      fixtureFiles.every((f) => fs.existsSync(f)),
+      fixtureFiles.map((f) => path.relative(alchemyTests, f)).join(", "),
     );
-    row("runtime", `${name} async form`, /### Async/.test(text), "");
-    row("runtime", `${name} tests for both forms`, false, "");
   }
   row("runtime", "Azure.InferEnv", has(/export type InferEnv/), "");
   // Event sources: the Functions.Function trigger layer each one registers.
@@ -767,6 +974,25 @@ function deliverableRows(): Row[] {
       new RegExp(`export (const|function) ${layer}\\b`).test(functionEventSources) ||
         has(new RegExp(`export (const|function) ${layer}\\b`)),
       `Azure.Functions trigger layer \`${layer}\``,
+    );
+  }
+  // Event sources on Container Apps (apps and jobs).
+  for (const [file, layer] of [
+    ["ContainerApps/AppEventSources.ts", "AppStorageQueueEventSource"],
+    ["ContainerApps/AppEventSources.ts", "AppServiceBusQueueEventSource"],
+    ["ContainerApps/AppEventSources.ts", "AppServiceBusSubscriptionEventSource"],
+    ["ContainerApps/AppEventSources.ts", "appSchedule"],
+    ["ContainerApps/JobEventSources.ts", "JobStorageQueueEventSource"],
+    ["ContainerApps/JobEventSources.ts", "JobServiceBusQueueEventSource"],
+    ["ContainerApps/JobEventSources.ts", "schedule"],
+  ] as const) {
+    row(
+      "event-source",
+      `Azure.ContainerApps.${layer}`,
+      new RegExp(`export (const|function) ${layer}\\b`).test(
+        fs.readFileSync(path.join(alchemySrc, file), "utf8"),
+      ),
+      file,
     );
   }
   row(
@@ -912,19 +1138,47 @@ function deliverableRows(): Row[] {
     /heading: "Azure"/.test(read("website/scripts/generate-llms-txt.ts")),
     "website/scripts/generate-llms-txt.ts",
   );
+  const exampleCount = (file: string) =>
+    (read(`packages/azure/src/${file}`).match(/\*\*Example:\*\*/g) ?? []).length;
+  const thin = (files: string[], bar: number) =>
+    files.filter((f) => exampleCount(f) < bar).map((f) => `${f} (${exampleCount(f)})`);
+  const runtimeFiles = [
+    "Functions/Function.ts",
+    "Web/FunctionApp.ts",
+    "Web/WebApp.ts",
+    "ContainerApps/ContainerApp.ts",
+    "ContainerApps/Job.ts",
+    "ContainerInstance/ContainerGroup.ts",
+    "Compute/VirtualMachine.ts",
+  ];
+  const fatHead = [
+    "Storage/StorageAccount.ts",
+    "Storage/BlobContainer.ts",
+    "Storage/Queue.ts",
+    "ServiceBus/Namespace.ts",
+    "ServiceBus/Queue.ts",
+    "EventHub/Namespace.ts",
+    "EventHub/EventHub.ts",
+    "Sql/Server.ts",
+    "Sql/Database.ts",
+    "CosmosDB/DatabaseAccount.ts",
+    "KeyVault/Vault.ts",
+    "Network/VirtualNetwork.ts",
+  ];
+  const thinRuntimes = thin(runtimeFiles, 10);
   row(
     "docs",
-    "JSDoc: runtimes to the AWS.Lambda.Function bar",
-    false,
-    "Functions.Function has 2 examples; Lambda has 21",
+    "JSDoc: runtimes to the AWS.Lambda.Function bar (10+ examples)",
+    thinRuntimes.length === 0,
+    thinRuntimes.join(", ") || runtimeFiles.map((f) => `${f} (${exampleCount(f)})`).join(", "),
   );
+  const thinFatHead = thin(fatHead, 5);
   row(
     "docs",
-    "JSDoc: fat-head resources to the S3/R2 Bucket bar",
-    false,
-    "StorageAccount has 3 examples; S3 Bucket has 15",
+    "JSDoc: fat-head resources to the S3/R2 Bucket bar (5+ examples)",
+    thinFatHead.length === 0,
+    thinFatHead.join(", ") || fatHead.map((f) => `${f} (${exampleCount(f)})`).join(", "),
   );
-  row("docs", "PR description: runtimes and fat head", false, "");
   return rows;
 }
 
@@ -956,11 +1210,27 @@ function renderIndex(): string {
   rows.unshift(...[...implemented].sort().map(resourceRow));
   for (const r of report) {
     for (const o of r.bindingOps) {
+      const dataPlaneOp = o.reason === "data-plane operation";
+      const action = `${dataPlaneOp ? "data plane" : "ARM action"} ${o.method} ${o.uri}`;
+      const layers = o.usedBy.filter((f) => bindingFiles.has(f));
+      const scope = dataPlaneOp
+        ? (DATA_PLANE_MODULE_OUT_OF_SCOPE.find(([re]) => re.test(r.service))?.[1] ??
+          (/ServiceProperties|ServiceStats|GetAccountInfo|UserDelegationKey/i.test(o.name)
+            ? "account-level settings, configured through the ARM resource"
+            : undefined))
+        : o.armType !== undefined
+          ? OUT_OF_SCOPE.find(([re]) => re.test(o.armType!))?.[1]
+          : undefined;
       rows.push({
         kind: "binding",
         name: `${r.service}.${o.name}`,
-        status: "missing",
-        note: `ARM action ${o.method} …/${o.uri.split("/").pop()}`,
+        status: layers.length > 0 ? "implemented" : scope ? "out-of-scope" : "missing",
+        note:
+          layers.length > 0
+            ? `${action}; ${layers.map((f) => path.basename(f)).join(", ")}`
+            : scope
+              ? `${scope}; ${action}`
+              : action,
       });
     }
   }

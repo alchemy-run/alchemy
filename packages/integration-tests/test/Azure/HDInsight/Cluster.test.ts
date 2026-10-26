@@ -96,8 +96,8 @@ test.provider.skip(
 // cluster's 18 cores (new subscriptions start at 0, and Microsoft.Quota
 // answers raises with `QuotaNotAvailableForResource`, so it takes a support
 // ticket), creating a cluster is rejected up front with the typed quota
-// error and nothing is provisioned. Once the limit covers a cluster the
-// lifecycle test above exercises creation instead.
+// error and nothing is provisioned. Once the limit covers a cluster this
+// probe fails on purpose: un-skip the lifecycle test above and delete it.
 test.provider(
   "a subscription without HDInsight cores rejects cluster creation with a typed quota error",
   (stack) =>
@@ -108,8 +108,8 @@ test.provider(
       });
       const cores = usages.value?.find((u) => u.name?.value === "cores");
       // Guard: with enough cores the deploy below would provision a real
-      // cluster.
-      if ((cores?.limit ?? 0) >= 18) return;
+      // cluster, so stop before it.
+      expect(cores?.limit ?? 0).toBeLessThan(18);
 
       yield* stack.destroy();
       const { group, account } = yield* stack.deploy(clusterStorage);

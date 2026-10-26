@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
@@ -115,7 +116,7 @@ const getAssignment = (
   name: string,
 ) =>
   orUndefinedIfNotFound(
-    guestconfiguration.ListGuestConfigurationHCRPAssignments({
+    collectAll(guestconfiguration.ListGuestConfigurationHCRPAssignments, {
       subscriptionId,
       resourceGroupName,
       machineName,

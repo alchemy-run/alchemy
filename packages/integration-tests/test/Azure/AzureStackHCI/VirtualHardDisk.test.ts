@@ -27,11 +27,11 @@ const getVirtualHardDisk = (resourceGroupName: string, name: string) =>
 const program = (props: { second: boolean; tags: Record<string, string> }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
-      location: process.env.AZURE_TEST_HCI_LOCATION ?? "eastus",
+      location: "eastus",
     });
     const resource = yield* Azure.AzureStackHCI.VirtualHardDisk("VirtualHardDisk", {
       resourceGroup: group.resourceGroupName,
-      location: process.env.AZURE_TEST_HCI_LOCATION ?? "eastus",
+      location: "eastus",
       extendedLocation: { name: customLocationId() },
       ...(props.second
         ? {

@@ -16,7 +16,7 @@ export const tags = ["provider:azure", "provider:azure:hybridcontainerservice", 
 export const subscription = Effect.map(Azure.AzureEnvironment.current, (env) => env.subscriptionId);
 
 /** Region of the Azure Local custom location (paid-only tests). */
-export const hciLocation = () => process.env.AZURE_TEST_HCI_LOCATION ?? "eastus";
+export const hciLocation = "eastus";
 
 /** Arc custom location of an Azure Local cluster (paid-only tests). */
 export const customLocationId = () => process.env.AZURE_TEST_HCI_CUSTOM_LOCATION ?? "";

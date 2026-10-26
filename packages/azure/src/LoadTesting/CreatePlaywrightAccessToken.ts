@@ -13,6 +13,9 @@ export interface CreatePlaywrightAccessTokenRequest extends Omit<
  * Create (or replace) an Azure Playwright workspace access token for the
  * host's identity from any host. The response carries the token's JWT once.
  *
+ * The `jwtToken` comes back `Redacted`; read it with `Redacted.value`
+ * where you use it.
+ *
  * Binding assigns a custom role
  * (`AzureLoadTestingPlaywrightAccessTokensRole`, one per stack) with exactly
  * the action

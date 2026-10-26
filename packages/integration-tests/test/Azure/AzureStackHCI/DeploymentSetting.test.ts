@@ -27,7 +27,7 @@ const deploymentConfiguration = (): Azure.AzureStackHCI.HciDeploymentConfigurati
 const program = (mode: "Validate" | "Deploy") =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
-      location: process.env.AZURE_TEST_HCI_LOCATION ?? "eastus",
+      location: "eastus",
     });
     const cluster = yield* Azure.AzureStackHCI.Cluster("Cluster", {
       resourceGroup: group.resourceGroupName,

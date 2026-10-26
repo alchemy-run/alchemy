@@ -13,6 +13,9 @@ export interface GetProjectDatasetCredentialsRequest extends Omit<
  * Get the SAS credential to access the storage account associated with a
  * Dataset version.
  *
+ * The `blobReference.credential.sasUri` comes back `Redacted`; read it
+ * with `Redacted.value` where you use it.
+ *
  * Binding assigns a custom role (`AzureAIProjectAssetsWriteRole`, one per
  * stack) with exactly the data action `AIServices/assets/write` (under
  * `Microsoft.CognitiveServices/accounts/`), on the Foundry project only. The

@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { distilledFromSource } from "./distilled-source.ts";
 
 // Resources the fixture binds. Module-scope so the test stack yields the
@@ -252,7 +253,10 @@ export default class LtBindingsFunction extends Azure.Functions.Function<LtBindi
                   id: token.id,
                   name: token.name,
                   state: token.state,
-                  hasJwt: (token.jwtToken ?? "").split(".").length === 3,
+                  // The JWT comes back `Redacted`; a plain string reads as no JWT.
+                  hasJwt:
+                    Redacted.isRedacted(token.jwtToken) &&
+                    Redacted.value(token.jwtToken).split(".").length === 3,
                 }),
               ),
             );

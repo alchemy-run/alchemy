@@ -27,11 +27,11 @@ const getMarketplaceGalleryImage = (resourceGroupName: string, name: string) =>
 const program = (props: { second: boolean; tags: Record<string, string> }) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
-      location: process.env.AZURE_TEST_HCI_LOCATION ?? "eastus",
+      location: "eastus",
     });
     const resource = yield* Azure.AzureStackHCI.MarketplaceGalleryImage("MarketplaceGalleryImage", {
       resourceGroup: group.resourceGroupName,
-      location: process.env.AZURE_TEST_HCI_LOCATION ?? "eastus",
+      location: "eastus",
       extendedLocation: { name: customLocationId() },
       ...(props.second
         ? {
@@ -43,7 +43,7 @@ const program = (props: { second: boolean; tags: Record<string, string> }) =>
               sku: "22_04-lts-gen2",
             },
             version: {
-              name: process.env.AZURE_TEST_HCI_MARKETPLACE_VERSION_2 ?? "22.04.202411010",
+              name: "22.04.202411010",
             },
           }
         : {
@@ -55,7 +55,7 @@ const program = (props: { second: boolean; tags: Record<string, string> }) =>
               sku: "22_04-lts-gen2",
             },
             version: {
-              name: process.env.AZURE_TEST_HCI_MARKETPLACE_VERSION ?? "22.04.202410020",
+              name: "22.04.202410020",
             },
           }),
       tags: props.tags,

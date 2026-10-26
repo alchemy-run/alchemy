@@ -51,7 +51,12 @@ export type WebAppTypeId = typeof WebAppTypeId;
  * - `env` becomes app settings.
  */
 export interface WebAppBinding {
+  /** Roles granted to the app's system-assigned identity, each on one scope. */
   roleAssignments?: HostRoleAssignment[];
+  /**
+   * App settings the binding contributes. The app's own `env` wins on a
+   * key clash.
+   */
   env?: Record<string, unknown>;
 }
 

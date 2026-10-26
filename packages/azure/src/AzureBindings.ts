@@ -163,6 +163,10 @@ type BindTarget = {
   bind: (...args: unknown[]) => (data: unknown) => Effect.Effect<void>;
 };
 
+/** `Binding.Host` is typed `ResourceLike`; every declared resource also has `bind`. */
+const isBindTarget = (host: ResourceLike): host is ResourceLike & BindTarget =>
+  "bind" in host && typeof host.bind === "function";
+
 const toOutput = (value: unknown) => (Output.isOutput(value) ? value : Output.literal(value));
 
 /** The signature {@link Bind} yields. */
@@ -213,7 +217,10 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
       if (host === undefined) return;
 
       if (runsAsManagedIdentity(host)) {
-        return yield* (host as unknown as BindTarget).bind(allow(label), host, ...args)(data);
+        if (!isBindTarget(host)) {
+          return yield* Effect.die(`${host.Type} ${host.LogicalId} has no bind.`);
+        }
+        return yield* host.bind(allow(label), host, ...args)(data);
       }
 
       const id = `${host.LogicalId}AzureIdentity`;

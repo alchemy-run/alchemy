@@ -22,3 +22,12 @@ bun run --filter azure-storage-example destroy
 The resources default to the profile's location (then `eastus`). Deploying
 takes about a minute; the storage account costs a few cents per month while
 it holds no data.
+
+## Live test
+
+```sh
+ALCHEMY_PROFILE=<name> bun test test/integ.test.ts
+```
+
+The test deploys the stack, reads the account and container back through
+the Azure API, then destroys the stack and checks the account is gone.

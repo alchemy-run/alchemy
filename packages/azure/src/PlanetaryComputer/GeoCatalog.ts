@@ -270,11 +270,7 @@ const deleteCatalog = (where: {
 }) =>
   planetarycomputer.DeleteGeoCatalog(where).pipe(
     Effect.asVoid,
-    Effect.catchIf(
-      (e) =>
-        e._tag === "HybridNetworkOperationInProgress" && (e.message ?? "").includes("'DELETE'"),
-      () => Effect.void,
-    ),
+    Effect.catchTag("DeleteOperationInProgress", () => Effect.void),
     retryWhileBusy,
   );
 

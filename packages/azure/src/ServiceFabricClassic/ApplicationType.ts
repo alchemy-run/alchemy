@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
@@ -151,7 +152,7 @@ export const ApplicationTypeProvider = () =>
       const all: ApplicationType["Attributes"][] = [];
       for (const { resourceGroup, clusterName } of yield* listClusters) {
         const page = yield* orUndefinedIfNotFound(
-          servicefabric.ListApplicationTypes({
+          collectAll(servicefabric.ListApplicationTypes, {
             subscriptionId,
             resourceGroupName: resourceGroup,
             clusterName,

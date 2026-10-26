@@ -84,6 +84,7 @@ const examples = [
   "./examples/azure-service-bus",
   "./examples/azure-service-to-service",
   "./examples/azure-sql",
+  "./examples/azure-storage",
   "./examples/azure-storage-queue",
   "./examples/azure-storage-uploads",
   "./examples/azure-vm",

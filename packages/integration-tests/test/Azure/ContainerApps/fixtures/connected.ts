@@ -8,14 +8,14 @@ import * as Effect from "effect/Effect";
  * host, so the connected-environment lifecycles run only with
  * AZURE_TEST_PAID=1 plus:
  *
- *   AZURE_TEST_CONTAINERAPPS_CUSTOM_LOCATION  custom location ARM ID
- *   AZURE_TEST_CONTAINERAPPS_ARC_LOCATION     region of the cluster (default eastus)
+ *   AZURE_TEST_CONTAINERAPPS_CUSTOM_LOCATION  custom location ARM ID (its cluster in eastus)
  *
  * Each file keeps an ungated probe that asserts the typed error Azure
  * returns without that infrastructure.
  */
 
-export const arcLocation = () => process.env.AZURE_TEST_CONTAINERAPPS_ARC_LOCATION ?? "eastus";
+/** Region of the Arc cluster behind the custom location. */
+export const arcLocation = "eastus";
 
 export const customLocationId = () => process.env.AZURE_TEST_CONTAINERAPPS_CUSTOM_LOCATION ?? "";
 
@@ -37,11 +37,11 @@ export const probeGroup = Effect.gen(function* () {
 /** Resource group + connected environment for the gated lifecycles. */
 export const connectedEnvironmentStack = Effect.gen(function* () {
   const group = yield* Azure.Resources.ResourceGroup("Group", {
-    location: arcLocation(),
+    location: arcLocation,
   });
   const env = yield* Azure.ContainerApps.ConnectedEnvironment("ArcEnv", {
     resourceGroup: group.resourceGroupName,
-    location: arcLocation(),
+    location: arcLocation,
     customLocationId: customLocationId(),
   });
   return { group, env };

@@ -12,6 +12,8 @@ import {
   type WebsiteNotFoundHandling,
 } from "alchemy/Website/assets";
 import { Server as FrameworkServer, type ServerDevProps } from "alchemy/Website/Server";
+import { ConfigError } from "effect/Config";
+import { SourceError } from "effect/ConfigProvider";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -693,14 +695,29 @@ const runFrameworkSite = Effect.fn("Azure.Website.FrameworkSite")(function* (
 });
 
 /**
- * Composite-level tagged errors (`FrameworkSiteError`, credentials) are
- * defects — `Alchemy.Stack` only admits `ConfigError` on the user effect.
+ * `Alchemy.Stack` admits only `ConfigError` on the user effect, so a
+ * composite's tagged errors (`FrameworkSiteError`, credentials) fail as a
+ * `ConfigError` whose cause is the original error.
  */
+export const failAsConfigError = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, ConfigError, R> =>
+  Effect.mapError(effect, (error) =>
+    error instanceof ConfigError
+      ? error
+      : new ConfigError(
+          new SourceError({
+            message: error instanceof Error ? error.message : String(error),
+            cause: error,
+          }),
+        ),
+  );
+
 export const makeFrameworkSite = (
   id: string,
   props: FrameworkSiteProps,
   config: FrameworkSiteConfig,
-) => runFrameworkSite(id, props, config).pipe(Effect.orDie);
+) => runFrameworkSite(id, props, config).pipe(failAsConfigError);
 
 /** Push {@link id} then run {@link makeFrameworkSite}. */
 export const frameworkSite = (id: string, props: FrameworkSiteProps, config: FrameworkSiteConfig) =>

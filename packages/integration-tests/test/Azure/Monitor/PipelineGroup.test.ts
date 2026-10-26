@@ -13,12 +13,12 @@ const { test } = Test.make({ providers: Azure.providers() });
  * the Azure Monitor pipeline extension and a custom location — external
  * onboarding the free-trial test subscription does not have. The full
  * lifecycle runs only with `AZURE_TEST_PAID=1` plus the custom location's
- * ARM ID in `AZURE_TEST_CUSTOM_LOCATION_ID` (and its region in
- * `AZURE_TEST_CUSTOM_LOCATION_REGION`). The cluster itself costs roughly
+ * ARM ID in `AZURE_TEST_CUSTOM_LOCATION_ID` (in `customLocationRegion`,
+ * eastus). The cluster itself costs roughly
  * $5+/day; the pipeline group adds no Azure charge.
  */
 const customLocationId = process.env.AZURE_TEST_CUSTOM_LOCATION_ID;
-const customLocationRegion = process.env.AZURE_TEST_CUSTOM_LOCATION_REGION ?? "eastus";
+const customLocationRegion = "eastus";
 
 const getPipelineGroup = (resourceGroupName: string, pipelineGroupName: string) =>
   Effect.gen(function* () {

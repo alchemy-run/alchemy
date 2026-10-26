@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
@@ -159,13 +160,15 @@ export const ConfigurationProfileVersionProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const profiles = yield* automanage.ListConfigurationProfileBySubscription({ subscriptionId });
+      const profiles = yield* collectAll(automanage.ListConfigurationProfileBySubscription, {
+        subscriptionId,
+      });
       const results: ConfigurationProfileVersion["Attributes"][] = [];
       for (const profile of profiles.value ?? []) {
         const group = resourceGroupOf(profile.id);
         if (group === undefined || profile.name === undefined) continue;
         const versions = yield* orUndefinedIfNotFound(
-          automanage.ListConfigurationProfilesVersionChildResources({
+          collectAll(automanage.ListConfigurationProfilesVersionChildResources, {
             subscriptionId,
             resourceGroupName: group,
             configurationProfileName: profile.name,

@@ -24,6 +24,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import {
+  collectAll,
   ensureRegistered,
   ignoreNotFound,
   orUndefinedIfNotFound,
@@ -380,7 +381,7 @@ export const waitForFunctions = (
   where: { subscriptionId: string; resourceGroupName: string; name: string },
   names: string[],
 ) =>
-  web.ListWebAppFunctions(where).pipe(
+  collectAll(web.ListWebAppFunctions, where).pipe(
     Effect.flatMap((page) => {
       const listed = new Set(
         (page.value ?? []).map((f) => (f.name ?? "").split("/").pop()?.toLowerCase()),

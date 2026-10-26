@@ -47,6 +47,7 @@ interface TaskStepCommon {
 }
 
 export interface DockerTaskStep extends TaskStepCommon {
+  /** Step kind: build an image from a Dockerfile. */
   type: "Docker";
   /** Dockerfile path relative to the context. */
   dockerFilePath: string;
@@ -63,6 +64,7 @@ export interface DockerTaskStep extends TaskStepCommon {
 }
 
 export interface FileTaskStep extends TaskStepCommon {
+  /** Step kind: run a multi-step task YAML file from the context. */
   type: "FileTask";
   /** Multi-step task YAML path relative to the context. */
   taskFilePath: string;
@@ -73,6 +75,7 @@ export interface FileTaskStep extends TaskStepCommon {
 }
 
 export interface EncodedTaskStep extends TaskStepCommon {
+  /** Step kind: run multi-step task YAML passed inline. */
   type: "EncodedTask";
   /** Base64-encoded multi-step task YAML. */
   encodedTaskContent: string;

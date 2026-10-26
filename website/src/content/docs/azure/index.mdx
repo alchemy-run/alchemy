@@ -120,24 +120,41 @@ Not sure? See [Choosing a runtime](/azure/compute/choosing-a-runtime).
 
 ## Out of scope
 
-The Azure provider covers about 1,190 Azure Resource Manager resource
-types across roughly 165 services. Each service has a reference page,
-for example [Azure.Storage](/providers/azure/storage). About 650 other
+The Azure provider covers about 1,290 Azure Resource Manager resource
+types across about 165 services. Each service has a reference page,
+for example [Azure.Storage](/providers/azure/storage). 510 other
 resource types are deliberately not Alchemy resources:
 
-| Reason | Examples |
-| --- | --- |
-| Retired or closed to new customers | Dev Box (no new customers since Nov 1, 2025), Cosmos DB for PostgreSQL (new clusters can't be created), Spring Apps, Customer Insights, Time Series Insights, Data Lake Analytics, Data Lake Storage Gen1, Front Door (classic), classic CDN, HPC Cache, Disk Pools, Lab Services, Logic Apps ISE, MySQL Single Server, Orbital, Scheduler, Dev Spaces, ML Studio (classic), Maps Creator, Playwright Testing |
-| Data-plane or end-user data | Machine Learning job runs, Sentinel incidents, API Management portal content, migration and import/export jobs, runbook jobs, remediation tasks, what-if results |
-| Actions, not desired state | Private endpoint connection approvals (managed from `Network.PrivateEndpoint`), maintenance triggers, troubleshooting runs, upgrade jobs |
-| Billing and subscription objects | Billing accounts and profiles, reservations and savings plans, Marketplace terms, quota requests, support tickets, subscription creation, hardware orders (Data Box, Edge) |
-| Closed or allow-listed previews | Delegated Network, Microsoft Purview cross-tenant objects, tenant-level service groups, M365 compliance private links |
-| Read-only mirrors and system-managed objects | AWS Connector inventory (112 types), vCenter/Arc discovery projections, platform-created hardware inventory, subscription and tenant singletons without delete |
-| Duplicates | Property setters folded into their parent (e.g. VPN connection shared keys, Web App settings), legacy aliases of current types |
+| Reason | Types | Examples |
+| --- | --- | --- |
+| Read-only mirror of AWS or GCP inventory | 118 | AWS Connector (112 types, e.g. `dynamoDBTables`), GCP Connector (6 types, e.g. `storageBuckets`) |
+| Retired or closed to new customers | 104 | Spring Apps, Customer Insights, Time Series Insights, Data Lake Analytics, Data Lake Storage Gen1, Front Door (classic), classic CDN, HPC Cache, Disk Pools, Lab Services, Logic Apps ISE, MySQL Single Server, Orbital, Scheduler, Dev Spaces, ML Studio (classic), Maps Creator, Playwright Testing (`AzurePlaywrightService` accounts), Azure AD B2C, Recommendations (retired 2026-03-31), Cosmos DB notebook workspaces, Dedicated HSM, App Service Environment v1/v2 worker pools |
+| Private endpoint connection approvals, managed from `Network.PrivateEndpoint` | 61 | `privateEndpointConnections` on Container Registry, Cognitive Services, AKS, Data Factory |
+| Billing, subscription, quota, or support objects | 59 | billing profiles and invoice sections, credits and savings plan orders, quotas and group quotas, Microsoft Graph Services billing accounts |
+| Needs external systems or hardware | 55 | vCenter and SCVMM inventory, Arc data services, Azure Stack registrations, bare-metal instances, on-premises Site Recovery fabrics, App Service on Azure Arc, Azure Sphere devices |
+| Actions or run records, not desired state | 44 | Automation jobs, Machine Learning jobs, policy remediations, update runs, packet captures, Service Connector dry runs, import/export jobs, Database Migration Service tasks, JIT access requests |
+| Hardware orders | 18 | Data Box jobs, Data Box Edge devices, Edge Order items, disconnected-operations hardware settings |
+| Resource-provider authoring (needs Microsoft partner onboarding) | 13 | ProviderHub provider registrations, rollouts, and manifests |
+| End-user data | 9 | Sentinel bookmarks, incident comments, and threat indicators; portal and Cloud Shell user settings |
+| Closed or allow-listed previews | 9 | Delegated Network, M365 compliance private links |
+| Duplicates | 7 | per-resource tags and tag names, data boundaries, deployment stack what-if results, Managed Applications types also modeled in the `resources` module |
+| System-managed objects | 5 | SAP Virtual Instance application/central/database instances, discovered Device Registry assets and devices |
+| User-level credentials or OAuth tokens | 2 | App Service publishing users and source control tokens |
+| Owned by the ExpressRoute connectivity provider | 2 | ExpressRoute cross-connections and their peerings |
+| Sample APIs | 2 | `Microsoft.Contoso/employees`, `Microsoft.Widget/employees` |
+| Subscription setting | 1 | preview feature registrations |
+| Microsoft first-party only | 1 | first-party service tags |
 
 These resources are implemented but need something beyond a
 subscription:
 
+- **Dev Box** (`Azure.DevCenter`) — closed to new customers since
+  2025-11-01. On a tenant that is not onboarded, Dev Box resources fail
+  with `DevBoxTenantNotOnboarded`.
+- **Cosmos DB for PostgreSQL** — retiring. Azure rejects new clusters
+  with `CosmosPostgresProvisioningRetired`. You can still adopt and
+  manage a cluster that already exists. For new workloads, use
+  [PostgreSQL](/azure/data/postgres).
 - **Microsoft Discovery** — an allow-listed preview.
 - **Confluent** — a signed-in user token. A service principal can't
   create one.

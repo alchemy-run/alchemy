@@ -161,7 +161,8 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(
 test(
   "the event hub has two active partitions",
   Effect.gen(function* () {
-    const hub = yield* readEventHub(yield* where);
+    const ids = yield* where;
+    const hub = yield* readEventHub(ids);
     expect({
       partitionCount: hub.properties?.partitionCount,
       partitionIds: hub.properties?.partitionIds,

@@ -168,7 +168,8 @@ describe(
         Effect.gen(function* () {
           const body = yield* call("GetSipRouting");
           expectOk(body);
-          const observed = yield* sipRouting.GetSipRouting({ endpoint: yield* endpoint });
+          const url = yield* endpoint;
+          const observed = yield* sipRouting.GetSipRouting({ endpoint: url });
           expect(body.result).toEqual(observed);
         }),
       );
@@ -996,7 +997,8 @@ describe(
     /** Out of band: read a job until its status is `status`. */
     const jobStatus = (jobId: string, status: string) =>
       Effect.gen(function* () {
-        return yield* jobRouter.GetJobRouterOperationJob({ ...(yield* router), jobId }).pipe(
+        const r = yield* router;
+        return yield* jobRouter.GetJobRouterOperationJob({ ...r, jobId }).pipe(
           Effect.repeat({
             schedule: Schedule.spaced("2 seconds"),
             until: (j) => j.status === status,
@@ -1385,9 +1387,10 @@ describe(
           expectOk(body);
           const observed = yield* jobStatus(jobId, "completed");
           expect(observed.status).toEqual("completed");
-          yield* jobRouter.JobRouterOperationsCloseJob({ ...(yield* router), jobId, assignmentId });
+          const r = yield* router;
+          yield* jobRouter.JobRouterOperationsCloseJob({ ...r, jobId, assignmentId });
           yield* jobStatus(jobId, "closed");
-          yield* outcome(jobRouter.DeleteJobRouterOperationJob({ ...(yield* router), jobId }));
+          yield* outcome(jobRouter.DeleteJobRouterOperationJob({ ...r, jobId }));
           yield* dropWorker("alchemy-complete-worker");
         }),
       );
@@ -1398,8 +1401,9 @@ describe(
         "closes a completed job",
         Effect.gen(function* () {
           const { jobId, assignmentId } = yield* assigned("alchemy-close");
+          const r = yield* router;
           yield* jobRouter.CompleteJobRouterOperationJob({
-            ...(yield* router),
+            ...r,
             jobId,
             assignmentId,
           });
@@ -1408,7 +1412,7 @@ describe(
           expectOk(body);
           const observed = yield* jobStatus(jobId, "closed");
           expect(observed.status).toEqual("closed");
-          yield* outcome(jobRouter.DeleteJobRouterOperationJob({ ...(yield* router), jobId }));
+          yield* outcome(jobRouter.DeleteJobRouterOperationJob({ ...r, jobId }));
           yield* dropWorker("alchemy-close-worker");
         }),
       );
@@ -1442,7 +1446,8 @@ describe(
 
     /** Out of band: a Communication Services user to call. */
     const newUser = Effect.gen(function* () {
-      const created = yield* identity.CreateIdentityOperation({ endpoint: yield* endpoint });
+      const url = yield* endpoint;
+      const created = yield* identity.CreateIdentityOperation({ endpoint: url });
       return created.identity.id;
     });
 
@@ -1612,7 +1617,8 @@ describe(
         "connects to a room call",
         Effect.gen(function* () {
           const { url } = yield* stack;
-          const room = yield* rooms.CreateRoom({ endpoint: yield* endpoint });
+          const acsEndpoint = yield* endpoint;
+          const room = yield* rooms.CreateRoom({ endpoint: acsEndpoint });
           const body = yield* call("ConnectCall", {
             callLocator: { kind: "roomCallLocator", roomId: room.id },
             callbackUri: `${url}/events`,
@@ -1620,17 +1626,17 @@ describe(
           expectOk(body);
           const callConnectionId: string = body.result.callConnectionId;
           const observed = yield* callAutomation.GetCallConnectionCall({
-            endpoint: yield* endpoint,
+            endpoint: acsEndpoint,
             callConnectionId,
           });
           expect(observed.callConnectionId).toEqual(callConnectionId);
           yield* outcome(
             callAutomation.TerminateCallConnectionCall({
-              endpoint: yield* endpoint,
+              endpoint: acsEndpoint,
               callConnectionId,
             }),
           );
-          yield* rooms.DeleteRoom({ endpoint: yield* endpoint, roomId: room.id });
+          yield* rooms.DeleteRoom({ endpoint: acsEndpoint, roomId: room.id });
         }),
       );
     });

@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
@@ -326,7 +327,7 @@ export const ServiceProvider = () =>
       const all: Service["Attributes"][] = [];
       for (const { resourceGroup, clusterName } of yield* listClusters) {
         const apps = yield* orUndefinedIfNotFound(
-          servicefabric.ListApplications({
+          collectAll(servicefabric.ListApplications, {
             subscriptionId,
             resourceGroupName: resourceGroup,
             clusterName,
@@ -335,7 +336,7 @@ export const ServiceProvider = () =>
         for (const app of apps?.value ?? []) {
           if (app.name === undefined) continue;
           const services = yield* orUndefinedIfNotFound(
-            servicefabric.ListServices({
+            collectAll(servicefabric.ListServices, {
               subscriptionId,
               resourceGroupName: resourceGroup,
               clusterName,

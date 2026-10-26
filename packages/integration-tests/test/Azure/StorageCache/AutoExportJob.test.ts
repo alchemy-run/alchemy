@@ -27,6 +27,7 @@ const getJob = (resourceGroupName: string, amlFilesystemName: string, autoExport
   });
 
 const program = (props: {
+  rpObjectId: string;
   autoExportPrefixes: string[];
   adminStatus: "Enable" | "Disable";
   tags?: Record<string, string>;
@@ -35,6 +36,7 @@ const program = (props: {
     const { group, subnet, hsm, grants } = yield* lustreDependencies({
       hsm: true,
       group: "alchemy-test-storagecache-export",
+      rpObjectId: props.rpObjectId,
     });
     const fs = yield* Azure.StorageCache.AmlFilesystem("Lustre", {
       resourceGroup: group.resourceGroupName,
@@ -58,13 +60,14 @@ const program = (props: {
 
 // Needs a 4 TiB AMLFS-Durable-Premium-500 file system with blob integration
 // (~$2-3/hour, 10-30 minutes to create, 5-20 minutes to delete): estimated
-// ~$5 and ~60 minutes per run. Also needs AZURE_HPC_CACHE_RP_OBJECT_ID (see
-// util.ts) and AMLFS quota, which free-trial subscriptions lack.
-test.provider.skipIf(!runExpensive || !hpcCacheRpObjectId)(
+// ~$5 and ~60 minutes per run. Also needs AMLFS quota, which free-trial
+// subscriptions lack.
+test.provider.skipIf(!runExpensive)(
   "create, update, replace, and delete an auto export job",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const rpObjectId = yield* hpcCacheRpObjectId;
 
       // Seed `results/` before the file system imports the container, so
       // the replacement step's `/results` prefix matches a path.
@@ -72,6 +75,7 @@ test.provider.skipIf(!runExpensive || !hpcCacheRpObjectId)(
         lustreDependencies({
           hsm: true,
           group: "alchemy-test-storagecache-export",
+          rpObjectId,
         }),
       );
       const blob = deps.blob;
@@ -89,7 +93,7 @@ test.provider.skipIf(!runExpensive || !hpcCacheRpObjectId)(
       ).toEqual(201);
 
       const { group, fs, job } = yield* stack.deploy(
-        program({ autoExportPrefixes: ["/"], adminStatus: "Enable" }),
+        program({ rpObjectId, autoExportPrefixes: ["/"], adminStatus: "Enable" }),
       );
       const get = (name: string) => getJob(group.resourceGroupName, fs.amlFilesystemName, name);
       expect(job.provisioningState).toEqual("Succeeded");
@@ -100,6 +104,7 @@ test.provider.skipIf(!runExpensive || !hpcCacheRpObjectId)(
       // In place: disable the job and add a tag.
       const updated = yield* stack.deploy(
         program({
+          rpObjectId,
           autoExportPrefixes: ["/"],
           adminStatus: "Disable",
           tags: { team: "hpc" },
@@ -113,6 +118,7 @@ test.provider.skipIf(!runExpensive || !hpcCacheRpObjectId)(
       // Replacement: export prefixes are immutable.
       const replaced = yield* stack.deploy(
         program({
+          rpObjectId,
           autoExportPrefixes: ["/results"],
           adminStatus: "Disable",
           tags: { team: "hpc" },

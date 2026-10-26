@@ -13,6 +13,9 @@ export interface SasGetSignRequest extends Omit<geocatalog.SasGetSignRequest, "e
 /**
  * Sign an asset URL with a SAS token.
  *
+ * The signed `href` carries the SAS token, so it comes back `Redacted`;
+ * read it with `Redacted.value` where you use it.
+ *
  * Binding assigns the built-in **GeoCatalog Reader** role on the bound catalog
  * only. `Microsoft.Orbital` has no data actions; the GeoCatalog data plane
  * checks this role's `Microsoft.Orbital/geoCatalogs/read`.

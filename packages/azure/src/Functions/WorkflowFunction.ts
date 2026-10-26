@@ -46,7 +46,9 @@ type WorkflowHostServices =
 
 /** The Durable Task Scheduler and task hub that store a host's runs. */
 export interface WorkflowDurableTask {
+  /** The Durable Task Scheduler that stores the host's runs. */
   readonly scheduler: Scheduler;
+  /** The task hub on the scheduler that the host's runs use. */
   readonly taskHub: TaskHub;
 }
 

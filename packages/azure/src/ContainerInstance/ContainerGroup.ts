@@ -95,7 +95,12 @@ export interface ContainerGroupRoleAssignment {
  * - `env` becomes environment variables of the program's container.
  */
 export interface ContainerGroupBinding {
+  /** Roles granted to the group's system-assigned identity, each on one scope. */
   roleAssignments?: ContainerGroupRoleAssignment[];
+  /**
+   * Env vars of the program's container the binding contributes. The
+   * group's own `env` wins on a key clash.
+   */
   env?: Record<string, unknown>;
 }
 
@@ -104,8 +109,11 @@ export interface ContainerGroupBinding {
  * @internal
  */
 export interface ContainerGroupHosting {
+  /** Name of the container registry. */
   registryName: string;
+  /** Login server of the registry, e.g. `myregistry.azurecr.io`. */
   loginServer: string;
+  /** Resource group of the registry. */
   resourceGroup: string;
 }
 
@@ -477,6 +485,36 @@ const transformContainerGroupProps = (id: string, props: ContainerGroupProps) =>
  *     ],
  *   },
  *   program, // reaches the sidecar on localhost:6379
+ * ) {}
+ * ```
+ *
+ * ### Packaging
+ * With `main`, Alchemy bundles the program and its imports with Rolldown
+ * into one ESM file, `index.mjs`, for Node.js. No Dockerfile and no Docker
+ * are involved: Alchemy imports `baseImage` (its linux/amd64 image) into
+ * the group's registry once and pushes one layer on top that holds the
+ * bundle under `/app`. The container runs `node /app/index.mjs`, so
+ * `baseImage` needs `node` on the `PATH`. No `node_modules` ship, so every
+ * import must be in the bundle. The image tag is a hash of the bundle,
+ * `baseImage`, and `port`, so a redeploy of unchanged code pushes nothing.
+ * The group pulls the image with the registry's admin credentials. Pass
+ * Rolldown options on `build`.
+ *
+ * **Example:** Ship a source map
+ * ```typescript
+ * export default class Api extends Azure.ContainerInstance.ContainerGroup<Api>()(
+ *   "Api",
+ *   { main: import.meta.url, build: { output: { sourcemap: true } } },
+ *   program,
+ * ) {}
+ * ```
+ *
+ * **Example:** Mark more packages as side-effect free
+ * ```typescript
+ * export default class Api extends Azure.ContainerInstance.ContainerGroup<Api>()(
+ *   "Api",
+ *   { main: import.meta.url, build: { pure: { packages: ["zod"] } } },
+ *   program,
  * ) {}
  * ```
  *

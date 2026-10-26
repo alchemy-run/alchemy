@@ -6,17 +6,11 @@ import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { runPaidOnly } from "../gates.ts";
-import { logLevel, subscriptionId, waitGone } from "./helpers.ts";
+import { cosmosPrincipalId, logLevel, subscriptionId, waitGone } from "./helpers.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
 const LOCATION = "eastus";
-
-/**
- * Object ID of the "Azure Cosmos DB" service principal (app ID
- * `a232010e-820c-4083-83bb-3ace5fc29d0b`) in the test tenant.
- */
-const cosmosPrincipal = process.env.AZURE_COSMOS_DB_SP_OBJECT_ID;
 
 const NETWORK_CONTRIBUTOR = "4d97b98b-1d4f-4787-a291-c67834d212e7";
 
@@ -30,7 +24,7 @@ const getDataCenter = (resourceGroupName: string, clusterName: string, dataCente
     }),
   );
 
-const program = (nodeCount: number) =>
+const program = (nodeCount: number, principalId: string) =>
   Effect.gen(function* () {
     const group = yield* Azure.Resources.ResourceGroup("Group", {
       location: LOCATION,
@@ -52,7 +46,7 @@ const program = (nodeCount: number) =>
     const grant = yield* Azure.Authorization.RoleAssignment("CosmosNetwork", {
       scope: vnet.virtualNetworkId,
       roleDefinitionId: NETWORK_CONTRIBUTOR,
-      principalId: cosmosPrincipal!,
+      principalId,
       principalType: "ServicePrincipal",
     });
     const cluster = yield* Azure.CosmosDB.CassandraCluster("Cluster", {
@@ -80,13 +74,14 @@ const program = (nodeCount: number) =>
 // Three Standard_D8s_v5 nodes (24 vCPUs) exceed the free trial's ~4
 // regional vCPU quota. On a paid subscription: ~$3/hour for the nodes plus
 // disks, 30-60 minutes for create + scale + delete (~$3-5 per run).
-test.provider.skipIf(!runPaidOnly || !cosmosPrincipal)(
+test.provider.skipIf(!runPaidOnly)(
   "create, scale, and delete a Managed Cassandra data center",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const principalId = yield* cosmosPrincipalId;
 
-      const { group, cluster, dataCenter } = yield* stack.deploy(program(3));
+      const { group, cluster, dataCenter } = yield* stack.deploy(program(3, principalId));
       expect(dataCenter.nodeCount).toEqual(3);
       const observed = yield* getDataCenter(
         group.resourceGroupName,
@@ -97,7 +92,7 @@ test.provider.skipIf(!runPaidOnly || !cosmosPrincipal)(
       expect(observed.properties?.sku).toEqual("Standard_D8s_v5");
 
       // In-place update: scale out.
-      const scaled = yield* stack.deploy(program(4));
+      const scaled = yield* stack.deploy(program(4, principalId));
       expect(scaled.dataCenter.dataCenterId).toEqual(dataCenter.dataCenterId);
       const rescaled = yield* getDataCenter(
         group.resourceGroupName,

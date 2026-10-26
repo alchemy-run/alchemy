@@ -37,8 +37,7 @@ const poolGone = (resourceGroupName: string, name: string) =>
  * Object ID of the "Standby Pool Resource Provider" service principal
  * (app ID d4398a72-b879-49e5-9f3a-ff22c32efb42) in the test tenant.
  */
-const STANDBY_POOL_PRINCIPAL_ID =
-  process.env.AZURE_STANDBY_POOL_PRINCIPAL_ID ?? "484657c4-5e65-42a7-9ef5-f554038edfd8";
+const STANDBY_POOL_PRINCIPAL_ID = "484657c4-5e65-42a7-9ef5-f554038edfd8";
 
 /** Retry a deploy while the fresh grant has not propagated to the RP. */
 const untilAuthorized = <A, E extends { readonly _tag: string }, R>(

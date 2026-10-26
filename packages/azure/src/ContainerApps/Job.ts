@@ -104,9 +104,16 @@ export interface JobScaleRule {
  * - `schedule` makes the job run on a cron schedule.
  */
 export interface JobBinding {
+  /** Roles granted to the job's system-assigned identity, each on one scope. */
   roleAssignments?: JobRoleAssignment[];
+  /**
+   * Container env vars the binding contributes. The job's own `env` wins
+   * on a key clash.
+   */
   env?: Record<string, unknown>;
+  /** KEDA scale rules that make the job `Event` triggered. */
   scaleRules?: JobScaleRule[];
+  /** Cron expression (five fields, UTC) that makes the job `Schedule` triggered. */
   schedule?: string;
 }
 
@@ -123,8 +130,11 @@ export interface JobRegistryRef {
  * @internal
  */
 export interface JobHosting {
+  /** Name of the container registry the image is pushed to. */
   registryName: string;
+  /** Resource group of the registry. */
   registryResourceGroup: string;
+  /** Repository of the program's image, `alchemy/<logical-id>`. */
   repository: string;
 }
 
@@ -489,6 +499,31 @@ const transformJobProps = (id: string, props: JobProps) =>
  *   registry: { registryName: registry.registryName, resourceGroup: registry.resourceGroup },
  *   baseImage: "docker.io/library/node:24-slim",
  * });
+ * ```
+ *
+ * ### Packaging
+ * With `main`, Alchemy bundles the program and its imports with Rolldown
+ * into one ESM file, `index.mjs`, for Node.js. No Dockerfile and no Docker
+ * are involved: Alchemy imports `baseImage` (its linux/amd64 image) into
+ * the job's registry and pushes one layer on top that holds the bundle
+ * under `/app`. The container runs `node /app/index.mjs`, so `baseImage`
+ * needs `node` on the `PATH`. No `node_modules` ship, so every import must
+ * be in the bundle. The image tag is a hash of the bundle and `baseImage`,
+ * so a redeploy of unchanged code pushes nothing. Pass Rolldown options on
+ * `build`.
+ *
+ * **Example:** Ship a source map on a slim base image
+ * ```typescript
+ * export default class Import extends Azure.ContainerApps.Job<Import>()(
+ *   "Import",
+ *   {
+ *     main: import.meta.url,
+ *     environmentId,
+ *     baseImage: "docker.io/library/node:24-slim",
+ *     build: { output: { sourcemap: true } },
+ *   },
+ *   program,
+ * ) {}
  * ```
  *
  * ### Scheduling

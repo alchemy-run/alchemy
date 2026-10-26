@@ -44,7 +44,7 @@ const waitGone = <A, R>(
 /** Domain to purchase in the paid lifecycle test (must be available). */
 const domainName = process.env.AZURE_TEST_DOMAIN_NAME ?? "alchemy-effect-test-domain.com";
 /** Client IP recorded as the legal-agreement consent. */
-const agreedBy = process.env.AZURE_TEST_DOMAIN_AGREED_BY ?? "203.0.113.10";
+const agreedBy = "203.0.113.10";
 
 const registrant = {
   email: "hostmaster@alchemy.run",
@@ -96,7 +96,9 @@ test.provider.skipIf(!runPaidOnly || !runExpensive)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const created = yield* stack.deploy(program({ name: "alchemy-first", ownershipId: FIRST_ID }));
+      const created = yield* stack.deploy(
+        program({ name: "alchemy-first", ownershipId: FIRST_ID }),
+      );
       const rg = created.group.resourceGroupName;
       expect(created.identifier.name).toEqual("alchemy-first");
       expect(created.identifier.ownershipId).toEqual(FIRST_ID);

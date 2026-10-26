@@ -35,6 +35,7 @@ export interface ScheduleAction {
 }
 
 export interface CronTrigger {
+  /** Trigger kind: a cron expression. */
   triggerType: "Cron";
   /** NCrontab expression, e.g. `0 2 * * *`. */
   expression: string;
@@ -47,6 +48,7 @@ export interface CronTrigger {
 }
 
 export interface RecurrenceTrigger {
+  /** Trigger kind: a fixed frequency and interval. */
   triggerType: "Recurrence";
   /** Recurrence unit. */
   frequency: "Minute" | "Hour" | "Day" | "Week" | "Month";

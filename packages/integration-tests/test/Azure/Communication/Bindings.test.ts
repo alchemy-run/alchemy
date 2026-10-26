@@ -16,6 +16,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { runPaidOnly } from "../gates.ts";
 import CommunicationBindingsFunction, { Acs, Domain } from "./fixtures/function.ts";
@@ -128,6 +129,18 @@ const expectOk = (body: Body) => expect({ ok: body.ok, error: body.error }).toEq
 
 const endpoint = Effect.map(stack, ({ endpoint }) => endpoint!);
 
+/** The plain value of a token distilled decodes as `Redacted` (a plain string fails the test). */
+const reveal = (value: string | Redacted.Redacted<string>) => {
+  expect(Redacted.isRedacted(value)).toBe(true);
+  return Redacted.isRedacted(value) ? Redacted.value(value) : value;
+};
+
+/** A token the fixture sent as `{ redacted }` (it was `Redacted` in the binding's result). */
+const sentRedacted = (value: { redacted?: unknown } | undefined) => {
+  expect(typeof value?.redacted).toEqual("string");
+  return String(value?.redacted);
+};
+
 /** Out of band: a Communication Services user and a chat token, as the deployer. */
 const newUser = Effect.gen(function* () {
   const url = yield* endpoint;
@@ -135,7 +148,7 @@ const newUser = Effect.gen(function* () {
     endpoint: url,
     createTokenWithScopes: ["chat"],
   });
-  return { id: created.identity.id, token: created.accessToken!.token };
+  return { id: created.identity.id, token: reveal(created.accessToken!.token) };
 });
 
 /**
@@ -251,9 +264,9 @@ describe(
           const token = yield* identity
             .IdentityOperationsIssueAccessToken({ endpoint: url, id, scopes: ["voip"] })
             .pipe(settled("IdentityNotOwned", "IdentityNotFound"));
-          expect(token.token.split(".").length).toEqual(3);
+          expect(reveal(token.token).split(".").length).toEqual(3);
           // The binding's own token works on the chat data plane.
-          const threads = yield* asUser(body.result.accessToken.token)(
+          const threads = yield* asUser(sentRedacted(body.result.accessToken.token))(
             chat.ListChatChatThreads,
             {},
           );
@@ -275,7 +288,10 @@ describe(
           expectOk(body);
           const minutes = (Date.parse(body.result.expiresOn) - Date.now()) / 60_000;
           expect(Math.round(minutes)).toEqual(60);
-          const threadId = yield* newThread({ id: user.id, token: body.result.token }, "issued");
+          const threadId = yield* newThread(
+            { id: user.id, token: sentRedacted(body.result.token) },
+            "issued",
+          );
           expect(threadId).toMatch(/^19:/);
         }),
       );

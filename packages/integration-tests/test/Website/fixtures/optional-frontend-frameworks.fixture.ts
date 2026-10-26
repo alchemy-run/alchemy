@@ -20,7 +20,7 @@ registerHooks({
 });
 
 const providers: string[] = [];
-for (const provider of ["Prisma", "Neon", "Fly", "Hetzner", "Railway"]) {
+for (const provider of ["Prisma", "Neon", "Fly", "Hetzner", "Railway", "Azure"]) {
   const module = await import(`@alchemy.run/${provider.toLowerCase()}`);
   if (module.Website) providers.push(provider);
 }

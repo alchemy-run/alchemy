@@ -23,7 +23,7 @@ const getSqlVm = (resourceGroupName: string, sqlVirtualMachineName: string) =>
 const ADMIN_PASSWORD = Redacted.make("Alchemy-Sql-Test-2026!");
 // Dv5/DSv5 family quota is 0 and the B-series is capacity-restricted
 // (`SkuNotAvailable`) in eastus; DASv4 is a 2-vCPU/8 GiB SCSI size.
-const VM_SIZE = process.env.AZURE_TEST_SQLVM_SIZE ?? "Standard_D2as_v4";
+const VM_SIZE = "Standard_D2as_v4";
 
 const program = (props: { dayOfWeek: "Sunday" | "Saturday"; tags: Record<string, string> }) =>
   Effect.gen(function* () {

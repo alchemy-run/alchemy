@@ -279,12 +279,21 @@ deletes every container, queue, and table. Changing an account's `name`,
 `location`, `kind`, or `isHnsEnabled` replaces it and loses the data.
 Keep a resource on destroy with `RemovalPolicy.retain()`:
 
-```typescript
-import * as RemovalPolicy from "alchemy/RemovalPolicy";
+```diff lang="typescript"
+// src/Files.ts
+import * as Azure from "@alchemy.run/azure";
++import * as RemovalPolicy from "alchemy/RemovalPolicy";
+import * as Effect from "effect/Effect";
 
-const uploads = yield* Azure.Storage.BlobContainer("uploads", {
-  storageAccount: account.storageAccountName,
-}).pipe(RemovalPolicy.retain());
+export const Data = Azure.Storage.StorageAccount("Data");
+
+export const Files = Effect.gen(function* () {
+  const account = yield* Data;
+  return yield* Azure.Storage.BlobContainer("Files", {
+    storageAccount: account.storageAccountName,
+-  });
++  }).pipe(RemovalPolicy.retain());
+});
 ```
 
 ## Examples

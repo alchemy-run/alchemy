@@ -23,7 +23,7 @@ export const runWithConfluentUser = runPaidOnly && !!process.env.AZURE_TEST_CONF
 
 export const subscription = Effect.map(Azure.AzureEnvironment.current, (env) => env.subscriptionId);
 
-const baseEmail = process.env.AZURE_TEST_CONFLUENT_EMAIL ?? "alchemy-test@example.com";
+const baseEmail = "alchemy-test@example.com";
 
 /**
  * Per-run mailbox tag. Confluent Cloud keeps a signed-up email after its

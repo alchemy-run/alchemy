@@ -178,6 +178,7 @@ directly from environment variables and nothing is read from or written to
 | --- | --- | --- |
 | AWS | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION` or `AWS_DEFAULT_REGION` | `AWS_SESSION_TOKEN`; `AWS_ACCOUNT_ID` avoids an STS `GetCallerIdentity` lookup |
 | Cloudflare | `CLOUDFLARE_ACCOUNT_ID` and either `CLOUDFLARE_API_TOKEN`, or `CLOUDFLARE_API_KEY` with `CLOUDFLARE_EMAIL`/`CLOUDFLARE_ACCOUNT_EMAIL` | None |
+| Azure | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_SUBSCRIPTION_ID` (a Microsoft Entra service principal) | None; resources default to the `eastus` location |
 | GitHub | `GITHUB_ACCESS_TOKEN` or `GITHUB_TOKEN`; enterprise hosts may instead use `GH_ENTERPRISE_TOKEN` or `GITHUB_ENTERPRISE_TOKEN` | `GITHUB_BASE_URL`, `GITHUB_API_URL`, or `GH_HOST` selects a GitHub Enterprise host |
 | Neon | `NEON_API_KEY` | None |
 | PlanetScale | `PLANETSCALE_API_TOKEN_ID`, `PLANETSCALE_API_TOKEN`, `PLANETSCALE_ORGANIZATION` | `PLANETSCALE_API_BASE_URL` |

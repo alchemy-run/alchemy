@@ -57,6 +57,9 @@ const program = (categories: string[]) =>
     return { group, perimeter, logging };
   });
 
+// ~$0/run, 2 min. Preview feature: needs AZURE_TEST_PAID=1 and AZURE_TEST_NSP_LOGGING=1 on a
+// subscription with the feature registered; elsewhere ARM answers
+// SubscriptionFeatureNotRegistered (asserted by the ungated probe below).
 test.provider.skipIf(!runPaidOnly || !allowListed)(
   "create, update, and delete a perimeter logging configuration",
   (stack) =>

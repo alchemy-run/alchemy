@@ -233,6 +233,12 @@ interface Client {
   readonly disconnected: Effect.Effect<Frame, unknown>;
 }
 
+/** The plain value of a token distilled decodes as `Redacted` (a plain string fails the test). */
+const reveal = (value: string | Redacted.Redacted<string>) => {
+  expect(Redacted.isRedacted(value)).toBe(true);
+  return Redacted.isRedacted(value) ? Redacted.value(value) : value;
+};
+
 /** Open a client socket with `token`; lives until the test's scope closes. */
 const open = (token: string) =>
   Effect.gen(function* () {
@@ -274,7 +280,7 @@ const connect = (userId?: string) =>
     const { token } = yield* data
       .GenerateClientToken({ ...where, userId })
       .pipe(Effect.retry(whileDenied));
-    return yield* open(token);
+    return yield* open(reveal(token));
   });
 
 const live = { timeout: 600_000 };
@@ -735,7 +741,9 @@ describe(
             `/generateClientToken${qs({ userId: "u-token", groups: "g-token" })}`,
           );
           expectOk(body);
-          const client = yield* open(body.result.token);
+          // The fixture sends a `Redacted` token as `{ redacted }`.
+          expect(typeof body.result.token?.redacted).toEqual("string");
+          const client = yield* open(body.result.token.redacted);
           expect(client.userId).toEqual("u-token");
           expect(yield* userExists("u-token")).toBe(true);
           expect(yield* membersOf("g-token", [client.connectionId])).toEqual([client.connectionId]);

@@ -113,6 +113,12 @@ const call = (route: string, body?: string) =>
 
 const expectOk = (body: Body) => expect({ ok: body.ok, error: body.error }).toEqual({ ok: true });
 
+/** The plain value of a secret distilled decodes as `Redacted` (a plain string fails the test). */
+const reveal = (value: string | Redacted.Redacted<string> | undefined) => {
+  expect(Redacted.isRedacted(value)).toBe(true);
+  return Redacted.isRedacted(value) ? Redacted.value(value) : value;
+};
+
 const vaultBaseUrl = Effect.map(stack, ({ vaultName }) => `https://${vaultName}.vault.azure.net`);
 
 /** Read a secret version through the data plane as the deployer (retried through role propagation). */
@@ -172,8 +178,8 @@ describe(
           const body = yield* call("/get");
           expectOk(body);
           expect(body.result).toEqual({
-            value: READ_VALUE,
-            pinned: READ_VALUE,
+            value: { redacted: READ_VALUE },
+            pinned: { redacted: READ_VALUE },
             missing: "SecretNotFound",
           });
         }),
@@ -218,7 +224,7 @@ describe(
           expectOk(body);
           expect(body.result.contentType).toEqual("text/plain");
           const observed = yield* deployerGet(writeName, body.result.version);
-          expect(observed.value).toEqual("set-by-function");
+          expect(reveal(observed.value)).toEqual("set-by-function");
         }),
         { timeout: 300_000 },
       );
@@ -254,7 +260,7 @@ describe(
           expect(body.result.updatedVersion).toEqual(body.result.version);
           const observed = yield* deployerGet(writeName, body.result.version);
           expect({
-            value: observed.value,
+            value: reveal(observed.value),
             contentType: observed.contentType,
             tags: observed.tags,
           }).toEqual({
@@ -279,7 +285,7 @@ describe(
             listed: true,
           });
           const latest = yield* deployerGet(writeName);
-          expect(latest.value).toEqual("round-trip");
+          expect(reveal(latest.value)).toEqual("round-trip");
         }),
         { timeout: 300_000 },
       );
@@ -373,7 +379,7 @@ describe(
           expectOk(body);
           expect(body.result.name).toEqual(doomedName);
           const observed = yield* deployerGet(doomedName);
-          expect(observed.value).toEqual(DOOMED_VALUE);
+          expect(reveal(observed.value)).toEqual(DOOMED_VALUE);
         }),
         { timeout: 300_000 },
       );
@@ -402,7 +408,7 @@ describe(
           expectOk(body);
           expect(body.result.name).toEqual(doomedName);
           const observed = yield* deployerGet(doomedName);
-          expect(observed.value).toEqual(DOOMED_VALUE);
+          expect(reveal(observed.value)).toEqual(DOOMED_VALUE);
         }),
         { timeout: 300_000 },
       );

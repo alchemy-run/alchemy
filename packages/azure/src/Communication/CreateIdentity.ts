@@ -13,6 +13,9 @@ export interface CreateIdentityRequest extends Omit<
  * Create a Communication Services user identity, and optionally a user
  * access token for it (for Chat, Calling, or Rooms).
  *
+ * The `accessToken.token` comes back `Redacted`; read it with
+ * `Redacted.value` where you use it.
+ *
  * Binding assigns a custom role (`AzureCommunicationIdentityRole`, one per
  * stack) with exactly the action
  * `Microsoft.Communication/CommunicationServices/Write`, on the communication
@@ -31,7 +34,7 @@ export interface CreateIdentityRequest extends Omit<
  *
  * // runtime
  * const created = yield* createIdentity({ createTokenWithScopes: ["chat"] });
- * // created.identity.id, created.accessToken?.token
+ * // created.identity.id, created.accessToken?.token (Redacted)
  * ```
  *
  * @binding

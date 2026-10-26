@@ -519,7 +519,7 @@ const emptyVault = Effect.fn(function* (
   let retainedUntil: string | undefined;
   for (const type of BACKUP_MANAGEMENT_TYPES) {
     const items = yield* orUndefinedIfNotFound(
-      backup.ListBackupProtectedItems({
+      collectAll(backup.ListBackupProtectedItems, {
         ...where,
         _filter: `backupManagementType eq '${type}'`,
       }),
@@ -549,7 +549,7 @@ const emptyVault = Effect.fn(function* (
   }
   for (const type of BACKUP_MANAGEMENT_TYPES) {
     const containers = yield* orUndefinedIfNotFound(
-      backup.ListBackupProtectionContainers({
+      collectAll(backup.ListBackupProtectionContainers, {
         ...where,
         _filter: `backupManagementType eq '${type}'`,
       }),

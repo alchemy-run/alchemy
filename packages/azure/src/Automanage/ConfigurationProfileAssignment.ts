@@ -7,6 +7,7 @@ import type { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import {
+  collectAll,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
@@ -193,7 +194,7 @@ export const ConfigurationProfileAssignmentProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      const page = yield* automanage.ListConfigurationProfileAssignmentBySubscription({
+      const page = yield* collectAll(automanage.ListConfigurationProfileAssignmentBySubscription, {
         subscriptionId,
       });
       const results: ConfigurationProfileAssignment["Attributes"][] = [];

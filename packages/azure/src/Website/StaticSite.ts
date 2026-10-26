@@ -10,7 +10,13 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Redacted from "effect/Redacted";
-import { deploySite, localWebsite, unwrapEnv, type FrameworkSiteProps } from "./FrameworkSite.ts";
+import {
+  deploySite,
+  failAsConfigError,
+  localWebsite,
+  unwrapEnv,
+  type FrameworkSiteProps,
+} from "./FrameworkSite.ts";
 
 export interface StaticSiteProps extends Pick<
   FrameworkSiteProps,
@@ -254,4 +260,4 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       spa: props.spa === true,
       errorPage: props.errorPage,
     }).pipe(Namespace.push(id));
-  }).pipe(Effect.orDie);
+  }).pipe(failAsConfigError);

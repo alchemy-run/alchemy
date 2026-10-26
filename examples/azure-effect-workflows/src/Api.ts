@@ -39,7 +39,8 @@ export default class Api extends Azure.Functions.Function<Api>()(
             yield* run.interrupt;
             return HttpServerResponse.text("cancelling", { status: 202 });
           }
-          return yield* HttpServerResponse.json(yield* run.status);
+          const status = yield* run.status;
+          return yield* HttpServerResponse.json(status);
         }
         return HttpServerResponse.text("Not Found", { status: 404 });
       }),

@@ -417,7 +417,7 @@ export const BackupProtectedItemProvider = () =>
       ) {
         // Only look among already-protected items: read must not inquire.
         const page = yield* orUndefinedIfNotFound(
-          backup.ListBackupProtectedItems({
+          collectAll(backup.ListBackupProtectedItems, {
             subscriptionId,
             resourceGroupName: resourceGroup,
             vaultName: vault,
