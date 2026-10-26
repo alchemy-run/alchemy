@@ -240,6 +240,29 @@ Optional. Reserves a physical name (or stub resource) before
 bindings](/infrastructure-as-effects/circular-bindings) — Worker A can know Worker B's
 URL before either is fully created.
 
+### `observe`
+
+Optional, and only useful next to `precreate`. A cycle precreates on
+raw props before they resolve, so `read` can't check ownership yet.
+`observe` gets the same raw props and reports what exists at the
+identity `precreate` would claim, without writing:
+
+```typescript
+observe: Effect.fn(function* ({ id, news }) {
+  if (!isResolved(news.name)) return undefined;
+  const live = yield* lookup(news.name);
+  if (!live) return undefined;
+  const attrs = { productId: live.id, name: live.name };
+  return ownsResource(id, live.tags) ? attrs : Unowned(attrs);
+}),
+```
+
+The engine refuses an `Unowned` result before `precreate` runs, unless
+adoption is allowed. Implement it whenever `precreate` can write to a
+resource that already exists, and include your `stables` in the
+attributes so the engine recognizes the resource's own previous
+generation.
+
 ### `list`
 
 Enumerates every existing resource of this type in the ambient

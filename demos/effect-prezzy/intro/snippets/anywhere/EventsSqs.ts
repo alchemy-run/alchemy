@@ -1,6 +1,5 @@
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 
 // #region show
 export default AWS.Lambda.Function(
@@ -9,8 +8,11 @@ export default AWS.Lambda.Function(
   Effect.gen(function* () {
     const source = yield* AWS.SQS.Queue("Messages");
 
-    yield* AWS.SQS.consumeQueueMessages(source, (records) =>
-      records.pipe(Stream.runForEach(Effect.log)),
+    yield* AWS.SQS.consumeQueueMessages(
+      source,
+      Effect.fn(function* (event) {
+        yield* Effect.log(event.Records);
+      }),
     );
 
     return {};

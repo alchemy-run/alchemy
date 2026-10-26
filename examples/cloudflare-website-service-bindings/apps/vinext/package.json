@@ -10,7 +10,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
+    "@cloudflare/workers-types": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",

@@ -400,7 +400,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
         expect(video.hlsPlaybackUrl).toContain(video.id);
         expect(video.dashPlaybackUrl).toContain(video.id);
         expect(video.preview).toMatch(
-          new RegExp(`^http://.*?/cdn-cgi/mf/stream/${video.id}/watch$`),
+          new RegExp(`^http://.*?/__cf_local/stream/${video.id}/watch$`),
         );
 
         const details = yield* sendCmd<Video>(worker, "video.details", {
@@ -594,7 +594,22 @@ layer(StreamTestLayer)("Stream binding", (it) => {
   });
 
   describe("Stream video serving", () => {
-    it.effect("serve video via /cdn-cgi/mf/stream/:id/watch", () =>
+    it.effect("serve video via /__cf_local/stream/:id/watch", () =>
+      Effect.gen(function* () {
+        const worker = yield* StreamTestWorker;
+        const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
+
+        const video = yield* uploadVideo(worker, videoUrl);
+
+        const resp = yield* worker.fetch(`/__cf_local/stream/${video.id}/watch`);
+        const bytes = new Uint8Array(yield* Effect.promise(() => resp.arrayBuffer()));
+        expect(resp.status).toBe(200);
+        expect(bytes).toEqual(TEST_VIDEO_BYTES);
+      }).pipe(Effect.scoped),
+    );
+
+    // Miniflare's former stream prefix keeps serving older preview URLs.
+    it.effect("serve video via the /cdn-cgi/mf/stream prefix", () =>
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
         const videoUrl = yield* useServer(staticBytesListener(TEST_VIDEO_BYTES));
@@ -602,9 +617,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
         const video = yield* uploadVideo(worker, videoUrl);
 
         const resp = yield* worker.fetch(`/cdn-cgi/mf/stream/${video.id}/watch`);
-        const bytes = new Uint8Array(yield* Effect.promise(() => resp.arrayBuffer()));
         expect(resp.status).toBe(200);
-        expect(bytes).toEqual(TEST_VIDEO_BYTES);
       }).pipe(Effect.scoped),
     );
 
@@ -612,7 +625,7 @@ layer(StreamTestLayer)("Stream binding", (it) => {
       Effect.gen(function* () {
         const worker = yield* StreamTestWorker;
         const resp = yield* worker.fetch(
-          "/cdn-cgi/mf/stream/00000000-0000-0000-0000-000000000000/watch",
+          "/__cf_local/stream/00000000-0000-0000-0000-000000000000/watch",
         );
         yield* Effect.promise(() => resp.arrayBuffer());
         expect(resp.status).toBe(404);
@@ -643,9 +656,9 @@ layer(StreamTestLayer)("Stream binding", (it) => {
 
         // The preview URL uses the runtime entry URL (http://127.0.0.1:<port>)
         expect(video.preview).toMatch(
-          new RegExp(`^http://127\\.0\\.0\\.1:\\d+/cdn-cgi/mf/stream/${video.id}/watch$`),
+          new RegExp(`^http://127\\.0\\.0\\.1:\\d+/__cf_local/stream/${video.id}/watch$`),
         );
-        expect(video.preview).toBe(`${worker.baseUrl.origin}/cdn-cgi/mf/stream/${video.id}/watch`);
+        expect(video.preview).toBe(`${worker.baseUrl.origin}/__cf_local/stream/${video.id}/watch`);
       }).pipe(Effect.scoped),
     );
   });
@@ -1692,7 +1705,7 @@ describe("Stream binding persistence", () => {
             expect(details.id).toBe(videoId);
             expect(details.size).toBe(TEST_VIDEO_BYTES.byteLength);
 
-            const resp = yield* worker.fetch(`/cdn-cgi/mf/stream/${videoId}/watch`);
+            const resp = yield* worker.fetch(`/__cf_local/stream/${videoId}/watch`);
             const bytes = new Uint8Array(yield* Effect.promise(() => resp.arrayBuffer()));
             expect(resp.status).toBe(200);
             expect(bytes).toEqual(TEST_VIDEO_BYTES);

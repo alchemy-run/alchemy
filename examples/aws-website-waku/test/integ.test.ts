@@ -1,5 +1,5 @@
 import { expect } from "bun:test";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Test from "alchemy/Test/Bun";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";

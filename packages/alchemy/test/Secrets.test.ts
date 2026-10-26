@@ -1,4 +1,4 @@
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Config from "effect/Config";
 import type { ConfigError } from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -9,6 +9,7 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
 import { MinimumLogLevel } from "effect/References";
+import { evalStack } from "@/EvalStack.ts";
 import {
   AlchemyContext,
   Secrets,
@@ -18,7 +19,6 @@ import {
   type SecretProviders,
   type StackSecrets,
 } from "@/index.ts";
-import { evalStack } from "@/Stack.ts";
 import * as TestCore from "@/Test/Core.ts";
 import { loadConfigProvider } from "@/Util/ConfigProvider.ts";
 
