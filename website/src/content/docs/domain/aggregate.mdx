@@ -1,0 +1,158 @@
+---
+title: Aggregate
+description: How an aggregate holds state, decides commands, applies events, and keeps its rules consistent.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+An aggregate is the part of a model that makes decisions. Each instance, one bank account for example, holds the state its rules need, takes one command at a time, and answers with events or a refusal.
+
+This page builds the account from the [tutorial](/domain/tutorial/part-1) piece by piece: its state, how it decides, how it applies what it decided, and what makes it safe under concurrent use.
+
+## Give it an identity
+
+An aggregate type has many instances, and each is addressed by an id. The account's id is an `AccountId`, the same schema its commands use as their `target`.
+
+```typescript title="src/Account.aggregate.ts"
+export class Account extends Domain.Aggregate("Account", {
+  id: AccountId,
+```
+
+Instances aren't created explicitly. Every id exists from the start, in the aggregate's initial state, and a command sent to a new id is decided against that state. Opening an account is just the first command an account accepts.
+
+## Model the state its rules need
+
+The state holds what `decide` needs to check its rules, and nothing more. An account must know whether it's open, who owns it, and its balance.
+
+```typescript title="src/Account.aggregate.ts"
+const State = Schema.Union([
+  Schema.TaggedStruct("Unopened", {}),
+  Schema.TaggedStruct("Open", { owner: Schema.String, balance: Schema.Int }),
+]);
+```
+
+A union of tagged states makes the lifecycle explicit. An `Unopened` account has no owner and no balance, so there's no field to forget to check. Code that wants the balance has to establish that the account is `Open` first, and the types enforce it.
+
+```typescript title="src/Account.aggregate.ts"
+state: State,
+initial: { _tag: "Unopened" },
+```
+
+`initial` is the state of every instance before its first event.
+
+Keep the statement, the transaction count and the monthly totals out of here. The account doesn't need them to decide anything, so they belong in [views](/domain/view).
+
+## Decide each command
+
+`decide` has one handler per command in `commands`. A handler receives the current state and the command, and returns the events to record or a rejection.
+
+```typescript title="src/Account.aggregate.ts"
+WithdrawMoney: (s, cmd) =>
+  s._tag !== "Open"
+    ? new NotOpen()
+    : cmd.amount > s.balance
+      ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
+      : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
+```
+
+Read it as the business rule it is: an account that isn't open can't be withdrawn from; a withdrawal can't exceed the balance; otherwise, the money is withdrawn and here's the new balance.
+
+`decide` doesn't change the state. It only describes what should happen. That keeps every rule in a function you can test with a state and a command, and nothing else.
+
+A handler can also return an empty array. The command is accepted, but there's nothing to record, like freezing an account that's already frozen. The caller still gets a receipt.
+
+## Apply events with evolve
+
+`evolve` has one handler per event. It receives the current state and the event, and returns the next state.
+
+```typescript title="src/Account.aggregate.ts"
+evolve: {
+  AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
+  MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
+  MoneyWithdrawn: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
+},
+```
+
+Keeping `evolve` separate from `decide` is what lets the state be derived from events. `decide` runs once, when the command arrives, and may refuse. `evolve` must always accept, because it applies events that have already been recorded, and applying the same events must always give the same state.
+
+`evolve` never fails either. Refusing is `decide`'s job, and it does it with a typed rejection: every command that records `MoneyDeposited` first returns `NotOpen` when the account isn't open. So each `evolve` handler only has to cover every state, and keeps any state its event can't follow.
+
+## Reply from the new state
+
+A command that declares a `reply` gets one from a `reply` handler. It runs after `evolve`, on the state the events produced.
+
+```typescript title="src/Account.aggregate.ts"
+reply: {
+  DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
+  WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
+},
+```
+
+The reply is stored with the events, so a retried command returns the same reply as the first time.
+
+## Use context in decisions
+
+Some rules need more than the state and the command. Only the account's owner may withdraw from it, so `decide` needs to know who's asking.
+
+A command's [middleware](/domain/sessions) can provide that. When it does, the handler can be an `Effect.fn` and read it. In the example bank, the withdrawal handler first checks that the current actor may act on the account.
+
+```typescript title="packages/domain/src/Account/Account.aggregate.ts"
+const authorized = Effect.fn(function* (s: AccountState) {
+  const o = openFor(s, yield* CurrentActor);
+  if (o._tag !== "Open") return yield* o;
+  return o;
+});
+```
+
+Rules can depend on time, too. The handler's third argument carries `now`, the time the command is decided. The example bank uses it for a daily withdrawal limit:
+
+```typescript title="packages/domain/src/Account/Account.aggregate.ts"
+const used = o.today.day === dayOf(now) ? o.today.withdrawn : 0;
+if (used + cmd.amount > DAILY_LIMIT)
+  return yield* new DailyLimitExceeded({ remaining: DAILY_LIMIT - used });
+```
+
+`now` is the time the command is stamped with, and its events record the same time as `at` in their envelopes, which is what `evolve` uses to track the day's total. A [story](/domain/story) can move the clock, so rules like this are testable.
+
+## One command at a time
+
+Each instance processes one command at a time. When two withdrawals for the same account arrive together, the second is decided against the state the first one left. Both can't pass the balance check on the same money.
+
+<DAG
+  nodes={[
+    { id: "first", label: "WithdrawMoney 80", type: "arrives first", layer: 0, kind: "command" },
+    { id: "second", label: "WithdrawMoney 80", type: "arrives second", layer: 0, kind: "command" },
+    { id: "account", label: "Account a-1", type: "balance: 100", layer: 1, kind: "aggregate" },
+    { id: "ok", label: "MoneyWithdrawn", type: "balance: 20", layer: 2, kind: "event" },
+    { id: "no", label: "InsufficientFunds", type: "balance: 20", layer: 2, kind: "rejection" },
+  ]}
+  edges={[
+    { from: "first", to: "account" },
+    { from: "second", to: "account" },
+    { from: "account", to: "ok" },
+    { from: "account", to: "no" },
+  ]}
+  caption="The second withdrawal is decided against the balance the first one left."
+/>
+
+Everything a command produces, its events, the new state, the reply and the deliveries to views and policies, commits together or not at all. This is what makes an instance a consistency boundary: its rules hold at every moment, for every observer.
+
+Nothing spans two instances. A transfer between accounts can't debit one and credit the other in a single step, because they're separate boundaries. Instead, each account handles its own side, and a [saga](/domain/saga) drives the steps in order.
+
+That shapes how big an aggregate should be. Draw it around the rules that must hold together, and no wider. A customer and their accounts are separate aggregates: no rule needs a customer's name and an account's balance to change in the same step, and keeping them apart means one busy account never slows down the others.
+
+## Send it commands
+
+Inside a hosted model, the aggregate is a service. `yield* Account` gives you its client, and `send` takes an instance id and a command.
+
+```typescript title="src/MainAccountProvisioning.policy.ts"
+yield* accounts
+  .send(AccountId.make(`${source.id}-main`), new OpenAccount({ owner: source.id }))
+  .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
+```
+
+The same client reads an instance's current state with `accounts.state(id)`, and schedules a command for later with `accounts.schedule(id, command, { after })`. See [Deadlines](/domain/deadlines).
+
+Clients outside the model send commands through an [Api](/domain/api). An aggregate with a `read` contract can also be read through one, so a client can fetch an account, watch it change, and follow its events.
+
+Next, [View](/domain/view) builds read models from the events aggregates record.

@@ -3,8 +3,8 @@ import * as Flag from "effect/cli/Flag";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Drift from "../../Alchemist/routes/drift.ts";
+import * as Interaction from "../../Interaction.ts";
 import { Cli } from "../../Report.ts";
-import * as CliKit from "../CliKit/index.ts";
 import { planDecisionScreen } from "../components/view/PlanDecision.tsx";
 import { config, envFile, profile, resolveStage, stage } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
@@ -49,12 +49,12 @@ const routeDrift = Effect.fn(function* ({
   }
 
   if (!repair) {
-    const terminal = yield* CliKit.CliKit;
+    const terminal = yield* Interaction.Interaction;
     if (!terminal.terminal.input) {
       return yield* cli.displayPlan(snapshot.repairPlan.native);
     }
     const decision = yield* terminal.prompt
-      .custom(
+      .screen(
         planDecisionScreen({
           plan: snapshot.repairPlan.native,
           message: "Drift detected",

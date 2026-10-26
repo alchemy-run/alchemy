@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { nonPrefixedNodeModules } from "@cloudflare/unenv-preset";
 import type * as vite from "vite";
 import { createPlugin } from "../factory.ts";
 import { parseViteEnvironments, type BasePluginOptions } from "../options.ts";
@@ -21,7 +22,12 @@ const DEFAULT_RESOLVE_EXTENSIONS = [
   ".ctx",
 ];
 
-const TARGET = "es2024";
+// workerd runs `using` declarations natively, so Rolldown builds keep them.
+// esbuild (Vite 6 and 7) has no `es2026`, so it gets `supported.using`.
+const TARGET = "es2026";
+const ESBUILD_TARGET = "es2024";
+const CSS_TARGET = "es2024";
+const ESBUILD_SUPPORTED = { using: true };
 
 export interface OptionsApi {
   input: () => Record<string, string>;
@@ -29,6 +35,26 @@ export interface OptionsApi {
 
 export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (pluginOptions) => {
   let input: Record<string, string> = {};
+  // A framework's own `index` input in the Worker environment (Waku's server
+  // entry) merges over the Worker entry's, so once every config is merged the
+  // Worker entry takes `index` back and the framework's builds under its own
+  // name.
+  const restoreWorkerEntryInput = (config: vite.ResolvedConfig) => {
+    if (typeof pluginOptions.main !== "string" || input.index === undefined) return;
+    const workerEntry = workerEntryId(input.index);
+    const build = config.environments[parseViteEnvironments(pluginOptions)[0]]?.build;
+    for (const options of new Set([build?.rolldownOptions, build?.rollupOptions])) {
+      const current = options?.input;
+      if (!options || !current || typeof current !== "object" || Array.isArray(current)) continue;
+      const displaced = current.index;
+      if (displaced === undefined || displaced === workerEntry) continue;
+      options.input = {
+        ...current,
+        [path.parse(displaced).name || "framework"]: displaced,
+        index: workerEntry,
+      };
+    }
+  };
   return {
     shared: {
       api: {
@@ -48,20 +74,43 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
         options.transform ??= {};
         options.transform.target ??= TARGET;
         options.transform.define ??= {};
-        Object.assign(options.transform.define, getDefine(pluginOptions, "production"));
+        Object.assign(options.transform.define, getDefine(pluginOptions, "production", "wrangler"));
         return options;
       },
     },
     vite: {
+      // On Vite 6 and 7, `vite:esbuild-transpile` lowers every chunk with the
+      // top-level `esbuild` options, which would also leave `using` in the
+      // client bundle. Each environment reads its own `esbuild` first, so
+      // the Worker environments get theirs.
+      configResolved(config) {
+        restoreWorkerEntryInput(config);
+        if (this.meta.rolldownVersion || config.esbuild === false) return;
+        const esbuild = {
+          ...config.esbuild,
+          supported: { ...config.esbuild.supported, ...ESBUILD_SUPPORTED },
+        };
+        for (const name of parseViteEnvironments(pluginOptions)) {
+          const environment = config.environments[name];
+          if (environment) Object.assign(environment, { esbuild });
+        }
+      },
       async config(userConfig) {
         const vite = await import("vite");
         const isRolldown = "rolldownVersion" in this.meta;
         const environmentNames = parseViteEnvironments(pluginOptions);
         const root = path.resolve(userConfig.root ?? ".");
         input = resolveInputPaths(
-          normalizeInput(
-            pluginOptions.main ?? defaultEnvironmentEntries(environmentNames[0], userConfig) ?? {},
-          ),
+          // `main` builds as `index`, `@cloudflare/vite-plugin`'s entry chunk
+          // name, which frameworks read back (RedwoodSDK links
+          // `<outDir>/index.js`).
+          typeof pluginOptions.main === "string"
+            ? { index: pluginOptions.main }
+            : normalizeInput(
+                pluginOptions.main ??
+                  defaultEnvironmentEntries(environmentNames[0], userConfig) ??
+                  {},
+              ),
           root,
         );
         const rollupOptions: vite.Rollup.RollupOptions = {
@@ -71,6 +120,7 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
         const define = getDefine(
           pluginOptions,
           process.env.NODE_ENV || userConfig.mode || "production",
+          "vite",
         );
         const makeEnvironment = ({
           name,
@@ -101,15 +151,22 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
                 false,
               ignoreOutdatedRequests: true,
               entries: asArray(entries)?.map(vite.normalizePath),
+              // Node.js built-ins are never pre-bundled, with or without
+              // `nodejs_compat` (`cloudflare:*` modules: `cloudflare-externals`).
+              exclude: [
+                ...nonPrefixedNodeModules,
+                ...nonPrefixedNodeModules.map((module) => `node:${module}`),
+                "node:sea",
+                "node:sqlite",
+                "node:test",
+                "node:test/reporters",
+              ],
               ...(isRolldown
                 ? {
                     rolldownOptions: {
                       platform: "neutral",
                       resolve: {
-                        conditionNames: [
-                          ...DEFAULT_RESOLVE_CONDITION_NAMES,
-                          "development|production",
-                        ],
+                        conditionNames: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development"],
                         mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
                         extensions: DEFAULT_RESOLVE_EXTENSIONS,
                       },
@@ -122,10 +179,11 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
                 : {
                     esbuildOptions: {
                       platform: "neutral",
-                      conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development|production"],
+                      conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development"],
                       resolveExtensions: DEFAULT_RESOLVE_EXTENSIONS,
                       mainFields: DEFAULT_RESOLVE_MAIN_FIELDS,
-                      target: TARGET,
+                      target: ESBUILD_TARGET,
+                      supported: ESBUILD_SUPPORTED,
                       define,
                     },
                   }),
@@ -138,8 +196,15 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
               ? {
                   build: {
                     ssr: true,
-                    target: TARGET,
+                    target: isRolldown ? TARGET : ESBUILD_TARGET,
+                    cssTarget: CSS_TARGET,
                     emitAssets: true,
+                    manifest: true,
+                    // Source maps upload with the Worker, for readable stack traces.
+                    sourcemap:
+                      userConfig.environments?.[name]?.build?.sourcemap ??
+                      userConfig.build?.sourcemap ??
+                      true,
                     copyPublicDir: false,
                     outDir: getOutputDirectory(userConfig, name),
                     ...(isRolldown
@@ -159,7 +224,16 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
               : {}),
           };
         };
-        const appType = userConfig.appType ?? (Object.keys(input).length === 0 ? "spa" : "custom");
+        // No Worker entry: an assets-only site. Declared `viteEnvironments`
+        // mean a framework plugin supplies the entry later (e.g.
+        // `@vitejs/plugin-rsc` in its own `config` hook).
+        const assetsOnly =
+          Object.keys(input).length === 0 && pluginOptions.viteEnvironments === undefined;
+        // `custom` as `@cloudflare/vite-plugin` sets it: Vite's own SPA/MPA
+        // HTML middleware never answers in dev, so every request it doesn't
+        // serve reaches the Worker's router, which applies the asset rules
+        // (`htmlHandling`, `notFoundHandling`, `runWorkerFirst`).
+        const appType = userConfig.appType ?? "custom";
         return {
           appType,
           builder:
@@ -168,51 +242,125 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
             // `buildApp` orchestrator (e.g. Astro's prerender -> ssr -> client
             // pipeline). Only default it when the resolved user config doesn't
             // already define one.
-            appType === "spa" || userConfig.builder?.buildApp !== undefined
+            userConfig.builder?.buildApp !== undefined
               ? undefined
               : {
-                  // We need to include this for `builder.buildApp()` to work
-                  // because not all frameworks provide it...
-                  buildApp: async (builder) => {
-                    for (const environment of Object.values(builder.environments)) {
-                      // Framework-owned environments we were told to leave
-                      // alone may have no build input; never drive them from
-                      // our default orchestrator.
-                      if (pluginOptions.skipEnvironments?.includes(environment.name)) continue;
-                      // ...however, if your framework does provide a `buildApp` hook,
-                      // this check prevents us from building the environment twice.
-                      if (environment.isBuilt) continue;
-                      // `skipEnvironments` opts out of environments the app
-                      // declared; this covers the one Vite creates unasked.
-                      if (isEntrylessClientEnvironment(environment)) continue;
-                      await builder.build(environment);
-                    }
+                  buildApp: (builder) =>
+                    // An assets-only site builds only its client.
+                    buildApp(builder, assetsOnly ? [] : environmentNames, pluginOptions),
+                },
+          // An assets-only site has no Worker environments, as with
+          // `@cloudflare/vite-plugin`: the client builds to Vite's own outDir.
+          environments: assetsOnly
+            ? undefined
+            : {
+                client: {
+                  build: {
+                    outDir: getOutputDirectory(userConfig, "client"),
                   },
                 },
-          ssr: {
-            noExternal: true,
-            resolve: {
-              conditions: [...DEFAULT_RESOLVE_CONDITION_NAMES, "development|production"],
-            },
-          },
-          environments: {
-            client: {
-              build: {
-                outDir: getOutputDirectory(userConfig, "client"),
+                ...Object.fromEntries(
+                  environmentNames.map((name, index) => [
+                    name,
+                    makeEnvironment({ name, isEntry: index === 0 }),
+                  ]),
+                ),
               },
-            },
-            ...Object.fromEntries(
-              environmentNames.map((name, index) => [
-                name,
-                makeEnvironment({ name, isEntry: index === 0 }),
-              ]),
-            ),
-          },
         };
       },
     },
   };
 });
+
+export const CLIENT_FALLBACK_ENTRY_ID = "virtual:cloudflare/client-fallback-entry";
+const CLIENT_FALLBACK_ENTRY_NAME = "__cloudflare_fallback_entry__";
+
+/**
+ * `@cloudflare/vite-plugin`'s default build: the Worker environments, any
+ * other environment the app declares, then the client. A client with no
+ * entry still builds when it has `public/` files or the Worker imports
+ * assets, so its output holds every static asset; the Worker's imported
+ * assets then move into it.
+ */
+const buildApp = async (
+  builder: vite.ViteBuilder,
+  environmentNames: ReadonlyArray<string>,
+  options: BasePluginOptions,
+) => {
+  const client = builder.environments.client;
+  const workerEnvironments = environmentNames.flatMap((name) => {
+    const environment = builder.environments[name];
+    return environment ? [environment] : [];
+  });
+  const others = Object.values(builder.environments).filter(
+    (environment) =>
+      workerEnvironments.length > 0 &&
+      environment !== client &&
+      !environmentNames.includes(environment.name) &&
+      // Framework-owned environments we were told to leave alone may have
+      // no build input; never drive them from the default orchestrator.
+      !options.skipEnvironments?.includes(environment.name),
+  );
+  for (const environment of [...workerEnvironments, ...others]) {
+    if (!environment.isBuilt) await builder.build(environment);
+  }
+  if (!client || client.isBuilt) return;
+  const entry = workerEnvironments[0];
+  const entryDirectory = entry
+    ? path.resolve(builder.config.root, entry.config.build.outDir)
+    : undefined;
+  const importedAssets = entryDirectory ? readImportedAssets(entryDirectory) : new Set<string>();
+  if (!isEntrylessClientEnvironment(client)) {
+    await builder.build(client);
+  } else if (importedAssets.size > 0 || hasPublicAssets(builder.config)) {
+    client.config.build.rollupOptions = {
+      input: CLIENT_FALLBACK_ENTRY_ID,
+      logLevel: "silent",
+      output: { entryFileNames: CLIENT_FALLBACK_ENTRY_NAME },
+    };
+    await builder.build(client);
+    fs.rmSync(
+      path.resolve(builder.config.root, client.config.build.outDir, CLIENT_FALLBACK_ENTRY_NAME),
+      { force: true },
+    );
+  } else {
+    return;
+  }
+  if (!entryDirectory) return;
+  const clientDirectory = path.resolve(builder.config.root, client.config.build.outDir);
+  for (const asset of importedAssets) {
+    const source = path.join(entryDirectory, asset);
+    const destination = path.join(clientDirectory, asset);
+    if (!fs.existsSync(source)) continue;
+    if (fs.existsSync(destination)) {
+      fs.unlinkSync(source);
+    } else {
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.renameSync(source, destination);
+    }
+  }
+};
+
+/** The assets the Worker's chunks import, from its build manifest. */
+const readImportedAssets = (directory: string): Set<string> => {
+  try {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(directory, ".vite", "manifest.json"), "utf8"),
+    ) as Record<string, { assets?: Array<string> }>;
+    return new Set(Object.values(manifest).flatMap((chunk) => chunk.assets ?? []));
+  } catch {
+    return new Set();
+  }
+};
+
+const hasPublicAssets = ({ publicDir }: { publicDir: string | false }): boolean => {
+  if (!publicDir) return false;
+  try {
+    return fs.readdirSync(publicDir).length > 0;
+  } catch {
+    return false;
+  }
+};
 
 /**
  * Vite always creates a default `client` environment, even for a pure Worker
@@ -287,30 +435,37 @@ const resolveInputPath = (id: string, root: string): string => {
 const wrapInput = (input: Record<string, string>) =>
   Object.fromEntries(Object.entries(input).map(([key, id]) => [key, workerEntryId(id)]));
 
-const getDefine = (options: BasePluginOptions, nodeEnv: string): Record<string, string> => {
-  return {
-    "process.env.NODE_ENV": JSON.stringify(nodeEnv),
-    "global.process.env.NODE_ENV": JSON.stringify(nodeEnv),
-    "globalThis.process.env.NODE_ENV": JSON.stringify(nodeEnv),
-    ...(hasNodejsCompat(options.compatibilityFlags, options.compatibilityDate)
-      ? {}
-      : {
-          "process.env": "{}",
-          "global.process.env": "{}",
-          "globalThis.process.env": "{}",
-        }),
-    ...(options.compatibilityDate && options.compatibilityDate >= "2022-03-21"
-      ? {
-          "navigator.userAgent": '"Cloudflare-Workers"',
-        }
-      : {}),
-    ...(nodeEnv === "production"
-      ? {
-          "import.meta.hot": "false",
-        }
-      : {}),
-  };
-};
+// `bundler` names the reference whose defines to match: Wrangler's own
+// bundler (plain Workers) or `@cloudflare/vite-plugin`, which leaves
+// `navigator.userAgent` to workerd and `import.meta.hot` to Vite.
+const getDefine = (
+  options: BasePluginOptions,
+  nodeEnv: string,
+  bundler: "wrangler" | "vite",
+): Record<string, string> => ({
+  "process.env.NODE_ENV": JSON.stringify(nodeEnv),
+  "global.process.env.NODE_ENV": JSON.stringify(nodeEnv),
+  "globalThis.process.env.NODE_ENV": JSON.stringify(nodeEnv),
+  ...(hasNodejsCompat(options.compatibilityFlags, options.compatibilityDate)
+    ? {}
+    : {
+        "process.env": "{}",
+        "global.process.env": "{}",
+        "globalThis.process.env": "{}",
+      }),
+  ...(bundler === "wrangler" &&
+  options.compatibilityDate &&
+  options.compatibilityDate >= "2022-03-21"
+    ? {
+        "navigator.userAgent": '"Cloudflare-Workers"',
+      }
+    : {}),
+  ...(bundler === "wrangler" && nodeEnv === "production"
+    ? {
+        "import.meta.hot": "false",
+      }
+    : {}),
+});
 
 const getOutputDirectory = (userConfig: vite.UserConfig, environmentName: string) => {
   const rootOutputDirectory = userConfig.build?.outDir ?? "dist";

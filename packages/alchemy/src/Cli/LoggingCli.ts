@@ -9,7 +9,8 @@ import { Cli, type PlanDisplayOptions } from "../Report.ts";
 import type { ApplyEvent, ApplyStatus } from "../Report.ts";
 import { canPromptOnStdin } from "../Util/interactive.ts";
 import { formatResourceTag } from "../Util/ResourceOutput.ts";
-import { ansiFg, colorsEnabled, theme } from "./CliKit/index.ts";
+import { ansiFg, colorsEnabled } from "../Util/Terminal.ts";
+import { theme } from "../Util/Theme.ts";
 import {
   actionStyle,
   applyStatusColor,
@@ -231,13 +232,11 @@ export const LoggingCli = Layer.effect(
                 : { message: "Apply this plan?", initial: true },
             );
           }
-          return yield* Effect.fail(
-            new NonInteractiveTerminal({
-              operation: "approve deployment plan",
-              message:
-                "Cannot approve this operation without terminal input. Pass --yes to continue.",
-            }),
-          );
+          return yield* new NonInteractiveTerminal({
+            operation: "approve deployment plan",
+            message:
+              "Cannot approve this operation without terminal input. Pass --yes to continue.",
+          });
         }),
       displayPlan: (plan, options) =>
         Effect.gen(function* () {

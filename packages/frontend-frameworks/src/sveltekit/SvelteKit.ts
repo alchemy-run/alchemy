@@ -104,6 +104,12 @@ export interface SvelteKitAdapterContext {
          * remote()-lowered bindings; without it the platform is local-only.
          */
         readonly services?: unknown;
+        /**
+         * Absolute path of kit's static directory (`kit.files.assets`), for
+         * a target whose dev platform serves its files (the Cloudflare
+         * target's `ASSETS` binding).
+         */
+        readonly assetsDirectory?: string | undefined;
       }
     | undefined;
 }
@@ -400,9 +406,7 @@ export const make: (
       });
       const target = resolveExportTarget(parsed.exports?.["./vite"]);
       if (target === undefined) {
-        return yield* Effect.fail(
-          fail(`The project's @sveltejs/kit (${kitDirectory}) has no "./vite" export`),
-        );
+        return yield* fail(`The project's @sveltejs/kit (${kitDirectory}) has no "./vite" export`);
       }
       return yield* Effect.tryPromise({
         try: async () =>
@@ -511,9 +515,7 @@ export const make: (
 
       const result = adapter.result.current;
       if (result === undefined) {
-        return yield* Effect.fail(
-          fail("The SvelteKit build completed without running the adapter"),
-        );
+        return yield* fail("The SvelteKit build completed without running the adapter");
       }
 
       const output: FrameworkCore.BuildOutput = {
@@ -546,6 +548,10 @@ export const make: (
           env: options?.dev?.env,
           bindings: options?.dev?.bindings,
           services: options?.dev?.services,
+          assetsDirectory: NodePath.resolve(
+            root,
+            (options?.kit?.files as { assets?: string } | undefined)?.assets ?? "static",
+          ),
         },
       });
       // Registered before the server is acquired so it runs after the server
@@ -589,7 +595,7 @@ export const make: (
       );
       const url = server.resolvedUrls?.local[0];
       if (url === undefined) {
-        return yield* Effect.fail(fail("Could not determine the dev server URL"));
+        return yield* fail("Could not determine the dev server URL");
       }
       return { url };
     });

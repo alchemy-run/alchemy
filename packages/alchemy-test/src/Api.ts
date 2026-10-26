@@ -10,9 +10,9 @@ import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as TestClock from "effect/testing/TestClock";
 import * as TestConsole from "effect/testing/TestConsole";
-import type { Hook, Mode, TestBody } from "./Model.ts";
+import type { Exclusive, Hook, Mode, TestBody } from "./Model.ts";
 import { makeSuite } from "./Model.ts";
-import { currentSuite, withSuite } from "./Registry.ts";
+import { currentFileSuite, currentSuite, withSuite } from "./Registry.ts";
 import { mergeTags, type Tags } from "./Tags.ts";
 
 // ---------------------------------------------------------------------------
@@ -30,13 +30,17 @@ export type TestOptions =
       readonly retry?: number;
       readonly repeats?: number;
       /**
-       * Run this test with the whole-process write lock — no other test in
-       * the run executes concurrently with it. Use for tests that mutate
-       * process-global state (e.g. `process.env.PATH`): the runner executes
-       * everything in ONE bun process, so such mutations are visible to every
-       * other running test.
+       * `true` runs this test with the whole-process write lock — no other
+       * test in the run executes concurrently with it. Use for tests that
+       * mutate process-global state (e.g. `process.env.PATH`): the runner
+       * executes everything in ONE bun process, so such mutations are
+       * visible to every other running test.
+       *
+       * A label (e.g. `"hetzner"`) only serializes the test with others
+       * holding the same label, so unrelated tests keep running. Use it for
+       * a shared cloud quota.
        */
-      readonly exclusive?: boolean;
+      readonly exclusive?: Exclusive;
     };
 
 export const timeoutOf = (options?: TestOptions): number | undefined =>
@@ -45,8 +49,8 @@ export const timeoutOf = (options?: TestOptions): number | undefined =>
 export const retryOf = (options?: TestOptions): number | undefined =>
   typeof options === "object" && options !== null ? options.retry : undefined;
 
-export const exclusiveOf = (options?: TestOptions): boolean =>
-  typeof options === "object" && options !== null && options.exclusive === true;
+export const exclusiveOf = (options?: TestOptions): Exclusive =>
+  typeof options === "object" && options !== null ? (options.exclusive ?? false) : false;
 
 export const tagsOf = (options?: TestOptions): Tags | undefined =>
   typeof options === "object" ? options?.tags : undefined;
@@ -182,7 +186,7 @@ export interface RegisterTestOptions {
   readonly name: string;
   readonly mode: Mode;
   readonly fails?: boolean;
-  readonly exclusive?: boolean;
+  readonly exclusive?: Exclusive;
   readonly retry?: number | undefined;
   readonly timeout?: number | undefined;
   readonly body: TestBody | undefined;
@@ -415,6 +419,11 @@ export const test: TestFn = it;
 
 export type HookKind = "beforeAll" | "afterAll" | "beforeEach" | "afterEach";
 
+/** Framework cleanup after user teardown, including files with no runnable tests. */
+export const registerFileCleanup = (hook: Hook): void => {
+  currentFileSuite().cleanups.push(hook);
+};
+
 /** Low-level hook registration with an Effect body — used by adapters. */
 export const registerHook = (kind: HookKind, hook: Hook): void => {
   currentSuite()[kind].push(hook);
@@ -494,10 +503,12 @@ export const layer =
     });
 
     const register = (): void => {
-      registerHook("afterAll", {
+      const cleanup: Hook = {
         body: () => Scope.close(scope, Exit.void),
         timeout: options?.timeout,
-      });
+      };
+      registerHook("afterAll", cleanup);
+      registerFileCleanup(cleanup);
       const f = (args.length === 1 ? args[0] : args[1]) as (it: LayerMethods<R>) => void;
       f(makeMethods());
     };

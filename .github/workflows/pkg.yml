@@ -72,6 +72,13 @@ jobs:
       - name: Build packages
         run: pnpm build:pkg
 
+      # The build emits plain tsc output for distilled SDKs that had no `lib/`
+      # when install's `ensure:built` ran (such as iceberg, referenced only by
+      # @alchemy.run/cloudflare). Bundle them now so their tarballs ship the
+      # `distilled-lazy` files their exports point at.
+      - name: Bundle distilled packages
+        run: pnpm ensure:built
+
       # Workspace dependencies of the listed packages, such as the
       # @distilled.cloud SDKs, are packed automatically under a collapsed
       # "Transitive Dependencies" group. Keep the @alchemy.run
@@ -83,7 +90,7 @@ jobs:
           ${{ contains(github.event.pull_request.labels.*.name, 'force-ci') && '--all' || '' }}
           --rebuild-all-path 'scripts/package-build.ts'
           --group 'alchemy=./packages/alchemy'
-          --group '@alchemy.run[Collapsed]=./packages/{better-auth,cloudflare-runtime,frontend-frameworks,node-utils,floci,pkg}'
+          --group '@alchemy.run[Collapsed]=./packages/{better-auth,git,drizzle,sqlite,acme,axiom,doppler,infisical,turso,planetscale,neon,prisma,hetzner,railway,fly,github,stripe,cloudflare,gcp,aws,domain,kubernetes,docker,redis,sql,cloudflare-runtime,frontend-frameworks,node-utils,pkg}'
 
       - name: Vouch for the manifest
         if: steps.pack.outputs.package-count != '0'

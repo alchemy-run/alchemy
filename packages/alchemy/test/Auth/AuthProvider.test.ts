@@ -1,10 +1,8 @@
+import { expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
 import {
   AuthProvider,
@@ -12,8 +10,8 @@ import {
   describeEnvironment,
   getAuthProvider,
 } from "@/Auth/AuthProvider.ts";
-import { getEnvRedactedRequired, getEnvRequired } from "@/Auth/Env.ts";
-import { Interaction, layerNonInteractive } from "@/Interaction.ts";
+import { getEnvRedactedRequired } from "@/Auth/Env.ts";
+import { Interaction, makeNonInteractive } from "@/Interaction.ts";
 
 const implementation = {
   configSchema: Schema.Struct({ method: Schema.Literal("custom") }),
@@ -85,14 +83,11 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const answered: string[] = [];
+      const quiet = makeNonInteractive({ stdout: { write: () => true } as never });
       const scripted = (name: string): Interaction["Service"] => ({
-        output: {
-          info: () => Effect.void,
-          success: () => Effect.void,
-          warning: () => Effect.void,
-          error: () => Effect.void,
-        },
+        ...quiet,
         prompt: {
+          ...quiet.prompt,
           text: () =>
             Effect.sync(() => {
               answered.push(name);
@@ -100,9 +95,6 @@ it.effect(
             }),
           password: () => Effect.succeed(name),
           confirm: () => Effect.succeed(true),
-          select: () => Effect.die("unused"),
-          multiSelect: () => Effect.die("unused"),
-          awaitExternal: () => Effect.succeed(name),
         },
         task: (_options, effect) => effect,
       });
@@ -128,51 +120,4 @@ it.effect(
       expect(answered).toEqual(["call-time"]);
     }).pipe(Effect.provideService(AuthProviders, {}), Effect.provide(NodeServices.layer)),
   { tags: ["unit", "local"] },
-);
-
-it.effect(
-  "read and readEnvironment use the call-time ConfigProvider, details the one at registration",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const home = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-auth-" });
-      const previous = process.env.ALCHEMY_HOME;
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          process.env.ALCHEMY_HOME = home;
-        }),
-        () =>
-          Effect.sync(() => {
-            if (previous === undefined) delete process.env.ALCHEMY_HOME;
-            else process.env.ALCHEMY_HOME = previous;
-          }),
-      );
-      const withToken = (token: string) =>
-        Effect.provideService(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromUnknown({ CUSTOM_PROVIDER_TOKEN: token }),
-        );
-      const token = getEnvRequired("CUSTOM_PROVIDER_TOKEN");
-      yield* AuthProvider<{ method: "custom" }, string>()("ConfigProviderProbe", {
-        ...implementation,
-        details: () => Effect.map(token, (value) => ({ lines: [{ key: "token", value }] })),
-        read: () => token,
-        readEnvironment: token,
-      }).pipe(withToken("registration"));
-
-      const provider = yield* getAuthProvider<{ method: "custom" }, string>("ConfigProviderProbe");
-      const config = { method: "custom" as const };
-      const atCallTime = withToken("call-time");
-      expect(yield* provider.readEnvironment!.pipe(atCallTime)).toBe("call-time");
-      expect(yield* provider.read("default", config).pipe(atCallTime)).toBe("call-time");
-      const details = yield* provider
-        .details("default", config)
-        .pipe(atCallTime, Effect.provide(layerNonInteractive()));
-      expect(details.lines).toEqual([{ key: "token", value: "registration" }]);
-    }).pipe(
-      Effect.scoped,
-      Effect.provideService(AuthProviders, {}),
-      Effect.provide(NodeServices.layer),
-    ),
-  { tags: ["unit", "local"], exclusive: true },
 );

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -58,11 +58,13 @@ describe("data utilities", { tags: ["unit", "local"] }, () => {
       unwrapRedacted({
         value: Redacted.make("secret"),
         nested: [Redacted.make("nested")],
+        wrapped: Redacted.make({ token: Redacted.make("s3cr3t") }),
         date,
       }),
     ).toEqual({
       value: "secret",
       nested: ["nested"],
+      wrapped: { token: "s3cr3t" },
       date,
     });
   });
