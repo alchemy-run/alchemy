@@ -1,10 +1,13 @@
 import * as AWS from "@alchemy.run/aws";
 import { Cluster } from "@alchemy.run/aws/ECS/Cluster";
+import { expect } from "@alchemy.run/test";
 import * as ecs from "@distilled.cloud/aws/ecs";
-import { expect } from "alchemy-test";
+import * as iam from "@distilled.cloud/aws/iam";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -41,4 +44,96 @@ test.provider(
       expect(afterList.some((c) => c.clusterArn === cluster.clusterArn)).toBe(false);
     }),
   { tags: ["provider:aws", "provider:aws:ecs", "live"] },
+);
+
+// #1968: ECS fills in account-default settings (containerInsights) the props
+// never declared; an untouched cluster must not read as drifted.
+test.provider(
+  "an untouched cluster reports no drift",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cluster("DriftCluster", {});
+        }),
+      );
+
+      const result = yield* Drift.detect({ name: stack.name, stage: stack.stage }).pipe(
+        Effect.provide(stack.state),
+      );
+      expect(result.resources.DriftCluster?.action).toBe("unchanged");
+      expect(result.resources.DriftCluster?.attr.settings).not.toEqual([]);
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:ecs", "live"] },
+);
+
+// Regression for #1558: in an account that has never run ECS, CreateCluster
+// creates the AWSServiceRoleForECS service-linked role asynchronously, and the
+// immediate PutClusterCapacityProviders failed with "Unable to assume the
+// service linked role". Delete the role out of band to recreate the fresh-
+// account state, then deploy a cluster with capacity providers.
+test.provider(
+  "attaches capacity providers when the ECS service-linked role does not exist yet",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deletion = yield* iam
+        .deleteServiceLinkedRole({ RoleName: "AWSServiceRoleForECS" })
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+      if (deletion) {
+        const { Status, Reason } = yield* iam
+          .getServiceLinkedRoleDeletionStatus({ DeletionTaskId: deletion.DeletionTaskId })
+          .pipe(
+            // The deletion task is not readable immediately after it starts.
+            Effect.retry({
+              while: (e) => e._tag === "NoSuchEntityException",
+              schedule: Schedule.spaced("2 seconds"),
+              times: 10,
+            }),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: ({ Status }) => Status === "SUCCEEDED" || Status === "FAILED",
+              times: 30,
+            }),
+          );
+        // IAM refuses to delete the role while any ECS resource in the
+        // account still uses it; the deploy below still has to converge.
+        if (Status !== "SUCCEEDED") {
+          yield* Effect.logWarning(
+            `AWSServiceRoleForECS deletion ${Status}; fresh-account state not reproduced`,
+            Reason,
+          );
+        }
+      }
+
+      const cluster = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cluster("FreshAccountCluster", {
+            capacityProviders: ["FARGATE", "FARGATE_SPOT"],
+            defaultCapacityProviderStrategy: [{ capacityProvider: "FARGATE_SPOT", weight: 1 }],
+          });
+        }),
+      );
+
+      const observed = (yield* ecs.describeClusters({ clusters: [cluster.clusterArn] }))
+        .clusters?.[0];
+      expect(observed?.status).toBe("ACTIVE");
+      expect([...(observed?.capacityProviders ?? [])].sort()).toEqual(["FARGATE", "FARGATE_SPOT"]);
+      expect(observed?.defaultCapacityProviderStrategy?.[0]?.capacityProvider).toBe("FARGATE_SPOT");
+
+      yield* stack.destroy();
+
+      const after = yield* ecs.describeClusters({ clusters: [cluster.clusterArn] });
+      expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(false);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ecs", "live"],
+    exclusive: "aws:ecs-service-linked-role",
+    timeout: 240_000,
+  },
 );

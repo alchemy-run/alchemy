@@ -928,28 +928,23 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * **Example:** Install `pg` unbundled
- * `pg` is CommonJS. Rolldown's interop turns `Client` into a namespace.
- * Install it into the image so `@effect/sql-pg` / `Drizzle.Postgres` load
- * it with Node's CJS semantics — same `build.install` as Lambda.
+ * **Example:** Install a native package unbundled
+ * `build.install` runs `npm install` in the image for packages that
+ * cannot be bundled, such as native addons — same `build.install` as
+ * Lambda.
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
  *   {
  *     main: import.meta.url,
  *     port: 3000,
- *     build: { install: ["pg"] },
+ *     build: { install: ["sharp"] },
  *   },
  *   Effect.gen(function* () {
- *     const conn = yield* Fly.ConnectPostgres(Db);
- *     const db = yield* Drizzle.Postgres(conn.connectionString);
  *     return {
- *       fetch: Effect.gen(function* () {
- *         const rows = yield* db.execute("select 1 as ok");
- *         return HttpServerResponse.json({ rows });
- *       }),
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
  *     };
- *   }).pipe(Effect.provide(Fly.ConnectPostgresHttp)),
+ *   }),
  * ) {}
  * ```
  *

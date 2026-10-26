@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/fly",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.84",
   "description": "Fly.io apps, machines and Postgres for Alchemy.",
   "keywords": [
     "alchemy",
@@ -52,6 +52,7 @@
         "worker": "./src/Website/index.ts",
         "default": "./lib/Website/index.js"
       },
+      "./internal/*": null,
       "./*": {
         "types": "./lib/*.d.ts",
         "bun": "./src/*.ts",

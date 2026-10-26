@@ -84,6 +84,12 @@ export interface MicrovmImageProps {
    * code is tree-shaken. `effect`, alchemy, and `@distilled.cloud` are
    * marked pure so unused parts prune more aggressively. List extra
    * packages with `pure.packages`, or disable with `pure: false`.
+   *
+   * The program is minified with `keepNames` by default. On the Node
+   * runtime a source map ships with it and stack traces map back to your
+   * source; Bun ignores external source maps, so its traces keep function
+   * names but point into the bundle. Set `output: { minify: false }` to
+   * ship readable code.
    */
   build?: Bundle.BundleConfig;
 

@@ -723,6 +723,24 @@ export const declaredSecurityGroupRuleIds = Effect.fn(function* (groupId: string
   return ids;
 });
 
+// The rules this stack's persisted SecurityGroupRule rows own on `groupId`.
+// `read` has no program to evaluate (drift runs from state alone), so it
+// trusts the state store rather than the current declarations.
+export const persistedSecurityGroupRuleIds = Effect.fn(function* (groupId: string) {
+  const stack = yield* Stack;
+  const state = yield* yield* State;
+  const ids = new Set<string>();
+  for (const fqn of yield* state.list({ stack: stack.name, stage: stack.stage })) {
+    const row = yield* state.get({ stack: stack.name, stage: stack.stage, fqn });
+    if (!row || isActionState(row) || row.resourceType !== "AWS.EC2.SecurityGroupRule") continue;
+    const attrs = row.attr ?? ("old" in row ? row.old.attr : undefined);
+    if (attrs?.groupId === groupId && typeof attrs.securityGroupRuleId === "string") {
+      ids.add(attrs.securityGroupRuleId);
+    }
+  }
+  return ids;
+});
+
 export const resolveSecurityGroupRules = (
   rules: SecurityGroupRuleData[] | undefined,
   isEgress: boolean,

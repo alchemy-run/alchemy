@@ -2,13 +2,13 @@ import * as Namespace from "alchemy/Namespace";
 import type lambda from "aws-lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
+import { processBatch } from "../internal/EventSourceBatch.ts";
 import type { Stream as KinesisStream } from "../Kinesis/Stream.ts";
 import {
   StreamEventSource as KinesisStreamEventSource,
-  type KinesisEventRecord,
   type StreamEventSourceProps,
   type StreamEventSourceService,
+  type StreamRecordsHandler,
 } from "../Kinesis/StreamEventSource.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";
@@ -25,12 +25,10 @@ export const StreamEventSource = Layer.effect(
     const host = yield* Lambda.eventSourceHost("AWS.Lambda.StreamEventSource");
     const Mapping = yield* EventSourceMapping;
 
-    return Effect.fn(function* <StreamReq = never, Req = never>(
+    return Effect.fn(function* <E = never, Req = never>(
       stream: KinesisStream,
       props: StreamEventSourceProps,
-      process: (
-        stream: Stream.Stream<KinesisEventRecord, never, StreamReq>,
-      ) => Effect.Effect<void, never, Req>,
+      process: StreamRecordsHandler<E, Req>,
     ) {
       const StreamArn = yield* stream.streamArn;
 
@@ -60,7 +58,7 @@ export const StreamEventSource = Layer.effect(
             yield* Mapping(
               `AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${stream.LogicalId})`,
               {
-                functionName: host.functionName,
+                functionName: Lambda.qualifiedNameOf(host),
                 eventSourceArn: stream.streamArn,
                 batchSize: props.batchSize,
                 maximumBatchingWindow: props.maximumBatchingWindow,
@@ -93,7 +91,14 @@ export const StreamEventSource = Layer.effect(
                 (record) => record.eventSourceARN?.startsWith(streamArn) === true,
               );
               if (records.length > 0) {
-                return process(Stream.fromArray(records as KinesisEventRecord[])).pipe(
+                return process({ Records: records }).pipe(
+                  Effect.map((response) => response ?? { batchItemFailures: [] }),
+                  processBatch({
+                    system: "aws_kinesis",
+                    destination: streamArn.split("/")[1] ?? streamArn,
+                    count: records.length,
+                  }),
+                  // A failure fails the invocation, so Lambda retries the whole batch.
                   Effect.orDie,
                 );
               }

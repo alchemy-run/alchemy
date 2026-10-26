@@ -1,5 +1,5 @@
 import * as Planetscale from "@alchemy.run/planetscale";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Plan from "alchemy/Plan";
 import * as Stack from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";

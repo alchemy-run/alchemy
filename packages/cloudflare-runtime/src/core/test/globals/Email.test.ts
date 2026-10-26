@@ -177,6 +177,24 @@ layer(localRuntimeLayer)("inbound email trigger route", (it) => {
     }),
   );
 
+  // Miniflare's current path (`CorePaths.EMAIL`).
+  it.effect("dispatches an email sent to Miniflare's /cdn-cgi/local/email path", () =>
+    Effect.gen(function* () {
+      const worker = yield* startTestWorker({
+        name: "email-dispatch-local-path",
+        compatibilityDate,
+        compatibilityFlags: [],
+        bindings: [],
+        modules: [...workerModules(RECORDING_EMAIL_WORKER)],
+      });
+      const res = yield* worker.fetch(
+        `/cdn-cgi/local/email?${emailParams("someone@example.com", "someone-else@example.com")}`,
+        { method: "POST", body: VALID_EMAIL },
+      );
+      expect(yield* Effect.promise(() => res.text())).toBe("Worker successfully processed email");
+    }),
+  );
+
   it.effect("rejects a request without from/to parameters", () =>
     Effect.gen(function* () {
       // The missing-body branch of the same 400 isn't separately testable:
@@ -372,7 +390,7 @@ layer(localRuntimeLayer)("inbound email trigger route", (it) => {
       });
       expect(res.status).toBe(404);
       expect(yield* Effect.promise(() => res.text())).toBe(
-        '"/cdn-cgi/handler/bogus" is not a valid handler. Did you mean to use "/cdn-cgi/handler/scheduled" or "/cdn-cgi/handler/email"?',
+        '"/cdn-cgi/handler/bogus" is not a valid handler. Did you mean to use "/cdn-cgi/local/scheduled" or "/cdn-cgi/local/email"?',
       );
     }),
   );

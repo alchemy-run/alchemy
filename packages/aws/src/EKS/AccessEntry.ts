@@ -34,7 +34,8 @@ export interface AccessEntryProps {
    */
   kubernetesGroups?: string[];
   /**
-   * Optional username to map inside Kubernetes.
+   * Optional username to map inside Kubernetes. If omitted, EKS generates one,
+   * and removing a username you set resets it to the generated default.
    */
   username?: string;
   /**
@@ -172,7 +173,7 @@ export const AccessEntryProvider = () =>
       if (!state) return undefined;
       return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
     }),
-    reconcile: Effect.fn(function* ({ id, news, session }) {
+    reconcile: Effect.fn(function* ({ id, news, olds, session }) {
       const clusterName = news.clusterName as string;
       const principalArn = news.principalArn as string;
       const desiredTags = {
@@ -188,8 +189,9 @@ export const AccessEntryProvider = () =>
 
       // Ensure — create the entry if missing. Tolerate
       // `ResourceInUseException` as a race with a peer reconciler.
+      let created = false;
       if (!state) {
-        yield* eks
+        created = yield* eks
           .createAccessEntry({
             clusterName,
             principalArn,
@@ -198,7 +200,10 @@ export const AccessEntryProvider = () =>
             type: news.type,
             tags: desiredTags,
           })
-          .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
+          .pipe(
+            Effect.as(true),
+            Effect.catchTag("ResourceInUseException", () => Effect.succeed(false)),
+          );
 
         state = yield* readAccessEntry({
           clusterName,
@@ -212,13 +217,20 @@ export const AccessEntryProvider = () =>
         }
       }
 
-      // Sync kubernetesGroups + username — observed ↔ desired.
-      const observedGroups = state.kubernetesGroups ?? [];
+      // Sync kubernetesGroups + username — observed ↔ desired. Groups are a
+      // set. An update that omits the username resets it to the EKS-generated
+      // default, which can't be told apart from a custom one by observation.
+      // So an omitted username is only re-sent when one may have been set:
+      // a username in `olds`, or an adopted entry this reconcile did not create.
       const desiredGroups = news.kubernetesGroups ?? [];
-      if (
-        JSON.stringify(observedGroups) !== JSON.stringify(desiredGroups) ||
-        state.username !== news.username
-      ) {
+      const groupsChanged =
+        JSON.stringify([...state.kubernetesGroups].sort()) !==
+        JSON.stringify([...desiredGroups].sort());
+      const usernameChanged =
+        news.username !== undefined
+          ? state.username !== news.username
+          : !created && (olds === undefined || olds.username !== undefined);
+      if (groupsChanged || usernameChanged) {
         yield* eks.updateAccessEntry({
           clusterName,
           principalArn,
@@ -263,8 +275,13 @@ export const AccessEntryProvider = () =>
         }
       }
 
+      // EKS keeps one association per policy ARN and `associateAccessPolicy`
+      // replaces its scope in place, while `disassociateAccessPolicy` takes no
+      // scope. Disassociating a still-desired ARN would undo the associate
+      // above, so only disassociate ARNs that are no longer desired.
+      const desiredPolicyArns = new Set(desiredPolicies.map((policy) => policy.policyArn));
       for (const [key, policy] of observedPolicyMap) {
-        if (!desiredPolicyMap.has(key)) {
+        if (!desiredPolicyMap.has(key) && !desiredPolicyArns.has(policy.policyArn)) {
           yield* eks.disassociateAccessPolicy({
             clusterName,
             principalArn,
@@ -304,9 +321,14 @@ const normalizeTags = (tags: Record<string, string | undefined> | undefined) =>
     Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
+// EKS reports a cluster scope as `{ type: "cluster", namespaces: [] }`, so
+// compare scopes in one canonical shape rather than as raw JSON.
+const scopeKey = (scope: eks.AccessScope) =>
+  JSON.stringify({ type: scope.type, namespaces: [...(scope.namespaces ?? [])].sort() });
+
 const comparePolicyAssociation = (a: AccessPolicyAssociation, b: AccessPolicyAssociation) =>
   a.policyArn.localeCompare(b.policyArn) ||
-  JSON.stringify(a.accessScope).localeCompare(JSON.stringify(b.accessScope));
+  scopeKey(a.accessScope).localeCompare(scopeKey(b.accessScope));
 
 const normalizeAccessPolicies = (
   policies: ReadonlyArray<AccessPolicyAssociation | eks.AssociatedAccessPolicy> | undefined,
@@ -325,7 +347,7 @@ const normalizeAccessPolicies = (
     .sort(comparePolicyAssociation);
 
 const policyKey = (policy: AccessPolicyAssociation) =>
-  `${policy.policyArn}::${JSON.stringify(policy.accessScope)}`;
+  `${policy.policyArn}::${scopeKey(policy.accessScope)}`;
 
 const listAccessPolicies = Effect.fn(function* ({
   clusterName,

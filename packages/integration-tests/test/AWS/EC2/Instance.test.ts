@@ -1,12 +1,13 @@
 import * as AWS from "@alchemy.run/aws";
 import { amazonLinux2023, Instance, Subnet, Vpc, type InstanceProps } from "@alchemy.run/aws/EC2";
 import { Queue } from "@alchemy.run/aws/SQS";
+import { describe, expect } from "@alchemy.run/test";
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import { describe, expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import { assertInstanceTerminated, assertVpcGone } from "./Gone.ts";
 import * as Test from "./VpcTest.ts";
@@ -62,6 +63,74 @@ describe.sequential("Instance", { tags: ["provider:aws", "provider:aws:ec2", "li
         yield* assertVpcGone(deployed.vpc.vpcId);
       }).pipe(logLevel),
     { timeout: 240_000 },
+  );
+
+  // Metadata options are applied by RunInstances at launch and updated in
+  // place via ModifyInstanceMetadataOptions — the instance id must not change.
+  test.provider(
+    "metadataOptions apply at launch and update in place",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const imageId = amazonLinux2023();
+
+        const program = (metadataOptions: InstanceProps["metadataOptions"]) =>
+          Effect.gen(function* () {
+            const vpc = yield* Vpc("MetadataInstanceVpc", { cidrBlock: "10.0.0.0/16" });
+            const subnet = yield* Subnet("MetadataInstanceSubnet", {
+              vpcId: vpc.vpcId,
+              cidrBlock: "10.0.1.0/24",
+            });
+            const instance = yield* Instance("MetadataInstance", {
+              imageId,
+              instanceType: "t3.micro",
+              subnetId: subnet.subnetId,
+              metadataOptions,
+            });
+            return { vpc, instance };
+          });
+
+        const observeMetadata = (instanceId: string) =>
+          ec2
+            .describeInstances({ InstanceIds: [instanceId] })
+            .pipe(Effect.map((r) => r.Reservations?.[0]?.Instances?.[0]?.MetadataOptions));
+
+        const first = yield* stack.deploy(
+          program({ httpTokens: "required", httpPutResponseHopLimit: 1 }),
+        );
+        expect(yield* observeMetadata(first.instance.instanceId)).toMatchObject({
+          HttpTokens: "required",
+          HttpPutResponseHopLimit: 1,
+        });
+
+        const next = program({
+          httpTokens: "required",
+          httpPutResponseHopLimit: 2,
+          instanceMetadataTags: "enabled",
+        });
+        const plan = yield* stack.plan(next);
+        expect(plan.resources.MetadataInstance).toMatchObject({ action: "update" });
+
+        const second = yield* stack.deploy(next);
+        expect(second.instance.instanceId).toBe(first.instance.instanceId);
+        expect(yield* observeMetadata(second.instance.instanceId)).toMatchObject({
+          HttpTokens: "required",
+          HttpPutResponseHopLimit: 2,
+          InstanceMetadataTags: "enabled",
+        });
+        expect(second.instance.metadataOptions).toMatchObject({
+          httpTokens: "required",
+          httpPutResponseHopLimit: 2,
+          instanceMetadataTags: "enabled",
+        });
+
+        yield* stack.destroy();
+
+        yield* assertInstanceTerminated(second.instance.instanceId);
+        yield* assertVpcGone(second.vpc.vpcId);
+      }).pipe(logLevel),
+    { timeout: 300_000 },
   );
 
   // Replacement must launch a distinct physical instance. The create phase of a
@@ -188,6 +257,53 @@ echo ${queue.queueUrl}
         yield* assertVpcGone(second.vpc.vpcId);
       }).pipe(logLevel),
     { timeout: 600_000 },
+  );
+
+  // A Redacted userData is revealed only for RunInstances and compared by
+  // value: the copy decoded from state is a new object, which must not
+  // replace the instance on every deploy.
+  test.provider(
+    "accepts Redacted userData and compares it by value",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const program = (token: string) =>
+          Effect.gen(function* () {
+            const vpc = yield* Vpc("RedactedUserDataVpc", { cidrBlock: "10.0.0.0/16" });
+            const subnet = yield* Subnet("RedactedUserDataSubnet", {
+              vpcId: vpc.vpcId,
+              cidrBlock: "10.0.1.0/24",
+            });
+            const instance = yield* Instance("RedactedUserDataInstance", {
+              imageId: amazonLinux2023(),
+              instanceType: "t3.micro",
+              subnetId: subnet.subnetId,
+              userData: Redacted.make(`#!/bin/bash\necho TOKEN=${token}\n`),
+            });
+            return { vpc, instance };
+          });
+
+        const first = yield* stack.deploy(program("one"));
+        const userData = yield* ec2.describeInstanceAttribute({
+          InstanceId: first.instance.instanceId,
+          Attribute: "userData",
+        });
+        const script = yield* Effect.sync(() =>
+          Buffer.from(userData.UserData?.Value ?? "", "base64").toString("utf8"),
+        );
+        expect(script).toContain("TOKEN=one");
+
+        const unchanged = yield* stack.plan(program("one"));
+        expect(unchanged.resources.RedactedUserDataInstance?.action).toBe("noop");
+        const changed = yield* stack.plan(program("two"));
+        expect(changed.resources.RedactedUserDataInstance?.action).toBe("replace");
+
+        yield* stack.destroy();
+        yield* assertInstanceTerminated(first.instance.instanceId);
+        yield* assertVpcGone(first.vpc.vpcId);
+      }).pipe(logLevel),
+    { timeout: 300_000 },
   );
 
   const fixedIpProgram = (props: Partial<InstanceProps> = {}) =>

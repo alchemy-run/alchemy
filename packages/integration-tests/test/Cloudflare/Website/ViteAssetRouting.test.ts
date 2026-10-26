@@ -1,6 +1,7 @@
+import * as NodeNet from "node:net";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import { describe } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -96,6 +97,39 @@ const routingTests = (
     );
   }
 };
+
+// The response head as a browser reads it: repeated header lines joined with
+// `, `. Read over a raw socket because Bun's HTTP clients keep only the last
+// of repeated lines, which Node's dev server sends for an array value.
+const rawHeaders = (url: string) =>
+  Effect.promise(
+    () =>
+      new Promise<Record<string, string>>((resolve, reject) => {
+        const { hostname, port, pathname } = new URL(url);
+        const socket = NodeNet.connect(Number(port), hostname, () =>
+          socket.write(
+            `GET ${pathname} HTTP/1.1\r\nHost: ${hostname}:${port}\r\nConnection: close\r\n\r\n`,
+          ),
+        );
+        let head = "";
+        socket.setEncoding("utf8");
+        socket.on("data", (chunk: string) => {
+          head += chunk;
+          const end = head.indexOf("\r\n\r\n");
+          if (end === -1) return;
+          socket.destroy();
+          const headers: Record<string, string> = {};
+          for (const line of head.slice(0, end).split("\r\n").slice(1)) {
+            const colon = line.indexOf(":");
+            const name = line.slice(0, colon).trim().toLowerCase();
+            const value = line.slice(colon + 1).trim();
+            headers[name] = headers[name] === undefined ? value : `${headers[name]}, ${value}`;
+          }
+          resolve(headers);
+        });
+        socket.on("error", reject);
+      }),
+  );
 
 // A browser navigation; the plugin's specs use `page.goto` for these.
 const navigate = { "sec-fetch-mode": "navigate", accept: "text/html" };
@@ -224,11 +258,17 @@ describe.concurrent(
       },
       (url) =>
         Effect.forEach(["/", "/vite.svg"], (path) =>
-          Effect.all([
-            expectHeader(`${url}${path}`, "custom-string", "string-value"),
-            expectHeader(`${url}${path}`, "custom-string-array", "one, two, three"),
-            expectHeader(`${url}${path}`, "custom-number", "123"),
-          ]),
+          rawHeaders(`${url}${path}`).pipe(
+            Effect.tap((headers) =>
+              Effect.sync(() =>
+                expect({
+                  string: headers["custom-string"],
+                  array: headers["custom-string-array"],
+                  number: headers["custom-number"],
+                }).toEqual({ string: "string-value", array: "one, two, three", number: "123" }),
+              ),
+            ),
+          ),
         ),
       ["dev"],
     );

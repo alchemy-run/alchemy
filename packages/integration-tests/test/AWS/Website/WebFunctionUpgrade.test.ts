@@ -10,13 +10,15 @@ import { spawn } from "node:child_process";
  * the old functions must be deleted.
  */
 import * as AWS from "@alchemy.run/aws";
+import { AWSEnvironment } from "@alchemy.run/aws/Environment";
+import { expect } from "@alchemy.run/test";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import effectPackage from "effect/package.json" with { type: "json" };
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
@@ -47,13 +49,12 @@ const platformPeers = {
  * Run a command to completion without blocking the runner's event loop.
  * Fails with the combined output on a non-zero exit.
  */
-const run = (options: { cmd: string; args: string[]; cwd: string }) =>
+const run = (options: { cmd: string; args: string[]; cwd: string; env: Record<string, string> }) =>
   Effect.callback<string, Error>((resume) => {
     const child = spawn(options.cmd, options.args, {
       cwd: options.cwd,
-      // `CI=1` keeps both CLIs non-interactive; AWS credentials come from
-      // the environment, which every version reads.
-      env: { ...process.env, NO_COLOR: "1", CI: "1" },
+      // `CI=1` keeps both CLIs non-interactive.
+      env: { ...process.env, ...options.env, NO_COLOR: "1", CI: "1" },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let output = "";
@@ -151,6 +152,19 @@ for (const upgrade of cases) {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
 
+        // Both CLIs read AWS credentials from the environment; under `CI=1`
+        // the published one does not fall back to an SSO profile.
+        const aws = yield* AWSEnvironment.current;
+        const credentials = yield* aws.credentials;
+        const awsEnv: Record<string, string> = {
+          AWS_ACCESS_KEY_ID: Redacted.value(credentials.accessKeyId),
+          AWS_SECRET_ACCESS_KEY: Redacted.value(credentials.secretAccessKey),
+          ...(credentials.sessionToken
+            ? { AWS_SESSION_TOKEN: Redacted.value(credentials.sessionToken) }
+            : {}),
+          AWS_REGION: aws.region,
+        };
+
         const dir = yield* cloneFixture(path.join(fixtures, upgrade.fixture), {
           prefix: `alchemy-wf-upgrade-${upgrade.fixture}-`,
           tempRoot: upgrade.tempRoot,
@@ -169,12 +183,14 @@ for (const upgrade of cases) {
           cmd: "bun",
           args: [workspaceCli, "destroy", "./alchemy.current.run.ts", "--stage", STAGE, "--yes"],
           cwd: dir,
+          env: awsEnv,
         }).pipe(
           Effect.catch(() =>
             run({
               cmd: "bun",
               args: ["node_modules/alchemy/bin/cli.js", "destroy", "--stage", STAGE, "--yes"],
               cwd: dir,
+              env: awsEnv,
             }),
           ),
         );
@@ -240,11 +256,12 @@ for (const upgrade of cases) {
           }
 
           // ── Phase 1: deploy with the published version ────────────────────
-          yield* run({ cmd: "bun", args: upgrade.install, cwd: dir });
+          yield* run({ cmd: "bun", args: upgrade.install, cwd: dir, env: awsEnv });
           yield* run({
             cmd: "bun",
             args: ["node_modules/alchemy/bin/cli.js", "deploy", "--stage", STAGE, "--yes"],
             cwd: dir,
+            env: awsEnv,
           });
 
           for (const { from } of upgrade.moved) {
@@ -270,6 +287,7 @@ for (const upgrade of cases) {
             cmd: "bun",
             args: [workspaceCli, "deploy", "./alchemy.current.run.ts", "--stage", STAGE, "--yes"],
             cwd: dir,
+            env: awsEnv,
           });
 
           // Each server moved onto a Web Function and the old function is gone.

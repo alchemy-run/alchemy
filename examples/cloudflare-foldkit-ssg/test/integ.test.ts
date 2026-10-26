@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import Stack from "../alchemy.run.ts";
 
-const request = (url: string, init?: RequestInit) =>
+const requestOnce = (url: string, init?: RequestInit) =>
   Effect.tryPromise(async () => {
     const response = await fetch(url, {
       ...init,
@@ -18,6 +18,19 @@ const request = (url: string, init?: RequestInit) =>
     };
   });
 
+// A fresh workers.dev URL can flap between serving and a 404 (or 5xx) while
+// it propagates across the edge, even after a first successful response, so
+// ride out those statuses. Assertions on a deliberate 404 use `requestOnce`.
+const request = (url: string, init?: RequestInit) =>
+  requestOnce(url, init).pipe(
+    Effect.flatMap((response) =>
+      response.status === 404 || response.status >= 500
+        ? Effect.fail(new Error(`${url} answered ${response.status}`))
+        : Effect.succeed(response),
+    ),
+    Effect.retry({ schedule: Schedule.spaced("1 second"), times: 10 }),
+  );
+
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
@@ -26,14 +39,19 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const stack = beforeAll(
   destroy(Stack).pipe(
     Effect.andThen(deploy(Stack)),
+    // The Worker reaches the edge before its assets do: wait for both the
+    // hydrating home page and a second prerendered route.
     Effect.tap(({ url }) =>
-      request(url!).pipe(
-        Effect.flatMap((response) =>
-          response.status === 200 && response.body.includes("Statically generated home")
+      Effect.all([request(url!), request(url!.replace(/\/+$/, "") + "/about")]).pipe(
+        Effect.flatMap(([home, about]) =>
+          home.status === 200 &&
+          home.body.includes("Statically generated home") &&
+          home.body.includes("<script") &&
+          about.status === 200
             ? Effect.void
             : Effect.fail(new Error("The example has not reached the edge yet")),
         ),
-        Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
+        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 25 }),
         Effect.timeout("60 seconds"),
       ),
     ),
@@ -60,7 +78,7 @@ test(
       expect(head.status).toBe(200);
       expect(head.body).toBe("");
     }
-    expect((yield* request(url + "/not-prerendered")).status).toBe(404);
+    expect((yield* requestOnce(url + "/not-prerendered")).status).toBe(404);
   }),
   { timeout: 120_000 },
 );

@@ -118,12 +118,18 @@ export const InstanceProvider = () =>
                 mode: "existing" as const,
               }));
           }),
-        diff: Effect.fn(function* ({ olds, news }) {
+        diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isResolved(news)) return;
+          // `instanceArn` and `name` select which instance to adopt. Adding,
+          // removing, or pinning one that matches the adopted instance is a
+          // noop; only a selector pointing at a different instance replaces.
+          // A replace in `account` mode deletes the old instance, so it must
+          // never fire for the same instance.
           if (
-            olds?.instanceArn !== news.instanceArn ||
-            olds?.mode !== news.mode ||
-            olds?.name !== news.name
+            (news.instanceArn !== undefined &&
+              news.instanceArn !== (output?.instanceArn ?? olds?.instanceArn)) ||
+            (news.name !== undefined && news.name !== (output?.name ?? olds?.name)) ||
+            (news.mode ?? "existing") !== (output?.mode ?? olds?.mode ?? "existing")
           ) {
             return { action: "replace" } as const;
           }

@@ -34,7 +34,7 @@ export interface ConnectionInfo {
    * `Connect` runtime effect re-runs on each execution and mints a fresh
    * token as `password`/`url`. Long-lived serverful pools (ECS Task /
    * ServerHost) should wire this into the driver's lazy-password hook
-   * (`postgres.js` `pass: () => ...`, `pg` `password: () => ...`) so every
+   * (`@effect/sql-pg` `password: Effect`, `postgres.js` `pass: () => ...`) so every
    * new physical connection authenticates with a fresh token instead of a
    * token minted at pool construction.
    */
@@ -121,7 +121,7 @@ export type ConnectOptions = SecretConnectOptions | IamConnectOptions;
  *     return {
  *       fetch: Effect.gen(function* () {
  *         // runtime — resolve host/port/credentials, hand `info.url`
- *         // (Redacted) to postgres.js / pg / drizzle
+ *         // (Redacted) to SQL.Postgres / Drizzle.Postgres
  *         const info = yield* connect;
  *         return yield* HttpServerResponse.json({
  *           host: info.host,

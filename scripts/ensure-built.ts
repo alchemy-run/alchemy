@@ -12,10 +12,11 @@
 // that stamp is missing or older than any tracked or untracked-but-not-ignored
 // file of the package or its workspace dependencies, test files excepted.
 //
-// Distilled SDKs are consumed the same way by bundlers: their `module` and
-// `default` export conditions point at `lib/services.full/*.js`, which only
-// distilled's `scripts/bundle-lib.ts` writes (`tsc -b` emits the rest of
-// `lib/`). After the builds above, every distilled package that has a `lib/`
+// Distilled SDKs are consumed the same way by bundlers: their `default`
+// export condition points at `lib/`, which distilled's `scripts/bundle-lib.ts`
+// turns from `tsc -b` output into the chunked layout npm ships, with the
+// `distilled-lazy` stubs in `lib/services.lazy/` (only bundle-lib writes
+// those). After the builds above, every distilled package that has a `lib/`
 // but no bundle stamp newer than its source and its `lib/` is bundled. Stamps live in `node_modules/.cache/distilled-bundle/<package>`
 // (bundle-lib prunes unknown files from `lib/`).
 //
@@ -124,7 +125,7 @@ const isStale = Effect.fn(function* (root: string, name: PackageName) {
 const distilledStamp = (root: string, path: Path.Path, name: string) =>
   path.join(root, "node_modules", ".cache", "distilled-bundle", name);
 
-/** Distilled packages whose `lib/services.full` is missing or older than their source. */
+/** Distilled packages whose bundled `lib/` is missing or older than their source. */
 const staleDistilled = Effect.fn(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;

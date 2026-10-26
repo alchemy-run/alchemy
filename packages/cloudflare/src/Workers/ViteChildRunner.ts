@@ -114,6 +114,16 @@ const program = Effect.scoped(
                 hyperdrives: config.worker.hyperdrives,
                 queueConsumers: Effect.succeed(config.worker.queueConsumers),
                 assets: config.worker.assets,
+                options: {
+                  workflows: runtimeWorker.workflows,
+                  crons: runtimeWorker.crons,
+                  tails: runtimeWorker.tails,
+                  streamingTails: runtimeWorker.streamingTails,
+                  cache: runtimeWorker.cache,
+                  cf: runtimeWorker.cf,
+                  zone: runtimeWorker.zone,
+                  access: devAccess,
+                },
               },
               runtimeContext,
             })
@@ -149,8 +159,17 @@ const program = Effect.scoped(
               compatibilityDate: compatibility.date,
               compatibilityFlags: compatibility.flags,
               viteEnvironments,
-              worker: { ...runtimeWorker, bindings },
+              // `dev.access` populates the Worker's native `ctx.access`.
+              worker: {
+                ...runtimeWorker,
+                bindings,
+                publicUrl: config.publicUrl,
+                access: devAccess,
+              },
               context: runtimeContext,
+              entrypoints: bindingDescriptors.flatMap((binding) =>
+                binding.type === "self_service" && binding.entrypoint ? [binding.entrypoint] : [],
+              ),
             },
             { host: viteHost, port: vitePort, strictPort: false },
           ).pipe(Effect.map((server) => server.resolvedUrls?.local[0]));

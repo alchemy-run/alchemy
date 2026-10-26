@@ -1,6 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
@@ -84,7 +84,7 @@ describe.sequential(
           );
           expect(afterDestroy).toEqual([]);
         }).pipe(logLevel),
-      { exclusive: true },
+      { exclusive: "cloudflare:mnm" },
     );
   },
 );

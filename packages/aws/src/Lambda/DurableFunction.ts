@@ -19,6 +19,7 @@ import type { DurableExecutionContext, DurableStep } from "./Durable.ts";
 import { DURABLE_SDK_MODULE, encodeDurableEnvelope, makeDurableListener } from "./DurableBridge.ts";
 import { Function, type FunctionProps, type FunctionServices } from "./Function.ts";
 import type { HandlerContext } from "./InvocationDeadline.ts";
+import { qualifierOf } from "./QualifiedArn.ts";
 
 type TypeId = "AWS.Lambda.DurableFunction";
 const TypeId = "AWS.Lambda.DurableFunction" as const;
@@ -130,6 +131,7 @@ export interface DurableStartOptions<Input = unknown> {
    * replay against the version they started on. `$LATEST` is suitable for
    * disposable development; production starts should target an immutable
    * numbered {@link Version} or a stable {@link Alias}.
+   * @default the function's `alias` when set, otherwise `$LATEST`
    */
   qualifier?: string;
 }
@@ -373,6 +375,12 @@ const composeDurableImpl = (
     // finish). Resolve it lazily inside the runtime callables instead, the
     // same posture as `InvokeFunctionHttp`.
     const FunctionName = host.functionName;
+    // Executions start on the alias when the function sets one.
+    // Typed like the iterator `FunctionName` resolves through, whose
+    // RuntimeContext the host always provides.
+    const Qualifier = qualifierOf(host).bind(`${host.LogicalId}.qualifier`) as Effect.Effect<
+      Effect.Effect<string>
+    >;
 
     if (!globalThis.__ALCHEMY_RUNTIME__) {
       // Self-binding: the statements land on this function's own execution
@@ -426,7 +434,7 @@ const composeDurableImpl = (
             FunctionName: functionName,
             InvocationType: "Event",
             DurableExecutionName: options?.name,
-            Qualifier: options?.qualifier,
+            Qualifier: options?.qualifier ?? (yield* yield* Qualifier),
             Payload: encodeDurableEnvelope(name, options?.params),
           });
           return {

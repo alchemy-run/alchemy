@@ -192,7 +192,17 @@ Domain provisioning is asynchronous. `site.domain` is the created
 CustomDomain resource. Configure its `dnsRecords` with your DNS provider
 and inspect `status`, `foundryStatus`, and `failureReason` before
 sending production traffic.
-Alchemy does not automatically create DNS records. Changing an existing
+
+To publish `dnsRecords` automatically, pass the DNS host as `dns`:
+
+```typescript
+const site = yield* Prisma.Website.Astro("Web", {
+  domain: { name: "app.example.com", dns: Cloudflare.DNS.Adapter() },
+});
+```
+
+`AWS.Route53.Adapter()` and `Hetzner.DNS.Adapter()` work the same way. See
+[DNS Adapters](/infrastructure-as-code/dns-adapters). Changing an existing
 domain's hostname or app is rejected; add a second domain, verify DNS
 and TLS, cut traffic over, then remove the old one. See
 [Compute custom domains](/prisma/compute/apps#custom-domains).

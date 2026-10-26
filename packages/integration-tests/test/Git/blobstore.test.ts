@@ -1,5 +1,5 @@
 import { orderedParts } from "@alchemy.run/git/BlobStore";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import { makeMemoryBlobStore } from "./harness/store.ts";

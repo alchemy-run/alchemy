@@ -17,6 +17,7 @@ import type { FoldkitBuildMetadata } from "../../Website/FoldkitBuild.ts";
 import { readAssets } from "../Assets.ts";
 import type { SourceDevHandle, SourceProvider } from "../Source.ts";
 import { runViteBuildChild } from "../ViteChild.ts";
+import { resolveViteMain } from "../ViteMain.ts";
 import { isSelfUrl, type ViteOptions } from "../Worker.ts";
 import { isContainerDecl } from "../WorkerAsyncBindings.ts";
 import { isWorkerLoader } from "../WorkerLoader.ts";
@@ -400,7 +401,11 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
         // importer (i.e. against `process.cwd()`), which breaks when the
         // deploy runs from a different directory (e.g. a monorepo infra
         // package) — absolutize before handing it over (#796).
-        main: vite.main ? path.resolve(initialCwd, vite.rootDir ?? ".", vite.main) : undefined,
+        // A package export or virtual module (`vike:server`) goes to Vite
+        // as is.
+        main: vite.main
+          ? yield* resolveViteMain(path.resolve(initialCwd, vite.rootDir ?? "."), vite.main)
+          : undefined,
         compatibilityDate: ctx.compatibility.date,
         compatibilityFlags: ctx.compatibility.flags,
         viteEnvironments: vite.viteEnvironments,

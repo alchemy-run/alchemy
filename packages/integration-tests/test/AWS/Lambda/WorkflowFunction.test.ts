@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { executionNameOf } from "@alchemy.run/aws/Lambda/WorkflowFunction";
+import { describe, expect } from "@alchemy.run/test";
 import * as Lambda from "@distilled.cloud/aws/lambda";
-import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import type { Status } from "alchemy/Workflows";
@@ -31,6 +31,7 @@ describe(
   { tags: ["provider:aws", "provider:aws:lambda", "live"] },
   () => {
     let functionName: string;
+    let aliasVersion: string;
     let url: string;
 
     beforeAll(
@@ -40,10 +41,15 @@ describe(
           Effect.gen(function* () {
             const host = yield* TestWorkflows;
             const caller = yield* WorkflowCaller;
-            return { functionName: host.functionName, url: caller.functionUrl };
+            return {
+              functionName: host.functionName,
+              version: host.version,
+              url: caller.functionUrl,
+            };
           }).pipe(Effect.provide(Layer.mergeAll(HostLive, CallerLive))),
         );
         functionName = outputs.functionName;
+        aliasVersion = outputs.version!;
         url = outputs.url!.replace(/\/$/, "");
         // A fresh Function URL can take a while to start serving.
         yield* request(`${url}/ready`).pipe(
@@ -132,6 +138,26 @@ describe(
             result: "hello sam",
           });
           expect(yield* stepsOf("Greet", run.executionId)).toEqual(["greet", "log"]);
+        }),
+      { timeout: 120_000 },
+    );
+
+    test.provider(
+      "starts runs on the host's alias",
+      (_stack) =>
+        Effect.gen(function* () {
+          const id = yield* freshId("alias");
+          const run = yield* start("Greet", id);
+          expect(yield* awaitResult(run.status)).toEqual({
+            _tag: "Completed",
+            result: "hello world",
+          });
+          const [execution] = yield* executionsOf("Greet", run.executionId);
+          const { Version } = yield* Lambda.getDurableExecution({
+            DurableExecutionArn: execution!.DurableExecutionArn,
+          });
+          // The version the alias serves, not `$LATEST`.
+          expect(Version).toBe(aliasVersion);
         }),
       { timeout: 120_000 },
     );
@@ -233,7 +259,15 @@ describe(
           expect(yield* awaitResult(run.status)).toEqual({ _tag: "Interrupted" });
           expect(yield* stepsOf("Approve", run.executionId)).toEqual(["requested"]);
           // Woken through its callback and finished by itself, not stopped.
-          const [execution] = yield* executionsOf("Approve", run.executionId);
+          // The result is recorded before the durable execution settles, so
+          // poll until it leaves RUNNING.
+          const [execution] = yield* executionsOf("Approve", run.executionId).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: ([first]) => first?.Status !== "RUNNING",
+              times: 20,
+            }),
+          );
           expect(execution!.Status).toBe("SUCCEEDED");
         }),
       { timeout: 180_000 },

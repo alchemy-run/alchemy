@@ -26,7 +26,6 @@ export default class Api extends Railway.Service<Api>()(
     project: Site,
     main: import.meta.url,
     port: 3000,
-    build: { install: ["pg"] },
     healthcheck: "/health",
   },
   Effect.gen(function* () {

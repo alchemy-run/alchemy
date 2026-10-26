@@ -85,8 +85,11 @@ export type InputOf<P extends Any> = Input<
 export type Identifier<P extends Any> = P extends Context.Key<infer I, unknown> ? I : never;
 
 /** The requirement identifier of a projection's progress service. */
-export type ProgressIdentifier<P extends Any> =
-  P["Progress"] extends Context.Key<infer I, unknown> ? I : never;
+export type ProgressIdentifier<P extends Any> = P extends Any
+  ? P["Progress"] extends Context.Key<infer I, unknown>
+    ? I
+    : never
+  : never;
 
 /**
  * A projection's progress, provided by the hosted model.

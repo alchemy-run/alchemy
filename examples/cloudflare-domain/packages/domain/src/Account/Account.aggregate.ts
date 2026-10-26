@@ -69,11 +69,10 @@ const authorized = Effect.fn(function* (s: AccountState) {
   return o;
 });
 
-// evolve guard: an event in the wrong state is a bug, so the command rolls back.
-const mustBeOpen = (s: AccountState, what: string): Open => {
-  if (s._tag !== "Open") throw new Error(`${what} in state ${s._tag}`);
-  return s;
-};
+// decide refuses every command on an account that is not open, so these
+// events only follow an Open state. evolve is total: any other state is kept.
+const whenOpen = (s: AccountState, f: (o: Open) => AccountState): AccountState =>
+  s._tag === "Open" ? f(s) : s;
 
 const dayOf = (t: DateTime.Utc) => DateTime.formatIsoDate(t);
 
@@ -198,28 +197,27 @@ export class Account extends Domain.Aggregate("Account", {
       frozen: null,
       today: { day: "", withdrawn: 0 },
     }),
-    OwnerChanged: (s, e) => ({ ...mustBeOpen(s, "OwnerChanged"), customerId: e.customerId }),
-    MoneyDeposited: (s, e) => balance.replace(e.balanceAfter, mustBeOpen(s, "MoneyDeposited")),
-    TransferDebited: (s, e) => balance.replace(e.balanceAfter, mustBeOpen(s, "TransferDebited")),
-    TransferCredited: (s, e) => balance.replace(e.balanceAfter, mustBeOpen(s, "TransferCredited")),
-    TransferRefunded: (s, e) => balance.replace(e.balanceAfter, mustBeOpen(s, "TransferRefunded")),
-    SettlementReceived: (s, e) =>
-      balance.replace(e.balanceAfter, mustBeOpen(s, "SettlementReceived")),
-    MoneyWithdrawn: (s, e, { at }) => {
-      const o = mustBeOpen(s, "MoneyWithdrawn");
-      const day = dayOf(at);
-      const withdrawn = (o.today.day === day ? o.today.withdrawn : 0) + e.amount;
-      return { ...balance.replace(e.balanceAfter, o), today: { day, withdrawn } };
-    },
-    AccountFrozen: (s, e) => frozen.replace(e.reason, mustBeOpen(s, "AccountFrozen")),
+    OwnerChanged: (s, e) => whenOpen(s, (o) => ({ ...o, customerId: e.customerId })),
+    MoneyDeposited: (s, e) => whenOpen(s, (o) => balance.replace(e.balanceAfter, o)),
+    TransferDebited: (s, e) => whenOpen(s, (o) => balance.replace(e.balanceAfter, o)),
+    TransferCredited: (s, e) => whenOpen(s, (o) => balance.replace(e.balanceAfter, o)),
+    TransferRefunded: (s, e) => whenOpen(s, (o) => balance.replace(e.balanceAfter, o)),
+    SettlementReceived: (s, e) => whenOpen(s, (o) => balance.replace(e.balanceAfter, o)),
+    MoneyWithdrawn: (s, e, { at }) =>
+      whenOpen(s, (o) => {
+        const day = dayOf(at);
+        const withdrawn = (o.today.day === day ? o.today.withdrawn : 0) + e.amount;
+        return { ...balance.replace(e.balanceAfter, o), today: { day, withdrawn } };
+      }),
+    AccountFrozen: (s, e) => whenOpen(s, (o) => frozen.replace(e.reason, o)),
     AccountClosed: () => ({ _tag: "Closed" as const }),
     RefundStranded: (s) => s,
     SettlementOnClosedAccount: (s) => s,
   },
 
   reply: {
-    DepositMoney: (s) => ({ balance: balance.get(mustBeOpen(s, "DepositMoney reply")) }),
-    WithdrawMoney: (s) => ({ balance: balance.get(mustBeOpen(s, "WithdrawMoney reply")) }),
+    DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
+    WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
   },
   // Clients may read and watch the account itself (its state and committed
   // events) through an Api, judged like a view against its current state.

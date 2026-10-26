@@ -1,6 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { assert, describe, expect } from "@alchemy.run/test";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import { assert, describe, expect } from "alchemy-test";
 import { destroy as destroyStack } from "alchemy/Destroy";
 import * as Plan from "alchemy/Plan";
 import { Stage } from "alchemy/Stage";
@@ -24,6 +24,12 @@ import makeExternalStack from "./fixtures/external/stack.ts";
 import makeInferredClassStack from "./fixtures/inferred/stack.ts";
 import { DEMO_PLAIN, DEMO_SECRET } from "./fixtures/remote/object.ts";
 import makeRemoteStack from "./fixtures/remote/stack.ts";
+
+/** Narrows a Containers application to the scheduler-placed shape. */
+const scheduledApplication = (app: Containers.ContainerApplicationItem) => {
+  assert("version" in app, `${app.name} is a Durable Object application`);
+  return app;
+};
 
 describe.concurrent.each([
   {
@@ -143,7 +149,8 @@ describe.concurrent.each([
     /**
      * External container (`context` / `dockerfile`): Alchemy builds the user's
      * Dockerfile against the context directory (nginx serving a static page on
-     * port 8080) and the DO proxies a request to it.
+     * port 8080) and the DO proxies a request to it. A second container builds
+     * the same server from inline `dockerfile.content`.
      */
     describe("external container (context/dockerfile)", () => {
       const { test, beforeAll, afterAll, deploy, destroy } = make();
@@ -157,6 +164,19 @@ describe.concurrent.each([
 
           const hello = yield* fetchReady(new URL("/hello", url), "external container");
           expect(hello).toContain("external container");
+        }).pipe(logLevel),
+        { tags: [...(dev ? ["local"] : ["live"])], timeout },
+      );
+
+      // Inline `dockerfile.content` has no user build context: the provider
+      // materializes one, which needs the Docker service in reconcile.
+      test(
+        "builds an inline Dockerfile and serves it over its TCP port",
+        Effect.gen(function* () {
+          const { url } = yield* stack;
+
+          const hello = yield* fetchReady(new URL("/inline", url), "inline dockerfile container");
+          expect(hello).toContain("inline dockerfile container");
         }).pipe(logLevel),
         { tags: [...(dev ? ["local"] : ["live"])], timeout },
       );
@@ -206,6 +226,48 @@ describe.concurrent.each([
           expect(echoed.env.DEMO_BUCKET).toBe(bucketName);
         }).pipe(logLevel),
         { tags: [...(dev ? ["local"] : ["live"])], timeout },
+      );
+
+      // Cloudflare reports a start it has no instance for by rejecting
+      // monitor(), not start(), so monitor() must classify it the way start()
+      // does. maxInstances is not enforced locally.
+      test.skipIf(dev)(
+        "a start past maxInstances fails monitor() with NoContainerInstanceError",
+        Effect.gen(function* () {
+          const { url } = yield* stack;
+          const startCapped = (name: string) =>
+            Effect.gen(function* () {
+              const client = yield* freshConn;
+              const response = yield* client.get(new URL(`/capped?name=${name}`, url));
+              const body = yield* response.text;
+              if (response.status !== 200) {
+                return yield* Effect.fail(
+                  new Error(`capped not ready: ${response.status} ${body}`),
+                );
+              }
+              return JSON.parse(body) as { phase: string; tag: string };
+            }).pipe(
+              Effect.timeout("60 seconds"),
+              Effect.retry({ schedule: readinessSchedule, times: 6 }),
+            );
+
+          // A fresh application also has no instance while it provisions, so
+          // retry until the first object holds the one instance.
+          const first = yield* startCapped("first").pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (result) => result.tag === "running",
+              times: 18,
+            }),
+          );
+          expect(first).toEqual({ phase: "monitor", tag: "running" });
+          const second = yield* startCapped("second");
+          expect(second).toMatchObject({
+            phase: "monitor",
+            tag: "NoContainerInstanceError",
+          });
+        }).pipe(logLevel),
+        { tags: ["live"], timeout },
       );
 
       // The proxy pattern from #1334 (`yield* fetch(yield* HttpServerRequest)`):
@@ -784,6 +846,7 @@ describe.sequential(
 
 const readAttachmentApplication = (accountId: string, applicationId: string) =>
   Containers.getContainerApplication({ accountId, applicationId }).pipe(
+    Effect.map(scheduledApplication),
     Effect.retry({
       while: (error) => error._tag === "ContainerApplicationNotFound",
       schedule: Schedule.spaced("1 second"),

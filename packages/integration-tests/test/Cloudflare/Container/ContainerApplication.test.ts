@@ -1,9 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { ContainerPlatform } from "@alchemy.run/cloudflare/Containers/ContainerPlatform";
-import { Docker, DockerLive } from "@alchemy.run/docker/Docker";
+import { Docker } from "@alchemy.run/docker/Docker";
+import { assert, describe, expect } from "@alchemy.run/test";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import { assert, describe, expect } from "alchemy-test";
 import * as Deploy from "alchemy/Deploy";
 import * as Destroy from "alchemy/Destroy";
 import * as Drift from "alchemy/Drift";
@@ -34,7 +34,7 @@ import MyContainerLive, { MyContainer } from "./fixtures/effectful/container.ts"
 import EffectfulContainerWorker from "./fixtures/effectful/worker.ts";
 import { ExternalContainer } from "./fixtures/external/object.ts";
 import ExternalContainerWorker from "./fixtures/external/worker.ts";
-import { applications } from "./fixtures/identity/applications.ts";
+import { applications, cyclicApplication } from "./fixtures/identity/applications.ts";
 import {
   publicationApplications,
   sharedApplication,
@@ -43,10 +43,16 @@ import {
 } from "./fixtures/publication/applications.ts";
 import { EnvBucket, RemoteContainer } from "./fixtures/remote/object.ts";
 import RemoteContainerWorker from "./fixtures/remote/worker.ts";
-const { test } = Test.make({ providers: Layer.mergeAll(Cloudflare.providers(), DockerLive) });
+
+/** Narrows a Containers application to the scheduler-placed shape. */
+const scheduledApplication = (app: Containers.ContainerApplicationItem) => {
+  assert("version" in app, `${app.name} is a Durable Object application`);
+  return app;
+};
+const { test } = Test.make({ providers: Cloudflare.providers() });
 const { test: registryCacheTest } = Test.make({
   // Each deployment must consult the registry, not a previous provider's map.
-  providers: Layer.fresh(Layer.mergeAll(Cloudflare.providers(), DockerLive)),
+  providers: Layer.fresh(Cloudflare.providers()),
 });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
@@ -64,6 +70,7 @@ const deployImage = (scratch: Scratch, image: string) =>
 /** The live (active) image reference + version of an application. */
 const live = (accountId: string, applicationId: string) =>
   Containers.getContainerApplication({ accountId, applicationId }).pipe(
+    Effect.map(scheduledApplication),
     Effect.map((app) => ({
       version: app.version,
       image: app.configuration.image,
@@ -101,6 +108,43 @@ const patchRow = <A extends Record<string, any>>(fqn: string, patch: (attr: A) =
     yield* state.set({ ...key, value: { ...row, attr: patch(row.attr as A) } });
   });
 
+/**
+ * Deploys `CyclicOriginal`, then forgets it, leaving an application owned by
+ * another logical id. Returns a step that remembers it again, so destroy
+ * removes it through normal stack cleanup.
+ */
+const plantForeignApplication = Effect.fn(function* (stack: Scratch) {
+  yield* stack.destroy();
+  const original = yield* stack.deploy(
+    Cloudflare.Container("CyclicOriginal", {
+      image: "mendhak/http-https-echo:41",
+      maxInstances: 1,
+    }).Application,
+  );
+  const key = { stack: stack.name, stage: stack.stage, fqn: "CyclicOriginal" };
+  const row = yield* Effect.gen(function* () {
+    const state = yield* yield* State;
+    const value = yield* state.get(key);
+    yield* state.delete(key);
+    return value!;
+  }).pipe(Effect.provide(stack.state));
+  const restore = Effect.gen(function* () {
+    const state = yield* yield* State;
+    yield* state.set({ ...key, value: row });
+  }).pipe(Effect.provide(stack.state));
+  return { original, restore };
+});
+
+const waitForApplicationDeleted = (accountId: string, applicationId: string) =>
+  Containers.getContainerApplication({ accountId, applicationId }).pipe(
+    Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (app) => app === undefined,
+      times: 8,
+    }),
+  );
+
 // Every test owns a name-namespaced scratch stack and scopes its buildx
 // builder through `DockerEnvironment`, so they all run concurrently.
 describe.concurrent(
@@ -125,7 +169,7 @@ describe.concurrent(
           const observed = yield* Containers.getContainerApplication({
             accountId: first.owned.accountId,
             applicationId: first.owned.applicationId,
-          });
+          }).pipe(Effect.map(scheduledApplication));
           expect(observed.maxInstances).toBe(4);
           const interrupted = { ...row, status: "creating" as const, attr: undefined };
           yield* Effect.gen(function* () {
@@ -188,7 +232,7 @@ describe.concurrent(
             const live = yield* Containers.getContainerApplication({
               accountId: first.owned.accountId,
               applicationId: first.owned.applicationId,
-            });
+            }).pipe(Effect.map(scheduledApplication));
             expect(live.maxInstances).toBe(5);
           }).pipe(
             Effect.ensuring(
@@ -217,6 +261,57 @@ describe.concurrent(
             );
             expect(deleted).toBeUndefined();
           }
+        }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+
+    // A cycle precreates on unresolved props, before `read` can check
+    // ownership; precreate would adopt and update an application by name.
+    // An explicit name never establishes ownership, so `observe` refuses it.
+    for (const scoped of [undefined, false]) {
+      test.provider(
+        `a cyclic precreate refuses an explicitly named application (scoped adoption ${scoped})`,
+        (stack) =>
+          Effect.gen(function* () {
+            const { original, restore } = yield* plantForeignApplication(stack);
+            const request = {
+              accountId: original.accountId,
+              applicationId: original.applicationId,
+            };
+            const before = yield* Containers.getContainerApplication(request);
+            const program = cyclicApplication(original.applicationName, scoped);
+            expect((yield* stack.plan(program)).resources.CyclicDifferent?.action).toBe("create");
+            const error = yield* stack.deploy(program).pipe(Effect.flip);
+            expect(error).toMatchObject({
+              _tag: "OwnedBySomeoneElse",
+              logicalId: "CyclicDifferent",
+            });
+            expect(yield* Containers.getContainerApplication(request)).toEqual(before);
+            yield* stack.destroy();
+            yield* restore;
+            yield* stack.destroy();
+            expect(
+              yield* waitForApplicationDeleted(original.accountId, original.applicationId),
+            ).toBeUndefined();
+          }).pipe(logLevel),
+        { timeout: 120_000 },
+      );
+    }
+
+    test.provider(
+      "a cyclic precreate takes over an explicitly named application with adopt(true)",
+      (stack) =>
+        Effect.gen(function* () {
+          const { original, restore } = yield* plantForeignApplication(stack);
+          const adopted = yield* stack.deploy(cyclicApplication(original.applicationName, true));
+          expect(adopted.applicationId).toBe(original.applicationId);
+          yield* stack.destroy();
+          expect(
+            yield* waitForApplicationDeleted(original.accountId, original.applicationId),
+          ).toBeUndefined();
+          // The original row still names the taken-over application; deleting it again is a no-op.
+          yield* restore;
+          yield* stack.destroy();
         }).pipe(logLevel),
       { timeout: 120_000 },
     );
@@ -487,7 +582,7 @@ describe.concurrent(
               const observed = yield* Containers.getContainerApplication({
                 accountId: app.accountId,
                 applicationId: app.applicationId,
-              });
+              }).pipe(Effect.map(scheduledApplication));
               expect(observed.configuration.image).toBe(shared.first.configuration.image);
             }
             yield* stack.destroy();
@@ -556,7 +651,7 @@ describe.concurrent(
             const observed = yield* Containers.getContainerApplication({
               accountId: app.accountId,
               applicationId: app.applicationId,
-            });
+            }).pipe(Effect.map(scheduledApplication));
             expect(observed.configuration.image).toBe(first.first.configuration.image);
             expect(observed.configuration.environmentVariables).toContainEqual({
               name: "SLOT",
@@ -1083,7 +1178,7 @@ describe.concurrent(
             const observed = yield* Containers.getContainerApplication({
               accountId,
               applicationId,
-            });
+            }).pipe(Effect.map(scheduledApplication));
             expect(observed.configuration.image).toBe(deployed.app.configuration.image);
 
             const response = yield* Effect.gen(function* () {
@@ -1137,7 +1232,10 @@ describe.concurrent(
               const first = yield* stack.deploy(applications());
               const { accountId } = first.owned;
               const observed = yield* Effect.forEach([first.owned, first.other], (app) =>
-                Containers.getContainerApplication({ accountId, applicationId: app.applicationId }),
+                Containers.getContainerApplication({
+                  accountId,
+                  applicationId: app.applicationId,
+                }).pipe(Effect.map(scheduledApplication)),
               );
               const state = yield* yield* State;
               const key = { stack: stack.name, stage: stack.stage, fqn: "CachedIdentity" };
@@ -1229,7 +1327,7 @@ describe.concurrent(
           const before = yield* Containers.getContainerApplication({
             accountId: first.owned.accountId,
             applicationId: first.owned.applicationId,
-          });
+          }).pipe(Effect.map(scheduledApplication));
           expect(before.name).toBe(first.owned.applicationName);
           expect(before.maxInstances).toBe(2);
 
@@ -1273,7 +1371,7 @@ describe.concurrent(
           const live = yield* Containers.getContainerApplication({
             accountId: app.accountId,
             applicationId: app.applicationId,
-          });
+          }).pipe(Effect.map(scheduledApplication));
           expect(live.configuration.memoryMib).toBe(4096);
           expect(live.configuration.instanceType).not.toBe("lite");
 
@@ -1319,6 +1417,39 @@ describe.concurrent(
 
         yield* stack.destroy();
       }).pipe(logLevel),
+    );
+
+    // Placement constraints pass through to Cloudflare unchanged and read back
+    // stable, so an unchanged redeploy plans no update. Whether an instance
+    // lands in the jurisdiction depends on account capacity; this pins the API
+    // boundary. Adapted from #1340 (@yovanoc).
+    test.provider(
+      "placement constraints round-trip and stay stable",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const program = Effect.gen(function* () {
+            return yield* Cloudflare.Container("ConstrainedPlacement", {
+              image: "mendhak/http-https-echo:41",
+              constraints: { jurisdiction: "eu", regions: ["WEUR", "EEUR"] },
+            }).Application;
+          });
+          const app = yield* stack.deploy(program);
+          expect(app.constraints).toEqual({ jurisdiction: "eu", regions: ["WEUR", "EEUR"] });
+
+          const observed = yield* Containers.getContainerApplication({
+            accountId: app.accountId,
+            applicationId: app.applicationId,
+          });
+          expect(observed.constraints).toEqual({ jurisdiction: "eu", regions: ["WEUR", "EEUR"] });
+
+          const plan = yield* stack.plan(program);
+          expect(plan.resources.ConstrainedPlacement?.action).toBe("noop");
+
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { timeout: 180_000 },
     );
 
     // Right after a Worker upload creates a Durable Object namespace, the

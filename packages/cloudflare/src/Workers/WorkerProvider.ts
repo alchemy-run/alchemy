@@ -19,6 +19,7 @@ import { sha256Object } from "alchemy/Util/sha256";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import { isHttpClientError } from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -761,6 +762,17 @@ const cachedWorkerId = (value: string | undefined, scriptName: string): string |
   value !== undefined && value !== "" && value !== scriptName && !value.startsWith("dev:")
     ? value
     : undefined;
+
+/**
+ * Whether `output` is a precreate stub that uploaded nothing: a version,
+ * preview, or dispatch-namespace worker's provisional row (`workerId: ""`).
+ * Its `workerName` names no script this resource wrote. Without a recorded
+ * namespace it can't even say which endpoint the attempt targeted — a
+ * dispatch stub's namespace may still have been unresolved — so the
+ * account-level script of that name proves nothing (#2533).
+ */
+const isUnscopedStub = (output: Worker["Attributes"]): boolean =>
+  output.workerId === "" && !output.namespace;
 
 export class WorkerIdNotFound extends Data.TaggedError("WorkerIdNotFound")<{
   scriptName: string;
@@ -1570,7 +1582,10 @@ export const LiveWorkerProvider = () =>
         for (const zoneId of zoneIds) {
           const entrypoint = yield* rulesets
             .getPhasForZone({ zoneId, rulesetPhase: "http_request_dynamic_redirect" })
-            .pipe(Effect.orElseSucceed(() => undefined));
+            // Only a missing entrypoint means no rules yet. Any other failure must
+            // stop here: the PUT below replaces the whole phase, so reading it as
+            // empty would delete every other rule in the zone.
+            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
           const existingRules = entrypoint?.rules ?? [];
           const ourDesired = desired
             .filter((hostname) => params.zoneIdByHostname.get(hostname) === zoneId)
@@ -1660,7 +1675,10 @@ export const LiveWorkerProvider = () =>
               : [];
           const entrypoint = yield* rulesets
             .getPhasForZone({ zoneId, rulesetPhase: "http_request_late_transform" })
-            .pipe(Effect.orElseSucceed(() => undefined));
+            // Only a missing entrypoint means no rules yet. Any other failure must
+            // stop here: the PUT below replaces the whole phase, so reading it as
+            // empty would delete every other rule in the zone.
+            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
           const existingRules = entrypoint?.rules ?? [];
           const isOurs = (rule: { description?: string | null }) =>
             (rule.description ?? "").startsWith(prefix);
@@ -3240,8 +3258,11 @@ export const LiveWorkerProvider = () =>
                 ...(item.props !== undefined && { props: item.props }),
               };
             }
-            if (item.type === "durable_object_namespace" && item.transferredFrom !== undefined) {
-              const { transferredFrom: _, ...rest } = item;
+            if (
+              item.type === "durable_object_namespace" &&
+              (item.transferredFrom !== undefined || item.storage !== undefined)
+            ) {
+              const { transferredFrom: _, storage: __, ...rest } = item;
               return rest;
             }
             // `queueId` (mode discrimination) and `shim` (dev-mode remote
@@ -3676,6 +3697,11 @@ export const LiveWorkerProvider = () =>
           scriptName: name,
           observedNamespaces,
           hostedClasses: currentDoBindings.map((binding) => binding.className),
+          declaredStorage: new Map(
+            currentDoBindings.flatMap((binding) =>
+              binding.storage === undefined ? [] : [[binding.className, binding.storage] as const],
+            ),
+          ),
           renamedClasses,
           deletedClasses,
           transferredClasses,
@@ -4409,9 +4435,10 @@ export const LiveWorkerProvider = () =>
                       ? [
                           {
                             accountId,
-                            // Practically always present; an empty value
-                            // is healed by the per-script read.
-                            workerId: script.tag ?? "",
+                            // Practically always present. Fall back to the
+                            // name (healed by the per-script read), never
+                            // the "" that marks an unuploaded stub.
+                            workerId: script.tag ?? script.id,
                             workerName: script.id,
                             namespace: undefined,
                             logpush: script.logpush ?? undefined,
@@ -4652,6 +4679,31 @@ export const LiveWorkerProvider = () =>
             }
           }
         }),
+        observe: Effect.fn(function* ({ id, news }) {
+          // The script precreate (or, for a dispatch-namespace worker,
+          // reconcile) writes to. A version/preview worker uploads to its
+          // parent's script and claims none of its own.
+          if (news.version?.parent != null || news.preview?.of != null) return undefined;
+          // Neither name nor namespace can be checked until it resolves.
+          if (!isResolved(news.name) || !isResolved(news.namespace)) return undefined;
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const name = yield* createWorkerName(id, news.name);
+          const settings = yield* getScriptSettings(
+            accountId,
+            name,
+            resolveNamespaceName(news.namespace),
+          ).pipe(
+            Effect.catchTags({
+              WorkerNotFound: () => Effect.succeed(undefined),
+              WorkerHasNoVersions: () => Effect.succeed(undefined),
+              DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
+              DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+            }),
+          );
+          if (settings === undefined) return undefined;
+          const observed = { workerName: name };
+          return hasAlchemyWorkerTags(id, settings.tags ?? []) ? observed : Unowned(observed);
+        }),
         precreate: Effect.fn(function* ({ id, news, session, bindings }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           yield* assertCloudflareTelemetryCompatibility(news as WorkerProps, bindings);
@@ -4703,7 +4755,11 @@ export const LiveWorkerProvider = () =>
               // workers are dispatched by name, never bound circularly).
               workerId: "",
               workerName: name,
-              namespace: typeof news.namespace === "string" ? news.namespace : undefined,
+              // Recorded only once resolved: cleanup deletes from this
+              // namespace, and must not fall back to the account endpoint.
+              namespace: isResolved(news.namespace)
+                ? resolveNamespaceName(news.namespace)
+                : undefined,
               logpush: undefined,
               url: undefined,
               tags: undefined,
@@ -4784,8 +4840,8 @@ export const LiveWorkerProvider = () =>
           let placeholder: { tag?: string | null } | undefined;
           if (existingSettings) {
             // Engine has already cleared this resource for write via
-            // `read` + AdoptPolicy. Either we own it (matching tags) or
-            // the user opted in to a takeover (`--adopt` / `adopt(true)`).
+            // `observe` or `read` + AdoptPolicy. Either we own it (matching
+            // tags) or the user opted in to a takeover (`--adopt` / `adopt(true)`).
             yield* Effect.logInfo(`Cloudflare Worker precreate: reusing existing ${name}`);
           } else {
             yield* session.note("Pre-creating worker...", { kind: "status" });
@@ -4812,13 +4868,17 @@ export const LiveWorkerProvider = () =>
                 compatibilityDate: compatibility.date,
                 compatibilityFlags: compatibility.flags,
                 containers,
-                // A fresh script: every hosted class is new and SQLite-backed.
+                // A fresh script: every hosted class is new, with the storage
+                // its binding declares (SQLite unless stated).
                 exports:
-                  doClasses.length > 0
+                  durableObjects.length > 0
                     ? Object.fromEntries(
-                        doClasses.map((className) => [
-                          className,
-                          { type: "durable-object", storage: "sqlite" },
+                        durableObjects.map((binding) => [
+                          binding.className,
+                          {
+                            type: "durable-object",
+                            storage: binding.storage ?? "sqlite",
+                          },
                         ]),
                       )
                     : undefined,
@@ -4939,6 +4999,11 @@ export const LiveWorkerProvider = () =>
                     Effect.succeed(undefined),
                   ),
                 );
+            }
+            if (output !== undefined && isUnscopedStub(output)) {
+              // Nothing was uploaded, and the endpoint it would have been
+              // uploaded to is unknown — there is nothing to observe.
+              return undefined;
             }
             const workerName = output?.workerName ?? (yield* createWorkerName(id, olds?.name));
             const dispatchNamespace = output?.namespace ?? resolveNamespaceName(olds?.namespace);
@@ -5117,6 +5182,11 @@ export const LiveWorkerProvider = () =>
               // cleanup list forward like any other stable cache.
               affinityZoneIds: output?.affinityZoneIds,
               versionId: uploadedVersionId,
+              // The deployment that put the recorded version live, carried
+              // forward while that version still exists — re-listing
+              // deployments on every read only to echo state back would
+              // cost a request per Worker per plan.
+              deploymentId: uploadedVersionId ? output?.deploymentId : undefined,
             } satisfies Worker["Attributes"];
 
             // Centralized ownership decision: the engine routes `read`'s
@@ -5285,6 +5355,12 @@ export const LiveWorkerProvider = () =>
             yield* workers
               .deletePreview({ accountId: output.accountId, workerId: output.previewOf, previewId })
               .pipe(Effect.catchTag(["PreviewNotFound", "WorkerNotFound"], () => Effect.void));
+            return;
+          }
+          if (isUnscopedStub(output)) {
+            yield* Effect.logWarning(
+              `Cloudflare Worker delete: ${output.workerName} was never uploaded, or its dispatch namespace was never recorded; skipping. An interrupted upload into a dispatch namespace may need manual cleanup.`,
+            );
             return;
           }
           yield* Effect.logInfo(`Cloudflare Worker delete: deleting ${output.workerName}`);
@@ -5464,16 +5540,22 @@ type ObservedDurableObjectNamespace = {
   useSqlite?: boolean;
 };
 
-/** The storage backend Cloudflare reports for a script's class. */
+/**
+ * The storage backend Cloudflare reports for a script's class, else the
+ * backend the class declares (`storage` on its binding), else SQLite.
+ */
 const observedStorage = (
   observedNamespaces: readonly ObservedDurableObjectNamespace[],
   scriptName: string,
   className: string,
-): "sqlite" | "legacy-kv" =>
-  observedNamespaces.find((ns) => ns.script === scriptName && ns.class === className)?.useSqlite ===
-  false
-    ? "legacy-kv"
-    : "sqlite";
+  declared?: "sqlite" | "legacy-kv",
+): "sqlite" | "legacy-kv" => {
+  const observed = observedNamespaces.find(
+    (ns) => ns.script === scriptName && ns.class === className,
+  );
+  if (observed === undefined) return declared ?? "sqlite";
+  return observed.useSqlite === false ? "legacy-kv" : "sqlite";
+};
 
 /**
  * Build a script's declarative `exports` map: every namespace Cloudflare
@@ -5488,6 +5570,8 @@ const buildDurableObjectExports = (params: {
   scriptName: string;
   observedNamespaces: readonly ObservedDurableObjectNamespace[];
   hostedClasses: readonly string[];
+  /** Storage declared by a hosted class's binding, for a class not yet observed. */
+  declaredStorage?: ReadonlyMap<string, "sqlite" | "legacy-kv">;
   renamedClasses: readonly { from: string; to: string }[];
   deletedClasses: readonly string[];
   transferredClasses: readonly { from: string; fromScript: string; to: string }[];
@@ -5497,7 +5581,12 @@ const buildDurableObjectExports = (params: {
   const live = (className: string, storageOf = className) => {
     exports[className] = {
       type: "durable-object",
-      storage: observedStorage(observedNamespaces, scriptName, storageOf),
+      storage: observedStorage(
+        observedNamespaces,
+        scriptName,
+        storageOf,
+        params.declaredStorage?.get(className),
+      ),
     };
   };
   for (const ns of observedNamespaces) {
@@ -5747,11 +5836,13 @@ function mergeDurableObjectClasses(
     logicalId: string;
     className: string;
     transferredFrom?: string | string[];
+    storage?: "sqlite" | "legacy-kv";
   }>,
   bindingDerived: ReadonlyArray<{
     logicalId: string;
     className: string;
     transferredFrom?: string | string[];
+    storage?: "sqlite" | "legacy-kv";
   }>,
 ) {
   return Array.from(
@@ -5794,6 +5885,7 @@ function getDurableObjectBindings(bindings: ReadonlyArray<ResourceBinding>, work
             Array.isArray(item.transferredFrom) && item.transferredFrom.length === 0
               ? undefined
               : item.transferredFrom,
+          storage: item.storage,
         },
       ];
     }),

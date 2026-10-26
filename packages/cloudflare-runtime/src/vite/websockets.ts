@@ -1,5 +1,5 @@
-import * as NodeHttp from "node:http";
 import type { IncomingMessage } from "node:http";
+import * as NodeNet from "node:net";
 import type { Duplex } from "node:stream";
 import type * as vite from "vite";
 import { proxyRequestHeaders, resolveForwardedHost } from "./forwarded-host.ts";
@@ -28,6 +28,29 @@ export function handleWebSocket(
     socket.on("close", () => sockets.delete(socket));
   };
 
+  // An `async` listener (Vite's `server.proxy` awaiting its `bypass`, a
+  // plugin authenticating first) may take an upgrade only after the Worker
+  // has answered it, without touching the socket before. `emit` is wrapped to
+  // keep the promises the other listeners return for each socket, and the
+  // Worker's answer waits for them to settle.
+  const pending = new WeakMap<Duplex, Promise<unknown>>();
+  const emit = httpServer.emit;
+  const emitUpgrade = function (
+    this: vite.HttpServer,
+    event: string | symbol,
+    ...args: Array<any>
+  ) {
+    if (event !== "upgrade") return emit.call(this, event, ...args);
+    const settling: Array<PromiseLike<unknown>> = [];
+    for (const listener of this.rawListeners("upgrade")) {
+      const result: unknown = listener.apply(this, args);
+      if (isPromiseLike(result)) settling.push(result);
+    }
+    if (settling.length > 0) pending.set(args[1] as Duplex, Promise.allSettled(settling));
+    return true;
+  } as typeof emit;
+  httpServer.emit = emitUpgrade;
+
   const onUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
     // Unhandled socket errors crash Node.
     socket.on("error", () => socket.destroy());
@@ -50,95 +73,96 @@ export function handleWebSocket(
     }
 
     const target = new URL(url.pathname + url.search, upstreamBase);
-    const upstream = NodeHttp.request({
-      hostname: target.hostname,
-      port: target.port,
-      path: target.pathname + target.search,
-      method: request.method,
-      // Forward the client-facing host so the worker sees the URL the client
-      // requested rather than the local workerd address.
-      headers: proxyRequestHeaders(request, url, proxySharedSecret),
-    });
-
-    const cleanup = () => {
-      upstream.destroy();
-      socket.destroy();
-    };
-
-    upstream.on("error", cleanup);
+    // A raw TCP tunnel rather than a `node:http` client request: Bun's
+    // `node:http` client never emits `upgrade`, so the handshake would hang
+    // there. Writing the request head and piping both ways relays the
+    // Worker's answer byte for byte, whether a 101 or a refusal (a 403, a
+    // 404, ...) that must reach the client rather than a connection reset.
+    const upstream = NodeNet.connect({ host: target.hostname, port: Number(target.port) });
+    track(socket);
+    track(upstream);
     socket.on("close", () => upstream.destroy());
 
-    upstream.on("response", (response) => {
-      // The worker answered the handshake with an ordinary HTTP response
-      // (401, 403, 404, 500, ...) instead of upgrading. Relay it verbatim:
-      // destroying the socket here erases the worker's answer, so every
-      // refusal reaches the client as a bare connection reset, and a proxy in
-      // front of Vite reports it as a generic "Network connection lost" 502.
-      if (socket.destroyed) {
-        response.resume();
+    // Other plugins serve their own WebSockets on the dev server (a DevTools
+    // relay, `server.proxy` with `ws: true`), and every `upgrade` listener sees
+    // every upgrade. This listener runs first (see `prependListener` below),
+    // so it records the socket's state before any other listener can touch
+    // it. A socket another listener has since written to, ended, or attached
+    // its own listeners to belongs to that listener: the Worker's answer is
+    // dropped rather than written over the other listener's handshake.
+    const before = socketActivity(socket);
+    const claimed = () => isClaimed(socket, before);
+
+    // The Worker's answer is buffered until it is known who answers the
+    // client: an asynchronous listener may claim the socket while the request
+    // is in flight, or may still be deciding when the Worker answers.
+    const answer: Array<Buffer> = [];
+    const buffer = (chunk: Buffer) => answer.push(chunk);
+    let relaying = false;
+    const relay = () => {
+      upstream.off("data", buffer);
+      if (claimed()) {
+        // Leaves the socket to the listener that claimed it.
+        sockets.delete(socket);
+        upstream.destroy();
         return;
       }
-
-      // The socket was hijacked out of the HTTP server, so it carries no
-      // framing of its own. `response` is already de-chunked by the client, so
-      // hop-by-hop headers must not be copied; the body is close-delimited
-      // instead.
-      const statusLine = `HTTP/1.1 ${response.statusCode ?? 502} ${
-        response.statusMessage ?? ""
-      }`.trimEnd();
-      const headerLines: Array<string> = [statusLine];
-      for (let i = 0; i < response.rawHeaders.length; i += 2) {
-        const name = response.rawHeaders[i]!;
-        if (HOP_BY_HOP_HEADERS.has(name.toLowerCase())) continue;
-        headerLines.push(`${name}: ${response.rawHeaders[i + 1]}`);
-      }
-      headerLines.push("connection: close");
-      socket.write(`${headerLines.join("\r\n")}\r\n\r\n`);
-
-      response.pipe(socket);
-    });
-
-    upstream.on("upgrade", (upstreamRes, upstreamSocket, upstreamHead) => {
-      upstreamSocket.on("error", () => upstreamSocket.destroy());
-
-      if (socket.destroyed) {
-        upstreamSocket.destroy();
+      if (upstream.destroyed) {
+        // The Worker closed: relay its whole (buffered) answer, or reset the
+        // client if it never answered.
+        if (answer.length === 0) {
+          socket.destroy();
+          return;
+        }
+        for (const chunk of answer) socket.write(chunk);
+        socket.end();
         return;
       }
-
-      track(socket);
-      track(upstreamSocket);
-
-      const statusLine = `HTTP/1.1 ${upstreamRes.statusCode ?? 101} ${
-        upstreamRes.statusMessage ?? "Switching Protocols"
-      }`;
-      const headerLines: Array<string> = [statusLine];
-      for (let i = 0; i < upstreamRes.rawHeaders.length; i += 2) {
-        headerLines.push(`${upstreamRes.rawHeaders[i]}: ${upstreamRes.rawHeaders[i + 1]}`);
-      }
-      socket.write(`${headerLines.join("\r\n")}\r\n\r\n`);
-
-      if (upstreamHead.length > 0) {
-        socket.write(upstreamHead);
-      }
-      if (head.length > 0) {
-        upstreamSocket.write(head);
-      }
-
+      relaying = true;
+      for (const chunk of answer) socket.write(chunk);
       // oxlint-disable-next-line effecttsgo/unnecessary-pipe-chain -- Node stream piping (socket -> upstream -> socket), not Effect pipe
-      socket.pipe(upstreamSocket).pipe(socket);
+      socket.pipe(upstream).pipe(socket);
+    };
+    let decided = false;
+    const decide = () => {
+      if (decided) return;
+      decided = true;
+      const settled = pending.get(socket);
+      if (settled === undefined) return relay();
+      void settled.then(relay);
+    };
+    upstream.on("data", buffer);
+    upstream.once("data", decide);
+    upstream.on("error", () => upstream.destroy());
+    upstream.on("close", () => {
+      if (relaying) socket.destroy();
+      else decide();
     });
-
-    // WebSocket upgrade requests carry no body, and any early client bytes are
-    // forwarded above via `upstreamSocket.write(head)`. Ending the request
-    // directly flushes the upstream handshake deterministically, rather than
-    // relying on the incoming `request` stream to emit `end` (which can be
-    // delayed by TCP timing) and avoids a second consumer of the client socket.
-    upstream.end();
+    upstream.once("connect", () => {
+      if (socket.destroyed || claimed()) {
+        sockets.delete(socket);
+        upstream.destroy();
+        return;
+      }
+      const lines = [`${request.method ?? "GET"} ${target.pathname}${target.search} HTTP/1.1`];
+      for (const [name, value] of Object.entries(
+        proxyRequestHeaders(request, url, proxySharedSecret),
+      )) {
+        if (value === undefined) continue;
+        for (const item of Array.isArray(value) ? value : [value]) {
+          lines.push(`${name}: ${item}`);
+        }
+      }
+      upstream.write(`${lines.join("\r\n")}\r\n\r\n`);
+      if (head.length > 0) {
+        upstream.write(head);
+      }
+    });
   };
 
-  httpServer.on("upgrade", onUpgrade);
+  httpServer.prependListener("upgrade", onUpgrade);
   return () => {
+    if (httpServer.emit === emitUpgrade) httpServer.emit = emit;
     httpServer.off("upgrade", onUpgrade);
     for (const socket of sockets) {
       socket.destroy();
@@ -147,21 +171,40 @@ export function handleWebSocket(
   };
 }
 
-/**
- * Headers that describe one hop's connection rather than the message. Copying
- * `transfer-encoding: chunked` onto an already de-chunked body would corrupt
- * the relayed response, so the whole hop-by-hop set is dropped.
- */
-const HOP_BY_HOP_HEADERS = new Set([
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-connection",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-]);
+const isPromiseLike = (value: unknown): value is PromiseLike<unknown> =>
+  typeof value === "object" &&
+  value !== null &&
+  "then" in value &&
+  typeof value.then === "function";
+
+interface SocketActivity {
+  readonly written: number;
+  readonly listeners: number;
+}
+
+// `bytesWritten` counts what Node has queued; Bun counts only what it has
+// flushed, so the queued `writableLength` is added for both.
+const socketActivity = (socket: Duplex): SocketActivity => ({
+  written: ((socket as Partial<NodeNet.Socket>).bytesWritten ?? 0) + socket.writableLength,
+  listeners: (["data", "error", "close", "end"] as const).reduce(
+    (count, event) => count + socket.listenerCount(event),
+    0,
+  ),
+});
+
+// A listener that takes an upgrade writes its handshake or refusal, or
+// subscribes to the socket synchronously, before it answers: `ws` listens for
+// `error` before an async `verifyClient`, and Vite's `server.proxy` for
+// `close` and `error` before it dials its target.
+const isClaimed = (socket: Duplex, before: SocketActivity) => {
+  const now = socketActivity(socket);
+  return (
+    socket.destroyed ||
+    socket.writableEnded ||
+    now.written > before.written ||
+    now.listeners > before.listeners
+  );
+};
 
 /**
  * Matches the origin of a Sandbox SDK preview URL.
@@ -173,7 +216,7 @@ const HOP_BY_HOP_HEADERS = new Set([
  * [^.]+ groups separated by - cause quadratic backtracking on hyphen-heavy input. Tokens
  * are documented as letters/digits/underscores only.
  */
-const SANDBOX_ORIGIN_REGEXP = /^https?:\/\/\d{4,}-[^.]+-[a-z0-9_]+\.localhost(:\d+)?$/i;
+export const SANDBOX_ORIGIN_REGEXP = /^https?:\/\/\d{4,}-[^.]+-[a-z0-9_]+\.localhost(:\d+)?$/i;
 
 function hasSandboxOrigin(origin: string) {
   return SANDBOX_ORIGIN_REGEXP.test(origin);

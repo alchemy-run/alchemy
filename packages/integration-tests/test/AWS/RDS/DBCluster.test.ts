@@ -3,7 +3,7 @@ import { Network } from "@alchemy.run/aws/EC2/Network";
 import { DBCluster } from "@alchemy.run/aws/RDS/DBCluster";
 import type { DBClusterProps } from "@alchemy.run/aws/RDS/DBCluster";
 import { DBSubnetGroup } from "@alchemy.run/aws/RDS/DBSubnetGroup";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
