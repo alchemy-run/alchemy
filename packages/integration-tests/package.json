@@ -38,6 +38,7 @@
     "@cloudflare/workers-types": "catalog:",
     "@distilled.cloud/acme": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
+    "@distilled.cloud/aws4signer": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",

@@ -13,6 +13,7 @@ import { localAccountId } from "../LocalAccount.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
+import { abortMultipartUploads, makeBucketS3Client } from "./internal.ts";
 
 export const isBucket = (value: any): value is Bucket =>
   isResourceOfType(value, "Cloudflare.R2.Bucket");
@@ -264,6 +265,14 @@ export type BucketProps = {
    * `BucketNotEmpty` and both the bucket and its objects survive. Set this
    * to `true` for buckets whose contents are disposable (caches, previews,
    * test fixtures).
+   *
+   * Incomplete multipart uploads also keep R2 from deleting a bucket, and
+   * only R2's S3 API can see them. When R2 still refuses after the objects
+   * are deleted, alchemy mints a temporary API token scoped to the bucket,
+   * aborts the uploads over the S3 API, and deletes the token. That needs
+   * permission to create account API tokens. If the bucket still can't be
+   * deleted, destroy fails with `BucketNotEmptyAfterForceDestroy`, whose
+   * message says why.
    *
    * `alchemy unsafe nuke` empties buckets regardless, since it is an
    * explicitly operator-confirmed account teardown.
@@ -587,7 +596,8 @@ export type Bucket = Resource<
  * does not bypass that refusal: destroying a non-empty bucket fails with
  * `BucketNotEmpty` and both the bucket and its objects survive. Opt into
  * emptying the bucket first with `forceDestroy` for buckets whose contents
- * are disposable.
+ * are disposable. `forceDestroy` also aborts the bucket's incomplete
+ * multipart uploads.
  *
  * **Example:** Empty the bucket on destroy
  * ```typescript
@@ -1508,22 +1518,72 @@ export const ProviderLive = () =>
           if (!destroyContents) {
             return yield* deleteBucket;
           }
-          // A writer that outlives the emptying pass (a Durable Object's
-          // alarm finishing a job while the stack tears down) can land an
-          // object between the sweep and the delete: re-empty and retry,
-          // bounded. Incomplete multipart uploads also hold a bucket; those
-          // only a lifecycle rule clears, and the refusal then stands.
-          yield* deleteBucket.pipe(
-            Effect.catchTag("BucketNotEmpty", (error) =>
-              Effect.sleep("2 seconds").pipe(
-                Effect.andThen(emptyBucket(output.bucketName, output.jurisdiction)),
-                Effect.andThen(Effect.fail(error)),
+          // R2 still refuses when the bucket holds incomplete multipart
+          // uploads (invisible to the object listing), or when a writer
+          // that outlives the emptying pass (a Durable Object's alarm
+          // finishing a job while the stack tears down) lands an object
+          // between the sweep and the delete. Re-empty, abort the uploads
+          // over the S3 API — the REST API cannot see them — and retry,
+          // bounded. The S3 credentials come from a temporary token minted
+          // only on this path and reused across retries.
+          const bucket = {
+            accountId: output.accountId,
+            bucketName: output.bucketName,
+            jurisdiction: output.jurisdiction,
+          };
+          let abortedUploads = 0;
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const s3 = yield* Effect.cached(makeBucketS3Client(bucket));
+              const abortUploads = s3.pipe(
+                Effect.flatMap(abortMultipartUploads),
+                Effect.tap((count) => Effect.sync(() => (abortedUploads += count))),
+                Effect.mapError(
+                  (cause) =>
+                    new BucketNotEmptyAfterForceDestroy({
+                      bucketName: output.bucketName,
+                      accountId: output.accountId,
+                      abortedUploads,
+                      message:
+                        `R2 refused to delete bucket "${output.bucketName}" after its objects were deleted, ` +
+                        "and its incomplete multipart uploads (which also keep a bucket from being deleted) " +
+                        `could not be aborted over R2's S3 API: ${cause.message}. ` +
+                        "Add a lifecycle rule with `abortMultipartUploadsTransition` to the bucket " +
+                        "(R2 aborts uploads after 7 days by default) and destroy again once R2 has applied it.",
+                      cause,
+                    }),
+                ),
+              );
+              yield* deleteBucket.pipe(
+                Effect.catchTag("BucketNotEmpty", (error) =>
+                  Effect.sleep("2 seconds").pipe(
+                    Effect.andThen(emptyBucket(output.bucketName, output.jurisdiction)),
+                    Effect.andThen(abortUploads),
+                    Effect.andThen(Effect.fail(error)),
+                  ),
+                ),
+                Effect.retry({
+                  while: (error) => error._tag === "BucketNotEmpty",
+                  times: 5,
+                }),
+              );
+            }),
+          ).pipe(
+            Effect.catchTag("BucketNotEmpty", (cause) =>
+              Effect.fail(
+                new BucketNotEmptyAfterForceDestroy({
+                  bucketName: output.bucketName,
+                  accountId: output.accountId,
+                  abortedUploads,
+                  message:
+                    `R2 still refuses to delete bucket "${output.bucketName}" after deleting its objects ` +
+                    `and aborting ${abortedUploads} incomplete multipart upload(s) on each of 5 retries. ` +
+                    "Something is still writing to it (a Worker, Durable Object, or S3 client " +
+                    "uploading objects or starting multipart uploads): stop the writer and destroy again.",
+                  cause,
+                }),
               ),
             ),
-            Effect.retry({
-              while: (error) => error._tag === "BucketNotEmpty",
-              times: 5,
-            }),
           );
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
@@ -1626,6 +1686,22 @@ export class LocalUploadsUnsupported extends Data.TaggedError("LocalUploadsUnsup
   bucketName: string;
   jurisdiction: Bucket.Jurisdiction;
   message: string;
+}> {}
+
+/**
+ * `forceDestroy` emptied the bucket and aborted its incomplete multipart
+ * uploads, and R2 still refuses to delete it (`BucketNotEmpty`). `message`
+ * says why and what to do about it.
+ */
+export class BucketNotEmptyAfterForceDestroy extends Data.TaggedError(
+  "BucketNotEmptyAfterForceDestroy",
+)<{
+  bucketName: string;
+  accountId: string;
+  /** Incomplete multipart uploads aborted before giving up. */
+  abortedUploads: number;
+  message: string;
+  cause: unknown;
 }> {}
 
 const r2BucketEndpointConsistencySchedule = Schedule.max([
