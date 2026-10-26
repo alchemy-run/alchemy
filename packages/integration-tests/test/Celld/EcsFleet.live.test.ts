@@ -25,23 +25,14 @@ const options = {
 };
 const { test } = Test.make(options);
 const stack = Core.scratchStack(options, "CelldEc2Live", import.meta.url);
-const cleanupOnly = process.env.CELLD_ECS_FLEET_CLEANUP === "1";
 
-// Cold EC2, NLB and Lambda ENI provisioning can exceed 120s. Every invocation
-// remains under timeout 240; cleanup-only mode resumes ordinary stack teardown.
-test.skipIf(process.env.CELLD_ECS_FLEET_LIVE !== "1")(
-  cleanupOnly
-    ? "cleans up owned Celld EC2 probe infrastructure without deploying"
-    : "dedicated EC2 Celld publishes through private management and executes a fenced runsc container",
+// Cold EC2 hosts, the private NLB and the management Lambda's ENIs take
+// several minutes to provision; the leading destroy drains a previous run.
+test.skipIf(!!process.env.FAST)(
+  "dedicated EC2 Celld publishes through private management and executes a fenced runsc container",
   Core.withProviders(
     Effect.gen(function* () {
-      if (cleanupOnly || process.env.CELLD_ECS_FLEET_RESUME !== "1") {
-        yield* Effect.logInfo(
-          "Destroying previous CelldEc2Live compute; persistent data is retained",
-        );
-        yield* stack.destroy();
-      }
-      if (cleanupOnly) return;
+      yield* stack.destroy();
       const vpcs = yield* ec2.describeVpcs({
         Filters: [{ Name: "is-default", Values: ["true"] }],
       });
@@ -170,5 +161,5 @@ test.skipIf(process.env.CELLD_ECS_FLEET_LIVE !== "1")(
     options,
     stack.name,
   ),
-  { timeout: 210_000 },
+  { timeout: 1_800_000 },
 );

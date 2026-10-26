@@ -1,0 +1,157 @@
+---
+title: Setup
+description: Provision a Celld fleet and publish a Worker graph through Alchemy APIs.
+---
+
+import { Code } from "@astrojs/starlight/components";
+import { effectVersion } from "../../../versions";
+
+Celld embeds V8 on your infrastructure. This guide uses the ECS Fargate host,
+an S3-compatible backing bucket, and an Alchemy `Application` publication.
+It does not invoke Wrangler or `celld deploy`.
+
+## Prepare the deployment environment
+
+Install Alchemy and Effect in a Bun project and configure an
+[Alchemy profile](/environments/profiles) with AWS credentials. The deploying
+identity needs permissions for the host's ECS, networking, IAM, object storage,
+and management resources. New fleets run the digest-pinned Celld 0.6.3 image.
+
+<Code code={`bun add alchemy @alchemy.run/celld @alchemy.run/aws "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}"`} lang="sh" />
+
+The Alchemy CLI performs provisioning and publication; you do not need a
+separate Celld deployment CLI.
+
+## Declare the fleet
+
+```typescript
+// src/fleet.ts
+import * as Celld from "@alchemy.run/celld";
+
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  instances: 2,
+  ingress: true,
+}) {}
+```
+
+A Fleet is infrastructure, not an application bundle. Keep its logical identity
+stable so later code deployments use the same backing resources.
+
+`ingress` puts the fleet's listener behind a public load balancer. Public
+ingress requires subnets in at least two Availability Zones; the host composes
+the network when you don't bring one. Omit `ingress` for a private fleet, which
+only network-attached callers reach through `Celld.bindWorker`.
+
+## Declare the entrypoint
+
+```typescript
+// src/worker.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return { fetch: Effect.succeed(HttpServerResponse.text("Hello from Celld")) };
+  }),
+) {}
+```
+
+The fleet's listener serves only the Application's entrypoint Worker.
+
+## Publish the application
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as AWS from "@alchemy.run/aws";
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Cells } from "./src/fleet.ts";
+import Api from "./src/worker.ts";
+
+export default Alchemy.Stack(
+  "CelldRooms",
+  {
+    providers: Layer.mergeAll(
+      AWS.providers(),
+      Celld.providers(),
+      Celld.EcsFleet(),
+    ),
+    state: AWS.state(),
+  },
+  Effect.gen(function* () {
+    const app = yield* Celld.Application("App", { entrypoint: Api });
+    return { url: app.url, revision: app.revision };
+  }).pipe(Effect.provide(Celld.Fleet.layer(Cells))),
+);
+```
+
+Workers stage immutable artifacts. `Application` selects, publishes, and activates
+the graph, and returns its URL after activation succeeds. `Fleet.layer(Cells)`
+selects the fleet for all declarations inside this scope.
+
+## Deploy
+
+```sh
+bun alchemy deploy
+```
+
+Use the returned application URL, not a staged Worker's URL, as the deployment
+success signal. Publication includes secondary Workers, not just the entrypoint.
+
+## Invoke the entrypoint
+
+```sh
+curl "$APPLICATION_URL"
+```
+
+Set `APPLICATION_URL` to the deployment output. This example returns
+`Hello from Celld`; private fleets require a network-attached caller.
+
+## Remove the compute
+
+```sh
+bun alchemy destroy
+```
+
+Review the plan before destroying a stack. Celld retains application publication
+and backing data rather than treating stack removal as permission to erase it.
+Destroying compute is not a data-purge operation; retained storage can continue
+to incur charges.
+
+## Runtime behavior
+
+The host owns infrastructure and private management access. Alchemy publishes
+through APIs and activates the selected revision; application requests go to
+the declared entrypoint. Background and service Workers belong in
+`Application.workers` and must use the same fleet.
+
+## Upgrade an existing fleet
+
+Releases within the Celld 0.6 series upgrade with a rolling deployment: set
+`runtimeVersion` (and `image`, for a mirror) on the Fleet and deploy. The host
+replaces nodes one at a time; a draining node hands its cells to its peers.
+Node sizing changes roll out the same way.
+
+A release from another series changes the bucket format, so the host refuses
+it on an existing fleet; plan a stopped-fleet maintenance operation instead.
+Switching between Fargate and EC2 capacity replaces every node at once and is
+refused too.
+
+## Limitations
+
+Celld is not workerd and is not a drop-in implementation of every Cloudflare
+binding. A default Fargate fleet does not imply support for Docker-backed
+Containers or Sandbox; those require an explicitly capable host configuration.
+
+## Related guides
+
+- [Workers](/celld/compute/workers)
+- [Cloudflare setup](/cloudflare/setup)
+- [Fleet reference](/providers/celld/reference/celld#fleet)
+- [Application reference](/providers/celld/reference/celld#application)
+- [ECS host reference](/providers/celld/reference/celld#ecsfleet)

@@ -56,10 +56,9 @@ const inWorker = <T>(route: string) =>
 
 // The engine conformance spec, run against a REAL celld fleet on Fargate.
 // The fleet is private, so the Lambda re-exposes the same routes and
-// drives the cells through `Celld.bindWorker`'s stub. Gated like an
-// entitlement: set ALCHEMY_TEST_FLEETS=1 to run it (cold fleet provisioning
-// and Fargate placement take minutes, not seconds).
-describe.skipIf(!process.env.ALCHEMY_TEST_FLEETS || !!process.env.FAST)(
+// drives the cells through `Celld.bindWorker`'s stub. Skipped under --fast:
+// cold fleet provisioning and Fargate placement take minutes, not seconds.
+describe.skipIf(!!process.env.FAST)(
   "celld engine conformance",
   { tags: ["provider:celld", "provider:aws", "provider:aws:ecs", "live"] },
   () => {

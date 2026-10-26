@@ -39,6 +39,7 @@ function providersSidebarEntry() {
       { label: "Hetzner", link: "/hetzner" },
       { label: "Fly", link: "/fly" },
       { label: "Railway", link: "/railway" },
+      { label: "Celld", link: "/celld" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
@@ -1185,6 +1186,34 @@ export default defineConfig({
               items: [{ label: "IPs & certificates", link: "/fly/networking" }],
             },
             providerResourcesEntry("Fly"),
+          ],
+        },
+        {
+          label: "Celld",
+          items: [
+            { label: "Overview", link: "/celld" },
+            { label: "Setup", link: "/celld/setup" },
+            {
+              label: "Workers",
+              items: [
+                { label: "Workers", link: "/celld/compute/workers" },
+                { label: "Workflows", link: "/celld/compute/workflows" },
+              ],
+            },
+            {
+              label: "Durable Objects",
+              items: [
+                { label: "Durable Objects", link: "/celld/compute/durable-objects" },
+                { label: "Durable schedules", link: "/celld/compute/durable-schedules" },
+                {
+                  label: "Hibernatable WebSockets",
+                  link: "/celld/compute/hibernatable-websockets",
+                },
+                { label: "Effect RPC", link: "/celld/apis/effect-rpc" },
+                { label: "SQL migrations", link: "/celld/data/sql-migrations" },
+              ],
+            },
+            providerResourcesEntry("Celld"),
           ],
         },
         {

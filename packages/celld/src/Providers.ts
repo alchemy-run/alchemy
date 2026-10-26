@@ -11,7 +11,8 @@ import { Namespace, NamespaceProvider } from "./KV/Namespace.ts";
 import { ManagementBindings } from "./ManagementBindings.ts";
 import { Queue, QueueProvider } from "./Queues/Queue.ts";
 import { Bucket, BucketProvider } from "./R2/Bucket.ts";
-import { CelldWorkerProvider, Worker } from "./Worker.ts";
+import { Worker } from "./Worker.ts";
+import { CelldWorkerProvider } from "./WorkerProvider.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("Celld") {}
 

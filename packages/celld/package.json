@@ -29,6 +29,12 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./Containers": "./src/Containers/index.ts",
+    "./D1": "./src/D1/index.ts",
+    "./KV": "./src/KV/index.ts",
+    "./Queues": "./src/Queues/index.ts",
+    "./R2": "./src/R2/index.ts",
+    "./Workflows": "./src/Workflows/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -39,6 +45,42 @@
         "bun": "./src/index.ts",
         "worker": "./src/index.ts",
         "default": "./lib/index.js"
+      },
+      "./Containers": {
+        "types": "./lib/Containers/index.d.ts",
+        "bun": "./src/Containers/index.ts",
+        "worker": "./src/Containers/index.ts",
+        "default": "./lib/Containers/index.js"
+      },
+      "./D1": {
+        "types": "./lib/D1/index.d.ts",
+        "bun": "./src/D1/index.ts",
+        "worker": "./src/D1/index.ts",
+        "default": "./lib/D1/index.js"
+      },
+      "./KV": {
+        "types": "./lib/KV/index.d.ts",
+        "bun": "./src/KV/index.ts",
+        "worker": "./src/KV/index.ts",
+        "default": "./lib/KV/index.js"
+      },
+      "./Queues": {
+        "types": "./lib/Queues/index.d.ts",
+        "bun": "./src/Queues/index.ts",
+        "worker": "./src/Queues/index.ts",
+        "default": "./lib/Queues/index.js"
+      },
+      "./R2": {
+        "types": "./lib/R2/index.d.ts",
+        "bun": "./src/R2/index.ts",
+        "worker": "./src/R2/index.ts",
+        "default": "./lib/R2/index.js"
+      },
+      "./Workflows": {
+        "types": "./lib/Workflows/index.d.ts",
+        "bun": "./src/Workflows/index.ts",
+        "worker": "./src/Workflows/index.ts",
+        "default": "./lib/Workflows/index.js"
       },
       "./*": {
         "types": "./lib/*.d.ts",

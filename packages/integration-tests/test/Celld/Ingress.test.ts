@@ -145,14 +145,12 @@ const probeRedirect = (url: string) =>
     Effect.provide(manualRedirects),
   );
 
-// Public ingress + custom domain for a celld fleet worker: an
-// internet-facing ALB in front of the node tasks (target group attached to
-// the EXISTING node service), an ACM certificate DNS-validated through
-// `Cloudflare.CloudflareDns()` on the standing test zone, and the domain
-// CNAME declared through the same seam. Gated like an entitlement: set
-// ALCHEMY_TEST_FLEETS=1 to run it (cold provisioning waits for Fargate
-// placement, target health AND certificate issuance).
-describe.skipIf(!process.env.ALCHEMY_TEST_FLEETS || !!process.env.FAST)(
+// Public ingress + custom domain for a celld fleet: the node service's
+// internet-facing ALB, an ACM certificate DNS-validated through the
+// Cloudflare DNS adapter on the standing test zone, and the domain CNAME.
+// Skipped under --fast: cold provisioning waits for Fargate placement,
+// target health AND certificate issuance.
+describe.skipIf(!!process.env.FAST)(
   "celld ingress (public ALB + domain)",
   {
     tags: [

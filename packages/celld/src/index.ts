@@ -60,7 +60,6 @@ export {
 } from "./Host.ts";
 export { providers, Providers } from "./Providers.ts";
 export {
-  CelldWorkerProvider,
   CelldWorkerTypeId,
   Worker,
   WorkerNotConnected,
@@ -76,6 +75,7 @@ export {
   type CelldWorkerResourceProps,
   type FleetRef,
 } from "./Worker.ts";
+export { CelldWorkerProvider } from "./WorkerProvider.ts";
 export { CelldMigrationConflictError } from "./Wrangler.ts";
 export { Application, type ApplicationProps, type ApplicationAttributes } from "./Application.ts";
 export { Bootstrap, type BootstrapProps, type BootstrapAttributes } from "./Bootstrap.ts";

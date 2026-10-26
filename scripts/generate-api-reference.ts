@@ -79,6 +79,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/turso/src",
   },
   {
+    srcRoot: "packages/celld/src",
+    providerPrefix: "Celld",
+    sourceDisplayPrefix: "packages/celld/src",
+  },
+  {
     srcRoot: "packages/planetscale/src",
     providerPrefix: "Planetscale",
     sourceDisplayPrefix: "packages/planetscale/src",

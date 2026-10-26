@@ -1,0 +1,1 @@
+CREATE TABLE items (value TEXT NOT NULL);
