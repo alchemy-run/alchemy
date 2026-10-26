@@ -21,12 +21,12 @@ import { FleetStorage, type Store } from "./FleetStorage.ts";
 import type { FleetBucket } from "./Host.ts";
 import * as Node from "./Protocol/node.ts";
 import type { Providers } from "./Providers.ts";
-import { DEFAULT_CELLD_VERSION } from "./RuntimeVersion.ts";
+import { CELLD_RUNTIME_SERIES, isSupportedCelldVersion } from "./RuntimeVersion.ts";
 
 export interface BootstrapProps {
   /** Existing backing bucket; no Fleet or compute dependency is required. */
   readonly bucket: FleetBucket;
-  /** Exact supported runtime version. In-place legacy migrations are refused. */
+  /** The fleet's runtime release; it must belong to the supported series. */
   readonly runtimeVersion: string;
 }
 export interface BootstrapAttributes extends BootstrapProps {
@@ -69,10 +69,10 @@ export const Bootstrap = Resource<Bootstrap>("Celld.Bootstrap");
 /** Prepared local native fixture, also suitable for the host's live startup test. */
 export const prepareBootstrap = (props: BootstrapProps) =>
   Effect.gen(function* () {
-    if (props.runtimeVersion !== DEFAULT_CELLD_VERSION)
+    if (!isSupportedCelldVersion(props.runtimeVersion))
       return yield* refuse(
         "unsupported",
-        `Bootstrap supports exactly Celld ${DEFAULT_CELLD_VERSION}. Runtime migrations require an explicit stopped-fleet operator migration.`,
+        `Bootstrap supports Celld ${CELLD_RUNTIME_SERIES}.x runtimes; got ${props.runtimeVersion}.`,
       );
     if (!/^s3:\/\/[^/]+$/.test(props.bucket.uri))
       return yield* refuse("configuration", "Bootstrap requires a bucket-only s3:// URI.");
@@ -155,7 +155,7 @@ const observeRoot = (store: Store) =>
     if (manifest.required_features?.some((feature) => !supported.includes(feature)))
       return yield* refuse(
         "unsupported",
-        `Existing root requires runtime features unsupported by Celld ${DEFAULT_CELLD_VERSION}.`,
+        `Existing root requires runtime features unsupported by Celld ${CELLD_RUNTIME_SERIES}.`,
       );
     for (const module of manifest.modules) {
       if (
@@ -226,7 +226,8 @@ const observeRoot = (store: Store) =>
 
 const expectedDescriptor = (props: BootstrapProps, pointer: Node.DeployPointer) => ({
   schemaVersion: 1 as const,
-  runtimeVersion: DEFAULT_CELLD_VERSION,
+  // The bucket format is per release series: patch releases share it.
+  runtimeVersion: CELLD_RUNTIME_SERIES,
   bucket: props.bucket,
   pointer,
 });

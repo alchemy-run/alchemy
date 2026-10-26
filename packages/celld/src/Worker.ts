@@ -65,7 +65,11 @@ import { FleetStorage } from "./FleetStorage.ts";
 import type { FleetBucket } from "./Host.ts";
 import { validateStorageBindings, type StorageBinding } from "./KV/StorageBinding.ts";
 import type { Providers } from "./Providers.ts";
-import { DEFAULT_CELLD_VERSION } from "./RuntimeVersion.ts";
+import {
+  CELLD_RUNTIME_SERIES,
+  DEFAULT_CELLD_VERSION,
+  isSupportedCelldVersion,
+} from "./RuntimeVersion.ts";
 import { FLEET_DEPLOYMENT_VAR, FLEET_SECRET_HEADER, FLEET_SECRET_VAR } from "./WorkerBridge.ts";
 import {
   computeFleetMigrations,
@@ -559,11 +563,11 @@ export const CelldWorkerProvider = () =>
           }),
         );
       }
-      if ((news.celldVersion ?? DEFAULT_CELLD_VERSION) !== DEFAULT_CELLD_VERSION) {
+      if (!isSupportedCelldVersion(news.celldVersion ?? DEFAULT_CELLD_VERSION)) {
         return yield* Effect.fail(
           new DeploymentError({
             reason: "unsupported",
-            message: `API deployment supports Celld ${DEFAULT_CELLD_VERSION} only; runtime upgrades require an explicit stopped-fleet maintenance operation.`,
+            message: `Celld.Worker deploys to Celld ${CELLD_RUNTIME_SERIES}.x fleets; got ${news.celldVersion}.`,
           }),
         );
       }

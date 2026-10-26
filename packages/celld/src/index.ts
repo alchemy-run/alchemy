@@ -1,5 +1,6 @@
 export {
   DEFAULT_CELLD_IMAGE,
+  CELLD_RUNTIME_SERIES,
   DEFAULT_CELLD_VERSION,
   CelldVersionMismatch,
 } from "./RuntimeVersion.ts";

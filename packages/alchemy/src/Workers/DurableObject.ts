@@ -165,6 +165,7 @@ export interface DurableObjectStubOptions {
  */
 export interface DurableObjectEngineHost extends DurableObjectHostLike {
   readonly Type: string;
+  readonly LogicalId: string;
   /** Host-native binding data for a Durable Object class declaration. */
   readonly durableObjectBinding: (decl: DurableObjectBindingDeclaration) => unknown;
   /** The engine's stub flavor over a native instance stub. */

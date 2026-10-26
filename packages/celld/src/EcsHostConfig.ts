@@ -6,8 +6,10 @@ import * as Effect from "effect/Effect";
 import {
   CELLD_INTERNAL_PORT,
   CELLD_PUBLIC_PORT,
+  CELLD_RUNTIME_SERIES,
   DEFAULT_CELLD_IMAGE,
   DEFAULT_CELLD_VERSION,
+  isSupportedCelldVersion,
 } from "./CelldCli.ts";
 import type { EcsFleetOptions } from "./EcsFleet.ts";
 
@@ -109,9 +111,9 @@ export const resolveEcsHostConfiguration = (
   Effect.gen(function* () {
     const runtimeVersion = props.runtimeVersion ?? DEFAULT_CELLD_VERSION;
     const image = props.image ?? DEFAULT_CELLD_IMAGE;
-    if (runtimeVersion !== DEFAULT_CELLD_VERSION || image !== DEFAULT_CELLD_IMAGE) {
+    if (!isSupportedCelldVersion(runtimeVersion)) {
       return yield* new EcsHostConfigurationError({
-        message: `EcsFleet only supports the pinned Celld ${DEFAULT_CELLD_VERSION} runtime image. Binary upgrades require an explicit stopped-fleet maintenance procedure, not an ECS rolling deployment.`,
+        message: `EcsFleet supports Celld ${CELLD_RUNTIME_SERIES}.x runtimes (default ${DEFAULT_CELLD_VERSION}); got ${runtimeVersion}.`,
       });
     }
     const capacity = options.capacity?.type ?? "fargate";
@@ -135,29 +137,33 @@ export const resolveEcsHostConfiguration = (
     } satisfies EcsHostConfiguration;
   });
 
-/** Missing configuration identifies fleets created before the split-listener contract. */
+/**
+ * Runtime releases within a series, images and node sizing roll out as an
+ * ECS rolling deployment: nodes drain gracefully and peers take their cells
+ * over. A release from another series changes the bucket format, and
+ * switching the capacity type or the container runtime replaces every node
+ * at once; those are refused on an existing fleet.
+ */
 export const validateEcsHostTransition = (
   previous: EcsHostConfiguration | undefined,
   next: EcsHostConfiguration,
 ) =>
-  previous === undefined ||
-  previous.runtimeVersion !== next.runtimeVersion ||
-  previous.image !== next.image ||
-  previous.capacity !== next.capacity ||
-  previous.instanceType !== next.instanceType ||
-  previous.containerRuntime !== next.containerRuntime ||
-  previous.runtimeRelease !== next.runtimeRelease ||
-  previous.architecture !== next.architecture ||
-  previous.reservedMemoryMiB !== next.reservedMemoryMiB ||
-  previous.memoryMiB !== next.memoryMiB ||
-  previous.cpuUnits !== next.cpuUnits
-    ? Effect.fail(
-        new EcsHostConfigurationError({
-          message:
-            "Changing an existing Celld runtime, capacity, or container runtime requires an explicit stopped-fleet maintenance procedure. Legacy fleets without a host configuration cannot be upgraded by a normal deploy.",
-        }),
-      )
-    : Effect.void;
+  previous === undefined
+    ? Effect.void
+    : !isSupportedCelldVersion(previous.runtimeVersion)
+      ? Effect.fail(
+          new EcsHostConfigurationError({
+            message: `Upgrading a Celld ${previous.runtimeVersion} fleet to ${next.runtimeVersion} crosses a release series and requires a stopped-fleet maintenance procedure; a rolling deployment cannot change the bucket format.`,
+          }),
+        )
+      : previous.capacity !== next.capacity || previous.containerRuntime !== next.containerRuntime
+        ? Effect.fail(
+            new EcsHostConfigurationError({
+              message:
+                "Changing an existing Celld fleet's capacity type or container runtime replaces every node at once; create a new fleet instead.",
+            }),
+          )
+        : Effect.void;
 
 /** ECS credentials remain refreshable through object_store's ambient provider. */
 export const makeEcsDockerfile = (image: string, capacity: "fargate" | "ec2" = "fargate") => `

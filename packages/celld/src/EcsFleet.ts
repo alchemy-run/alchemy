@@ -511,8 +511,9 @@ const awsEnvironment = Layer.mergeAll(
 /**
  * ECS host with Fargate as the default. Workers use port 8080; only nodes
  * and the trusted management runner can access the private 8081 listener.
- * Storage is retained when the fleet is removed. Runtime upgrades require
- * a stopped-fleet maintenance procedure.
+ * Storage is retained when the fleet is removed. Runtime upgrades within the
+ * supported release series, image changes and node resizing roll out as ECS
+ * rolling deployments.
  *
  * EC2 uses a dedicated ASG with one task per host and one spare host. Child
  * containers run on the host Docker daemon, outside ECS task accounting;

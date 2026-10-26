@@ -1,12 +1,23 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 
-/** Exact runtime release supported by the native deployment protocol. */
-export const DEFAULT_CELLD_VERSION = "0.6.0";
+/**
+ * The release series whose deployment protocol and bucket format this
+ * integration speaks. Releases within a series upgrade with a rolling
+ * restart of the fleet's nodes.
+ */
+export const CELLD_RUNTIME_SERIES = "0.6";
 
-/** Multi-architecture v0.6.0 image, release commit bad4649d01f0db84cdc9093527e72e64ca7a14bf. */
+/** The runtime release new fleets run. */
+export const DEFAULT_CELLD_VERSION = "0.6.3";
+
+/** Multi-architecture v0.6.3 image, release commit 8702f6d186c77698dbfb30cf29e3b1922a88f008. */
 export const DEFAULT_CELLD_IMAGE =
-  "ghcr.io/denoland/celld@sha256:e188a7f2bb0b8cec9fb04ee4c3d1ed7cca0ea0419519ae2a9ba36e5b6fe5161b";
+  "ghcr.io/denoland/celld@sha256:22bca1b40a9e4c434cc149d8913d7eaafa9792961a8c05f9fecf921d416216dc";
+
+/** Whether a runtime release belongs to the supported series. */
+export const isSupportedCelldVersion = (version: string) =>
+  version === CELLD_RUNTIME_SERIES || version.startsWith(`${CELLD_RUNTIME_SERIES}.`);
 
 /** Public Worker traffic; the peer/operator listener must remain private. */
 export const CELLD_PUBLIC_PORT = 8080;
@@ -20,12 +31,12 @@ export class CelldVersionMismatch extends Data.TaggedError("Celld.VersionMismatc
   readonly message: string;
 }> {}
 
-/** Binary upgrades require explicit maintenance, never a Worker redeployment. */
+/** Refuse a runtime release outside the supported series. */
 export const validateCelldVersion = (version: string) =>
-  version === DEFAULT_CELLD_VERSION
+  isSupportedCelldVersion(version)
     ? Effect.void
     : Effect.fail(
         new CelldVersionMismatch({
-          message: `Celld ${version} is not supported by this adapter; use ${DEFAULT_CELLD_VERSION}. Binary upgrades require an explicit stopped-fleet upgrade procedure.`,
+          message: `Celld ${version} is not supported by this integration; use a ${CELLD_RUNTIME_SERIES}.x release (default ${DEFAULT_CELLD_VERSION}).`,
         }),
       );

@@ -3,7 +3,7 @@ import * as Schema from "effect/Schema";
 import { sameImmutableManifest, stageDeployment, type PreparedDeployment } from "../Deployment.ts";
 import type { Store, StoredObject } from "../FleetStorage.ts";
 import * as Node from "../Protocol/node.ts";
-import { DEFAULT_CELLD_VERSION } from "../RuntimeVersion.ts";
+import { CELLD_RUNTIME_SERIES } from "../RuntimeVersion.ts";
 import {
   bytes,
   conditionalPut,
@@ -25,7 +25,7 @@ export const ROOT_POINTER_KEY = "deploy/current.json";
 
 export const BootstrapDescriptorSchema = Schema.Struct({
   schemaVersion: Schema.Literal(1),
-  runtimeVersion: Schema.Literal(DEFAULT_CELLD_VERSION),
+  runtimeVersion: Schema.Literal(CELLD_RUNTIME_SERIES),
   bucket: Schema.Struct({
     uri: Schema.String,
     region: Schema.optional(Schema.String),
@@ -310,7 +310,7 @@ const checkCronTransition = (
     if (manifest.crons?.length && (scriptName !== next.scriptName || !next.manifest.crons?.length))
       return yield* refuse(
         "unsupported",
-        `Celld ${DEFAULT_CELLD_VERSION} cannot safely retire the previous root's persisted cron cell .cron:${scriptName} when changing its script identity or removing all cron triggers. Keep root script ${scriptName} and at least one cron trigger; this transition requires verified native cron retirement support.`,
+        `Celld ${CELLD_RUNTIME_SERIES} cannot safely retire the previous root's persisted cron cell .cron:${scriptName} when changing its script identity or removing all cron triggers. Keep root script ${scriptName} and at least one cron trigger; this transition requires verified native cron retirement support.`,
       );
   });
 

@@ -223,10 +223,11 @@ export type FleetClass = {
  * Neither Wrangler nor `celld deploy` is invoked.
  *
  * ### Capabilities and limits <!-- api-prose -->
- * Celld embeds V8 rather than workerd. This integration targets the pinned
- * {@link Celld.DEFAULT_CELLD_VERSION} runtime, not a general Cloudflare API implementation.
- * Runtime upgrades require an explicit stopped-fleet maintenance procedure;
- * a normal deploy never rolls an existing fleet onto a new runtime.
+ * Celld embeds V8 rather than workerd. This integration targets the Celld
+ * {@link Celld.CELLD_RUNTIME_SERIES} release series (new fleets run
+ * {@link Celld.DEFAULT_CELLD_VERSION}), not a general Cloudflare API
+ * implementation. Releases within the series upgrade with a rolling restart
+ * of the fleet's nodes.
  *
  * - {@link Celld.KV.Namespace}, {@link Celld.D1.Database}, {@link Celld.R2.Bucket},
  *   {@link Celld.Queues.Queue}, {@link Celld.DurableObject}, {@link Celld.Workflow},
