@@ -528,27 +528,26 @@ export const make = <
   } as unknown as AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>>;
 };
 
-/** The tags of the commands whose `target` is not the aggregate's `id`. */
-type MismatchedTargets<Id extends IdSchema, C extends Command.Any> = C extends Command.Any
-  ? [Id["Type"]] extends [C["target"]["Type"]]
-    ? [C["target"]["Type"]] extends [Id["Type"]]
-      ? never
-      : C["tag"]
-    : C["tag"]
-  : never;
+/**
+ * A command whose `target` is the aggregate's `id`, both ways; any other
+ * command becomes a message naming it.
+ */
+type CheckTarget<Id extends IdSchema, Cmd> = Cmd extends Command.Any
+  ? [Id["Type"]] extends [Cmd["target"]["Type"]]
+    ? [Cmd["target"]["Type"]] extends [Id["Type"]]
+      ? Cmd
+      : `${Cmd["tag"]}'s target must be this aggregate's id schema`
+    : `${Cmd["tag"]}'s target must be this aggregate's id schema`
+  : Cmd;
 
 /**
  * Every command's `target` must be the aggregate's `id`: an Api decodes the
  * target with the command's schema and the aggregate decodes it with its own.
- * A mismatch asks for a property that names the commands.
+ * A mismatched command is a type error on its entry in `commands`.
  */
-export type TargetsMatch<Id extends IdSchema, C extends ReadonlyArray<Command.Any>> = [
-  MismatchedTargets<Id, C[number]>,
-] extends [never]
-  ? unknown
-  : {
-      readonly "~targetNotThisAggregatesId": MismatchedTargets<Id, C[number]>;
-    };
+export type TargetsMatch<Id extends IdSchema, C extends ReadonlyArray<Command.Any>> = {
+  readonly commands: { readonly [K in keyof C]: CheckTarget<Id, C[K]> };
+};
 
 /** A definition with its events collected from its commands. */
 export type Resolved<

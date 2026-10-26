@@ -98,6 +98,18 @@ class AlsoBroken extends Domain.Model("AlsoBroken", {
   policies: [Notify, Audit],
 }) {}
 
+const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
+const CustomerId = Schema.String.pipe(Schema.brand("CustomerId"));
+class Opened extends Domain.Event("Opened") {}
+class OpenAccount extends Domain.Command("OpenAccount", { target: AccountId, events: [Opened] }) {}
+// Addresses a customer, so it does not belong on Account.
+class OpenForCustomer extends Domain.Command("OpenForCustomer", {
+  target: CustomerId,
+  events: [Opened],
+}) {}
+// A plain string target accepts ids that are not an AccountId.
+class OpenAny extends Domain.Command("OpenAny", { target: Schema.String, events: [Opened] }) {}
+
 describe("Domain verify", () => {
   it("finds no problem in a correct model", () => {
     expect(Domain.verify(Bank)).toEqual([]);
@@ -134,6 +146,49 @@ describe("Domain verify", () => {
     expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
       _tag: "DefinitionError",
       message: first!.message,
+    });
+  });
+
+  describe("command target", () => {
+    it("a command addresses its aggregate's id", () => {
+      class Account extends Domain.Aggregate("Account", {
+        id: AccountId,
+        state: Schema.Struct({}),
+        initial: {},
+        commands: [OpenAccount],
+        decide: { OpenAccount: () => [new Opened()] },
+        evolve: { Opened: (s) => s },
+      }) {}
+      expect(Account.ref("a-1").id).toBe("a-1");
+    });
+
+    it("a command whose target is another id schema is a type error", () => {
+      class Account extends Domain.Aggregate("Account", {
+        id: AccountId,
+        state: Schema.Struct({}),
+        initial: {},
+        commands: [
+          OpenAccount,
+          // @ts-expect-error OpenForCustomer's target must be this aggregate's id schema
+          OpenForCustomer,
+        ],
+        decide: { OpenAccount: () => [new Opened()], OpenForCustomer: () => [new Opened()] },
+        evolve: { Opened: (s) => s },
+      }) {}
+      expect(Account.aggregateName).toBe("Account");
+    });
+
+    it("a command whose target is wider than the id is a type error", () => {
+      class Account extends Domain.Aggregate("Account", {
+        id: AccountId,
+        state: Schema.Struct({}),
+        initial: {},
+        // @ts-expect-error OpenAny's target must be this aggregate's id schema
+        commands: [OpenAny],
+        decide: { OpenAny: () => [new Opened()] },
+        evolve: { Opened: (s) => s },
+      }) {}
+      expect(Account.aggregateName).toBe("Account");
     });
   });
 });
