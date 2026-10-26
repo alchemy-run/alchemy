@@ -112,8 +112,8 @@ const NAME_MAX_LENGTH = 255;
 
 const PAGE_SIZE = 200;
 
-// GET can lag a change by a few seconds.
-const SSH_KEY_POLL: PollBudget = { every: "1 second", times: 10 };
+// GET lags a change by a few seconds.
+const SSH_KEY_POLL: PollBudget = { every: "3 seconds", times: 15 };
 
 type AuthorizedKey = {
   /** The `authorized_keys` line DigitalOcean registers. */
@@ -275,8 +275,15 @@ const waitForKey = (
     onTimeout: () => new SshKeyWaitTimedOut({ sshKeyId, waitingFor: wait.waitingFor }),
   }).pipe(Effect.map((observed) => observed.value));
 
-const waitUntilGone = (sshKeyId: number) =>
-  pollUntil(observeById(sshKeyId), {
+// A key registered moments ago answers DELETE with 404 while GET still
+// returns it, so the delete is repeated until the key is gone.
+const deleteOnce = (sshKeyId: number) =>
+  ignoreNotFound(DO.deleteSshKey({ ssh_key_identifier: String(sshKeyId) })).pipe(
+    Effect.andThen(observeById(sshKeyId)),
+  );
+
+const deleteUntilGone = (sshKeyId: number) =>
+  pollUntil(deleteOnce(sshKeyId), {
     ...SSH_KEY_POLL,
     until: Option.isNone,
     onTimeout: () => new SshKeyWaitTimedOut({ sshKeyId, waitingFor: "deletion" }),
@@ -364,7 +371,6 @@ export const SshKeyProvider = () =>
       return toAttrs(yield* syncName(key, name));
     }),
     delete: Effect.fn(function* ({ output }) {
-      yield* ignoreNotFound(DO.deleteSshKey({ ssh_key_identifier: String(output.sshKeyId) }));
-      yield* waitUntilGone(output.sshKeyId);
+      yield* deleteUntilGone(output.sshKeyId);
     }),
   });

@@ -136,11 +136,15 @@ already exist — DigitalOcean rejects an unknown tag with a typed
 Droplet names are not unique, so alchemy adds two tags to every
 droplet it creates. `alchemy:<sha256>` names the resource. The hash
 is built from the stack, stage, and the fully-qualified resource
-name. If the state store is ever lost, alchemy finds the droplet
-again through that tag. `alchemy:generation:<instanceId>` names one
-generation of the resource and tells a replacement from the droplet
-it replaces. Both tags are deleted with the droplet, and `tags`
+name. `alchemy:generation:<instanceId>` names one generation of the
+resource: an interrupted deploy resumes on the droplet it already
+created, and a replacement never mistakes the droplet it replaces
+for its own. Both tags are deleted with the droplet, and `tags`
 cannot use the `alchemy:` prefix.
+
+A droplet whose state row is lost is not taken back over. The next
+deploy creates a new droplet and leaves the old one, still carrying
+its tags, for you to delete.
 
 When a resource already exists but alchemy didn't create it, the
 deploy fails instead of silently taking it over:

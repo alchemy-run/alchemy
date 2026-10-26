@@ -6,7 +6,7 @@ import {
 } from "@alchemy.run/digitalocean/Droplet";
 import { hashOwnershipTag } from "@alchemy.run/digitalocean/internal/ownership";
 import { describe, expect, it } from "@alchemy.run/test";
-import { dropletsDestroy, getDroplet, getTag } from "@distilled.cloud/digitalocean";
+import { deleteTag, dropletsDestroy, getDroplet, getTag } from "@distilled.cloud/digitalocean";
 import { OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
 import { State } from "alchemy/State/State";
@@ -426,6 +426,22 @@ const droplet = (props: Partial<DropletProps>) =>
 
 const isGenerationTag = (tag: string) => tag.startsWith("alchemy:generation:");
 
+/** Destroys a droplet the stack no longer knows about, and the tags only it carried. */
+const destroyOrphan = (dropletId: number, tags: ReadonlyArray<string | undefined>) =>
+  dropletsDestroy({ droplet_id: dropletId }).pipe(
+    Effect.catchTag("NotFound", () => Effect.void),
+    Effect.andThen(
+      Effect.forEach(
+        tags.filter((tag) => tag !== undefined),
+        (tag) => deleteTag({ tag_id: tag }).pipe(Effect.catchTag("NotFound", () => Effect.void)),
+        { discard: true },
+      ),
+    ),
+    Effect.catchCause((cause) =>
+      Effect.logWarning(`Droplet ${dropletId} was not cleaned up`, cause),
+    ),
+  );
+
 const generationTagOf = (dropletId: number) =>
   getDroplet({ droplet_id: dropletId }).pipe(
     Effect.map((response) => response.droplet.tags.find(isGenerationTag)),
@@ -528,21 +544,18 @@ test.provider.skipIf(skipSlow)(
 );
 
 test.provider.skipIf(skipSlow)(
-  "droplet is recovered through its ownership tag after state loss",
+  "a droplet whose state row is lost is left alone and the next deploy creates a new one",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
       const created = yield* stack.deploy(droplet({ name: DROPLET_NAME }));
+      const orphanTags = [
+        yield* generationTagOf(created.dropletId),
+        yield* hashOwnershipTag(stack.name, stack.stage, "TestDroplet"),
+      ];
       // A deleted state row hides the droplet from the harness teardown.
-      yield* Effect.addFinalizer(() =>
-        dropletsDestroy({ droplet_id: created.dropletId }).pipe(
-          Effect.catchTag("NotFound", () => Effect.void),
-          Effect.catchCause((cause) =>
-            Effect.logWarning(`Droplet ${created.dropletId} was not cleaned up`, cause),
-          ),
-        ),
-      );
+      yield* Effect.addFinalizer(() => destroyOrphan(created.dropletId, orphanTags));
 
       const state = yield* yield* State;
       yield* state.delete({
@@ -551,13 +564,14 @@ test.provider.skipIf(skipSlow)(
         fqn: "TestDroplet",
       });
 
-      const recovered = yield* stack.deploy(droplet({ name: DROPLET_NAME }));
-      expect(recovered.dropletId).toEqual(created.dropletId);
-      expect(recovered.ipv4).toEqual(created.ipv4);
+      const recreated = yield* stack.deploy(droplet({ name: DROPLET_NAME }));
+      expect(recreated.dropletId).not.toEqual(created.dropletId);
+      expect(yield* isGone(getDroplet({ droplet_id: created.dropletId }))).toBe(false);
 
       yield* stack.destroy();
 
-      expect(yield* isGone(getDroplet({ droplet_id: created.dropletId }))).toBe(true);
+      expect(yield* isGone(getDroplet({ droplet_id: recreated.dropletId }))).toBe(true);
+      expect(yield* isGone(getDroplet({ droplet_id: created.dropletId }))).toBe(false);
     }).pipe(logLevel),
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );

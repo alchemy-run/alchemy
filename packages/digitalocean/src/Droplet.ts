@@ -169,10 +169,12 @@ export type DropletAttributes = Droplet["Attributes"];
  * the old one is deleted. Put all setup in `userData` (cloud-init) so
  * a new droplet configures itself.
  *
- * Droplet names are not unique. Alchemy adds an `alchemy:` ownership tag at
- * create, built from the stack, stage, and fully-qualified resource name.
- * If the state store is lost, alchemy finds the droplet again through that
- * tag. A droplet with the same name but no tag is `Unowned` and needs
+ * Droplet names are not unique. Alchemy tags every droplet it creates with
+ * an `alchemy:` ownership tag, built from the stack, stage and
+ * fully-qualified resource name, and an `alchemy:generation:` tag for the
+ * generation, so an interrupted deploy resumes on the droplet it already
+ * created and a replacement never mistakes the old droplet for the new one.
+ * A same-named droplet without the ownership tag is `Unowned` and needs
  * `--adopt`.
  *
  * ### Creating a Droplet
@@ -496,6 +498,11 @@ const observeByIdOrTag = Effect.fn(function* (dropletId: number | undefined, tag
   return yield* observeNewestTagged(tag);
 });
 
+// An interrupted create resumes under the same instance id, while a
+// replacement runs under a new one and never finds the droplet it replaces.
+const observeGeneration = (output: DropletAttributes | undefined, instanceId: string) =>
+  observeByIdOrTag(output?.dropletId, generationTagFor(instanceId));
+
 const lastStatusOf = (last: Option.Option<ApiDroplet>) =>
   Option.getOrUndefined(Option.map(last, (droplet) => droplet.status));
 
@@ -705,15 +712,21 @@ export const DropletProvider = () =>
         .filter((droplet) => droplet.tags.some(isAlchemyTag))
         .map(toAttrs);
     }),
-    read: Effect.fn(function* ({ fqn, olds, output }) {
-      const ownedDroplet = yield* observeByIdOrTag(output?.dropletId, yield* ownershipTagFor(fqn));
+    read: Effect.fn(function* ({ fqn, instanceId, olds, output }) {
+      const ownedDroplet = yield* observeGeneration(output, instanceId);
       if (Option.isSome(ownedDroplet)) return toAttrs(ownedDroplet.value);
-      // A same-named droplet without the tag belongs to someone else
-      // until `--adopt` says otherwise.
       if (olds.name === undefined) return undefined;
-      const foreignDroplet = yield* observeByName(olds.name);
+      // An earlier generation of this resource is never a target: a
+      // replacement creates a fresh droplet beside it. A droplet without
+      // the ownership tag belongs to someone else until `--adopt` says
+      // otherwise.
+      const ownershipTag = yield* ownershipTagFor(fqn);
+      const sameNamedDroplet = yield* observeByName(olds.name);
       return Option.getOrUndefined(
-        Option.map(foreignDroplet, (droplet) => Unowned(toAttrs(droplet))),
+        Option.map(
+          Option.filter(sameNamedDroplet, (droplet) => !droplet.tags.includes(ownershipTag)),
+          (droplet) => Unowned(toAttrs(droplet)),
+        ),
       );
     }),
     diff: diffDroplet,
@@ -723,9 +736,7 @@ export const DropletProvider = () =>
       const generationTag = generationTagFor(instanceId);
       const tags = Arr.dedupe([...(news.tags ?? []), yield* ownershipTagFor(fqn), generationTag]);
 
-      // The ownership tag is not a fallback here: a replacement shares
-      // it with the droplet it replaces.
-      const observed = yield* observeByIdOrTag(output?.dropletId, generationTag);
+      const observed = yield* observeGeneration(output, instanceId);
       const droplet = yield* ensureDroplet(observed, name, news, tags);
 
       yield* syncTags(droplet, tags);

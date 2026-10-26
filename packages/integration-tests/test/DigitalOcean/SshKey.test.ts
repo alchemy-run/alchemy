@@ -62,7 +62,7 @@ const PEM_KEYS = [
 
 const UNIT_TAGS = ["unit", "provider:digitalocean", "provider:digitalocean:sshkey", "local"];
 const LIVE_TAGS = ["provider:digitalocean", "provider:digitalocean:sshkey", "live"];
-const LIVE_TIMEOUT = 180_000;
+const LIVE_TIMEOUT = 240_000;
 
 describe("authorizedKey", { tags: UNIT_TAGS }, () => {
   it.effect("keeps an authorized_keys line, trimmed", () =>
