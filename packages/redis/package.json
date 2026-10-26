@@ -54,12 +54,10 @@
   "devDependencies": {
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "alchemy": "workspace:*",
     "effect": "catalog:",
     "typescript": "catalog:"
   },
   "peerDependencies": {
-    "alchemy": "workspace:*",
     "effect": "catalog:"
   }
 }

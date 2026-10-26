@@ -1,5 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Output from "alchemy/Output";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -45,7 +47,16 @@ export const EndpointInfraLive = (options: EndpointInfraOptions) =>
   Layer.effect(
     EndpointInfra,
     Effect.gen(function* () {
-      const secondaryRegion = secondaryRegionOf(yield* yield* AWS.Region);
+      // The region is configuration: report a missing one as a ConfigError.
+      const region = yield* (yield* AWS.Region).pipe(
+        Effect.mapError(
+          (e) =>
+            new Config.ConfigError(
+              e._tag === "SourceError" ? e : new ConfigProvider.SourceError({ message: e.message }),
+            ),
+        ),
+      );
+      const secondaryRegion = secondaryRegionOf(region);
 
       const primary = yield* AWS.EventBridge.EventBus("PrimaryBus", {
         forceDestroy: true,
