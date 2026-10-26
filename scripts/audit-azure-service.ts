@@ -748,23 +748,25 @@ function deliverableRows(): Row[] {
     row("runtime", `${name} tests for both forms`, false, "");
   }
   row("runtime", "Azure.InferEnv", has(/export type InferEnv/), "");
-  for (const source of [
-    "Storage queue",
-    "Blob storage",
-    "Service Bus queue/topic",
-    "Event Hubs",
-    "Event Grid",
-    "Cosmos DB change feed",
-    "Timer (schedule)",
-  ]) {
-    const done = source === "Storage queue" || source === "Timer (schedule)";
+  // Event sources: the Functions.Function trigger layer each one registers.
+  const functionEventSources = exists("packages/azure/src/Functions/EventSources.ts")
+    ? fs.readFileSync(path.join(repo, "packages/azure/src/Functions/EventSources.ts"), "utf8")
+    : "";
+  for (const [source, layer] of [
+    ["Storage queue", "StorageQueueEventSource"],
+    ["Blob storage", "BlobCreatedEventSource"],
+    ["Service Bus queue/topic", "ServiceBusSubscriptionEventSource"],
+    ["Event Hubs", "EventHubEventSource"],
+    ["Event Grid", "EventGridEventSource"],
+    ["Cosmos DB change feed", "CosmosDBChangeFeedEventSource"],
+    ["Timer (schedule)", "schedule"],
+  ] as const) {
     row(
       "event-source",
       source,
-      done,
-      done
-        ? "Functions.Function trigger exists; no Container Apps (KEDA) layer, not live-verified"
-        : "",
+      new RegExp(`export (const|function) ${layer}\\b`).test(functionEventSources) ||
+        has(new RegExp(`export (const|function) ${layer}\\b`)),
+      `Azure.Functions trigger layer \`${layer}\``,
     );
   }
   row(
@@ -791,39 +793,54 @@ function deliverableRows(): Row[] {
     "Vocs",
     "Waku",
   ];
+  const read = (p: string) => (exists(p) ? fs.readFileSync(path.join(repo, p), "utf8") : "");
+  const frameworkSite = read("packages/azure/src/Website/FrameworkSite.ts");
   row(
     "website",
     "CDN (Front Door) on by default, purge on deploy",
-    false,
-    "Front Door is opt-in (frontDoor: true)",
+    /frontDoor: site\.frontDoor \?\? \{\}/.test(frameworkSite) && /purge/.test(frameworkSite),
+    "Front Door unless `frontDoor: false`; redeploys purge changed paths",
   );
   row(
     "website",
     "SSR on Azure Functions (Flex Consumption)",
-    false,
-    "server builds run on an always-on App Service B1 plan",
+    /from "\.\.\/Functions\/Function\.ts"/.test(frameworkSite),
+    "server entry bundled into Azure.Functions.Function",
   );
+  // Directory, example and docs names: lower case, `react-router`, `tanstack-start`.
+  const kebab = (fw: string) =>
+    ({ ReactRouter: "react-router", TanStackStart: "tanstack-start" })[fw] ?? fw.toLowerCase();
   for (const fw of frameworks) {
+    const testFile = `packages/integration-tests/test/Azure/Website/${fw}.test.ts`;
     row(
       "website",
       `Azure.Website.${fw}`,
-      false,
-      "exists on Storage/App Service; rebuild on CDN + Functions",
+      exists(`packages/azure/src/Website/${fw}.ts`) && exists(testFile),
+      "Blob + Front Door; server builds on Flex Consumption",
     );
     if (fw !== "StaticSite" && fw !== "Vite") {
+      const dir = kebab(fw);
       row(
         "website",
-        `frontend-frameworks/${fw.toLowerCase()}/azure.ts`,
-        exists(`packages/frontend-frameworks/src/${fw.toLowerCase()}/azure.ts`),
+        `frontend-frameworks/${dir}/azure.ts`,
+        exists(`packages/frontend-frameworks/src/${dir}/azure.ts`),
         "",
       );
     }
     const example =
-      fw === "StaticSite"
-        ? "examples/azure-static-site"
-        : `examples/azure-website-${fw.toLowerCase()}`;
+      fw === "StaticSite" ? "examples/azure-website-static" : `examples/azure-website-${kebab(fw)}`;
     row("example", example, exists(example), "");
+    if (fw !== "StaticSite") {
+      const page = `website/src/content/docs/azure/frontend/${kebab(fw)}.mdx`;
+      row("docs", page, exists(page), "");
+    }
   }
+  row(
+    "docs",
+    "website/src/content/docs/azure/frontend/static-site.mdx",
+    exists("website/src/content/docs/azure/frontend/static-site.mdx"),
+    "",
+  );
 
   // Workload examples.
   for (const ex of [
@@ -889,7 +906,12 @@ function deliverableRows(): Row[] {
       "",
     );
   }
-  row("docs", "llms.txt section", false, "website/scripts/generate-llms-txt.ts");
+  row(
+    "docs",
+    "llms.txt section",
+    /heading: "Azure"/.test(read("website/scripts/generate-llms-txt.ts")),
+    "website/scripts/generate-llms-txt.ts",
+  );
   row(
     "docs",
     "JSDoc: runtimes to the AWS.Lambda.Function bar",

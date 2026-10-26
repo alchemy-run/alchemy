@@ -53,7 +53,7 @@ export interface NextjsProps extends FrameworkSiteProps {}
  * ### Sharing Front Door
  * **Example:** Add the Site to an Existing Front Door Profile
  * ```typescript
- * const profile = yield* Azure.Cdn.Profile("FrontDoor", {});
+ * const profile = yield* Azure.Cdn.Profile("Edge");
  * const site = yield* Azure.Website.Nextjs("Web", {
  *   rootDir: "./app",
  *   frontDoor: { profile },

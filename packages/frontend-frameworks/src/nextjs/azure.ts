@@ -243,6 +243,12 @@ const lookupPackage = Effect.fn(function* (name: string, from: string, top: stri
   }
 });
 
+interface DependencyManifest {
+  readonly dependencies?: Record<string, string>;
+  readonly optionalDependencies?: Record<string, string>;
+  readonly peerDependencies?: Record<string, string>;
+}
+
 /** The names a package depends on, from its `package.json`. */
 const dependencyNames = Effect.fn(function* (packageDir: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -250,13 +256,8 @@ const dependencyNames = Effect.fn(function* (packageDir: string) {
     .readFileString(`${packageDir}/package.json`)
     .pipe(Effect.orElseSucceed(() => "{}"));
   const manifest = yield* Effect.try(
-    () =>
-      JSON.parse(raw) as {
-        dependencies?: Record<string, string>;
-        optionalDependencies?: Record<string, string>;
-        peerDependencies?: Record<string, string>;
-      },
-  ).pipe(Effect.orElseSucceed(() => ({})));
+    () => JSON.parse(raw) as DependencyManifest,
+  ).pipe(Effect.orElseSucceed((): DependencyManifest => ({})));
   return [
     ...new Set([
       ...Object.keys(manifest.dependencies ?? {}),

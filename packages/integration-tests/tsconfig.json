@@ -68,7 +68,10 @@
     "test/AWS/Website/fixtures/react-router-app",
     // Foldkit mode overlays are copied over a clone of the SSR fixture;
     // their imports resolve only inside that clone.
-    "test/Website/fixtures/foldkit-modes"
+    "test/Website/fixtures/foldkit-modes",
+    // Read by vocs's own toolchain (the fixture's tsconfig types it); the
+    // inferred `defineConfig` type is not portable from this composite project.
+    "test/Azure/Website/fixtures/vocs-app/vocs.config.ts"
   ],
   "compilerOptions": {
     "composite": true,

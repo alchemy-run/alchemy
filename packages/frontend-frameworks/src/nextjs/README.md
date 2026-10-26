@@ -78,6 +78,21 @@ source: {
 }
 ```
 
+## Azure Functions (`nextjs/azure`)
+
+`@alchemy.run/frontend-frameworks/nextjs/azure` (`azure.ts`) is the
+framework module used by `Azure.Website.Nextjs`. It needs no OpenNext:
+
+- `build` runs `next build` with `NEXT_PRIVATE_STANDALONE=true`, copies
+  `.next/standalone` to `.next/alchemy-azure-server` with a hoisted
+  `node_modules` of real directories (a Function package keeps no symbolic
+  links), and writes `serve-azure.mjs`, a Fetch module that starts Next in
+  production mode on the first request. The Function ships that directory
+  as-is.
+- `public/` and `.next/static` are gathered into
+  `.next/alchemy-azure-assets`, which Front Door serves from Blob Storage.
+- `dev` runs the real `next dev` CLI (see `node.ts`).
+
 ## Notes
 
 - The OpenNext pipeline runs `next build` internally via a child process

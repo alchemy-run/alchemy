@@ -2458,6 +2458,92 @@ importers:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
 
+  examples/azure-website-nextjs:
+    dependencies:
+      '@alchemy.run/azure':
+        specifier: workspace:*
+        version: link:../../packages/azure
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      alchemy-test:
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+      effect:
+        specifier: 4.0.5
+        version: 4.0.5
+      next:
+        specifier: 'catalog:'
+        version: 16.2.10(@babel/core@7.29.7(supports-color@10.2.2))(@playwright/test@1.64.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      react:
+        specifier: 'catalog:'
+        version: 19.3.0
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.3.0(react@19.3.0)
+    devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.5(effect@4.0.5)(redis@6.2.1)
+      '@tailwindcss/postcss':
+        specifier: 'catalog:'
+        version: 4.3.3
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.3.0(@types/react@19.3.0)
+      tailwindcss:
+        specifier: 'catalog:'
+        version: 4.3.3
+      typescript:
+        specifier: catalog:nextjs
+        version: 5.9.3
+
+  examples/azure-website-nuxt:
+    dependencies:
+      '@alchemy.run/azure':
+        specifier: workspace:*
+        version: link:../../packages/azure
+      '@alchemy.run/frontend-frameworks':
+        specifier: workspace:*
+        version: link:../../packages/frontend-frameworks
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      alchemy-test:
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+      effect:
+        specifier: 4.0.5
+        version: 4.0.5
+    devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.5(effect@4.0.5)(redis@6.2.1)
+      '@tailwindcss/vite':
+        specifier: 'catalog:'
+        version: 4.3.3(vite@8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+      '@types/node':
+        specifier: catalog:node24
+        version: 24.13.3
+      nitropack:
+        specifier: 'catalog:'
+        version: 2.13.4(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@rspack/core@1.7.11(@swc/helpers@0.5.23))(aws4fetch@1.0.20)(drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261012.1)(@effect/sql-d1@4.0.5(effect@4.0.5))(@effect/sql-libsql@4.0.5(effect@4.0.5))(@effect/sql-mysql2@4.0.5(@types/node@24.13.3)(effect@4.0.5))(@effect/sql-pg@4.0.5(effect@4.0.5))(@effect/sql-sqlite-do@4.0.5(effect@4.0.5))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.0.5)(mysql2@3.24.5(@types/node@24.13.3))(pg@8.23.1)(postgres@3.4.7)(typebox@1.3.27)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4))(mysql2@3.24.5(@types/node@24.13.3))(oxc-parser@0.141.0)(rolldown@1.2.13)(srvx@1.0.5)(supports-color@10.2.2)(vite@8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))(webpack@5.109.2(cssnano@9.7.0(postcss@8.5.29))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.29))
+      nuxt:
+        specifier: 'catalog:'
+        version: 4.6.1(3d99b2c442f76622367cd5a5578bd5e7)
+      tailwindcss:
+        specifier: 'catalog:'
+        version: 4.3.3
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   examples/azure-website-octane:
     dependencies:
       '@alchemy.run/azure':
