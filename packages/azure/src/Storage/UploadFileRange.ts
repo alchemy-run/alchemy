@@ -37,6 +37,7 @@ export type UploadFileRangeRequest = FileShareRequest<files.UploadFileRangeReque
  *   xMsWrite: "update",
  *   body,
  * });
+ * // …provided with Effect.provide(Azure.Storage.UploadFileRangeHttp)
  * ```
  *
  * @binding

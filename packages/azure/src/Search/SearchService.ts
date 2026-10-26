@@ -46,29 +46,50 @@ export interface SearchServiceIdentity {
   /**
    * ARM resource IDs of user-assigned managed identities to attach. Only
    * used with `UserAssigned` or `SystemAssigned, UserAssigned`.
+   * @default []
    */
   userAssignedIdentities?: string[];
 }
 
 export interface SearchServiceProps {
-  /** Resource group the service is created in. Changing it replaces the service. */
+  /**
+   * Resource group the service is created in.
+   *
+   * :::caution
+   * Changing it replaces the service and deletes every index in it.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Globally unique service name (it becomes
    * `https://{name}.search.windows.net`): 2-60 lowercase letters, digits,
-   * and hyphens. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the service.
+   * and hyphens.
+   *
+   * :::caution
+   * Changing it replaces the service and deletes every index in it.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the service. Changing it replaces the service.
+   * Azure location of the service, e.g. `centralus`.
+   *
+   * :::caution
+   * Changing it replaces the service and deletes every index in it.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
-   * Pricing tier. A subscription may hold only one `free` service, and the
-   * `free` tier does not support replicas, partitions, IP rules, identities,
-   * or semantic search. Changing it replaces the service.
+   * Pricing tier: `free`, `basic`, `standard`, `standard2`, `standard3`,
+   * `storage_optimized_l1`, or `storage_optimized_l2`. A subscription may
+   * hold only one `free` service, and `free` does not support replicas,
+   * partitions, IP rules, identities, or semantic ranking.
+   *
+   * :::caution
+   * Changing it replaces the service and deletes every index in it.
+   * :::
    * @default "basic"
    */
   sku?: SearchSkuName;
@@ -86,13 +107,15 @@ export interface SearchServiceProps {
   partitionCount?: number;
   /**
    * `HighDensity` allows up to 1000 indexes and is only valid on
-   * `standard3`. Changing it replaces the service.
+   * `standard3`. Alchemy sends it only at creation: a later change has no
+   * effect. Declare a new service (a new logical ID) to switch modes.
    * @default "Default"
    */
   hostingMode?: SearchHostingMode;
   /**
-   * Run the service on default or Azure Confidential Compute. Changing it
-   * replaces the service.
+   * Run the service on default or Azure Confidential Compute. Alchemy
+   * sends it only at creation: a later change has no effect. Declare a new
+   * service (a new logical ID) to switch.
    * @default "Default"
    */
   computeType?: SearchComputeType;
@@ -104,8 +127,9 @@ export interface SearchServiceProps {
   publicNetworkAccess?: SearchPublicNetworkAccess;
   /**
    * IPv4 addresses or CIDR ranges allowed to reach the public endpoint.
-   * Every other public network is blocked once a rule exists. Pass `[]` to
+   * Once a rule exists, every other public network is blocked. Pass `[]` to
    * remove all rules.
+   * @default no rules (every network may connect)
    */
   ipRules?: string[];
   /**
@@ -137,7 +161,10 @@ export interface SearchServiceProps {
    * @default Azure's default
    */
   semanticSearch?: SearchSemanticSearchPlan;
-  /** Data exfiltration scenarios to block. Only `BlockAll` is supported. */
+  /**
+   * Data exfiltration scenarios to block. Only `BlockAll` is supported.
+   * @default []
+   */
   dataExfiltrationProtections?: "BlockAll"[];
   /**
    * Whether the service enforces customer-managed-key encryption on its
@@ -145,11 +172,16 @@ export interface SearchServiceProps {
    * @default Azure's default (`Unspecified`)
    */
   cmkEnforcement?: "Disabled" | "Enabled" | "Unspecified";
-  /** Managed identity of the service. */
+  /**
+   * Managed identity of the service, used to reach data sources and
+   * customer-managed keys.
+   * @default no identity
+   */
   identity?: SearchServiceIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -194,36 +226,154 @@ export interface SearchService extends Resource<
 > {}
 
 /**
- * An Azure AI Search service — a managed search engine for full-text,
- * vector, and hybrid search over your indexes. The service exposes its
- * admin and query API keys as redacted attributes.
+ * An Azure AI Search service (`Microsoft.Search/searchServices`): a
+ * managed search engine for full-text, vector, and hybrid search over your
+ * indexes.
  *
- * @see https://learn.microsoft.com/azure/search/search-what-is-azure-search
+ * Alchemy creates a `basic` service (one replica, one partition) by
+ * default. Runtimes query and load indexes through bindings on
+ * `Azure.Search.SearchIndex`, which assign Search roles to the host's
+ * Microsoft Entra identity; set `authMode: "aadOrApiKey"` so the service
+ * accepts those tokens. The admin and query API keys are also exposed as
+ * redacted attributes. Creating a service takes a few minutes; scaling
+ * replicas or partitions is asynchronous, and the deploy waits for it.
+ *
+ * :::caution[Changing `name`, `location`, `sku`, or `resourceGroup` replaces the service]
+ * Alchemy creates a new, empty service and deletes the old one with every
+ * index and document in it.
+ * :::
+ *
+ * See [What is Azure AI Search?](https://learn.microsoft.com/azure/search/search-what-is-azure-search).
  *
  * ### Creating a Search Service
- * **Example:** Basic search service
+ * **Example:** Basic service that accepts Entra ID tokens
  * ```typescript
- * const search = yield* Azure.Search.SearchService("search");
+ * const search = yield* Azure.Search.SearchService("Search", {
+ *   sku: "basic",
+ *   authMode: "aadOrApiKey",
+ * });
+ * // search.endpoint → "https://<name>.search.windows.net"
  * ```
  *
- * **Example:** Standard tier with two replicas and semantic ranking
+ * **Example:** Free service for experiments
  * ```typescript
- * const search = yield* Azure.Search.SearchService("search", {
+ * // One free service per subscription; no replicas, partitions, or IP rules.
+ * const search = yield* Azure.Search.SearchService("Search", {
+ *   sku: "free",
+ * });
+ * ```
+ *
+ * ### Scaling
+ * Change `replicaCount` (query throughput and availability) or
+ * `partitionCount` (storage and indexing) and deploy again. Azure scales
+ * the service in place.
+ *
+ * **Example:** Standard tier with two replicas and two partitions
+ * ```typescript
+ * const search = yield* Azure.Search.SearchService("Search", {
  *   sku: "standard",
  *   replicaCount: 2,
+ *   partitionCount: 2,
+ * });
+ * ```
+ *
+ * **Example:** Semantic ranking
+ * ```typescript
+ * const search = yield* Azure.Search.SearchService("Search", {
+ *   sku: "standard",
  *   semanticSearch: "standard",
  * });
  * ```
  *
- * ### Securing the Service
- * **Example:** Entra ID or API keys, restricted to one network
+ * ### Authentication
+ * **Example:** Entra ID only (no API keys)
  * ```typescript
- * const search = yield* Azure.Search.SearchService("search", {
+ * const search = yield* Azure.Search.SearchService("Search", {
+ *   disableLocalAuth: true,
+ * });
+ * ```
+ *
+ * **Example:** API keys or Entra ID, with a 401 challenge on failure
+ * ```typescript
+ * const search = yield* Azure.Search.SearchService("Search", {
  *   authMode: "aadOrApiKey",
  *   aadAuthFailureMode: "http401WithBearerChallenge",
+ * });
+ * // search.primaryAdminKey and search.queryKey are Redacted
+ * ```
+ *
+ * ### Network Access
+ * **Example:** Allow one IP range and trusted Azure services
+ * ```typescript
+ * const search = yield* Azure.Search.SearchService("Search", {
+ *   authMode: "aadOrApiKey",
  *   ipRules: ["203.0.113.0/24"],
+ *   bypass: "AzureServices",
+ * });
+ * ```
+ *
+ * **Example:** Private-only service behind a private endpoint
+ * ```typescript
+ * const search = yield* Azure.Search.SearchService("Search", {
+ *   authMode: "aadOrApiKey",
+ *   publicNetworkAccess: "Disabled",
+ * });
+ * yield* Azure.Network.PrivateEndpoint("SearchEndpoint", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: search.searchServiceId, groupIds: ["searchService"] },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Reach a private storage account from the indexer
+ * ```typescript
+ * const search = yield* Azure.Search.SearchService("Search", {
+ *   sku: "standard",
  *   identity: { type: "SystemAssigned" },
  * });
+ * yield* Azure.Search.SharedPrivateLinkResource("Blobs", {
+ *   searchService: search.searchServiceName,
+ *   privateLinkResourceId: account.storageAccountId,
+ *   groupId: "blob",
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * Bind an index in the service, not the service itself. Each binding
+ * assigns Search roles on that one index to the host's principal: the
+ * managed identity on an Azure Function, Web App, Container App, container
+ * group, or VM, or an Entra service principal on any other host.
+ *
+ * **Example:** Search an index from an Azure Function
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const hotels = yield* Hotels; // an Azure.Search.SearchIndex
+ *     const index = yield* Azure.Search.SearchIndexRead(hotels);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const results = yield* index.search({ search: "beach", top: 10 });
+ *         return yield* HttpServerResponse.json(results.value);
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.Search.SearchIndexReadHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Deleting a Service
+ * Destroying the service deletes its shared private links first, then the
+ * service with every index and document in it.
+ *
+ * **Example:** Keep the service when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const search = yield* Azure.Search.SearchService("Search", {
+ *   authMode: "aadOrApiKey",
+ * }).pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

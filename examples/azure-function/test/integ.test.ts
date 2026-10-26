@@ -135,7 +135,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(
     yield* destroy(Stack);
     expect(yield* untilGone(siteStatus(ids))).toBe("gone");
     expect(yield* untilGone(accountStatus(ids, ids.storageAccount))).toBe("gone");
-    expect(yield* untilGone(accountStatus(ids, ids.hostStorageAccount))).toBe("gone");
+    expect(yield* untilGone(accountStatus(ids, ids.hostStorageAccount!))).toBe("gone");
   }),
   { timeout: 600_000 },
 );

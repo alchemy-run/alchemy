@@ -58,6 +58,7 @@ export interface WriteFileShareClient {
  * yield* docs.put("reports/latest.json", JSON.stringify(report), {
  *   contentType: "application/json",
  * });
+ * // …provided with Effect.provide(Azure.Storage.FileShareWriteHttp)
  * ```
  *
  * **Example:** Remove a file and its directory

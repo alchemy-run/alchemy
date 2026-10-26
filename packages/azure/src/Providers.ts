@@ -41,6 +41,7 @@ import * as ContainerAppsProviders from "./ContainerApps/Providers.ts";
 import * as ContainerInstanceProviders from "./ContainerInstance/Providers.ts";
 import * as ContainerRegistryProviders from "./ContainerRegistry/Providers.ts";
 import * as ContainerServiceProviders from "./ContainerService/Providers.ts";
+import { AksKubernetesAdapter } from "./ContainerService/KubernetesAdapter.ts";
 import * as CosmosDBProviders from "./CosmosDB/Providers.ts";
 import * as CosmosDBPostgreSQLProviders from "./CosmosDBPostgreSQL/Providers.ts";
 import * as CostManagementProviders from "./CostManagement/Providers.ts";
@@ -384,6 +385,10 @@ const makeProviders = () =>
         ...services.map((service) => service.layers()),
       ).pipe(Layer.provide(azureLive)),
     ),
+    // The AKS cluster adapter is merged (not just provided) so the
+    // cluster-agnostic `Kubernetes.*` workload providers resolve it from
+    // the stack context.
+    Layer.provideMerge(AksKubernetesAdapter().pipe(Layer.provide(azureLive))),
     Layer.provideMerge(azureLive),
     Layer.orDie,
     // Erased on purpose: the inferred union of hundreds of provider layers

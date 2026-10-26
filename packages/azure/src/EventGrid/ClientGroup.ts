@@ -17,26 +17,45 @@ import {
 } from "./MqttShared.ts";
 
 export interface ClientGroupProps {
-  /** Resource group of the namespace. Changing it replaces the client group. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the client group.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
-   * Name of the Event Grid namespace (MQTT broker enabled). Changing it
-   * replaces the client group.
+   * Name of the Event Grid namespace, e.g. `namespace.namespaceName` of an
+   * `Azure.EventGrid.Namespace` with the MQTT broker enabled.
+   *
+   * :::caution
+   * Changing it replaces the client group.
+   * :::
    */
   namespace: string;
   /**
    * Client group name: 3-50 letters, digits, and hyphens. If omitted, a
-   * unique name is generated from the app, stage, and logical ID. Changing
-   * it replaces the client group.
+   * unique name is generated from the app, stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the client group.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Query over client attributes that selects the group's members, e.g.
    * `attributes.role IN ['sensor', 'gateway']`. Every namespace also has a
-   * built-in `$all` group that contains every client.
+   * built-in `$all` group that contains every client. Updated in place.
    */
   query: string;
-  /** Description of the client group. */
+  /**
+   * Description of the client group. Alchemy appends its ownership marker
+   * (` [alchemy:{stack}/{stage}/{id}]`) to it.
+   * @default no description (only the ownership marker)
+   */
   description?: string;
 }
 
@@ -62,12 +81,23 @@ export interface ClientGroup extends Resource<
 > {}
 
 /**
- * A group of MQTT clients in an Event Grid namespace, selected by a query
- * over client attributes. Permission bindings grant a client group publish
- * or subscribe access to a topic space.
+ * An MQTT client group of an Event Grid MQTT broker
+ * (`Microsoft.EventGrid/namespaces/clientGroups`): the clients that match a
+ * query over client attributes. Grant a client group publish or subscribe
+ * access to a topic space with an `Azure.EventGrid.PermissionBinding`.
  *
  * Client groups have no tags; Alchemy appends an ownership marker to the
  * `description`.
+ *
+ * :::caution[Changing `name`, `namespace`, or `resourceGroup` replaces the client group]
+ * Alchemy creates a new client group and deletes the old one.
+ * :::
+ *
+ * :::caution[The namespace needs the MQTT broker]
+ * Declare the parent `Azure.EventGrid.Namespace` with
+ * `topicSpacesConfiguration: { state: "Enabled" }`. Azure cannot turn the
+ * broker off again: switching it to `Disabled` replaces the namespace.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/mqtt-client-groups
  *
@@ -80,6 +110,15 @@ export interface ClientGroup extends Resource<
  * const sensors = yield* Azure.EventGrid.ClientGroup("sensors", {
  *   namespace: namespace.namespaceName,
  *   query: "attributes.role = 'sensor'",
+ * });
+ * ```
+ *
+ * **Example:** Clients with one of several roles
+ * ```typescript
+ * const fleet = yield* Azure.EventGrid.ClientGroup("fleet", {
+ *   namespace: namespace.namespaceName,
+ *   query: "attributes.role IN ['sensor', 'gateway']",
+ *   description: "Sensors and gateways",
  * });
  * ```
  *

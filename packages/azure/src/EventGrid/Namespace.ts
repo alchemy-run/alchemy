@@ -38,12 +38,17 @@ import {
 /** MQTT broker settings of a namespace. */
 export interface NamespaceTopicSpacesConfiguration {
   /**
-   * Whether the MQTT broker is enabled. Azure does not allow disabling it
-   * once enabled, so switching to `Disabled` replaces the namespace.
+   * Whether the MQTT broker is enabled.
+   *
+   * :::caution
+   * Azure does not allow disabling it once enabled, so switching to
+   * `Disabled` replaces the namespace.
+   * :::
    */
   state: "Enabled" | "Disabled";
   /**
    * ARM ID of a namespace topic that receives routed MQTT messages.
+   * @default no routing
    */
   routeTopicResourceId?: string;
   /**
@@ -59,16 +64,32 @@ export interface NamespaceTopicSpacesConfiguration {
 }
 
 export interface NamespaceProps {
-  /** Resource group the namespace is created in. Changing it replaces the namespace. */
+  /**
+   * Resource group the namespace is created in.
+   *
+   * :::caution
+   * Changing it replaces the namespace.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Namespace name: 3-50 letters, digits, and hyphens, unique per region.
    * If omitted, a unique name is generated from the app, stage, and logical
-   * ID. Changing it replaces the namespace.
+   * ID.
+   *
+   * :::caution
+   * Changing it replaces the namespace.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the namespace. Changing it replaces the namespace.
+   * Azure location of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the namespace.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
@@ -79,12 +100,18 @@ export interface NamespaceProps {
    */
   capacity?: number;
   /**
-   * Spread the namespace across availability zones. Changing it replaces
-   * the namespace.
+   * Spread the namespace across availability zones.
+   *
+   * :::caution
+   * Changing it replaces the namespace.
+   * :::
    * @default Azure's default for the region
    */
   isZoneRedundant?: boolean;
-  /** MQTT broker settings. Omit to leave the broker disabled. */
+  /**
+   * MQTT broker settings. Omit to leave the broker disabled.
+   * @default broker disabled
+   */
   topicSpacesConfiguration?: NamespaceTopicSpacesConfiguration;
   /**
    * Whether the public endpoints accept traffic.
@@ -97,11 +124,16 @@ export interface NamespaceProps {
    * @default []
    */
   inboundIpRules?: EventGridInboundIpRule[];
-  /** Managed identity of the namespace. */
+  /**
+   * Managed identity of the namespace, used for push delivery
+   * (`push.deliveryIdentity` on a namespace topic subscription).
+   * @default the observed identity is kept (none on a new namespace)
+   */
   identity?: EventGridIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -142,25 +174,151 @@ export interface Namespace extends Resource<
 > {}
 
 /**
- * An Event Grid namespace — hosts namespace topics with pull or push
- * delivery of CloudEvents, and optionally an MQTT broker. Billed per
- * throughput unit hour.
+ * An Event Grid namespace (`Microsoft.EventGrid/namespaces`): hosts
+ * namespace topics that take CloudEvents over HTTP, with pull (queue) or
+ * push delivery, and optionally an MQTT broker for devices.
+ *
+ * Alchemy creates a `Standard` namespace with one throughput unit in the
+ * stack's resource group. Bind its namespace topics and subscriptions to
+ * your runtimes: publish bindings assign **EventGrid Data Sender** on the
+ * namespace topic, and receive bindings assign a receive-only custom role
+ * on the event subscription, never on the whole namespace.
+ *
+ * :::caution[Throughput units are billed by the hour]
+ * Each unit of `capacity` is billed while the namespace exists, even with
+ * no traffic.
+ * :::
+ *
+ * :::caution[Changing `name`, `resourceGroup`, `location`, `isZoneRedundant`, or turning the MQTT broker off replaces the namespace]
+ * Alchemy creates a new namespace and deletes the old one with every
+ * namespace topic, subscription, retained event, and MQTT client in it.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/concepts-event-grid-namespaces
  *
  * ### Creating a Namespace
  * **Example:** Namespace with one throughput unit
  * ```typescript
- * const namespace = yield* Azure.EventGrid.Namespace("events");
+ * const events = yield* Azure.EventGrid.Namespace("events");
+ * // events.topicsHostname → "<name>.<region>-1.eventgrid.azure.net"
+ * ```
+ *
+ * **Example:** Two throughput units across zones
+ * ```typescript
+ * const events = yield* Azure.EventGrid.Namespace("events", {
+ *   capacity: 2,
+ *   isZoneRedundant: true,
+ * });
+ * ```
+ *
+ * ### Topics and Pull Delivery
+ * A queue subscription holds events until a receiver takes them, like a
+ * message queue. Receivers lock, then acknowledge, release, or reject each
+ * event.
+ *
+ * **Example:** Topic with a queue subscription for workers
+ * ```typescript
+ * const orders = yield* Azure.EventGrid.NamespaceTopic("orders", {
+ *   namespace: events.namespaceName,
+ *   eventRetentionInDays: 1,
+ * });
+ * const workers = yield* Azure.EventGrid.NamespaceTopicEventSubscription("workers", {
+ *   namespace: events.namespaceName,
+ *   topic: orders.namespaceTopicName,
+ *   queue: { receiveLockDurationInSeconds: 120, maxDeliveryCount: 10 },
+ *   includedEventTypes: ["Order.Created"],
+ * });
+ * ```
+ *
+ * ### Push Delivery
+ * **Example:** Push a topic's events to an event hub
+ * ```typescript
+ * const events = yield* Azure.EventGrid.Namespace("events", {
+ *   identity: { type: "SystemAssigned" },
+ * });
+ * yield* Azure.EventGrid.NamespaceTopicEventSubscription("to-hub", {
+ *   namespace: events.namespaceName,
+ *   topic: orders.namespaceTopicName,
+ *   push: {
+ *     destination: { endpointType: "EventHub", resourceId: hub.eventHubId },
+ *     deliveryIdentity: { type: "SystemAssigned" },
+ *   },
+ * });
+ * // also grant the namespace identity Azure Event Hubs Data Sender on the hub
  * ```
  *
  * ### MQTT Broker
+ * Turn on the broker to connect devices over MQTT. Once on, Azure does not
+ * let you turn it off.
+ *
  * **Example:** Namespace with the MQTT broker enabled
  * ```typescript
- * const namespace = yield* Azure.EventGrid.Namespace("iot", {
+ * const iot = yield* Azure.EventGrid.Namespace("iot", {
  *   capacity: 2,
- *   topicSpacesConfiguration: { state: "Enabled" },
+ *   topicSpacesConfiguration: { state: "Enabled", maximumSessionExpiryInHours: 8 },
  * });
+ * // iot.topicSpacesHostname is the MQTT endpoint
+ * ```
+ *
+ * ### Network Access
+ * **Example:** Allow one IP range
+ * ```typescript
+ * const events = yield* Azure.EventGrid.Namespace("events", {
+ *   inboundIpRules: [{ ipMask: "203.0.113.0/24" }],
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * **Example:** Publish and receive CloudEvents in an Azure Function
+ * ```typescript
+ * export default class Worker extends Azure.Functions.Function<Worker>()(
+ *   "Worker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const topic = yield* Orders;
+ *     const subscription = yield* Workers;
+ *     const publish = yield* Azure.EventGrid.PublishCloudEvent(topic);
+ *     const receive = yield* Azure.EventGrid.ReceiveCloudEvents(subscription);
+ *     const acknowledge = yield* Azure.EventGrid.AcknowledgeCloudEvents(subscription);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* publish({
+ *           id: "order-42",
+ *           source: "/orders",
+ *           type: "Order.Created",
+ *           specversion: "1.0",
+ *           data: { orderId: "42" },
+ *         });
+ *         const received = yield* receive({ maxEvents: 10, maxWaitTime: 10 });
+ *         const lockTokens = received.value.map((r) => r.brokerProperties.lockToken);
+ *         if (lockTokens.length > 0) yield* acknowledge({ lockTokens });
+ *         return yield* HttpServerResponse.json({ handled: lockTokens.length });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(
+ *     Effect.provide(
+ *       Layer.mergeAll(
+ *         Azure.EventGrid.PublishCloudEventHttp,
+ *         Azure.EventGrid.ReceiveCloudEventsHttp,
+ *         Azure.EventGrid.AcknowledgeCloudEventsHttp,
+ *       ),
+ *     ),
+ *   ),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Release an event for later or reject it
+ * ```typescript
+ * // init
+ * const release = yield* Azure.EventGrid.ReleaseCloudEvents(subscription);
+ * const reject = yield* Azure.EventGrid.RejectCloudEvents(subscription);
+ * const renew = yield* Azure.EventGrid.RenewCloudEventLocks(subscription);
+ *
+ * // runtime
+ * yield* renew({ lockTokens: [token] }); // keep the lock during long work
+ * yield* release({ lockTokens: [token] }); // deliver it again
+ * yield* reject({ lockTokens: [poisonToken] }); // dead-letter it, or drop it
  * ```
  *
  * @resource

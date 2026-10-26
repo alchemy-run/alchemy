@@ -62,6 +62,7 @@ export interface WriteSecretClient {
  *
  * // runtime
  * const written = yield* token.set(Redacted.make(fresh), { contentType: "text/plain" });
+ * // …provided with Effect.provide(Azure.KeyVault.SecretWriteHttp)
  * ```
  *
  * **Example:** Disable an old version

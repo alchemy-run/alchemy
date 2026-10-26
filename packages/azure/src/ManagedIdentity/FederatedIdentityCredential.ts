@@ -27,11 +27,12 @@ export interface FederatedIdentityCredentialProps {
   /**
    * Resource group of the parent user-assigned identity. Changing it
    * replaces the credential.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
-   * Name of the parent user-assigned identity. Changing it replaces the
-   * credential.
+   * Name of the parent user-assigned identity (`identity.identityName`).
+   * Changing it replaces the credential.
    */
   identity: string;
   /**
@@ -44,19 +45,21 @@ export interface FederatedIdentityCredentialProps {
   /**
    * URL of the external OpenID Connect issuer to trust, e.g.
    * `https://token.actions.githubusercontent.com` or an AKS cluster's OIDC
-   * issuer URL.
+   * issuer URL. It must match the token's `iss` claim exactly. Changing it
+   * updates the credential in place.
    */
   issuer: string;
   /**
    * Identifier of the external identity, e.g.
    * `repo:my-org/my-repo:ref:refs/heads/main` (GitHub Actions) or
-   * `system:serviceaccount:my-namespace:my-sa` (Kubernetes). The
-   * issuer/subject pair must be unique per identity.
+   * `system:serviceaccount:my-namespace:my-sa` (Kubernetes). It must match
+   * the token's `sub` claim exactly. The issuer/subject pair must be unique
+   * per identity. Changing it updates the credential in place.
    */
   subject: string;
   /**
    * Audience that must appear in the external token. Azure currently
-   * accepts exactly one entry.
+   * accepts exactly one entry. Changing it updates the credential in place.
    * @default ["api://AzureADTokenExchange"]
    */
   audiences?: string[];
@@ -86,18 +89,38 @@ export interface FederatedIdentityCredential extends Resource<
 > {}
 
 /**
- * A federated identity credential on a user-assigned managed identity. It
- * lets an external workload (GitHub Actions, Kubernetes service accounts,
- * another cloud) exchange its OpenID Connect token for a Microsoft Entra
- * token of the identity — no secrets to store or rotate.
+ * A federated identity credential on a user-assigned managed identity
+ * (`Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials`).
+ * It lets an external workload (GitHub Actions, Kubernetes service
+ * accounts, another cloud) exchange its OpenID Connect token for a
+ * Microsoft Entra token of the identity — no secrets to store or rotate.
  *
- * Federated credentials carry no tags. Alchemy treats one as owned when its
- * parent identity carries this stack's and stage's ownership tags. Deleting
- * the parent identity deletes its credentials.
+ * Entra accepts a token only when its `iss`, `sub`, and `aud` claims match
+ * `issuer`, `subject`, and `audiences` exactly; wildcards are not
+ * supported. Federated credentials carry no tags. Alchemy treats one as
+ * owned when its parent identity carries this stack's and stage's ownership
+ * tags. Deleting the parent identity deletes its credentials. Azure rejects
+ * concurrent writes to one identity's credentials, so Alchemy retries them
+ * for up to 60 seconds.
+ *
+ * :::caution[Changing `name`, `identity`, or `resourceGroup` replaces the credential]
+ * When the new credential keeps the same `issuer` and `subject`, Alchemy
+ * deletes the old one first (the pair is unique per identity), so sign-ins
+ * fail for the few seconds in between. `issuer`, `subject`, and `audiences`
+ * update in place.
+ * :::
+ *
+ * :::caution[One identity holds at most 20 federated credentials]
+ * Use one credential per branch, environment, or service account, and a
+ * second identity when you need more than 20.
+ * :::
  *
  * @see https://learn.microsoft.com/entra/workload-id/workload-identity-federation
  *
  * ### Trusting GitHub Actions
+ * GitHub's `sub` claim names the repository and what the job runs for: a
+ * branch, a tag, an environment, or a pull request.
+ *
  * **Example:** Deploy from the main branch without secrets
  * ```typescript
  * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("deployer");
@@ -108,13 +131,73 @@ export interface FederatedIdentityCredential extends Resource<
  * });
  * ```
  *
+ * **Example:** Jobs that use the `production` environment
+ * ```typescript
+ * yield* Azure.ManagedIdentity.FederatedIdentityCredential("github-production", {
+ *   identity: identity.identityName,
+ *   issuer: "https://token.actions.githubusercontent.com",
+ *   subject: "repo:my-org/my-repo:environment:production",
+ * });
+ * ```
+ *
+ * **Example:** Pull request jobs
+ * ```typescript
+ * yield* Azure.ManagedIdentity.FederatedIdentityCredential("github-pr", {
+ *   identity: identity.identityName,
+ *   issuer: "https://token.actions.githubusercontent.com",
+ *   subject: "repo:my-org/my-repo:pull_request",
+ * });
+ * ```
+ *
+ * ### Granting the Workload Access
+ * The external workload gets exactly the roles of the identity.
+ *
+ * **Example:** A CI deployer with Contributor on one resource group
+ * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
+ * const deployer = yield* Azure.ManagedIdentity.UserAssignedIdentity("deployer");
+ * yield* Azure.ManagedIdentity.FederatedIdentityCredential("github-main", {
+ *   identity: deployer.identityName,
+ *   issuer: "https://token.actions.githubusercontent.com",
+ *   subject: "repo:my-org/my-repo:ref:refs/heads/main",
+ * });
+ * yield* Azure.Authorization.RoleAssignment("deployer-contributes", {
+ *   scope: group.resourceGroupId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.Contributor,
+ *   principalId: deployer.principalId,
+ *   principalType: "ServicePrincipal",
+ * });
+ * // azure/login in the workflow takes client-id and tenant-id from these.
+ * return { clientId: deployer.clientId, tenantId: deployer.tenantId };
+ * ```
+ *
  * ### Trusting a Kubernetes Service Account
+ * The subject is `system:serviceaccount:<namespace>:<name>`. The cluster
+ * needs an OIDC issuer.
+ *
  * **Example:** AKS workload identity
  * ```typescript
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+ *   oidcIssuerEnabled: true,
+ *   workloadIdentityEnabled: true,
+ * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api");
  * yield* Azure.ManagedIdentity.FederatedIdentityCredential("api-sa", {
  *   identity: identity.identityName,
- *   issuer: cluster.oidcIssuerUrl,
+ *   issuer: cluster.oidcIssuerUrl.as<string>(),
  *   subject: "system:serviceaccount:default:api",
+ * });
+ * ```
+ *
+ * ### Custom Audiences
+ * **Example:** Accept tokens minted for another audience
+ * ```typescript
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("ci");
+ * yield* Azure.ManagedIdentity.FederatedIdentityCredential("ci", {
+ *   identity: identity.identityName,
+ *   issuer: "https://gitlab.example.com",
+ *   subject: "project_path:my-group/my-project:ref_type:branch:ref:main",
+ *   audiences: ["https://gitlab.example.com"],
  * });
  * ```
  *

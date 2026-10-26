@@ -34,6 +34,7 @@ export interface GetDeletedSecretsRequest extends Omit<
  * // runtime
  * const page = yield* listDeleted();
  * const recoverable = page.value.map((s) => s.recoveryId);
+ * // …provided with Effect.provide(Azure.KeyVault.GetDeletedSecretsHttp)
  * ```
  *
  * @binding

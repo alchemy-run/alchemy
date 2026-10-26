@@ -41,13 +41,24 @@ export interface WorkspaceFeatureProps {
   /**
    * Use only resource-context permissions: users need access to a resource
    * to read its logs, rather than workspace-wide access.
+   * @default Azure's default
    */
   enableLogAccessUsingOnlyResourcePermissions?: boolean;
-  /** Disable shared-key (non-Microsoft Entra) authentication. */
+  /**
+   * Disable shared-key (non-Microsoft Entra) authentication. The shared-key
+   * attributes are then undefined.
+   * @default Azure's default (`false`)
+   */
   disableLocalAuth?: boolean;
-  /** Remove data after 30 days, regardless of the retention setting. */
+  /**
+   * Remove data after 30 days, regardless of the retention setting.
+   * @default Azure's default (`false`)
+   */
   immediatePurgeDataOn30Days?: boolean;
-  /** Allow data export rules on the workspace. */
+  /**
+   * Allow data export rules on the workspace.
+   * @default Azure's default
+   */
   enableDataExport?: boolean;
 }
 
@@ -57,24 +68,38 @@ export interface WorkspaceIdentity {
   /**
    * ARM resource IDs of user-assigned identities. Required when `type` is
    * `UserAssigned`.
+   * @default []
    */
   userAssignedIdentities?: string[];
 }
 
 export interface WorkspaceProps {
   /**
-   * Resource group the workspace is created in. Changing it replaces the
-   * workspace.
+   * Resource group the workspace is created in.
+   *
+   * :::caution
+   * Changing it replaces the workspace.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Workspace name: 4-63 letters, digits, and hyphens, starting and ending
    * with a letter or digit. If omitted, a unique name is generated from the
-   * app, stage, and logical ID. Changing it replaces the workspace.
+   * app, stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the workspace.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the workspace. Changing it replaces the workspace.
+   * Azure location of the workspace.
+   *
+   * :::caution
+   * Changing it replaces the workspace.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
@@ -87,6 +112,7 @@ export interface WorkspaceProps {
   /**
    * Daily commitment in GB (100, 200, ..., 50000). Only with the
    * `CapacityReservation` SKU.
+   * @default not set (required with `CapacityReservation`)
    */
   capacityReservationLevel?: number;
   /**
@@ -94,19 +120,43 @@ export interface WorkspaceProps {
    * @default 30
    */
   retentionInDays?: number;
-  /** Daily ingestion cap in GB. `-1` removes the cap. */
+  /**
+   * Daily ingestion cap in GB. `-1` removes the cap. Unset leaves the
+   * observed cap unchanged.
+   * @default Azure's default (`-1`, no cap)
+   */
   dailyQuotaGb?: number;
-  /** Network access for ingestion. */
+  /**
+   * Whether the public endpoint accepts ingestion: `Enabled`, `Disabled`,
+   * or `SecuredByPerimeter`.
+   * @default Azure's default (`Enabled`)
+   */
   publicNetworkAccessForIngestion?: WorkspaceNetworkAccess;
-  /** Network access for queries. */
+  /**
+   * Whether the public endpoint accepts queries: `Enabled`, `Disabled`, or
+   * `SecuredByPerimeter`.
+   * @default Azure's default (`Enabled`)
+   */
   publicNetworkAccessForQuery?: WorkspaceNetworkAccess;
-  /** Require customer-managed storage for saved queries. */
+  /**
+   * Require customer-managed storage for saved queries.
+   * @default Azure's default (`false`)
+   */
   forceCmkForQuery?: boolean;
-  /** Workspace feature flags. Only the flags you set are managed. */
+  /**
+   * Workspace feature flags. Only the flags you set are managed.
+   * @default {}
+   */
   features?: WorkspaceFeatureProps;
-  /** ARM resource ID of the default data collection rule. */
+  /**
+   * ARM resource ID of the default data collection rule.
+   * @default none
+   */
   defaultDataCollectionRuleResourceId?: string;
-  /** Managed identity of the workspace. */
+  /**
+   * Managed identity of the workspace.
+   * @default the observed identity is kept (none on a new workspace)
+   */
   identity?: WorkspaceIdentity;
   /**
    * Delete the workspace permanently instead of leaving it soft-deleted for
@@ -119,6 +169,7 @@ export interface WorkspaceProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -160,13 +211,22 @@ export interface Workspace extends Resource<
 > {}
 
 /**
- * An Azure Monitor Log Analytics workspace — the store that Azure Monitor
- * logs, Microsoft Sentinel, Application Insights, and Container Apps write
- * to and query with KQL.
+ * An Azure Monitor Log Analytics workspace
+ * (`Microsoft.OperationalInsights/workspaces`): the store that Azure
+ * Monitor logs, Application Insights, Container Apps, and Microsoft
+ * Sentinel write to, and that you query with KQL.
  *
- * A `PerGB2018` workspace has no fixed charge: you pay per GB ingested and
- * for retention beyond 31 days. Alchemy force-deletes workspaces by default
- * so a later create with the same name never recovers soft-deleted data.
+ * Alchemy creates a pay-as-you-go (`PerGB2018`) workspace with 30 days of
+ * retention in the stack's resource group. It has no fixed charge: you pay
+ * per GB ingested, and for retention beyond 31 days. Bind it to a runtime
+ * to run queries: the query bindings assign **Log Analytics Data Reader**
+ * on this workspace only.
+ *
+ * :::caution[Changing `name`, `resourceGroup`, or `location` replaces the workspace]
+ * Alchemy creates a new, empty workspace and deletes the old one with all
+ * its logs. Agents and diagnostic settings that write to the old
+ * `customerId` stop delivering until you point them at the new one.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-monitor/logs/log-analytics-workspace-overview
  *
@@ -174,19 +234,49 @@ export interface Workspace extends Resource<
  * **Example:** Pay-as-you-go workspace
  * ```typescript
  * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * // logs.customerId is the workspace GUID agents and the query API use
  * ```
  *
- * **Example:** Longer retention and a daily cap
+ * **Example:** Workspace with a fixed name and region
+ * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs", {
+ *   name: "contoso-prod-logs",
+ *   location: "westeurope",
+ * });
+ * ```
+ *
+ * ### Retention and Cost
+ * **Example:** 90-day retention and a 5 GB daily cap
  * ```typescript
  * const logs = yield* Azure.LogAnalytics.Workspace("logs", {
  *   retentionInDays: 90,
  *   dailyQuotaGb: 5,
- *   tags: { team: "platform" },
  * });
  * ```
  *
- * ### Securing a Workspace
- * **Example:** Microsoft Entra-only access with resource-context permissions
+ * **Example:** Commitment tier of 100 GB a day
+ * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs", {
+ *   sku: "CapacityReservation",
+ *   capacityReservationLevel: 100,
+ * });
+ * ```
+ *
+ * **Example:** Keep one table longer than the rest
+ * ```typescript
+ * const audit = yield* Azure.LogAnalytics.Table("audit", {
+ *   workspace: logs.workspaceName,
+ *   name: "Audit_CL",
+ *   totalRetentionInDays: 365,
+ *   columns: [
+ *     { name: "TimeGenerated", type: "dateTime" },
+ *     { name: "Actor", type: "string" },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Access Control
+ * **Example:** Microsoft Entra ID only, with resource-context permissions
  * ```typescript
  * const logs = yield* Azure.LogAnalytics.Workspace("logs", {
  *   features: {
@@ -194,6 +284,126 @@ export interface Workspace extends Resource<
  *     enableLogAccessUsingOnlyResourcePermissions: true,
  *   },
  * });
+ * // logs.primarySharedKey is undefined: shared keys are off
+ * ```
+ *
+ * **Example:** Close the public endpoints
+ * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs", {
+ *   publicNetworkAccessForIngestion: "Disabled",
+ *   publicNetworkAccessForQuery: "Disabled",
+ * });
+ * ```
+ *
+ * ### Sending Logs
+ * **Example:** Stream Container Apps logs to the workspace
+ * ```typescript
+ * import type * as Redacted from "effect/Redacted";
+ *
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
+ *   appLogsConfiguration: {
+ *     destination: "log-analytics",
+ *     logAnalyticsConfiguration: {
+ *       customerId: logs.customerId,
+ *       sharedKey: logs.primarySharedKey.as<Redacted.Redacted<string>>(),
+ *     },
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Export a table to a storage account
+ * ```typescript
+ * const archive = yield* Azure.Storage.StorageAccount("archive");
+ * yield* Azure.LogAnalytics.DataExport("archive", {
+ *   workspace: logs.workspaceName,
+ *   tableNames: [audit.tableName],
+ *   destinationResourceId: archive.storageAccountId,
+ * });
+ * ```
+ *
+ * ### Alerts
+ * **Example:** Alert when errors pass a threshold
+ * ```typescript
+ * yield* Azure.Monitor.ScheduledQueryRule("too-many-errors", {
+ *   scopes: [logs.workspaceId],
+ *   severity: 2,
+ *   evaluationFrequency: "PT5M",
+ *   windowSize: "PT15M",
+ *   criteria: [
+ *     {
+ *       query: "AppEvents_CL | where Level == 'error'",
+ *       timeAggregation: "Count",
+ *       operator: "GreaterThan",
+ *       threshold: 10,
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * `ExecuteQuery`, `QueryBatch`, `GetQuery`, `GetMetadata`, and
+ * `PostMetadata` assign **Log Analytics Data Reader** on this workspace
+ * only. They work on any host: a managed-identity host (an Azure Function,
+ * Web App, Container App, container group, or VM) gets the role on its
+ * identity; any other host (a Cloudflare Worker, an AWS Lambda) gets an
+ * Entra service principal.
+ *
+ * **Example:** Run a KQL query from an Azure Function
+ * ```typescript
+ * export default class Reports extends Azure.Functions.Function<Reports>()(
+ *   "Reports",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const workspace = yield* Logs;
+ *     const executeQuery = yield* Azure.LogAnalytics.ExecuteQuery(workspace);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const result = yield* executeQuery({
+ *           query: "AppEvents_CL | where Level == 'error' | take 10",
+ *           timespan: "PT1H",
+ *         });
+ *         return yield* HttpServerResponse.json({ rows: result.tables[0]?.rows ?? [] });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.LogAnalytics.ExecuteQueryHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Two queries in one request
+ * ```typescript
+ * // init
+ * const queryBatch = yield* Azure.LogAnalytics.QueryBatch(workspace);
+ *
+ * // runtime
+ * const results = yield* queryBatch({
+ *   requests: [
+ *     { id: "errors", body: { query: "AppEvents_CL | where Level == 'error' | count" } },
+ *     { id: "total", body: { query: "AppEvents_CL | count" } },
+ *   ],
+ * });
+ * // …provided with Effect.provide(Azure.LogAnalytics.QueryBatchHttp)
+ * ```
+ *
+ * ### Deleting a Workspace
+ * Alchemy deletes the workspace permanently by default. With
+ * `forceDelete: false`, Azure keeps it soft-deleted for 14 days, and the
+ * next create with the same name in the same resource group restores it
+ * with its old settings and tables.
+ *
+ * **Example:** Keep a soft-deleted copy for 14 days
+ * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs", {
+ *   forceDelete: false,
+ * });
+ * ```
+ *
+ * **Example:** Keep the workspace when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs").pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

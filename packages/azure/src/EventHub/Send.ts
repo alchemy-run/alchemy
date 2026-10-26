@@ -11,34 +11,57 @@ import type { EventHub } from "./EventHub.ts";
 
 /** Custom properties of an event, one per key. */
 export interface EventHubEventOptions {
-  /** Custom event properties. */
+  /**
+   * Custom event properties, one string value per key. Consumers see them
+   * as the event's application properties.
+   * @default no custom properties
+   */
   properties?: Record<string, string>;
 }
 
+/** Options of `send` and `sendBatch`. */
 export interface EventHubSendOptions extends EventHubEventOptions {
-  /** Route all events with this key to the same partition. */
+  /**
+   * Route all events with this key to the same partition, in send order.
+   * @default none (Event Hubs picks a partition)
+   */
   partitionKey?: string;
 }
 
 /** Send-only client for one event hub. */
 export interface SendEventHubClient {
-  /** Send one event; objects are JSON-encoded. */
+  /**
+   * Send one event. A string is sent as `text/plain`; an object is
+   * JSON-encoded and sent as `application/json`.
+   */
   send(
     event: string | object,
     options?: EventHubSendOptions,
   ): Effect.Effect<void, SendEventError, RuntimeContext>;
-  /** Send a batch of events in one request. */
+  /**
+   * Send a batch of events in one request; objects are JSON-encoded. Every
+   * event gets the same `options`. An empty array sends nothing. The whole
+   * batch counts against the hub's maximum event size (`MessageTooLarge`).
+   */
   sendBatch(
     events: ReadonlyArray<string | object>,
     options?: EventHubSendOptions,
   ): Effect.Effect<void, SendEventBatchError, RuntimeContext>;
-  /** Send one event to one partition (`"0"`, `"1"`, …). */
+  /**
+   * Send one event to one partition. `partitionId` is one of the hub's
+   * `partitionIds` (`"0"`, `"1"`, …); any other value fails with
+   * `InvalidPartition`.
+   */
   sendToPartition(
     partitionId: string,
     event: string | object,
     options?: EventHubEventOptions,
   ): Effect.Effect<void, SendPartitionEventError, RuntimeContext>;
-  /** Send one event under a publisher name (Standard or higher namespaces). */
+  /**
+   * Send one event under a publisher name, e.g. a device ID. Needs a
+   * `Standard` or higher namespace (`PublisherRequiresStandardTier` on
+   * `Basic`).
+   */
   sendAsPublisher(
     publisherId: string,
     event: string | object,
@@ -69,25 +92,48 @@ export interface SendEventHubClient {
  * {@link SendHttp}.
  *
  * ### Sending Events
- * **Example:** Send telemetry
+ * **Example:** Send a reading from a Function
  * ```typescript
- * // init
- * const telemetry = yield* Azure.EventHub.Send(hub);
- *
- * // runtime
- * yield* telemetry.send({ deviceId, temperature }, { partitionKey: deviceId });
+ * // Readings: a module-scope Azure.EventHub.EventHub declaration
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const hub = yield* Readings;
+ *     // init: assigns Azure Event Hubs Data Sender on the event hub only
+ *     const readings = yield* Azure.EventHub.Send(hub);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime
+ *         yield* readings.send(
+ *           { deviceId: "d1", temperature: 21 },
+ *           { partitionKey: "d1" },
+ *         );
+ *         return HttpServerResponse.text("sent");
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.EventHub.SendHttp)),
+ * ) {}
  * ```
  *
  * **Example:** Send a batch with custom properties
  * ```typescript
- * yield* telemetry.sendBatch(readings, { properties: { source: "gateway" } });
+ * // runtime, inside the host above
+ * yield* readings.sendBatch(
+ *   [
+ *     { deviceId: "d1", temperature: 21 },
+ *     { deviceId: "d1", temperature: 22 },
+ *   ],
+ *   { partitionKey: "d1", properties: { source: "gateway" } },
+ * );
  * ```
  *
  * ### Choosing the Partition
  * **Example:** Send to one partition or as a publisher
  * ```typescript
- * yield* telemetry.sendToPartition("0", { kind: "rebalance" });
- * yield* telemetry.sendAsPublisher(deviceId, { kind: "online" });
+ * // runtime, inside the host above
+ * yield* readings.sendToPartition("0", { kind: "rebalance" });
+ * yield* readings.sendAsPublisher("device-1", { kind: "online" });
  * ```
  *
  * @binding

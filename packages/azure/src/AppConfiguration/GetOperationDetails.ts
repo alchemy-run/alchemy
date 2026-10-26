@@ -30,6 +30,7 @@ export interface GetOperationDetailsRequest extends Omit<
  *
  * // runtime
  * const operation = yield* getOperationDetails({ snapshot: "release-1" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.GetOperationDetailsHttp)
  * ```
  *
  * @binding

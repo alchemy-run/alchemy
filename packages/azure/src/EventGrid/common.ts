@@ -18,7 +18,9 @@ export interface EventGridIdentity {
   type: EventGridIdentityType;
   /**
    * ARM IDs of user-assigned identities, e.g. `identity.identityId` of an
-   * `Azure.ManagedIdentity.UserAssignedIdentity`.
+   * `Azure.ManagedIdentity.UserAssignedIdentity`. Use with `UserAssigned`
+   * or `SystemAssigned, UserAssigned`.
+   * @default []
    */
   userAssignedIdentities?: string[];
 }

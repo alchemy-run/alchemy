@@ -26,6 +26,7 @@ export interface CheckLabelsRequest extends Omit<appconfig.CheckLabelsRequest, "
  *
  * // runtime
  * yield* checkLabels({ name: "prod*" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.CheckLabelsHttp)
  * ```
  *
  * @binding

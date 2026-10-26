@@ -27,6 +27,7 @@ export interface GetKeyValueRequest extends Omit<appconfig.GetKeyValueRequest, "
  *
  * // runtime
  * const setting = yield* getKeyValue({ key: "App:Color", label: "prod" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.GetKeyValueHttp)
  * ```
  *
  * @binding

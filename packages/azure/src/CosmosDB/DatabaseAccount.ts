@@ -98,7 +98,10 @@ export interface DatabaseAccountCorsRule {
 }
 
 export interface DatabaseAccountProps {
-  /** Resource group the account is created in. Changing it replaces the account. */
+  /**
+   * Resource group the account is created in. Changing it replaces the account.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Globally unique account name: 3-44 lowercase letters, digits, and
@@ -126,6 +129,7 @@ export interface DatabaseAccountProps {
    * create-only capability (`EnableServerless`, `EnableTable`,
    * `EnableCassandra`, `EnableGremlin`, `EnableMongo`) replaces the account;
    * other capabilities are added in place.
+   * @default [] (a provisioned-throughput NoSQL account)
    */
   capabilities?: DatabaseAccountCapability[];
   /**
@@ -145,29 +149,51 @@ export interface DatabaseAccountProps {
    * @default false
    */
   enableFreeTier?: boolean;
-  /** Automatically fail over the write region during a regional outage. */
+  /**
+   * Automatically fail over the write region during a regional outage.
+   * @default unmanaged (Azure's default is `false`)
+   */
   enableAutomaticFailover?: boolean;
-  /** Accept writes in every region (multi-region writes). */
+  /**
+   * Accept writes in every region (multi-region writes).
+   * @default unmanaged (Azure's default is `false`)
+   */
   enableMultipleWriteLocations?: boolean;
   /**
    * Whether the public endpoint accepts traffic.
    * @default Azure's default (`Enabled`)
    */
   publicNetworkAccess?: "Enabled" | "Disabled";
-  /** IPv4 addresses or CIDR ranges allowed through the firewall. */
+  /**
+   * IPv4 addresses or CIDR ranges allowed through the firewall.
+   * @default unmanaged (Azure's default allows every address)
+   */
   ipRules?: string[];
-  /** Enforce `virtualNetworkRules`. */
+  /**
+   * Enforce `virtualNetworkRules`.
+   * @default unmanaged (Azure's default is `false`)
+   */
   isVirtualNetworkFilterEnabled?: boolean;
-  /** Subnets allowed through the firewall. */
+  /**
+   * Subnets allowed through the firewall.
+   * @default unmanaged (none)
+   */
   virtualNetworkRules?: DatabaseAccountVirtualNetworkRule[];
-  /** Let trusted Azure services bypass the firewall. */
+  /**
+   * Let trusted Azure services bypass the firewall.
+   * @default unmanaged (Azure's default is `None`)
+   */
   networkAclBypass?: "None" | "AzureServices";
   /**
    * Reject account-key authentication so only Microsoft Entra ID (RBAC via
    * `SqlRoleAssignment`) can access data.
+   * @default unmanaged (Azure's default is `false`)
    */
   disableLocalAuth?: boolean;
-  /** Reject metadata writes (databases, containers, throughput) made with account keys. */
+  /**
+   * Reject metadata writes (databases, containers, throughput) made with account keys.
+   * @default unmanaged (Azure's default is `false`)
+   */
   disableKeyBasedMetadataWriteAccess?: boolean;
   /**
    * Minimum TLS version accepted by the endpoints.
@@ -177,17 +203,28 @@ export interface DatabaseAccountProps {
   /**
    * Upper bound on the total provisioned throughput (RU/s) across the
    * account; `-1` removes the limit. A useful cost guard.
+   * @default unmanaged (Azure's default is `-1`, no limit)
    */
   totalThroughputLimit?: number;
-  /** MongoDB wire-protocol version, e.g. `"4.2"` or `"7.0"` (kind `MongoDB` only). */
+  /**
+   * MongoDB wire-protocol version, e.g. `"4.2"` or `"7.0"` (kind `MongoDB` only).
+   * @default unmanaged (Azure's default for new accounts)
+   */
   serverVersion?: string;
-  /** Enable the analytical store (Synapse Link). Cannot be disabled once enabled. */
+  /**
+   * Enable the analytical store (Synapse Link). Cannot be disabled once enabled.
+   * @default unmanaged (Azure's default is `false`)
+   */
   enableAnalyticalStorage?: boolean;
-  /** CORS rules for browser access. */
+  /**
+   * CORS rules for browser access.
+   * @default unmanaged (none)
+   */
   cors?: DatabaseAccountCorsRule[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -224,11 +261,27 @@ export interface DatabaseAccount extends Resource<
 > {}
 
 /**
- * An Azure Cosmos DB database account — the globally distributed endpoint
- * that hosts NoSQL databases, MongoDB databases, or tables.
+ * An Azure Cosmos DB database account (`Microsoft.DocumentDB/databaseAccounts`):
+ * the globally distributed endpoint that hosts your NoSQL databases,
+ * MongoDB databases, or tables.
  *
- * Creating or deleting an account takes several minutes. Serverless
- * accounts (`capabilities: ["EnableServerless"]`) cost nothing while idle.
+ * Alchemy creates a single-region account with `Session` consistency and
+ * TLS 1.2 in the stack's resource group. Serverless accounts
+ * (`capabilities: ["EnableServerless"]`) bill per request unit and cost
+ * nothing while idle. Runtimes reach the data through bindings on its
+ * containers, which assign a Cosmos DB data-plane role to the host's Entra
+ * identity, so you never handle account keys.
+ *
+ * :::caution[Changing `name`, `resourceGroup`, `location`, `kind`, `enableFreeTier`, or a create-only capability replaces the account]
+ * Alchemy creates a new, empty account and deletes the old one with every
+ * database in it. The create-only capabilities are `EnableServerless`,
+ * `EnableTable`, `EnableCassandra`, `EnableGremlin`, and `EnableMongo`.
+ * :::
+ *
+ * :::caution[Creating or deleting an account takes minutes]
+ * A serverless account in `centralus` takes about a minute. In busy
+ * regions, creation has taken 25 minutes or more (seen in `eastus`).
+ * :::
  *
  * @see https://learn.microsoft.com/azure/cosmos-db/introduction
  *
@@ -236,15 +289,37 @@ export interface DatabaseAccount extends Resource<
  * **Example:** Serverless NoSQL account
  * ```typescript
  * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
+ *   location: "centralus",
  *   capabilities: ["EnableServerless"],
+ * });
+ * // account.documentEndpoint → "https://{name}.documents.azure.com:443/"
+ * ```
+ *
+ * **Example:** Provisioned account on the free tier
+ * ```typescript
+ * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
+ *   enableFreeTier: true,
+ * });
+ * const database = yield* Azure.CosmosDB.SqlDatabase("app", {
+ *   account: account.accountName,
+ *   throughput: 1000,
  * });
  * ```
  *
+ * **Example:** Cap the account's total throughput
+ * ```typescript
+ * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
+ *   totalThroughputLimit: 4000,
+ * });
+ * ```
+ *
+ * ### Authentication
  * **Example:** Keyless account (Entra ID only)
  * ```typescript
  * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
  *   capabilities: ["EnableServerless"],
  *   disableLocalAuth: true,
+ *   disableKeyBasedMetadataWriteAccess: true,
  * });
  * ```
  *
@@ -277,6 +352,121 @@ export interface DatabaseAccount extends Resource<
  *   enableAutomaticFailover: true,
  *   consistencyPolicy: { defaultConsistencyLevel: "Session" },
  * });
+ * ```
+ *
+ * **Example:** Multi-region writes with zone redundancy
+ * ```typescript
+ * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
+ *   location: "westeurope",
+ *   locations: [
+ *     { locationName: "westeurope", failoverPriority: 0, isZoneRedundant: true },
+ *     { locationName: "northeurope", failoverPriority: 1 },
+ *   ],
+ *   enableMultipleWriteLocations: true,
+ * });
+ * ```
+ *
+ * ### Consistency
+ * **Example:** Bounded staleness
+ * ```typescript
+ * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
+ *   consistencyPolicy: {
+ *     defaultConsistencyLevel: "BoundedStaleness",
+ *     maxStalenessPrefix: 100_000,
+ *     maxIntervalInSeconds: 300,
+ *   },
+ * });
+ * ```
+ *
+ * ### Network Access
+ * **Example:** Allow one IP range and trusted Azure services
+ * ```typescript
+ * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
+ *   ipRules: ["203.0.113.0/24"],
+ *   networkAclBypass: "AzureServices",
+ * });
+ * ```
+ *
+ * **Example:** Private account behind a private endpoint
+ * ```typescript
+ * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
+ *   publicNetworkAccess: "Disabled",
+ * });
+ * const endpoint = yield* Azure.Network.PrivateEndpoint("cosmos", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: account.accountId, groupIds: ["Sql"] },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Browser access with CORS
+ * ```typescript
+ * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
+ *   cors: [{ allowedOrigins: "https://app.example.com", allowedMethods: "GET,POST" }],
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * Bind the containers in the account: each binding assigns a Cosmos DB
+ * data-plane role on that one container to the host's principal (the
+ * managed identity on an Azure Function, Web App, Container App, container
+ * group, or VM; an Entra service principal on any other host).
+ *
+ * **Example:** Read and write documents from an Azure Function
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const todosContainer = yield* Todos;
+ *     const todos = yield* Azure.CosmosDB.SqlContainerReadWrite(todosContainer);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const todo = { id: crypto.randomUUID(), owner: "sam", title: "ship", done: false };
+ *         const created = yield* todos.create({ document: todo, partitionKey: [todo.owner] });
+ *         return yield* HttpServerResponse.json({ etag: created.etag }, { status: 201 });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.CosmosDB.SqlContainerReadWriteHttp)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Manual failover from a runtime
+ * ```typescript
+ * // init: a custom role with only failoverPriorityChange/action on the account
+ * const changeFailoverPriority = yield* Azure.CosmosDB.ChangeFailoverPriority(account);
+ *
+ * // runtime
+ * yield* changeFailoverPriority({
+ *   failoverPolicies: [
+ *     { locationName: "westus", failoverPriority: 0 },
+ *     { locationName: "eastus", failoverPriority: 1 },
+ *   ],
+ * });
+ * // …provided with Effect.provide(Azure.CosmosDB.ChangeFailoverPriorityHttp)
+ * ```
+ *
+ * ### Event Sources
+ * **Example:** Consume a container's change feed
+ * ```typescript
+ * yield* Azure.CosmosDB.consumeChangeFeed(todos, { leases }, (documents) =>
+ *   Effect.log(`${documents.length} todos changed`),
+ * );
+ * // …provided with Effect.provide(Azure.Functions.CosmosDBChangeFeedEventSource)
+ * ```
+ *
+ * ### Deleting an Account
+ * Destroying the account deletes every database, container, and document
+ * in it, and takes several minutes.
+ *
+ * **Example:** Keep the account when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
+ *   capabilities: ["EnableServerless"],
+ * }).pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

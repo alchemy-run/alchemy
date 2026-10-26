@@ -36,11 +36,13 @@ export type GetSchemaByVersionClient = (
  * ### Reading Schemas
  * **Example:** Read version 2 of a schema
  * ```typescript
+ * // Schemas: a module-scope Azure.EventHub.SchemaGroup declaration
  * export default class Api extends Azure.Functions.Function<Api>()(
  *   "Api",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     // init: assigns the role on the schema group
+ *     const schemas = yield* Schemas;
+ *     // init: assigns Schema Registry Reader on the schema group only
  *     const getVersion = yield* Azure.EventHub.GetSchemaByVersion(schemas);
  *     return {
  *       fetch: Effect.gen(function* () {

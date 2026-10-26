@@ -27,6 +27,7 @@ export interface GetLabelsRequest extends Omit<appconfig.GetLabelsRequest, "endp
  *
  * // runtime
  * const page = yield* getLabels({ name: "prod*" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.GetLabelsHttp)
  * ```
  *
  * @binding

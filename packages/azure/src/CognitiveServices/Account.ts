@@ -50,63 +50,101 @@ export type AccountKind =
 export interface AccountNetworkAcls {
   /** Action when no IP or virtual network rule matches. */
   defaultAction: "Allow" | "Deny";
-  /** Let trusted Azure services bypass the rules. */
+  /**
+   * Let trusted Azure services bypass the rules.
+   * @default Azure's default (`AzureServices`)
+   */
   bypass?: "None" | "AzureServices";
-  /** Allowed IPv4 addresses or CIDR ranges. */
+  /**
+   * Allowed IPv4 addresses or CIDR ranges.
+   * @default []
+   */
   ipRules?: string[];
-  /** ARM resource IDs of allowed virtual network subnets. */
+  /**
+   * ARM resource IDs of allowed virtual network subnets.
+   * @default []
+   */
   virtualNetworkRules?: string[];
 }
 
 export interface AccountNetworkInjection {
   /** Scenario the injection applies to. */
   scenario: "agent" | "none";
-  /** ARM ID of a delegated subnet to inject into. */
+  /**
+   * ARM ID of a delegated subnet to inject into.
+   * @default none
+   */
   subnetArmId?: string;
   /**
    * Use a Microsoft-managed virtual network instead of your own subnet
    * (required by `CognitiveServices.ManagedNetwork`).
+   * @default false
    */
   useMicrosoftManagedNetwork?: boolean;
 }
 
 export interface AccountProps {
-  /** Resource group the account is created in. Changing it replaces the account. */
+  /**
+   * Resource group the account is created in.
+   *
+   * :::caution
+   * Changing it replaces the account and deletes its deployments and projects.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
-   * Account name: 2-64 letters, digits, and hyphens. If omitted, a unique
-   * lowercase name is generated from the app, stage, and logical ID.
-   * Changing it replaces the account.
+   * Account name: 2-64 letters, digits, and hyphens.
+   *
+   * :::caution
+   * Changing it replaces the account and deletes its deployments and projects.
+   * :::
+   * @default a unique lowercase name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the account. Changing it replaces the account.
+   * Azure location of the account. Model availability differs by region.
+   *
+   * :::caution
+   * Changing it replaces the account and deletes its deployments and projects.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
-   * Kind of service (`AIServices` for Azure AI Foundry / multi-service,
-   * `OpenAI`, `TextAnalytics`, ...). Changing it replaces the account.
+   * Kind of service: `AIServices` for Azure AI Foundry and multi-service
+   * access, `OpenAI`, `TextAnalytics` (Language), `ContentSafety`,
+   * `TextTranslation`, `SpeechServices`, `FormRecognizer` (Document
+   * Intelligence), …
+   *
+   * :::caution
+   * Changing it replaces the account and deletes its deployments and projects.
+   * :::
    * @default "AIServices"
    */
   kind?: AccountKind;
   /**
    * Pricing tier. `F0` (free) is limited to one account per kind per
-   * subscription.
+   * subscription. Changing it updates the account in place.
    * @default "S0"
    */
   sku?: string;
   /**
    * Globally unique subdomain of the account endpoint
    * (`https://{customSubDomainName}.cognitiveservices.azure.com/`).
-   * Required for Microsoft Entra ID auth, network rules, and projects. It
-   * cannot be changed once set; changing it replaces the account.
+   * Microsoft Entra ID auth, network rules, and projects need it.
+   *
+   * :::caution
+   * Azure cannot change it once set. Changing it replaces the account and
+   * deletes its deployments and projects.
+   * :::
    * @default the account name
    */
   customSubDomainName?: string;
   /**
    * Managed identity of the account. Foundry projects and customer-managed
    * keys need a system-assigned identity.
+   * @default no identity
    */
   identity?: CognitiveServicesIdentity;
   /**
@@ -114,7 +152,10 @@ export interface AccountProps {
    * @default Azure's default (`Enabled`)
    */
   publicNetworkAccess?: "Enabled" | "Disabled";
-  /** Network rules for the public endpoint. */
+  /**
+   * Network rules for the public endpoint.
+   * @default no rules (every network may connect)
+   */
   networkAcls?: AccountNetworkAcls;
   /**
    * Disable key-based (local) authentication so callers must use
@@ -129,24 +170,41 @@ export interface AccountProps {
    * @default false
    */
   allowProjectManagement?: boolean;
-  /** Project targeted by data-plane calls that do not name a project. */
+  /**
+   * Project targeted by data-plane calls that do not name a project.
+   * @default none
+   */
   defaultProject?: string;
-  /** Restrict outbound calls of the account to `allowedFqdnList`. */
+  /**
+   * Restrict outbound calls of the account to `allowedFqdnList`.
+   * @default false
+   */
   restrictOutboundNetworkAccess?: boolean;
-  /** FQDNs the account may call when outbound access is restricted. */
+  /**
+   * FQDNs the account may call when outbound access is restricted.
+   * @default []
+   */
   allowedFqdnList?: string[];
   /**
    * Network injection for Foundry agents: your own delegated subnet, or a
    * Microsoft-managed network (`useMicrosoftManagedNetwork: true`).
+   * @default none
    */
   networkInjections?: AccountNetworkInjection[];
-  /** Enable dynamic throttling. */
+  /**
+   * Enable dynamic throttling.
+   * @default Azure's default (`false`)
+   */
   dynamicThrottlingEnabled?: boolean;
-  /** Disable stored completions (Azure OpenAI). */
+  /**
+   * Disable stored completions (Azure OpenAI).
+   * @default Azure's default (`false`)
+   */
   storedCompletionsDisabled?: boolean;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -184,45 +242,249 @@ export interface Account extends Resource<
 
 /**
  * An Azure AI services account (`Microsoft.CognitiveServices/accounts`):
- * the root resource of Azure AI Foundry, Azure OpenAI, and the single
- * Azure AI services (Language, Vision, Speech, Content Safety, ...).
+ * the root resource of Azure AI Foundry, Azure OpenAI, and the single Azure
+ * AI services (Language, Vision, Speech, Content Safety, Translator,
+ * Document Intelligence, …).
  *
- * Deleting an account only soft-deletes it, which keeps its name and
- * subdomain reserved for 48 hours. Alchemy purges the deleted account so
- * the name can be reused immediately.
+ * Alchemy creates an `AIServices` account on the `S0` tier (billed per
+ * call, $0 while idle) with a custom subdomain equal to its name. The
+ * subdomain is what lets runtimes call the account with a Microsoft Entra
+ * token, so bindings never handle keys: each binding assigns a custom role
+ * with one data action on this account to the host's identity. Deploy
+ * models into the account with `Azure.CognitiveServices.Deployment`.
  *
- * @see https://learn.microsoft.com/azure/ai-services/multi-service-resource
+ * :::caution[Changing `name`, `location`, `kind`, `customSubDomainName`, or `resourceGroup` replaces the account]
+ * Alchemy creates a new account and deletes the old one with its model
+ * deployments, projects, and data (agents, files, fine-tuned models).
+ * :::
+ *
+ * :::caution[Deleted accounts are soft-deleted]
+ * Azure keeps a deleted account, its name, and its subdomain for 48 hours.
+ * Alchemy purges the deleted account on destroy, so you can reuse the name
+ * at once.
+ * :::
+ *
+ * See [Create an Azure AI services resource](https://learn.microsoft.com/azure/ai-services/multi-service-resource).
  *
  * ### Creating an Account
  * **Example:** Azure AI services (Foundry) account
  * ```typescript
- * const account = yield* Azure.CognitiveServices.Account("ai");
+ * const ai = yield* Azure.CognitiveServices.Account("Ai");
+ * // ai.endpoint → "https://<name>.cognitiveservices.azure.com/"
+ * // ai.endpoints["OpenAI Language Model Instance API"] → "https://<name>.openai.azure.com/"
  * ```
  *
- * **Example:** Azure OpenAI account with Entra ID only
+ * **Example:** Azure OpenAI account in a chosen region
  * ```typescript
- * const openai = yield* Azure.CognitiveServices.Account("openai", {
+ * const openai = yield* Azure.CognitiveServices.Account("OpenAI", {
  *   kind: "OpenAI",
+ *   location: "eastus2",
+ * });
+ * ```
+ *
+ * **Example:** Single-service accounts
+ * ```typescript
+ * const language = yield* Azure.CognitiveServices.Account("Language", { kind: "TextAnalytics" });
+ * const safety = yield* Azure.CognitiveServices.Account("Safety", { kind: "ContentSafety" });
+ * const translator = yield* Azure.CognitiveServices.Account("Translator", {
+ *   kind: "TextTranslation",
+ * });
+ * ```
+ *
+ * **Example:** Free tier
+ * ```typescript
+ * // One F0 account per kind per subscription.
+ * const language = yield* Azure.CognitiveServices.Account("Language", {
+ *   kind: "TextAnalytics",
+ *   sku: "F0",
+ * });
+ * ```
+ *
+ * ### Deploying Models
+ * **Example:** A chat model and an embeddings model
+ * ```typescript
+ * const account = yield* Azure.CognitiveServices.Account("OpenAI");
+ * const chat = yield* Azure.CognitiveServices.Deployment("Chat", {
+ *   account: account.accountName,
+ *   name: "chat",
+ *   model: { format: "OpenAI", name: "gpt-4.1-mini", version: "2025-04-14" },
+ *   sku: { name: "GlobalStandard", capacity: 10 },
+ * });
+ * ```
+ *
+ * ### Authentication
+ * **Example:** Entra ID only (no keys)
+ * ```typescript
+ * const account = yield* Azure.CognitiveServices.Account("Ai", {
  *   disableLocalAuth: true,
  * });
  * ```
  *
- * ### Azure AI Foundry
- * **Example:** Account that can hold Foundry projects
+ * ### Azure AI Foundry Projects
+ * **Example:** Account that holds Foundry projects
  * ```typescript
- * const foundry = yield* Azure.CognitiveServices.Account("foundry", {
+ * const foundry = yield* Azure.CognitiveServices.Account("Foundry", {
  *   kind: "AIServices",
  *   allowProjectManagement: true,
  *   identity: { type: "SystemAssigned" },
  * });
+ * const project = yield* Azure.CognitiveServices.Project("Agents", {
+ *   account: foundry.accountName,
+ *   displayName: "Agents",
+ * });
  * ```
  *
- * ### Network Restrictions
+ * ### Network Access
  * **Example:** Allow only one IP range
  * ```typescript
- * const account = yield* Azure.CognitiveServices.Account("ai", {
+ * const account = yield* Azure.CognitiveServices.Account("Ai", {
  *   networkAcls: { defaultAction: "Deny", ipRules: ["203.0.113.0/24"] },
  * });
+ * ```
+ *
+ * **Example:** Private-only account behind a private endpoint
+ * ```typescript
+ * const account = yield* Azure.CognitiveServices.Account("Ai", {
+ *   publicNetworkAccess: "Disabled",
+ * });
+ * yield* Azure.Network.PrivateEndpoint("AiEndpoint", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: account.accountId, groupIds: ["account"] },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Restrict outbound calls
+ * ```typescript
+ * const account = yield* Azure.CognitiveServices.Account("Ai", {
+ *   restrictOutboundNetworkAccess: true,
+ *   allowedFqdnList: ["docs.blob.core.windows.net"],
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * Bind the account inside the host and provide the matching `*Http`
+ * layer. Each binding assigns a custom role with exactly one data action
+ * (for example `OpenAI/deployments/chat/completions/action`) on this
+ * account only, to the host's managed identity (an Azure Function, Web App,
+ * Container App, container group, or VM) or, on any other host, to an
+ * Entra service principal. Calls answer `401` for a few minutes after the
+ * first deploy, until the role assignments propagate.
+ *
+ * **Example:** Chat and embeddings from an Azure Function
+ * ```typescript
+ * // src/Api.ts
+ * import * as Azure from "@alchemy.run/azure";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import { Chat, Embeddings, OpenAI } from "./resources.ts";
+ *
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const account = yield* OpenAI;
+ *     yield* Chat;
+ *     yield* Embeddings;
+ *     const chat = yield* Azure.CognitiveServices.OpenAICreateChatCompletion(account);
+ *     const embed = yield* Azure.CognitiveServices.OpenAICreateEmbedding(account);
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const reply = yield* chat({
+ *           deploymentId: "chat", // the deployment's name
+ *           messages: [{ role: "user", content: "Say hello" }],
+ *           max_tokens: 200,
+ *         });
+ *         const vectors = yield* embed({ deploymentId: "embeddings", input: ["hello"] });
+ *         return yield* HttpServerResponse.json({
+ *           text: reply.object === "chat.completion" ? reply.choices[0]?.message.content : "",
+ *           dimensions: vectors.data[0]?.embedding.length,
+ *         });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(
+ *     Effect.provide([
+ *       Azure.CognitiveServices.OpenAICreateChatCompletionHttp,
+ *       Azure.CognitiveServices.OpenAICreateEmbeddingHttp,
+ *     ]),
+ *   ),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Screen user text with Content Safety
+ * ```typescript
+ * // init: an account of kind ContentSafety or AIServices
+ * const analyzeTextSafety = yield* Azure.CognitiveServices.AnalyzeTextSafety(safety);
+ *
+ * // runtime
+ * const { categoriesAnalysis } = yield* analyzeTextSafety({ text: userMessage });
+ * const flagged = categoriesAnalysis.some((c) => (c.severity ?? 0) >= 4);
+ * // …provided with Effect.provide(Azure.CognitiveServices.AnalyzeTextSafetyHttp)
+ * ```
+ *
+ * **Example:** Translate text
+ * ```typescript
+ * // init: an account of kind TextTranslation or AIServices
+ * const translateText = yield* Azure.CognitiveServices.TranslateText(translator);
+ *
+ * // runtime
+ * const [result] = yield* translateText({ to: ["de", "fr"], body: [{ text: "Hello" }] });
+ * // …provided with Effect.provide(Azure.CognitiveServices.TranslateTextHttp)
+ * ```
+ *
+ * **Example:** Sentiment analysis
+ * ```typescript
+ * // init: an account of kind TextAnalytics or AIServices
+ * const analyzeText = yield* Azure.CognitiveServices.AnalyzeText(language);
+ *
+ * // runtime
+ * const sentiment = yield* analyzeText({
+ *   kind: "SentimentAnalysis",
+ *   analysisInput: { documents: [{ id: "1", text: "I love this", language: "en" }] },
+ * });
+ * // …provided with Effect.provide(Azure.CognitiveServices.AnalyzeTextHttp)
+ * ```
+ *
+ * **Example:** Read a document with Document Intelligence
+ * ```typescript
+ * // init
+ * const analyzeDocument = yield* Azure.CognitiveServices.AnalyzeDocument(account);
+ *
+ * // runtime: Azure analyzes in the background; poll the operation location
+ * const { operationLocation } = yield* analyzeDocument({
+ *   modelId: "prebuilt-read",
+ *   urlSource: "https://example.com/receipt.png",
+ * });
+ * // …provided with Effect.provide(Azure.CognitiveServices.AnalyzeDocumentHttp)
+ * ```
+ *
+ * **Example:** Run a Foundry agent
+ * ```typescript
+ * // init: agent bindings take an Azure.CognitiveServices.Project
+ * const createAgent = yield* Azure.CognitiveServices.CreateAgent(project);
+ * const createAgentThreadAndRun = yield* Azure.CognitiveServices.CreateAgentThreadAndRun(project);
+ *
+ * // runtime
+ * const agent = yield* createAgent({ model: "chat", name: "support", instructions: "Answer in one sentence." });
+ * const run = yield* createAgentThreadAndRun({
+ *   assistant_id: agent.id,
+ *   thread: { messages: [{ role: "user", content: "Hello" }] },
+ * });
+ * // …provided with Effect.provide([Azure.CognitiveServices.CreateAgentHttp, Azure.CognitiveServices.CreateAgentThreadAndRunHttp])
+ * ```
+ *
+ * ### Deleting an Account
+ * Destroying the account deletes its deployments and projects, then purges
+ * the soft-deleted account so the name is free again.
+ *
+ * **Example:** Keep the account when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const account = yield* Azure.CognitiveServices.Account("OpenAI").pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

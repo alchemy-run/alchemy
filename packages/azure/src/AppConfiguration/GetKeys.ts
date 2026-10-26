@@ -27,6 +27,7 @@ export interface GetKeysRequest extends Omit<appconfig.GetKeysRequest, "endpoint
  *
  * // runtime
  * const page = yield* getKeys({ name: "App:*" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.GetKeysHttp)
  * ```
  *
  * @binding

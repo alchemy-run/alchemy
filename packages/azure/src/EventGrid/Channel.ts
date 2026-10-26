@@ -19,51 +19,92 @@ import { createEventGridName, sameName } from "./common.ts";
 export interface PartnerEventType {
   /** Display name shown to the subscriber (required by Event Grid). */
   displayName: string;
-  /** Description of the event type. */
+  /**
+   * Description of the event type.
+   * @default no description
+   */
   description?: string;
-  /** Documentation URL of the event type. */
+  /**
+   * Documentation URL of the event type.
+   * @default no documentation URL
+   */
   documentationUrl?: string;
-  /** URL of the JSON schema of the event `data`. */
+  /**
+   * URL of the JSON schema of the event `data`.
+   * @default no schema URL
+   */
   dataSchemaUrl?: string;
 }
 
 /** Where a channel creates its partner topic (the subscriber's side). */
 export interface ChannelPartnerTopic {
   /**
-   * Azure subscription of the subscriber. Changing it replaces the channel.
+   * Azure subscription ID (GUID) of the subscriber.
+   *
+   * :::caution
+   * Changing it replaces the channel.
+   * :::
    * @default the current subscription
    */
   subscriptionId?: string;
   /**
    * Subscriber resource group the partner topic is created in. Its
    * `Azure.EventGrid.PartnerConfiguration` must authorize the partner
-   * registration. Changing it replaces the channel.
+   * registration. This is the subscriber's group, not the stack's, so it
+   * has no default.
+   *
+   * :::caution
+   * Changing it replaces the channel.
+   * :::
    */
   resourceGroup: string;
   /**
-   * Name of the partner topic. Changing it replaces the channel.
+   * Name of the partner topic.
+   *
+   * :::caution
+   * Changing it replaces the channel.
+   * :::
    * @default the channel name
    */
   name?: string;
   /**
-   * Partner resource the events come from, shown to the subscriber during
-   * activation. Changing it replaces the channel.
+   * Partner resource the events come from, e.g.
+   * `contoso/tenants/customer-a`. The subscriber sees it during activation.
+   *
+   * :::caution
+   * Changing it replaces the channel.
+   * :::
    */
   source: string;
 }
 
 export interface ChannelProps {
   /**
-   * Resource group of the partner namespace. Changing it replaces the
-   * channel.
+   * Resource group of the partner namespace.
+   *
+   * :::caution
+   * Changing it replaces the channel.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
-  /** Name of the parent partner namespace. Changing it replaces the channel. */
+  /**
+   * Name of the parent partner namespace, e.g.
+   * `namespace.partnerNamespaceName` of an `Azure.EventGrid.PartnerNamespace`.
+   *
+   * :::caution
+   * Changing it replaces the channel.
+   * :::
+   */
   partnerNamespace: string;
   /**
    * Channel name: 3-50 letters, digits, and hyphens. If omitted, a unique
-   * name is generated from the app, stage, and logical ID. Changing it
-   * replaces the channel.
+   * name is generated from the app, stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the channel.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
@@ -88,6 +129,7 @@ export interface ChannelProps {
    * :::caution
    * Changing it replaces the channel.
    * :::
+   * @default no message
    */
   messageForActivation?: string;
   /**
@@ -131,19 +173,34 @@ export interface Channel extends Resource<
  * creation it creates a partner topic in the subscriber's resource group;
  * the subscriber then activates it with `Azure.EventGrid.PartnerTopic`.
  *
- * The subscriber's resource group must authorize the partner registration
- * with an `Azure.EventGrid.PartnerConfiguration` first.
- *
  * Channels have no tags; Alchemy tracks them through stack state.
+ *
+ * :::caution[Changing `name`, `partnerNamespace`, `resourceGroup`, any `partnerTopic` field, or `messageForActivation` replaces the channel]
+ * Alchemy creates a new channel and deletes the old one with its partner
+ * topic. The subscriber must activate the new partner topic. `eventTypes`
+ * and `expirationTimeIfNotActivatedUtc` update in place.
+ * :::
+ *
+ * :::caution[The subscriber must authorize your partner registration]
+ * The subscriber's resource group needs an
+ * `Azure.EventGrid.PartnerConfiguration` that lists your registration's
+ * `partnerRegistrationImmutableId` before the channel can create the
+ * partner topic there.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/onboard-partner
  *
  * ### Creating a Channel
  * **Example:** Channel that creates a partner topic for a customer
  * ```typescript
+ * const registration = yield* Azure.EventGrid.PartnerRegistration("contoso");
+ * const namespace = yield* Azure.EventGrid.PartnerNamespace("contoso-events", {
+ *   partnerRegistration: registration.partnerRegistrationId,
+ * });
  * const channel = yield* Azure.EventGrid.Channel("customer-a", {
  *   partnerNamespace: namespace.partnerNamespaceName,
  *   partnerTopic: {
+ *     // the subscriber's resource group, not the stack's
  *     resourceGroup: "customer-a-events",
  *     source: "contoso/tenants/customer-a",
  *   },

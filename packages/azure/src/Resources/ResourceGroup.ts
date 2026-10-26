@@ -41,7 +41,9 @@ export interface ResourceGroupProps {
   location?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
-   * `alchemy::id`) are merged in automatically.
+   * `alchemy::id`) are merged in automatically. Changing them updates the
+   * group in place.
+   * @default {}
    */
   tags?: Record<string, string>;
   /**
@@ -95,13 +97,32 @@ export interface ResourceGroup extends Resource<
 > {}
 
 /**
- * An Azure resource group — the container every other Azure resource is
- * deployed into. Deleting a resource group deletes everything in it.
+ * An Azure resource group (`Microsoft.Resources/resourceGroups`): the
+ * container every other Azure resource is deployed into. Deleting a
+ * resource group deletes everything in it.
  *
  * You rarely declare one. A resource without a `resourceGroup` prop goes
  * into the stack's resource group: `<stack>-<stage>`, created on first use
  * and deleted on destroy once it is empty. Declare a group to choose its
  * name, location, or tags, or to keep shared resources apart.
+ *
+ * Alchemy tags the group with `alchemy::stack`, `alchemy::stage`, and
+ * `alchemy::id`. A generated name stays within 80 characters, the limit
+ * Front Door accepts.
+ *
+ * :::caution[Changing `name` or `location` replaces the resource group]
+ * Alchemy creates a new group and deletes the old one with every resource
+ * still in it. A resource's ARM ID contains its resource group, so moving a
+ * resource to another group, or switching the stack from the default group
+ * to a named one, replaces that resource too.
+ * :::
+ *
+ * :::caution[The deploying identity needs permission to create resource groups]
+ * Creating a group needs `Microsoft.Resources/subscriptions/resourceGroups/write`
+ * on the subscription (for example the **Contributor** role). Without it,
+ * deploy fails with `Azure.ResourceGroupCreateForbidden`. Deploy into an
+ * existing group with `Azure.resourceGroup("<name>")` instead.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-resource-manager/management/manage-resource-groups-portal
  *
@@ -132,12 +153,6 @@ export interface ResourceGroup extends Resource<
  * }).pipe(Effect.provide(Azure.resourceGroup(group)));
  * ```
  *
- * :::caution
- * A resource's ARM ID contains its resource group. Moving a resource to
- * another group, or switching the stack from the default group to a named
- * one, replaces the resource.
- * :::
- *
  * ### Creating a Resource Group
  * **Example:** Resource group in the default location
  * ```typescript
@@ -153,13 +168,93 @@ export interface ResourceGroup extends Resource<
  * });
  * ```
  *
+ * **Example:** Set the default location for the whole stack
+ * ```typescript
+ * // Every group and resource without a `location` goes to westeurope.
+ * providers: Azure.providers().pipe(
+ *   Layer.provideMerge(Azure.location("westeurope")),
+ * ),
+ * ```
+ *
  * ### Deploying into a Resource Group
+ * Pass `resourceGroupName` as the `resourceGroup` prop of each resource.
+ *
  * **Example:** Storage account inside the group
  * ```typescript
  * const group = yield* Azure.Resources.ResourceGroup("app");
  * const account = yield* Azure.Storage.StorageAccount("files", {
  *   resourceGroup: group.resourceGroupName,
  * });
+ * ```
+ *
+ * **Example:** Shared resources in their own group
+ * ```typescript
+ * const shared = yield* Azure.Resources.ResourceGroup("shared", {
+ *   location: "westeurope",
+ * });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("deployer", {
+ *   resourceGroup: shared.resourceGroupName,
+ * });
+ * // Resources without `resourceGroup` still go into `<stack>-<stage>`.
+ * const files = yield* Azure.Storage.StorageAccount("files");
+ * ```
+ *
+ * ### Granting Access to a Resource Group
+ * Use `resourceGroupId` as a role-assignment scope. The role covers every
+ * resource in the group.
+ *
+ * **Example:** Read access for a managed identity
+ * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("auditor");
+ * yield* Azure.Authorization.RoleAssignment("auditor-reads-app", {
+ *   scope: group.resourceGroupId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.Reader,
+ *   principalId: identity.principalId,
+ *   principalType: "ServicePrincipal",
+ * });
+ * ```
+ *
+ * ### Locking a Resource Group
+ * A `CanNotDelete` lock blocks deleting the group and every resource in it,
+ * from the portal, the CLI, and Alchemy alike.
+ *
+ * **Example:** Protect a production group
+ * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("prod", {
+ *   name: "shop-prod",
+ * });
+ * yield* Azure.Resources.ManagementLock("prod-lock", {
+ *   scope: group.resourceGroupId,
+ *   level: "CanNotDelete",
+ *   notes: "Production data",
+ * });
+ * ```
+ *
+ * ### Deleting a Resource Group
+ * Destroy deletes the group and everything still in it, and waits up to
+ * 5 minutes for the delete to finish. Set `deleteOnlyIfEmpty: true` to
+ * refuse: destroy then deletes the group only when it carries this stack's
+ * ownership tags and holds no resources, and fails with
+ * `Azure.ResourceGroupNotEmpty` (listing the remaining resource IDs) or
+ * `Azure.ResourceGroupNotOwned` otherwise. The stack's implicit group sets
+ * it.
+ *
+ * **Example:** Never delete resources Alchemy did not create
+ * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app", {
+ *   name: "shop-prod",
+ *   deleteOnlyIfEmpty: true,
+ * });
+ * ```
+ *
+ * **Example:** Keep the group when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const group = yield* Azure.Resources.ResourceGroup("app", {
+ *   name: "shop-prod",
+ * }).pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

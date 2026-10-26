@@ -791,7 +791,7 @@ export const Compute: Platform<
     let runtimeContext: ComputeRuntimeContext;
     const run: ProcessContext["run"] = (effect) =>
       Effect.sync(() => {
-        runners.push(effect);
+        runners.push(effect.pipe(Effect.provideService(RuntimeContext, runtimeContext)));
       });
 
     const serve = <Req = never>(handler: HttpEffect<Req>) =>

@@ -26,22 +26,49 @@ import {
 import type { EntityStatus } from "./Queue.ts";
 
 export interface SubscriptionProps {
-  /** Resource group of the namespace. Changing it replaces the subscription. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Namespace that holds the topic. Changing it replaces the subscription. */
+  /**
+   * Name of the namespace that holds the topic.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   */
   namespace: string;
-  /** Topic the subscription receives from. Changing it replaces the subscription. */
+  /**
+   * Name of the topic the subscription receives from (`topic.topicName`).
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   */
   topic: string;
   /**
    * Subscription name: 1-50 letters, digits, `.`, `-`, and `_`, starting
    * and ending with a letter or digit. If omitted, a unique lowercase name
-   * is generated from the app, stage, and logical ID. Changing it replaces
-   * the subscription.
+   * is generated from the app, stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Whether the subscription supports sessions. Changing it replaces the
-   * subscription.
+   * Whether the subscription supports sessions (ordered, grouped
+   * delivery). Publishers must then set `sessionId`.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
    * @default false
    */
   requiresSession?: boolean;
@@ -80,15 +107,28 @@ export interface SubscriptionProps {
    * @default true
    */
   enableBatchedOperations?: boolean;
-  /** Idle interval (ISO 8601, at least `PT5M`) after which the subscription is deleted. */
+  /**
+   * Idle interval (ISO 8601, at least `PT5M`) after which Service Bus
+   * deletes the subscription.
+   * @default never (Azure's maximum, about 29,000 years)
+   */
   autoDeleteOnIdle?: string;
-  /** Queue or topic (same namespace) to auto-forward messages to. */
+  /**
+   * Name of a queue or topic in the same namespace to auto-forward every
+   * message to.
+   * @default no forwarding
+   */
   forwardTo?: string;
-  /** Queue or topic (same namespace) to auto-forward dead-lettered messages to. */
+  /**
+   * Name of a queue or topic in the same namespace to auto-forward
+   * dead-lettered messages to.
+   * @default no forwarding
+   */
   forwardDeadLetteredMessagesTo?: string;
   /**
    * Free-form user metadata. Alchemy appends an ownership marker
    * (`[alchemy <stack>/<stage>/<id>]`) because subscriptions have no tags.
+   * @default only the ownership marker
    */
   userMetadata?: string;
 }
@@ -112,7 +152,7 @@ export interface Subscription extends Resource<
     resourceGroup: string;
     /** Whether sessions are required. */
     requiresSession: boolean;
-    /** Entity status. */
+    /** Entity status: `Active`, `Disabled`, or `ReceiveDisabled`. */
     status: string | undefined;
     /** User metadata (ownership marker stripped). */
     userMetadata: string | undefined;
@@ -122,26 +162,79 @@ export interface Subscription extends Resource<
 > {}
 
 /**
- * A Service Bus topic subscription — a durable, independent queue of the
- * topic's messages. Service Bus adds a `$Default` rule that accepts every
- * message.
+ * An Azure Service Bus topic subscription
+ * (`Microsoft.ServiceBus/namespaces/topics/subscriptions`): a durable,
+ * independent queue that receives its own copy of every topic message its
+ * rules match.
  *
- * Subscriptions have no tags, so Alchemy records ownership as a
- * `[alchemy <stack>/<stage>/<id>]` marker at the end of `userMetadata`.
+ * Service Bus gives every new subscription a `$Default` rule that accepts
+ * every message; add a `Rule` to filter. Bind the subscription to a runtime
+ * with `SubscriptionRead`, or consume it with `consumeSubscriptionMessages`:
+ * both assign **Azure Service Bus Data Receiver** (or Data Owner for a
+ * Container Apps scaler) on this subscription only. Subscriptions have no
+ * tags, so Alchemy records ownership as a `[alchemy <stack>/<stage>/<id>]`
+ * marker at the end of `userMetadata`.
+ *
+ * :::caution[Changing `name`, `topic`, `namespace`, `resourceGroup`, or `requiresSession` replaces the subscription]
+ * Alchemy creates a new subscription and deletes the old one with every
+ * message in it. The new subscription only receives messages published
+ * after it exists.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/service-bus-messaging/service-bus-queues-topics-subscriptions#topics-and-subscriptions
  *
  * ### Creating a Subscription
  * **Example:** Subscription on a topic
  * ```typescript
+ * const bus = yield* Azure.ServiceBus.Namespace("bus");
  * const events = yield* Azure.ServiceBus.Topic("events", {
  *   namespace: bus.namespaceName,
  * });
  * const audit = yield* Azure.ServiceBus.Subscription("audit", {
  *   namespace: bus.namespaceName,
  *   topic: events.topicName,
- *   maxDeliveryCount: 5,
  * });
+ * ```
+ *
+ * ### Locks, Retries, and Dead-Lettering
+ * **Example:** Five attempts with a 30-second lock, dead-letter expired messages
+ * ```typescript
+ * const audit = yield* Azure.ServiceBus.Subscription("audit", {
+ *   namespace: bus.namespaceName,
+ *   topic: events.topicName,
+ *   lockDuration: "PT30S",
+ *   maxDeliveryCount: 5,
+ *   defaultMessageTimeToLive: "P7D",
+ *   deadLetteringOnMessageExpiration: true,
+ * });
+ * ```
+ *
+ * ### Filtering Messages
+ * A message reaches the subscription when any of its rules matches.
+ *
+ * **Example:** Receive only EU orders
+ * ```typescript
+ * const euOrders = yield* Azure.ServiceBus.Subscription("eu-orders", {
+ *   namespace: bus.namespaceName,
+ *   topic: events.topicName,
+ * });
+ * yield* Azure.ServiceBus.Rule("eu-only", {
+ *   namespace: bus.namespaceName,
+ *   topic: events.topicName,
+ *   subscription: euOrders.subscriptionName,
+ *   correlationFilter: { label: "order.created", properties: { region: "eu" } },
+ * });
+ * ```
+ *
+ * ### Sessions
+ * **Example:** Ordered delivery per session
+ * ```typescript
+ * const ordered = yield* Azure.ServiceBus.Subscription("ordered", {
+ *   namespace: bus.namespaceName,
+ *   topic: events.topicName,
+ *   requiresSession: true,
+ * });
+ * // publishers set `sessionId` on every message
  * ```
  *
  * ### Forwarding
@@ -155,6 +248,82 @@ export interface Subscription extends Resource<
  *   topic: events.topicName,
  *   forwardTo: inbox.queueName,
  * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * `SubscriptionRead` assigns **Azure Service Bus Data Receiver** on this
+ * subscription only. It works on any host: a managed-identity host (an
+ * Azure Function, Web App, Container App, container group, or VM) gets the
+ * role on its identity; any other host (a Cloudflare Worker, an AWS
+ * Lambda) gets an Entra service principal.
+ *
+ * **Example:** Receive and complete from an Azure Function
+ * ```typescript
+ * export default class Drain extends Azure.Functions.Function<Drain>()(
+ *   "Drain",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const subscription = yield* Audit;
+ *     const audit = yield* Azure.ServiceBus.SubscriptionRead(subscription);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const message = yield* audit.receive({ timeoutSeconds: 10 });
+ *         if (message === undefined) return HttpServerResponse.text("empty");
+ *         yield* audit.complete(message);
+ *         return HttpServerResponse.text(message.text);
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.ServiceBus.SubscriptionReadHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Peek-lock, then complete, abandon, or renew
+ * ```typescript
+ * // init
+ * const audit = yield* Azure.ServiceBus.SubscriptionRead(subscription);
+ *
+ * // runtime
+ * const message = yield* audit.receive({ timeoutSeconds: 10 });
+ * if (message !== undefined) {
+ *   yield* audit.renewLock(message); // extend the lock for long work
+ *   yield* handle(message.text).pipe(
+ *     Effect.andThen(audit.complete(message)),
+ *     Effect.catch(() => audit.abandon(message)), // deliver it again
+ *   );
+ * }
+ * ```
+ *
+ * **Example:** Receive and delete in one step (at most once)
+ * ```typescript
+ * const message = yield* audit.receiveAndDelete();
+ * ```
+ *
+ * ### Event Sources
+ * Run a handler for every message. The host completes the message when the
+ * handler succeeds and abandons it when the handler fails, so it moves to
+ * the dead-letter subqueue after `maxDeliveryCount` attempts.
+ *
+ * **Example:** Consume a subscription in an Azure Function
+ * ```typescript
+ * export default class Worker extends Azure.Functions.Function<Worker>()(
+ *   "Worker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     yield* Azure.ServiceBus.consumeSubscriptionMessages(Audit, (message) =>
+ *       Effect.log(`audit ${message.messageId}: ${JSON.stringify(message.body)}`),
+ *     );
+ *     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+ *   }).pipe(Effect.provide(Azure.Functions.ServiceBusSubscriptionEventSource)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Consume a subscription in a Container App
+ * ```typescript
+ * yield* Azure.ServiceBus.consumeSubscriptionMessages(Audit, (message) =>
+ *   Effect.log(message.body),
+ * );
+ * // Effect.provide(Azure.ContainerApps.AppServiceBusSubscriptionEventSource)
  * ```
  *
  * @resource

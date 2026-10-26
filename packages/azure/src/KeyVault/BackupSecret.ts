@@ -33,6 +33,7 @@ export interface BackupSecretRequest extends Omit<
  *
  * // runtime
  * const { value: blob } = yield* backupSecret();
+ * // …provided with Effect.provide(Azure.KeyVault.BackupSecretHttp)
  * ```
  *
  * @binding

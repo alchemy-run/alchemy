@@ -337,6 +337,13 @@ const transformJobProps = (id: string, props: JobProps) =>
  * A new job is created and the old one is deleted.
  * :::
  *
+ * :::caution[An execution stops after 30 minutes and is not retried]
+ * Alchemy defaults `configuration.replicaTimeout` to `1800` seconds and
+ * `replicaRetryLimit` to `0`. Raise them for long or flaky work. A job has
+ * one trigger: a `schedule` together with an event source fails the
+ * deploy with `JobTriggerConflict`.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/container-apps/jobs
  *
  * ### Effect Jobs
@@ -499,9 +506,55 @@ const transformJobProps = (id: string, props: JobProps) =>
  * ) {}
  * ```
  *
- * ### Bindings
+ * ### Networking
+ * A job runs in its environment's network. Put the environment in your
+ * virtual network to reach private endpoints and databases.
+ *
+ * **Example:** Job in a virtual network environment
+ * ```typescript
+ * const infra = yield* Azure.Network.Subnet("JobsInfra", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.0.0/23",
+ *   delegations: [{ serviceName: "Microsoft.App/environments" }],
+ * });
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("Env", {
+ *   workloadProfiles: [{ name: "Consumption", workloadProfileType: "Consumption" }],
+ *   vnetConfiguration: { infrastructureSubnetId: infra.subnetId, internal: true },
+ * });
+ * const job = yield* Azure.ContainerApps.Job("Migrate", {
+ *   main: "./src/migrate.ts",
+ *   environmentId: env.environmentId,
+ * });
+ * ```
+ *
+ * ### Storage Bindings
  * Bindings grant the job's managed identity the smallest data role on the
- * bound resource and hand the program a typed client.
+ * bound resource only, and hand the program a typed client. Provide the
+ * `*Http` layer of each binding on the program.
+ *
+ * **Example:** Send to a Storage queue
+ * ```typescript
+ * // init: Storage Queue Data Message Sender on the queue
+ * const send = yield* Azure.Storage.QueueSend(jobs);
+ *
+ * // run
+ * yield* send.send(JSON.stringify({ id: 1 }));
+ * // …provided with Effect.provide(Azure.Storage.QueueSendHttp)
+ * ```
+ *
+ * **Example:** List and delete old blobs
+ * ```typescript
+ * // init: Storage Blob Data Contributor on the container
+ * const files = yield* Azure.Storage.BlobContainerReadWrite(uploads);
+ *
+ * // run
+ * const { blobs } = yield* files.list({ prefix: "tmp/" });
+ * yield* Effect.forEach(blobs, (blob) => files.delete(blob.key));
+ * // …provided with Effect.provide(Azure.Storage.BlobContainerReadWriteHttp)
+ * ```
+ *
+ * ### Key Vault Bindings
+ * `SecretRead` grants **Key Vault Secrets User** on the one secret.
  *
  * **Example:** Read a Key Vault secret
  * ```typescript
@@ -516,13 +569,46 @@ const transformJobProps = (id: string, props: JobProps) =>
  * }).pipe(Effect.provide(Azure.KeyVault.SecretReadHttp))
  * ```
  *
- * **Example:** Send to a Storage queue
+ * ### Cosmos DB Bindings
+ * `SqlContainerRead` assigns a read-only Cosmos DB data-plane role scoped
+ * to the one container.
+ *
+ * **Example:** Query documents for a report
  * ```typescript
  * // init
- * const send = yield* Azure.Storage.QueueSend(jobs);
+ * const orders = yield* Azure.CosmosDB.SqlContainerRead(ordersContainer);
  *
  * // run
- * yield* send.send(JSON.stringify({ id: 1 }));
+ * const { Documents } = yield* orders.query({
+ *   query: "SELECT * FROM c WHERE c.status = @status",
+ *   parameters: [{ name: "@status", value: "open" }],
+ * });
+ * // …provided with Effect.provide(Azure.CosmosDB.SqlContainerReadHttp)
+ * ```
+ *
+ * ### Starting a Job from a Runtime
+ * `StartJob` lets another runtime start an execution. It grants a custom
+ * role with only `Microsoft.App/jobs/start/action` on the job.
+ * `StopJobExecution`, `SuspendJob`, and `ResumeJob` work the same way.
+ *
+ * **Example:** Start the job from a Function
+ * ```typescript
+ * export default class Ops extends Azure.Functions.Function<Ops>()(
+ *   "Ops",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const nightly = yield* Nightly;
+ *     // init
+ *     const startJob = yield* Azure.ContainerApps.StartJob(nightly);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime
+ *         const execution = yield* startJob();
+ *         return yield* HttpServerResponse.json({ execution: execution.name });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.ContainerApps.StartJobHttp)),
+ * ) {}
  * ```
  *
  * ### Event Sources

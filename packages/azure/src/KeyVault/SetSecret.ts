@@ -32,6 +32,7 @@ export interface SetSecretRequest extends Omit<
  *
  * // runtime
  * const written = yield* setSecret({ value: fresh, contentType: "text/plain" });
+ * // …provided with Effect.provide(Azure.KeyVault.SetSecretHttp)
  * ```
  *
  * @binding

@@ -27,6 +27,7 @@ export interface CheckKeyValuesRequest extends Omit<appconfig.CheckKeyValuesRequ
  *
  * // runtime
  * yield* checkKeyValues({ key: "App:*" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.CheckKeyValuesHttp)
  * ```
  *
  * @binding

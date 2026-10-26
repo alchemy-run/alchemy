@@ -16,66 +16,140 @@ import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, sameName } from "./internal.ts";
 
-/** A SQL-92 subset filter evaluated against message properties. */
+/** A SQL filter: a SQL-92 subset expression evaluated against message properties. */
 export interface RuleSqlFilter {
-  /** SQL filter expression, e.g. `color = 'red' AND quantity > 10`. */
+  /**
+   * SQL filter expression over system (`sys.Label`) and user properties,
+   * e.g. `color = 'red' AND quantity > 10`. `1=1` matches every message.
+   */
   sqlExpression: string;
 }
 
 /**
  * A correlation filter: matches messages whose system and user properties
- * equal every value set here (cheaper than a SQL filter).
+ * equal every value set here (cheaper than a SQL filter). Unset fields are
+ * not compared.
  */
 export interface RuleCorrelationFilter {
-  /** Match on the `CorrelationId` system property. */
+  /**
+   * Match on the `CorrelationId` system property.
+   * @default not compared
+   */
   correlationId?: string;
-  /** Match on the `MessageId` system property. */
+  /**
+   * Match on the `MessageId` system property.
+   * @default not compared
+   */
   messageId?: string;
-  /** Match on the `To` system property. */
+  /**
+   * Match on the `To` system property.
+   * @default not compared
+   */
   to?: string;
-  /** Match on the `ReplyTo` system property. */
+  /**
+   * Match on the `ReplyTo` system property.
+   * @default not compared
+   */
   replyTo?: string;
-  /** Match on the `Label` (subject) system property. */
+  /**
+   * Match on the `Label` (subject) system property, e.g. the `label` a
+   * sender passes to `send`.
+   * @default not compared
+   */
   label?: string;
-  /** Match on the `SessionId` system property. */
+  /**
+   * Match on the `SessionId` system property.
+   * @default not compared
+   */
   sessionId?: string;
-  /** Match on the `ReplyToSessionId` system property. */
+  /**
+   * Match on the `ReplyToSessionId` system property.
+   * @default not compared
+   */
   replyToSessionId?: string;
-  /** Match on the `ContentType` system property. */
+  /**
+   * Match on the `ContentType` system property, e.g. `application/json`.
+   * @default not compared
+   */
   contentType?: string;
-  /** Match on user (application) properties. */
+  /**
+   * Match on user (application) properties: every key must be present with
+   * exactly this value.
+   * @default {}
+   */
   properties?: Record<string, string>;
 }
 
-/** A SQL action that modifies matched messages, e.g. `SET priority = 'high'`. */
+/** A SQL action that changes the properties of messages the filter matches. */
 export interface RuleAction {
-  /** SQL action expression, e.g. `SET sys.Label = 'routed'`. */
+  /**
+   * SQL action expression: `SET`/`REMOVE` statements, e.g.
+   * `SET priority = 'high'` or `SET sys.Label = 'routed'`.
+   */
   sqlExpression: string;
 }
 
 export interface RuleProps {
-  /** Resource group of the namespace. Changing it replaces the rule. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Namespace that holds the topic. Changing it replaces the rule. */
+  /**
+   * Name of the namespace that holds the topic, e.g. `bus.namespaceName` of
+   * an `Azure.ServiceBus.Namespace`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   */
   namespace: string;
-  /** Topic that holds the subscription. Changing it replaces the rule. */
+  /**
+   * Name of the topic that holds the subscription, e.g. `events.topicName`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   */
   topic: string;
-  /** Subscription the rule filters for. Changing it replaces the rule. */
+  /**
+   * Name of the subscription the rule filters for, e.g.
+   * `audit.subscriptionName` of an `Azure.ServiceBus.Subscription`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   */
   subscription: string;
   /**
-   * Rule name: 1-50 letters, digits, `.`, `-`, and `_`. If omitted, a unique
-   * lowercase name is generated from the app, stage, and logical ID.
+   * Rule name: 1-50 letters, digits, `.`, `-`, and `_`.
+   *
+   * :::caution
    * Changing it replaces the rule.
+   * :::
+   * @default a lowercase name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * SQL filter. Exactly one of `sqlFilter` and `correlationFilter` should be
-   * set; switching between them updates the rule in place.
+   * SQL filter. Set `sqlFilter` or `correlationFilter`, not both: when both
+   * are set, `correlationFilter` wins. Switching between them updates the
+   * rule in place.
+   * @default `{ sqlExpression: "1=1" }` (match every message) when `correlationFilter` is also unset
    */
   sqlFilter?: RuleSqlFilter;
-  /** Correlation filter (used instead of `sqlFilter`). */
+  /**
+   * Correlation filter, used instead of `sqlFilter`.
+   * @default no correlation filter (the rule uses `sqlFilter`)
+   */
   correlationFilter?: RuleCorrelationFilter;
-  /** Optional SQL action applied to messages the filter matches. */
+  /**
+   * SQL action applied to the messages the filter matches.
+   * @default no action
+   */
   action?: RuleAction;
 }
 
@@ -85,21 +159,24 @@ export interface Rule extends Resource<
   {
     /** Name of the rule. */
     ruleName: string;
-    /** ARM resource ID of the rule. */
+    /**
+     * ARM resource ID of the rule
+     * (`/subscriptions/.../topics/{topic}/subscriptions/{subscription}/rules/{name}`).
+     */
     ruleId: string;
-    /** Subscription the rule filters for. */
+    /** Name of the subscription the rule filters for. */
     subscriptionName: string;
-    /** Topic that holds the subscription. */
+    /** Name of the topic that holds the subscription. */
     topicName: string;
-    /** Namespace that holds the topic. */
+    /** Name of the namespace that holds the topic. */
     namespaceName: string;
     /** Resource group of the namespace. */
     resourceGroup: string;
     /** Filter type: `SqlFilter` or `CorrelationFilter`. */
     filterType: string | undefined;
-    /** Observed SQL filter expression (for `SqlFilter` rules). */
+    /** Observed SQL filter expression; `undefined` for `CorrelationFilter` rules. */
     sqlExpression: string | undefined;
-    /** Observed SQL action expression, if any. */
+    /** Observed SQL action expression; `undefined` when the rule has no action. */
     actionExpression: string | undefined;
   },
   never,
@@ -107,12 +184,26 @@ export interface Rule extends Resource<
 > {}
 
 /**
- * A Service Bus subscription rule — a filter (SQL or correlation) plus an
- * optional SQL action that decides which topic messages a subscription
- * receives. Service Bus gives every new subscription a `$Default` rule
- * that accepts everything; a message is delivered when any rule matches,
- * so delete `$Default` out of band (or create the subscription with only
- * your own rules) to make filters exclusive.
+ * A Service Bus subscription rule
+ * (`Microsoft.ServiceBus/namespaces/topics/subscriptions/rules`): a filter
+ * (SQL or correlation) plus an optional SQL action that decides which
+ * topic messages a subscription receives.
+ *
+ * :::caution[Changing `name`, `subscription`, `topic`, `namespace`, or `resourceGroup` replaces the rule]
+ * Alchemy creates a new rule and deletes the old one. While both exist,
+ * the subscription gets the messages either rule matches.
+ * :::
+ *
+ * :::caution[The `$Default` rule still matches everything]
+ * Service Bus gives every new subscription a `$Default` rule that accepts
+ * every message. A message is delivered when any rule matches, so delete
+ * `$Default` out of band to make your filters exclusive.
+ * :::
+ *
+ * :::caution[Rules need a topic subscription, so a Standard or Premium namespace]
+ * A Basic namespace has no topics. Create the namespace with
+ * `sku: "Standard"` or `"Premium"`, then the topic and the subscription.
+ * :::
  *
  * Rules have no tags or metadata: Alchemy treats a rule it did not create
  * (e.g. an existing rule with the same explicit `name`) as unowned and only
@@ -121,8 +212,18 @@ export interface Rule extends Resource<
  * @see https://learn.microsoft.com/azure/service-bus-messaging/topic-filters
  *
  * ### Filtering a Subscription
+ * Match on user properties with a SQL expression.
+ *
  * **Example:** SQL filter
  * ```typescript
+ * const bus = yield* Azure.ServiceBus.Namespace("bus", { sku: "Standard" });
+ * const events = yield* Azure.ServiceBus.Topic("events", {
+ *   namespace: bus.namespaceName,
+ * });
+ * const audit = yield* Azure.ServiceBus.Subscription("audit", {
+ *   namespace: bus.namespaceName,
+ *   topic: events.topicName,
+ * });
  * yield* Azure.ServiceBus.Rule("red-only", {
  *   namespace: bus.namespaceName,
  *   topic: events.topicName,
@@ -131,8 +232,19 @@ export interface Rule extends Resource<
  * });
  * ```
  *
+ * Match exact property values with a correlation filter. It is cheaper
+ * than SQL.
+ *
  * **Example:** Correlation filter
  * ```typescript
+ * const bus = yield* Azure.ServiceBus.Namespace("bus", { sku: "Standard" });
+ * const events = yield* Azure.ServiceBus.Topic("events", {
+ *   namespace: bus.namespaceName,
+ * });
+ * const audit = yield* Azure.ServiceBus.Subscription("audit", {
+ *   namespace: bus.namespaceName,
+ *   topic: events.topicName,
+ * });
  * yield* Azure.ServiceBus.Rule("orders", {
  *   namespace: bus.namespaceName,
  *   topic: events.topicName,
@@ -142,8 +254,18 @@ export interface Rule extends Resource<
  * ```
  *
  * ### Transforming Messages
+ * Change the properties of matched messages with an action.
+ *
  * **Example:** SQL filter with an action
  * ```typescript
+ * const bus = yield* Azure.ServiceBus.Namespace("bus", { sku: "Standard" });
+ * const events = yield* Azure.ServiceBus.Topic("events", {
+ *   namespace: bus.namespaceName,
+ * });
+ * const audit = yield* Azure.ServiceBus.Subscription("audit", {
+ *   namespace: bus.namespaceName,
+ *   topic: events.topicName,
+ * });
  * yield* Azure.ServiceBus.Rule("tag-priority", {
  *   namespace: bus.namespaceName,
  *   topic: events.topicName,

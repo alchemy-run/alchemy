@@ -26,6 +26,7 @@ export interface GetSecurityDomainUploadStatusRequest extends Omit<
  *
  * // runtime
  * const { status } = yield* uploadStatus();
+ * // …provided with Effect.provide(Azure.KeyVault.GetSecurityDomainUploadStatusHttp)
  * ```
  *
  * @binding

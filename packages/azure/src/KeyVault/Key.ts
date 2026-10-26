@@ -65,21 +65,34 @@ export interface KeyCommonProps {
    * @default true
    */
   enabled?: boolean;
-  /** Not-before time (Unix seconds). */
+  /**
+   * Not-before time (Unix seconds).
+   * @default none
+   */
   notBefore?: number;
-  /** Expiry time (Unix seconds). */
+  /**
+   * Expiry time (Unix seconds).
+   * @default never expires
+   */
   expires?: number;
-  /** Automatic rotation policy. */
+  /**
+   * Automatic rotation policy.
+   * @default no automatic rotation
+   */
   rotationPolicy?: KeyRotationPolicy;
   /**
    * User tags. Alchemy ownership tags are merged in automatically. Tags are
    * written only when the key is created.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
 
 export interface KeyProps extends KeyCommonProps {
-  /** Resource group of the vault. Changing it replaces the key. */
+  /**
+   * Resource group of the vault. Changing it replaces the key.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Vault that holds the key. Changing it replaces the key. */
   vault: string;
@@ -118,26 +131,35 @@ export interface Key extends Resource<
 > {}
 
 /**
- * A cryptographic key in an Azure Key Vault, managed through Azure Resource
- * Manager.
+ * A cryptographic key in an Azure Key Vault (`Microsoft.KeyVault/vaults/keys`),
+ * managed through Azure Resource Manager. The private key never leaves the
+ * vault: your runtime calls Key Vault to encrypt, decrypt, sign, verify,
+ * wrap, and unwrap with it.
  *
- * ARM creates keys but cannot change or delete them: every property change
- * creates a new key (the old one stays in the vault), and keys are removed
- * together with their vault.
- * Rotate key material with `rotationPolicy` instead of replacing the key.
+ * Bind the key with one binding per operation (`Encrypt`, `Sign`, …); each
+ * grants a custom role with exactly that one data action on this key.
+ * Rotate key material with `rotationPolicy`: a rotation adds a version and
+ * keeps the old ones, so data encrypted earlier still decrypts.
+ *
+ * :::caution[Changing any key property replaces the key]
+ * ARM creates keys but cannot change or delete them. A change to `name`,
+ * `vault`, `kty`, `keySize`, `curveName`, `keyOps`, `enabled`, the dates,
+ * `rotationPolicy`, or `tags` creates a new key; the old one stays in the
+ * vault until the vault is deleted. Data encrypted with the old key does
+ * not decrypt with the new one.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/key-vault/keys/about-keys
  *
  * ### Creating a Key
- * **Example:** RSA key for customer-managed encryption
+ * **Example:** RSA encryption key
  * ```typescript
- * const vault = yield* Azure.KeyVault.Vault("keys", {
- *   enablePurgeProtection: true,
- * });
- * const key = yield* Azure.KeyVault.Key("cmk", {
+ * const vault = yield* Azure.KeyVault.Vault("keys");
+ * const dataKey = yield* Azure.KeyVault.Key("data-key", {
  *   vault: vault.vaultName,
  *   kty: "RSA",
- *   keySize: 3072,
+ *   keySize: 2048,
+ *   keyOps: ["encrypt", "decrypt"],
  * });
  * ```
  *
@@ -146,9 +168,37 @@ export interface Key extends Resource<
  * const signing = yield* Azure.KeyVault.Key("signing", {
  *   vault: vault.vaultName,
  *   kty: "EC",
- *   curveName: "P-384",
+ *   curveName: "P-256",
  *   keyOps: ["sign", "verify"],
  * });
+ * ```
+ *
+ * **Example:** HSM-protected key on a premium vault
+ * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("hsm-keys", { sku: "premium" });
+ * const key = yield* Azure.KeyVault.Key("cmk", {
+ *   vault: vault.vaultName,
+ *   kty: "RSA-HSM",
+ *   keySize: 3072,
+ * });
+ * ```
+ *
+ * ### Customer-Managed Keys
+ * Services that encrypt with your key take its `keyUri` (the latest
+ * version, so they follow rotations).
+ *
+ * **Example:** Key for customer-managed encryption
+ * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("keys", {
+ *   enablePurgeProtection: true,
+ * });
+ * const key = yield* Azure.KeyVault.Key("cmk", {
+ *   vault: vault.vaultName,
+ *   kty: "RSA",
+ *   keySize: 3072,
+ *   keyOps: ["wrapKey", "unwrapKey"],
+ * });
+ * // pass key.keyUri to the service's encryption settings
  * ```
  *
  * ### Rotation
@@ -162,6 +212,111 @@ export interface Key extends Resource<
  *   },
  * });
  * ```
+ *
+ * **Example:** Notify 30 days before expiry
+ * ```typescript
+ * const key = yield* Azure.KeyVault.Key("signing", {
+ *   vault: vault.vaultName,
+ *   kty: "EC",
+ *   rotationPolicy: {
+ *     expiryTime: "P1Y",
+ *     lifetimeActions: [{ action: "notify", timeBeforeExpiry: "P30D" }],
+ *   },
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * Each operation is its own binding with its own custom role on this key:
+ * `Encrypt`, `Decrypt`, `Sign`, `Verify`, `WrapKey`, and `UnwrapKey`.
+ * `KeyRead` reads the key and its public half; `KeyWrite` creates
+ * versions, rotates, and changes the rotation policy. The vault must use
+ * Azure RBAC (the default).
+ *
+ * **Example:** Encrypt and decrypt in an Azure Function
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const key = yield* DataKey;
+ *     const encrypt = yield* Azure.KeyVault.Encrypt(key);
+ *     const decrypt = yield* Azure.KeyVault.Decrypt(key);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const value = Buffer.from("hello", "utf8").toString("base64url");
+ *         const sealed = yield* encrypt({ alg: "RSA-OAEP-256", value });
+ *         const keyVersion = sealed.kid?.split("/").pop() ?? "";
+ *         const opened = yield* decrypt({ alg: "RSA-OAEP-256", keyVersion, value: sealed.value ?? "" });
+ *         return HttpServerResponse.text(Buffer.from(opened.value ?? "", "base64url").toString());
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide([Azure.KeyVault.EncryptHttp, Azure.KeyVault.DecryptHttp])),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Sign a digest and verify it
+ * ```typescript
+ * // init
+ * const sign = yield* Azure.KeyVault.Sign(signingKey);
+ * const verify = yield* Azure.KeyVault.Verify(signingKey);
+ *
+ * // runtime: `digest` is the base64url SHA-256 of the message
+ * const signed = yield* sign({ alg: "ES256", value: digest });
+ * const keyVersion = signed.kid?.split("/").pop() ?? "";
+ * const checked = yield* verify({ alg: "ES256", keyVersion, digest, value: signed.value ?? "" });
+ * // checked.value === true
+ * // …provided with Azure.KeyVault.SignHttp and Azure.KeyVault.VerifyHttp
+ * ```
+ *
+ * **Example:** Publish the public key as a JWKS
+ * ```typescript
+ * // init
+ * const signingKeyRead = yield* Azure.KeyVault.KeyRead(signingKey);
+ *
+ * // runtime
+ * const bundle = yield* signingKeyRead.get();
+ * const { kid, kty, crv, x, y } = bundle.key ?? {};
+ * // …provided with Effect.provide(Azure.KeyVault.KeyReadHttp)
+ * ```
+ *
+ * **Example:** Wrap a data-encryption key
+ * ```typescript
+ * // init
+ * const wrapKey = yield* Azure.KeyVault.WrapKey(key);
+ *
+ * // runtime
+ * const wrapped = yield* wrapKey({ alg: "RSA-OAEP-256", value: dek.toString("base64url") });
+ * // …provided with Effect.provide(Azure.KeyVault.WrapKeyHttp)
+ * ```
+ *
+ * **Example:** Rotate on demand
+ * ```typescript
+ * // init
+ * const cmk = yield* Azure.KeyVault.KeyWrite(key);
+ *
+ * // runtime
+ * const bundle = yield* cmk.rotate();
+ * // …provided with Effect.provide(Azure.KeyVault.KeyWriteHttp)
+ * ```
+ *
+ * ### Event Sources
+ * **Example:** React to new key versions
+ * ```typescript
+ * yield* Azure.EventGrid.consumeEvents(
+ *   "KeyVersions",
+ *   {
+ *     scope: vault.vaultId,
+ *     includedEventTypes: ["Microsoft.KeyVault.KeyNewVersionCreated"],
+ *   },
+ *   (event) => Effect.log(`new version of ${event.subject}`),
+ * );
+ * // …provided with Effect.provide(Azure.Functions.EventGridEventSource)
+ * ```
+ *
+ * ### Deleting a Key
+ * ARM has no key delete. Destroying the resource leaves the key in the
+ * vault; it goes away with its vault.
  *
  * @resource
  */

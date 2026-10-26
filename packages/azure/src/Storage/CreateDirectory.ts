@@ -31,6 +31,7 @@ export type CreateDirectoryRequest = FileShareRequest<files.CreateDirectoryReque
  *
  * // runtime
  * yield* createDirectory({ directory: "reports" });
+ * // …provided with Effect.provide(Azure.Storage.CreateDirectoryHttp)
  * ```
  *
  * @binding

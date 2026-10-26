@@ -26,6 +26,7 @@ export interface UpdateHsmSettingRequest extends Omit<admin.UpdateSettingRequest
  *   settingName: "AllowKeyManagementOperationsThroughARM",
  *   value: "true",
  * });
+ * // …provided with Effect.provide(Azure.KeyVault.UpdateHsmSettingHttp)
  * ```
  *
  * @binding

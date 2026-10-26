@@ -29,6 +29,7 @@ export type GetFileRangeListRequest = FileShareRequest<files.FileGetRangeListReq
  *
  * // runtime
  * const { Ranges } = yield* getFileRangeList({ fileName: "disks/data.vhd" });
+ * // …provided with Effect.provide(Azure.Storage.GetFileRangeListHttp)
  * ```
  *
  * @binding

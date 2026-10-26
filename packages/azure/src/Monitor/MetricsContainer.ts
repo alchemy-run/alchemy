@@ -28,18 +28,26 @@ const DEFAULT_VERSION: MetricsContainerVersion = "2.0";
 
 export interface MetricsContainerProps {
   /**
-   * Resource group of the Azure Monitor workspace. Changing it replaces
-   * the resource.
+   * Resource group of the Azure Monitor workspace.
+   *
+   * :::caution
+   * Changing it replaces the resource.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Name of the Azure Monitor workspace (`Azure.Monitor.Workspace`
-   * `workspaceName`). Changing it replaces the resource.
+   * `workspaceName`).
+   *
+   * :::caution
+   * Changing it replaces the resource.
+   * :::
    */
   workspaceName: string;
   /**
    * Version of the Metrics Query Service the workspace uses for all metric
-   * queries.
+   * queries: `"1.0"` or `"2.0"`.
    * @default "2.0"
    */
   version?: MetricsContainerVersion;
@@ -65,15 +73,27 @@ export interface MetricsContainer extends Resource<
 > {}
 
 /**
- * The metrics container settings of an Azure Monitor workspace — selects
- * the Metrics Query Service version used for all metric queries against
- * the workspace.
+ * The metrics container settings of an Azure Monitor workspace
+ * (`Microsoft.Monitor/accounts/metricsContainers`): they select the Metrics
+ * Query Service version (`1.0` or `2.0`) used for all metric queries
+ * against the workspace.
  *
  * Every workspace has exactly one container, `default`, created with the
- * workspace (version `2.0`). This resource manages its settings; destroying
- * it restores version `2.0` (there is no delete API — the container goes
- * away with its workspace). It has no tags: ownership follows the
+ * workspace (version `2.0`). This resource manages its settings. Destroying
+ * it restores version `2.0`; there is no delete API, and the container goes
+ * away with its workspace. It has no tags: ownership follows the
  * workspace's Alchemy tags.
+ *
+ * :::caution[Changing `workspaceName` or `resourceGroup` replaces the resource]
+ * Alchemy restores version `2.0` on the old workspace and sets the version
+ * on the new one.
+ * :::
+ *
+ * :::caution[The workspace must exist]
+ * Declare the `Azure.Monitor.Workspace` first and pass its `workspaceName`.
+ * Right after the workspace is created, Alchemy retries for up to 3 minutes
+ * until its metrics container is ready.
+ * :::
  *
  * @see https://learn.microsoft.com/rest/api/monitor/metrics-containers
  *
@@ -82,7 +102,6 @@ export interface MetricsContainer extends Resource<
  * ```typescript
  * const metrics = yield* Azure.Monitor.Workspace("metrics");
  * yield* Azure.Monitor.MetricsContainer("metrics-container", {
- *   resourceGroup: metrics.resourceGroup,
  *   workspaceName: metrics.workspaceName,
  *   version: "1.0",
  * });

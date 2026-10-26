@@ -20,9 +20,23 @@ import {
 } from "./EventSubscriptionShared.ts";
 
 export interface PartnerTopicEventSubscriptionProps extends EventSubscriptionSettings {
-  /** Resource group of the partner topic. Changing it replaces the subscription. */
+  /**
+   * Resource group of the partner topic.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the parent partner topic. Changing it replaces the subscription. */
+  /**
+   * Name of the parent partner topic, e.g. `topic.partnerTopicName` of an
+   * `Azure.EventGrid.PartnerTopic`.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   */
   partnerTopic: string;
   /**
    * Schema of delivered events. Partner topics take CloudEvents v1.0 input,
@@ -52,19 +66,40 @@ export interface PartnerTopicEventSubscription extends Resource<
  * An event subscription on an Event Grid partner topic
  * (`Microsoft.EventGrid/partnerTopics/eventSubscriptions`) — routes events a
  * SaaS partner publishes (Auth0 logins, Graph API changes, your own partner
- * namespace, …) to a destination. The partner topic must be activated
- * first, e.g. by an `Azure.EventGrid.PartnerTopic`.
+ * namespace, …) to a destination.
  *
  * Event subscriptions have no tags; Alchemy records ownership in a label
  * (`alchemy:{stack}/{stage}/{id}`).
+ *
+ * :::caution[Changing `name`, `partnerTopic`, or `resourceGroup` replaces the subscription]
+ * Alchemy creates a new subscription and deletes the old one.
+ * :::
+ *
+ * :::caution[The partner topic must exist and be activated]
+ * Only a partner's channel creates a partner topic, and only after your
+ * resource group's `Azure.EventGrid.PartnerConfiguration` authorizes the
+ * partner registration. Declare an `Azure.EventGrid.PartnerTopic` for it so
+ * Alchemy activates the topic before it creates the subscription.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/subscribe-to-partner-events
  *
  * ### Subscribing to Partner Events
  * **Example:** Partner events to a Storage queue
  * ```typescript
+ * const partners = yield* Azure.EventGrid.PartnerConfiguration("partners", {
+ *   authorizedPartners: [
+ *     // immutable ID the partner gives you
+ *     { partnerRegistrationImmutableId: "941a5b43-6d4c-4d3c-9c9e-2c1d4b8a7f10" },
+ *   ],
+ * });
+ * // the partner topic name the partner's channel created
  * const orders = yield* Azure.EventGrid.PartnerTopic("orders", {
  *   name: "contoso-orders",
+ * });
+ * const account = yield* Azure.Storage.StorageAccount("inbox");
+ * const queue = yield* Azure.Storage.Queue("orders", {
+ *   storageAccount: account.storageAccountName,
  * });
  * const created = yield* Azure.EventGrid.PartnerTopicEventSubscription(
  *   "orders-created",
@@ -73,7 +108,7 @@ export interface PartnerTopicEventSubscription extends Resource<
  *     destination: {
  *       endpointType: "StorageQueue",
  *       resourceId: account.storageAccountId,
- *       queueName: "orders",
+ *       queueName: queue.queueName,
  *     },
  *     filter: {
  *       includedEventTypes: ["Contoso.OrderCreated"],

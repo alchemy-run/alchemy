@@ -45,20 +45,26 @@ export interface RoleAssignmentProps {
    */
   principalId: string;
   /**
-   * Kind of principal. Set `ServicePrincipal` for managed identities: it
-   * lets Azure skip the directory lookup that fails while a new identity is
-   * still replicating. Changing it replaces the assignment.
+   * Kind of principal: `User`, `Group`, `ServicePrincipal`,
+   * `ForeignGroup`, `Device`, `AgentUser`, or `AgentServicePrincipal`. Set `ServicePrincipal` for managed
+   * identities and Entra service principals: it lets Azure skip the
+   * directory lookup that fails while a new identity is still replicating.
+   * Changing it replaces the assignment.
+   * @default Azure looks up the principal's type
    */
   principalType?: PrincipalType;
   /**
    * Description shown in the portal. Alchemy appends an ownership marker
    * (`[alchemy <stack>/<stage>/<id>]`) because role assignments have no
-   * tags.
+   * tags. Changing it updates the assignment in place.
+   * @default only the ownership marker
    */
   description?: string;
   /**
-   * ABAC condition that narrows the grant, e.g. to one blob container. See
+   * ABAC condition (version `2.0`) that narrows the grant, e.g. to one blob
+   * container. Changing it updates the assignment in place. See
    * https://learn.microsoft.com/azure/role-based-access-control/conditions-overview
+   * @default no condition
    */
   condition?: string;
 }
@@ -114,22 +120,44 @@ export const BuiltInRole = {
 } as const;
 
 /**
- * An Azure RBAC role assignment — grants a role to a principal (a managed
- * identity, service principal, user, or group) at a scope.
+ * An Azure RBAC role assignment
+ * (`Microsoft.Authorization/roleAssignments`): grants a role to a principal
+ * (a managed identity, service principal, user, or group) at a scope.
+ *
+ * You rarely declare one for a runtime. A binding such as
+ * `Azure.Storage.BlobContainerRead` assigns its role to the host's managed
+ * identity, on the bound resource only. Declare an assignment for a host
+ * without bindings (an async Function), for an identity that is not a
+ * runtime (a CI deployer), or for a role no binding grants.
  *
  * Role assignments cannot be tagged, so Alchemy records ownership as a
  * `[alchemy <stack>/<stage>/<id>]` marker at the end of the description.
  * The assignment name is a GUID derived from the stack, stage, logical ID,
  * and instance ID, so re-running a deploy converges on the same assignment.
+ * A new identity can take a minute to replicate through Microsoft Entra ID;
+ * Alchemy retries `PrincipalNotFound` for up to 60 seconds.
+ *
+ * :::caution[Changing `scope`, `roleDefinitionId`, `principalId`, or `principalType` replaces the assignment]
+ * Alchemy creates a new assignment with a new GUID name and deletes the old
+ * one. `description` and `condition` update in place.
+ * :::
+ *
+ * :::caution[The deploying identity needs Owner to grant roles]
+ * Creating a role assignment needs `Microsoft.Authorization/roleAssignments/write`
+ * on the scope, which **Owner** (or **User Access Administrator**) has and
+ * **Contributor** does not.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/role-based-access-control/role-assignments
  *
  * ### Granting a Role
+ * Grant at the narrowest scope that works: a single resource's ARM ID, a
+ * resource group's `resourceGroupId`, or a subscription.
+ *
  * **Example:** Let a managed identity read blobs in one storage account
  * ```typescript
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api", {
- *   resourceGroup: group.resourceGroupName,
- * });
+ * const account = yield* Azure.Storage.StorageAccount("files");
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api");
  * yield* Azure.Authorization.RoleAssignment("api-reads-files", {
  *   scope: account.storageAccountId,
  *   roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataReader,
@@ -138,9 +166,115 @@ export const BuiltInRole = {
  * });
  * ```
  *
+ * **Example:** Read access to a whole resource group
+ * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
+ * yield* Azure.Authorization.RoleAssignment("api-reads-group", {
+ *   scope: group.resourceGroupId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.Reader,
+ *   principalId: identity.principalId,
+ *   principalType: "ServicePrincipal",
+ * });
+ * ```
+ *
+ * **Example:** A built-in role by its GUID
+ * ```typescript
+ * // `Azure.Authorization.BuiltInRole` lists common roles; pass any other
+ * // built-in role's GUID, e.g. AcrPull.
+ * const registry = yield* Azure.ContainerRegistry.Registry("images");
+ * yield* Azure.Authorization.RoleAssignment("api-pulls-images", {
+ *   scope: registry.registryId,
+ *   roleDefinitionId: "7f951dda-4ed3-4680-a7ca-43fe172d538d",
+ *   principalId: identity.principalId,
+ *   principalType: "ServicePrincipal",
+ * });
+ * ```
+ *
+ * ### Granting a Role to a Runtime
+ * Azure Functions, Web Apps, and Container Apps expose the object ID of
+ * their system-assigned identity as `principalId`. It is `undefined` until
+ * the host has an identity, so assert it with `.as<string>()`.
+ *
+ * **Example:** Let an async Function write blobs
+ * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("files");
+ * const container = yield* Azure.Storage.BlobContainer("notes", {
+ *   storageAccount: account.storageAccountName,
+ * });
+ * const api = yield* Azure.Functions.Function("Api", { main: "./src/api.ts" });
+ * yield* Azure.Authorization.RoleAssignment("ApiWritesNotes", {
+ *   scope: container.containerId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataContributor,
+ *   principalId: api.principalId.as<string>(),
+ *   principalType: "ServicePrincipal",
+ * });
+ * ```
+ *
+ * **Example:** Let a Container App read Key Vault secrets
+ * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("secrets");
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env");
+ * const app = yield* Azure.ContainerApps.ContainerApp("api", {
+ *   environmentId: env.environmentId,
+ *   identity: { type: "SystemAssigned" },
+ *   template: {
+ *     containers: [{ name: "api", image: "mcr.microsoft.com/k8se/quickstart:latest" }],
+ *   },
+ * });
+ * yield* Azure.Authorization.RoleAssignment("api-reads-secrets", {
+ *   scope: vault.vaultId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.KeyVaultSecretsUser,
+ *   principalId: app.principalId.as<string>(),
+ *   principalType: "ServicePrincipal",
+ * });
+ * ```
+ *
+ * ### Granting a Role to an Entra Application
+ * Assign roles to the application's service principal, not the application.
+ *
+ * **Example:** A deployer that GitHub Actions signs in as
+ * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
+ * const app = yield* Azure.Entra.Application("Deployer");
+ * const principal = yield* Azure.Entra.ServicePrincipal("DeployerPrincipal", {
+ *   appId: app.appId,
+ * });
+ * yield* Azure.Authorization.RoleAssignment("DeployerContributes", {
+ *   scope: group.resourceGroupId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.Contributor,
+ *   principalId: principal.objectId,
+ *   principalType: "ServicePrincipal",
+ * });
+ * ```
+ *
+ * ### Granting a Custom Role
+ * Pass an `Azure.Authorization.RoleDefinition`'s `roleDefinitionId`. The
+ * scope must be one of the role's `assignableScopes` or below it.
+ *
+ * **Example:** Assign a role that only reads storage account metadata
+ * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api");
+ * const role = yield* Azure.Authorization.RoleDefinition("StorageMetadataReader", {
+ *   scope: group.resourceGroupId,
+ *   permissions: [{ actions: ["Microsoft.Storage/storageAccounts/read"] }],
+ * });
+ * yield* Azure.Authorization.RoleAssignment("api-reads-storage-metadata", {
+ *   scope: group.resourceGroupId,
+ *   roleDefinitionId: role.roleDefinitionId,
+ *   principalId: identity.principalId,
+ *   principalType: "ServicePrincipal",
+ * });
+ * ```
+ *
  * ### Conditional Access
+ * An ABAC condition narrows a data role further. Alchemy sends it as
+ * condition version `2.0`.
+ *
  * **Example:** Restrict a grant to one blob container
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("files");
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api");
  * yield* Azure.Authorization.RoleAssignment("api-writes-uploads", {
  *   scope: account.storageAccountId,
  *   roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataContributor,
@@ -148,6 +282,7 @@ export const BuiltInRole = {
  *   principalType: "ServicePrincipal",
  *   condition:
  *     "@Resource[Microsoft.Storage/storageAccounts/blobServices/containers:name] StringEquals 'uploads'",
+ *   description: "api writes only to uploads",
  * });
  * ```
  *

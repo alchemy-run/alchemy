@@ -25,21 +25,46 @@ import {
 } from "./internal.ts";
 
 export interface TopicAuthorizationRuleProps {
-  /** Resource group of the namespace. Changing it replaces the rule. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Namespace that holds the topic. Changing it replaces the rule. */
+  /**
+   * Name of the namespace that holds the topic, e.g. `bus.namespaceName` of
+   * an `Azure.ServiceBus.Namespace`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   */
   namespace: string;
-  /** Topic the rule grants access to. Changing it replaces the rule. */
+  /**
+   * Name of the topic the rule grants access to, e.g. `events.topicName`
+   * of an `Azure.ServiceBus.Topic`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   */
   topic: string;
   /**
-   * Rule name: 1-50 letters, digits, `.`, `-`, and `_`. If omitted, a unique
-   * name is generated from the app, stage, and logical ID. Changing it
-   * replaces the rule.
+   * Rule name: 1-50 letters, digits, `.`, `-`, and `_`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Granted rights. `Manage` implies `Listen` and `Send`; Alchemy adds them
-   * automatically.
+   * Granted rights: any of `Listen`, `Send`, and `Manage`. `Manage`
+   * implies `Listen` and `Send`; Alchemy adds them for you. Changing the
+   * rights updates the rule in place and keeps its keys.
    */
   rights: AccessRight[];
 }
@@ -50,23 +75,30 @@ export interface TopicAuthorizationRule extends Resource<
   {
     /** Name of the rule. */
     authorizationRuleName: string;
-    /** ARM resource ID of the rule. */
+    /**
+     * ARM resource ID of the rule
+     * (`/subscriptions/.../namespaces/{namespace}/topics/{topic}/authorizationRules/{name}`).
+     */
     authorizationRuleId: string;
-    /** Topic the rule grants access to. */
+    /** Name of the topic the rule grants access to. */
     topicName: string;
-    /** Namespace that holds the topic. */
+    /** Name of the namespace that holds the topic. */
     namespaceName: string;
     /** Resource group of the namespace. */
     resourceGroup: string;
     /** Granted rights (sorted; `Manage` implies `Listen` and `Send`). */
     rights: AccessRight[];
-    /** Primary SAS key. */
+    /** Primary SAS key, as a secret. `undefined` when Azure did not return the keys. */
     primaryKey: Redacted.Redacted<string> | undefined;
-    /** Secondary SAS key. */
+    /** Secondary SAS key, as a secret. `undefined` when Azure did not return the keys. */
     secondaryKey: Redacted.Redacted<string> | undefined;
-    /** Primary connection string (`Endpoint=sb://...;SharedAccessKeyName=...`). */
+    /**
+     * Primary connection string
+     * (`Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...;EntityPath=<topic>`),
+     * as a secret.
+     */
     primaryConnectionString: Redacted.Redacted<string> | undefined;
-    /** Secondary connection string. */
+    /** Secondary connection string, as a secret. */
     secondaryConnectionString: Redacted.Redacted<string> | undefined;
   },
   never,
@@ -74,10 +106,29 @@ export interface TopicAuthorizationRule extends Resource<
 > {}
 
 /**
- * A shared access (SAS) authorization rule scoped to a single Service Bus
- * topic. It grants `Listen`, `Send`, and/or `Manage` on that topic only and
- * exposes the rule's keys and connection strings (with
- * `EntityPath=<topic>`) as secrets.
+ * A Service Bus topic SAS rule
+ * (`Microsoft.ServiceBus/namespaces/topics/authorizationRules`): a shared
+ * access key that grants `Send` (publish), `Listen` (receive from the topic's
+ * subscriptions), and/or `Manage` on that one topic. Its connection
+ * strings carry `EntityPath=<topic>`. Use them for clients that cannot use
+ * Entra ID. For an Alchemy host, prefer a binding such as
+ * `Azure.ServiceBus.TopicWrite` or `Azure.ServiceBus.SubscriptionRead`:
+ * it assigns a role and needs no key.
+ *
+ * :::caution[Changing `name`, `topic`, `namespace`, or `resourceGroup` replaces the rule]
+ * Alchemy creates a new rule with new keys and deletes the old one.
+ * Clients that use the old connection string stop working.
+ * :::
+ *
+ * :::caution[The topic must exist]
+ * Create the `Azure.ServiceBus.Topic` first and pass its `topicName`.
+ * Deleting the topic deletes its rules.
+ * :::
+ *
+ * :::caution[Topics need a Standard or Premium namespace]
+ * A Basic namespace has no topics. Create the namespace with
+ * `sku: "Standard"` or `"Premium"`.
+ * :::
  *
  * Authorization rules have no tags or metadata: Alchemy treats a rule it
  * did not create (e.g. an existing rule with the same explicit `name`) as
@@ -88,6 +139,7 @@ export interface TopicAuthorizationRule extends Resource<
  * ### Creating a Rule
  * **Example:** Send-only connection string for one topic
  * ```typescript
+ * const bus = yield* Azure.ServiceBus.Namespace("bus", { sku: "Standard" });
  * const events = yield* Azure.ServiceBus.Topic("events", {
  *   namespace: bus.namespaceName,
  * });
@@ -101,6 +153,10 @@ export interface TopicAuthorizationRule extends Resource<
  *
  * **Example:** Manage rule (implies Listen and Send)
  * ```typescript
+ * const bus = yield* Azure.ServiceBus.Namespace("bus", { sku: "Standard" });
+ * const events = yield* Azure.ServiceBus.Topic("events", {
+ *   namespace: bus.namespaceName,
+ * });
  * const admin = yield* Azure.ServiceBus.TopicAuthorizationRule("admin", {
  *   namespace: bus.namespaceName,
  *   topic: events.topicName,

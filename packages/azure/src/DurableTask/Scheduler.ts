@@ -29,6 +29,7 @@ export interface SchedulerProps {
   /**
    * Resource group the scheduler is created in. Changing it replaces the
    * scheduler.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -54,23 +55,28 @@ export interface SchedulerProps {
   /**
    * Capacity units of a `Dedicated` scheduler (scale out/in; 3 or more
    * enables zone redundancy where supported). Ignored for `Consumption`.
+   * Changing it scales the scheduler in place.
    * @default 1 for `Dedicated`
    */
   capacity?: number;
   /**
    * IPv4/IPv6 addresses or CIDR ranges allowed to reach the scheduler
-   * endpoint. `["0.0.0.0/0"]` allows every address.
+   * endpoint. `["0.0.0.0/0"]` allows every address. Changing it updates the
+   * scheduler in place.
    * @default ["0.0.0.0/0"]
    */
   ipAllowlist?: string[];
   /**
-   * Whether the public endpoint accepts traffic.
+   * Whether the public endpoint accepts traffic. Changing it updates the
+   * scheduler in place.
    * @default Azure's default (`Enabled`)
    */
   publicNetworkAccess?: "Enabled" | "Disabled";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
-   * `alchemy::id`) are merged in automatically.
+   * `alchemy::id`) are merged in automatically. Changing them updates the
+   * scheduler in place.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -110,34 +116,209 @@ export interface Scheduler extends Resource<
 > {}
 
 /**
- * A Durable Task Scheduler — the managed backend that stores and dispatches
- * orchestrations and activities for Durable Functions and the Durable Task
- * SDKs. Workloads connect to its `endpoint` with a Microsoft Entra identity
- * that holds the `Durable Task Data Contributor` role on the scheduler.
+ * A Durable Task Scheduler (`Microsoft.DurableTask/schedulers`): the
+ * managed backend that stores and dispatches orchestrations and activities
+ * for Durable Functions and the Durable Task SDKs. Workloads connect to its
+ * `endpoint` with a Microsoft Entra identity that holds the
+ * **Durable Task Data Contributor** role on the scheduler or one of its
+ * task hubs. There are no keys.
+ *
+ * You rarely declare one for Effect workflows:
+ * `Azure.Functions.WorkflowFunction` creates a scheduler and task hub for
+ * its runs. Declare one to run the Durable Task SDKs on another host, to
+ * share a scheduler, or to pick the Dedicated tier yourself.
+ *
+ * Alchemy registers the `Microsoft.DurableTask` resource provider on the
+ * subscription if needed, defaults to the Consumption tier, and allows
+ * every IP address (`0.0.0.0/0`) unless you set `ipAllowlist`. Creation is
+ * a long-running operation; Alchemy waits up to 10 minutes for it.
+ * Destroy deletes the scheduler with its task hubs and all orchestration
+ * state, and also waits up to 10 minutes. Azure keeps listing a deleted
+ * scheduler in its resource group for 5-15 minutes; destroying the stack's
+ * resource group waits for it.
+ *
+ * :::caution[Schedulers are not offered in `eastus`]
+ * The default location falls back to `eastus`, where creation fails. Set
+ * `location` (or the stack's `Azure.location(...)`) to a region that offers
+ * schedulers, e.g. `eastus2`, `westus2`, or `northeurope`. The Consumption
+ * tier is offered in fewer regions still.
+ * :::
+ *
+ * :::caution[Changing `name`, `location`, `sku`, or `resourceGroup` replaces the scheduler]
+ * Alchemy creates a new, empty scheduler with a new `endpoint` and deletes
+ * the old one with its task hubs and every orchestration's state and
+ * history. `capacity`, `ipAllowlist`, `publicNetworkAccess`, and `tags`
+ * update in place.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-functions/durable/durable-task-scheduler/durable-task-scheduler
  *
  * ### Creating a Scheduler
  * **Example:** Consumption scheduler
  * ```typescript
- * const scheduler = yield* Azure.DurableTask.Scheduler("orchestrations");
- * ```
- *
- * **Example:** Dedicated scheduler with an IP allow list
- * ```typescript
  * const scheduler = yield* Azure.DurableTask.Scheduler("orchestrations", {
- *   sku: "Dedicated",
- *   capacity: 1,
- *   ipAllowlist: ["203.0.113.0/24"],
+ *   location: "westus2",
  * });
  * ```
  *
- * ### Adding a Task Hub
+ * **Example:** Dedicated scheduler with a fixed name
+ * ```typescript
+ * const scheduler = yield* Azure.DurableTask.Scheduler("orchestrations", {
+ *   name: "shop-orchestrations",
+ *   location: "northeurope",
+ *   sku: "Dedicated",
+ *   capacity: 1,
+ *   tags: { team: "shop" },
+ * });
+ * ```
+ *
+ * ### Scaling a Dedicated Scheduler
+ * `capacity` is the number of capacity units. Three or more make the
+ * scheduler zone redundant where the region supports it; read
+ * `redundancyState` to check. `Consumption` ignores it.
+ *
+ * **Example:** Zone-redundant scheduler
+ * ```typescript
+ * const scheduler = yield* Azure.DurableTask.Scheduler("orchestrations", {
+ *   location: "westus2",
+ *   sku: "Dedicated",
+ *   capacity: 3,
+ * });
+ * // scheduler.redundancyState is "Zone" when the region supports it
+ * ```
+ *
+ * **Example:** Scale out in place
+ * ```diff
+ *  const scheduler = yield* Azure.DurableTask.Scheduler("orchestrations", {
+ *    location: "westus2",
+ *    sku: "Dedicated",
+ * -  capacity: 1,
+ * +  capacity: 3,
+ *  });
+ * ```
+ *
+ * ### Network Access
+ * **Example:** Only allow your own network
+ * ```typescript
+ * const scheduler = yield* Azure.DurableTask.Scheduler("orchestrations", {
+ *   location: "westus2",
+ *   ipAllowlist: ["203.0.113.0/24", "198.51.100.7"],
+ * });
+ * ```
+ *
+ * **Example:** Turn off the public endpoint
+ * ```typescript
+ * // Clients then reach the scheduler only through an Azure.Network.PrivateEndpoint.
+ * const scheduler = yield* Azure.DurableTask.Scheduler("orchestrations", {
+ *   location: "westus2",
+ *   publicNetworkAccess: "Disabled",
+ * });
+ * ```
+ *
+ * ### Task Hubs and Retention
+ * A task hub holds one app's orchestrations. A retention policy purges
+ * finished orchestrations after a number of days.
+ *
  * **Example:** Scheduler with a task hub
  * ```typescript
+ * const scheduler = yield* Azure.DurableTask.Scheduler("orchestrations", {
+ *   location: "westus2",
+ * });
  * const hub = yield* Azure.DurableTask.TaskHub("default", {
  *   scheduler: scheduler.schedulerName,
  * });
+ * ```
+ *
+ * **Example:** Keep finished orchestrations 7 days, failures 30 days
+ * ```typescript
+ * yield* Azure.DurableTask.RetentionPolicy("retention", {
+ *   scheduler: scheduler.schedulerName,
+ *   retentionPolicies: [
+ *     { retentionPeriodInDays: 7 },
+ *     { retentionPeriodInDays: 30, orchestrationState: "Failed" },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Granting Access
+ * Grant **Durable Task Data Contributor** on `schedulerId` for every task
+ * hub, or on a task hub's `taskHubId` for one. Then connect with an
+ * identity-based connection string.
+ *
+ * **Example:** Let a user-assigned identity use one task hub
+ * ```typescript
+ * const scheduler = yield* Azure.DurableTask.Scheduler("orchestrations", {
+ *   location: "westus2",
+ * });
+ * const hub = yield* Azure.DurableTask.TaskHub("default", {
+ *   scheduler: scheduler.schedulerName,
+ * });
+ * const worker = yield* Azure.ManagedIdentity.UserAssignedIdentity("worker", {
+ *   location: "westus2",
+ * });
+ * yield* Azure.Authorization.RoleAssignment("worker-uses-hub", {
+ *   scope: hub.taskHubId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.DurableTaskDataContributor,
+ *   principalId: worker.principalId,
+ *   principalType: "ServicePrincipal",
+ * });
+ * const connection = Output.interpolate`Endpoint=${scheduler.endpoint};Authentication=ManagedIdentity;ClientID=${worker.clientId};TaskHub=${hub.taskHubName}`;
+ * ```
+ *
+ * ### Binding to a runtime
+ * For Effect workflows, `Azure.Functions.WorkflowFunction` creates a
+ * Consumption scheduler (in `schedulerLocation`) and a task hub, and
+ * grants its managed identity **Durable Task Data Contributor** on the hub.
+ * `Azure.Functions.DurableEngine` grants a calling runtime the same role on
+ * the hub of each host it runs workflows on, and nothing wider. A caller
+ * that isn't an Azure host (a Cloudflare Worker, an AWS Lambda) gets an
+ * Entra service principal with the role.
+ *
+ * **Example:** A workflow function and its scheduler
+ * ```typescript
+ * export class OrderWorkflows extends Azure.Functions.WorkflowFunction<OrderWorkflows>()(
+ *   "OrderWorkflows",
+ *   { workflows: [PlaceOrder], schedulerLocation: "westus2", schedulerSku: "Dedicated" },
+ * ) {}
+ *
+ * export default OrderWorkflows.make({ main: import.meta.url, location: "westus2" }, PlaceOrderLive);
+ * ```
+ *
+ * **Example:** Start runs from another Function
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url, location: "westus2" },
+ *   Effect.gen(function* () {
+ *     const placeOrder = yield* Workflows.RunWorkflow(PlaceOrder);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const run = yield* placeOrder.start({ orderId: "o-1" });
+ *         return HttpServerResponse.text(run.executionId);
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Azure.Functions.DurableEngine(OrderWorkflows))),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Start, read, signal, and interrupt a run
+ * ```typescript
+ * // init
+ * const placeOrder = yield* Workflows.RunWorkflow(PlaceOrder);
+ *
+ * // runtime
+ * const started = yield* placeOrder.start({ orderId: "o-1" }); // same key returns the same run
+ * const run = placeOrder.get(started.executionId);
+ * const status = yield* run.status; // Running, Completed, Failed, …
+ * yield* run.signal(Approval, "agent-7"); // Approval: a DurableDeferred the workflow awaits
+ * yield* run.interrupt;
+ * ```
+ *
+ * **Example:** Open a host's runs in the scheduler dashboard
+ * ```typescript
+ * const { scheduler, taskHub } = yield* OrderWorkflows.durableTask;
+ * return { endpoint: scheduler.endpoint, dashboard: taskHub.dashboardUrl };
  * ```
  *
  * @resource

@@ -22,16 +22,36 @@ import {
 } from "./common.ts";
 
 export interface ConfigurationProps {
-  /** Resource group of the server. Changing it replaces the configuration. */
+  /**
+   * Resource group of the server.
+   *
+   * :::caution
+   * Changing it replaces the configuration.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the flexible server. Changing it replaces the configuration. */
+  /**
+   * Name of the `Azure.PostgreSQL.FlexibleServer`.
+   *
+   * :::caution
+   * Changing it replaces the configuration.
+   * :::
+   */
   server: string;
   /**
-   * Server parameter name, e.g. `log_min_duration_statement`. Changing it
-   * replaces the configuration.
+   * Server parameter name, e.g. `log_min_duration_statement`.
+   *
+   * :::caution
+   * Changing it replaces the configuration: Alchemy restores the old
+   * parameter's default and sets the new one.
+   * :::
    */
   name: string;
-  /** Value to assign to the parameter. */
+  /**
+   * Value to assign to the parameter, as a string (`"500"`, `"on"`).
+   * Changing it updates the parameter in place.
+   */
   value: string;
   /**
    * Restart the server after changing a static parameter so the new value
@@ -72,17 +92,25 @@ export interface Configuration extends Resource<
 > {}
 
 /**
- * A server parameter of an Azure Database for PostgreSQL flexible server.
+ * A server parameter of an Azure Database for PostgreSQL flexible server
+ * (`Microsoft.DBforPostgreSQL/flexibleServers/configurations`).
  *
- * Every parameter always exists on the server; this resource overrides its
- * value and restores Azure's default when deleted.
+ * Every parameter always exists on the server. This resource overrides its
+ * value and restores Azure's default when you delete it. A dynamic
+ * parameter applies at once; a static one waits for a restart unless you
+ * set `restartOnChange`.
  *
- * @see https://learn.microsoft.com/azure/postgresql/flexible-server/concepts-server-parameters
+ * :::caution[Changing `name`, `server`, or `resourceGroup` replaces the configuration]
+ * Alchemy restores the old parameter to its default and sets the new one.
+ * :::
+ *
+ * See [Server parameters in Azure Database for PostgreSQL](https://learn.microsoft.com/azure/postgresql/flexible-server/concepts-server-parameters).
  *
  * ### Setting Parameters
  * **Example:** Log slow statements
  * ```typescript
- * const slowLog = yield* Azure.PostgreSQL.Configuration("slow-log", {
+ * const server = yield* Azure.PostgreSQL.FlexibleServer("Postgres");
+ * yield* Azure.PostgreSQL.Configuration("SlowLog", {
  *   server: server.serverName,
  *   name: "log_min_duration_statement",
  *   value: "500",
@@ -91,7 +119,7 @@ export interface Configuration extends Resource<
  *
  * **Example:** Static parameter applied with a restart
  * ```typescript
- * const extensions = yield* Azure.PostgreSQL.Configuration("preload", {
+ * yield* Azure.PostgreSQL.Configuration("Preload", {
  *   server: server.serverName,
  *   name: "shared_preload_libraries",
  *   value: "pg_stat_statements",

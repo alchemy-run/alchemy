@@ -26,6 +26,7 @@ export interface CheckKeysRequest extends Omit<appconfig.CheckKeysRequest, "endp
  *
  * // runtime
  * yield* checkKeys({ name: "App:*" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.CheckKeysHttp)
  * ```
  *
  * @binding

@@ -17,25 +17,51 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createNamespaceName, namespaceOwnedByStage } from "./Common.ts";
 
 export interface DisasterRecoveryConfigProps {
-  /** Resource group of the primary namespace. Changing it replaces the pairing. */
+  /**
+   * Resource group of the primary namespace.
+   *
+   * :::caution
+   * Changing it replaces the pairing.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Primary namespace name. Changing it replaces the pairing. */
+  /**
+   * Name of the primary namespace, e.g. `primary.namespaceName`.
+   *
+   * :::caution
+   * Changing it replaces the pairing.
+   * :::
+   */
   namespace: string;
   /**
    * Geo-DR alias: the stable DNS name (`{alias}.servicebus.windows.net`)
    * clients connect to. 6-50 letters, digits, and hyphens, globally unique.
-   * If omitted, a unique name is generated from the app, stage, and logical
-   * ID. Changing it replaces the pairing.
+   *
+   * :::caution
+   * Changing it replaces the pairing.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   alias?: string;
   /**
-   * ARM resource ID of the secondary namespace (another region, same tier,
-   * and empty when paired). Changing it replaces the pairing.
+   * ARM resource ID of the secondary namespace, e.g.
+   * `secondary.namespaceId`. It must be in another region, on the same
+   * tier, and empty when you pair it.
+   *
+   * :::caution
+   * Changing it replaces the pairing.
+   * :::
    */
   partnerNamespace: string;
   /**
    * Alternate name, required only when the alias equals the primary
-   * namespace name. Changing it replaces the pairing.
+   * namespace name.
+   *
+   * :::caution
+   * Changing it replaces the pairing.
+   * :::
+   * @default none
    */
   alternateName?: string;
 }
@@ -68,17 +94,29 @@ export interface DisasterRecoveryConfig extends Resource<
 > {}
 
 /**
- * An Event Hubs Geo-disaster recovery pairing — an alias that pairs a
- * primary namespace with an empty secondary namespace in another region and
- * replicates metadata (event hubs, consumer groups, settings) to it. Clients
- * connect through the alias, which keeps pointing at the active namespace
- * after a failover. Both namespaces must be `Standard` (or higher).
+ * An Event Hubs Geo-disaster recovery pairing
+ * (`Microsoft.EventHub/namespaces/disasterRecoveryConfigs`): an alias that
+ * pairs a primary namespace with an empty secondary namespace in another
+ * region and replicates metadata (event hubs, consumer groups, settings) to
+ * it. Events are not replicated. Clients connect through the alias, which
+ * keeps pointing at the active namespace after a failover.
  *
  * Deleting the resource breaks the pairing first (both namespaces keep
  * their entities) and then removes the alias.
  *
- * Pairings have no tags; Alchemy treats one as owned when its primary
+ * Pairings have no tags. Alchemy treats one as owned when its primary
  * namespace carries this stack's ownership tags.
+ *
+ * :::caution[Changing `alias`, `namespace`, `partnerNamespace`, `alternateName`, or `resourceGroup` replaces the pairing]
+ * A namespace can be in one pairing at a time, so Alchemy breaks and
+ * deletes the old pairing first, then creates the new one. Clients that use
+ * the old alias stop resolving until the new pairing exists.
+ * :::
+ *
+ * :::caution[Needs two `Standard` (or higher) namespaces]
+ * Both namespaces must be on the same tier, `Standard` or higher, in
+ * different regions. The secondary must be empty when you pair it.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-hubs/event-hubs-geo-dr
  *

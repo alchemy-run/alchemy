@@ -278,7 +278,12 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * generated pod-identity role. On `GCP.Container.Cluster` targets it
  * accepts the `{ env, iam }` contract of `GCP.Run.Service`: IAM roles are
  * granted to the Kubernetes ServiceAccount's Workload Identity Federation
- * principal.
+ * principal. On `Azure.ContainerService.ManagedCluster` targets it accepts
+ * the `{ env, roleAssignments }` contract of `Azure.ContainerApps.ContainerApp`:
+ * roles are assigned to a managed identity federated with the
+ * ServiceAccount (Microsoft Entra Workload ID), and `main` images go to an
+ * Azure Container Registry built without Docker.
+ *
  * ### Creating a Deployment
  * **Example:** Run an image on a local cluster
  * ```typescript
@@ -368,6 +373,28 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  *       }),
  *     };
  *   }).pipe(Effect.provide(AWS.DynamoDB.PutItemHttp)),
+ * );
+ * ```
+ *
+ * **Example:** Blob binding on AKS (Microsoft Entra Workload ID)
+ * ```typescript
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("Cluster", {
+ *   oidcIssuerEnabled: true,
+ *   workloadIdentityEnabled: true,
+ * });
+ *
+ * const api = yield* Kubernetes.Deployment(
+ *   "Api",
+ *   { cluster, main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     const notes = yield* Azure.Storage.BlobContainerReadWrite(container);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* notes.put("notes/hello", "hi").pipe(Effect.orDie);
+ *         return HttpServerResponse.text("ok");
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp)),
  * );
  * ```
  *
@@ -713,7 +740,7 @@ export const DeploymentProvider = () =>
           };
           const podTemplate = deepMerge(
             {
-              metadata: { labels },
+              metadata: { labels: { ...identity?.podLabels, ...labels } },
               spec: {
                 serviceAccountName,
                 containers: [

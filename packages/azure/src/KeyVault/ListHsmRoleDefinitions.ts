@@ -26,6 +26,7 @@ export interface ListHsmRoleDefinitionsRequest extends Omit<
  *
  * // runtime
  * const roles = yield* listRoles({ scope: "/" });
+ * // …provided with Effect.provide(Azure.KeyVault.ListHsmRoleDefinitionsHttp)
  * ```
  *
  * @binding

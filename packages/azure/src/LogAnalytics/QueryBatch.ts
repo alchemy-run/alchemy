@@ -4,14 +4,28 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type { Workspace } from "./Workspace.ts";
 
-/** One query of a batch; it runs against the bound workspace. */
+/**
+ * One query of a {@link QueryBatch} call. It runs as `POST /query` against
+ * the bound workspace.
+ *
+ * - `id`: ID of the query, unique in the batch. Its answer carries the
+ *   same `id`.
+ * - `body`: the query: `{ query, timespan?, workspaces? }`, with the same
+ *   meaning as in `ExecuteQueryRequest`.
+ * - `headers` (optional): request headers, e.g.
+ *   `{ Prefer: "include-statistics=true" }`. Default: none.
+ */
 export interface QueryBatchItem extends Omit<
   query.BatchQueryRequest,
   "workspace" | "path" | "method"
 > {}
 
+/**
+ * Request of a {@link QueryBatch} call: the `requests`, plus an optional
+ * `endpoint` (Log Analytics endpoint, default `https://api.loganalytics.io`).
+ */
 export interface QueryBatchRequest extends Omit<query.QueryBatchRequest, "requests"> {
-  /** The queries, each with an `id` unique in the batch (at most 10). */
+  /** The queries, each with an `id` unique in the batch. Send at most 10. */
   requests: QueryBatchItem[];
 }
 
@@ -30,28 +44,36 @@ export interface QueryBatchRequest extends Omit<query.QueryBatchRequest, "reques
  * (a Cloudflare Worker, an AWS Lambda) gets an Entra service principal (see
  * `AzureBindings`). Provide {@link QueryBatchHttp}.
  *
- * ### Calling QueryBatch
- * **Example:** Two queries in one call
+ * ### Running Several Queries
+ * **Example:** Two queries in one call from an Azure Function
  * ```typescript
- * // init
- * const queryBatch = yield* Azure.LogAnalytics.QueryBatch(workspace);
+ * const Logs = Azure.LogAnalytics.Workspace("Logs", {});
  *
- * // runtime
- * const { responses } = yield* queryBatch({
- *   requests: [
- *     { id: "errors", body: { query: "AppEvents_CL | where Level == 'error' | count" } },
- *     { id: "total", body: { query: "AppEvents_CL | count", timespan: "P1D" } },
- *   ],
- * });
- * const errors = responses?.find((r) => r.id === "errors")?.body?.tables?.[0]?.rows;
- * ```
- *
- * **Example:** Provide the implementation on the Function
- * ```typescript
- * Effect.gen(function* () {
- *   const queryBatch = yield* Azure.LogAnalytics.QueryBatch(workspace);
- *   // ...
- * }).pipe(Effect.provide(Azure.LogAnalytics.QueryBatchHttp));
+ * export default class Reports extends Azure.Functions.Function<Reports>()(
+ *   "Reports",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const workspace = yield* Logs;
+ *     // init: assigns Log Analytics Data Reader on the workspace only
+ *     const queryBatch = yield* Azure.LogAnalytics.QueryBatch(workspace);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime
+ *         const { responses } = yield* queryBatch({
+ *           requests: [
+ *             { id: "errors", body: { query: "AppEvents_CL | where Level == 'error' | count" } },
+ *             { id: "total", body: { query: "AppEvents_CL | count", timespan: "P1D" } },
+ *           ],
+ *         });
+ *         const errors = responses?.find((r) => r.id === "errors");
+ *         return yield* HttpServerResponse.json({
+ *           status: errors?.status,
+ *           rows: errors?.body?.tables?.[0]?.rows ?? [],
+ *         });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.LogAnalytics.QueryBatchHttp)),
+ * ) {}
  * ```
  *
  * @binding

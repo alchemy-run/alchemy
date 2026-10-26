@@ -39,6 +39,7 @@ export const ownershipMarker = Effect.fn(function* (id: string) {
   return `[alchemy ${stack}/${stage}/${id}]`;
 });
 
+/** User metadata with the ownership marker appended. */
 export const withMarker = (userMetadata: string | undefined, marker: string) =>
   userMetadata ? `${userMetadata} ${marker}` : marker;
 
@@ -48,6 +49,7 @@ export const stripMarker = (userMetadata: string | undefined) => {
   return stripped ? stripped : undefined;
 };
 
+/** True when the user metadata carries an Alchemy ownership marker of any stack. */
 export const hasAnyMarker = (userMetadata: string | undefined) => MARKER.test(userMetadata ?? "");
 
 /**
@@ -103,15 +105,20 @@ export interface AuthorizationRuleKeys {
   primaryKey: Redacted.Redacted<string> | undefined;
   /** Secondary SAS key. */
   secondaryKey: Redacted.Redacted<string> | undefined;
-  /** Primary connection string. */
+  /**
+   * Primary connection string
+   * (`Endpoint=sb://{namespace}.servicebus.windows.net/;SharedAccessKeyName=...;SharedAccessKey=...`,
+   * plus `EntityPath` for an event hub rule).
+   */
   primaryConnectionString: Redacted.Redacted<string> | undefined;
-  /** Secondary connection string. */
+  /** Secondary connection string, built from the secondary key. */
   secondaryConnectionString: Redacted.Redacted<string> | undefined;
 }
 
 const redact = (value: string | undefined) =>
   value === undefined ? undefined : Redacted.make(value);
 
+/** The keys and connection strings of a rule, each wrapped in `Redacted`. */
 export const toKeys = (keys: eventhub.AccessKeys): AuthorizationRuleKeys => ({
   primaryKey: redact(keys.primaryKey),
   secondaryKey: redact(keys.secondaryKey),
@@ -119,6 +126,11 @@ export const toKeys = (keys: eventhub.AccessKeys): AuthorizationRuleKeys => ({
   secondaryConnectionString: redact(keys.secondaryConnectionString),
 });
 
+/**
+ * A right of a SAS authorization rule: `Send` (publish events), `Listen`
+ * (receive events), or `Manage` (manage entities; needs `Send` and
+ * `Listen` too).
+ */
 export type AccessRight = "Manage" | "Send" | "Listen";
 
 /** Rights compared as a set (Azure may reorder them). */

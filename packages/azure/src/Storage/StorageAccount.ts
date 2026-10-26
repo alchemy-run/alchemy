@@ -33,6 +33,7 @@ export interface StorageAccountProps {
   /**
    * Resource group the account is created in. Changing it replaces the
    * account.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -57,7 +58,9 @@ export interface StorageAccountProps {
    */
   sku?: StorageSkuName;
   /**
-   * Account kind. Changing it replaces the account.
+   * Account kind: `StorageV2` (general purpose), `BlockBlobStorage` or
+   * `FileStorage` (premium, with a `Premium_*` SKU), and the legacy
+   * `Storage` and `BlobStorage`. Changing it replaces the account.
    * @default "StorageV2"
    */
   kind?: StorageKind;
@@ -111,6 +114,7 @@ export interface StorageAccountProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -172,9 +176,20 @@ export interface StorageAccount extends Resource<
 > {}
 
 /**
- * An Azure Storage account — the namespace for Blob, Queue, Table, and File
- * storage. Accounts are secure by default: HTTPS only, TLS 1.2 minimum, and
- * anonymous blob access disabled.
+ * An Azure Storage account (`Microsoft.Storage/storageAccounts`): the
+ * namespace that holds your blob containers, queues, tables, and file
+ * shares.
+ *
+ * Alchemy creates a general-purpose v2 account with locally redundant
+ * storage (`Standard_LRS`) in the stack's resource group. The account is
+ * secure by default: HTTPS only, TLS 1.2 minimum, and anonymous blob access
+ * off. Runtimes reach the data with Microsoft Entra ID through bindings on
+ * the containers, queues, and tables, so you never handle account keys.
+ *
+ * :::caution[Changing `name`, `resourceGroup`, `location`, `kind`, or `isHnsEnabled` replaces the account]
+ * Alchemy creates a new account and deletes the old one with every blob,
+ * message, entity, and file in it.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/storage/common/storage-account-overview
  *
@@ -184,11 +199,130 @@ export interface StorageAccount extends Resource<
  * const account = yield* Azure.Storage.StorageAccount("files");
  * ```
  *
- * **Example:** Geo-redundant account that requires Entra ID auth
+ * **Example:** Account with a fixed name and region
  * ```typescript
  * const account = yield* Azure.Storage.StorageAccount("files", {
- *   sku: "Standard_GRS",
+ *   name: "contosofiles",
+ *   location: "westeurope",
+ * });
+ * // account.primaryEndpoints.blob → "https://contosofiles.blob.core.windows.net/"
+ * ```
+ *
+ * ### Redundancy
+ * `sku` picks how Azure replicates your data: `Standard_LRS` (one
+ * datacenter), `Standard_ZRS` (three zones), `Standard_GRS` (a second
+ * region), and `Standard_RAGRS` (a second region you can read from).
+ *
+ * **Example:** Zone-redundant account
+ * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("files", {
+ *   sku: "Standard_ZRS",
+ * });
+ * ```
+ *
+ * **Example:** Geo-redundant account with read access to the secondary
+ * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("files", {
+ *   sku: "Standard_RAGRS",
+ * });
+ * ```
+ *
+ * ### Access Tiers
+ * **Example:** Cool account for rarely read data
+ * ```typescript
+ * const archive = yield* Azure.Storage.StorageAccount("archive", {
+ *   accessTier: "Cool",
+ * });
+ * ```
+ *
+ * ### Authentication and Network Access
+ * **Example:** Require Microsoft Entra ID (no account keys or SAS)
+ * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("files", {
  *   allowSharedKeyAccess: false,
+ * });
+ * ```
+ *
+ * **Example:** Allow public read containers
+ * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("assets", {
+ *   allowBlobPublicAccess: true,
+ * });
+ * const images = yield* Azure.Storage.BlobContainer("images", {
+ *   storageAccount: account.storageAccountName,
+ *   publicAccess: "Blob",
+ * });
+ * ```
+ *
+ * **Example:** Private account behind a private endpoint
+ * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("files", {
+ *   publicNetworkAccess: "Disabled",
+ * });
+ * const endpoint = yield* Azure.Network.PrivateEndpoint("files-blob", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: account.storageAccountId, groupIds: ["blob"] },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Versioning, Soft Delete, and CORS
+ * Blob service settings live on `Azure.Storage.BlobServiceProperties`, one
+ * per account.
+ *
+ * **Example:** Versioning with 7-day soft delete
+ * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("files");
+ * yield* Azure.Storage.BlobServiceProperties("files-blob", {
+ *   storageAccount: account.storageAccountName,
+ *   isVersioningEnabled: true,
+ *   deleteRetentionPolicy: { enabled: true, days: 7 },
+ *   containerDeleteRetentionPolicy: { enabled: true, days: 7 },
+ * });
+ * ```
+ *
+ * **Example:** Allow browser uploads from one origin
+ * ```typescript
+ * yield* Azure.Storage.BlobServiceProperties("files-blob", {
+ *   storageAccount: account.storageAccountName,
+ *   cors: [
+ *     {
+ *       allowedOrigins: ["https://app.example.com"],
+ *       allowedMethods: ["GET", "PUT"],
+ *       maxAgeInSeconds: 600,
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Lifecycle Rules
+ * **Example:** Delete logs 30 days after their last change
+ * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("logs");
+ * yield* Azure.Storage.ManagementPolicy("logs-lifecycle", {
+ *   storageAccount: account.storageAccountName,
+ *   rules: [
+ *     {
+ *       name: "expireLogs",
+ *       filters: { blobTypes: ["blockBlob"], prefixMatch: ["logs/"] },
+ *       actions: {
+ *         baseBlob: { delete: { daysAfterModificationGreaterThan: 30 } },
+ *       },
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Encryption
+ * Azure encrypts every account with Microsoft-managed keys. Add an
+ * encryption scope when some blobs need their own key.
+ *
+ * **Example:** Encryption scope with infrastructure encryption
+ * ```typescript
+ * const scope = yield* Azure.Storage.EncryptionScope("sensitive", {
+ *   storageAccount: account.storageAccountName,
+ *   requireInfrastructureEncryption: true,
  * });
  * ```
  *
@@ -198,6 +332,10 @@ export interface StorageAccount extends Resource<
  * const lake = yield* Azure.Storage.StorageAccount("lake", {
  *   isHnsEnabled: true,
  * });
+ * const raw = yield* Azure.Storage.BlobContainer("raw", {
+ *   storageAccount: lake.storageAccountName,
+ * });
+ * // bind `raw` with Azure.Storage.DataLakeFileSystemReadWrite
  * ```
  *
  * ### Native Data Sharing
@@ -211,9 +349,82 @@ export interface StorageAccount extends Resource<
  * });
  * ```
  *
+ * ### Binding to a runtime
+ * Bind the containers, queues, and tables in the account, not the account
+ * itself: each binding grants a data role on that one resource. The
+ * account-level operations (list or create containers, queues, and tables)
+ * bind to the account and grant their custom role on it.
+ *
+ * **Example:** Read and write blobs from an Azure Function
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const uploads = yield* Uploads;
+ *     // Storage Blob Data Contributor on the container only.
+ *     const blobs = yield* Azure.Storage.BlobContainerReadWrite(uploads);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* blobs.put("hello.txt", "hi", { contentType: "text/plain" });
+ *         const blob = yield* blobs.get("hello.txt");
+ *         return HttpServerResponse.text(blob?.text() ?? "missing");
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp)),
+ * ) {}
+ * ```
+ *
+ * **Example:** List the account's containers
+ * ```typescript
+ * // init
+ * const listBlobContainers = yield* Azure.Storage.ListBlobContainers(account);
+ *
+ * // runtime
+ * const page = yield* listBlobContainers({ prefix: "tenant-" });
+ * const names = page.ContainerItems.map((c) => c.Name);
+ * // …provided with Effect.provide(Azure.Storage.ListBlobContainersHttp)
+ * ```
+ *
+ * ### Event Sources
+ * **Example:** Consume a Storage queue
+ * ```typescript
+ * yield* Azure.Storage.consumeQueueMessages(jobs, (message) =>
+ *   Effect.log(message.body),
+ * );
+ * // …provided with Effect.provide(Azure.Functions.StorageQueueEventSource)
+ * ```
+ *
+ * **Example:** React to any account event through Event Grid
+ * ```typescript
+ * yield* Azure.EventGrid.consumeEvents(
+ *   "Deletes",
+ *   { scope: account.storageAccountId, includedEventTypes: ["Microsoft.Storage.BlobDeleted"] },
+ *   (event) => Effect.log(event.subject),
+ * );
+ * // …provided with Effect.provide(Azure.Functions.EventGridEventSource)
+ * ```
+ *
+ * ### Deleting an Account
+ * Destroying the account deletes it with all its data. After a redundancy
+ * change (e.g. `Standard_LRS` → `Standard_GRS`), Azure keeps syncing in the
+ * background; until it finishes, a delete or another `sku` change fails
+ * with `PendingTransactionAlreadyExists`.
+ *
+ * **Example:** Keep the account when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const account = yield* Azure.Storage.StorageAccount("files").pipe(
+ *   RemovalPolicy.retain(),
+ * );
+ * ```
+ *
  * @resource
  */
-export const StorageAccount = GroupedResource<StorageAccount>("Azure.Storage.StorageAccount");
+export const StorageAccount = GroupedResource<StorageAccount>("Azure.Storage.StorageAccount", {
+  local: true,
+});
 
 type ObservedAccount = storage.GetStorageAccountPropertiesResponse;
 

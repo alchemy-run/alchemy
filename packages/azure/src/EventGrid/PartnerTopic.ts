@@ -25,8 +25,13 @@ import { identityDiffers, sameName, toIdentityInfo, type EventGridIdentity } fro
 
 export interface PartnerTopicProps {
   /**
-   * Resource group the partner created the topic in. Changing it replaces
-   * the partner topic.
+   * Resource group the partner created the topic in (the
+   * `partnerTopic.resourceGroup` of the partner's channel).
+   *
+   * :::caution
+   * Changing it replaces the partner topic: Alchemy deletes the old one.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -38,11 +43,17 @@ export interface PartnerTopicProps {
    * :::
    */
   name: string;
-  /** Managed identity of the partner topic, used for identity-based delivery. */
+  /**
+   * Managed identity of the partner topic, used for identity-based delivery
+   * (`deliveryIdentity` of an `Azure.EventGrid.PartnerTopicEventSubscription`).
+   * Updated in place.
+   * @default not managed (left as the partner topic has it)
+   */
   identity?: EventGridIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -83,10 +94,20 @@ export interface PartnerTopic extends Resource<
  * events flow, and manages its tags and identity. Route its events with
  * `Azure.EventGrid.PartnerTopicEventSubscription`.
  *
- * Partner topics cannot be created directly: the reconcile waits up to
- * about a minute for the partner's channel to create the topic. Activation
- * is one-way (Event Grid cannot deactivate a partner topic). Deleting the
- * partner topic also deletes the partner's channel.
+ * Activation is one-way (Event Grid cannot deactivate a partner topic).
+ * Deleting the partner topic also deletes the partner's channel.
+ *
+ * :::caution[Changing `name` or `resourceGroup` replaces the partner topic]
+ * Alchemy claims and activates the other partner topic, and deletes the
+ * old one together with the partner's channel for it.
+ * :::
+ *
+ * :::caution[The partner must create the topic first]
+ * You cannot create a partner topic yourself. Authorize the partner's
+ * registration in an `Azure.EventGrid.PartnerConfiguration`, then the
+ * partner's channel creates the topic. The deploy waits up to about a
+ * minute for the topic to appear, then fails.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/subscribe-to-partner-events
  *
@@ -95,9 +116,11 @@ export interface PartnerTopic extends Resource<
  * ```typescript
  * const partners = yield* Azure.EventGrid.PartnerConfiguration("partners", {
  *   authorizedPartners: [
+ *     // immutable ID the partner gives you
  *     { partnerRegistrationImmutableId: "941a5b43-6d4c-4d3c-9c9e-2c1d4b8a7f10" },
  *   ],
  * });
+ * // the partner topic name the partner's channel created
  * const topic = yield* Azure.EventGrid.PartnerTopic("orders", {
  *   name: "contoso-orders",
  * });
@@ -108,6 +131,32 @@ export interface PartnerTopic extends Resource<
  * const topic = yield* Azure.EventGrid.PartnerTopic("orders", {
  *   name: "contoso-orders",
  *   identity: { type: "SystemAssigned" },
+ * });
+ * ```
+ *
+ * ### Partner and Subscriber in One Stack
+ * **Example:** Activate the topic your own channel creates
+ * ```typescript
+ * const registration = yield* Azure.EventGrid.PartnerRegistration("contoso");
+ * const partners = yield* Azure.EventGrid.PartnerConfiguration("partners", {
+ *   authorizedPartners: [
+ *     { partnerRegistrationImmutableId: registration.partnerRegistrationImmutableId },
+ *   ],
+ * });
+ * const namespace = yield* Azure.EventGrid.PartnerNamespace("contoso-events", {
+ *   partnerRegistration: registration.partnerRegistrationId,
+ * });
+ * const channel = yield* Azure.EventGrid.Channel("orders", {
+ *   partnerNamespace: namespace.partnerNamespaceName,
+ *   partnerTopic: {
+ *     // the subscriber's group: here the configuration's group, which
+ *     // also orders the channel after the authorization
+ *     resourceGroup: partners.resourceGroup,
+ *     source: "contoso/tenants/orders",
+ *   },
+ * });
+ * const topic = yield* Azure.EventGrid.PartnerTopic("orders-topic", {
+ *   name: channel.partnerTopicName,
  * });
  * ```
  *

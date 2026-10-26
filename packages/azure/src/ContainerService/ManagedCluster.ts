@@ -1,3 +1,4 @@
+import type { Connection } from "@alchemy.run/kubernetes/Connection";
 import * as cs from "@distilled.cloud/azure/containerservice";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
@@ -29,6 +30,7 @@ import {
   whileClusterBusy,
   whileClusterCreateBlocked,
 } from "./Common.ts";
+import { aksConnectionOf } from "./KubernetesConnection.ts";
 
 export type ManagedClusterSkuTier = "Free" | "Standard" | "Premium";
 export type ManagedClusterUpgradeChannel = cs.UpgradeChannel;
@@ -52,28 +54,51 @@ export interface ManagedClusterDefaultNodePool {
    * @default 1
    */
   count?: number;
-  /** Let the cluster autoscaler scale the pool between `minCount` and `maxCount`. */
+  /**
+   * Let the cluster autoscaler scale the pool between `minCount` and `maxCount`.
+   * @default false
+   */
   enableAutoScaling?: boolean;
-  /** Minimum node count when autoscaling. */
+  /** Minimum node count when autoscaling. Required with `enableAutoScaling`. */
   minCount?: number;
-  /** Maximum node count when autoscaling. */
+  /** Maximum node count when autoscaling. Required with `enableAutoScaling`. */
   maxCount?: number;
-  /** OS disk size in GiB. Changing it replaces the cluster. */
+  /**
+   * OS disk size in GiB. Changing it replaces the cluster.
+   * @default chosen by AKS for the VM size
+   */
   osDiskSizeGB?: number;
-  /** Node OS SKU (e.g. `Ubuntu`, `AzureLinux`). Changing it replaces the cluster. */
+  /**
+   * Node OS SKU (e.g. `Ubuntu`, `AzureLinux`). Changing it replaces the cluster.
+   * @default AKS's default (`Ubuntu`)
+   */
   osSKU?: cs.OSSKU;
-  /** Maximum pods per node. Changing it replaces the cluster. */
+  /**
+   * Maximum pods per node. Changing it replaces the cluster.
+   * @default AKS's default for the network plugin (250 for Azure CNI overlay)
+   */
   maxPods?: number;
-  /** Availability zones of the nodes. Changing them replaces the cluster. */
+  /**
+   * Availability zones of the nodes, e.g. `["1", "2", "3"]`. Changing them
+   * replaces the cluster.
+   * @default no zones
+   */
   availabilityZones?: string[];
-  /** Subnet the nodes join (Azure CNI). Changing it replaces the cluster. */
+  /**
+   * ARM ID of the subnet the nodes join (`subnet.subnetId`). Changing it
+   * replaces the cluster.
+   * @default a virtual network AKS creates in the node resource group
+   */
   vnetSubnetId?: string;
 }
 
 export interface ManagedClusterAadProfile {
-  /** Use Azure RBAC for Kubernetes authorization. */
+  /**
+   * Use Azure RBAC role assignments for Kubernetes authorization.
+   * @default AKS's default (`false`)
+   */
   enableAzureRbac?: boolean;
-  /** Entra ID group object IDs that get cluster-admin. */
+  /** Object IDs of the Entra ID groups that get `cluster-admin`. */
   adminGroupObjectIds?: string[];
   /**
    * Tenant of the Entra ID integration.
@@ -90,7 +115,10 @@ export interface ManagedClusterAddon {
 }
 
 export interface ManagedClusterProps {
-  /** Resource group of the cluster. Changing it replaces the cluster. */
+  /**
+   * Resource group of the cluster. Changing it replaces the cluster.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Cluster name: 1-63 letters, digits, `-` and `_`. If omitted, a unique
@@ -115,18 +143,22 @@ export interface ManagedClusterProps {
    */
   kubernetesVersion?: string;
   /**
-   * Control-plane pricing tier.
+   * Control-plane pricing tier: `Free`, `Standard` (uptime SLA), or
+   * `Premium` (Standard plus long-term support). Changes in place.
    * @default "Free"
    */
   skuTier?: ManagedClusterSkuTier;
   /**
    * The system node pool created with the cluster. Add more pools with
    * `Azure.ContainerService.AgentPool`.
+   * @default one `system` node of the AKS default VM size
    */
   defaultNodePool?: ManagedClusterDefaultNodePool;
   /**
    * Resource ID of a user-assigned managed identity for the control plane.
-   * When omitted the cluster uses a system-assigned identity.
+   * When omitted the cluster uses a system-assigned identity. Changes in
+   * place.
+   * @default a system-assigned identity
    */
   userAssignedIdentityId?: string;
   /**
@@ -145,15 +177,35 @@ export interface ManagedClusterProps {
    * @default "overlay" when `networkPlugin` is `azure`
    */
   networkPluginMode?: cs.NetworkPluginMode;
-  /** Network policy engine. Changing it replaces the cluster. */
+  /**
+   * Network policy engine: `none`, `calico`, `azure`, or `cilium`.
+   * Changing it replaces the cluster.
+   * @default AKS's default (no network policy)
+   */
   networkPolicy?: cs.NetworkPolicy;
-  /** Kubernetes service CIDR. Changing it replaces the cluster. */
+  /**
+   * Kubernetes service CIDR; must not overlap the node subnet. Changing it
+   * replaces the cluster.
+   * @default AKS's default (`10.0.0.0/16`)
+   */
   serviceCidr?: string;
-  /** Kubernetes DNS service IP (inside `serviceCidr`). Changing it replaces the cluster. */
+  /**
+   * Kubernetes DNS service IP (inside `serviceCidr`). Changing it replaces
+   * the cluster.
+   * @default AKS's default (`10.0.0.10`)
+   */
   dnsServiceIp?: string;
-  /** Pod CIDR (overlay / kubenet). Changing it replaces the cluster. */
+  /**
+   * Pod CIDR (overlay / kubenet). Changing it replaces the cluster.
+   * @default AKS's default (`10.244.0.0/16`)
+   */
   podCidr?: string;
-  /** Outbound routing method. Changing it replaces the cluster. */
+  /**
+   * Outbound routing method: `loadBalancer`, `userDefinedRouting`,
+   * `managedNATGateway`, or `userAssignedNATGateway`. Changing it replaces
+   * the cluster.
+   * @default AKS's default (`loadBalancer`)
+   */
   outboundType?: cs.ContainerServiceNetworkProfileInputOutboundType;
   /**
    * Enable Kubernetes RBAC. Changing it replaces the cluster.
@@ -180,20 +232,33 @@ export interface ManagedClusterProps {
    * @default false
    */
   workloadIdentityEnabled?: boolean;
-  /** IP ranges (CIDR) allowed to reach the public API server. */
+  /**
+   * IP ranges (CIDR) allowed to reach the public API server.
+   * @default any IP address
+   */
   authorizedIpRanges?: string[];
-  /** Kubernetes auto-upgrade channel. */
+  /**
+   * Kubernetes auto-upgrade channel: `rapid`, `stable`, `patch`,
+   * `node-image`, or `none`.
+   * @default AKS's default (`none`)
+   */
   autoUpgradeChannel?: ManagedClusterUpgradeChannel;
-  /** Node OS image auto-upgrade channel. */
+  /**
+   * Node OS image auto-upgrade channel: `None`, `Unmanaged`, `NodeImage`,
+   * or `SecurityPatch`.
+   * @default AKS's default (`NodeImage`)
+   */
   nodeOsUpgradeChannel?: ManagedClusterNodeOsUpgradeChannel;
   /**
    * Add-ons keyed by name (e.g. `azurepolicy`, `omsagent`,
    * `azureKeyvaultSecretsProvider`).
+   * @default no add-ons
    */
   addonProfiles?: Record<string, ManagedClusterAddon>;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -231,7 +296,7 @@ export interface ManagedCluster extends Resource<
     kubernetesVersion: string | undefined;
     /** Resource group that holds the nodes. */
     nodeResourceGroup: string | undefined;
-    /** Control-plane pricing tier. */
+    /** Control-plane pricing tier: `Free`, `Standard`, or `Premium`. */
     skuTier: string | undefined;
     /** Principal ID of the system-assigned identity. */
     principalId: string | undefined;
@@ -241,6 +306,11 @@ export interface ManagedCluster extends Resource<
     kubeletIdentity: ManagedClusterKubeletIdentity;
     /** OIDC issuer URL (when `oidcIssuerEnabled`). */
     oidcIssuerUrl: string | undefined;
+    /**
+     * How `Kubernetes.*` workloads reach the cluster: pass the cluster
+     * itself as their `cluster`.
+     */
+    connection: Connection;
     /** User tags (Alchemy ownership tags stripped). */
     tags: Record<string, string>;
   },
@@ -249,10 +319,37 @@ export interface ManagedCluster extends Resource<
 > {}
 
 /**
- * An Azure Kubernetes Service (AKS) managed cluster with a system node pool.
+ * An Azure Kubernetes Service (AKS) managed cluster
+ * (`Microsoft.ContainerService/managedClusters`): a Kubernetes control plane
+ * that Azure runs for you, with a system node pool of VMs in your
+ * subscription.
  *
- * Creating a cluster takes about 5-10 minutes. Nodes are billed as virtual
- * machines; the `Free` control-plane tier costs nothing.
+ * Alchemy creates a `Free`-tier cluster with one `system` node, a
+ * system-assigned identity, Kubernetes RBAC, and Azure CNI in overlay mode.
+ * AKS puts the nodes, disks, and load balancers in a separate node resource
+ * group (`MC_{resourceGroup}_{name}_{location}`). Creating a cluster takes
+ * about 5-10 minutes. Nodes are billed as virtual machines; the `Free`
+ * control-plane tier costs nothing.
+ *
+ * :::caution[Changing the cluster's name, placement, network, or system pool shape replaces the cluster]
+ * That covers `name`, `resourceGroup`, `location`, `dnsPrefix`,
+ * `nodeResourceGroup`, `enableRbac`, and the network settings. The network
+ * settings are `networkPlugin`, `networkPluginMode`,
+ * `networkPolicy`, `serviceCidr`, `dnsServiceIp`, `podCidr`, and
+ * `outboundType`. The system pool's shape is `defaultNodePool.name`,
+ * `vmSize`, `osDiskSizeGB`, `osSKU`, `maxPods`, `vnetSubnetId`, and
+ * `availabilityZones`. Alchemy creates a new cluster with a new API server
+ * FQDN and deletes the old one with its node resource group: the workloads,
+ * disks, persistent volumes, and public IPs in it.
+ * :::
+ *
+ * :::caution[A fresh subscription needs the provider and a vCPU quota]
+ * Alchemy registers the `Microsoft.ContainerService` resource provider
+ * before the first cluster; the deploying identity needs permission to
+ * register resource providers. Each node counts against the subscription's
+ * regional vCPU quota for its VM family, and a create fails when the
+ * quota is too low.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/aks/what-is-aks
  *
@@ -264,11 +361,94 @@ export interface ManagedCluster extends Resource<
  * });
  * ```
  *
+ * **Example:** Cluster with a fixed name, region, and Kubernetes version
+ * ```typescript
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+ *   name: "contoso-prod",
+ *   location: "westeurope",
+ *   kubernetesVersion: "1.35",
+ *   tags: { team: "platform" },
+ * });
+ * ```
+ *
  * **Example:** Autoscaling system pool on the Standard tier
  * ```typescript
  * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
  *   skuTier: "Standard",
  *   defaultNodePool: { enableAutoScaling: true, minCount: 1, maxCount: 3 },
+ * });
+ * ```
+ *
+ * **Example:** Zone-redundant system pool on Azure Linux
+ * ```typescript
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+ *   defaultNodePool: {
+ *     vmSize: "Standard_D4s_v5",
+ *     count: 3,
+ *     osSKU: "AzureLinux",
+ *     availabilityZones: ["1", "2", "3"],
+ *   },
+ * });
+ * ```
+ *
+ * ### Node Pools
+ * Run your apps on user pools with `Azure.ContainerService.AgentPool`, and
+ * keep the system pool for cluster add-ons.
+ *
+ * **Example:** A tainted pool for batch work
+ * ```typescript
+ * yield* Azure.ContainerService.AgentPool("workers", {
+ *   cluster: cluster.clusterName,
+ *   vmSize: "Standard_D4s_v5",
+ *   count: 2,
+ *   nodeLabels: { workload: "batch" },
+ *   nodeTaints: ["workload=batch:NoSchedule"],
+ * });
+ * ```
+ *
+ * **Example:** Spot pool that scales to zero
+ * ```typescript
+ * yield* Azure.ContainerService.AgentPool("spot", {
+ *   cluster: cluster.clusterName,
+ *   scaleSetPriority: "Spot",
+ *   spotMaxPrice: -1,
+ *   enableAutoScaling: true,
+ *   minCount: 0,
+ *   maxCount: 5,
+ * });
+ * ```
+ *
+ * ### Networking
+ * **Example:** Nodes in your own virtual network
+ * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const nodes = yield* Azure.Network.Subnet("aks-nodes", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.0.0/22",
+ * });
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+ *   defaultNodePool: { vmSize: "Standard_D2s_v7", vnetSubnetId: nodes.subnetId },
+ *   networkPolicy: "calico",
+ *   podCidr: "192.168.0.0/16",
+ *   serviceCidr: "10.1.0.0/16",
+ *   dnsServiceIp: "10.1.0.10",
+ * });
+ * ```
+ *
+ * **Example:** Outbound traffic through a managed NAT gateway
+ * ```typescript
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+ *   outboundType: "managedNATGateway",
+ * });
+ * ```
+ *
+ * ### API Server Access
+ * **Example:** Allow the API server only from your office range
+ * ```typescript
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+ *   authorizedIpRanges: ["203.0.113.0/24"],
  * });
  * ```
  *
@@ -282,12 +462,144 @@ export interface ManagedCluster extends Resource<
  * });
  * ```
  *
+ * **Example:** Entra ID admins and no local accounts
+ * ```typescript
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+ *   aad: {
+ *     enableAzureRbac: true,
+ *     adminGroupObjectIds: ["00000000-0000-0000-0000-000000000000"], // your Entra group
+ *   },
+ *   disableLocalAccounts: true,
+ * });
+ * ```
+ *
+ * **Example:** Control plane with a user-assigned identity
+ * ```typescript
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("aks-control-plane");
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+ *   userAssignedIdentityId: identity.identityId,
+ * });
+ * ```
+ *
  * **Example:** Let the kubelet pull from a container registry
  * ```typescript
+ * const registry = yield* Azure.ContainerRegistry.Registry("images");
  * yield* Azure.Authorization.RoleAssignment("acr-pull", {
  *   scope: registry.registryId,
  *   roleDefinitionId: "7f951dda-4ed3-4680-a7ca-43fe172d538d", // AcrPull
  *   principalId: cluster.kubeletIdentity.objectId,
+ *   principalType: "ServicePrincipal",
+ * });
+ * ```
+ *
+ * **Example:** Trust a ServiceAccount with a federated credential
+ * ```typescript
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api");
+ * yield* Azure.ManagedIdentity.FederatedIdentityCredential("api-sa", {
+ *   identity: identity.identityName,
+ *   issuer: cluster.oidcIssuerUrl,
+ *   subject: "system:serviceaccount:default:api",
+ * });
+ * ```
+ *
+ * ### Upgrades and Maintenance
+ * Raise `kubernetesVersion` to upgrade in place; AKS cannot downgrade.
+ *
+ * **Example:** Automatic patch upgrades in a Sunday window
+ * ```typescript
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+ *   autoUpgradeChannel: "patch",
+ *   nodeOsUpgradeChannel: "NodeImage",
+ * });
+ * yield* Azure.ContainerService.MaintenanceConfiguration("upgrades", {
+ *   cluster: cluster.clusterName,
+ *   name: "aksManagedAutoUpgradeSchedule",
+ *   maintenanceWindow: {
+ *     schedule: { weekly: { intervalWeeks: 1, dayOfWeek: "Sunday" } },
+ *     durationHours: 4,
+ *     startTime: "02:00",
+ *     utcOffset: "+00:00",
+ *   },
+ * });
+ * ```
+ *
+ * ### Add-ons
+ * **Example:** Container insights and the Key Vault secrets provider
+ * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+ *   addonProfiles: {
+ *     omsagent: {
+ *       enabled: true,
+ *       config: { logAnalyticsWorkspaceResourceID: logs.workspaceId },
+ *     },
+ *     azureKeyvaultSecretsProvider: { enabled: true },
+ *   },
+ * });
+ * ```
+ *
+ * ### Running Kubernetes Workloads
+ * Pass the cluster as the `cluster` of any `Kubernetes.Deployment`, `Job`,
+ * `Manifest`, or `HelmChart`, with `Kubernetes.providers()` next to
+ * `Azure.providers()`. A `main` program is bundled and pushed to an Azure
+ * Container Registry Alchemy creates for the workload (no Docker), and the
+ * kubelet gets `AcrPull` on it. Azure bindings on a cluster with
+ * `workloadIdentityEnabled` assign their roles to a user-assigned managed
+ * identity federated with the workload's ServiceAccount (Microsoft Entra
+ * Workload ID).
+ *
+ * **Example:** Effect server with a blob binding
+ * ```typescript
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+ *   defaultNodePool: { vmSize: "Standard_D2s_v7", count: 1 },
+ *   oidcIssuerEnabled: true,
+ *   workloadIdentityEnabled: true,
+ * });
+ *
+ * const api = yield* Kubernetes.Deployment(
+ *   "Api",
+ *   { cluster, main: import.meta.url, port: 3000 },
+ *   Effect.gen(function* () {
+ *     const notes = yield* Azure.Storage.BlobContainerReadWrite(container);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const note = yield* notes.get("notes/hello").pipe(Effect.orDie);
+ *         return HttpServerResponse.text(note?.text() ?? "none");
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp)),
+ * );
+ * ```
+ *
+ * **Example:** A pre-built image
+ * ```typescript
+ * const web = yield* Kubernetes.Deployment("Web", {
+ *   cluster,
+ *   image: "nginx:1.27",
+ *   port: 80,
+ * });
+ * ```
+ *
+ * **Example:** A public service behind an Azure load balancer
+ * ```typescript
+ * const web = yield* Kubernetes.Deployment("Web", {
+ *   cluster,
+ *   image: "nginx:1.27",
+ *   port: 80,
+ *   replicas: 2,
+ *   serviceType: "LoadBalancer",
+ * });
+ * ```
+ *
+ * **Example:** A Helm chart
+ * ```typescript
+ * const ingress = yield* Kubernetes.HelmChart("IngressNginx", {
+ *   cluster,
+ *   chart: "ingress-nginx",
+ *   repo: "https://kubernetes.github.io/ingress-nginx",
+ *   version: "4.11.2",
+ *   namespace: "ingress-nginx",
+ *   createNamespace: true,
  * });
  * ```
  *
@@ -338,6 +650,12 @@ const toAttrs = (
       resourceId: kubelet?.resourceId,
     },
     oidcIssuerUrl: props.oidcIssuerProfile?.issuerURL,
+    connection: aksConnectionOf({
+      clusterId: cluster.id,
+      clusterName: name,
+      resourceGroup,
+      fqdn: props.fqdn,
+    }),
     tags: userTags(cluster.tags),
   };
 };

@@ -20,7 +20,10 @@ import {
 } from "./Shared.ts";
 
 export interface SqlDatabaseProps extends ThroughputProps {
-  /** Resource group of the account. Changing it replaces the database. */
+  /**
+   * Resource group of the account. Changing it replaces the database.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Name of the Cosmos DB account (kind `GlobalDocumentDB`), e.g.
@@ -59,11 +62,20 @@ export interface SqlDatabase extends Resource<
 > {}
 
 /**
- * A database in an Azure Cosmos DB for NoSQL account. Containers live inside
- * a database; give the database throughput to share it across containers.
+ * A database in an Azure Cosmos DB for NoSQL account
+ * (`Microsoft.DocumentDB/databaseAccounts/sqlDatabases`). Containers live
+ * inside a database; give the database throughput to share it across its
+ * containers.
  *
  * Cosmos DB does not keep tags on databases; Alchemy treats one it created
  * (or one under a generated name) as its own.
+ *
+ * :::caution[Changing `name`, `account`, or `resourceGroup`, or adding or removing throughput, replaces the database]
+ * Alchemy creates a new, empty database and deletes the old one with every
+ * container and document in it. Changing the throughput value, or
+ * switching between `throughput` and `autoscaleMaxThroughput`, applies in
+ * place.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/cosmos-db/nosql/
  *
@@ -71,6 +83,7 @@ export interface SqlDatabase extends Resource<
  * **Example:** Database on a serverless account
  * ```typescript
  * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
+ *   location: "centralus",
  *   capabilities: ["EnableServerless"],
  * });
  * const database = yield* Azure.CosmosDB.SqlDatabase("app", {
@@ -78,13 +91,78 @@ export interface SqlDatabase extends Resource<
  * });
  * ```
  *
+ * **Example:** Database with a fixed name
+ * ```typescript
+ * const database = yield* Azure.CosmosDB.SqlDatabase("app", {
+ *   account: account.accountName,
+ *   name: "shop",
+ * });
+ * ```
+ *
  * ### Shared Throughput
+ * On a provisioned account, throughput on the database is shared by every
+ * container that has none of its own. Serverless accounts reject it.
+ *
+ * **Example:** Manual throughput shared by every container
+ * ```typescript
+ * const database = yield* Azure.CosmosDB.SqlDatabase("app", {
+ *   account: account.accountName,
+ *   throughput: 400,
+ * });
+ * ```
+ *
  * **Example:** Autoscale throughput shared by every container
  * ```typescript
  * const database = yield* Azure.CosmosDB.SqlDatabase("app", {
  *   account: account.accountName,
  *   autoscaleMaxThroughput: 1000,
  * });
+ * ```
+ *
+ * ### Adding Containers
+ * **Example:** Two containers in one database
+ * ```typescript
+ * const orders = yield* Azure.CosmosDB.SqlContainer("orders", {
+ *   account: account.accountName,
+ *   database: database.databaseName,
+ *   partitionKey: { paths: ["/customerId"] },
+ * });
+ * const leases = yield* Azure.CosmosDB.SqlContainer("leases", {
+ *   account: account.accountName,
+ *   database: database.databaseName,
+ *   partitionKey: { paths: ["/id"] },
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * Bind the containers in the database (`Azure.CosmosDB.SqlContainerRead`,
+ * `SqlContainerWrite`, `SqlContainerReadWrite`); each binding assigns a
+ * Cosmos DB data role on that one container.
+ *
+ * **Example:** Query a container from an Azure Function
+ * ```typescript
+ * // init
+ * const orders = yield* Azure.CosmosDB.SqlContainerRead(ordersContainer);
+ *
+ * // runtime
+ * const page = yield* orders.query({
+ *   query: "SELECT * FROM c WHERE c.customerId = @id",
+ *   parameters: [{ name: "@id", value: "c-1" }],
+ *   partitionKey: ["c-1"],
+ * });
+ * // …provided with Effect.provide(Azure.CosmosDB.SqlContainerReadHttp)
+ * ```
+ *
+ * ### Deleting a Database
+ * Destroying the database deletes every container and document in it.
+ *
+ * **Example:** Keep the database when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const database = yield* Azure.CosmosDB.SqlDatabase("app", {
+ *   account: account.accountName,
+ * }).pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

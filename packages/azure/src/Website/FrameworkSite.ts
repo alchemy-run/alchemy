@@ -291,13 +291,9 @@ const deployerPrincipal = Effect.gen(function* () {
   };
 });
 
-/** `value`, released only once every `waitFor` resolves (orders one resource after others). */
-const after = <A>(value: Output.Output<A>, ...waitFor: Output.Output<unknown>[]) =>
-  // `Output.all` over a rest parameter does not infer a tuple, so the first value is cast back.
-  Output.map(
-    Output.all(value, ...waitFor),
-    (values: unknown[]) => values[0] as A,
-  ) as Output.Output<A>;
+/** `value`, released only once `waitFor` resolves (orders one resource after another). */
+const after = <A>(value: Output.Output<A>, waitFor: Output.Output<unknown>): Output.Output<A> =>
+  Output.map(Output.all(value, waitFor), ([resolved]) => resolved);
 
 /** Edge caching for routes that serve Blob assets; Front Door honours their `Cache-Control`. */
 const ASSET_CACHE: AfdRouteCacheConfiguration = {

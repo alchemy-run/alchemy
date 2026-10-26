@@ -27,20 +27,28 @@ export interface FederatedIdentityCredentialProps {
   /**
    * Issuer URL of the external identity provider; it must match the `iss`
    * claim of the external token, e.g.
-   * `https://token.actions.githubusercontent.com`.
+   * `https://token.actions.githubusercontent.com`. Changing it updates the
+   * credential in place.
    */
   issuer: string;
   /**
    * Identity of the external workload; it must match the `sub` claim of
    * the external token, e.g. `repo:my-org/my-repo:ref:refs/heads/main`.
+   * The issuer and subject pair must be unique on the application.
+   * Changing it updates the credential in place.
    */
   subject: string;
   /**
-   * Accepted `aud` claim values. Entra accepts exactly one.
+   * Accepted `aud` claim values. Entra accepts exactly one. Changing it
+   * updates the credential in place.
    * @default ["api://AzureADTokenExchange"]
    */
   audiences?: string[];
-  /** Free-text description (up to 600 characters). */
+  /**
+   * Free-text description (up to 600 characters). Changing it updates the
+   * credential in place.
+   * @default no description
+   */
   description?: string;
 }
 
@@ -68,19 +76,37 @@ export interface FederatedIdentityCredential extends Resource<
 > {}
 
 /**
- * A federated identity credential on a Microsoft Entra ID application:
- * lets a workload outside Azure (GitHub Actions, a Kubernetes service
- * account, another cloud's identity) exchange its own OIDC token for an
- * Entra token, with no secret to store.
+ * A federated identity credential on a Microsoft Entra ID application
+ * (Microsoft Graph `federatedIdentityCredential`): lets a workload outside
+ * Azure (GitHub Actions, a Kubernetes service account, another cloud's
+ * identity) exchange its own OIDC token for an Entra token of the
+ * application, with no secret to store.
  *
- * Credentials have no tags. They belong to their application, are
- * addressed by `name`, and are removed with it. The issuer and subject
- * pair must be unique on the application, so renaming a credential deletes
- * it before creating its replacement.
+ * Entra accepts a token only when its `iss`, `sub`, and `aud` claims match
+ * `issuer`, `subject`, and `audiences` exactly; wildcards are not
+ * supported. Credentials have no tags. They belong to their application,
+ * are addressed by `name`, and are removed with it. To use a user-assigned
+ * managed identity instead of an application, see
+ * `Azure.ManagedIdentity.FederatedIdentityCredential`.
+ *
+ * :::caution[Changing `name` or `applicationObjectId` replaces the credential]
+ * The issuer and subject pair must be unique on the application, so a
+ * renamed credential is deleted before its replacement is created, and
+ * sign-ins fail for the few seconds in between. `issuer`, `subject`,
+ * `audiences`, and `description` update in place.
+ * :::
+ *
+ * :::caution[One application holds at most 20 federated credentials]
+ * Use one credential per branch, environment, or service account, and a
+ * second application when you need more than 20.
+ * :::
  *
  * @see https://learn.microsoft.com/graph/api/resources/federatedidentitycredential
  *
  * ### Trusting GitHub Actions
+ * GitHub's `sub` claim names the repository and what the job runs for: a
+ * branch, a tag, an environment, or a pull request.
+ *
  * **Example:** Let one branch of a repository sign in as the application
  * ```typescript
  * const app = yield* Azure.Entra.Application("Deployer");
@@ -91,14 +117,99 @@ export interface FederatedIdentityCredential extends Resource<
  * });
  * ```
  *
- * ### Trusting a Kubernetes Service Account
- * **Example:** Workload identity on a cluster with an OIDC issuer
+ * **Example:** Jobs that use the `production` environment
  * ```typescript
+ * yield* Azure.Entra.FederatedIdentityCredential("GitHubProduction", {
+ *   applicationObjectId: app.objectId,
+ *   issuer: "https://token.actions.githubusercontent.com",
+ *   subject: "repo:my-org/my-repo:environment:production",
+ * });
+ * ```
+ *
+ * **Example:** Release tags
+ * ```typescript
+ * yield* Azure.Entra.FederatedIdentityCredential("GitHubRelease", {
+ *   applicationObjectId: app.objectId,
+ *   issuer: "https://token.actions.githubusercontent.com",
+ *   subject: "repo:my-org/my-repo:ref:refs/tags/v1.0.0",
+ *   description: "release v1.0.0",
+ * });
+ * ```
+ *
+ * ### Granting the Workload Access
+ * The workload gets the roles of the application's service principal.
+ *
+ * **Example:** A CI deployer with Contributor on one resource group
+ * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
+ * const app = yield* Azure.Entra.Application("Deployer");
+ * const principal = yield* Azure.Entra.ServicePrincipal("DeployerPrincipal", {
+ *   appId: app.appId,
+ * });
+ * yield* Azure.Entra.FederatedIdentityCredential("GitHubMain", {
+ *   applicationObjectId: app.objectId,
+ *   issuer: "https://token.actions.githubusercontent.com",
+ *   subject: "repo:my-org/my-repo:ref:refs/heads/main",
+ * });
+ * yield* Azure.Authorization.RoleAssignment("DeployerContributes", {
+ *   scope: group.resourceGroupId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.Contributor,
+ *   principalId: principal.objectId,
+ *   principalType: "ServicePrincipal",
+ * });
+ * // azure/login in the workflow takes client-id and tenant-id from these.
+ * return { clientId: app.appId, tenantId: app.tenantId };
+ * ```
+ *
+ * ### Trusting a Kubernetes Service Account
+ * The subject is `system:serviceaccount:<namespace>:<name>`, and the issuer
+ * is the cluster's OIDC issuer URL.
+ *
+ * **Example:** Workload identity on an AKS cluster
+ * ```typescript
+ * const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+ *   oidcIssuerEnabled: true,
+ *   workloadIdentityEnabled: true,
+ * });
+ * const app = yield* Azure.Entra.Application("Api");
  * yield* Azure.Entra.FederatedIdentityCredential("ApiPods", {
  *   applicationObjectId: app.objectId,
- *   issuer: "https://oidc.prod-aks.azure.com/<tenant-id>/<issuer-id>/",
+ *   issuer: cluster.oidcIssuerUrl.as<string>(),
  *   subject: "system:serviceaccount:default:api",
  *   description: "api pods",
+ * });
+ * ```
+ *
+ * **Example:** A cluster outside Azure
+ * ```typescript
+ * yield* Azure.Entra.FederatedIdentityCredential("OnPremPods", {
+ *   applicationObjectId: app.objectId,
+ *   issuer: "https://oidc.example.com/clusters/prod",
+ *   subject: "system:serviceaccount:jobs:importer",
+ * });
+ * ```
+ *
+ * ### Trusting Another Cloud
+ * **Example:** A Google Cloud service account
+ * ```typescript
+ * const app = yield* Azure.Entra.Application("GcpImporter");
+ * yield* Azure.Entra.FederatedIdentityCredential("GcpImporterSa", {
+ *   applicationObjectId: app.objectId,
+ *   issuer: "https://accounts.google.com",
+ *   // the service account's numeric unique ID
+ *   subject: "112233445566778899000",
+ * });
+ * ```
+ *
+ * ### Custom Audiences
+ * **Example:** Accept tokens minted for another audience
+ * ```typescript
+ * const app = yield* Azure.Entra.Application("Ci");
+ * yield* Azure.Entra.FederatedIdentityCredential("GitLabMain", {
+ *   applicationObjectId: app.objectId,
+ *   issuer: "https://gitlab.example.com",
+ *   subject: "project_path:my-group/my-project:ref_type:branch:ref:main",
+ *   audiences: ["https://gitlab.example.com"],
  * });
  * ```
  *

@@ -27,6 +27,7 @@ export interface GetSnapshotsRequest extends Omit<appconfig.GetSnapshotsRequest,
  *
  * // runtime
  * const page = yield* getSnapshots({ status: ["ready"] });
+ * // …provided with Effect.provide(Azure.AppConfiguration.GetSnapshotsHttp)
  * ```
  *
  * @binding

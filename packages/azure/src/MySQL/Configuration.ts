@@ -22,16 +22,36 @@ import {
 } from "./common.ts";
 
 export interface ConfigurationProps {
-  /** Resource group of the server. Changing it replaces the configuration. */
+  /**
+   * Resource group of the server.
+   *
+   * :::caution
+   * Changing it replaces the configuration.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the flexible server. Changing it replaces the configuration. */
+  /**
+   * Name of the `Azure.MySQL.FlexibleServer`.
+   *
+   * :::caution
+   * Changing it replaces the configuration.
+   * :::
+   */
   server: string;
   /**
-   * Server parameter name, e.g. `max_connections`. Changing it
-   * replaces the configuration.
+   * Server parameter name, e.g. `max_connections`.
+   *
+   * :::caution
+   * Changing it replaces the configuration: Alchemy restores the old
+   * parameter's default and sets the new one.
+   * :::
    */
   name: string;
-  /** Value to assign to the parameter. */
+  /**
+   * Value to assign to the parameter, as a string (`"200"`, `"ON"`).
+   * Changing it updates the parameter in place.
+   */
   value: string;
   /**
    * Restart the server after changing a static parameter so the new value
@@ -76,17 +96,25 @@ export interface Configuration extends Resource<
 > {}
 
 /**
- * A server parameter of an Azure Database for MySQL flexible server.
+ * A server parameter of an Azure Database for MySQL flexible server
+ * (`Microsoft.DBforMySQL/flexibleServers/configurations`).
  *
- * Every parameter always exists on the server; this resource overrides its
- * value and restores Azure's default when deleted.
+ * Every parameter always exists on the server. This resource overrides its
+ * value and restores Azure's default when you delete it. A dynamic
+ * parameter applies at once; a static one waits for a restart unless you
+ * set `restartOnChange`.
  *
- * @see https://learn.microsoft.com/azure/mysql/flexible-server/concepts-server-parameters
+ * :::caution[Changing `name`, `server`, or `resourceGroup` replaces the configuration]
+ * Alchemy restores the old parameter to its default and sets the new one.
+ * :::
+ *
+ * See [Server parameters in Azure Database for MySQL](https://learn.microsoft.com/azure/mysql/flexible-server/concepts-server-parameters).
  *
  * ### Setting Parameters
  * **Example:** Raise the connection limit
  * ```typescript
- * const connections = yield* Azure.MySQL.Configuration("max-connections", {
+ * const server = yield* Azure.MySQL.FlexibleServer("MySql");
+ * yield* Azure.MySQL.Configuration("MaxConnections", {
  *   server: server.serverName,
  *   name: "max_connections",
  *   value: "200",
@@ -95,7 +123,7 @@ export interface Configuration extends Resource<
  *
  * **Example:** Static parameter applied with a restart
  * ```typescript
- * const ftTokens = yield* Azure.MySQL.Configuration("ft-min-token", {
+ * yield* Azure.MySQL.Configuration("FtMinToken", {
  *   server: server.serverName,
  *   name: "innodb_ft_min_token_size",
  *   value: "2",

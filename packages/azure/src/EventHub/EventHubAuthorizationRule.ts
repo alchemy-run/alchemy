@@ -24,21 +24,47 @@ import {
 } from "./Common.ts";
 
 export interface EventHubAuthorizationRuleProps {
-  /** Resource group of the namespace. Changing it replaces the rule. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Namespace of the event hub. Changing it replaces the rule. */
+  /**
+   * Name of the namespace that holds the event hub, e.g.
+   * `namespace.namespaceName`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   */
   namespace: string;
-  /** Event hub the rule grants access to. Changing it replaces the rule. */
+  /**
+   * Name of the event hub the rule grants access to, e.g.
+   * `orders.eventHubName`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   */
   eventHub: string;
   /**
-   * Rule name: letters, digits, periods, hyphens, and underscores. If
-   * omitted, a unique name is generated from the app, stage, and logical ID.
+   * Rule name, up to 256 characters: letters, digits, periods, hyphens, and
+   * underscores, starting and ending with a letter or digit.
+   *
+   * :::caution
    * Changing it replaces the rule.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Rights granted to holders of the rule's keys. `Manage` requires `Send`
-   * and `Listen` as well.
+   * Rights granted to holders of the rule's keys: `Send`, `Listen`, and/or
+   * `Manage`. `Manage` requires `Send` and `Listen` as well. Changes apply
+   * in place and keep the keys.
    */
   rights: AccessRight[];
 }
@@ -57,7 +83,7 @@ export interface EventHubAuthorizationRule extends Resource<
     namespace: string;
     /** Resource group of the namespace. */
     resourceGroup: string;
-    /** Rights granted by the rule. */
+    /** Rights granted by the rule (`Send`, `Listen`, `Manage`). */
     rights: string[];
   },
   never,
@@ -65,17 +91,32 @@ export interface EventHubAuthorizationRule extends Resource<
 > {}
 
 /**
- * A shared access (SAS) policy scoped to a single event hub. Its connection
- * strings include `EntityPath`, so clients connect straight to that hub.
+ * A shared access (SAS) policy on one event hub
+ * (`Microsoft.EventHub/namespaces/eventhubs/authorizationRules`). Its keys
+ * grant the listed rights on that hub only, and its connection strings
+ * include `EntityPath`, so clients connect straight to it. Use it for a
+ * client that cannot use Microsoft Entra ID; Alchemy's bindings use Entra
+ * ID roles instead.
  *
- * Authorization rules have no tags or metadata; Alchemy treats a rule as
+ * Authorization rules have no tags or metadata. Alchemy treats a rule as
  * owned when its namespace carries this stack's ownership tags.
+ *
+ * :::caution[Changing `name`, `eventHub`, `namespace`, or `resourceGroup` replaces the rule]
+ * Alchemy creates a new rule with new keys and deletes the old one. Clients
+ * that hold the old connection string stop working.
+ * :::
+ *
+ * :::caution[SAS keys stop working when local auth is off]
+ * A namespace with `disableLocalAuth: true` rejects every SAS key, so the
+ * rule's connection strings do not work there.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-hubs/authorize-access-shared-access-signature
  *
  * ### Creating a Rule
  * **Example:** Listen-only policy for one event hub
  * ```typescript
+ * const namespace = yield* Azure.EventHub.Namespace("events");
  * const orders = yield* Azure.EventHub.EventHub("orders", {
  *   namespace: namespace.namespaceName,
  * });

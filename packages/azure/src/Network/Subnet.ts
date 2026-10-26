@@ -21,7 +21,10 @@ import {
 } from "./common.ts";
 
 export interface SubnetServiceEndpoint {
-  /** Service, e.g. `Microsoft.Storage` or `Microsoft.KeyVault`. */
+  /**
+   * Service, e.g. `Microsoft.Storage`, `Microsoft.KeyVault`, `Microsoft.Sql`,
+   * or `Microsoft.AzureCosmosDB`.
+   */
   service: string;
   /**
    * Regions the endpoint applies to.
@@ -36,14 +39,25 @@ export interface SubnetDelegation {
    * @default the service name
    */
   name?: string;
-  /** Service the subnet is delegated to, e.g. `Microsoft.App/environments`. */
+  /**
+   * Service the subnet is delegated to, e.g. `Microsoft.App/environments`
+   * (Container Apps), `Microsoft.Web/serverFarms` (App Service and
+   * Functions VNet integration), or `Microsoft.Web/hostingEnvironments`
+   * (App Service Environment).
+   */
   serviceName: string;
 }
 
 export interface SubnetProps {
-  /** Resource group of the virtual network. Changing it replaces the subnet. */
+  /**
+   * Resource group of the virtual network. Changing it replaces the subnet.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the parent virtual network. Changing it replaces the subnet. */
+  /**
+   * Name of the parent virtual network, e.g. `vnet.virtualNetworkName`.
+   * Changing it replaces the subnet.
+   */
   virtualNetwork: string;
   /**
    * Name of the subnet: 1-80 letters, digits, `_`, `.`, and `-`. If omitted,
@@ -57,17 +71,37 @@ export interface SubnetProps {
    * Changing it fails while IPs in the subnet are in use.
    */
   addressPrefix?: string;
-  /** Multiple address prefixes (e.g. IPv4 + IPv6). */
+  /**
+   * Multiple address prefixes in CIDR notation, e.g. an IPv4 /24 and an
+   * IPv6 /64 for a dual-stack subnet. Takes precedence over
+   * `addressPrefix`. Changing it fails while IPs in the subnet are in use.
+   */
   addressPrefixes?: string[];
-  /** ARM ID of a network security group to associate. */
+  /**
+   * ARM ID of a network security group to associate. Updated in place.
+   * @default no network security group
+   */
   networkSecurityGroupId?: string;
-  /** ARM ID of a route table to associate. */
+  /**
+   * ARM ID of a route table to associate. Updated in place.
+   * @default Azure's system routes only
+   */
   routeTableId?: string;
-  /** ARM ID of a NAT gateway for outbound traffic. */
+  /**
+   * ARM ID of a NAT gateway for outbound traffic. Updated in place.
+   * @default no NAT gateway
+   */
   natGatewayId?: string;
-  /** Service endpoints enabled on the subnet. */
+  /**
+   * Service endpoints enabled on the subnet. Updated in place.
+   * @default []
+   */
   serviceEndpoints?: SubnetServiceEndpoint[];
-  /** Delegations of the subnet to Azure services. */
+  /**
+   * Delegations of the subnet to Azure services. A delegated subnet can
+   * only hold that service's resources. Updated in place.
+   * @default []
+   */
   delegations?: SubnetDelegation[];
   /**
    * Network policies (NSG / route table) applied to private endpoints in
@@ -104,9 +138,9 @@ export interface Subnet extends Resource<
     virtualNetwork: string;
     /** Resource group of the virtual network. */
     resourceGroup: string;
-    /** Address prefix (single-prefix subnets). */
+    /** Address prefix in CIDR notation (single-prefix subnets). */
     addressPrefix: string | undefined;
-    /** Address prefixes (multi-prefix subnets). */
+    /** Address prefixes in CIDR notation (multi-prefix subnets). */
     addressPrefixes: string[];
     /** Associated network security group ID. */
     networkSecurityGroupId: string | undefined;
@@ -120,13 +154,35 @@ export interface Subnet extends Resource<
 > {}
 
 /**
- * A subnet of an Azure virtual network. Network interfaces, private
- * endpoints, and internal load balancers are placed in subnets; network
- * security groups, route tables, and NAT gateways attach to them.
+ * A subnet of an Azure virtual network
+ * (`Microsoft.Network/virtualNetworks/subnets`): a range of the network's
+ * address space. Network interfaces, private endpoints, internal load
+ * balancers, and VNet-integrated services (Container Apps environments,
+ * App Service apps) are placed in subnets; network security groups, route
+ * tables, and NAT gateways attach to them.
  *
- * Subnets of one virtual network are written one at a time by Azure; the
- * provider retries `AnotherOperationInProgress` so sibling subnets can be
- * declared side by side.
+ * A new subnet has no network security group, no route table, no
+ * service endpoints, and no delegation. Azure reserves 5 addresses in
+ * every subnet (the first four and the last), so a /24 holds 251 hosts.
+ * Subnets of one virtual network are written one at a time by Azure;
+ * Alchemy retries `AnotherOperationInProgress` so sibling subnets can be
+ * declared side by side. Subnets carry no tags: ownership follows the
+ * parent virtual network's `alchemy::stack` and `alchemy::stage` tags.
+ *
+ * :::caution[Changing `name`, `virtualNetwork`, or `resourceGroup` replaces the subnet]
+ * Alchemy creates a new subnet and deletes the old one. The old subnet
+ * cannot be deleted while network interfaces, private endpoints, or
+ * delegated services still use it (Alchemy retries `SubnetInUse` for a
+ * while, then fails), so move those resources first. They get new
+ * private IPs.
+ * :::
+ *
+ * :::caution[The parent virtual network must exist]
+ * Declare the `Azure.Network.VirtualNetwork` in the same stack and pass
+ * `vnet.virtualNetworkName`, or pass the name of an existing network in
+ * `resourceGroup`. The address prefix must sit inside the network's
+ * address space and must not overlap a sibling subnet.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-network/virtual-network-manage-subnet
  *
@@ -142,26 +198,183 @@ export interface Subnet extends Resource<
  * });
  * ```
  *
- * ### Associations
- * **Example:** Subnet with an NSG, route table, and NAT gateway
+ * **Example:** Subnet with a fixed name
  * ```typescript
  * const subnet = yield* Azure.Network.Subnet("app", {
  *   virtualNetwork: vnet.virtualNetworkName,
+ *   name: "snet-app",
+ *   addressPrefix: "10.0.1.0/24",
+ * });
+ * ```
+ *
+ * **Example:** Dual-stack subnet
+ * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16", "fd00:db8:deca::/48"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("app", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefixes: ["10.0.1.0/24", "fd00:db8:deca:1::/64"],
+ * });
+ * ```
+ *
+ * ### Network Security Groups
+ * Associate an NSG to filter traffic to and from every resource in the
+ * subnet. Add rules with `Azure.Network.SecurityRule`.
+ *
+ * **Example:** Allow HTTPS from the internet
+ * ```typescript
+ * const nsg = yield* Azure.Network.NetworkSecurityGroup("web");
+ * yield* Azure.Network.SecurityRule("allow-https", {
+ *   networkSecurityGroup: nsg.networkSecurityGroupName,
+ *   priority: 100,
+ *   direction: "Inbound",
+ *   access: "Allow",
+ *   protocol: "Tcp",
+ *   sourceAddressPrefix: "Internet",
+ *   destinationPortRange: "443",
+ * });
+ * const subnet = yield* Azure.Network.Subnet("web", {
+ *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.1.0/24",
  *   networkSecurityGroupId: nsg.networkSecurityGroupId,
+ * });
+ * ```
+ *
+ * ### Routing
+ * Associate a route table to override Azure's system routes, e.g. to send
+ * internet-bound traffic through a firewall.
+ *
+ * **Example:** Force traffic through an appliance
+ * ```typescript
+ * const routes = yield* Azure.Network.RouteTable("egress");
+ * yield* Azure.Network.Route("default", {
+ *   routeTable: routes.routeTableName,
+ *   addressPrefix: "0.0.0.0/0",
+ *   nextHopType: "VirtualAppliance",
+ *   nextHopIpAddress: "10.0.0.4",
+ * });
+ * const subnet = yield* Azure.Network.Subnet("app", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
  *   routeTableId: routes.routeTableId,
+ * });
+ * ```
+ *
+ * ### Outbound Internet Access
+ * Attach a NAT gateway so every resource in the subnet leaves through
+ * the gateway's static public IPs. Set `defaultOutboundAccess: false` to
+ * make the subnet private: VMs without a NAT gateway, load balancer, or
+ * public IP then have no internet access.
+ *
+ * **Example:** Static egress IP through a NAT gateway
+ * ```typescript
+ * const ip = yield* Azure.Network.PublicIpAddress("egress");
+ * const nat = yield* Azure.Network.NatGateway("egress", {
+ *   publicIpAddressIds: [ip.publicIpAddressId],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("app", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
  *   natGatewayId: nat.natGatewayId,
  * });
  * ```
  *
- * ### Service Endpoints and Delegation
- * **Example:** Subnet delegated to Azure Container Apps
+ * **Example:** Private subnet with no default outbound access
+ * ```typescript
+ * const subnet = yield* Azure.Network.Subnet("data", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.2.0/24",
+ *   defaultOutboundAccess: false,
+ * });
+ * ```
+ *
+ * ### Service Endpoints
+ * A service endpoint routes the subnet's traffic to an Azure service over
+ * the Azure backbone, so the service can allow the subnet in its firewall.
+ *
+ * **Example:** Allow only the subnet into a Key Vault
+ * ```typescript
+ * const subnet = yield* Azure.Network.Subnet("app", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ *   serviceEndpoints: [{ service: "Microsoft.KeyVault" }],
+ * });
+ * const vault = yield* Azure.KeyVault.Vault("secrets", {
+ *   networkAcls: {
+ *     defaultAction: "Deny",
+ *     virtualNetworkRules: [subnet.subnetId],
+ *   },
+ * });
+ * ```
+ *
+ * ### Delegating to Container Apps
+ * A Container Apps environment with workload profiles needs a subnet of
+ * /27 or larger delegated to `Microsoft.App/environments`. Changing the
+ * environment's `vnetConfiguration` replaces the environment.
+ *
+ * **Example:** Container Apps environment in your network
  * ```typescript
  * const subnet = yield* Azure.Network.Subnet("apps", {
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.2.0/23",
- *   serviceEndpoints: [{ service: "Microsoft.Storage" }],
  *   delegations: [{ serviceName: "Microsoft.App/environments" }],
+ * });
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
+ *   vnetConfiguration: { infrastructureSubnetId: subnet.subnetId },
+ * });
+ * ```
+ *
+ * **Example:** Internal-only environment
+ * ```typescript
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
+ *   vnetConfiguration: {
+ *     infrastructureSubnetId: subnet.subnetId,
+ *     internal: true,
+ *   },
+ * });
+ * ```
+ *
+ * ### Delegating to App Service
+ * Regional VNet integration routes a Web App's or Function App's outbound
+ * traffic through a subnet delegated to `Microsoft.Web/serverFarms`. The
+ * plan must be Basic (`B1`) or higher.
+ *
+ * **Example:** VNet-integrated Web App
+ * ```typescript
+ * const subnet = yield* Azure.Network.Subnet("web-out", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.4.0/26",
+ *   delegations: [{ serviceName: "Microsoft.Web/serverFarms" }],
+ * });
+ * const api = yield* Azure.Web.WebApp("Api", {
+ *   main: "./src/api.ts",
+ *   sku: "B1",
+ *   virtualNetworkSubnetId: subnet.subnetId,
+ * });
+ * ```
+ *
+ * ### Private Endpoints
+ * Place private endpoints in a regular (non-delegated) subnet. Set
+ * `privateEndpointNetworkPolicies: "Enabled"` to apply the subnet's NSG
+ * and route table to them.
+ *
+ * **Example:** Subnet for private endpoints
+ * ```typescript
+ * const endpoints = yield* Azure.Network.Subnet("endpoints", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.3.0/24",
+ *   privateEndpointNetworkPolicies: "Enabled",
+ *   networkSecurityGroupId: nsg.networkSecurityGroupId,
+ * });
+ * const account = yield* Azure.Storage.StorageAccount("files", {
+ *   publicNetworkAccess: "Disabled",
+ * });
+ * yield* Azure.Network.PrivateEndpoint("files-blob", {
+ *   subnetId: endpoints.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: account.storageAccountId, groupIds: ["blob"] },
+ *   ],
  * });
  * ```
  *

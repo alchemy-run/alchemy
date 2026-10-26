@@ -27,38 +27,69 @@ import {
 export type EntityStatus = servicebus.EntityStatus;
 
 export interface QueueProps {
-  /** Resource group of the namespace. Changing it replaces the queue. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the queue.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Namespace that holds the queue. Changing it replaces the queue. */
+  /**
+   * Name of the namespace that holds the queue (`namespace.namespaceName`).
+   *
+   * :::caution
+   * Changing it replaces the queue.
+   * :::
+   */
   namespace: string;
   /**
    * Queue name: 1-260 letters, digits, `.`, `-`, `_`, and `/`, starting and
    * ending with a letter or digit. If omitted, a unique lowercase name is
-   * generated from the app, stage, and logical ID. Changing it replaces the
-   * queue.
+   * generated from the app, stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the queue.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Whether the queue supports sessions (ordered, grouped delivery).
+   * Whether the queue supports sessions (ordered, grouped delivery). Every
+   * sender must then set `sessionId`.
+   *
+   * :::caution
    * Changing it replaces the queue.
+   * :::
    * @default false
    */
   requiresSession?: boolean;
   /**
-   * Partition the queue across message brokers (Basic/Standard). Changing
-   * it replaces the queue.
+   * Partition the queue across message brokers (Basic/Standard).
+   *
+   * :::caution
+   * Changing it replaces the queue.
+   * :::
    * @default false
    */
   enablePartitioning?: boolean;
   /**
    * Hold messages in memory before persisting them (not on Premium).
+   *
+   * :::caution
    * Changing it replaces the queue.
+   * :::
    * @default false
    */
   enableExpress?: boolean;
   /**
-   * Detect and drop duplicate messages by `MessageId`. Changing it replaces
-   * the queue.
+   * Detect and drop duplicate messages by `MessageId` within
+   * `duplicateDetectionHistoryTimeWindow`.
+   *
+   * :::caution
+   * Changing it replaces the queue.
+   * :::
    * @default false
    */
   requiresDuplicateDetection?: boolean;
@@ -72,7 +103,10 @@ export interface QueueProps {
    * @default 1024
    */
   maxSizeInMegabytes?: number;
-  /** Maximum message size in kilobytes (Premium only). */
+  /**
+   * Maximum message size in kilobytes, 1024-102400 (Premium only).
+   * @default Azure's default (`1024` on Premium)
+   */
   maxMessageSizeInKilobytes?: number;
   /**
    * Default message time-to-live as an ISO 8601 duration.
@@ -104,15 +138,28 @@ export interface QueueProps {
    * @default true
    */
   enableBatchedOperations?: boolean;
-  /** Idle interval (ISO 8601, at least `PT5M`) after which the queue is deleted. */
+  /**
+   * Idle interval (ISO 8601, at least `PT5M`) after which Service Bus
+   * deletes the queue.
+   * @default never (Azure's maximum, about 29,000 years)
+   */
   autoDeleteOnIdle?: string;
-  /** Queue or topic (same namespace) to auto-forward messages to. */
+  /**
+   * Name of a queue or topic in the same namespace to auto-forward every
+   * message to.
+   * @default no forwarding
+   */
   forwardTo?: string;
-  /** Queue or topic (same namespace) to auto-forward dead-lettered messages to. */
+  /**
+   * Name of a queue or topic in the same namespace to auto-forward
+   * dead-lettered messages to.
+   * @default no forwarding
+   */
   forwardDeadLetteredMessagesTo?: string;
   /**
    * Free-form user metadata. Alchemy appends an ownership marker
    * (`[alchemy <stack>/<stage>/<id>]`) because queues have no tags.
+   * @default only the ownership marker
    */
   userMetadata?: string;
 }
@@ -137,7 +184,7 @@ export interface Queue extends Resource<
     enableExpress: boolean;
     /** Whether duplicate detection is enabled. */
     requiresDuplicateDetection: boolean;
-    /** Entity status. */
+    /** Entity status: `Active`, `Disabled`, `SendDisabled`, or `ReceiveDisabled`. */
     status: string | undefined;
     /** User metadata (ownership marker stripped). */
     userMetadata: string | undefined;
@@ -147,16 +194,25 @@ export interface Queue extends Resource<
 > {}
 
 /**
- * A Service Bus queue — point-to-point, at-least-once message delivery with
- * peek-lock, dead-lettering, sessions, and duplicate detection.
+ * An Azure Service Bus queue (`Microsoft.ServiceBus/namespaces/queues`):
+ * point-to-point messaging where each message goes to one receiver, with
+ * peek-lock delivery, dead-lettering, sessions, and duplicate detection.
  *
- * Queues have no tags, so Alchemy records ownership as a
- * `[alchemy <stack>/<stage>/<id>]` marker at the end of `userMetadata`.
+ * Alchemy creates the queue in a namespace you declare. Bind it to a
+ * runtime to send, receive, or both: each binding assigns **Azure Service
+ * Bus Data Sender** or **Data Receiver** on this queue only. Queues have no
+ * tags, so Alchemy records ownership as a `[alchemy <stack>/<stage>/<id>]`
+ * marker at the end of `userMetadata`.
+ *
+ * :::caution[Changing `name`, `namespace`, `resourceGroup`, `requiresSession`, `enablePartitioning`, `enableExpress`, or `requiresDuplicateDetection` replaces the queue]
+ * Alchemy creates a new queue and deletes the old one with every message
+ * in it, dead-lettered messages included.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/service-bus-messaging/service-bus-queues-topics-subscriptions
  *
  * ### Creating a Queue
- * **Example:** Basic queue
+ * **Example:** Queue in a new namespace
  * ```typescript
  * const bus = yield* Azure.ServiceBus.Namespace("bus");
  * const orders = yield* Azure.ServiceBus.Queue("orders", {
@@ -164,18 +220,61 @@ export interface Queue extends Resource<
  * });
  * ```
  *
- * **Example:** Session-enabled queue with a short lock
+ * **Example:** Queue with a fixed name and a 5 GB size limit
+ * ```typescript
+ * const orders = yield* Azure.ServiceBus.Queue("orders", {
+ *   namespace: bus.namespaceName,
+ *   name: "orders",
+ *   maxSizeInMegabytes: 5120,
+ * });
+ * ```
+ *
+ * ### Locks, Retries, and Time to Live
+ * A receiver locks a message for `lockDuration`. When it does not complete
+ * the message in time, Service Bus delivers it again. After
+ * `maxDeliveryCount` deliveries, the message moves to the dead-letter
+ * subqueue. Durations are ISO 8601 (`PT30S`, `PT5M`, `P1D`).
+ *
+ * **Example:** Short lock, five attempts, one-day time to live
+ * ```typescript
+ * const orders = yield* Azure.ServiceBus.Queue("orders", {
+ *   namespace: bus.namespaceName,
+ *   lockDuration: "PT30S",
+ *   maxDeliveryCount: 5,
+ *   defaultMessageTimeToLive: "P1D",
+ *   deadLetteringOnMessageExpiration: true,
+ * });
+ * ```
+ *
+ * ### Sessions
+ * A session-enabled queue delivers the messages of one `sessionId` in
+ * order, to one receiver at a time. Every sender must set `sessionId`.
+ *
+ * **Example:** Ordered messages per customer
  * ```typescript
  * const orders = yield* Azure.ServiceBus.Queue("orders", {
  *   namespace: bus.namespaceName,
  *   requiresSession: true,
- *   lockDuration: "PT30S",
- *   maxDeliveryCount: 5,
  * });
+ * // runtime, with QueueSend: yield* sender.send(order, { sessionId: order.customerId });
  * ```
  *
- * ### Forwarding
- * **Example:** Forward dead-lettered messages to another queue
+ * ### Duplicate Detection
+ * Service Bus drops a message whose `messageId` it already received within
+ * the detection window.
+ *
+ * **Example:** Drop duplicates for one hour
+ * ```typescript
+ * const payments = yield* Azure.ServiceBus.Queue("payments", {
+ *   namespace: bus.namespaceName,
+ *   requiresDuplicateDetection: true,
+ *   duplicateDetectionHistoryTimeWindow: "PT1H",
+ * });
+ * // runtime, with QueueSend: yield* sender.send(payment, { messageId: payment.id });
+ * ```
+ *
+ * ### Dead-Lettering and Forwarding
+ * **Example:** Forward dead-lettered messages to a poison queue
  * ```typescript
  * const poison = yield* Azure.ServiceBus.Queue("poison", {
  *   namespace: bus.namespaceName,
@@ -184,6 +283,157 @@ export interface Queue extends Resource<
  *   namespace: bus.namespaceName,
  *   forwardDeadLetteredMessagesTo: poison.queueName,
  * });
+ * ```
+ *
+ * **Example:** Forward every message to a topic
+ * ```typescript
+ * const events = yield* Azure.ServiceBus.Topic("events", {
+ *   namespace: bus.namespaceName,
+ * });
+ * const inbox = yield* Azure.ServiceBus.Queue("inbox", {
+ *   namespace: bus.namespaceName,
+ *   forwardTo: events.topicName,
+ * });
+ * ```
+ *
+ * ### Pausing and Cleaning Up
+ * **Example:** Stop accepting new messages but keep draining
+ * ```typescript
+ * const orders = yield* Azure.ServiceBus.Queue("orders", {
+ *   namespace: bus.namespaceName,
+ *   status: "SendDisabled",
+ * });
+ * ```
+ *
+ * **Example:** Delete a scratch queue after seven idle days
+ * ```typescript
+ * const scratch = yield* Azure.ServiceBus.Queue("scratch", {
+ *   namespace: bus.namespaceName,
+ *   autoDeleteOnIdle: "P7D",
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * Pick the binding for the access you need. `QueueSend` and `QueueWrite`
+ * assign **Azure Service Bus Data Sender**, `QueueRead` assigns **Azure
+ * Service Bus Data Receiver**, and `QueueReadWrite` assigns both, on this
+ * queue only. The binding works on any host: a managed-identity host (an
+ * Azure Function, Web App, Container App, container group, or VM) gets the
+ * role on its identity; any other host (a Cloudflare Worker, an AWS
+ * Lambda) gets an Entra service principal.
+ *
+ * **Example:** Send from an Azure Function
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const queue = yield* Orders;
+ *     const orders = yield* Azure.ServiceBus.QueueSend(queue);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* orders.send({ orderId: "42" }, { messageId: "42" });
+ *         return HttpServerResponse.text("queued", { status: 202 });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.ServiceBus.QueueSendHttp)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Receive and settle in an Azure Function
+ * ```typescript
+ * export default class Drain extends Azure.Functions.Function<Drain>()(
+ *   "Drain",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const queue = yield* Orders;
+ *     const orders = yield* Azure.ServiceBus.QueueReadWrite(queue);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const message = yield* orders.receive({ timeoutSeconds: 10 });
+ *         if (message === undefined) return HttpServerResponse.text("empty");
+ *         yield* orders.complete(message);
+ *         return HttpServerResponse.text(message.text);
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.ServiceBus.QueueReadWriteHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Send one message or a batch
+ * ```typescript
+ * // init
+ * const orders = yield* Azure.ServiceBus.QueueWrite(queue);
+ *
+ * // runtime
+ * yield* orders.send({ orderId: "42" }, { messageId: "42", label: "order" });
+ * yield* orders.sendBatch([
+ *   { body: { orderId: "43" } },
+ *   { body: "plain text", options: { timeToLiveSeconds: 600 } },
+ * ]);
+ * ```
+ *
+ * **Example:** Peek-lock, then complete, abandon, or renew
+ * ```typescript
+ * // init
+ * const orders = yield* Azure.ServiceBus.QueueRead(queue);
+ *
+ * // runtime
+ * const message = yield* orders.receive({ timeoutSeconds: 10 });
+ * if (message !== undefined) {
+ *   yield* orders.renewLock(message); // extend the lock for long work
+ *   yield* handle(message.text).pipe(
+ *     Effect.andThen(orders.complete(message)),
+ *     Effect.catch(() => orders.abandon(message)), // deliver it again
+ *   );
+ * }
+ * ```
+ *
+ * **Example:** Receive and delete in one step (at most once)
+ * ```typescript
+ * const message = yield* orders.receiveAndDelete();
+ * ```
+ *
+ * ### Event Sources
+ * Run a handler for every message. The host completes the message when the
+ * handler succeeds and abandons it when the handler fails, so it moves to
+ * the dead-letter subqueue after `maxDeliveryCount` attempts.
+ *
+ * **Example:** Consume a queue in an Azure Function
+ * ```typescript
+ * export default class Worker extends Azure.Functions.Function<Worker>()(
+ *   "Worker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     yield* Azure.ServiceBus.consumeQueueMessages(Orders, (message) =>
+ *       Effect.log(`order ${message.messageId}: ${JSON.stringify(message.body)}`),
+ *     );
+ *     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+ *   }).pipe(Effect.provide(Azure.Functions.ServiceBusQueueEventSource)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Consume a queue in a Container App or a Container Apps job
+ * ```typescript
+ * yield* Azure.ServiceBus.consumeQueueMessages(Orders, (message) =>
+ *   Effect.log(message.body),
+ * );
+ * // Container App: Effect.provide(Azure.ContainerApps.AppServiceBusQueueEventSource)
+ * // Container Apps job: Effect.provide(Azure.ContainerApps.JobServiceBusQueueEventSource)
+ * ```
+ *
+ * ### Deleting a Queue
+ * Destroying the queue deletes its messages. Deleting the namespace deletes
+ * the queue too.
+ *
+ * **Example:** Keep the queue when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const orders = yield* Azure.ServiceBus.Queue("orders", {
+ *   namespace: bus.namespaceName,
+ * }).pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

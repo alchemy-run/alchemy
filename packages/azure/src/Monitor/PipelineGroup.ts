@@ -38,48 +38,86 @@ export type PipelineGroupTlsConfiguration = monitoringservice.TlsConfiguration;
 
 export interface PipelineGroupProps {
   /**
-   * Resource group the pipeline group is created in. Changing it replaces
-   * the pipeline group.
+   * Resource group the pipeline group is created in.
+   *
+   * :::caution
+   * Changing it replaces the pipeline group.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
-   * Pipeline group name. If omitted, a unique name is generated from the
-   * app, stage, and logical ID. Changing it replaces the pipeline group.
+   * Pipeline group name: up to 63 lowercase letters, digits, and hyphens.
+   *
+   * :::caution
+   * Changing it replaces the pipeline group.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Azure location of the pipeline group (the custom location's region).
+   *
+   * :::caution
    * Changing it replaces the pipeline group.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
    * ARM resource ID of the Azure Arc custom location
    * (`Microsoft.ExtendedLocation/customLocations`) on the Arc-enabled
-   * Kubernetes cluster that runs the pipeline. Changing it replaces the
-   * pipeline group.
+   * Kubernetes cluster that runs the pipeline, e.g.
+   * `customLocation.customLocationId` of an
+   * `Azure.ExtendedLocation.CustomLocation`.
+   *
+   * :::caution
+   * Changing it replaces the pipeline group.
+   * :::
    */
   customLocationId: string;
-  /** Number of replicas of the pipeline group instance. */
+  /**
+   * Number of replicas of the pipeline group instance on the cluster.
+   * @default Azure's default
+   */
   replicas?: number;
-  /** Receivers (Syslog / OTLP listeners) of the pipeline group. */
+  /**
+   * Receivers of the pipeline group: `Syslog` (`syslog: { endpoint }`) or
+   * `OTLP` (`otlp: { endpoint }`) listeners, each with a unique `name`.
+   * Endpoints are `host:port`, e.g. `0.0.0.0:514`.
+   */
   receivers: PipelineGroupReceiver[];
   /**
-   * Processors (batch / transform) of the pipeline group.
+   * Processors of the pipeline group: `Batch`, `TransformLanguage` (KQL),
+   * `MicrosoftSyslog`, or `MicrosoftCommonSecurityLog`.
    * @default []
    */
   processors?: PipelineGroupProcessor[];
-  /** Exporters sending data to Azure Monitor. */
+  /**
+   * Exporters sending data to Azure Monitor: `AzureMonitorWorkspaceLogs`
+   * with a data collection endpoint URL, a data collection rule immutable
+   * ID, a stream, and a record mapping.
+   */
   exporters: PipelineGroupExporter[];
-  /** Pipelines connecting receivers, processors, and exporters. */
+  /**
+   * Pipelines connecting receivers, processors, and exporters by `name`.
+   */
   service: PipelineGroupService;
-  /** Placement constraints for the pipeline group's instances. */
+  /**
+   * Placement constraints for the pipeline group's instances on the
+   * cluster's nodes.
+   * @default no constraints
+   */
   executionPlacement?: PipelineGroupExecutionPlacement;
-  /** Named TLS configurations referenced by receivers. */
+  /**
+   * Named TLS configurations that receivers reference by name.
+   * @default none (receivers use the default TLS configuration)
+   */
   tlsConfigurations?: PipelineGroupTlsConfiguration[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -108,38 +146,55 @@ export interface PipelineGroup extends Resource<
 > {}
 
 /**
- * An Azure Monitor pipeline group — an Azure Monitor pipeline at the edge
- * that receives Syslog/OTLP telemetry on an Arc-enabled Kubernetes cluster,
- * optionally batches or transforms it, and forwards it to Azure Monitor
- * through a data collection rule.
+ * An Azure Monitor pipeline group (`Microsoft.Monitor/pipelineGroups`): an
+ * Azure Monitor pipeline at the edge. It receives Syslog or OTLP telemetry
+ * on an Arc-enabled Kubernetes cluster, can batch or transform it, and
+ * forwards it to Azure Monitor through a data collection rule. Use it to
+ * collect telemetry from devices on a local network.
  *
- * Requires an Azure Arc-enabled Kubernetes cluster with the Azure Monitor
- * pipeline extension installed and a custom location on it.
+ * :::caution[Changing `name`, `location`, `customLocationId`, or `resourceGroup` replaces the pipeline group]
+ * Alchemy creates a new pipeline group and deletes the old one.
+ * :::
+ *
+ * :::caution[It needs an Arc-enabled Kubernetes cluster with a custom location]
+ * Connect a Kubernetes cluster to Azure Arc, install the Azure Monitor
+ * pipeline extension on it, and create a custom location on it
+ * (`Azure.ExtendedLocation.CustomLocation`). Create the pipeline group in
+ * the custom location's region.
+ * :::
+ *
+ * :::caution[The exporter needs a data collection endpoint and rule]
+ * Alchemy has no data collection rule resource yet. Create the data
+ * collection endpoint and rule (with the exporter's stream) outside
+ * Alchemy, or in an `Azure.Resources.DeploymentStack`, and pass the
+ * endpoint URL and the rule's immutable ID.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-monitor/essentials/edge-pipeline-configure
  *
  * ### Creating a Pipeline Group
  * **Example:** Syslog to a Log Analytics table through a DCR
  * ```typescript
+ * // created outside Alchemy
+ * const customLocationId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/edge/providers/Microsoft.ExtendedLocation/customLocations/factory";
+ * const dceUrl = "https://edge-dce-abcd.eastus-1.ingest.monitor.azure.com";
+ * const dcrImmutableId = "dcr-00000000000000000000000000000000";
+ *
  * const pipeline = yield* Azure.Monitor.PipelineGroup("edge", {
  *   location: "eastus",
- *   customLocationId: customLocation.id,
+ *   customLocationId,
  *   receivers: [
- *     {
- *       type: "Syslog",
- *       name: "syslog",
- *       syslog: { endpoint: "0.0.0.0:514" },
- *     },
+ *     { type: "Syslog", name: "syslog", syslog: { endpoint: "0.0.0.0:514" } },
  *   ],
- *   processors: [],
  *   exporters: [
  *     {
  *       type: "AzureMonitorWorkspaceLogs",
  *       name: "logs",
  *       azureMonitorWorkspaceLogs: {
  *         api: {
- *           dataCollectionEndpointUrl: dce.logsIngestionEndpoint,
- *           dataCollectionRule: dcr.immutableId,
+ *           dataCollectionEndpointUrl: dceUrl,
+ *           dataCollectionRule: dcrImmutableId,
  *           stream: "Custom-Syslog",
  *           schema: { recordMap: [{ from: "body", to: "Body" }] },
  *         },
@@ -151,6 +206,44 @@ export interface PipelineGroup extends Resource<
  *       { name: "syslog", type: "Logs", receivers: ["syslog"], exporters: ["logs"] },
  *     ],
  *   },
+ * });
+ * ```
+ *
+ * ### Scaling and Transforming
+ * **Example:** OTLP with two replicas and a batch processor
+ * ```typescript
+ * const pipeline = yield* Azure.Monitor.PipelineGroup("otlp", {
+ *   location: "eastus",
+ *   customLocationId,
+ *   replicas: 2,
+ *   receivers: [{ type: "OTLP", name: "otlp", otlp: { endpoint: "0.0.0.0:4317" } }],
+ *   processors: [{ type: "Batch", name: "batch", batch: { batchSize: 1000, timeout: 1000 } }],
+ *   exporters: [
+ *     {
+ *       type: "AzureMonitorWorkspaceLogs",
+ *       name: "logs",
+ *       azureMonitorWorkspaceLogs: {
+ *         api: {
+ *           dataCollectionEndpointUrl: dceUrl,
+ *           dataCollectionRule: dcrImmutableId,
+ *           stream: "Custom-Otlp",
+ *           schema: { recordMap: [{ from: "body", to: "Body" }] },
+ *         },
+ *       },
+ *     },
+ *   ],
+ *   service: {
+ *     pipelines: [
+ *       {
+ *         name: "logs",
+ *         type: "Logs",
+ *         receivers: ["otlp"],
+ *         processors: ["batch"],
+ *         exporters: ["logs"],
+ *       },
+ *     ],
+ *   },
+ *   tags: { site: "factory" },
  * });
  * ```
  *

@@ -38,7 +38,10 @@ export type CacheIdentityType = "SystemAssigned" | "UserAssigned" | "SystemAssig
 export interface CacheIdentity {
   /** Which identities to attach. */
   type: CacheIdentityType;
-  /** ARM resource IDs of user-assigned identities to attach. */
+  /**
+   * ARM resource IDs of user-assigned identities to attach.
+   * @default []
+   */
   userAssignedIdentities?: string[];
 }
 
@@ -48,65 +51,127 @@ export interface CacheIdentity {
  */
 export interface CacheRedisConfiguration {
   /**
-   * Eviction policy when memory is full, e.g. `volatile-lru` (the Azure
-   * default), `allkeys-lru`, `noeviction`.
+   * Eviction policy when memory is full, e.g. `volatile-lru`,
+   * `allkeys-lru`, `noeviction`.
+   * @default Azure's default (`volatile-lru`)
    */
   maxmemoryPolicy?: string;
-  /** Megabytes reserved per shard for non-cache usage (e.g. failover). */
+  /**
+   * Megabytes reserved per shard for non-cache usage (e.g. failover).
+   * @default Azure's default for the size
+   */
   maxmemoryReserved?: number;
-  /** Megabytes reserved per shard for non-cache usage (e.g. failover). */
+  /**
+   * Megabytes reserved per shard for non-cache usage (e.g. failover).
+   * @default Azure's default for the size
+   */
   maxmemoryDelta?: number;
-  /** Megabytes reserved per shard for memory fragmentation. */
+  /**
+   * Megabytes reserved per shard for memory fragmentation.
+   * @default Azure's default for the size
+   */
   maxfragmentationmemoryReserved?: number;
-  /** Keyspace events to publish, e.g. `KEA`. Empty string disables them. */
+  /**
+   * Keyspace events to publish, e.g. `KEA`. An empty string disables them.
+   * @default Azure's default (disabled)
+   */
   notifyKeyspaceEvents?: string;
   /**
    * Enable Microsoft Entra authentication, required for
    * `Azure.Redis.CacheAccessPolicyAssignment` data access with tokens.
+   * @default false
    */
   aadEnabled?: boolean;
-  /** Enable RDB snapshots to a storage account (Premium only). */
+  /**
+   * Enable RDB snapshots to a storage account (Premium only).
+   * @default false
+   */
   rdbBackupEnabled?: boolean;
-  /** Minutes between RDB snapshots: 15, 30, 60, 360, 720 or 1440 (Premium only). */
+  /**
+   * Minutes between RDB snapshots: 15, 30, 60, 360, 720, or 1440 (Premium
+   * only).
+   * @default Azure's default
+   */
   rdbBackupFrequency?: number;
-  /** Maximum number of RDB snapshots to keep (Premium only). */
+  /**
+   * Maximum number of RDB snapshots to keep (Premium only).
+   * @default Azure's default
+   */
   rdbBackupMaxSnapshotCount?: number;
   /**
    * Storage account connection string for RDB snapshots. Azure never
-   * returns it, so it is sent whenever another configuration setting
-   * changes and on create, but a change to it alone is not detected.
+   * returns it, so Alchemy sends it on create and whenever another
+   * configuration setting changes; a change to it alone is not detected.
+   * @default none
    */
   rdbStorageConnectionString?: string;
-  /** Enable AOF persistence to a storage account (Premium only). */
+  /**
+   * Enable AOF persistence to a storage account (Premium only).
+   * @default false
+   */
   aofBackupEnabled?: boolean;
-  /** First storage account connection string for AOF persistence. Not read back (see `rdbStorageConnectionString`). */
+  /**
+   * First storage account connection string for AOF persistence. Not read
+   * back (see `rdbStorageConnectionString`).
+   * @default none
+   */
   aofStorageConnectionString0?: string;
-  /** Second storage account connection string for AOF persistence. Not read back (see `rdbStorageConnectionString`). */
+  /**
+   * Second storage account connection string for AOF persistence. Not read
+   * back (see `rdbStorageConnectionString`).
+   * @default none
+   */
   aofStorageConnectionString1?: string;
-  /** Auth method for the persistence storage account: `SAS` or `ManagedIdentity`. */
+  /**
+   * Auth method for the persistence storage account: `SAS` or
+   * `ManagedIdentity`.
+   * @default Azure's default (`SAS`)
+   */
   preferredDataPersistenceAuthMethod?: "SAS" | "ManagedIdentity";
-  /** Subscription of the persistence storage account when using a managed identity. */
+  /**
+   * Subscription of the persistence storage account when using a managed
+   * identity.
+   * @default the cache's subscription
+   */
   storageSubscriptionId?: string;
 }
 
 export interface CacheProps {
-  /** Resource group the cache is created in. Changing it replaces the cache. */
+  /**
+   * Resource group the cache is created in.
+   *
+   * :::caution
+   * Changing it replaces the cache and deletes its data.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Cache name: 1-63 letters, digits, and single hyphens. It forms the
-   * globally unique host name `<name>.redis.cache.windows.net`. If omitted,
-   * a unique name is generated from the app, stage, and logical ID.
-   * Changing it replaces the cache.
+   * globally unique host name `<name>.redis.cache.windows.net`.
+   *
+   * :::caution
+   * Changing it replaces the cache and deletes its data.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the cache. Changing it replaces the cache.
+   * Azure location of the cache.
+   *
+   * :::caution
+   * Changing it replaces the cache and deletes its data.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
    * Pricing tier. Scaling up (`Basic` → `Standard` → `Premium`) happens in
-   * place; scaling down to a lower tier replaces the cache.
+   * place.
+   *
+   * :::caution
+   * Scaling down to a lower tier replaces the cache and deletes its data.
+   * :::
    * @default "Basic"
    */
   sku?: CacheSkuName;
@@ -116,23 +181,49 @@ export interface CacheProps {
    * @default 0 for Basic/Standard, 1 for Premium
    */
   capacity?: number;
-  /** Availability zones (Standard/Premium). Changing them replaces the cache. */
+  /**
+   * Availability zones (Standard/Premium), e.g. `["1", "2"]`.
+   *
+   * :::caution
+   * Changing them replaces the cache and deletes its data.
+   * :::
+   * @default none
+   */
   zones?: string[];
   /**
    * How zones are allocated: `Automatic`, `UserDefined` (with `zones`), or
-   * `NoZones`. Azure picks a value when omitted.
+   * `NoZones`.
+   * @default Azure's choice
    */
   zonalAllocationPolicy?: "Automatic" | "UserDefined" | "NoZones";
   /**
    * ARM resource ID of a subnet to inject the cache into (Premium only).
-   * Changing it replaces the cache.
+   *
+   * :::caution
+   * Changing it replaces the cache and deletes its data.
+   * :::
+   * @default none (public endpoint)
    */
   subnetId?: string;
-  /** Static IP inside `subnetId`. Changing it replaces the cache. */
+  /**
+   * Static IP inside `subnetId`.
+   *
+   * :::caution
+   * Changing it replaces the cache and deletes its data.
+   * :::
+   * @default an address Azure picks
+   */
   staticIP?: string;
-  /** Number of shards of a clustered Premium cache. */
+  /**
+   * Number of shards of a clustered Premium cache. Changes reshard in
+   * place.
+   * @default not clustered
+   */
   shardCount?: number;
-  /** Number of replicas per primary (Premium only). */
+  /**
+   * Number of replicas per primary (Premium only).
+   * @default Azure's default (`1`)
+   */
   replicasPerPrimary?: number;
   /**
    * Redis major version, e.g. `6`. Versions can only be upgraded.
@@ -166,15 +257,25 @@ export interface CacheProps {
    * @default false
    */
   disableAccessKeyAuthentication?: boolean;
-  /** Redis server settings. */
+  /**
+   * Redis server settings.
+   * @default Azure's defaults
+   */
   redisConfiguration?: CacheRedisConfiguration;
-  /** Tenant settings dictionary. */
+  /**
+   * Tenant settings dictionary.
+   * @default {}
+   */
   tenantSettings?: Record<string, string>;
-  /** Managed identity of the cache. Omit for no identity. */
+  /**
+   * Managed identity of the cache.
+   * @default no identity
+   */
   identity?: CacheIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -224,25 +325,38 @@ export interface Cache extends Resource<
 
 /**
  * An Azure Cache for Redis instance (`Microsoft.Cache/redis`) in the
- * Basic, Standard, or Premium tier.
+ * Basic, Standard, or Premium tier: an in-memory key-value store for
+ * caching, sessions, and queues.
  *
- * Provisioning takes roughly 15-20 minutes (Premium up to ~40); the
- * deploy blocks until the cache is `Succeeded`. For new workloads prefer
- * `Azure.Redis.ManagedRedis`: Microsoft retires these tiers in 2028 and
- * refuses new caches (`RedisCacheRetiring`) to subscriptions that never
- * had one — in practice also in regions where the subscription had none.
+ * Alchemy creates a Basic C0 cache (250 MB, no replica) by default, with
+ * TLS 1.2 as the minimum version and the plain-text port closed. Clients
+ * connect on port 6380 with an access key, or with a Microsoft Entra token
+ * when you enable `aadEnabled`. Creating a cache takes about 15-20 minutes
+ * (Premium up to about 40); the deploy waits until it is `Succeeded`.
  *
- * @see https://learn.microsoft.com/azure/azure-cache-for-redis/cache-overview
+ * :::caution[Prefer `Azure.Redis.ManagedRedis` for new workloads]
+ * Microsoft retires these tiers in 2028 and refuses new caches
+ * (`RedisCacheRetiring`) to subscriptions that never had one, in practice
+ * also in regions where the subscription had none.
+ * :::
+ *
+ * :::caution[Changing `name`, `location`, `zones`, `subnetId`, `staticIP`, or `resourceGroup` replaces the cache]
+ * Alchemy creates a new, empty cache and deletes the old one with its data.
+ * Moving to a lower `sku` tier replaces it too; moving up happens in place.
+ * :::
+ *
+ * See [What is Azure Cache for Redis?](https://learn.microsoft.com/azure/azure-cache-for-redis/cache-overview).
  *
  * ### Creating a Cache
  * **Example:** Smallest Basic cache
  * ```typescript
- * const cache = yield* Azure.Redis.Cache("cache");
+ * const cache = yield* Azure.Redis.Cache("Cache");
+ * // cache.hostName → "<name>.redis.cache.windows.net", cache.sslPort → 6380
  * ```
  *
  * **Example:** Standard cache with an eviction policy
  * ```typescript
- * const cache = yield* Azure.Redis.Cache("cache", {
+ * const cache = yield* Azure.Redis.Cache("Cache", {
  *   sku: "Standard",
  *   capacity: 1,
  *   redisConfiguration: { maxmemoryPolicy: "allkeys-lru" },
@@ -250,32 +364,190 @@ export interface Cache extends Resource<
  * });
  * ```
  *
- * ### Connecting
- * **Example:** Pass the connection string to an app
- * ```typescript
- * const cache = yield* Azure.Redis.Cache("cache");
- * // `cache.hostName`, `cache.sslPort`, `cache.primaryKey` (Redacted)
- * const connection = cache.primaryConnectionString;
+ * ### Scaling
+ * Change `capacity`, or move to a higher `sku`, and deploy again. Azure
+ * scales the cache in place and keeps the data.
+ *
+ * **Example:** Scale a Standard C1 cache up to Premium P1
+ * ```diff
+ * const cache = yield* Azure.Redis.Cache("Cache", {
+ * -  sku: "Standard",
+ * +  sku: "Premium",
+ *   capacity: 1,
+ * });
  * ```
  *
  * ### Microsoft Entra Authentication
- * **Example:** Enable Entra auth and disable access keys
+ * **Example:** Entra-only cache with a data access policy for an identity
  * ```typescript
- * const cache = yield* Azure.Redis.Cache("cache", {
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("App");
+ * const cache = yield* Azure.Redis.Cache("Cache", {
  *   redisConfiguration: { aadEnabled: true },
  *   disableAccessKeyAuthentication: true,
+ * });
+ * yield* Azure.Redis.CacheAccessPolicyAssignment("AppAccess", {
+ *   cache: cache.cacheName,
+ *   accessPolicyName: "Data Contributor",
+ *   objectId: identity.principalId,
+ * });
+ * ```
+ *
+ * **Example:** Custom access policy limited to session keys
+ * ```typescript
+ * const sessions = yield* Azure.Redis.AccessPolicy("Sessions", {
+ *   cache: cache.cacheName,
+ *   permissions: "+@read +@write +@connection ~session:*",
+ * });
+ * yield* Azure.Redis.CacheAccessPolicyAssignment("SessionsAccess", {
+ *   cache: cache.cacheName,
+ *   accessPolicyName: sessions.accessPolicyName,
+ *   objectId: identity.principalId,
+ * });
+ * ```
+ *
+ * ### Network Access
+ * **Example:** Allow one IP range through the firewall
+ * ```typescript
+ * yield* Azure.Redis.FirewallRule("Office", {
+ *   cache: cache.cacheName,
+ *   startIP: "203.0.113.0",
+ *   endIP: "203.0.113.255",
+ * });
+ * ```
+ *
+ * **Example:** Private-only cache behind a private endpoint
+ * ```typescript
+ * const cache = yield* Azure.Redis.Cache("Cache", {
+ *   sku: "Standard",
+ *   capacity: 1,
+ *   publicNetworkAccess: "Disabled",
+ * });
+ * yield* Azure.Network.PrivateEndpoint("CacheEndpoint", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: cache.cacheId, groupIds: ["redisCache"] },
+ *   ],
  * });
  * ```
  *
  * ### Premium Features
- * **Example:** Clustered Premium cache with zone redundancy
+ * **Example:** Clustered, zone-redundant cache with two replicas
  * ```typescript
- * const cache = yield* Azure.Redis.Cache("cache", {
+ * const cache = yield* Azure.Redis.Cache("Cache", {
  *   sku: "Premium",
  *   capacity: 1,
  *   shardCount: 2,
+ *   replicasPerPrimary: 2,
  *   zonalAllocationPolicy: "Automatic",
  * });
+ * ```
+ *
+ * **Example:** Hourly RDB snapshots to a storage account
+ * ```typescript
+ * const cache = yield* Azure.Redis.Cache("Cache", {
+ *   sku: "Premium",
+ *   capacity: 1,
+ *   redisConfiguration: {
+ *     rdbBackupEnabled: true,
+ *     rdbBackupFrequency: 60,
+ *     rdbBackupMaxSnapshotCount: 1,
+ *     rdbStorageConnectionString: storageConnectionString,
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Replicate to another region
+ * ```typescript
+ * const secondary = yield* Azure.Redis.Cache("CacheWest", {
+ *   location: "westus2",
+ *   sku: "Premium",
+ *   capacity: 1,
+ * });
+ * const link = yield* Azure.Redis.LinkedServer("Geo", {
+ *   cache: cache.cacheName,
+ *   linkedCacheId: secondary.cacheId,
+ *   linkedCacheLocation: secondary.location,
+ * });
+ * // connect clients to link.geoReplicatedPrimaryHostName
+ * ```
+ *
+ * ### Maintenance
+ * **Example:** Patch on Sunday nights
+ * ```typescript
+ * yield* Azure.Redis.PatchSchedule("Patching", {
+ *   cache: cache.cacheName,
+ *   scheduleEntries: [{ dayOfWeek: "Sunday", startHourUtc: 2 }],
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * Redis has no ARM data-plane binding: the runtime speaks RESP to
+ * `hostName:sslPort`. Yield an Output of the cache inside the host. Alchemy
+ * puts the value in the host's app settings and returns an Effect that
+ * reads it at runtime. The host's identity gets no role; it signs in with
+ * the access key, or with a token when you assign it an access policy.
+ *
+ * **Example:** Count hits with an access key from an Azure Function
+ * ```typescript
+ * import * as Redis from "@alchemy.run/redis";
+ * import * as Redacted from "effect/Redacted";
+ *
+ * // init
+ * const host = yield* cache.hostName;
+ * const key = yield* cache.primaryKey;
+ *
+ * // runtime
+ * const hostName = yield* host;
+ * const primaryKey = yield* key;
+ * const url = Redis.connectionUrl({
+ *   host: hostName,
+ *   port: 6380,
+ *   password: Redacted.value(primaryKey!),
+ *   tls: true,
+ * });
+ * const count = yield* Redis.run(url, "INCR", ["hits"]);
+ * ```
+ *
+ * ### Runtime Operations
+ * `FlushCache`, `ExportCacheData`, and `ImportCacheData` each assign a
+ * custom role with exactly one action on this cache only, to the host's
+ * managed identity or, on any other host, to an Entra service principal.
+ *
+ * **Example:** Flush every key
+ * ```typescript
+ * // init
+ * const flushCache = yield* Azure.Redis.FlushCache(cache);
+ *
+ * // runtime
+ * yield* flushCache();
+ * // …provided with Effect.provide(Azure.Redis.FlushCacheHttp)
+ * ```
+ *
+ * **Example:** Export a Premium cache to blobs and import it again
+ * ```typescript
+ * // init
+ * const exportCacheData = yield* Azure.Redis.ExportCacheData(cache);
+ * const importCacheData = yield* Azure.Redis.ImportCacheData(cache);
+ *
+ * // runtime
+ * yield* exportCacheData({
+ *   prefix: "nightly",
+ *   container: "https://backups.blob.core.windows.net/redis?<sas>",
+ * });
+ * yield* importCacheData({
+ *   files: ["https://backups.blob.core.windows.net/redis/nightly?<sas>"],
+ * });
+ * // …provided with Effect.provide([Azure.Redis.ExportCacheDataHttp, Azure.Redis.ImportCacheDataHttp])
+ * ```
+ *
+ * ### Deleting a Cache
+ * Destroying the cache deletes it and its data.
+ *
+ * **Example:** Keep the cache when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const cache = yield* Azure.Redis.Cache("Cache").pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

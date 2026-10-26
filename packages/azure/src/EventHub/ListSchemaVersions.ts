@@ -32,11 +32,13 @@ export type ListSchemaVersionsClient = (
  * ### Listing Versions
  * **Example:** List the versions of a schema
  * ```typescript
+ * // Schemas: a module-scope Azure.EventHub.SchemaGroup declaration
  * export default class Api extends Azure.Functions.Function<Api>()(
  *   "Api",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     // init: assigns the role on the schema group
+ *     const schemas = yield* Schemas;
+ *     // init: assigns Schema Registry Reader on the schema group only
  *     const listVersions = yield* Azure.EventHub.ListSchemaVersions(schemas);
  *     return {
  *       fetch: Effect.gen(function* () {

@@ -55,6 +55,7 @@ export interface WriteConfigurationStoreClient {
  * // runtime
  * yield* config.set("App:Color", "green", { label: "prod" });
  * yield* config.delete("App:Legacy", { label: "prod" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.ConfigurationStoreWriteHttp)
  * ```
  *
  * @binding

@@ -22,44 +22,87 @@ import {
   withMarker,
 } from "./Common.ts";
 
+/** Bin size of a summary rule in minutes: 20 minutes up to one day (1440). */
 export type SummaryRuleBinSize = 20 | 30 | 60 | 120 | 180 | 360 | 720 | 1440;
 
 export interface SummaryRuleProps {
-  /** Resource group of the workspace. Changing it replaces the rule. */
+  /**
+   * Resource group of the workspace.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Workspace that holds the rule. Changing it replaces the rule. */
+  /**
+   * Name of the workspace that holds the rule, e.g. `logs.workspaceName`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   */
   workspace: string;
   /**
-   * Rule name. If omitted, a unique name is generated from the app, stage,
-   * and logical ID. Changing it replaces the rule.
+   * Rule name: letters, digits, hyphens, and underscores, unique in the
+   * workspace.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Display name of the rule. */
+  /**
+   * Display name of the rule.
+   * @default not sent (Azure shows the rule name)
+   */
   displayName?: string;
   /**
    * Rule description. Alchemy appends an `[alchemy <stack>/<stage>/<id>]`
    * ownership marker because summary rules have no tags.
+   * @default no description (only the ownership marker)
    */
   description?: string;
-  /** KQL query that aggregates each bin. */
+  /**
+   * KQL query that aggregates each bin, e.g.
+   * `Usage | summarize Quantity = sum(Quantity) by DataType`. Alchemy
+   * updates it in place.
+   */
   query: string;
-  /** Bin size in minutes. */
+  /**
+   * Bin size in minutes: `20`, `30`, `60`, `120`, `180`, `360`, `720`, or
+   * `1440`. The rule runs once per bin. Alchemy updates it in place.
+   */
   binSize: SummaryRuleBinSize;
-  /** Minutes to wait after a bin closes before running it, to absorb late data. */
+  /**
+   * Minutes to wait after a bin closes before the rule runs it, to include
+   * late data.
+   * @default Azure's default
+   */
   binDelay?: number;
   /**
-   * First bin start time (ISO 8601, aligned to the bin size). Changing it
-   * replaces the rule.
+   * Start time of the first bin (ISO 8601), aligned to the bin size, e.g.
+   * `2026-01-01T00:00:00Z`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default Azure's default
    */
   binStartTime?: string;
   /**
-   * Destination custom table; must end in `_CL`. Azure creates it on first
-   * run and keeps it when the rule is deleted. Changing it replaces the
-   * rule.
+   * Destination custom table, ending in `_CL`, e.g. `UsageHourly_CL`. Azure
+   * creates it on the first run and keeps it (with its data) when the rule
+   * is deleted.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
    */
   destinationTable: string;
   /**
-   * Whether the rule runs. Set `false` to stop it without deleting it.
+   * Whether the rule runs. Set `false` to stop it and keep it.
    * @default true
    */
   active?: boolean;
@@ -71,17 +114,17 @@ export interface SummaryRule extends Resource<
   {
     /** Name of the rule. */
     summaryRuleName: string;
-    /** Workspace that holds the rule. */
+    /** Name of the workspace that holds the rule. */
     workspace: string;
     /** Resource group of the workspace. */
     resourceGroup: string;
     /** ARM resource ID of the rule. */
     summaryRuleId: string;
-    /** Destination table of the rule. */
+    /** Destination table of the rule, e.g. `UsageHourly_CL`. */
     destinationTable: string;
     /** Whether the rule is running. */
     isActive: boolean;
-    /** Reason the rule was deactivated (`UserAction`, `DataPlaneError`). */
+    /** Reason the rule stopped: `UserAction` or `DataPlaneError`. */
     statusCode: string | undefined;
     /** User description (Alchemy ownership marker stripped). */
     description: string | undefined;
@@ -91,9 +134,21 @@ export interface SummaryRule extends Resource<
 > {}
 
 /**
- * A Log Analytics summary rule: a scheduled KQL aggregation that writes
- * results for each time bin into a custom `_CL` table, so dashboards and
- * alerts query compact summaries instead of raw logs.
+ * A Log Analytics summary rule
+ * (`Microsoft.OperationalInsights/workspaces/summaryLogs`): a scheduled KQL
+ * aggregation that writes the result of each time bin into a custom `_CL`
+ * table. Dashboards and alerts then query the small summary instead of
+ * the raw logs.
+ *
+ * :::caution[Changing `name`, `destinationTable`, `binStartTime`, `workspace`, or `resourceGroup` replaces the rule]
+ * Alchemy creates the new rule and deletes the old one. The old destination
+ * table and its data stay in the workspace.
+ * :::
+ *
+ * :::caution[The workspace must exist first]
+ * Declare the `Azure.LogAnalytics.Workspace` and pass its `workspaceName`.
+ * Azure creates the destination table on the first run.
+ * :::
  *
  * Summary rules have no tags, so Alchemy records ownership as a marker at
  * the end of the rule description.
@@ -103,11 +158,25 @@ export interface SummaryRule extends Resource<
  * ### Creating a Summary Rule
  * **Example:** Hourly usage summary
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * const hourly = yield* Azure.LogAnalytics.SummaryRule("hourly-usage", {
  *   workspace: logs.workspaceName,
  *   query: "Usage | summarize Quantity = sum(Quantity) by DataType",
  *   binSize: 60,
  *   destinationTable: "UsageHourly_CL",
+ * });
+ * ```
+ *
+ * **Example:** Daily summary that waits 15 minutes for late data
+ * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const daily = yield* Azure.LogAnalytics.SummaryRule("daily-errors", {
+ *   workspace: logs.workspaceName,
+ *   displayName: "Daily errors",
+ *   query: "AppExceptions | summarize Count = count() by ProblemId",
+ *   binSize: 1440,
+ *   binDelay: 15,
+ *   destinationTable: "ErrorsDaily_CL",
  * });
  * ```
  *

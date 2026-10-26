@@ -33,6 +33,7 @@ export interface ReadWriteTableClient extends ReadTableClient, WriteTableClient 
  * const current = yield* counters.get("counters", "visits");
  * const n = typeof current?.n === "number" ? current.n + 1 : 1;
  * yield* counters.upsert({ PartitionKey: "counters", RowKey: "visits", n });
+ * // …provided with Effect.provide(Azure.Storage.TableReadWriteHttp)
  * ```
  *
  * @binding

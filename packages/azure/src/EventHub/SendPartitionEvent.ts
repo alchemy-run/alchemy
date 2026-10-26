@@ -41,11 +41,13 @@ export type SendPartitionEventClient = (
  * ### Sending to a Partition
  * **Example:** Pin an event to partition 0
  * ```typescript
+ * // Telemetry: a module-scope Azure.EventHub.EventHub declaration
  * export default class Api extends Azure.Functions.Function<Api>()(
  *   "Api",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     // init: assigns Azure Event Hubs Data Sender on the event hub
+ *     const telemetry = yield* Telemetry;
+ *     // init: assigns Azure Event Hubs Data Sender on the event hub only
  *     const sendToPartition = yield* Azure.EventHub.SendPartitionEvent(telemetry);
  *     return {
  *       fetch: Effect.gen(function* () {

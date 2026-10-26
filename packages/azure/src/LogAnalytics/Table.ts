@@ -17,8 +17,14 @@ import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { ownershipMarker, sameText, stripMarker, withMarker } from "./Common.ts";
 
+/**
+ * Table plan: `Analytics` (full KQL, alerts, interactive retention),
+ * `Basic` (cheaper ingestion, limited KQL, 30-day interactive retention),
+ * or `Auxiliary` (lowest cost, for verbose logs you rarely query).
+ */
 export type TablePlan = "Analytics" | "Basic" | "Auxiliary";
 
+/** Data type of a custom table column. */
 export type TableColumnType =
   | "string"
   | "int"
@@ -29,60 +35,106 @@ export type TableColumnType =
   | "guid"
   | "dynamic";
 
+/** One column of a custom table. */
 export interface TableColumn {
-  /** Column name. */
+  /** Column name: letters, digits, and underscores, starting with a letter. */
   name: string;
-  /** Column data type. Changing it replaces the table. */
+  /**
+   * Column data type: `string`, `int`, `long`, `real`, `boolean`,
+   * `dateTime`, `guid`, or `dynamic` (JSON).
+   *
+   * :::caution
+   * Changing it replaces the table and deletes its data.
+   * :::
+   */
   type: TableColumnType;
-  /** Logical hint for `string` columns. */
+  /**
+   * Logical hint for a `string` column: `uri`, `guid`, `armPath`, or `ip`.
+   * @default no hint
+   */
   dataTypeHint?: "uri" | "guid" | "armPath" | "ip";
-  /** Column description. */
+  /**
+   * Column description. Alchemy updates it in place.
+   * @default no description
+   */
   description?: string;
-  /** Column display name; can only be set when the column is created. */
+  /**
+   * Column display name. Azure accepts it only when the column is created.
+   * @default the column name
+   */
   displayName?: string;
 }
 
 export interface TableProps {
-  /** Resource group of the workspace. Changing it replaces the table. */
+  /**
+   * Resource group of the workspace.
+   *
+   * :::caution
+   * Changing it replaces the table and deletes its data.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Workspace that holds the table. Changing it replaces the table. */
+  /**
+   * Name of the workspace that holds the table, e.g. `logs.workspaceName`.
+   *
+   * :::caution
+   * Changing it replaces the table and deletes its data.
+   * :::
+   */
   workspace: string;
   /**
-   * Table name. Custom tables must end in `_CL`. If omitted, a unique name
-   * ending in `_CL` is generated from the app, stage, and logical ID.
-   * Changing it replaces the table.
+   * Table name: letters, digits, and underscores, ending in `_CL`
+   * (custom tables), e.g. `AppEvents_CL`.
+   *
+   * :::caution
+   * Changing it replaces the table and deletes its data.
+   * :::
+   * @default a name ending in `_CL`, generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Columns of the custom table. Must include `TimeGenerated` of type
-   * `dateTime`. Adding columns updates the table in place; removing a
-   * column or changing its type replaces it.
+   * Columns of the table. Include `TimeGenerated` of type `dateTime`.
+   * Alchemy adds new columns in place.
+   *
+   * :::caution
+   * Removing a column or changing its `type` replaces the table and deletes
+   * its data.
+   * :::
    */
   columns: TableColumn[];
   /**
-   * Table plan. `Analytics` and `Basic` can be switched once a week;
-   * moving to or from `Auxiliary` replaces the table.
+   * Table plan: `Analytics`, `Basic`, or `Auxiliary`. Azure lets you switch
+   * between `Analytics` and `Basic` once a week, in place.
+   *
+   * :::caution
+   * Moving to or from `Auxiliary` replaces the table and deletes its data.
+   * :::
    * @default "Analytics"
    */
   plan?: TablePlan;
   /**
-   * Interactive retention in days (4-730, Analytics plan only). `-1` uses
-   * the workspace retention.
+   * Interactive retention in days: 4-730, or `-1` for the workspace
+   * retention. Only the `Analytics` plan uses it.
    * @default -1
    */
   retentionInDays?: number;
   /**
-   * Total retention in days including long-term retention (4-4383). `-1`
-   * uses `retentionInDays`.
+   * Total retention in days, including long-term retention: 4-4383, or `-1`
+   * for the interactive retention.
    * @default -1
    */
   totalRetentionInDays?: number;
   /**
    * Table description. Alchemy appends an `[alchemy <stack>/<stage>/<id>]`
    * ownership marker because tables have no tags.
+   * @default no description (only the ownership marker)
    */
   description?: string;
-  /** Table display name. */
+  /**
+   * Table display name.
+   * @default the table name
+   */
   displayName?: string;
 }
 
@@ -90,23 +142,23 @@ export interface Table extends Resource<
   "Azure.LogAnalytics.Table",
   TableProps,
   {
-    /** Name of the table. */
+    /** Name of the table, e.g. `AppEvents_CL`. */
     tableName: string;
-    /** Workspace that holds the table. */
+    /** Name of the workspace that holds the table. */
     workspace: string;
     /** Resource group of the workspace. */
     resourceGroup: string;
     /** ARM resource ID of the table. */
     tableId: string;
-    /** Table plan. */
+    /** Table plan: `Analytics`, `Basic`, or `Auxiliary`. */
     plan: string;
     /** Interactive retention in days. */
     retentionInDays: number | undefined;
-    /** Total retention in days. */
+    /** Total retention in days, including long-term retention. */
     totalRetentionInDays: number | undefined;
     /** Long-term (archive) retention in days. */
     archiveRetentionInDays: number | undefined;
-    /** Kind of table (`CustomLog`, `Microsoft`, ...). */
+    /** Kind of table, e.g. `CustomLog` or `Microsoft`. */
     tableType: string | undefined;
     /** User description (Alchemy ownership marker stripped). */
     description: string | undefined;
@@ -116,11 +168,22 @@ export interface Table extends Resource<
 > {}
 
 /**
- * A custom table (`*_CL`) in a Log Analytics workspace — the destination
- * for the Logs Ingestion API, data collection rules, and summary rules.
+ * A custom table in a Log Analytics workspace
+ * (`Microsoft.OperationalInsights/workspaces/tables`), named `*_CL`. Send
+ * rows to it with the Logs Ingestion API (`Azure.Monitor.UploadLogs`), a
+ * data collection rule, or a summary rule, and query it with KQL.
  *
- * Tables cannot be tagged, so Alchemy records ownership as a marker at the
- * end of the table description. Deleting the table deletes its data.
+ * :::caution[Changing `name`, `workspace`, `resourceGroup`, a column's `type`, removing a column, or moving to or from the `Auxiliary` plan replaces the table]
+ * Alchemy deletes the old table, and its data goes with it.
+ * :::
+ *
+ * :::caution[The workspace must exist first]
+ * Declare the `Azure.LogAnalytics.Workspace` and pass its `workspaceName`.
+ * Deleting the table deletes its data.
+ * :::
+ *
+ * Tables have no tags, so Alchemy records ownership as a marker at the end
+ * of the table description.
  *
  * @see https://learn.microsoft.com/azure/azure-monitor/logs/create-custom-table
  *
@@ -141,6 +204,7 @@ export interface Table extends Resource<
  * ### Retention and Plans
  * **Example:** Basic-plan table with long-term retention
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * const audit = yield* Azure.LogAnalytics.Table("audit", {
  *   workspace: logs.workspaceName,
  *   name: "Audit_CL",
@@ -150,6 +214,20 @@ export interface Table extends Resource<
  *     { name: "TimeGenerated", type: "dateTime" },
  *     { name: "Actor", type: "string" },
  *     { name: "Details", type: "dynamic" },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Keep 90 days interactive and two years in total
+ * ```typescript
+ * const events = yield* Azure.LogAnalytics.Table("events", {
+ *   workspace: logs.workspaceName,
+ *   name: "AppEvents_CL",
+ *   retentionInDays: 90,
+ *   totalRetentionInDays: 730,
+ *   columns: [
+ *     { name: "TimeGenerated", type: "dateTime" },
+ *     { name: "Message", type: "string" },
  *   ],
  * });
  * ```

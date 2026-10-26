@@ -40,11 +40,19 @@ export type RegisterSchemaClient = (
  * ### Registering Schemas
  * **Example:** Register an Avro schema
  * ```typescript
+ * // Schemas: a module-scope Azure.EventHub.SchemaGroup declaration
+ * const orderSchema = {
+ *   type: "record",
+ *   name: "Order",
+ *   fields: [{ name: "id", type: "string" }],
+ * };
+ *
  * export default class Api extends Azure.Functions.Function<Api>()(
  *   "Api",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     // init: assigns the role on the schema group
+ *     const schemas = yield* Schemas;
+ *     // init: assigns the schemas/write role on the group's namespace
  *     const register = yield* Azure.EventHub.RegisterSchema(schemas);
  *     return {
  *       fetch: Effect.gen(function* () {
@@ -54,7 +62,7 @@ export type RegisterSchemaClient = (
  *           contentType: "application/json; serialization=Avro",
  *           body: JSON.stringify(orderSchema),
  *         });
- *         return HttpServerResponse.text("ok");
+ *         return yield* HttpServerResponse.json({ schemaId, schemaVersion });
  *       }).pipe(Effect.orDie),
  *     };
  *   }).pipe(Effect.provide(Azure.EventHub.RegisterSchemaHttp)),

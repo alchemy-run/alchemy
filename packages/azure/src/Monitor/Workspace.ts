@@ -29,24 +29,38 @@ export interface WorkspaceIdentity {
   /**
    * ARM resource IDs of user-assigned identities. Required when `type`
    * includes `UserAssigned`.
+   * @default []
    */
   userAssignedIdentities?: string[];
 }
 
 export interface WorkspaceProps {
   /**
-   * Resource group the workspace is created in. Changing it replaces the
-   * workspace.
+   * Resource group the workspace is created in.
+   *
+   * :::caution
+   * Changing it replaces the workspace.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Workspace name: 4-44 letters, digits, and hyphens, not starting or
    * ending with a hyphen. If omitted, a unique name is generated from the
-   * app, stage, and logical ID. Changing it replaces the workspace.
+   * app, stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the workspace.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the workspace. Changing it replaces the workspace.
+   * Azure location of the workspace.
+   *
+   * :::caution
+   * Changing it replaces the workspace.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
@@ -60,13 +74,18 @@ export interface WorkspaceProps {
    * Allow metric queries authorized with permissions on the source
    * resource rather than on the workspace. Unset leaves the service
    * default unmanaged.
+   * @default Azure's default
    */
   enableAccessUsingResourcePermissions?: boolean;
-  /** Managed identity of the workspace. Unset leaves identity unmanaged. */
+  /**
+   * Managed identity of the workspace. Unset leaves identity unmanaged.
+   * @default the observed identity is kept (none on a new workspace)
+   */
   identity?: WorkspaceIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -107,15 +126,20 @@ export interface Workspace extends Resource<
 > {}
 
 /**
- * An Azure Monitor workspace — the managed Prometheus metrics store used by
- * AKS managed Prometheus, Azure Managed Grafana, and Prometheus
- * remote-write.
+ * An Azure Monitor workspace (`Microsoft.Monitor/accounts`): the managed
+ * Prometheus metrics store that AKS managed Prometheus, Azure Managed
+ * Grafana, and Prometheus remote-write clients use.
  *
- * Creating a workspace also provisions a managed resource group
- * (`MA_<name>_<location>_managed`) holding the default data collection
- * rule and endpoint; Azure deletes it together with the workspace. The
- * workspace itself has no fixed charge — you pay per ingested sample and
- * per query.
+ * Creating a workspace also creates a managed resource group
+ * (`MA_<name>_<location>_managed`) with the default data collection rule
+ * and endpoint; Azure deletes it with the workspace. The workspace has no
+ * fixed charge: you pay per ingested sample and per query.
+ *
+ * :::caution[Changing `name`, `resourceGroup`, or `location` replaces the workspace]
+ * Alchemy creates a new, empty workspace and deletes the old one with its
+ * metrics. Remote-write clients and Grafana data sources that point at the
+ * old endpoints stop working until you update them.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-monitor/essentials/azure-monitor-workspace-overview
  *
@@ -123,17 +147,78 @@ export interface Workspace extends Resource<
  * **Example:** Managed Prometheus workspace
  * ```typescript
  * const metrics = yield* Azure.Monitor.Workspace("metrics");
- * // metrics.prometheusQueryEndpoint, metrics.metricsIngestionEndpoint
+ * // metrics.prometheusQueryEndpoint: PromQL HTTP API base URL
+ * // metrics.metricsIngestionEndpoint: Prometheus remote-write target
  * ```
  *
- * ### Securing a Workspace
+ * **Example:** Workspace with a fixed name and region
+ * ```typescript
+ * const metrics = yield* Azure.Monitor.Workspace("metrics", {
+ *   name: "contoso-prod-metrics",
+ *   location: "westeurope",
+ * });
+ * ```
+ *
+ * ### Access Control
  * **Example:** Private-only workspace with resource-context access
  * ```typescript
  * const metrics = yield* Azure.Monitor.Workspace("metrics", {
  *   publicNetworkAccess: "Disabled",
  *   enableAccessUsingResourcePermissions: true,
- *   tags: { team: "platform" },
  * });
+ * ```
+ *
+ * ### Recording and Alerting Rules
+ * **Example:** Precompute a per-namespace CPU rate
+ * ```typescript
+ * const rules = yield* Azure.Monitor.PrometheusRuleGroup("recording", {
+ *   location: metrics.location,
+ *   scopes: [metrics.workspaceId],
+ *   interval: "PT1M",
+ *   rules: [
+ *     {
+ *       record: "namespace:container_cpu:rate5m",
+ *       expression: "sum by (namespace) (rate(container_cpu_usage_seconds_total[5m]))",
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Alert when a scrape target is down
+ * ```typescript
+ * const alerts = yield* Azure.Monitor.PrometheusRuleGroup("alerts", {
+ *   location: metrics.location,
+ *   scopes: [metrics.workspaceId],
+ *   rules: [
+ *     {
+ *       alert: "TargetDown",
+ *       expression: "up == 0",
+ *       for: "PT5M",
+ *       severity: 2,
+ *       annotations: { summary: "Scrape target is down" },
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Dashboards
+ * **Example:** Query the workspace from Azure Managed Grafana
+ * ```typescript
+ * const grafana = yield* Azure.Grafana.Workspace("grafana", {
+ *   identity: { type: "SystemAssigned" },
+ *   azureMonitorWorkspaceIntegrations: [metrics.workspaceId],
+ * });
+ * ```
+ *
+ * ### Deleting a Workspace
+ * Destroying the workspace deletes its metrics and its managed resource
+ * group.
+ *
+ * **Example:** Keep the workspace when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const metrics = yield* Azure.Monitor.Workspace("metrics").pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

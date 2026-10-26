@@ -72,6 +72,7 @@ export interface ReadConfigurationStoreClient {
  *
  * // runtime
  * const color = yield* config.get("App:Color", { label: "prod" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.ConfigurationStoreReadHttp)
  * ```
  *
  * **Example:** List settings by prefix

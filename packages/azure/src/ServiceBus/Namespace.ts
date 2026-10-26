@@ -30,53 +30,78 @@ export type ServiceBusTlsVersion = servicebus.TlsVersion;
 export type ServiceBusIdentityType = servicebus.ManagedServiceIdentityType;
 
 export interface NamespaceIdentity {
-  /** Managed identity type. */
+  /**
+   * Managed identity type: `SystemAssigned`, `UserAssigned`,
+   * `SystemAssigned, UserAssigned`, or `None`.
+   */
   type: ServiceBusIdentityType;
   /**
    * ARM IDs of user-assigned identities to attach (required for
    * `UserAssigned` types).
+   * @default []
    */
   userAssignedIdentityIds?: string[];
 }
 
 export interface NamespaceProps {
   /**
-   * Resource group the namespace is created in. Changing it replaces the
-   * namespace.
+   * Resource group the namespace is created in.
+   *
+   * :::caution
+   * Changing it replaces the namespace.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Globally unique namespace name (`<name>.servicebus.windows.net`): 6-50
    * letters, digits, and hyphens, starting with a letter and ending with a
    * letter or digit. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the namespace.
+   * stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the namespace.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the namespace. Changing it replaces the namespace.
+   * Azure location of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the namespace.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
    * Pricing tier. `Basic` supports queues only; topics and subscriptions
    * need `Standard` or `Premium`. Switching between `Basic` and `Standard`
-   * is in place; any change to or from `Premium` replaces the namespace.
+   * is in place.
+   *
+   * :::caution
+   * Moving to or from `Premium` replaces the namespace.
+   * :::
    * @default "Standard"
    */
   sku?: ServiceBusSku;
   /**
    * Premium messaging units (1, 2, 4, 8, or 16 times
-   * `premiumMessagingPartitions`). Ignored for Basic and Standard.
+   * `premiumMessagingPartitions`). Changes in place. Ignored for Basic and
+   * Standard.
    * @default 1 (Premium only)
    */
   capacity?: number;
   /**
-   * Spread a Premium namespace across availability zones. Changing it
-   * replaces the namespace.
+   * Spread a Premium namespace across availability zones. Set it when you
+   * create the namespace: a later change alone sends no update.
+   * @default Azure's default for the region
    */
   zoneRedundant?: boolean;
   /**
-   * Premium partitions (1, 2, or 4). Changing it replaces the namespace.
+   * Premium partitions (1, 2, or 4). Set it when you create the namespace:
+   * a later change alone sends no update.
+   * @default Azure's default (`1`)
    */
   premiumMessagingPartitions?: number;
   /**
@@ -101,11 +126,15 @@ export interface NamespaceProps {
    * @default Azure's default (`IPv4`)
    */
   ipAddressType?: "IPv4" | "DualStack";
-  /** Managed identity of the namespace (used for customer-managed keys). */
+  /**
+   * Managed identity of the namespace (used for customer-managed keys).
+   * @default the observed identity is kept (none on a new namespace)
+   */
   identity?: NamespaceIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -154,14 +183,21 @@ export interface Namespace extends Resource<
 > {}
 
 /**
- * An Azure Service Bus namespace — the container for queues, topics, and
- * subscriptions, with its own `<name>.servicebus.windows.net` endpoint.
+ * An Azure Service Bus namespace (`Microsoft.ServiceBus/namespaces`): the
+ * container for your queues, topics, and subscriptions, with its own
+ * `<name>.servicebus.windows.net` endpoint.
  *
- * Namespaces default to the `Standard` tier (queues, topics, and
- * subscriptions) and TLS 1.2. The connection string of the built-in
- * `RootManageSharedAccessKey` rule is exposed as a secret; prefer
- * least-privilege `NamespaceAuthorizationRule`s or Entra ID role
- * assignments for applications.
+ * Alchemy creates a `Standard` namespace in the stack's resource group, with
+ * TLS 1.2 as the minimum. Bind the queues, topics, and subscriptions in it to
+ * your runtimes: each binding assigns a Service Bus data role on that one
+ * entity, so your code never handles a connection string. The connection
+ * string of the built-in `RootManageSharedAccessKey` rule is still an
+ * attribute (a `Redacted` secret) for tools that need one.
+ *
+ * :::caution[Changing `name`, `resourceGroup`, `location`, or moving to or from `Premium` replaces the namespace]
+ * Alchemy creates a new namespace and deletes the old one with every queue,
+ * topic, subscription, and message in it.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/service-bus-messaging/service-bus-messaging-overview
  *
@@ -169,7 +205,23 @@ export interface Namespace extends Resource<
  * **Example:** Standard namespace
  * ```typescript
  * const bus = yield* Azure.ServiceBus.Namespace("bus");
+ * // bus.hostName → "<name>.servicebus.windows.net"
  * ```
+ *
+ * **Example:** Namespace with a fixed name and region
+ * ```typescript
+ * const bus = yield* Azure.ServiceBus.Namespace("bus", {
+ *   name: "contoso-orders-bus",
+ *   location: "westeurope",
+ * });
+ * ```
+ *
+ * ### Choosing a Tier
+ * `Basic` has queues only. `Standard` adds topics, subscriptions, sessions,
+ * and transactions. `Premium` runs on dedicated messaging units, accepts
+ * messages up to 100 MB, and supports private endpoints, availability zones,
+ * and geo-disaster recovery. You can switch between `Basic` and `Standard` in
+ * place.
  *
  * **Example:** Basic namespace (queues only)
  * ```typescript
@@ -178,19 +230,130 @@ export interface Namespace extends Resource<
  * });
  * ```
  *
- * ### Securing a Namespace
- * **Example:** Entra ID only, TLS 1.2
+ * **Example:** Premium namespace with two messaging units across zones
+ * ```typescript
+ * const bus = yield* Azure.ServiceBus.Namespace("bus", {
+ *   sku: "Premium",
+ *   capacity: 2,
+ *   zoneRedundant: true,
+ * });
+ * ```
+ *
+ * ### Authentication
+ * **Example:** Accept Microsoft Entra ID only
  * ```typescript
  * const bus = yield* Azure.ServiceBus.Namespace("bus", {
  *   disableLocalAuth: true,
- *   minimumTlsVersion: "1.2",
  * });
- * // "Azure Service Bus Data Sender"
- * yield* Azure.Authorization.RoleAssignment("api-sends", {
+ * // bus.primaryConnectionString is undefined: SAS keys are off
+ * ```
+ *
+ * **Example:** Assign a data role to an identity you manage
+ * ```typescript
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("worker");
+ * yield* Azure.Authorization.RoleAssignment("worker-sends", {
  *   scope: bus.namespaceId,
- *   roleDefinitionId: "69a216fc-b8fb-44d8-bc22-1f3c2cd27a39",
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.ServiceBusDataSender,
  *   principalId: identity.principalId,
  * });
+ * ```
+ *
+ * **Example:** Send-only SAS rule for a client that needs a connection string
+ * ```typescript
+ * const producer = yield* Azure.ServiceBus.NamespaceAuthorizationRule("producer", {
+ *   namespace: bus.namespaceName,
+ *   rights: ["Send"],
+ * });
+ * // producer.primaryConnectionString is a Redacted secret
+ * ```
+ *
+ * ### Network Access
+ * **Example:** Allow one IP range and trusted Azure services
+ * ```typescript
+ * const bus = yield* Azure.ServiceBus.Namespace("bus", { sku: "Premium" });
+ * yield* Azure.ServiceBus.NetworkRuleSet("bus-firewall", {
+ *   namespace: bus.namespaceName,
+ *   defaultAction: "Deny",
+ *   ipRules: [{ ipMask: "203.0.113.0/24" }],
+ *   trustedServiceAccessEnabled: true,
+ * });
+ * ```
+ *
+ * **Example:** Private endpoint in your virtual network (Premium)
+ * ```typescript
+ * const bus = yield* Azure.ServiceBus.Namespace("bus", {
+ *   sku: "Premium",
+ *   publicNetworkAccess: "Disabled",
+ * });
+ * yield* Azure.Network.PrivateEndpoint("bus-endpoint", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: bus.namespaceId, groupIds: ["namespace"] },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Geo-Disaster Recovery
+ * Pair two empty `Premium` namespaces in different regions behind one alias.
+ * Clients connect to `<alias>.servicebus.windows.net`.
+ *
+ * **Example:** Pair a primary and a secondary namespace
+ * ```typescript
+ * const primary = yield* Azure.ServiceBus.Namespace("primary", {
+ *   sku: "Premium",
+ *   location: "eastus",
+ * });
+ * const secondary = yield* Azure.ServiceBus.Namespace("secondary", {
+ *   sku: "Premium",
+ *   location: "westus",
+ * });
+ * yield* Azure.ServiceBus.DisasterRecoveryConfig("bus-alias", {
+ *   namespace: primary.namespaceName,
+ *   partnerNamespace: secondary.namespaceId,
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * Bind the entities in the namespace, not the namespace itself. A queue
+ * binding assigns **Azure Service Bus Data Sender** or **Data Receiver** on
+ * that queue only.
+ *
+ * **Example:** Send to a queue and a topic from an Azure Function
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const ordersQueue = yield* Orders;
+ *     const eventsTopic = yield* Events;
+ *     const orders = yield* Azure.ServiceBus.QueueSend(ordersQueue);
+ *     const events = yield* Azure.ServiceBus.TopicWrite(eventsTopic);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* orders.send({ orderId: "42" }, { messageId: "42" });
+ *         yield* events.send({ type: "order.created" }, { label: "order.created" });
+ *         return HttpServerResponse.text("queued");
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(
+ *     Effect.provide([
+ *       Azure.ServiceBus.QueueSendHttp,
+ *       Azure.ServiceBus.TopicWriteHttp,
+ *     ]),
+ *   ),
+ * ) {}
+ * ```
+ *
+ * ### Deleting a Namespace
+ * Destroying the namespace deletes every entity and message in it.
+ *
+ * **Example:** Keep the namespace when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const bus = yield* Azure.ServiceBus.Namespace("bus").pipe(
+ *   RemovalPolicy.retain(),
+ * );
  * ```
  *
  * @resource

@@ -34,6 +34,7 @@ export interface StartFullRestoreRequest extends Omit<
  *     useManagedIdentity: true,
  *   },
  * });
+ * // …provided with Effect.provide(Azure.KeyVault.StartFullRestoreHttp)
  * ```
  *
  * @binding

@@ -17,22 +17,42 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createChildName, lower } from "./common.ts";
 
 export interface FirewallRuleProps {
-  /** Resource group of the server. Changing it replaces the rule. */
+  /**
+   * Resource group of the server.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the SQL server. Changing it replaces the rule. */
+  /**
+   * Name of the `Azure.Sql.Server` the rule belongs to.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   */
   server: string;
   /**
-   * Rule name (1-128 characters, no `<>*%&:;\/?`, not ending with a
-   * period). If omitted, a unique name is generated from the app, stage,
-   * and logical ID. Changing it replaces the rule.
+   * Rule name: 1-128 characters, no `<>*%&:;\/?`, not ending with a period.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * First IPv4 address of the allowed range. `0.0.0.0` for both start and
-   * end allows connections from Azure services.
+   * end allows connections from Azure services. Changing it updates the
+   * rule in place.
    */
   startIpAddress: string;
-  /** Last IPv4 address of the allowed range. */
+  /**
+   * Last IPv4 address of the allowed range. Changing it updates the rule in
+   * place.
+   */
   endIpAddress: string;
 }
 
@@ -58,28 +78,54 @@ export interface FirewallRule extends Resource<
 > {}
 
 /**
- * A server-level IPv4 firewall rule on an Azure SQL server. Clients whose
- * address falls in the range may connect to every database on the server.
+ * A server-level IPv4 firewall rule on an Azure SQL server
+ * (`Microsoft.Sql/servers/firewallRules`). Clients whose address falls in
+ * the range may connect to every database on the server. A new server has
+ * no rules, so it accepts no public client until you add one.
  *
- * Firewall rules cannot be tagged; Alchemy treats a rule as its own when
- * its name is the one Alchemy generated for this resource (or it was
- * created by a previous deploy).
+ * Firewall rules cannot be tagged. Alchemy treats a rule as its own when
+ * its name is the one Alchemy generated for this resource, or a previous
+ * deploy created it.
  *
- * @see https://learn.microsoft.com/azure/azure-sql/database/firewall-configure
+ * :::caution[Changing `name`, `server`, or `resourceGroup` replaces the rule]
+ * Clients in the range lose access for a moment while Alchemy creates the
+ * new rule and deletes the old one. Changing the IP range updates the rule
+ * in place.
+ * :::
+ *
+ * See [Azure SQL Database and Azure Synapse IP firewall rules](https://learn.microsoft.com/azure/azure-sql/database/firewall-configure).
  *
  * ### Allowing Clients
  * **Example:** Allow an office IP range
  * ```typescript
- * yield* Azure.Sql.FirewallRule("office", {
+ * const server = yield* Azure.Sql.Server("Sql", {
+ *   administratorLogin: "sqladmin",
+ *   administratorLoginPassword: password,
+ * });
+ * yield* Azure.Sql.FirewallRule("Office", {
  *   server: server.serverName,
  *   startIpAddress: "203.0.113.0",
  *   endIpAddress: "203.0.113.255",
  * });
  * ```
  *
+ * **Example:** Allow one address
+ * ```typescript
+ * yield* Azure.Sql.FirewallRule("Laptop", {
+ *   server: server.serverName,
+ *   startIpAddress: "198.51.100.7",
+ *   endIpAddress: "198.51.100.7",
+ * });
+ * ```
+ *
+ * ### Allowing Azure Services
+ * Azure Functions on Flex Consumption and other Azure services have no
+ * fixed outbound IP. The `0.0.0.0` rule lets connections from any Azure
+ * service in; the server still requires a login.
+ *
  * **Example:** Allow Azure services
  * ```typescript
- * yield* Azure.Sql.FirewallRule("azure-services", {
+ * yield* Azure.Sql.FirewallRule("AllowAzureServices", {
  *   server: server.serverName,
  *   startIpAddress: "0.0.0.0",
  *   endIpAddress: "0.0.0.0",

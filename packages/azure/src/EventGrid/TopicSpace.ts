@@ -17,25 +17,46 @@ import {
 } from "./MqttShared.ts";
 
 export interface TopicSpaceProps {
-  /** Resource group of the namespace. Changing it replaces the topic space. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the topic space.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
-   * Name of the Event Grid namespace (MQTT broker enabled). Changing it
-   * replaces the topic space.
+   * Name of the Event Grid namespace, e.g. `namespace.namespaceName` of an
+   * `Azure.EventGrid.Namespace` with the MQTT broker enabled.
+   *
+   * :::caution
+   * Changing it replaces the topic space.
+   * :::
    */
   namespace: string;
   /**
    * Topic space name: 3-50 letters, digits, and hyphens. If omitted, a
-   * unique name is generated from the app, stage, and logical ID. Changing
-   * it replaces the topic space.
+   * unique name is generated from the app, stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the topic space.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * MQTT topic templates in the space, e.g. `devices/+/telemetry` or
-   * `devices/${client.authenticationName}/telemetry`.
+   * MQTT topic templates in the space, e.g. `devices/+/telemetry` (`+`
+   * matches one level, `#` the rest) or
+   * `devices/${client.authenticationName}/telemetry` (a variable filled in
+   * per client). Updated in place.
    */
   topicTemplates: string[];
-  /** Description of the topic space. */
+  /**
+   * Description of the topic space. Alchemy appends its ownership marker
+   * (` [alchemy:{stack}/{stage}/{id}]`) to it.
+   * @default no description (only the ownership marker)
+   */
   description?: string;
 }
 
@@ -64,12 +85,23 @@ export interface TopicSpace extends Resource<
 > {}
 
 /**
- * A set of MQTT topic templates in an Event Grid namespace. Permission
- * bindings grant client groups publish or subscribe access to a topic
- * space.
+ * An MQTT topic space of an Event Grid MQTT broker
+ * (`Microsoft.EventGrid/namespaces/topicSpaces`): a set of topic templates
+ * that clients publish or subscribe to. Grant a client group access to a
+ * topic space with an `Azure.EventGrid.PermissionBinding`.
  *
  * Topic spaces have no tags and Azure does not return their `description`
  * on GET, so ownership follows the parent namespace.
+ *
+ * :::caution[Changing `name`, `namespace`, or `resourceGroup` replaces the topic space]
+ * Alchemy creates a new topic space and deletes the old one.
+ * :::
+ *
+ * :::caution[The namespace needs the MQTT broker]
+ * Declare the parent `Azure.EventGrid.Namespace` with
+ * `topicSpacesConfiguration: { state: "Enabled" }`. Azure cannot turn the
+ * broker off again: switching it to `Disabled` replaces the namespace.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/mqtt-topic-spaces
  *
@@ -82,6 +114,15 @@ export interface TopicSpace extends Resource<
  * const telemetry = yield* Azure.EventGrid.TopicSpace("telemetry", {
  *   namespace: namespace.namespaceName,
  *   topicTemplates: ["devices/${client.authenticationName}/telemetry"],
+ * });
+ * ```
+ *
+ * **Example:** Commands to every device
+ * ```typescript
+ * const commands = yield* Azure.EventGrid.TopicSpace("commands", {
+ *   namespace: namespace.namespaceName,
+ *   topicTemplates: ["devices/+/commands"],
+ *   description: "Cloud-to-device commands",
  * });
  * ```
  *

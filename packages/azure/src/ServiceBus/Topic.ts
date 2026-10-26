@@ -26,35 +26,60 @@ import {
 import type { EntityStatus } from "./Queue.ts";
 
 export interface TopicProps {
-  /** Resource group of the namespace. Changing it replaces the topic. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the topic.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
-   * Namespace that holds the topic (`Standard` or `Premium` tier). Changing
-   * it replaces the topic.
+   * Name of the namespace that holds the topic (`Standard` or `Premium`
+   * tier).
+   *
+   * :::caution
+   * Changing it replaces the topic.
+   * :::
    */
   namespace: string;
   /**
    * Topic name: 1-260 letters, digits, `.`, `-`, `_`, and `/`, starting and
    * ending with a letter or digit. If omitted, a unique lowercase name is
-   * generated from the app, stage, and logical ID. Changing it replaces the
-   * topic.
+   * generated from the app, stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the topic.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Partition the topic across message brokers (Standard). Changing it
-   * replaces the topic.
+   * Partition the topic across message brokers (Standard).
+   *
+   * :::caution
+   * Changing it replaces the topic.
+   * :::
    * @default false
    */
   enablePartitioning?: boolean;
   /**
    * Hold messages in memory before persisting them (not on Premium).
+   *
+   * :::caution
    * Changing it replaces the topic.
+   * :::
    * @default false
    */
   enableExpress?: boolean;
   /**
-   * Detect and drop duplicate messages by `MessageId`. Changing it replaces
-   * the topic.
+   * Detect and drop duplicate messages by `MessageId` within
+   * `duplicateDetectionHistoryTimeWindow`.
+   *
+   * :::caution
+   * Changing it replaces the topic.
+   * :::
    * @default false
    */
   requiresDuplicateDetection?: boolean;
@@ -73,7 +98,10 @@ export interface TopicProps {
    * @default 1024
    */
   maxSizeInMegabytes?: number;
-  /** Maximum message size in kilobytes (Premium only). */
+  /**
+   * Maximum message size in kilobytes, 1024-102400 (Premium only).
+   * @default Azure's default (`1024` on Premium)
+   */
   maxMessageSizeInKilobytes?: number;
   /**
    * Duplicate detection window as an ISO 8601 duration.
@@ -90,11 +118,16 @@ export interface TopicProps {
    * @default "Active"
    */
   status?: EntityStatus;
-  /** Idle interval (ISO 8601, at least `PT5M`) after which the topic is deleted. */
+  /**
+   * Idle interval (ISO 8601, at least `PT5M`) after which Service Bus
+   * deletes the topic.
+   * @default never (Azure's maximum, about 29,000 years)
+   */
   autoDeleteOnIdle?: string;
   /**
    * Free-form user metadata. Alchemy appends an ownership marker
    * (`[alchemy <stack>/<stage>/<id>]`) because topics have no tags.
+   * @default only the ownership marker
    */
   userMetadata?: string;
 }
@@ -117,7 +150,7 @@ export interface Topic extends Resource<
     enableExpress: boolean;
     /** Whether duplicate detection is enabled. */
     requiresDuplicateDetection: boolean;
-    /** Entity status. */
+    /** Entity status: `Active`, `Disabled`, or `SendDisabled`. */
     status: string | undefined;
     /** User metadata (ownership marker stripped). */
     userMetadata: string | undefined;
@@ -127,30 +160,47 @@ export interface Topic extends Resource<
 > {}
 
 /**
- * A Service Bus topic — publish/subscribe messaging where every
- * `Subscription` receives its own copy of each matching message. Requires a
- * `Standard` or `Premium` namespace.
+ * An Azure Service Bus topic (`Microsoft.ServiceBus/namespaces/topics`):
+ * publish/subscribe messaging where every `Subscription` receives its own
+ * copy of each message that matches its rules.
  *
- * Topics have no tags, so Alchemy records ownership as a
- * `[alchemy <stack>/<stage>/<id>]` marker at the end of `userMetadata`.
- * Deleting a topic deletes its subscriptions.
+ * Alchemy creates the topic in a namespace you declare. Bind it to a
+ * runtime with `TopicWrite` to publish: the binding assigns **Azure Service
+ * Bus Data Sender** on this topic only. Receivers read from a
+ * `Subscription`, not from the topic. Topics have no tags, so Alchemy
+ * records ownership as a `[alchemy <stack>/<stage>/<id>]` marker at the end
+ * of `userMetadata`.
+ *
+ * :::caution[Topics need a `Standard` or `Premium` namespace]
+ * A `Basic` namespace rejects the topic.
+ * :::
+ *
+ * :::caution[Changing `name`, `namespace`, `resourceGroup`, `enablePartitioning`, `enableExpress`, or `requiresDuplicateDetection` replaces the topic]
+ * Alchemy creates a new topic and deletes the old one with its
+ * subscriptions and their messages.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/service-bus-messaging/service-bus-queues-topics-subscriptions#topics-and-subscriptions
  *
  * ### Creating a Topic
- * **Example:** Topic with one subscription
+ * **Example:** Topic with two subscriptions
  * ```typescript
- * const bus = yield* Azure.ServiceBus.Namespace("bus");
+ * const bus = yield* Azure.ServiceBus.Namespace("bus", { sku: "Standard" });
  * const events = yield* Azure.ServiceBus.Topic("events", {
  *   namespace: bus.namespaceName,
  * });
- * yield* Azure.ServiceBus.Subscription("audit", {
+ * const audit = yield* Azure.ServiceBus.Subscription("audit", {
+ *   namespace: bus.namespaceName,
+ *   topic: events.topicName,
+ * });
+ * const notify = yield* Azure.ServiceBus.Subscription("notify", {
  *   namespace: bus.namespaceName,
  *   topic: events.topicName,
  * });
  * ```
  *
- * **Example:** Topic with duplicate detection and a one-day TTL
+ * ### Duplicate Detection and Time to Live
+ * **Example:** Drop duplicates for an hour, expire messages after a day
  * ```typescript
  * const events = yield* Azure.ServiceBus.Topic("events", {
  *   namespace: bus.namespaceName,
@@ -158,6 +208,127 @@ export interface Topic extends Resource<
  *   duplicateDetectionHistoryTimeWindow: "PT1H",
  *   defaultMessageTimeToLive: "P1D",
  * });
+ * ```
+ *
+ * ### Filtering per Subscription
+ * Each subscription starts with a `$Default` rule that accepts every
+ * message. Add a `Rule` to route messages by their properties.
+ *
+ * **Example:** Route `order.*` events by their label
+ * ```typescript
+ * const orders = yield* Azure.ServiceBus.Subscription("orders", {
+ *   namespace: bus.namespaceName,
+ *   topic: events.topicName,
+ * });
+ * yield* Azure.ServiceBus.Rule("orders-only", {
+ *   namespace: bus.namespaceName,
+ *   topic: events.topicName,
+ *   subscription: orders.subscriptionName,
+ *   sqlFilter: { sqlExpression: "sys.Label LIKE 'order.%'" },
+ * });
+ * ```
+ *
+ * ### Size and Partitioning
+ * **Example:** Partitioned 5 GB topic
+ * ```typescript
+ * const events = yield* Azure.ServiceBus.Topic("events", {
+ *   namespace: bus.namespaceName,
+ *   enablePartitioning: true,
+ *   maxSizeInMegabytes: 5120,
+ * });
+ * ```
+ *
+ * **Example:** Accept 10 MB messages (Premium)
+ * ```typescript
+ * const bus = yield* Azure.ServiceBus.Namespace("bus", { sku: "Premium" });
+ * const files = yield* Azure.ServiceBus.Topic("files", {
+ *   namespace: bus.namespaceName,
+ *   maxMessageSizeInKilobytes: 10240,
+ * });
+ * ```
+ *
+ * ### Pausing a Topic
+ * **Example:** Stop accepting new messages
+ * ```typescript
+ * const events = yield* Azure.ServiceBus.Topic("events", {
+ *   namespace: bus.namespaceName,
+ *   status: "SendDisabled",
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * `TopicWrite` assigns **Azure Service Bus Data Sender** on this topic
+ * only. It works on any host: a managed-identity host (an Azure Function,
+ * Web App, Container App, container group, or VM) gets the role on its
+ * identity; any other host (a Cloudflare Worker, an AWS Lambda) gets an
+ * Entra service principal.
+ *
+ * **Example:** Publish from an Azure Function
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const topic = yield* Events;
+ *     const events = yield* Azure.ServiceBus.TopicWrite(topic);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* events.send({ type: "order.shipped" }, { label: "order.shipped" });
+ *         return HttpServerResponse.text("published", { status: 202 });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.ServiceBus.TopicWriteHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Publish one message with properties, or a batch
+ * ```typescript
+ * // init
+ * const events = yield* Azure.ServiceBus.TopicWrite(topic);
+ *
+ * // runtime
+ * yield* events.send(
+ *   { orderId: "42" },
+ *   { messageId: "42", label: "order.created", properties: { region: "eu" } },
+ * );
+ * yield* events.sendBatch([
+ *   { body: { orderId: "43" }, options: { label: "order.created" } },
+ *   { body: { orderId: "44" }, options: { label: "order.created" } },
+ * ]);
+ * ```
+ *
+ * ### Event Sources
+ * Consume a topic through its subscriptions: each consumer gets its own
+ * copy of every message.
+ *
+ * **Example:** Two consumers of one topic in an Azure Function
+ * ```typescript
+ * export default class Worker extends Azure.Functions.Function<Worker>()(
+ *   "Worker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     yield* Azure.ServiceBus.consumeSubscriptionMessages(Audit, (message) =>
+ *       Effect.log(`audit ${message.messageId}`),
+ *     );
+ *     yield* Azure.ServiceBus.consumeSubscriptionMessages(Notify, (message) =>
+ *       Effect.log(`notify ${message.messageId}`),
+ *     );
+ *     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+ *   }).pipe(Effect.provide(Azure.Functions.ServiceBusSubscriptionEventSource)),
+ * ) {}
+ * ```
+ *
+ * ### Deleting a Topic
+ * Destroying the topic deletes its subscriptions, rules, and messages.
+ *
+ * **Example:** Keep the topic when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const events = yield* Azure.ServiceBus.Topic("events", {
+ *   namespace: bus.namespaceName,
+ * }).pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

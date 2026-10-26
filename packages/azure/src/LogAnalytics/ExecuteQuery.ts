@@ -4,6 +4,22 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type { Workspace } from "./Workspace.ts";
 
+/**
+ * Request of an {@link ExecuteQuery} call. The bound workspace supplies
+ * `workspaceId`.
+ *
+ * - `query`: the KQL query text, e.g. `"Heartbeat | count"`.
+ * - `timespan` (optional): ISO 8601 duration or interval applied on top of
+ *   any time filter in the query, e.g. `PT1H` or `P1D`. Default: no extra
+ *   time filter.
+ * - `workspaces` (optional): more workspaces to query with the primary one
+ *   (names, customer IDs, or ARM IDs). The binding grants access to the
+ *   bound workspace only. Default: only the bound workspace.
+ * - `prefer` (optional): `Prefer` header, e.g. `wait=60` (server timeout in
+ *   seconds) or `include-statistics=true`. Default: not sent.
+ * - `endpoint` (optional): Log Analytics endpoint. Default:
+ *   `https://api.loganalytics.io`.
+ */
 export interface ExecuteQueryRequest extends Omit<query.ExecuteQueryRequest, "workspaceId"> {}
 
 /**
@@ -20,26 +36,30 @@ export interface ExecuteQueryRequest extends Omit<query.ExecuteQueryRequest, "wo
  * `AzureBindings`).
  * Provide {@link ExecuteQueryHttp}.
  *
- * ### Calling ExecuteQuery
- * **Example:** ExecuteQuery from a Function
+ * ### Running a Query
+ * **Example:** Run a KQL query from an Azure Function
  * ```typescript
- * // init
- * const executeQuery = yield* Azure.LogAnalytics.ExecuteQuery(workspace);
+ * const Logs = Azure.LogAnalytics.Workspace("Logs", {});
  *
- * // runtime
- * const result = yield* executeQuery({
- *   query: "AppEvents_CL | where Level == 'error' | take 10",
- *   timespan: "PT1H",
- * });
- * const rows = result.tables[0]?.rows ?? [];
- * ```
- *
- * **Example:** Provide the implementation on the Function
- * ```typescript
- * Effect.gen(function* () {
- *   const executeQuery = yield* Azure.LogAnalytics.ExecuteQuery(workspace);
- *   // ...
- * }).pipe(Effect.provide(Azure.LogAnalytics.ExecuteQueryHttp));
+ * export default class Reports extends Azure.Functions.Function<Reports>()(
+ *   "Reports",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const workspace = yield* Logs;
+ *     // init: assigns Log Analytics Data Reader on the workspace only
+ *     const executeQuery = yield* Azure.LogAnalytics.ExecuteQuery(workspace);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime
+ *         const result = yield* executeQuery({
+ *           query: "AppEvents_CL | where Level == 'error' | take 10",
+ *           timespan: "PT1H",
+ *         });
+ *         return yield* HttpServerResponse.json({ rows: result.tables[0]?.rows ?? [] });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.LogAnalytics.ExecuteQueryHttp)),
+ * ) {}
  * ```
  *
  * @binding

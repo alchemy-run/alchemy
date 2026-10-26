@@ -31,6 +31,7 @@ export type SetDirectoryMetadataRequest = FileShareRequest<files.SetDirectoryMet
  *
  * // runtime
  * yield* setDirectoryMetadata({ directory: "reports", metadata: { team: "finance" } });
+ * // …provided with Effect.provide(Azure.Storage.SetDirectoryMetadataHttp)
  * ```
  *
  * @binding

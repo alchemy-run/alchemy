@@ -28,6 +28,7 @@ export interface ReadWriteConfigurationStoreClient
  * // runtime
  * yield* config.set("App:Color", "green");
  * const color = yield* config.get("App:Color");
+ * // …provided with Effect.provide(Azure.AppConfiguration.ConfigurationStoreReadWriteHttp)
  * ```
  *
  * @binding

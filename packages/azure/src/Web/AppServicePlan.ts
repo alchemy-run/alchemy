@@ -31,6 +31,7 @@ export type AppServicePlanOs = "linux" | "windows";
 export interface AppServicePlanProps {
   /**
    * Resource group the plan is created in. Changing it replaces the plan.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -54,12 +55,14 @@ export interface AppServicePlanProps {
    */
   sku?: string;
   /**
-   * Pricing tier of the SKU, e.g. `Free`, `Basic`, `FlexConsumption`.
+   * Pricing tier of the SKU, e.g. `Free`, `Basic`, `PremiumV3`,
+   * `FlexConsumption`. Set it only for a SKU Alchemy cannot map to a tier.
    * @default derived from `sku`
    */
   tier?: string;
   /**
-   * Number of workers (instances) of a dedicated plan.
+   * Number of workers (instances) of a dedicated plan. Changes in place;
+   * the SKU's `maximumNumberOfWorkers` is the upper limit.
    * @default Azure's default (1)
    */
   capacity?: number;
@@ -69,12 +72,14 @@ export interface AppServicePlanProps {
    */
   os?: AppServicePlanOs;
   /**
-   * Scale each app independently instead of all apps across every worker.
+   * Scale each app independently (with its own instance count) instead of
+   * running every app on every worker. Changes in place.
    * @default Azure's default (`false`)
    */
   perSiteScaling?: boolean;
   /**
-   * Maximum number of workers an Elastic Premium plan scales out to.
+   * Maximum number of workers an Elastic Premium (`EP1`-`EP3`) plan scales
+   * out to. Changes in place.
    * @default Azure's default
    */
   maximumElasticWorkerCount?: number;
@@ -87,6 +92,7 @@ export interface AppServicePlanProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -127,12 +133,29 @@ export interface AppServicePlan extends Resource<
 > {}
 
 /**
- * An Azure App Service plan — the compute (workers, SKU, OS) that web
- * apps and function apps run on.
+ * An Azure App Service plan (`Microsoft.Web/serverfarms`): the compute
+ * (workers, SKU, OS) that web apps and function apps run on. Every app on
+ * a dedicated plan runs on every worker of the plan.
  *
- * The Free (`F1`), Consumption (`Y1`), and Flex Consumption (`FC1`) SKUs
- * cost nothing while idle; dedicated SKUs (`B1` and up) bill per worker
- * hour.
+ * Alchemy creates a Free (`F1`) Linux plan in the stack's resource group.
+ * `Azure.Web.WebApp` and `Azure.Functions.Function` create a plan for you
+ * when you don't pass one. The Free (`F1`), Consumption (`Y1`), and Flex
+ * Consumption (`FC1`) SKUs cost nothing while idle; dedicated SKUs (`B1`
+ * and up) bill per worker hour.
+ *
+ * :::caution[Changing `name`, `resourceGroup`, `location`, `os`, `zoneRedundant`, or the SKU family replaces the plan]
+ * The SKU families are Consumption (`Y1`), Flex Consumption (`FC1`),
+ * Elastic Premium (`EP1`-`EP3`), and dedicated (everything else). Alchemy
+ * creates a new plan with new workers, points the apps that use it at the
+ * new plan, and deletes the old one. Changing the SKU within a family
+ * (`B1` to `P1v3`) scales the plan in place.
+ * :::
+ *
+ * :::caution[Microsoft.Web throttles plan creates]
+ * Alchemy registers the `Microsoft.Web` resource provider before the first
+ * plan. A burst of plan creates in one subscription is throttled; Alchemy
+ * retries for about 25 minutes before it fails.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/app-service/overview-hosting-plans
  *
@@ -141,6 +164,16 @@ export interface AppServicePlan extends Resource<
  * ```typescript
  * const plan = yield* Azure.Web.AppServicePlan("plan", {
  *   sku: "F1",
+ * });
+ * ```
+ *
+ * **Example:** Plan with a fixed name and region
+ * ```typescript
+ * const plan = yield* Azure.Web.AppServicePlan("plan", {
+ *   name: "plan-web-prod",
+ *   location: "westeurope",
+ *   sku: "B1",
+ *   tags: { team: "web" },
  * });
  * ```
  *
@@ -153,11 +186,97 @@ export interface AppServicePlan extends Resource<
  * });
  * ```
  *
+ * ### Choosing a SKU
+ * `F1` is for trying things out (60 CPU minutes a day, no `alwaysOn`, no
+ * custom domains). `B1`-`B3` add `alwaysOn` and custom domains, `S1`-`S3`
+ * add deployment slots and autoscale, and Premium v3 (`P0v3`, `P1v3`, ...)
+ * adds faster workers and zone redundancy.
+ *
+ * **Example:** Premium v3 plan for production
+ * ```typescript
+ * const plan = yield* Azure.Web.AppServicePlan("plan", {
+ *   sku: "P1v3",
+ * });
+ * ```
+ *
+ * **Example:** Move up a size in place
+ * ```diff
+ *  const plan = yield* Azure.Web.AppServicePlan("plan", {
+ * -  sku: "B1",
+ * +  sku: "P1v3",
+ *  });
+ * ```
+ *
+ * ### Scaling Out
+ * **Example:** Three workers with per-app scaling
+ * ```typescript
+ * const plan = yield* Azure.Web.AppServicePlan("plan", {
+ *   sku: "P1v3",
+ *   capacity: 3,
+ *   perSiteScaling: true,
+ * });
+ * ```
+ *
+ * ### Zone Redundancy
+ * **Example:** Workers spread across availability zones
+ * ```typescript
+ * const plan = yield* Azure.Web.AppServicePlan("plan", {
+ *   sku: "P1v3",
+ *   capacity: 3,
+ *   zoneRedundant: true,
+ * });
+ * ```
+ *
  * ### Functions Hosting
  * **Example:** Flex Consumption plan for function apps
  * ```typescript
  * const plan = yield* Azure.Web.AppServicePlan("functions", {
  *   sku: "FC1",
+ * });
+ * ```
+ *
+ * **Example:** Elastic Premium plan that scales out to 20 workers
+ * ```typescript
+ * const plan = yield* Azure.Web.AppServicePlan("functions", {
+ *   sku: "EP1",
+ *   maximumElasticWorkerCount: 20,
+ * });
+ * ```
+ *
+ * **Example:** Consumption plan on Windows
+ * ```typescript
+ * const plan = yield* Azure.Web.AppServicePlan("functions", {
+ *   sku: "Y1",
+ *   os: "windows",
+ * });
+ * ```
+ *
+ * ### Running Apps on a Plan
+ * Pass `plan.appServicePlanId` as an app's `serverFarmId`. Apps on one plan
+ * share its workers; you pay for the workers, not for each app.
+ *
+ * **Example:** Two web apps on one plan
+ * ```typescript
+ * const plan = yield* Azure.Web.AppServicePlan("Plan", { sku: "P1v3" });
+ * const api = yield* Azure.Web.WebApp("Api", {
+ *   main: "./src/api.ts",
+ *   serverFarmId: plan.appServicePlanId,
+ *   siteConfig: { alwaysOn: true },
+ * });
+ * const admin = yield* Azure.Web.WebApp("Admin", {
+ *   main: "./src/admin.ts",
+ *   serverFarmId: plan.appServicePlanId,
+ * });
+ * ```
+ *
+ * **Example:** A function app on a dedicated plan
+ * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("FunctionsStorage");
+ * const plan = yield* Azure.Web.AppServicePlan("Plan", { sku: "B1" });
+ * const hello = yield* Azure.Web.FunctionApp("Hello", {
+ *   main: "./src/hello.ts",
+ *   serverFarmId: plan.appServicePlanId,
+ *   hostStorageAccountId: account.storageAccountId,
  * });
  * ```
  *

@@ -32,6 +32,7 @@ export interface PurgeDeletedSecretRequest extends Omit<
  *
  * // runtime
  * yield* purge();
+ * // …provided with Effect.provide(Azure.KeyVault.PurgeDeletedSecretHttp)
  * ```
  *
  * @binding

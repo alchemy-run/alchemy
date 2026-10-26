@@ -27,6 +27,7 @@ export interface DeleteKeyValueRequest extends Omit<appconfig.DeleteKeyValueRequ
  *
  * // runtime
  * yield* deleteKeyValue({ key: "App:Legacy", label: "prod" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.DeleteKeyValueHttp)
  * ```
  *
  * @binding

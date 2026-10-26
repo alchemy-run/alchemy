@@ -20,9 +20,23 @@ import {
 } from "./EventSubscriptionShared.ts";
 
 export interface TopicEventSubscriptionProps extends EventSubscriptionSettings {
-  /** Resource group of the custom topic. Changing it replaces the subscription. */
+  /**
+   * Resource group of the custom topic.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the parent custom topic. Changing it replaces the subscription. */
+  /**
+   * Name of the parent custom topic, e.g. `topic.topicName` of an
+   * `Azure.EventGrid.Topic`.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   */
   topic: string;
 }
 
@@ -40,29 +54,52 @@ export interface TopicEventSubscription extends Resource<
 > {}
 
 /**
- * An event subscription on an Event Grid custom topic, addressed through the
- * topic (`topics/{topic}/eventSubscriptions/{name}`). It is the same ARM
- * object that `Azure.EventGrid.EventSubscription` creates with
+ * An event subscription on an Event Grid custom topic
+ * (`Microsoft.EventGrid/topics/eventSubscriptions`): it routes the events
+ * you publish to the topic to a queue, webhook, Function, or hub. It is the
+ * same ARM object that `Azure.EventGrid.EventSubscription` creates with
  * `scope: topic.topicId`.
  *
  * Event subscriptions have no tags; Alchemy records ownership in a label
  * (`alchemy:{stack}/{stage}/{id}`).
+ *
+ * :::caution[Changing `name`, `topic`, `eventDeliverySchema`, or `resourceGroup` replaces the subscription]
+ * Alchemy creates a new subscription and deletes the old one.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/custom-topics
  *
  * ### Subscribing to a Custom Topic
  * **Example:** Deliver order events to a Storage queue
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("sink");
+ * const queue = yield* Azure.Storage.Queue("orders", {
+ *   storageAccount: account.storageAccountName,
+ * });
  * const topic = yield* Azure.EventGrid.Topic("orders");
  * const toQueue = yield* Azure.EventGrid.TopicEventSubscription("orders-queue", {
  *   topic: topic.topicName,
  *   destination: {
  *     endpointType: "StorageQueue",
  *     resourceId: account.storageAccountId,
- *     queueName: "orders",
+ *     queueName: queue.queueName,
  *   },
  *   filter: { includedEventTypes: ["Order.Created"] },
  *   retryPolicy: { maxDeliveryAttempts: 10 },
+ * });
+ * ```
+ *
+ * ### Delivery Schema
+ * **Example:** Deliver events as CloudEvents v1.0
+ * ```typescript
+ * const cloudEvents = yield* Azure.EventGrid.TopicEventSubscription("orders-ce", {
+ *   topic: topic.topicName,
+ *   destination: {
+ *     endpointType: "StorageQueue",
+ *     resourceId: account.storageAccountId,
+ *     queueName: queue.queueName,
+ *   },
+ *   eventDeliverySchema: "CloudEventSchemaV1_0",
  * });
  * ```
  *

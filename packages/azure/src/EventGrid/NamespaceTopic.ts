@@ -17,18 +17,36 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEventGridName, namespaceTopicsHostname, redactKeys, sameName } from "./common.ts";
 
 export interface NamespaceTopicProps {
-  /** Resource group of the namespace. Changing it replaces the topic. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the topic.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the parent Event Grid namespace. Changing it replaces the topic. */
+  /**
+   * Name of the parent Event Grid namespace, e.g. `namespace.namespaceName`
+   * of an `Azure.EventGrid.Namespace`.
+   *
+   * :::caution
+   * Changing it replaces the topic.
+   * :::
+   */
   namespace: string;
   /**
    * Topic name: 3-50 letters, digits, and hyphens. If omitted, a unique
-   * name is generated from the app, stage, and logical ID. Changing it
-   * replaces the topic.
+   * name is generated from the app, stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the topic.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Days events are retained for pull delivery (1-7).
+   * Days events are retained for pull delivery (1-7). Updated in place.
    * @default Azure's default (`7`)
    */
   eventRetentionInDays?: number;
@@ -63,11 +81,17 @@ export interface NamespaceTopic extends Resource<
 > {}
 
 /**
- * A topic in an Event Grid namespace. It accepts CloudEvents (v1.0) from
- * custom publishers and delivers them to namespace event subscriptions by
- * pull (queue) or push.
+ * A topic in an Event Grid namespace (`Microsoft.EventGrid/namespaces/topics`).
+ * It accepts CloudEvents (v1.0) from your publishers and delivers them to
+ * `Azure.EventGrid.NamespaceTopicEventSubscription`s by pull (queue) or
+ * push.
  *
  * Namespace topics have no tags; ownership follows the parent namespace.
+ *
+ * :::caution[Changing `name`, `namespace`, or `resourceGroup` replaces the topic]
+ * Alchemy creates a new topic and deletes the old one with its event
+ * subscriptions and retained events.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/concepts-event-grid-namespaces
  *

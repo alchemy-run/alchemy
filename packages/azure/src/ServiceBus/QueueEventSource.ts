@@ -4,23 +4,25 @@ import type { Queue } from "./Queue.ts";
 
 /** One Service Bus message delivered to a handler. */
 export interface ServiceBusMessage {
-  /** Message body, JSON-decoded when it is JSON. */
+  /** Message body: JSON-decoded when it is JSON, else the text. */
   body: unknown;
   /** Message ID. */
   messageId: string | undefined;
   /** How many times delivery was attempted (1 on first delivery). */
   deliveryCount: number | undefined;
-  /** When Service Bus accepted the message. */
+  /** When Service Bus accepted the message (UTC). */
   enqueuedTimeUtc: string | undefined;
-  /** Application properties set by the sender. */
+  /** Application (custom) properties the sender set, by name. */
   applicationProperties: Record<string, unknown>;
   /** All trigger metadata the host passed (`SequenceNumber`, `ContentType`, …). */
   metadata: Record<string, unknown>;
 }
 
+/** Options of a Service Bus event source. */
 export interface ServiceBusEventSourceProps {
   /**
-   * Name of the trigger function on the host (letters, digits, `_`, `-`).
+   * Name of the trigger function on an Azure Function host (letters,
+   * digits, `_`, `-`). Container Apps hosts ignore it.
    * @default `sbq-<queue logical ID>` / `sbs-<subscription logical ID>`
    */
   functionName?: string;
@@ -33,22 +35,73 @@ export type QueueEventSourceService = <Req = never>(
 ) => Effect.Effect<void>;
 
 /**
- * Event source connecting a Service Bus {@link Queue} to the runtime that
- * hosts it. Consume it with {@link consumeQueueMessages} and provide the
- * host's implementation: `Azure.Functions.ServiceBusQueueEventSource` (a
- * native `serviceBusTrigger` function with a managed-identity connection).
+ * Run a handler for every message sent to an Azure Service Bus
+ * {@link Queue}. Consume it with {@link consumeQueueMessages} inside the
+ * host and provide the host's layer:
+ *
+ * - **Azure Function**: `Azure.Functions.ServiceBusQueueEventSource`. It
+ *   adds a native `serviceBusTrigger` function with a managed-identity
+ *   connection and assigns **Azure Service Bus Data Receiver** on the queue
+ *   only.
+ * - **Container App**: `Azure.ContainerApps.AppServiceBusQueueEventSource`.
+ *   It adds a KEDA `azure-servicebus` scale rule and runs a receive loop in
+ *   every replica. It assigns **Azure Service Bus Data Owner** on the queue
+ *   only, because the KEDA scaler reads the queue's message count.
+ * - **Container Apps job**: `Azure.ContainerApps.JobServiceBusQueueEventSource`.
+ *   A KEDA rule starts an execution while the queue has messages. It
+ *   assigns **Azure Service Bus Data Owner** on the queue only.
  *
  * The host completes a message when the handler succeeds and abandons it
- * when the handler fails (defects); after the queue's max delivery count
- * the message moves to the dead-letter queue.
+ * when the handler fails (defects). After the queue's max delivery count
+ * the message moves to the dead-letter queue. Make the handler idempotent:
+ * a message can arrive more than once.
  *
  * ### Consuming a Queue
  * **Example:** Process orders in an Azure Function
  * ```typescript
- * yield* Azure.ServiceBus.consumeQueueMessages(orders, (message) =>
- *   Effect.log(`order ${message.messageId}`),
+ * export default class Worker extends Azure.Functions.Function<Worker>()(
+ *   "Worker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     // init: adds the trigger and assigns the role on the queue only
+ *     yield* Azure.ServiceBus.consumeQueueMessages(Orders, (message) =>
+ *       // runtime: once per message
+ *       Effect.log(`order ${message.messageId}: ${JSON.stringify(message.body)}`),
+ *     );
+ *     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+ *   }).pipe(Effect.provide(Azure.Functions.ServiceBusQueueEventSource)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Process orders in a Container App
+ * ```typescript
+ * export default class Worker extends Azure.ContainerApps.ContainerApp<Worker>()(
+ *   "Worker",
+ *   Effect.gen(function* () {
+ *     const env = yield* Environment;
+ *     return {
+ *       main: import.meta.url,
+ *       environmentId: env.environmentId,
+ *       template: { scale: { minReplicas: 0, maxReplicas: 5 } },
+ *     };
+ *   }),
+ *   Effect.gen(function* () {
+ *     yield* Azure.ServiceBus.consumeQueueMessages(Orders, (message) =>
+ *       Effect.log(`order ${message.messageId}, delivery ${message.deliveryCount}`),
+ *     );
+ *     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+ *   }).pipe(Effect.provide(Azure.ContainerApps.AppServiceBusQueueEventSource)),
+ * ) {}
+ * ```
+ *
+ * ### Naming the Trigger
+ * **Example:** Set the Azure Function trigger name
+ * ```typescript
+ * yield* Azure.ServiceBus.consumeQueueMessages(
+ *   Orders,
+ *   { functionName: "process-orders" },
+ *   (message) => Effect.log(message.body),
  * );
- * // …provided with Effect.provide(Azure.Functions.ServiceBusQueueEventSource)
  * ```
  *
  * @binding

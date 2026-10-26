@@ -40,7 +40,7 @@ export type MySQLSkuTier = "Burstable" | "GeneralPurpose" | "MemoryOptimized";
 type EnableStatus = "Enabled" | "Disabled";
 
 export interface FlexibleServerSku {
-  /** Compute size, e.g. `Standard_B1ms`, `Standard_D2ds_v4`. */
+  /** Compute size, e.g. `Standard_B1ms`, `Standard_D2ds_v4`. Resizing restarts the server. */
   name: string;
   /** Compute tier matching the size. */
   tier: MySQLSkuTier;
@@ -48,21 +48,41 @@ export interface FlexibleServerSku {
 
 export interface FlexibleServerStorage {
   /**
-   * Storage size in GiB (20-16384). Can only grow in place; asking for less
-   * than the previously requested size replaces the server.
+   * Storage size in GiB (20-16384). Storage can only grow in place.
+   *
+   * :::caution
+   * Asking for less than the previous size replaces the server and
+   * deletes every database on it.
+   * :::
    * @default 20
    */
   storageSizeGB?: number;
-  /** Provisioned IOPS (ignored when `autoIoScaling` is enabled). */
+  /**
+   * Provisioned IOPS (ignored when `autoIoScaling` is enabled).
+   * @default Azure's default for the size
+   */
   iops?: number;
-  /** Grow storage automatically when free space runs low. */
+  /**
+   * Grow storage automatically when free space runs low.
+   * @default Azure's default (`Enabled`)
+   */
   autoGrow?: EnableStatus;
-  /** Scale IOPS automatically with the workload. */
+  /**
+   * Scale IOPS automatically with the workload.
+   * @default Azure's default (`Disabled`)
+   */
   autoIoScaling?: EnableStatus;
-  /** Keep the binary log on the data disk. */
+  /**
+   * Keep the binary log on the data disk.
+   * @default Azure's default (`Disabled`)
+   */
   logOnDisk?: EnableStatus;
   /**
-   * Storage redundancy. Changing it replaces the server.
+   * Storage redundancy.
+   *
+   * :::caution
+   * Changing it replaces the server and deletes every database on it.
+   * :::
    * @default "LocalRedundancy"
    */
   storageRedundancy?: "LocalRedundancy" | "ZoneRedundancy";
@@ -70,14 +90,21 @@ export interface FlexibleServerStorage {
 
 export interface FlexibleServerBackup {
   /**
-   * Days to retain automatic backups (1-35).
+   * Days to keep automatic backups (1-35).
    * @default 7
    */
   backupRetentionDays?: number;
-  /** Hours between automatic backups. */
+  /**
+   * Hours between automatic backups.
+   * @default Azure's default
+   */
   backupIntervalHours?: number;
   /**
-   * Store backups in the paired region. Changing it replaces the server.
+   * Store backups in the paired region.
+   *
+   * :::caution
+   * Changing it replaces the server and deletes every database on it.
+   * :::
    * @default "Disabled"
    */
   geoRedundantBackup?: EnableStatus;
@@ -85,18 +112,29 @@ export interface FlexibleServerBackup {
 
 export interface FlexibleServerNetwork {
   /**
-   * Whether the public endpoint accepts traffic (public-access servers only;
-   * firewall rules still apply).
+   * Whether the public endpoint accepts traffic (public-access servers
+   * only; firewall rules still apply).
+   * @default Azure's default (`Enabled` for public-access servers)
    */
   publicNetworkAccess?: EnableStatus;
   /**
    * Subnet delegated to `Microsoft.DBforMySQL/flexibleServers` for VNet
-   * integration. Changing it replaces the server.
+   * integration.
+   *
+   * :::caution
+   * Changing it replaces the server and deletes every database on it.
+   * :::
+   * @default none (public access)
    */
   delegatedSubnetResourceId?: string;
   /**
-   * Private DNS zone used with VNet integration. Changing it replaces the
-   * server.
+   * Private DNS zone used with VNet integration, e.g.
+   * `<name>.private.mysql.database.azure.com`.
+   *
+   * :::caution
+   * Changing it replaces the server and deletes every database on it.
+   * :::
+   * @default none
    */
   privateDnsZoneResourceId?: string;
 }
@@ -104,127 +142,226 @@ export interface FlexibleServerNetwork {
 export interface FlexibleServerHighAvailability {
   /** High availability mode. Not available on the Burstable tier. */
   mode: "Disabled" | "ZoneRedundant" | "SameZone";
-  /** Availability zone of the standby server. */
+  /**
+   * Availability zone of the standby server.
+   * @default Azure's choice
+   */
   standbyAvailabilityZone?: string;
 }
 
 export interface FlexibleServerMaintenanceWindow {
-  /** `Enabled` to use the custom window below, `Disabled` for system-managed. */
+  /**
+   * `Enabled` to use the custom window below, `Disabled` for a
+   * system-managed window.
+   * @default Azure's default (`Disabled`)
+   */
   customWindow?: EnableStatus;
-  /** Start hour (UTC, 0-23). */
+  /**
+   * Start hour (UTC, 0-23).
+   * @default 0
+   */
   startHour?: number;
-  /** Start minute (0-59). */
+  /**
+   * Start minute (0-59).
+   * @default 0
+   */
   startMinute?: number;
-  /** Day of the week (0 = Sunday). */
+  /**
+   * Day of the week (0 = Sunday).
+   * @default 0
+   */
   dayOfWeek?: number;
 }
 
 export interface FlexibleServerDataEncryption {
-  /** Encryption type. Changing it replaces the server. */
+  /**
+   * Encryption type.
+   *
+   * :::caution
+   * Changing it replaces the server and deletes every database on it.
+   * :::
+   */
   type: "SystemManaged" | "AzureKeyVault";
-  /** Key Vault key URI for customer-managed keys. */
+  /**
+   * Key Vault key URI for customer-managed keys.
+   * @default none
+   */
   primaryKeyURI?: string;
-  /** User-assigned identity that can read the primary key. */
+  /**
+   * User-assigned identity that can read the primary key.
+   * @default none
+   */
   primaryUserAssignedIdentityId?: string;
-  /** Key Vault key URI for geo-redundant backups. */
+  /**
+   * Key Vault key URI for geo-redundant backups.
+   * @default none
+   */
   geoBackupKeyURI?: string;
-  /** User-assigned identity that can read the geo-backup key. */
+  /**
+   * User-assigned identity that can read the geo-backup key.
+   * @default none
+   */
   geoBackupUserAssignedIdentityId?: string;
 }
 
 export interface FlexibleServerProps {
-  /** Resource group the server is created in. Changing it replaces the server. */
+  /**
+   * Resource group the server is created in.
+   *
+   * :::caution
+   * Changing it replaces the server and deletes every database on it.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Globally unique server name (it becomes the DNS label
    * `{name}.mysql.database.azure.com`): 3-63 lowercase letters, digits,
-   * and hyphens. If omitted, a unique name of at most 32 characters is
-   * generated from the app, stage, and logical ID (long server names in
-   * long resource-group names fail to provision). Changing it replaces the
-   * server.
+   * and hyphens.
+   *
+   * :::caution
+   * Changing it replaces the server and deletes every database on it.
+   * :::
+   * @default a unique name of at most 32 characters generated from the app, stage, and logical ID (long server names in long resource-group names fail to provision)
    */
   name?: string;
   /**
-   * Azure location of the server. Changing it replaces the server.
+   * Azure location of the server, e.g. `centralus`.
+   *
+   * :::caution
+   * Changing it replaces the server and deletes every database on it.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
-   * MySQL version. Upgrades happen in place; a downgrade replaces the
-   * server.
+   * MySQL version. A higher version upgrades the server in place (with
+   * downtime).
+   *
+   * :::caution
+   * A lower version replaces the server and deletes every database on it.
+   * :::
    * @default "8.0.21"
    */
   version?: MySQLVersion;
   /**
-   * Compute size and tier.
+   * Compute size and tier. Resizing happens in place and restarts the
+   * server.
    * @default { name: "Standard_B1ms", tier: "Burstable" }
    */
   sku?: FlexibleServerSku;
   /**
-   * Login of the password-based administrator. Cannot change after
-   * creation: changing it replaces the server. Must not be `admin`,
-   * `administrator`, `root`, `guest`, `public`, or similar reserved names.
+   * Login of the password-based administrator. Must not be `admin`,
+   * `administrator`, `root`, `guest`, `public`, or a similar reserved name.
+   *
+   * :::caution
+   * Azure cannot change the login after creation. Changing it replaces the
+   * server and deletes every database on it.
+   * :::
    * @default "alchemyadmin"
    */
   administratorLogin?: string;
   /**
-   * Administrator password (8-128 characters from three of: upper, lower,
-   * digits, symbols). Changing it updates the server in place. If omitted,
-   * a random password is generated on create and exposed as an attribute.
+   * Administrator password: 8-128 characters from three of upper case,
+   * lower case, digits, and symbols. Changing it updates the server in
+   * place.
+   * @default a random password generated on create and exposed as the `administratorLoginPassword` attribute
    */
   administratorLoginPassword?: Redacted.Redacted<string>;
-  /** Storage configuration. */
+  /**
+   * Storage configuration.
+   * @default { storageSizeGB: 20, storageRedundancy: "LocalRedundancy" }
+   */
   storage?: FlexibleServerStorage;
-  /** Automatic backup configuration. */
+  /**
+   * Automatic backup configuration.
+   * @default { backupRetentionDays: 7, geoRedundantBackup: "Disabled" }
+   */
   backup?: FlexibleServerBackup;
-  /** Network configuration. Defaults to a public-access server. */
+  /**
+   * Network configuration.
+   * @default a public-access server with no firewall rules
+   */
   network?: FlexibleServerNetwork;
-  /** High availability configuration (General Purpose / Memory Optimized only). */
+  /**
+   * High availability configuration (General Purpose and Memory Optimized
+   * tiers only).
+   * @default { mode: "Disabled" }
+   */
   highAvailability?: FlexibleServerHighAvailability;
   /**
-   * Availability zone of the primary server, set at creation. Changing it
-   * replaces the server.
+   * Availability zone of the primary server, set at creation.
+   *
+   * :::caution
+   * Changing it replaces the server and deletes every database on it.
+   * :::
+   * @default Azure's choice
    */
   availabilityZone?: string;
-  /** Maintenance window. */
+  /**
+   * Maintenance window.
+   * @default a system-managed window
+   */
   maintenanceWindow?: FlexibleServerMaintenanceWindow;
-  /** Data encryption (system-managed or customer-managed keys). */
+  /**
+   * Data encryption (system-managed or customer-managed keys).
+   * @default { type: "SystemManaged" }
+   */
   dataEncryption?: FlexibleServerDataEncryption;
   /**
    * ARM IDs of user-assigned managed identities to attach (needed for
    * customer-managed keys and Microsoft Entra administrators).
+   * @default []
    */
   userAssignedIdentityIds?: string[];
   /**
    * TCP port the server listens on.
+   *
+   * :::caution
+   * Changing the port replaces the server and deletes every database on it.
+   * :::
    * @default 3306
    */
   databasePort?: number;
   /**
    * How the server is created. `Replica` creates a read replica of
-   * `sourceServerResourceId`; `PointInTimeRestore`/`GeoRestore` restore
-   * it. Changing it replaces the server.
+   * `sourceServerResourceId`; `PointInTimeRestore` and `GeoRestore`
+   * restore it.
+   *
+   * :::caution
+   * Changing it replaces the server and deletes every database on it.
+   * :::
    * @default "Default"
    */
   createMode?: "Default" | "Replica" | "PointInTimeRestore" | "GeoRestore";
   /**
    * Source server for `Replica`, `PointInTimeRestore`, and `GeoRestore`.
-   * Changing it replaces the server.
+   *
+   * :::caution
+   * Changing it replaces the server and deletes every database on it.
+   * :::
+   * @default none
    */
   sourceServerResourceId?: string;
   /**
-   * Restore point (ISO 8601) for `PointInTimeRestore`/`GeoRestore`.
-   * Changing it replaces the server.
+   * Restore point (ISO 8601) for `PointInTimeRestore` and `GeoRestore`.
+   *
+   * :::caution
+   * Changing it replaces the server and deletes every database on it.
+   * :::
+   * @default none
    */
   restorePointInTime?: string;
   /**
    * Replication role. Set `None` on a replica to promote it to a
    * standalone server.
+   * @default Azure's value for the create mode
    */
   replicationRole?: "None" | "Source" | "Replica";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -281,41 +418,245 @@ export interface FlexibleServer extends Resource<
 > {}
 
 /**
- * An Azure Database for MySQL flexible server.
+ * An Azure Database for MySQL flexible server
+ * (`Microsoft.DBforMySQL/flexibleServers`): a managed MySQL server that
+ * holds your databases.
  *
- * Servers default to the cheapest configuration — Burstable
- * `Standard_B1ms`, 20 GiB storage, MySQL 8.0, public access with no
- * firewall rules (add `MySQL.FirewallRule`s to let clients in). Creation
- * takes several minutes.
+ * Alchemy creates the cheapest configuration by default: Burstable
+ * `Standard_B1ms`, 20 GiB storage, MySQL 8.0, and public access with no
+ * firewall rules, so no client connects until you add an
+ * `Azure.MySQL.FirewallRule` or put the server in a VNet. If you give no
+ * password, Alchemy generates one and exposes it, with a `mysql://`
+ * connection URL that requires TLS, as redacted attributes. Creation takes
+ * several minutes; the deploy waits until the server is `Ready`.
  *
- * @see https://learn.microsoft.com/azure/mysql/flexible-server/overview
+ * :::caution[Changing `name`, `location`, `resourceGroup`, `administratorLogin`, `createMode`, `availabilityZone`, or `databasePort` replaces the server]
+ * Alchemy creates a new, empty server and deletes the old one with every
+ * database on it. A lower `version`, a smaller `storage.storageSizeGB`, and
+ * changes to `storage.storageRedundancy`, `backup.geoRedundantBackup`,
+ * `dataEncryption.type`, the delegated subnet, the private DNS zone,
+ * `sourceServerResourceId`, or `restorePointInTime` replace it too.
+ * :::
+ *
+ * :::caution[A deploy starts a stopped server]
+ * Azure rejects updates to a stopped server, so Alchemy starts a server you
+ * stopped (for example with `Azure.MySQL.StopServer`) before it syncs the
+ * settings.
+ * :::
+ *
+ * See [Azure Database for MySQL flexible server](https://learn.microsoft.com/azure/mysql/flexible-server/overview).
  *
  * ### Creating a Server
  * **Example:** Burstable server with a generated password
  * ```typescript
- * const server = yield* Azure.MySQL.FlexibleServer("db");
- * // server.connectionString is a Redacted mysql:// URL
+ * const server = yield* Azure.MySQL.FlexibleServer("MySql", {
+ *   location: "centralus",
+ * });
+ * // server.fullyQualifiedDomainName → "<name>.mysql.database.azure.com"
+ * // server.connectionString is a Redacted mysql:// URL for the administrator
  * ```
  *
- * **Example:** General Purpose server with longer backup retention
+ * **Example:** General Purpose server on MySQL 8.4
  * ```typescript
- * const server = yield* Azure.MySQL.FlexibleServer("db", {
+ * import * as Config from "effect/Config";
+ *
+ * const password = yield* Config.redacted("MYSQL_PASSWORD");
+ * const server = yield* Azure.MySQL.FlexibleServer("MySql", {
  *   version: "8.4",
  *   sku: { name: "Standard_D2ds_v4", tier: "GeneralPurpose" },
- *   storage: { storageSizeGB: 128, autoGrow: "Enabled" },
- *   backup: { backupRetentionDays: 14 },
- *   administratorLoginPassword: yield* Config.redacted("MYSQL_PASSWORD"),
+ *   storage: { storageSizeGB: 128, autoGrow: "Enabled", autoIoScaling: "Enabled" },
+ *   administratorLoginPassword: password,
+ * });
+ * ```
+ *
+ * ### Databases and Parameters
+ * **Example:** Create a database and set a server parameter
+ * ```typescript
+ * const db = yield* Azure.MySQL.Database("App", {
+ *   server: server.serverName,
+ *   name: "app",
+ * });
+ * yield* Azure.MySQL.Configuration("SlowLog", {
+ *   server: server.serverName,
+ *   name: "slow_query_log",
+ *   value: "ON",
+ * });
+ * ```
+ *
+ * ### Firewall Rules
+ * **Example:** Allow Azure services
+ * ```typescript
+ * // Flex Consumption Functions have no fixed outbound IP. The 0.0.0.0 rule
+ * // lets Azure services in; the server still requires TLS and a password.
+ * yield* Azure.MySQL.FirewallRule("AllowAzureServices", {
+ *   server: server.serverName,
+ *   startIpAddress: "0.0.0.0",
+ *   endIpAddress: "0.0.0.0",
+ * });
+ * ```
+ *
+ * **Example:** Allow an office range
+ * ```typescript
+ * yield* Azure.MySQL.FirewallRule("Office", {
+ *   server: server.serverName,
+ *   startIpAddress: "203.0.113.0",
+ *   endIpAddress: "203.0.113.255",
+ * });
+ * ```
+ *
+ * ### Private Networking
+ * **Example:** Server inside a delegated subnet
+ * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("Vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("Db", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ *   delegations: [{ serviceName: "Microsoft.DBforMySQL/flexibleServers" }],
+ * });
+ * const zone = yield* Azure.PrivateDns.Zone("MySqlZone", {
+ *   name: "app.private.mysql.database.azure.com",
+ * });
+ * yield* Azure.PrivateDns.VirtualNetworkLink("MySqlZoneLink", {
+ *   privateZoneName: zone.privateZoneName,
+ *   virtualNetworkId: vnet.virtualNetworkId,
+ * });
+ * const server = yield* Azure.MySQL.FlexibleServer("MySql", {
+ *   sku: { name: "Standard_D2ds_v4", tier: "GeneralPurpose" },
+ *   network: {
+ *     delegatedSubnetResourceId: subnet.subnetId,
+ *     privateDnsZoneResourceId: zone.privateZoneId,
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Turn off the public endpoint
+ * ```typescript
+ * const server = yield* Azure.MySQL.FlexibleServer("MySql", {
+ *   network: { publicNetworkAccess: "Disabled" },
+ * });
+ * ```
+ *
+ * ### Authentication
+ * **Example:** Make an Entra group the administrator
+ * ```typescript
+ * // MySQL reads Entra users through a user-assigned identity on the server.
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("MySqlEntra");
+ * const server = yield* Azure.MySQL.FlexibleServer("MySql", {
+ *   userAssignedIdentityIds: [identity.identityId],
+ * });
+ * yield* Azure.MySQL.Administrator("Dbas", {
+ *   server: server.serverName,
+ *   login: "db-admins",
+ *   sid: "00000000-0000-0000-0000-000000000000", // the group's object ID
+ *   identityResourceId: identity.identityId,
+ * });
+ * ```
+ *
+ * ### High Availability
+ * **Example:** Zone-redundant standby
+ * ```typescript
+ * const server = yield* Azure.MySQL.FlexibleServer("MySql", {
+ *   sku: { name: "Standard_D2ds_v4", tier: "GeneralPurpose" },
+ *   highAvailability: { mode: "ZoneRedundant" },
+ *   storage: { storageRedundancy: "ZoneRedundancy" },
+ * });
+ * ```
+ *
+ * ### Backups and Restores
+ * **Example:** Keep backups for 14 days in the paired region
+ * ```typescript
+ * const server = yield* Azure.MySQL.FlexibleServer("MySql", {
+ *   backup: { backupRetentionDays: 14, geoRedundantBackup: "Enabled" },
+ * });
+ * ```
+ *
+ * **Example:** Restore a point in time into a new server
+ * ```typescript
+ * const restored = yield* Azure.MySQL.FlexibleServer("Restored", {
+ *   createMode: "PointInTimeRestore",
+ *   sourceServerResourceId: server.serverId,
+ *   restorePointInTime: "2026-10-24T12:00:00Z",
  * });
  * ```
  *
  * ### Read Replicas
  * **Example:** Replica of an existing server
  * ```typescript
- * const replica = yield* Azure.MySQL.FlexibleServer("replica", {
+ * const replica = yield* Azure.MySQL.FlexibleServer("Replica", {
  *   createMode: "Replica",
  *   sourceServerResourceId: primary.serverId,
  *   sku: { name: "Standard_D2ds_v4", tier: "GeneralPurpose" },
  * });
+ * ```
+ *
+ * **Example:** Promote the replica to a standalone server
+ * ```diff
+ * const replica = yield* Azure.MySQL.FlexibleServer("Replica", {
+ *   createMode: "Replica",
+ *   sourceServerResourceId: primary.serverId,
+ *   sku: { name: "Standard_D2ds_v4", tier: "GeneralPurpose" },
+ * +  replicationRole: "None",
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * MySQL has no data-plane binding: the runtime connects with a MySQL driver
+ * over TLS. Yield an Output of the server inside the host. Alchemy puts the
+ * value in the host's app settings and returns an Effect that reads it at
+ * runtime. The host's identity gets no role.
+ *
+ * **Example:** Read the connection values inside an Azure Function
+ * ```typescript
+ * // init
+ * const host = yield* server.fullyQualifiedDomainName;
+ * const databaseName = yield* db.databaseName;
+ *
+ * // runtime
+ * const hostName = yield* host;
+ * const name = yield* databaseName;
+ * // connect with a MySQL driver (e.g. @effect/sql-mysql2) to hostName:3306/name over TLS
+ * ```
+ *
+ * ### Runtime Operations
+ * `StopServer`, `StartServer`, `RestartServer`, and `FailoverServer` each
+ * assign a custom role with exactly one action on this server only, to the
+ * host's managed identity or, on any other host, to an Entra service
+ * principal.
+ *
+ * **Example:** Stop the server at night and start it in the morning
+ * ```typescript
+ * // init
+ * const stopServer = yield* Azure.MySQL.StopServer(server);
+ * const startServer = yield* Azure.MySQL.StartServer(server);
+ *
+ * // runtime: compute billing stops while stopped; Azure starts it again after 30 days
+ * yield* stopServer();
+ * yield* startServer();
+ * // …provided with Effect.provide([Azure.MySQL.StopServerHttp, Azure.MySQL.StartServerHttp])
+ * ```
+ *
+ * **Example:** Fail a zone-redundant server over to its standby
+ * ```typescript
+ * // init
+ * const failoverServer = yield* Azure.MySQL.FailoverServer(server);
+ * const restartServer = yield* Azure.MySQL.RestartServer(server);
+ *
+ * // runtime
+ * yield* failoverServer();
+ * yield* restartServer({ restartWithFailover: "Disabled" });
+ * // …provided with Effect.provide([Azure.MySQL.FailoverServerHttp, Azure.MySQL.RestartServerHttp])
+ * ```
+ *
+ * ### Deleting a Server
+ * Destroying the server deletes every database on it.
+ *
+ * **Example:** Keep the server when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const server = yield* Azure.MySQL.FlexibleServer("MySql").pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

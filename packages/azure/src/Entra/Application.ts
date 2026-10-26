@@ -49,9 +49,15 @@ export interface ApplicationProps {
    * and logical ID.
    */
   displayName?: string;
-  /** Free-text description (up to 1,024 characters). */
+  /**
+   * Free-text description (up to 1,024 characters).
+   * @default no description
+   */
   description?: string;
-  /** Notes for the people who manage the application. */
+  /**
+   * Notes for the people who manage the application.
+   * @default no notes
+   */
   notes?: string;
   /**
    * Accounts that may sign in.
@@ -66,16 +72,33 @@ export interface ApplicationProps {
   identifierUris?: string[];
   /** Web platform settings: redirect URIs for the authorization-code flow. */
   web?: {
+    /**
+     * URLs Entra may send the authorization code to, e.g.
+     * `https://portal.example.com/auth/callback`. HTTPS, except
+     * `http://localhost`.
+     * @default []
+     */
     redirectUris?: string[];
+    /** Home page of the application. */
     homePageUrl?: string;
+    /** URL Entra calls to sign the user out of the application. */
     logoutUrl?: string;
   };
   /** Single-page application redirect URIs (authorization code with PKCE). */
   spa?: {
+    /**
+     * URLs of the single-page app that receive the authorization code.
+     * @default []
+     */
     redirectUris?: string[];
   };
   /** Mobile and desktop redirect URIs. */
   publicClient?: {
+    /**
+     * Redirect URIs of native clients, e.g. `http://localhost` or
+     * `msal<client-id>://auth`.
+     * @default []
+     */
     redirectUris?: string[];
   };
   /**
@@ -87,6 +110,7 @@ export interface ApplicationProps {
   /**
    * User tags (plain strings). Alchemy adds its ownership tags
    * (`alchemy::stack=<stack>`, `alchemy::stage=<stage>`, `alchemy::id=<id>`).
+   * @default []
    */
   tags?: string[];
 }
@@ -113,21 +137,32 @@ export interface Application extends Resource<
 > {}
 
 /**
- * A Microsoft Entra ID application registration: the identity a program
- * signs in as. Pair it with an `Azure.Entra.ServicePrincipal` to give it
- * Azure RBAC roles, and an `Azure.Entra.ApplicationPassword` or
+ * A Microsoft Entra ID application registration (Microsoft Graph
+ * `application`): the identity a program signs in as. Pair it with an
+ * `Azure.Entra.ServicePrincipal` to give it Azure RBAC roles, and an
+ * `Azure.Entra.ApplicationPassword` or
  * `Azure.Entra.FederatedIdentityCredential` so it can get tokens.
+ *
+ * Use one for code that runs outside Azure (CI, another cloud) or for a
+ * sign-in flow. Code on an Azure host uses the host's managed identity
+ * instead, and Azure bindings on a non-Azure host (a Cloudflare Worker, an
+ * AWS Lambda) create an application, service principal, and client secret
+ * for the host on their own.
  *
  * Applications have no resource group: they live in the tenant. Alchemy
  * records ownership in the application's `tags` (a list of strings) as
  * `alchemy::stack=<stack>`, `alchemy::stage=<stage>` and
- * `alchemy::id=<id>`. Destroy deletes the application and then purges it
- * from the directory's deleted items, so it does not count toward the
- * tenant's object quota for 30 days.
+ * `alchemy::id=<id>`. Every prop updates the application in place; its
+ * `appId` and `objectId` never change. Destroy deletes the application and
+ * then purges it from the directory's deleted items, so it does not count
+ * toward the tenant's object quota for 30 days.
  *
+ * :::caution[The deploying identity needs a Microsoft Graph permission]
  * The deploying service principal needs the Microsoft Graph application
  * permission `Application.ReadWrite.OwnedBy` (or
- * `Application.ReadWrite.All`).
+ * `Application.ReadWrite.All`), with admin consent. Azure RBAC roles such
+ * as Owner do not cover Entra objects.
+ * :::
  *
  * @see https://learn.microsoft.com/graph/api/resources/application
  *
@@ -149,7 +184,84 @@ export interface Application extends Resource<
  * });
  * ```
  *
+ * **Example:** An application any Entra tenant can sign in to
+ * ```typescript
+ * const app = yield* Azure.Entra.Application("Saas", {
+ *   displayName: "Contoso SaaS",
+ *   signInAudience: "AzureADMultipleOrgs",
+ *   web: { redirectUris: ["https://app.contoso.com/auth/callback"] },
+ * });
+ * ```
+ *
+ * ### Signing In Without a Secret
+ * A federated credential lets GitHub Actions (or any OIDC issuer) sign in
+ * as the application with its own token. Grant roles to the service
+ * principal.
+ *
+ * **Example:** Deploy from GitHub Actions
+ * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
+ * const app = yield* Azure.Entra.Application("Deployer");
+ * const principal = yield* Azure.Entra.ServicePrincipal("DeployerPrincipal", {
+ *   appId: app.appId,
+ * });
+ * yield* Azure.Entra.FederatedIdentityCredential("DeployerGitHubMain", {
+ *   applicationObjectId: app.objectId,
+ *   issuer: "https://token.actions.githubusercontent.com",
+ *   subject: "repo:my-org/my-repo:ref:refs/heads/main",
+ * });
+ * yield* Azure.Authorization.RoleAssignment("DeployerContributes", {
+ *   scope: group.resourceGroupId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.Contributor,
+ *   principalId: principal.objectId,
+ *   principalType: "ServicePrincipal",
+ * });
+ * // azure/login in the workflow takes client-id and tenant-id from these.
+ * return { clientId: app.appId, tenantId: app.tenantId };
+ * ```
+ *
+ * ### Client Secrets
+ * **Example:** A client secret for a program that cannot use OIDC
+ * ```typescript
+ * const app = yield* Azure.Entra.Application("Ci");
+ * const secret = yield* Azure.Entra.ApplicationPassword("CiSecret", {
+ *   applicationObjectId: app.objectId,
+ *   endDateTime: "2027-12-31T00:00:00Z",
+ * });
+ * // Sign in with app.appId, app.tenantId, and secret.secretText (Redacted).
+ * ```
+ *
+ * ### Exposing an API
+ * Give the application an App ID URI so clients can request tokens for it,
+ * with the scope `<uri>/.default`.
+ *
+ * **Example:** An API with an App ID URI
+ * ```typescript
+ * const api = yield* Azure.Entra.Application("OrdersApi", {
+ *   displayName: "Orders API",
+ *   identifierUris: ["api://contoso-orders"],
+ * });
+ * ```
+ *
+ * ### Single-Page and Native Apps
+ * **Example:** A single-page app that signs in with PKCE
+ * ```typescript
+ * const spa = yield* Azure.Entra.Application("Dashboard", {
+ *   spa: { redirectUris: ["https://dashboard.example.com", "http://localhost:5173"] },
+ * });
+ * ```
+ *
+ * **Example:** A desktop or CLI client
+ * ```typescript
+ * const cli = yield* Azure.Entra.Application("Cli", {
+ *   publicClient: { redirectUris: ["http://localhost"] },
+ * });
+ * ```
+ *
  * ### Requesting API Permissions
+ * `Scope` requests a delegated permission (on behalf of a user); `Role`
+ * requests an application permission. An admin still has to grant consent.
+ *
  * **Example:** Request Microsoft Graph `User.Read`
  * ```typescript
  * const app = yield* Azure.Entra.Application("Reader", {
@@ -157,6 +269,18 @@ export interface Application extends Resource<
  *     {
  *       resourceAppId: "00000003-0000-0000-c000-000000000000",
  *       resourceAccess: [{ id: "e1fe6dd8-ba31-4d61-89e7-88639da4683d", type: "Scope" }],
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Request the Microsoft Graph application permission `User.Read.All`
+ * ```typescript
+ * const app = yield* Azure.Entra.Application("Directory", {
+ *   requiredResourceAccess: [
+ *     {
+ *       resourceAppId: "00000003-0000-0000-c000-000000000000",
+ *       resourceAccess: [{ id: "df021288-bdef-4463-88db-98f22de89214", type: "Role" }],
  *     },
  *   ],
  * });

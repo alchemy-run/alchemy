@@ -10,23 +10,66 @@ export type SubscriptionEventSourceService = <Req = never>(
 ) => Effect.Effect<void>;
 
 /**
- * Event source connecting a Service Bus topic {@link Subscription} to the
- * runtime that hosts it. Consume it with {@link consumeSubscriptionMessages}
- * and provide the host's implementation:
- * `Azure.Functions.ServiceBusSubscriptionEventSource` (a native
- * `serviceBusTrigger` function on the topic and subscription).
+ * Run a handler for every message an Azure Service Bus topic delivers to a
+ * {@link Subscription}. Consume it with {@link consumeSubscriptionMessages}
+ * inside the host and provide the host's layer:
+ *
+ * - **Azure Function**: `Azure.Functions.ServiceBusSubscriptionEventSource`.
+ *   It adds a native `serviceBusTrigger` function on the topic and
+ *   subscription and assigns **Azure Service Bus Data Receiver** on the
+ *   subscription only.
+ * - **Container App**:
+ *   `Azure.ContainerApps.AppServiceBusSubscriptionEventSource`. It adds a
+ *   KEDA `azure-servicebus` scale rule and runs a receive loop in every
+ *   replica. It assigns **Azure Service Bus Data Owner** on the
+ *   subscription only, because the KEDA scaler reads its message count.
+ *
+ * The host completes a message when the handler succeeds and abandons it
+ * when the handler fails (defects). After the subscription's max delivery
+ * count the message moves to the subscription's dead-letter queue. Each
+ * subscription gets its own copy of every message its rules match.
  *
  * ### Consuming a Topic Subscription
- * **Example:** Audit every published event
+ * **Example:** Audit every published event in an Azure Function
  * ```typescript
- * const audit = yield* Azure.ServiceBus.Subscription("Audit", {
- *   namespace: bus.namespaceName,
- *   topic: events.topicName,
+ * export const Audit = Effect.gen(function* () {
+ *   const bus = yield* Bus;
+ *   const events = yield* Events;
+ *   return yield* Azure.ServiceBus.Subscription("Audit", {
+ *     namespace: bus.namespaceName,
+ *     topic: events.topicName,
+ *   });
  * });
- * yield* Azure.ServiceBus.consumeSubscriptionMessages(audit, (message) =>
- *   Effect.log(message.body),
- * );
- * // …provided with Effect.provide(Azure.Functions.ServiceBusSubscriptionEventSource)
+ *
+ * export default class Worker extends Azure.Functions.Function<Worker>()(
+ *   "Worker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     // init: adds the trigger and assigns the role on the subscription only
+ *     yield* Azure.ServiceBus.consumeSubscriptionMessages(Audit, (message) =>
+ *       // runtime: once per message
+ *       Effect.log(`event ${message.messageId}: ${JSON.stringify(message.body)}`),
+ *     );
+ *     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+ *   }).pipe(Effect.provide(Azure.Functions.ServiceBusSubscriptionEventSource)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Audit events in a Container App
+ * ```typescript
+ * export default class Auditor extends Azure.ContainerApps.ContainerApp<Auditor>()(
+ *   "Auditor",
+ *   Effect.gen(function* () {
+ *     const env = yield* Environment;
+ *     return { main: import.meta.url, environmentId: env.environmentId };
+ *   }),
+ *   Effect.gen(function* () {
+ *     yield* Azure.ServiceBus.consumeSubscriptionMessages(Audit, (message) =>
+ *       Effect.log(`event ${message.messageId}`),
+ *     );
+ *     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+ *   }).pipe(Effect.provide(Azure.ContainerApps.AppServiceBusSubscriptionEventSource)),
+ * ) {}
  * ```
  *
  * @binding

@@ -1636,6 +1636,7 @@ export default defineConfig({
               items: [
                 { label: "Overview", link: "/azure/frontend/websites" },
                 { label: "Vite", link: "/azure/frontend/vite" },
+                { label: "Static sites", link: "/azure/frontend/static-site" },
               ],
             },
             providerResourcesEntry("Azure"),

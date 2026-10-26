@@ -209,6 +209,12 @@ export interface WorkloadIdentityResult {
   env: Record<string, any>;
   /** Annotations to stamp on the workload's ServiceAccount object. */
   serviceAccountAnnotations?: Record<string, string>;
+  /**
+   * Labels to stamp on the workload's pods (never on its selector). AKS
+   * workload identity only injects credentials into pods labelled
+   * `azure.workload.identity/use: "true"`.
+   */
+  podLabels?: Record<string, string>;
   /** Serializable state persisted on the workload's attributes. */
   state: IdentityState | undefined;
 }
@@ -226,6 +232,11 @@ export interface WorkloadIdentityDeleteOptions {
 export interface ImageRegistryResolveOptions {
   /** Logical resource id — keys generated repository names. */
   id: string;
+  /**
+   * The resolved cluster connection, for registries whose pull access is
+   * granted to the cluster (AKS grants its kubelet identity `AcrPull`).
+   */
+  connection?: Connection;
   /** The image-source props bag. */
   source: WorkloadImageSource;
   /** Target image platform (`linux/amd64` / `linux/arm64`). */

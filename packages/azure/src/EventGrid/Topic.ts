@@ -41,13 +41,19 @@ export type EventGridInputSchema = "EventGridSchema" | "CustomEventSchema" | "Cl
 
 /** Maps one Event Grid field to a field of a custom input schema. */
 export interface JsonField {
-  /** Name of the field in the published event. */
+  /**
+   * Name of the field in the published event.
+   * @default the Event Grid field of the same name
+   */
   sourceField?: string;
 }
 
 /** Maps one Event Grid field to a custom field, with a fallback value. */
 export interface JsonFieldWithDefault extends JsonField {
-  /** Value used when the source field is absent. */
+  /**
+   * Value used when the source field is absent.
+   * @default no fallback
+   */
   defaultValue?: string;
 }
 
@@ -70,27 +76,51 @@ export interface JsonInputSchemaMapping {
 }
 
 export interface TopicProps {
-  /** Resource group the topic is created in. Changing it replaces the topic. */
+  /**
+   * Resource group the topic is created in.
+   *
+   * :::caution
+   * Changing it replaces the topic.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Topic name: 3-50 letters, digits, and hyphens, unique per region. If
    * omitted, a unique name is generated from the app, stage, and logical ID.
+   *
+   * :::caution
    * Changing it replaces the topic.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the topic. Changing it replaces the topic.
+   * Azure location of the topic.
+   *
+   * :::caution
+   * Changing it replaces the topic.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
-   * Schema of published events. Immutable: changing it replaces the topic.
+   * Schema of published events: `EventGridSchema`, `CloudEventSchemaV1_0`,
+   * or `CustomEventSchema` (with `inputSchemaMapping`).
+   *
+   * :::caution
+   * Changing it replaces the topic.
+   * :::
    * @default "EventGridSchema"
    */
   inputSchema?: EventGridInputSchema;
   /**
-   * Field mappings used with `inputSchema: "CustomEventSchema"`. Changing
-   * it replaces the topic.
+   * Field mappings used with `inputSchema: "CustomEventSchema"`.
+   *
+   * :::caution
+   * Changing it replaces the topic.
+   * :::
+   * @default no mapping
    */
   inputSchemaMapping?: JsonInputSchemaMapping;
   /**
@@ -120,11 +150,16 @@ export interface TopicProps {
    * @default Azure's default
    */
   dataResidencyBoundary?: "WithinGeopair" | "WithinRegion";
-  /** Managed identity of the topic, used for identity-based delivery. */
+  /**
+   * Managed identity of the topic, used for identity-based delivery
+   * (`deliveryIdentity` on an event subscription).
+   * @default the observed identity is kept (none on a new topic)
+   */
   identity?: EventGridIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -161,31 +196,204 @@ export interface Topic extends Resource<
 > {}
 
 /**
- * An Event Grid custom topic — an endpoint your applications publish events
- * to, fanned out to event subscriptions.
+ * An Event Grid custom topic (`Microsoft.EventGrid/topics`): an HTTPS
+ * endpoint your applications publish events to. Event Grid pushes each
+ * event to every event subscription whose filter matches.
+ *
+ * Alchemy creates the topic in the stack's resource group with the Event
+ * Grid schema. Bind it to a runtime to publish: the publish bindings assign
+ * **EventGrid Data Sender** on this topic only, so your code never handles
+ * a topic key. The SAS keys are still attributes (`Redacted` secrets) for
+ * publishers outside Azure.
+ *
+ * :::caution[Changing `name`, `resourceGroup`, `location`, `inputSchema`, or `inputSchemaMapping` replaces the topic]
+ * Alchemy creates a new topic with a new endpoint and keys, and deletes the
+ * old one with its event subscriptions.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/custom-topics
  *
  * ### Creating a Topic
  * **Example:** Topic with the Event Grid schema
  * ```typescript
- * const topic = yield* Azure.EventGrid.Topic("orders");
+ * const orders = yield* Azure.EventGrid.Topic("orders");
+ * // orders.endpoint → "https://<name>.<region>-1.eventgrid.azure.net/api/events"
  * ```
  *
- * **Example:** CloudEvents topic that requires Entra ID
+ * ### Event Schemas
+ * `inputSchema` sets what publishers send: Event Grid events (the
+ * default), CloudEvents v1.0, or your own JSON mapped onto Event Grid
+ * fields.
+ *
+ * **Example:** CloudEvents topic
  * ```typescript
- * const topic = yield* Azure.EventGrid.Topic("orders", {
+ * const orders = yield* Azure.EventGrid.Topic("orders", {
  *   inputSchema: "CloudEventSchemaV1_0",
+ * });
+ * ```
+ *
+ * **Example:** Custom schema that maps `{ orderId, kind }` events
+ * ```typescript
+ * const orders = yield* Azure.EventGrid.Topic("orders", {
+ *   inputSchema: "CustomEventSchema",
+ *   inputSchemaMapping: {
+ *     id: { sourceField: "orderId" },
+ *     eventType: { sourceField: "kind", defaultValue: "Order.Custom" },
+ *     subject: { defaultValue: "orders" },
+ *     dataVersion: { defaultValue: "1.0" },
+ *   },
+ * });
+ * ```
+ *
+ * ### Authentication and Network Access
+ * **Example:** Accept Microsoft Entra ID only
+ * ```typescript
+ * const orders = yield* Azure.EventGrid.Topic("orders", {
  *   disableLocalAuth: true,
  * });
+ * // orders.primaryKey is undefined: SAS keys are off
  * ```
  *
- * ### Network Restrictions
- * **Example:** Allow publishing from one range only
+ * **Example:** Allow publishing from one IP range
  * ```typescript
- * const topic = yield* Azure.EventGrid.Topic("orders", {
+ * const orders = yield* Azure.EventGrid.Topic("orders", {
  *   inboundIpRules: [{ ipMask: "203.0.113.0/24" }],
  * });
+ * ```
+ *
+ * **Example:** Private endpoint only
+ * ```typescript
+ * const orders = yield* Azure.EventGrid.Topic("orders", {
+ *   publicNetworkAccess: "Disabled",
+ * });
+ * yield* Azure.Network.PrivateEndpoint("orders-endpoint", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: orders.topicId, groupIds: ["topic"] },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Delivering with a Managed Identity
+ * Give the topic an identity, grant it a role on the destination, and
+ * subscribe with `deliveryIdentity`.
+ *
+ * **Example:** Deliver to a Service Bus queue with the topic's identity
+ * ```typescript
+ * const orders = yield* Azure.EventGrid.Topic("orders", {
+ *   identity: { type: "SystemAssigned" },
+ * });
+ * yield* Azure.Authorization.RoleAssignment("orders-to-queue-sender", {
+ *   scope: queue.queueId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.ServiceBusDataSender,
+ *   principalId: orders.principalId.as<string>(),
+ * });
+ * yield* Azure.EventGrid.EventSubscription("orders-to-queue", {
+ *   scope: orders.topicId,
+ *   destination: { endpointType: "ServiceBusQueue", resourceId: queue.queueId },
+ *   deliveryIdentity: { type: "SystemAssigned" },
+ * });
+ * ```
+ *
+ * ### Subscribing to the Topic
+ * **Example:** Deliver `Order.Created` events to a Storage queue
+ * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("sink");
+ * const inbox = yield* Azure.Storage.Queue("inbox", {
+ *   storageAccount: account.storageAccountName,
+ * });
+ * yield* Azure.EventGrid.EventSubscription("orders-to-inbox", {
+ *   scope: orders.topicId,
+ *   destination: {
+ *     endpointType: "StorageQueue",
+ *     resourceId: account.storageAccountId,
+ *     queueName: inbox.queueName,
+ *   },
+ *   filter: { includedEventTypes: ["Order.Created"] },
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * Pick the publish binding that matches the topic's `inputSchema`:
+ * `PublishEventGridEvents`, `PublishCloudEventEvents`, or
+ * `PublishCustomEventEvents`. Each assigns **EventGrid Data Sender** on this
+ * topic only.
+ *
+ * **Example:** Publish Event Grid events from an Azure Function
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const topic = yield* Orders;
+ *     const publish = yield* Azure.EventGrid.PublishEventGridEvents(topic);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* publish({
+ *           body: [
+ *             {
+ *               id: "order-42",
+ *               subject: "orders/42",
+ *               eventType: "Order.Created",
+ *               eventTime: new Date().toISOString(),
+ *               dataVersion: "1.0",
+ *               data: { orderId: "42" },
+ *             },
+ *           ],
+ *         });
+ *         return HttpServerResponse.text("published", { status: 202 });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.EventGrid.PublishEventGridEventsHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Publish CloudEvents to a CloudEvents topic
+ * ```typescript
+ * // init
+ * const publish = yield* Azure.EventGrid.PublishCloudEventEvents(topic);
+ *
+ * // runtime
+ * yield* publish({
+ *   body: [
+ *     {
+ *       id: "order-42",
+ *       source: "/orders",
+ *       type: "Order.Created",
+ *       specversion: "1.0",
+ *       datacontenttype: "application/json",
+ *       data: { orderId: "42" },
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Publish your own JSON to a custom-schema topic
+ * ```typescript
+ * // init
+ * const publish = yield* Azure.EventGrid.PublishCustomEventEvents(topic);
+ *
+ * // runtime
+ * yield* publish({ body: [{ orderId: "42", kind: "Order.Created" }] });
+ * ```
+ *
+ * ### Event Sources
+ * **Example:** Handle the topic's events in an Azure Function
+ * ```typescript
+ * export default class Worker extends Azure.Functions.Function<Worker>()(
+ *   "Worker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const topic = yield* Orders;
+ *     yield* Azure.EventGrid.consumeEvents(
+ *       "OrderCreated",
+ *       { scope: topic.topicId, includedEventTypes: ["Order.Created"] },
+ *       (event) => Effect.log(`${event.subject}: ${JSON.stringify(event.data)}`),
+ *     );
+ *     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+ *   }).pipe(Effect.provide(Azure.Functions.EventGridEventSource)),
+ * ) {}
  * ```
  *
  * @resource

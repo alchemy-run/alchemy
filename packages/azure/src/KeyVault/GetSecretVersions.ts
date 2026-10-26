@@ -33,6 +33,7 @@ export interface GetSecretVersionsRequest extends Omit<
  * // runtime
  * const page = yield* getVersions({ maxresults: 25 });
  * const ids = page.value.map((v) => v.id);
+ * // …provided with Effect.provide(Azure.KeyVault.GetSecretVersionsHttp)
  * ```
  *
  * @binding

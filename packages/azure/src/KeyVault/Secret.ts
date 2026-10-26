@@ -27,14 +27,23 @@ export interface SecretAttributes {
    * @default true
    */
   enabled?: boolean;
-  /** Not-before time (Unix seconds). */
+  /**
+   * Not-before time (Unix seconds).
+   * @default none
+   */
   notBefore?: number;
-  /** Expiry time (Unix seconds). */
+  /**
+   * Expiry time (Unix seconds).
+   * @default never expires
+   */
   expires?: number;
 }
 
 export interface SecretProps {
-  /** Resource group of the vault. Changing it replaces the secret. */
+  /**
+   * Resource group of the vault. Changing it replaces the secret.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Vault that holds the secret. Changing it replaces the secret. */
   vault: string;
@@ -49,13 +58,20 @@ export interface SecretProps {
    * the hash recorded at the last deploy; each change writes a new version.
    */
   value: string | Redacted.Redacted<string>;
-  /** Content type hint, e.g. `text/plain` or `application/json`. */
+  /**
+   * Content type hint, e.g. `text/plain` or `application/json`.
+   * @default none
+   */
   contentType?: string;
-  /** Lifetime attributes. */
+  /**
+   * Lifetime attributes.
+   * @default enabled, with no not-before or expiry time
+   */
   attributes?: SecretAttributes;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -90,23 +106,49 @@ export interface Secret extends Resource<
 > {}
 
 /**
- * A secret in an Azure Key Vault, managed through Azure Resource Manager.
+ * A secret in an Azure Key Vault (`Microsoft.KeyVault/vaults/secrets`),
+ * managed through Azure Resource Manager: a versioned value such as an API
+ * key, a password, or a connection string.
  *
- * ARM can create, update, and read secrets but has no delete operation
- * (deletion is a data-plane call). Destroying the resource therefore
- * *disables* the secret so it can no longer be read; the secret itself is
- * removed together with its vault.
+ * Alchemy never stores the value in state, only its SHA-256 hash; a new
+ * value writes a new version. Bind the secret to a runtime to read it with
+ * **Key Vault Secrets User** on this secret only.
+ *
+ * :::caution[Changing `name`, `vault`, or `resourceGroup` replaces the secret]
+ * Alchemy creates the new secret and disables the old one (ARM has no
+ * secret delete).
+ * :::
  *
  * @see https://learn.microsoft.com/azure/key-vault/secrets/about-secrets
  *
  * ### Creating a Secret
- * **Example:** Store a database password
+ * **Example:** Store a database password from config
  * ```typescript
  * const vault = yield* Azure.KeyVault.Vault("secrets");
  * const password = yield* Azure.KeyVault.Secret("db-password", {
  *   vault: vault.vaultName,
- *   value: Redacted.make(process.env.DB_PASSWORD!),
+ *   value: Config.redacted("DB_PASSWORD"),
  *   contentType: "text/plain",
+ * });
+ * ```
+ *
+ * **Example:** Generate a random API key once
+ * ```typescript
+ * const initial = yield* Alchemy.Random("InitialApiKey");
+ * const apiKey = yield* Azure.KeyVault.Secret("api-key", {
+ *   vault: vault.vaultName,
+ *   value: initial.text,
+ *   contentType: "text/plain",
+ * });
+ * ```
+ *
+ * **Example:** JSON value with a fixed name
+ * ```typescript
+ * const smtp = yield* Azure.KeyVault.Secret("smtp", {
+ *   vault: vault.vaultName,
+ *   name: "smtp-credentials",
+ *   value: Redacted.make(JSON.stringify({ user: "mailer", password: "…" })),
+ *   contentType: "application/json",
  * });
  * ```
  *
@@ -115,10 +157,101 @@ export interface Secret extends Resource<
  * ```typescript
  * const token = yield* Azure.KeyVault.Secret("api-token", {
  *   vault: vault.vaultName,
- *   value: Redacted.make(apiToken),
- *   attributes: { expires: 1_893_456_000 },
+ *   value: Config.redacted("API_TOKEN"),
+ *   attributes: { expires: 1_893_456_000 }, // Unix seconds
  * });
  * ```
+ *
+ * **Example:** Disable a secret without removing it
+ * ```typescript
+ * const token = yield* Azure.KeyVault.Secret("api-token", {
+ *   vault: vault.vaultName,
+ *   value: Config.redacted("API_TOKEN"),
+ *   attributes: { enabled: false },
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * `SecretRead` grants **Key Vault Secrets User** on this secret only.
+ * `SecretWrite` grants a custom role with only `setSecret` and `update`,
+ * and `SecretReadWrite` grants both. The vault must use Azure RBAC (the
+ * default). On an Azure Function, Web App, Container App, container group,
+ * or VM the role goes to the host's managed identity; any other host gets
+ * an Entra service principal.
+ *
+ * **Example:** Check an API key in an Azure Function
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const secret = yield* ApiKey;
+ *     const apiKey = yield* Azure.KeyVault.SecretRead(secret);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         // the latest version on every request, so a rotation applies at once
+ *         const expected = yield* apiKey.get();
+ *         const ok = request.headers["x-api-key"] === Redacted.value(expected);
+ *         return HttpServerResponse.text(ok ? "ok" : "unauthorized", { status: ok ? 200 : 401 });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.KeyVault.SecretReadHttp)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Read a secret from a Cloudflare Worker
+ * ```typescript
+ * // init: an Entra service principal for the Worker gets Key Vault Secrets User
+ * const secret = yield* Azure.KeyVault.SecretRead(vaultSecret);
+ *
+ * // runtime
+ * const value = yield* secret.get();
+ * // …provided with Effect.provide(Azure.KeyVault.SecretReadHttp)
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Read the latest or a specific version
+ * ```typescript
+ * const latest = yield* apiKey.get();
+ * const pinned = yield* apiKey.get("4f1c7c0e2b8a4d5f9e3a1b2c3d4e5f60");
+ * const versions = yield* apiKey.versions(); // metadata only, no values
+ * ```
+ *
+ * **Example:** Rotate the secret from the runtime
+ * ```typescript
+ * // init
+ * const apiKey = yield* Azure.KeyVault.SecretReadWrite(secret);
+ *
+ * // runtime
+ * const next = yield* Effect.sync(() => randomBytes(32).toString("hex"));
+ * const written = yield* apiKey.set(Redacted.make(next), { contentType: "text/plain" });
+ * yield* apiKey.update(previousVersion, { enabled: false });
+ * // …provided with Effect.provide(Azure.KeyVault.SecretReadWriteHttp)
+ * ```
+ *
+ * A version written at runtime is not tracked by this resource: the next
+ * deploy writes the declared value again only if that value changed.
+ *
+ * ### Event Sources
+ * **Example:** React to new secret versions
+ * ```typescript
+ * yield* Azure.EventGrid.consumeEvents(
+ *   "SecretVersions",
+ *   {
+ *     scope: vault.vaultId,
+ *     includedEventTypes: ["Microsoft.KeyVault.SecretNewVersionCreated"],
+ *     subjectBeginsWith: apiKey.secretName,
+ *   },
+ *   (event) => Effect.log(`new version of ${event.subject}`),
+ * );
+ * // …provided with Effect.provide(Azure.Functions.EventGridEventSource)
+ * ```
+ *
+ * ### Deleting a Secret
+ * ARM can create, update, and read secrets but has no delete operation.
+ * Destroying the resource *disables* the secret so nothing can read it;
+ * the secret itself goes away with its vault.
  *
  * @resource
  */

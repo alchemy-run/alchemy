@@ -33,6 +33,7 @@ export interface CreateSnapshotRequest extends Omit<appconfig.CreateSnapshotRequ
  *   name: "release-1",
  *   filters: [{ key: "App:*", label: "prod" }],
  * });
+ * // …provided with Effect.provide(Azure.AppConfiguration.CreateSnapshotHttp)
  * ```
  *
  * @binding

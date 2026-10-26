@@ -9,13 +9,18 @@ import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameName } from "./internal.ts";
 
+/** One IPv4 range allowed through the namespace firewall. */
 export interface NetworkRuleSetIpRule {
-  /** IPv4 address or CIDR range, e.g. `203.0.113.0/24`. */
+  /** IPv4 address or CIDR range, e.g. `203.0.113.0/24` or `198.51.100.7`. */
   ipMask: string;
 }
 
+/** One subnet allowed through the namespace firewall (Premium only). */
 export interface NetworkRuleSetVirtualNetworkRule {
-  /** ARM ID of the subnet allowed to reach the namespace. */
+  /**
+   * ARM resource ID of the subnet allowed to reach the namespace, e.g.
+   * `subnet.subnetId` of an `Azure.Network.Subnet`.
+   */
   subnetId: string;
   /**
    * Accept the rule even if the subnet lacks the `Microsoft.ServiceBus`
@@ -26,28 +31,51 @@ export interface NetworkRuleSetVirtualNetworkRule {
 }
 
 export interface NetworkRuleSetProps {
-  /** Resource group of the namespace. Changing it replaces the rule set. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the rule set.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Namespace the rule set applies to. Changing it replaces the rule set. */
+  /**
+   * Name of the namespace the rule set applies to, e.g. `bus.namespaceName`
+   * of an `Azure.ServiceBus.Namespace`.
+   *
+   * :::caution
+   * Changing it replaces the rule set.
+   * :::
+   */
   namespace: string;
   /**
-   * Action for traffic that matches no rule.
+   * Action for traffic that matches no rule: `Allow` or `Deny`. With
+   * `Deny`, only `ipRules` and `virtualNetworkRules` get through.
    * @default "Allow"
    */
   defaultAction?: "Allow" | "Deny";
   /**
-   * Whether the public endpoint accepts traffic at all.
+   * Whether the public endpoint accepts traffic at all: `Enabled` or
+   * `Disabled`. With `Disabled`, clients need a private endpoint.
    * @default "Enabled"
    */
   publicNetworkAccess?: "Enabled" | "Disabled";
   /**
-   * Let trusted Microsoft services bypass the firewall.
+   * Let trusted Microsoft services (e.g. Event Grid, Azure Monitor) bypass
+   * the firewall.
    * @default false
    */
   trustedServiceAccessEnabled?: boolean;
-  /** IP ranges allowed when `defaultAction` is `Deny`. */
+  /**
+   * IPv4 ranges allowed when `defaultAction` is `Deny`.
+   * @default []
+   */
   ipRules?: NetworkRuleSetIpRule[];
-  /** Subnets allowed when `defaultAction` is `Deny` (Premium only). */
+  /**
+   * Subnets allowed when `defaultAction` is `Deny`. Premium only.
+   * @default []
+   */
   virtualNetworkRules?: NetworkRuleSetVirtualNetworkRule[];
 }
 
@@ -57,19 +85,19 @@ export interface NetworkRuleSet extends Resource<
   {
     /** ARM resource ID of the rule set (`.../networkRuleSets/default`). */
     networkRuleSetId: string;
-    /** Namespace the rule set applies to. */
+    /** Name of the namespace the rule set applies to. */
     namespaceName: string;
     /** Resource group of the namespace. */
     resourceGroup: string;
-    /** Action for traffic that matches no rule. */
+    /** Action for traffic that matches no rule: `Allow` or `Deny`. */
     defaultAction: string;
-    /** Whether the public endpoint accepts traffic. */
+    /** Whether the public endpoint accepts traffic: `Enabled` or `Disabled`. */
     publicNetworkAccess: string;
     /** Whether trusted Microsoft services bypass the firewall. */
     trustedServiceAccessEnabled: boolean;
-    /** Allowed IP ranges. */
+    /** Allowed IPv4 ranges, as Azure returns them (a single IP may come back as `x.x.x.x/32`). */
     ipRules: string[];
-    /** Allowed subnet IDs. */
+    /** ARM resource IDs of the allowed subnets. */
     virtualNetworkRules: string[];
   },
   never,
@@ -77,13 +105,29 @@ export interface NetworkRuleSet extends Resource<
 > {}
 
 /**
- * The network firewall of a Service Bus namespace (the singleton
- * `networkRuleSets/default`): default action, public access, trusted
- * services, IP rules, and (Premium) virtual network rules.
+ * The network firewall of a Service Bus namespace
+ * (`Microsoft.ServiceBus/namespaces/networkRuleSets`, always named
+ * `default`): the default action, public access, trusted services, IP
+ * rules, and (Premium) virtual network rules.
  *
- * Every namespace already has a rule set, so this resource converges the
- * existing one instead of creating it; destroying it resets the namespace
+ * Every namespace already has a rule set, so Alchemy updates the existing
+ * one instead of creating it. Destroying the resource resets the namespace
  * to allow all traffic.
+ *
+ * :::caution[Changing `namespace` or `resourceGroup` replaces the rule set]
+ * Alchemy resets the old namespace's firewall to allow all traffic and
+ * applies the rules to the new namespace.
+ * :::
+ *
+ * :::caution[Virtual network rules need Premium]
+ * `virtualNetworkRules` need a namespace with `sku: "Premium"`.
+ * :::
+ *
+ * :::caution[`Deny` without rules locks clients out]
+ * With `defaultAction: "Deny"` and no `ipRules` or `virtualNetworkRules`,
+ * no client can send or receive over the public endpoint. Add every range
+ * your clients use.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/service-bus-messaging/service-bus-ip-filtering
  *
@@ -100,10 +144,32 @@ export interface NetworkRuleSet extends Resource<
  *
  * **Example:** Disable the public endpoint, allow trusted services
  * ```typescript
+ * const bus = yield* Azure.ServiceBus.Namespace("bus", { sku: "Premium" });
  * yield* Azure.ServiceBus.NetworkRuleSet("bus-firewall", {
  *   namespace: bus.namespaceName,
  *   publicNetworkAccess: "Disabled",
  *   trustedServiceAccessEnabled: true,
+ * });
+ * ```
+ *
+ * ### Allowing a Virtual Network
+ * The subnet needs the `Microsoft.ServiceBus` service endpoint.
+ *
+ * **Example:** Allow one subnet on a Premium namespace
+ * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("app", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ *   serviceEndpoints: [{ service: "Microsoft.ServiceBus" }],
+ * });
+ * const bus = yield* Azure.ServiceBus.Namespace("bus", { sku: "Premium" });
+ * yield* Azure.ServiceBus.NetworkRuleSet("bus-firewall", {
+ *   namespace: bus.namespaceName,
+ *   defaultAction: "Deny",
+ *   virtualNetworkRules: [{ subnetId: subnet.subnetId }],
  * });
  * ```
  *

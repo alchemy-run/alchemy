@@ -16,9 +16,11 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 // Front Door endpoint creation plus the Storage upload.
 const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
 
-// The Front Door profile delete takes 5-20 minutes.
+// The Front Door profile delete took 14 to more than 30 minutes in live runs.
+// The hook outlasts the provider's own 30-minute delete wait, so a slow
+// delete fails with the provider's error instead of a hook timeout.
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
-  timeout: 1_800_000,
+  timeout: 2_100_000,
 });
 
 /** GET `url` until it answers 200, through a new endpoint's 10-20 minute propagation. */

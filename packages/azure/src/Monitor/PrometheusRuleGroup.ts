@@ -23,10 +23,17 @@ import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 
+/** An action group a Prometheus alerting rule notifies. */
 export interface PrometheusRuleAction {
-  /** ARM resource ID of the action group to notify. */
+  /**
+   * ARM resource ID of the action group to notify
+   * (`Microsoft.Insights/actionGroups`).
+   */
   actionGroupId?: string;
-  /** Properties passed to the action group. */
+  /**
+   * Properties passed to the action group with the alert.
+   * @default {}
+   */
   actionProperties?: Record<string, string>;
 }
 
@@ -35,71 +42,107 @@ export interface PrometheusRuleAction {
  * exactly one of `record` and `alert`.
  */
 export interface PrometheusRule {
-  /** Name of the time series a recording rule writes. */
+  /** Name of the time series a recording rule writes, e.g. `job:up:sum`. */
   record?: string;
-  /** Name of the alert an alerting rule fires. */
+  /** Name of the alert an alerting rule fires, e.g. `TargetDown`. */
   alert?: string;
   /**
    * Whether the rule is evaluated.
    * @default true
    */
   enabled?: boolean;
-  /** PromQL expression evaluated every `interval`. */
+  /** PromQL expression evaluated every `interval`, e.g. `up == 0`. */
   expression: string;
-  /** Labels added to (or overwritten on) the result. */
+  /**
+   * Labels added to (or overwritten on) the result.
+   * @default {}
+   */
   labels?: Record<string, string>;
-  /** Alert severity, 0 (critical) to 4 (verbose). Alerting rules only. */
+  /**
+   * Alert severity, `0` (critical) to `4` (verbose). Alerting rules only.
+   * @default Azure's default
+   */
   severity?: 0 | 1 | 2 | 3 | 4;
   /**
    * How long the condition must hold before the alert fires, ISO 8601
    * duration (e.g. `PT5M`). Alerting rules only.
+   * @default fires on the first evaluation that matches
    */
   for?: string;
-  /** Informational labels such as descriptions or runbook links. */
+  /**
+   * Informational labels such as descriptions or runbook links. Alerting
+   * rules only.
+   * @default {}
+   */
   annotations?: Record<string, string>;
-  /** Action groups notified when the alert fires or resolves. */
+  /**
+   * Action groups notified when the alert fires or resolves. Alerting rules
+   * only.
+   * @default []
+   */
   actions?: PrometheusRuleAction[];
-  /** How fired alerts are resolved. Alerting rules only. */
+  /**
+   * How fired alerts are resolved. Alerting rules only.
+   * @default Azure's default
+   */
   resolveConfiguration?: {
     /** Whether fired alerts are resolved automatically. */
     autoResolved?: boolean;
-    /** Healthy duration (ISO 8601) before an alert is resolved. */
+    /** Healthy duration (ISO 8601, e.g. `PT10M`) before an alert is resolved. */
     timeToResolve?: string;
   };
 }
 
 export interface PrometheusRuleGroupProps {
   /**
-   * Resource group the rule group is created in. Changing it replaces the
-   * rule group.
+   * Resource group the rule group is created in.
+   *
+   * :::caution
+   * Changing it replaces the rule group.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
-   * Rule group name. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the rule group.
+   * Rule group name.
+   *
+   * :::caution
+   * Changing it replaces the rule group.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location; should match the Azure Monitor workspace's region.
+   * Azure location; use the Azure Monitor workspace's region.
+   *
+   * :::caution
    * Changing it replaces the rule group.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
    * ARM IDs the rules run against: exactly one Azure Monitor workspace
-   * (`Microsoft.Monitor/accounts`), optionally followed by an AKS cluster.
+   * (`Microsoft.Monitor/accounts`, e.g. `metrics.workspaceId`), optionally
+   * followed by an AKS cluster.
    */
   scopes: string[];
-  /** Recording and alerting rules of the group. */
+  /** Recording and alerting rules of the group, evaluated in order. */
   rules: PrometheusRule[];
-  /** Restrict the rules to series from this cluster (`cluster` label). */
+  /**
+   * Restrict the rules to series from this cluster (`cluster` label).
+   * @default every cluster that writes to the workspace
+   */
   clusterName?: string;
   /**
    * Evaluation interval, ISO 8601 duration between `PT1M` and `PT15M`.
-   * Unset leaves the service default (`PT1M`).
+   * @default the service default (`PT1M`)
    */
   interval?: string;
-  /** Description of the rule group. */
+  /**
+   * Description of the rule group.
+   * @default no description
+   */
   description?: string;
   /**
    * Whether the rule group is evaluated.
@@ -109,6 +152,7 @@ export interface PrometheusRuleGroupProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -139,8 +183,26 @@ export interface PrometheusRuleGroup extends Resource<
 > {}
 
 /**
- * An Azure Monitor managed Prometheus rule group — Prometheus recording and
- * alerting rules evaluated against an Azure Monitor workspace.
+ * An Azure Monitor managed Prometheus rule group
+ * (`Microsoft.AlertsManagement/prometheusRuleGroups`): Prometheus recording
+ * and alerting rules that Azure evaluates against an Azure Monitor
+ * workspace. Recording rules write precomputed series back to the
+ * workspace; alerting rules fire Azure Monitor alerts and notify action
+ * groups.
+ *
+ * :::caution[Changing `name`, `location`, or `resourceGroup` replaces the rule group]
+ * Alchemy creates a new rule group and deletes the old one.
+ * :::
+ *
+ * :::caution[The rule group needs an Azure Monitor workspace]
+ * Declare an `Azure.Monitor.Workspace` first, pass its `workspaceId` as the
+ * first scope, and create the rule group in the workspace's region.
+ * :::
+ *
+ * :::caution[Alert actions need an existing action group]
+ * Alchemy has no action group resource yet. Create the action group
+ * (`Microsoft.Insights/actionGroups`) outside Alchemy and pass its ARM ID.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-monitor/essentials/prometheus-rule-groups
  *
@@ -149,6 +211,7 @@ export interface PrometheusRuleGroup extends Resource<
  * ```typescript
  * const metrics = yield* Azure.Monitor.Workspace("metrics");
  * const rules = yield* Azure.Monitor.PrometheusRuleGroup("recording", {
+ *   location: metrics.location,
  *   scopes: [metrics.workspaceId],
  *   interval: "PT1M",
  *   rules: [
@@ -164,7 +227,12 @@ export interface PrometheusRuleGroup extends Resource<
  * ### Alerting Rules
  * **Example:** Alert on a down scrape target and notify an action group
  * ```typescript
+ * // an action group created outside Alchemy
+ * const oncallId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/ops/providers/Microsoft.Insights/actionGroups/oncall";
+ * const metrics = yield* Azure.Monitor.Workspace("metrics");
  * const alerts = yield* Azure.Monitor.PrometheusRuleGroup("alerts", {
+ *   location: metrics.location,
  *   scopes: [metrics.workspaceId],
  *   clusterName: "prod-aks",
  *   rules: [

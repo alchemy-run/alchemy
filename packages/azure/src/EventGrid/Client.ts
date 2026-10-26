@@ -29,33 +29,53 @@ export type ClientValidationScheme =
 export type ClientAttributeValue = string | number | boolean | string[];
 
 export interface ClientProps {
-  /** Resource group of the namespace. Changing it replaces the client. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the client.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
-   * Name of the Event Grid namespace (MQTT broker enabled). Changing it
-   * replaces the client.
+   * Name of the Event Grid namespace, e.g. `namespace.namespaceName` of an
+   * `Azure.EventGrid.Namespace` with the MQTT broker enabled.
+   *
+   * :::caution
+   * Changing it replaces the client.
+   * :::
    */
   namespace: string;
   /**
    * Client name: 3-50 letters, digits, and hyphens. If omitted, a unique
-   * name is generated from the app, stage, and logical ID. Changing it
-   * replaces the client.
+   * name is generated from the app, stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the client.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Name the client presents when it authenticates (matched against its
-   * certificate according to `validationScheme`).
+   * Name the client presents when it connects (the MQTT username). The
+   * broker matches it against the client certificate according to
+   * `validationScheme`. Updated in place.
    * @default the client name
    */
   authenticationName?: string;
   /**
-   * Certificate validation scheme.
+   * How the broker validates the client certificate: one of the
+   * `*MatchesAuthenticationName` schemes (the certificate must chain to an
+   * `Azure.EventGrid.CaCertificate`), or `ThumbprintMatch` (the certificate
+   * thumbprint must be in `allowedThumbprints`).
    * @default "SubjectMatchesAuthenticationName"
    */
   validationScheme?: ClientValidationScheme;
   /**
    * SHA-256 thumbprints (hex) of the certificates the client may present.
    * Required with `validationScheme: "ThumbprintMatch"` (1-2 thumbprints).
+   * @default []
    */
   allowedThumbprints?: string[];
   /**
@@ -65,10 +85,15 @@ export interface ClientProps {
   state?: "Enabled" | "Disabled";
   /**
    * Attributes used by client group queries, e.g. `{ role: "sensor" }`.
+   * Values are strings, numbers, booleans, or string arrays.
    * @default {}
    */
   attributes?: Record<string, ClientAttributeValue>;
-  /** Description of the client. */
+  /**
+   * Description of the client. Alchemy appends its ownership marker
+   * (` [alchemy:{stack}/{stage}/{id}]`) to it.
+   * @default no description (only the ownership marker)
+   */
   description?: string;
 }
 
@@ -86,9 +111,9 @@ export interface Client extends Resource<
     namespace: string;
     /** Authentication name of the client. */
     authenticationName: string | undefined;
-    /** Certificate validation scheme. */
+    /** Certificate validation scheme, e.g. `ThumbprintMatch`. */
     validationScheme: string | undefined;
-    /** Whether the client may connect. */
+    /** Whether the client may connect (`Enabled` or `Disabled`). */
     state: string | undefined;
     /** Client attributes. */
     attributes: Record<string, unknown>;
@@ -100,12 +125,25 @@ export interface Client extends Resource<
 > {}
 
 /**
- * An MQTT client registered with an Event Grid namespace's MQTT broker.
- * Clients authenticate with X.509 certificates; their attributes place them
- * in client groups, which permission bindings grant access to topic spaces.
+ * An MQTT client of an Event Grid MQTT broker
+ * (`Microsoft.EventGrid/namespaces/clients`): one device or service that
+ * connects to the broker. Clients authenticate with X.509 certificates.
+ * Their attributes place them in `Azure.EventGrid.ClientGroup`s, and
+ * `Azure.EventGrid.PermissionBinding`s grant those groups access to topic
+ * spaces.
  *
  * Clients have no tags; Alchemy appends an ownership marker to the
  * `description`.
+ *
+ * :::caution[Changing `name`, `namespace`, or `resourceGroup` replaces the client]
+ * Alchemy creates a new client and deletes the old one.
+ * :::
+ *
+ * :::caution[The namespace needs the MQTT broker]
+ * Declare the parent `Azure.EventGrid.Namespace` with
+ * `topicSpacesConfiguration: { state: "Enabled" }`. Azure cannot turn the
+ * broker off again: switching it to `Disabled` replaces the namespace.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/mqtt-clients
  *
@@ -118,13 +156,25 @@ export interface Client extends Resource<
  * const device = yield* Azure.EventGrid.Client("device-1", {
  *   namespace: namespace.namespaceName,
  *   validationScheme: "ThumbprintMatch",
- *   allowedThumbprints: [deviceCertThumbprint],
+ *   // SHA-256 thumbprint of the device certificate
+ *   allowedThumbprints: [
+ *     "3A1B6C9D2E4F7081A2B3C4D5E6F708192A3B4C5D6E7F8091A2B3C4D5E6F70819",
+ *   ],
  *   attributes: { role: "sensor" },
  * });
  * ```
  *
- * **Example:** Client validated by a CA certificate (subject = name)
+ * ### Authenticating with a CA
+ * **Example:** Client whose certificate subject is its authentication name
  * ```typescript
+ * const fs = yield* FileSystem.FileSystem;
+ * const namespace = yield* Azure.EventGrid.Namespace("iot", {
+ *   topicSpacesConfiguration: { state: "Enabled" },
+ * });
+ * yield* Azure.EventGrid.CaCertificate("devices-ca", {
+ *   namespace: namespace.namespaceName,
+ *   encodedCertificate: yield* fs.readFileString("ca.pem"),
+ * });
  * const device = yield* Azure.EventGrid.Client("device-2", {
  *   namespace: namespace.namespaceName,
  *   authenticationName: "device-2",

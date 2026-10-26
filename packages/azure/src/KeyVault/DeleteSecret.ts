@@ -36,6 +36,7 @@ export interface DeleteSecretRequest extends Omit<
  * // runtime
  * const deleted = yield* deleteSecret();
  * console.log(deleted.scheduledPurgeDate);
+ * // …provided with Effect.provide(Azure.KeyVault.DeleteSecretHttp)
  * ```
  *
  * @binding

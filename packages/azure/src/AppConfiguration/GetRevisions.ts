@@ -27,6 +27,7 @@ export interface GetRevisionsRequest extends Omit<appconfig.GetRevisionsRequest,
  *
  * // runtime
  * const page = yield* getRevisions({ key: "App:Color" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.GetRevisionsHttp)
  * ```
  *
  * @binding

@@ -33,7 +33,10 @@ export type ManagedRedisIdentityType =
 export interface ManagedRedisIdentity {
   /** Which identities to attach. */
   type: ManagedRedisIdentityType;
-  /** ARM resource IDs of user-assigned identities to attach. */
+  /**
+   * ARM resource IDs of user-assigned identities to attach.
+   * @default []
+   */
   userAssignedIdentities?: string[];
 }
 
@@ -46,37 +49,63 @@ export interface ManagedRedisCustomerManagedKey {
 }
 
 export interface ManagedRedisProps {
-  /** Resource group the cluster is created in. Changing it replaces the cluster. */
+  /**
+   * Resource group the cluster is created in.
+   *
+   * :::caution
+   * Changing it replaces the cluster and deletes its data.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Cluster name: letters, digits, and single hyphens; together with the
    * location's display name (e.g. `East US`) at most 62 characters. It
-   * forms the host name `<name>.<region>.redis.azure.net`. If omitted, a unique name
-   * is generated from the app, stage, and logical ID. Changing it replaces
-   * the cluster.
+   * forms the host name `<name>.<region>.redis.azure.net`.
+   *
+   * :::caution
+   * Changing it replaces the cluster and deletes its data.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the cluster. Changing it replaces the cluster.
+   * Azure location of the cluster, e.g. `centralus`.
+   *
+   * :::caution
+   * Changing it replaces the cluster and deletes its data.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
    * Performance tier and size (`Balanced_B*`, `MemoryOptimized_M*`,
-   * `ComputeOptimized_X*`, `FlashOptimized_A*`). Scaling within Azure
-   * Managed Redis tiers happens in place; moving between the Azure Managed
-   * Redis tiers and the legacy `Enterprise_*` / `EnterpriseFlash_*` SKUs
-   * replaces the cluster.
+   * `ComputeOptimized_X*`, `FlashOptimized_A*`). Scaling within the Azure
+   * Managed Redis tiers happens in place.
+   *
+   * :::caution
+   * Moving between the Azure Managed Redis tiers and the legacy
+   * `Enterprise_*` / `EnterpriseFlash_*` SKUs replaces the cluster and
+   * deletes its data.
+   * :::
    * @default "Balanced_B0"
    */
   sku?: ManagedRedisSkuName;
   /**
    * Cluster size for the legacy `Enterprise_*` (2, 4, 6, ...) and
-   * `EnterpriseFlash_*` (3, 9, 15, ...) SKUs. Ignored by Azure Managed Redis
-   * SKUs.
+   * `EnterpriseFlash_*` (3, 9, 15, ...) SKUs. Azure Managed Redis SKUs
+   * ignore it.
+   * @default none
    */
   capacity?: number;
-  /** Availability zones the cluster is deployed in. Changing them replaces the cluster. */
+  /**
+   * Availability zones the cluster is deployed in, e.g. `["1", "2", "3"]`.
+   *
+   * :::caution
+   * Changing them replaces the cluster and deletes its data.
+   * :::
+   * @default Azure's choice
+   */
   zones?: string[];
   /**
    * Replicate the data set across nodes. Disabling it halves the cost but
@@ -96,12 +125,14 @@ export interface ManagedRedisProps {
    */
   publicNetworkAccess?: "Enabled" | "Disabled";
   /**
-   * Managed identity of the cluster. Omit for no identity.
+   * Managed identity of the cluster.
+   * @default no identity
    */
   identity?: ManagedRedisIdentity;
   /**
-   * Customer-managed key encryption at rest. Omit for Microsoft-managed
-   * keys. Requires the identity to be attached via `identity`.
+   * Customer-managed key encryption at rest. Requires the identity to be
+   * attached with `identity`.
+   * @default Microsoft-managed keys
    */
   customerManagedKey?: ManagedRedisCustomerManagedKey;
   /**
@@ -147,45 +178,90 @@ export interface ManagedRedis extends Resource<
 > {}
 
 /**
- * An Azure Managed Redis cluster (`Microsoft.Cache/redisEnterprise`) — the
+ * An Azure Managed Redis cluster (`Microsoft.Cache/redisEnterprise`), the
  * successor of Azure Cache for Redis. A cluster holds one database; create
  * it with `Azure.Redis.ManagedRedisDatabase`.
  *
- * Provisioning takes roughly 5-10 minutes; the deploy blocks until the
- * cluster is `Running`.
+ * Alchemy creates the smallest SKU (`Balanced_B0`) with high availability on
+ * and TLS 1.2 as the minimum version by default. Access keys stay disabled
+ * on the database, so clients sign in with a Microsoft Entra token for an
+ * identity you grant with `Azure.Redis.AccessPolicyAssignment`. Creating a
+ * cluster takes about 5-10 minutes; the deploy waits until it is `Running`.
  *
- * @see https://learn.microsoft.com/azure/redis/overview
+ * :::caution[Changing `name`, `location`, `zones`, or `resourceGroup` replaces the cluster]
+ * Alchemy creates a new, empty cluster and deletes the old one with its
+ * data. Moving between the Azure Managed Redis SKUs and the legacy
+ * `Enterprise_*` SKUs replaces it too; scaling within Azure Managed Redis
+ * happens in place.
+ * :::
+ *
+ * See [What is Azure Managed Redis?](https://learn.microsoft.com/azure/redis/overview).
  *
  * ### Creating a Cluster
- * **Example:** Smallest Balanced cluster
+ * **Example:** Smallest cluster without high availability
  * ```typescript
- * const redis = yield* Azure.Redis.ManagedRedis("cache", {
+ * // One node and no replica: half the cost, no availability SLA.
+ * const cache = yield* Azure.Redis.ManagedRedis("Cache", {
  *   sku: "Balanced_B0",
  *   highAvailability: "Disabled",
  * });
+ * const counters = yield* Azure.Redis.ManagedRedisDatabase("Counters", {
+ *   cluster: cache.clusterName,
+ *   clusteringPolicy: "EnterpriseCluster",
+ * });
+ * // counters.hostName → "<name>.<region>.redis.azure.net", counters.port → 10000
  * ```
  *
  * **Example:** Highly available Memory Optimized cluster
  * ```typescript
- * const redis = yield* Azure.Redis.ManagedRedis("cache", {
+ * const cache = yield* Azure.Redis.ManagedRedis("Cache", {
  *   sku: "MemoryOptimized_M10",
  *   tags: { team: "platform" },
  * });
  * ```
  *
- * ### Private Networking
- * **Example:** Disable the public endpoint
- * ```typescript
- * const redis = yield* Azure.Redis.ManagedRedis("cache", {
- *   publicNetworkAccess: "Disabled",
+ * ### Scaling
+ * Change `sku` to another Azure Managed Redis size and deploy again. Azure
+ * scales the cluster in place and keeps the data.
+ *
+ * **Example:** Scale from Balanced B0 to B1
+ * ```diff
+ * const cache = yield* Azure.Redis.ManagedRedis("Cache", {
+ * -  sku: "Balanced_B0",
+ * +  sku: "Balanced_B1",
  * });
  * ```
  *
- * ### Managed Identity
+ * ### Microsoft Entra Authentication
+ * **Example:** Let a Function's managed identity use the database
+ * ```typescript
+ * const api = yield* Api; // an Azure.Functions.Function
+ * yield* Azure.Redis.AccessPolicyAssignment("ApiAccess", {
+ *   cluster: counters.cluster,
+ *   database: counters.databaseName,
+ *   objectId: api.principalId.as<string>(),
+ * });
+ * ```
+ *
+ * ### Private Networking
+ * **Example:** Private-only cluster behind a private endpoint
+ * ```typescript
+ * const cache = yield* Azure.Redis.ManagedRedis("Cache", {
+ *   publicNetworkAccess: "Disabled",
+ * });
+ * yield* Azure.Network.PrivateEndpoint("CacheEndpoint", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: cache.clusterId, groupIds: ["redisEnterprise"] },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Encryption
  * **Example:** Customer-managed key with a user-assigned identity
  * ```typescript
- * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("redis");
- * const redis = yield* Azure.Redis.ManagedRedis("cache", {
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("RedisKeys");
+ * const cache = yield* Azure.Redis.ManagedRedis("Cache", {
  *   identity: {
  *     type: "UserAssigned",
  *     userAssignedIdentities: [identity.identityId],
@@ -195,6 +271,76 @@ export interface ManagedRedis extends Resource<
  *     userAssignedIdentityId: identity.identityId,
  *   },
  * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * Azure Managed Redis has no ARM data-plane binding: the runtime speaks
+ * RESP to the database endpoint over TLS. Yield the database's `hostName`
+ * and `port` inside the host; Alchemy puts them in its app settings and
+ * returns Effects that read them at runtime. The host signs in with
+ * `AUTH <object ID> <token>`, using a token for
+ * `https://redis.azure.com/.default` from its managed identity. Grant the
+ * identity access with `Azure.Redis.AccessPolicyAssignment` first.
+ *
+ * **Example:** Count hits from an Azure Function with an Entra token
+ * ```typescript
+ * // src/Api.ts
+ * import * as Azure from "@alchemy.run/azure";
+ * import * as Redis from "@alchemy.run/redis";
+ * import { makeTokenCache, requestManagedIdentityToken } from "@distilled.cloud/azure";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import * as Redacted from "effect/Redacted";
+ * import { Counters } from "./resources.ts";
+ *
+ * const tokenFor = makeTokenCache((scope: string) => requestManagedIdentityToken({}, scope));
+ *
+ * // Azure Managed Redis takes `AUTH <object ID> <token>`; the object ID is the token's `oid` claim.
+ * const objectIdOf = (token: string) =>
+ *   Effect.try(
+ *     () =>
+ *       JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")).oid as string,
+ *   );
+ *
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     // init: bind the endpoint into the app settings
+ *     const counters = yield* Counters;
+ *     const hostName = yield* counters.hostName;
+ *     const port = yield* counters.port;
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime
+ *         const host = yield* hostName;
+ *         const tcpPort = yield* port;
+ *         const token = yield* tokenFor("https://redis.azure.com/.default");
+ *         const objectId = yield* objectIdOf(Redacted.value(token));
+ *         const url = Redis.connectionUrl({
+ *           host,
+ *           port: tcpPort,
+ *           username: objectId,
+ *           password: Redacted.value(token),
+ *           tls: true,
+ *         });
+ *         const count = yield* Redis.run(url, "INCR", ["hits"]);
+ *         return yield* HttpServerResponse.json({ count });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * ### Deleting a Cluster
+ * Destroying the cluster deletes its database and data.
+ *
+ * **Example:** Keep the cluster when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const cache = yield* Azure.Redis.ManagedRedis("Cache").pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

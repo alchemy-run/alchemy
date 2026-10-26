@@ -31,6 +31,7 @@ import {
 export interface NetworkSecurityGroupProps {
   /**
    * Resource group the NSG is created in. Changing it replaces the NSG.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -45,13 +46,15 @@ export interface NetworkSecurityGroupProps {
    */
   location?: string;
   /**
-   * Re-evaluate existing flows when a rule changes (flush connections).
+   * Re-evaluate existing flows when a rule changes (flush connections), so
+   * a new deny rule also cuts open connections. Updated in place.
    * @default false
    */
   flushConnection?: boolean;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -62,11 +65,14 @@ export interface NetworkSecurityGroup extends Resource<
   {
     /** Name of the NSG. */
     networkSecurityGroupName: string;
-    /** ARM resource ID of the NSG. */
+    /**
+     * ARM resource ID of the NSG; pass it as `networkSecurityGroupId` to a
+     * subnet or network interface.
+     */
     networkSecurityGroupId: string;
     /** Resource group that holds the NSG. */
     resourceGroup: string;
-    /** Location of the NSG. */
+    /** Azure location of the NSG, e.g. `eastus`. */
     location: string;
     /** Immutable GUID Azure assigned to the NSG. */
     resourceGuid: string | undefined;
@@ -80,13 +86,30 @@ export interface NetworkSecurityGroup extends Resource<
 > {}
 
 /**
- * An Azure network security group (NSG) — a stateful allow/deny firewall
- * for subnets and network interfaces. New NSGs carry Azure's default rules
- * (allow VNet and load-balancer traffic, deny other inbound).
+ * An Azure network security group
+ * (`Microsoft.Network/networkSecurityGroups`), or NSG: a stateful
+ * allow/deny firewall for subnets and network interfaces, Azure's
+ * counterpart to an AWS security group.
  *
- * Custom rules are modelled by `Azure.Network.SecurityRule`; updating the
- * NSG never removes them. Associate the NSG through
- * `Subnet.networkSecurityGroupId` or `NetworkInterface.networkSecurityGroupId`.
+ * A new NSG carries only Azure's default rules: inbound, it allows traffic
+ * from the virtual network and the Azure load balancer and denies the
+ * rest; outbound, it allows traffic to the virtual network and the
+ * internet. Add your own rules with `Azure.Network.SecurityRule`; updating
+ * the NSG never removes them. Associate the NSG through
+ * `Subnet.networkSecurityGroupId` or
+ * `NetworkInterface.networkSecurityGroupId`.
+ *
+ * :::caution[Changing `name`, `location`, or `resourceGroup` replaces the NSG]
+ * Alchemy creates a new NSG and deletes the old one. Rules declared
+ * against `nsg.networkSecurityGroupName` are recreated in the new NSG.
+ * Until they are, the subnets and network interfaces that use it have
+ * only Azure's default rules.
+ * :::
+ *
+ * :::caution[An NSG must be in the same region as its subnets and network interfaces]
+ * Set the same `location` on the NSG and the virtual network, or let both
+ * use the stack default.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-network/network-security-groups-overview
  *
@@ -101,11 +124,119 @@ export interface NetworkSecurityGroup extends Resource<
  * });
  * ```
  *
- * **Example:** NSG that flushes connections on rule changes
+ * **Example:** NSG with a fixed name and region
+ * ```typescript
+ * const nsg = yield* Azure.Network.NetworkSecurityGroup("web", {
+ *   name: "nsg-web-prod",
+ *   location: "westeurope",
+ *   tags: { tier: "web" },
+ * });
+ * ```
+ *
+ * ### Allowing Inbound Traffic
+ * Each rule has a priority from 100 to 4096, unique per direction. Azure
+ * evaluates lower numbers first and stops at the first match.
+ *
+ * **Example:** Allow HTTP and HTTPS from the internet
+ * ```typescript
+ * const nsg = yield* Azure.Network.NetworkSecurityGroup("web");
+ * yield* Azure.Network.SecurityRule("allow-web", {
+ *   networkSecurityGroup: nsg.networkSecurityGroupName,
+ *   priority: 100,
+ *   direction: "Inbound",
+ *   access: "Allow",
+ *   protocol: "Tcp",
+ *   sourceAddressPrefix: "Internet",
+ *   destinationPortRanges: ["80", "443"],
+ * });
+ * ```
+ *
+ * **Example:** Allow SSH from one office range
+ * ```typescript
+ * yield* Azure.Network.SecurityRule("allow-ssh", {
+ *   networkSecurityGroup: nsg.networkSecurityGroupName,
+ *   priority: 110,
+ *   direction: "Inbound",
+ *   access: "Allow",
+ *   protocol: "Tcp",
+ *   sourceAddressPrefix: "203.0.113.0/24",
+ *   destinationPortRange: "22",
+ * });
+ * ```
+ *
+ * ### Restricting Outbound Traffic
+ * The default rules allow all outbound internet traffic. Add a deny rule
+ * to block it, and an allow rule with a lower number for what the
+ * workload needs.
+ *
+ * **Example:** Allow only Azure Storage outbound
+ * ```typescript
+ * yield* Azure.Network.SecurityRule("allow-storage", {
+ *   networkSecurityGroup: nsg.networkSecurityGroupName,
+ *   priority: 100,
+ *   direction: "Outbound",
+ *   access: "Allow",
+ *   protocol: "Tcp",
+ *   destinationAddressPrefix: "Storage",
+ *   destinationPortRange: "443",
+ * });
+ * yield* Azure.Network.SecurityRule("deny-internet", {
+ *   networkSecurityGroup: nsg.networkSecurityGroupName,
+ *   priority: 4000,
+ *   direction: "Outbound",
+ *   access: "Deny",
+ *   protocol: "*",
+ *   destinationAddressPrefix: "Internet",
+ * });
+ * ```
+ *
+ * ### Application Security Groups
+ * Group network interfaces by role with an application security group,
+ * then write rules against the group instead of IP addresses.
+ *
+ * **Example:** Let the app tier reach the database tier
+ * ```typescript
+ * const app = yield* Azure.Network.ApplicationSecurityGroup("app");
+ * const db = yield* Azure.Network.ApplicationSecurityGroup("db");
+ * const dbNic = yield* Azure.Network.NetworkInterface("db", {
+ *   ipConfigurations: [
+ *     { subnetId: subnet.subnetId, applicationSecurityGroupIds: [db.applicationSecurityGroupId] },
+ *   ],
+ * });
+ * yield* Azure.Network.SecurityRule("app-to-db", {
+ *   networkSecurityGroup: nsg.networkSecurityGroupName,
+ *   priority: 200,
+ *   direction: "Inbound",
+ *   access: "Allow",
+ *   protocol: "Tcp",
+ *   destinationPortRange: "5432",
+ *   sourceApplicationSecurityGroupIds: [app.applicationSecurityGroupId],
+ *   destinationApplicationSecurityGroupIds: [db.applicationSecurityGroupId],
+ * });
+ * ```
+ *
+ * ### Attaching to a Network Interface
+ * An NSG on a network interface filters only that VM's traffic. When
+ * both the subnet and the NIC have an NSG, traffic must pass both.
+ *
+ * **Example:** NSG on a VM's network interface
+ * ```typescript
+ * const nsg = yield* Azure.Network.NetworkSecurityGroup("vm");
+ * const nic = yield* Azure.Network.NetworkInterface("vm", {
+ *   ipConfigurations: [{ subnetId: subnet.subnetId }],
+ *   networkSecurityGroupId: nsg.networkSecurityGroupId,
+ * });
+ * ```
+ *
+ * ### Flushing Connections on Rule Changes
+ * NSG rules are stateful: by default a rule change applies only to new
+ * connections. Set `flushConnection: true` to re-evaluate open
+ * connections too.
+ *
+ * **Example:** Cut open connections when a rule changes
  * ```typescript
  * const nsg = yield* Azure.Network.NetworkSecurityGroup("web", {
  *   flushConnection: true,
- *   tags: { tier: "web" },
  * });
  * ```
  *

@@ -125,6 +125,7 @@ export interface ThroughputProps {
    * Manual (fixed) throughput in RU/s. Mutually exclusive with
    * `autoscaleMaxThroughput`. Not allowed on serverless accounts. Adding or
    * removing dedicated throughput replaces the resource.
+   * @default none (serverless, or shared from the parent)
    */
   throughput?: number;
   /**
@@ -132,6 +133,7 @@ export interface ThroughputProps {
    * this value). Mutually exclusive with `throughput`. Not allowed on
    * serverless accounts. Adding or removing dedicated throughput replaces
    * the resource.
+   * @default none (serverless, or shared from the parent)
    */
   autoscaleMaxThroughput?: number;
 }

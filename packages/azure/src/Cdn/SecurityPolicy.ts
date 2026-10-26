@@ -80,9 +80,10 @@ export interface SecurityPolicy extends Resource<
  * ### Attaching a WAF Policy
  * **Example:** Protect an endpoint with a WAF policy
  * ```typescript
+ * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf");
  * const policy = yield* Azure.Cdn.SecurityPolicy("waf", {
  *   profile: profile.profileName,
- *   wafPolicyId: wafPolicy.id,
+ *   wafPolicyId: waf.policyId,
  *   associations: [
  *     { domainIds: [endpoint.endpointId], patternsToMatch: ["/*"] },
  *   ],

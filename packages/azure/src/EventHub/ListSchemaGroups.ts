@@ -34,11 +34,13 @@ export type ListSchemaGroupsClient = (
  * ### Listing Schema Groups
  * **Example:** List the groups of a namespace
  * ```typescript
+ * // Events: a module-scope Azure.EventHub.Namespace declaration
  * export default class Api extends Azure.Functions.Function<Api>()(
  *   "Api",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     // init: assigns the role on the namespace
+ *     const namespace = yield* Events;
+ *     // init: assigns Schema Registry Reader on the namespace
  *     const listGroups = yield* Azure.EventHub.ListSchemaGroups(namespace);
  *     return {
  *       fetch: Effect.gen(function* () {

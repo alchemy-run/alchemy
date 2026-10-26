@@ -42,11 +42,13 @@ export type SendPublisherEventClient = (
  * ### Sending as a Publisher
  * **Example:** Send under a device's publisher name
  * ```typescript
+ * // Telemetry: a module-scope Azure.EventHub.EventHub declaration
  * export default class Api extends Azure.Functions.Function<Api>()(
  *   "Api",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     // init: assigns Azure Event Hubs Data Sender on the event hub
+ *     const telemetry = yield* Telemetry;
+ *     // init: assigns Azure Event Hubs Data Sender on the event hub only
  *     const sendAsPublisher = yield* Azure.EventHub.SendPublisherEvent(telemetry);
  *     return {
  *       fetch: Effect.gen(function* () {

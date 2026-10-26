@@ -10,6 +10,12 @@ import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { isWorkspaceOwnedByStack, sameText } from "./Common.ts";
 
+/**
+ * Kind of data the linked storage holds: `CustomLogs` (legacy custom log
+ * uploads), `AzureWatson` (crash dumps), `Query` (saved queries and
+ * functions), `Ingestion` (data sent through private links), or `Alerts`
+ * (log alert queries).
+ */
 export type LinkedStorageDataSourceType =
   | "CustomLogs"
   | "AzureWatson"
@@ -18,20 +24,40 @@ export type LinkedStorageDataSourceType =
   | "Alerts";
 
 export interface LinkedStorageAccountProps {
-  /** Resource group of the workspace. Changing it replaces the link. */
+  /**
+   * Resource group of the workspace.
+   *
+   * :::caution
+   * Changing it replaces the link.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Workspace to link storage to. Changing it replaces the link. */
+  /**
+   * Name of the workspace to link storage to, e.g. `logs.workspaceName`.
+   *
+   * :::caution
+   * Changing it replaces the link.
+   * :::
+   */
   workspace: string;
   /**
-   * Data the linked storage holds — also the link's name, so a workspace
-   * has at most one link per type. Changing it replaces the link.
+   * Kind of data the linked storage holds: `CustomLogs`, `AzureWatson`,
+   * `Query`, `Ingestion`, or `Alerts`. It is also the link's name, so a
+   * workspace has at most one link per type.
+   *
+   * :::caution
+   * Changing it replaces the link.
+   * :::
    */
   dataSourceType: LinkedStorageDataSourceType;
   /**
-   * ARM resource IDs of the storage accounts to link. Each account must be
-   * in the workspace's region and let trusted Azure services bypass its
-   * network rules (`networkAcls.bypass` includes `AzureServices`); Azure
-   * otherwise rejects the link as `LinkedStorageAccountFaulted`.
+   * ARM resource IDs of the storage accounts to link, e.g.
+   * `[account.storageAccountId]`. Each account must be in the workspace's
+   * region and let trusted Azure services bypass its network rules
+   * (`networkAcls.bypass` includes `AzureServices`). Azure otherwise rejects
+   * the link as `LinkedStorageAccountFaulted`. Alchemy updates the list in
+   * place.
    */
   storageAccountIds: string[];
 }
@@ -40,15 +66,15 @@ export interface LinkedStorageAccount extends Resource<
   "Azure.LogAnalytics.LinkedStorageAccount",
   LinkedStorageAccountProps,
   {
-    /** Data source type (the link's name). */
+    /** Data source type, which is also the link's name. */
     dataSourceType: string;
-    /** Workspace the storage is linked to. */
+    /** Name of the workspace the storage is linked to. */
     workspace: string;
     /** Resource group of the workspace. */
     resourceGroup: string;
     /** ARM resource ID of the link. */
     linkedStorageAccountId: string;
-    /** Linked storage account IDs. */
+    /** ARM resource IDs of the linked storage accounts. */
     storageAccountIds: string[];
   },
   never,
@@ -57,10 +83,24 @@ export interface LinkedStorageAccount extends Resource<
 
 /**
  * Customer-managed storage linked to a Log Analytics workspace for one
- * kind of data (saved queries, alerts, custom logs, ingestion), e.g. to
- * keep saved queries in your own storage account encrypted with your keys.
+ * kind of data (`Microsoft.OperationalInsights/workspaces/linkedStorageAccounts`).
+ * Use it to keep saved queries, alert queries, or ingested data in your own
+ * storage account, encrypted with your keys.
  *
- * A workspace has one link per data source type and links have no tags;
+ * :::caution[Changing `dataSourceType`, `workspace`, or `resourceGroup` replaces the link]
+ * Alchemy creates the new link and deletes the old one. The data already in
+ * the old storage account stays there.
+ * :::
+ *
+ * :::caution[The storage account must allow trusted Azure services]
+ * Set `networkAcls.bypass` to include `AzureServices` on each storage
+ * account. `Azure.Storage.StorageAccount` does not set it, so a new account
+ * has `bypass: None` and Azure rejects the link as
+ * `LinkedStorageAccountFaulted`. The account must also be in the
+ * workspace's region.
+ * :::
+ *
+ * A workspace has one link per data source type, and links have no tags.
  * Alchemy treats a link as owned when its workspace is owned by the
  * current stack and stage.
  *
@@ -69,10 +109,20 @@ export interface LinkedStorageAccount extends Resource<
  * ### Linking Storage
  * **Example:** Keep saved queries in your own storage account
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * const queries = yield* Azure.Storage.StorageAccount("queries");
  * yield* Azure.LogAnalytics.LinkedStorageAccount("queries", {
  *   workspace: logs.workspaceName,
  *   dataSourceType: "Query",
+ *   storageAccountIds: [queries.storageAccountId],
+ * });
+ * ```
+ *
+ * **Example:** Keep log alert queries in the same account
+ * ```typescript
+ * yield* Azure.LogAnalytics.LinkedStorageAccount("alerts", {
+ *   workspace: logs.workspaceName,
+ *   dataSourceType: "Alerts",
  *   storageAccountIds: [queries.storageAccountId],
  * });
  * ```

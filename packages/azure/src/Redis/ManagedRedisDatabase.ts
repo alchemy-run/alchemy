@@ -25,13 +25,25 @@ export type ManagedRedisClusteringPolicy = "OSSCluster" | "EnterpriseCluster" | 
 
 /** Data persistence of the database. Enable at most one of AOF or RDB. */
 export interface ManagedRedisPersistence {
-  /** Append-only-file persistence. */
+  /**
+   * Append-only-file persistence.
+   * @default false
+   */
   aofEnabled?: boolean;
-  /** How often the append-only file is flushed. @default "1s" */
+  /**
+   * How often the append-only file is flushed.
+   * @default "1s"
+   */
   aofFrequency?: "1s" | "always";
-  /** Periodic snapshot (RDB) persistence. */
+  /**
+   * Periodic snapshot (RDB) persistence.
+   * @default false
+   */
   rdbEnabled?: boolean;
-  /** How often a snapshot is taken. */
+  /**
+   * How often a snapshot is taken.
+   * @default Azure's default
+   */
   rdbFrequency?: "1h" | "6h" | "12h";
 }
 
@@ -39,18 +51,37 @@ export interface ManagedRedisPersistence {
 export interface ManagedRedisModule {
   /** Module name: `RedisJSON`, `RediSearch`, `RedisBloom`, or `RedisTimeSeries`. */
   name: string;
-  /** Module configuration, e.g. `ERROR_RATE 0.01 INITIAL_SIZE 400`. */
+  /**
+   * Module configuration, e.g. `ERROR_RATE 0.01 INITIAL_SIZE 400`.
+   * @default the module's defaults
+   */
   args?: string;
 }
 
 export interface ManagedRedisDatabaseProps {
-  /** Resource group of the cluster. Changing it replaces the database. */
+  /**
+   * Resource group of the cluster.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the `Azure.Redis.ManagedRedis` cluster. Changing it replaces the database. */
+  /**
+   * Name of the `Azure.Redis.ManagedRedis` cluster.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
+   */
   cluster: string;
   /**
-   * Database name. Azure Managed Redis supports only `default`. Changing it
-   * replaces the database.
+   * Database name. Azure Managed Redis supports only `default`.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
    * @default "default"
    */
   name?: string;
@@ -60,12 +91,21 @@ export interface ManagedRedisDatabaseProps {
    */
   clientProtocol?: "Encrypted" | "Plaintext";
   /**
-   * TCP port of the database endpoint. Changing it replaces the database.
+   * TCP port of the database endpoint.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
    * @default 10000
    */
   port?: number;
   /**
-   * Clustering policy. Changing it replaces the database (flushing its data).
+   * Clustering policy. `OSSCluster` needs a cluster-aware client;
+   * `EnterpriseCluster` puts one endpoint in front of every shard.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
    * @default "OSSCluster"
    */
   clusteringPolicy?: ManagedRedisClusteringPolicy;
@@ -74,9 +114,19 @@ export interface ManagedRedisDatabaseProps {
    * @default "VolatileLRU"
    */
   evictionPolicy?: ManagedRedisEvictionPolicy;
-  /** Data persistence. Omit to disable persistence. */
+  /**
+   * Data persistence. Enable at most one of AOF or RDB.
+   * @default no persistence
+   */
   persistence?: ManagedRedisPersistence;
-  /** Redis modules. Modules can only be set at creation; changing them replaces the database. */
+  /**
+   * Redis modules. Modules can only be set at creation.
+   *
+   * :::caution
+   * Changing them replaces the database and deletes its data.
+   * :::
+   * @default []
+   */
   modules?: ManagedRedisModule[];
   /**
    * Defer Redis version upgrades.
@@ -130,42 +180,93 @@ export interface ManagedRedisDatabase extends Resource<
 > {}
 
 /**
- * The Redis database of an Azure Managed Redis cluster. Each cluster holds
+ * The Redis database of an Azure Managed Redis cluster
+ * (`Microsoft.Cache/redisEnterprise/databases`). Each cluster holds
  * exactly one database, named `default`.
  *
- * Databases have no tags; they belong to the stage that owns their cluster.
+ * Alchemy creates the database with TLS (`Encrypted`), the `OSSCluster`
+ * policy, `VolatileLRU` eviction, no persistence, and access keys disabled,
+ * so only identities with an `Azure.Redis.AccessPolicyAssignment` can sign
+ * in. Databases have no tags; they belong to the stage that owns their
+ * cluster.
  *
- * @see https://learn.microsoft.com/azure/redis/overview
+ * :::caution[Changing `name`, `cluster`, `port`, `clusteringPolicy`, `modules`, or `resourceGroup` replaces the database]
+ * Alchemy deletes the old database first (a cluster holds only one), then
+ * creates the new one. The data is lost.
+ * :::
+ *
+ * See [What is Azure Managed Redis?](https://learn.microsoft.com/azure/redis/overview).
  *
  * ### Creating a Database
  * **Example:** Database with Entra ID authentication only
  * ```typescript
- * const redis = yield* Azure.Redis.ManagedRedis("cache");
- * const db = yield* Azure.Redis.ManagedRedisDatabase("db", {
- *   cluster: redis.clusterName,
+ * const cache = yield* Azure.Redis.ManagedRedis("Cache", {
+ *   sku: "Balanced_B0",
+ *   highAvailability: "Disabled",
  * });
+ * const db = yield* Azure.Redis.ManagedRedisDatabase("Counters", {
+ *   cluster: cache.clusterName,
+ *   // One endpoint in front of every shard, for clients that do not follow MOVED.
+ *   clusteringPolicy: "EnterpriseCluster",
+ * });
+ * // db.hostName, db.port (10000)
  * ```
  *
  * **Example:** Cache with access keys and LRU eviction
  * ```typescript
- * const db = yield* Azure.Redis.ManagedRedisDatabase("db", {
- *   cluster: redis.clusterName,
+ * const db = yield* Azure.Redis.ManagedRedisDatabase("Sessions", {
+ *   cluster: cache.clusterName,
  *   evictionPolicy: "AllKeysLRU",
  *   accessKeysAuthentication: "Enabled",
  * });
- * // db.hostName, db.port, db.primaryKey
+ * // db.primaryKey is Redacted; clients AUTH with it on db.hostName:db.port
  * ```
  *
  * ### Modules and Persistence
  * **Example:** JSON and search with snapshot persistence
  * ```typescript
- * const db = yield* Azure.Redis.ManagedRedisDatabase("db", {
- *   cluster: redis.clusterName,
+ * const db = yield* Azure.Redis.ManagedRedisDatabase("Catalog", {
+ *   cluster: cache.clusterName,
  *   clusteringPolicy: "EnterpriseCluster",
- *   evictionPolicy: "NoEviction",
+ *   evictionPolicy: "NoEviction", // RediSearch requires it
  *   modules: [{ name: "RedisJSON" }, { name: "RediSearch" }],
  *   persistence: { rdbEnabled: true, rdbFrequency: "6h" },
  * });
+ * ```
+ *
+ * **Example:** Append-only-file persistence
+ * ```typescript
+ * const db = yield* Azure.Redis.ManagedRedisDatabase("Queue", {
+ *   cluster: cache.clusterName,
+ *   persistence: { aofEnabled: true, aofFrequency: "1s" },
+ * });
+ * ```
+ *
+ * ### Granting Access
+ * **Example:** Let a managed identity sign in
+ * ```typescript
+ * yield* Azure.Redis.AccessPolicyAssignment("ApiAccess", {
+ *   cluster: db.cluster,
+ *   database: db.databaseName,
+ *   objectId: api.principalId.as<string>(), // e.g. an Azure.Functions.Function
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * Yield `db.hostName` and `db.port` inside the host to put them in its app
+ * settings, then read them at runtime and connect over TLS (see
+ * `Azure.Redis.ManagedRedis` for a Function that signs in with an Entra
+ * token).
+ *
+ * **Example:** Read the endpoint inside an Azure Function
+ * ```typescript
+ * // init
+ * const hostName = yield* db.hostName;
+ * const port = yield* db.port;
+ *
+ * // runtime
+ * const host = yield* hostName;
+ * const tcpPort = yield* port;
  * ```
  *
  * @resource

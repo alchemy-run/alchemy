@@ -30,6 +30,7 @@ export type GetDirectoryPropertiesRequest = FileShareRequest<files.GetDirectoryP
  * // runtime
  * const props = yield* getDirectoryProperties({ directory: "reports" });
  * const etag = props.eTag;
+ * // …provided with Effect.provide(Azure.Storage.GetDirectoryPropertiesHttp)
  * ```
  *
  * @binding

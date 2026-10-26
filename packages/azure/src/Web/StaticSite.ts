@@ -32,6 +32,7 @@ export interface StaticSiteProps {
   /**
    * Resource group the static site is created in. Changing it replaces the
    * site.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -49,20 +50,29 @@ export interface StaticSiteProps {
   location?: string;
   /**
    * Pricing plan. `Standard` adds custom authentication, linked backends,
-   * private endpoints, and an SLA.
+   * password protection, private endpoints, and an SLA. `Dedicated` runs
+   * the site on dedicated infrastructure. Changes in place.
    * @default "Free"
    */
   sku?: StaticSiteSku;
   /**
-   * Git repository Azure builds the site from. Omit it to deploy with the
+   * Git repository Azure builds the site from, e.g.
+   * `https://github.com/contoso/docs`. Omit it to deploy with the
    * deployment token instead ("bring your own CI").
+   * @default no repository
    */
   repositoryUrl?: string;
-  /** Branch of `repositoryUrl` to build. */
+  /** Branch of `repositoryUrl` to build, e.g. `main`. */
   branch?: string;
-  /** GitHub personal access token Azure uses to set up the repository. */
+  /**
+   * GitHub personal access token Azure uses to set up the repository
+   * (a workflow and a deployment secret).
+   */
   repositoryToken?: string | Redacted.Redacted<string>;
-  /** Build settings used when Azure builds `repositoryUrl`. */
+  /**
+   * Build settings used when Azure builds `repositoryUrl`: `appLocation`,
+   * `apiLocation`, `outputLocation`, and custom build commands.
+   */
   buildProperties?: web.StaticSiteBuildProperties;
   /**
    * Whether pull requests get preview (staging) environments.
@@ -75,18 +85,21 @@ export interface StaticSiteProps {
    */
   allowConfigFileUpdates?: boolean;
   /**
-   * Whether the public endpoint accepts traffic.
-   * @default Azure's default
+   * Whether the public endpoint accepts traffic. `Disabled` needs the
+   * `Standard` plan and a private endpoint to reach the site.
+   * @default Azure's default (`Enabled`)
    */
   publicNetworkAccess?: "Enabled" | "Disabled";
   /**
    * App settings exposed to the site's managed functions as environment
    * variables. The site's settings are replaced with exactly this map.
+   * @default {}
    */
   appSettings?: Record<string, string>;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -103,7 +116,7 @@ export interface StaticSite extends Resource<
     resourceGroup: string;
     /** Location of the static site. */
     location: string;
-    /** Pricing plan. */
+    /** Pricing plan: `Free`, `Standard`, or `Dedicated`. */
     sku: string;
     /** Default host name, e.g. `{words}.azurestaticapps.net`. */
     defaultHostname: string;
@@ -123,22 +136,47 @@ export interface StaticSite extends Resource<
 > {}
 
 /**
- * An Azure Static Web App: globally distributed static content with
- * optional managed functions, preview environments, and custom domains.
+ * An Azure Static Web App (`Microsoft.Web/staticSites`): globally
+ * distributed static content with optional managed functions, preview
+ * environments, and custom domains.
  *
- * Without `repositoryUrl` the site is "bring your own CI": upload content
- * with the `deploymentToken` (e.g. `swa deploy --deployment-token`).
+ * Alchemy creates a `Free` site in `eastus2` (not the stack's location:
+ * Static Web Apps runs its management plane in five regions only). The
+ * content itself is served from a global edge network. Without
+ * `repositoryUrl` the site is "bring your own CI": upload content with the
+ * `deploymentToken` (e.g. `swa deploy --deployment-token`). To build and
+ * upload a site from the stack itself, use `Azure.Website.StaticSite`,
+ * which serves from Blob Storage and Front Door instead.
+ *
+ * :::caution[Changing `name`, `resourceGroup`, or `location` replaces the site]
+ * Alchemy creates a new, empty site with a new `*.azurestaticapps.net`
+ * host name and a new deployment token, and deletes the old site with its
+ * content and preview environments. Deploy the content again. Custom
+ * domains move to the new site and validate again against its new host
+ * name.
+ * :::
+ *
+ * :::caution[Static Web Apps runs in `westus2`, `centralus`, `eastus2`, `westeurope`, and `eastasia` only]
+ * A `location` outside these regions fails. Alchemy registers the
+ * `Microsoft.Web` resource provider before the first site.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/static-web-apps/overview
  *
  * ### Creating a Static Site
  * **Example:** Free static site
  * ```typescript
- * const group = yield* Azure.Resources.ResourceGroup("web", {
- *   location: "eastus2",
- * });
  * const site = yield* Azure.Web.StaticSite("site");
  * // site.url, site.deploymentToken
+ * ```
+ *
+ * **Example:** Site with a fixed name and region
+ * ```typescript
+ * const site = yield* Azure.Web.StaticSite("site", {
+ *   name: "contoso-docs",
+ *   location: "westeurope",
+ *   tags: { team: "docs" },
+ * });
  * ```
  *
  * **Example:** Standard site with app settings
@@ -147,6 +185,134 @@ export interface StaticSite extends Resource<
  *   sku: "Standard",
  *   stagingEnvironmentPolicy: "Disabled",
  *   appSettings: { API_BASE: "https://api.example.com" },
+ * });
+ * ```
+ *
+ * ### Deploying Content
+ * **Example:** Deploy from your own CI with the deployment token
+ * ```typescript
+ * const site = yield* Azure.Web.StaticSite("site");
+ * return { deploymentToken: site.deploymentToken };
+ * // in CI: swa deploy ./dist --deployment-token "$SWA_DEPLOYMENT_TOKEN" --env production
+ * ```
+ *
+ * **Example:** Let Azure build a GitHub repository
+ * ```typescript
+ * const site = yield* Azure.Web.StaticSite("site", {
+ *   repositoryUrl: "https://github.com/contoso/docs",
+ *   branch: "main",
+ *   repositoryToken: Config.redacted("GITHUB_TOKEN"),
+ *   buildProperties: {
+ *     appLocation: "/",
+ *     apiLocation: "api",
+ *     outputLocation: "dist",
+ *   },
+ * });
+ * ```
+ *
+ * ### Preview Environments
+ * Each pull request gets its own preview URL unless you turn them off.
+ * The `Free` plan allows 3 preview environments and `Standard` allows 10.
+ *
+ * **Example:** No preview environments, no config-file overrides
+ * ```typescript
+ * const site = yield* Azure.Web.StaticSite("site", {
+ *   stagingEnvironmentPolicy: "Disabled",
+ *   allowConfigFileUpdates: false,
+ * });
+ * ```
+ *
+ * **Example:** Password-protect the preview environments
+ * ```typescript
+ * const site = yield* Azure.Web.StaticSite("site", { sku: "Standard" });
+ * yield* Azure.Web.StaticSiteBasicAuth("preview-password", {
+ *   staticSiteName: site.staticSiteName,
+ *   password: Redacted.make(previewPassword),
+ *   applicableEnvironmentsMode: "StagingEnvironments",
+ * });
+ * ```
+ *
+ * **Example:** Settings of one preview environment
+ * ```typescript
+ * yield* Azure.Web.StaticSiteEnvironmentSettings("preview-settings", {
+ *   staticSiteName: site.staticSiteName,
+ *   environmentName: "42",
+ *   appSettings: { API_URL: "https://preview.example.com" },
+ * });
+ * ```
+ *
+ * ### Custom Domains
+ * **Example:** Subdomain validated by an Azure DNS CNAME record
+ * ```typescript
+ * const zone = yield* Azure.Dns.Zone("contoso", { name: "contoso.com" });
+ * const site = yield* Azure.Web.StaticSite("site");
+ * const cname = yield* Azure.Dns.RecordSet("www", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "CNAME",
+ *   name: "www",
+ *   cname: site.defaultHostname,
+ * });
+ * yield* Azure.Web.StaticSiteCustomDomain("www", {
+ *   staticSiteName: site.staticSiteName,
+ *   domainName: Output.map(cname.recordSetName, () => "www.contoso.com"),
+ * });
+ * ```
+ *
+ * **Example:** Apex domain validated by a TXT token
+ * ```typescript
+ * const domain = yield* Azure.Web.StaticSiteCustomDomain("apex", {
+ *   staticSiteName: site.staticSiteName,
+ *   domainName: "contoso.com",
+ *   validationMethod: "dns-txt-token",
+ * });
+ * yield* Azure.Dns.RecordSet("dnsauth", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "TXT",
+ *   name: "_dnsauth",
+ *   txtRecords: [domain.validationToken.as<string>()],
+ * });
+ * ```
+ *
+ * ### APIs and Backends
+ * On the `Standard` plan, link one backend to serve `/api/*`: a function
+ * app, container app, API Management instance, or web app.
+ *
+ * **Example:** Container App behind `/api`
+ * ```typescript
+ * const site = yield* Azure.Web.StaticSite("site", { sku: "Standard" });
+ * const api = yield* Azure.ContainerApps.ContainerApp("api", {
+ *   environmentId: env.environmentId,
+ *   configuration: { ingress: { external: true, targetPort: 80 } },
+ *   template: {
+ *     containers: [{ name: "api", image: "mcr.microsoft.com/k8se/quickstart:latest" }],
+ *   },
+ * });
+ * yield* Azure.Web.StaticSiteLinkedBackend("api", {
+ *   staticSiteName: site.staticSiteName,
+ *   backendResourceId: api.containerAppId,
+ *   region: api.location,
+ * });
+ * ```
+ *
+ * **Example:** Settings for the managed functions in `apiLocation`
+ * ```typescript
+ * const site = yield* Azure.Web.StaticSite("site", {
+ *   appSettings: { DATABASE_URL: "postgres://db.example.com/app" },
+ * });
+ * ```
+ *
+ * ### Network Access
+ * **Example:** Turn off the public endpoint
+ * ```typescript
+ * const site = yield* Azure.Web.StaticSite("site", {
+ *   sku: "Standard",
+ *   publicNetworkAccess: "Disabled",
+ * });
+ * const endpoint = yield* Azure.Network.PrivateEndpoint("site", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: site.staticSiteId, groupIds: ["staticSites"] },
+ *   ],
  * });
  * ```
  *

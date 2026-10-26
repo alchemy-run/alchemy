@@ -16,8 +16,8 @@ export interface AsyncHandler {
   fetch?: (request: Request, env: any) => Response | Promise<Response>;
 }
 
-// Must stay in step with `packEnvValue` in `alchemy/RuntimeContext`.
-const decode = (raw: string | undefined): unknown => {
+/** Decode one app setting. Must stay in step with `packEnvValue` in `alchemy/RuntimeContext`. */
+export const decode = (raw: string | undefined): unknown => {
   if (raw === undefined || !/^[\x20\t\r\n]*["{[0-9tfn-]/.test(raw)) return raw;
   try {
     const parsed: unknown = JSON.parse(raw);

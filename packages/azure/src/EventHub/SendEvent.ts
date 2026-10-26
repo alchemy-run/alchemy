@@ -36,11 +36,13 @@ export type SendEventClient = (
  * ### Sending an Event
  * **Example:** Send a reading from a Function
  * ```typescript
+ * // Telemetry: a module-scope Azure.EventHub.EventHub declaration
  * export default class Api extends Azure.Functions.Function<Api>()(
  *   "Api",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     // init: assigns Azure Event Hubs Data Sender on the event hub
+ *     const telemetry = yield* Telemetry;
+ *     // init: assigns Azure Event Hubs Data Sender on the event hub only
  *     const sendEvent = yield* Azure.EventHub.SendEvent(telemetry);
  *     return {
  *       fetch: Effect.gen(function* () {

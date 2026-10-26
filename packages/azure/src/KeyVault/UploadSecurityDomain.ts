@@ -26,6 +26,7 @@ export interface UploadSecurityDomainRequest extends Omit<
  *
  * // runtime
  * yield* upload({ value: restoreBlob });
+ * // …provided with Effect.provide(Azure.KeyVault.UploadSecurityDomainHttp)
  * ```
  *
  * @binding

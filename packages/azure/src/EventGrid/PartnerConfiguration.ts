@@ -31,6 +31,7 @@ export interface AuthorizedPartner {
    * Display name of the partner. Only a Microsoft-verified partner may be
    * named; omit it for your own unverified `Azure.EventGrid.PartnerRegistration`
    * (Event Grid rejects the request otherwise).
+   * @default not sent
    */
   partnerName?: string;
   /**
@@ -44,24 +45,30 @@ export interface AuthorizedPartner {
 export interface PartnerConfigurationProps {
   /**
    * Resource group the partner configuration belongs to. There is one
-   * configuration (named `default`) per resource group. Changing it replaces
-   * the configuration.
+   * configuration (named `default`) per resource group.
+   *
+   * :::caution
+   * Changing it replaces the configuration.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Maximum number of days a partner authorization may last (1-365).
-   * @default 7
+   * Updated in place.
+   * @default Azure's default (`7`)
    */
   defaultMaximumExpirationTimeInDays?: number;
   /**
    * Partners authorized to create partner topics or destinations in the
-   * resource group.
+   * resource group. Updated in place.
    * @default []
    */
   authorizedPartners?: AuthorizedPartner[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -86,15 +93,28 @@ export interface PartnerConfiguration extends Resource<
 > {}
 
 /**
- * The Event Grid partner configuration of a resource group: the list of
- * SaaS partners (Auth0, Microsoft Graph API, SAP, …) authorized to create
- * partner topics in it. Each resource group has exactly one configuration,
- * named `default`, in the `global` location.
+ * The Event Grid partner configuration of a resource group
+ * (`Microsoft.EventGrid/partnerConfigurations`): the list of SaaS partners
+ * (Auth0, Microsoft Graph API, SAP, …) authorized to create partner topics
+ * in it. Each resource group has exactly one configuration, named
+ * `default`, in the `global` location.
+ *
+ * :::caution[Changing `resourceGroup` replaces the configuration]
+ * Alchemy creates a configuration in the new resource group and deletes
+ * the old one. Partners can no longer create partner topics in the old
+ * group.
+ * :::
+ *
+ * :::caution[One configuration per resource group]
+ * Declare at most one `PartnerConfiguration` for each resource group. Two
+ * declarations for the same group write the same `default` configuration
+ * and overwrite each other's partner list.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/subscribe-to-partner-events
  *
  * ### Authorizing Partners
- * **Example:** Authorize a partner for 30 days
+ * **Example:** Authorize a verified partner for 30 days
  * ```typescript
  * const partners = yield* Azure.EventGrid.PartnerConfiguration("partners", {
  *   defaultMaximumExpirationTimeInDays: 30,
@@ -103,6 +123,16 @@ export interface PartnerConfiguration extends Resource<
  *       partnerRegistrationImmutableId: "941a5b43-6d4c-4d3c-9c9e-2c1d4b8a7f10",
  *       partnerName: "Auth0",
  *     },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Authorize your own partner registration
+ * ```typescript
+ * const registration = yield* Azure.EventGrid.PartnerRegistration("contoso");
+ * const partners = yield* Azure.EventGrid.PartnerConfiguration("partners", {
+ *   authorizedPartners: [
+ *     { partnerRegistrationImmutableId: registration.partnerRegistrationImmutableId },
  *   ],
  * });
  * ```

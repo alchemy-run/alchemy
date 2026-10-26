@@ -4,6 +4,17 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type { MonitoredResource } from "../Monitor/MonitoredResource.ts";
 
+/**
+ * Request of a {@link GetQueryWithResourceId} call. The bound resource
+ * supplies `resourceId`.
+ *
+ * - `query`: the KQL query text, e.g. `"Heartbeat | count"`.
+ * - `timespan` (optional): ISO 8601 duration or interval applied on top of
+ *   any time filter in the query, e.g. `PT1H` or `P1D`. Default: no extra
+ *   time filter.
+ * - `endpoint` (optional): Log Analytics endpoint. Default:
+ *   `https://api.loganalytics.io`.
+ */
 export interface GetQueryWithResourceIdRequest extends Omit<
   query.GetQueryWithResourceIdRequest,
   "resourceId"
@@ -22,28 +33,35 @@ export interface GetQueryWithResourceIdRequest extends Omit<
  * App, container group, VM, or AKS workload identity) the role goes to
  * that identity; any other host (a Cloudflare Worker, an AWS Lambda) gets
  * an Entra service principal (see `AzureBindings`).
+ * The resource must send its logs to a workspace (a diagnostic setting),
+ * or the query returns no rows.
  * Provide {@link GetQueryWithResourceIdHttp}.
  *
- * ### Calling GetQueryWithResourceId
- * **Example:** GetQueryWithResourceId from a Function
+ * ### Querying One Resource's Logs
+ * **Example:** Count a storage account's log rows from an Azure Function
  * ```typescript
- * // init
- * const queryLogs = yield* Azure.LogAnalytics.GetQueryWithResourceId({
- *   resource: account,
- *   resourceId: account.storageAccountId,
- *   location: account.location,
- * });
+ * const Data = Azure.Storage.StorageAccount("Data");
  *
- * // runtime
- * const result = yield* queryLogs({ query: "AzureMetrics | count", timespan: "P1D" });
- * ```
- *
- * **Example:** Provide the implementation on the Function
- * ```typescript
- * Effect.gen(function* () {
- *   const queryLogs = yield* Azure.LogAnalytics.GetQueryWithResourceId(target);
- *   // ...
- * }).pipe(Effect.provide(Azure.LogAnalytics.GetQueryWithResourceIdHttp));
+ * export default class Reports extends Azure.Functions.Function<Reports>()(
+ *   "Reports",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const account = yield* Data;
+ *     // init: assigns AzureMonitorQueryResourceLogsRole on the account only
+ *     const queryLogs = yield* Azure.LogAnalytics.GetQueryWithResourceId({
+ *       resource: account,
+ *       resourceId: account.storageAccountId,
+ *       location: account.location,
+ *     });
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime
+ *         const result = yield* queryLogs({ query: "StorageBlobLogs | count", timespan: "P1D" });
+ *         return yield* HttpServerResponse.json({ count: result.tables[0]?.rows[0]?.[0] });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.LogAnalytics.GetQueryWithResourceIdHttp)),
+ * ) {}
  * ```
  *
  * @binding

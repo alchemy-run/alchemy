@@ -172,6 +172,21 @@ const transformWebAppProps = (id: string, props: WebAppProps) =>
  * `Azure.ContainerApps.ContainerApp`.
  * :::
  *
+ * :::caution[An idle app unloads after 20 minutes]
+ * `alwaysOn` is off unless you set it. Azure then unloads the app after 20
+ * minutes without requests: the next request waits for a cold start, and
+ * `host.run` loops stop until then. Set `siteConfig: { alwaysOn: true }` on
+ * a Basic or higher plan. The free `F1` plan cannot stay on and has 60 CPU
+ * minutes a day.
+ * :::
+ *
+ * :::caution[`main` deploys to Linux only]
+ * With `main`, Alchemy sets the stack to `NODE|22-lts` and the start
+ * command to `node index.mjs`, and `os: "windows"` fails with
+ * `WebAppRuntimeUnsupported`. Each deploy whose bundle changed zip-deploys
+ * it and restarts the app.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/app-service/overview
  *
  * ### Effect Web Apps
@@ -285,11 +300,26 @@ const transformWebAppProps = (id: string, props: WebAppProps) =>
  * });
  * ```
  *
- * **Example:** Keep a package out of the bundle
+ * ### Bundling
+ * Alchemy bundles `main` and its imports with Rolldown into one ESM file
+ * for Node.js 22, zips it with a `package.json`, and deploys it without a
+ * remote build, so the app has no `node_modules`: every import must be in
+ * the bundle. Pass Rolldown options on `build`.
+ *
+ * **Example:** Mark more packages as side-effect free
  * ```typescript
  * export default class Api extends Azure.Web.WebApp<Api>()(
  *   "Api",
- *   { main: import.meta.url, build: { input: { external: ["sharp"] } } },
+ *   { main: import.meta.url, build: { pure: { packages: ["zod"] } } },
+ *   program,
+ * ) {}
+ * ```
+ *
+ * **Example:** Ship a source map
+ * ```typescript
+ * export default class Api extends Azure.Web.WebApp<Api>()(
+ *   "Api",
+ *   { main: import.meta.url, build: { output: { sourcemap: true } } },
  *   program,
  * ) {}
  * ```
@@ -310,17 +340,20 @@ const transformWebAppProps = (id: string, props: WebAppProps) =>
  * });
  * ```
  *
- * ### Bindings
+ * ### Storage Bindings
  * Bindings grant the app's managed identity the smallest data role on the
- * bound resource and hand the program a typed client. Provide the `*Http`
- * layer of each binding on the program.
+ * bound resource only, and hand the program a typed client. Provide the
+ * `*Http` layer of each binding on the program. `BlobContainerReadWrite`
+ * grants **Storage Blob Data Contributor** on the container.
  *
  * **Example:** Read and write blobs
  * ```typescript
  * Effect.gen(function* () {
+ *   // init
  *   const files = yield* Azure.Storage.BlobContainerReadWrite(uploads);
  *   return {
  *     fetch: Effect.gen(function* () {
+ *       // runtime
  *       yield* files.put("hello.txt", "hi");
  *       const blob = yield* files.get("hello.txt");
  *       return HttpServerResponse.text(blob?.text() ?? "missing");
@@ -329,17 +362,105 @@ const transformWebAppProps = (id: string, props: WebAppProps) =>
  * }).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp))
  * ```
  *
- * **Example:** Send to a Storage queue and read a Key Vault secret
+ * **Example:** Send to a Storage queue
  * ```typescript
- * // init
+ * // init: Storage Queue Data Message Sender on the queue
  * const jobs = yield* Azure.Storage.QueueSend(queue);
- * const apiKey = yield* Azure.KeyVault.SecretRead(secret);
  *
- * // per request
+ * // runtime
  * yield* jobs.send(JSON.stringify({ id: 1 }));
- * const key = yield* apiKey.get(); // Redacted<string>
+ * // …provided with Effect.provide(Azure.Storage.QueueSendHttp)
  * ```
  *
+ * ### Key Vault Bindings
+ * `SecretRead` grants **Key Vault Secrets User** on the one secret.
+ *
+ * **Example:** Read a secret
+ * ```typescript
+ * // init
+ * const apiKey = yield* Azure.KeyVault.SecretRead(secret);
+ *
+ * // runtime: the latest version, as a Redacted<string>
+ * const key = yield* apiKey.get();
+ * // …provided with Effect.provide(Azure.KeyVault.SecretReadHttp)
+ * ```
+ *
+ * ### Service Bus Bindings
+ * `QueueSend` grants **Azure Service Bus Data Sender** on the queue, and
+ * `TopicWrite` grants it on the topic.
+ *
+ * **Example:** Send to a queue and publish to a topic
+ * ```typescript
+ * // init
+ * const orders = yield* Azure.ServiceBus.QueueSend(queue);
+ * const events = yield* Azure.ServiceBus.TopicWrite(topic);
+ *
+ * // runtime
+ * yield* orders.send({ id: 1 }, { messageId: "order-1" });
+ * yield* events.send({ type: "order.created", orderId: "1" }, { label: "order" });
+ * // …provided with Azure.ServiceBus.QueueSendHttp and Azure.ServiceBus.TopicWriteHttp
+ * ```
+ *
+ * ### Event Hubs Bindings
+ * `Send` grants **Azure Event Hubs Data Sender** on the event hub.
+ *
+ * **Example:** Send an event
+ * ```typescript
+ * // init
+ * const readings = yield* Azure.EventHub.Send(hub);
+ *
+ * // runtime
+ * yield* readings.send({ deviceId: "d1", temperature: 21 }, { partitionKey: "d1" });
+ * // …provided with Effect.provide(Azure.EventHub.SendHttp)
+ * ```
+ *
+ * ### Cosmos DB Bindings
+ * `SqlContainerReadWrite` assigns a Cosmos DB data-plane role scoped to the
+ * one container.
+ *
+ * **Example:** Upsert and query documents
+ * ```typescript
+ * // init
+ * const orders = yield* Azure.CosmosDB.SqlContainerReadWrite(ordersContainer);
+ *
+ * // runtime
+ * yield* orders.upsert({
+ *   document: { id: "o-1", tenant: "t1", status: "open" },
+ *   partitionKey: ["t1"],
+ * });
+ * const { Documents } = yield* orders.query({
+ *   query: "SELECT * FROM c WHERE c.status = @status",
+ *   parameters: [{ name: "@status", value: "open" }],
+ * });
+ * // …provided with Effect.provide(Azure.CosmosDB.SqlContainerReadWriteHttp)
+ * ```
+ *
+ * ### Controlling the App from a Runtime
+ * `StartWebApp`, `StopWebApp`, and `RestartWebApp` let another runtime
+ * operate the app. Each grants a custom role with only its one action, on
+ * this app only.
+ *
+ * **Example:** Restart the app from a Function
+ * ```typescript
+ * export default class Ops extends Azure.Functions.Function<Ops>()(
+ *   "Ops",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const site = yield* Site;
+ *     // init
+ *     const restart = yield* Azure.Web.RestartWebApp(site);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime
+ *         yield* restart({ softRestart: true });
+ *         return HttpServerResponse.text("accepted");
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.Web.RestartWebAppHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Custom Role Grants
  * **Example:** Grant a role the program uses directly
  * ```typescript
  * const host = yield* Azure.Web.WebApp;
@@ -350,6 +471,73 @@ const transformWebAppProps = (id: string, props: WebAppProps) =>
  *     ],
  *   });
  * }
+ * ```
+ *
+ * ### Networking
+ * `virtualNetworkSubnetId` routes the app's outbound traffic through a
+ * subnet delegated to `Microsoft.Web/serverFarms` (Basic plan or higher),
+ * so the app reaches private endpoints and VMs in the virtual network.
+ *
+ * **Example:** Outbound traffic through a delegated subnet
+ * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("Vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("Apps", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ *   delegations: [{ serviceName: "Microsoft.Web/serverFarms" }],
+ * });
+ * const api = yield* Azure.Web.WebApp("Api", {
+ *   main: "./src/api.ts",
+ *   sku: "P0v3",
+ *   virtualNetworkSubnetId: subnet.subnetId,
+ * });
+ * ```
+ *
+ * **Example:** Allow one IP range and block the rest
+ * ```typescript
+ * const api = yield* Azure.Web.WebApp("Api", {
+ *   main: "./src/api.ts",
+ *   siteConfig: {
+ *     ipSecurityRestrictions: [
+ *       { name: "office", ipAddress: "203.0.113.0/24", action: "Allow", priority: 100 },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
+ * ### Custom Domains
+ * Azure verifies a hostname when you bind it: the domain needs a CNAME to
+ * `defaultHostName` and an `asuid.<name>` TXT record holding
+ * `customDomainVerificationId`. Make `hostName` depend on both records so
+ * Alchemy creates them first. A TLS binding also needs a certificate and a
+ * Basic or higher plan.
+ *
+ * **Example:** `www` in an Azure DNS zone
+ * ```typescript
+ * import * as Output from "alchemy/Output";
+ *
+ * const zone = yield* Azure.Dns.Zone("Zone", { name: "example.com" });
+ * const cname = yield* Azure.Dns.RecordSet("WwwCname", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "CNAME",
+ *   name: "www",
+ *   cname: api.defaultHostName,
+ * });
+ * const verify = yield* Azure.Dns.RecordSet("WwwVerify", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "TXT",
+ *   name: "asuid.www",
+ *   txtRecords: [api.customDomainVerificationId.as<string>()],
+ * });
+ * yield* Azure.Web.HostNameBinding("Www", {
+ *   siteName: api.siteName,
+ *   hostName: Output.map(
+ *     Output.all(cname.recordSetName, verify.recordSetName),
+ *     () => "www.example.com",
+ *   ),
+ * });
  * ```
  *
  * ### Configuration-only Web Apps

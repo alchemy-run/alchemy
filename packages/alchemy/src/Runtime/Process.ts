@@ -9,15 +9,25 @@ import type { Terminal } from "effect/Terminal";
 import type { HttpEffect } from "../Http.ts";
 import * as Http from "../Http.ts";
 import * as Output from "../Output.ts";
-import { packEnvValue, unpackEnvValue, type BaseRuntimeContext } from "../RuntimeContext.ts";
+import {
+  packEnvValue,
+  RuntimeContext,
+  unpackEnvValue,
+  type BaseRuntimeContext,
+} from "../RuntimeContext.ts";
 import { ManagedHttpShutdown } from "./ManagedHttpShutdown.ts";
 
 export type ProcessServices = ChildProcessSpawner | FileSystem | Path | Stdio | Terminal;
 
 export interface ProcessContext extends BaseRuntimeContext {
+  /**
+   * Register a background loop. The host runs it with its own
+   * {@link RuntimeContext}, so runtime-only binding clients may be called
+   * inside it.
+   */
   run: <Req = never, RunReq = never>(
     effect: Effect.Effect<void, never, RunReq>,
-  ) => Effect.Effect<void, never, Req | RunReq>;
+  ) => Effect.Effect<void, never, Req | Exclude<RunReq, RuntimeContext>>;
 }
 
 /**
@@ -67,7 +77,7 @@ export const createHostRuntimeContext =
     const runners: Effect.Effect<void, never, any>[] = [];
     const env: Record<string, any> = {};
 
-    return {
+    const context: HostRuntimeContext = {
       Type: type,
       id,
       env,
@@ -85,7 +95,7 @@ export const createHostRuntimeContext =
         Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
       run: (effect: Effect.Effect<void, never, any>) =>
         Effect.sync(() => {
-          runners.push(effect);
+          runners.push(Effect.provideService(effect, RuntimeContext, context));
         }),
       serve: ((handler) =>
         Effect.sync(() => {
@@ -118,7 +128,8 @@ export const createHostRuntimeContext =
           }),
         ),
       })),
-    } satisfies HostRuntimeContext;
+    };
+    return context;
   };
 
 /**

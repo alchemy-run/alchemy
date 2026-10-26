@@ -24,7 +24,10 @@ import {
 } from "./StorageOwnership.ts";
 
 export interface TableProps {
-  /** Resource group of the storage account. Changing it replaces the table. */
+  /**
+   * Resource group of the storage account. Changing it replaces the table.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Storage account that holds the table. Changing it replaces the table. */
   storageAccount: string;
@@ -38,6 +41,7 @@ export interface TableProps {
    * Stored access policies (at most 5) that shared access signatures can
    * reference. Table permissions are `r` (query), `a` (add), `u` (update),
    * and `d` (delete).
+   * @default []
    */
   accessPolicies?: StorageAccessPolicy[];
 }
@@ -62,13 +66,21 @@ export interface Table extends Resource<
 > {}
 
 /**
- * An Azure Table storage table — a schemaless key/attribute store inside a
- * Storage account.
+ * An Azure Table storage table (`Microsoft.Storage/storageAccounts/tableServices/tables`):
+ * a schemaless key/attribute store inside a Storage account. Each entity
+ * has a `PartitionKey`, a `RowKey`, and up to 252 properties.
  *
- * Tables carry neither tags nor metadata, so Alchemy treats a table as
- * owned when its storage account is tagged for the current stack and stage
- * and the table has the deterministic name. Deleting the table deletes
- * every entity in it.
+ * Use it for cheap lookups by key, such as metadata, sessions, or
+ * counters. For queries across partitions, secondary indexes, or global
+ * replication, use `Azure.CosmosDB.SqlContainer`. Tables carry neither tags
+ * nor metadata, so Alchemy treats a table as owned when its storage
+ * account is tagged for the current stack and stage and the table has the
+ * deterministic name.
+ *
+ * :::caution[Changing `name`, `storageAccount`, or `resourceGroup` replaces the table]
+ * Alchemy creates a new, empty table and deletes the old one with every
+ * entity in it.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/storage/tables/table-storage-overview
  *
@@ -81,6 +93,84 @@ export interface Table extends Resource<
  * });
  * ```
  *
+ * **Example:** Table with a fixed name
+ * ```typescript
+ * const users = yield* Azure.Storage.Table("users", {
+ *   storageAccount: account.storageAccountName,
+ *   name: "Users",
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * Each binding grants a role on this table only. `TableRead` grants
+ * **Storage Table Data Reader**. `TableWrite` (insert, update, delete,
+ * no reads) and `TableReadWrite` grant a custom role with exactly the data
+ * actions their client calls. On an Azure Function, Web App, Container
+ * App, container group, or VM the role goes to the host's managed
+ * identity; any other host gets an Entra service principal.
+ *
+ * **Example:** Read and write entities from an Azure Function
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const files = yield* Files;
+ *     const records = yield* Azure.Storage.TableReadWrite(files);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const page = yield* records.query({ filter: "PartitionKey eq 'files'", top: 100 });
+ *         return yield* HttpServerResponse.json({ files: page.entities });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.Storage.TableReadWriteHttp)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Write-only access for a background indexer
+ * ```typescript
+ * // init
+ * const records = yield* Azure.Storage.TableWrite(files);
+ *
+ * // runtime
+ * yield* records.upsert({ PartitionKey: "files", RowKey: name, size, sha256 });
+ * // …provided with Effect.provide(Azure.Storage.TableWriteHttp)
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Read one entity
+ * ```typescript
+ * // init
+ * const users = yield* Azure.Storage.TableRead(table);
+ *
+ * // runtime
+ * const user = yield* users.get("users", userId); // undefined when missing
+ * // …provided with Effect.provide(Azure.Storage.TableReadHttp)
+ * ```
+ *
+ * **Example:** Page through a partition
+ * ```typescript
+ * let continuation: Azure.Storage.TableQueryContinuation | undefined;
+ * do {
+ *   const page = yield* users.query({ filter: "PartitionKey eq 'users'", continuation });
+ *   for (const user of page.entities) yield* Effect.log(user.RowKey);
+ *   continuation = page.continuation;
+ * } while (continuation);
+ * ```
+ *
+ * **Example:** Insert, then update with optimistic concurrency
+ * ```typescript
+ * const { etag } = yield* counters.insert({ PartitionKey: "counters", RowKey: "hits", n: 1 });
+ * yield* counters.update({ PartitionKey: "counters", RowKey: "hits", n: 2 }, { etag });
+ * // a stale etag fails with TableEntityConditionNotMet
+ * ```
+ *
+ * **Example:** Merge one property and delete an entity
+ * ```typescript
+ * yield* counters.upsert({ PartitionKey: "counters", RowKey: "hits", lastSeen: now }, { mode: "merge" });
+ * yield* counters.delete("counters", "old"); // succeeds when already gone
+ * ```
+ *
  * ### Access Policies
  * **Example:** Stored access policy for read-only SAS tokens
  * ```typescript
@@ -90,6 +180,20 @@ export interface Table extends Resource<
  *     { id: "readers", permission: "r", expiryTime: "2030-01-01T00:00:00Z" },
  *   ],
  * });
+ * ```
+ *
+ * ### Deleting a Table
+ * Destroying the table deletes every entity in it. Azure finishes the
+ * delete in the background, which takes at least 40 seconds; until then,
+ * creating a table with the same name fails.
+ *
+ * **Example:** Keep the table when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const users = yield* Azure.Storage.Table("users", {
+ *   storageAccount: account.storageAccountName,
+ * }).pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

@@ -43,6 +43,7 @@ export interface ReadTableClient {
  * // runtime
  * const user = yield* users.get("users", userId);
  * const name = user?.name;
+ * // …provided with Effect.provide(Azure.Storage.TableReadHttp)
  * ```
  *
  * **Example:** Page through a partition

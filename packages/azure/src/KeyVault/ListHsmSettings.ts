@@ -23,6 +23,7 @@ export interface ListHsmSettingsRequest extends Omit<admin.GetSettingsRequest, "
  *
  * // runtime
  * const { settings } = yield* listSettings();
+ * // …provided with Effect.provide(Azure.KeyVault.ListHsmSettingsHttp)
  * ```
  *
  * @binding

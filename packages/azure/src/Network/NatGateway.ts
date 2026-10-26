@@ -33,6 +33,7 @@ export interface NatGatewayProps {
   /**
    * Resource group the NAT gateway is created in. Changing it replaces the
    * NAT gateway.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -52,25 +53,32 @@ export interface NatGatewayProps {
    */
   sku?: "Standard" | "StandardV2";
   /**
-   * Availability zone, e.g. `["1"]`. Changing it replaces the NAT gateway.
+   * Availability zone, e.g. `["1"]`. Its public IPs must be in the same
+   * zone or zone-redundant. Changing it replaces the NAT gateway.
    * @default no zone (regional)
    */
   zones?: string[];
   /**
-   * TCP idle timeout in minutes (4-120).
+   * TCP idle timeout in minutes (4-120). Updated in place.
    * @default 4
    */
   idleTimeoutInMinutes?: number;
   /**
    * ARM IDs of Standard public IPs used for outbound SNAT. Set at least one
-   * public IP or prefix.
+   * public IP or prefix; up to 16 IP addresses in total across IPs and
+   * prefixes. Updated in place.
+   * @default []
    */
   publicIpAddressIds?: string[];
-  /** ARM IDs of public IP prefixes used for outbound SNAT. */
+  /**
+   * ARM IDs of public IP prefixes used for outbound SNAT. Updated in place.
+   * @default []
+   */
   publicIpPrefixIds?: string[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -81,15 +89,15 @@ export interface NatGateway extends Resource<
   {
     /** Name of the NAT gateway. */
     natGatewayName: string;
-    /** ARM resource ID of the NAT gateway. */
+    /** ARM resource ID of the NAT gateway; pass it as a subnet's `natGatewayId`. */
     natGatewayId: string;
     /** Resource group that holds the NAT gateway. */
     resourceGroup: string;
-    /** Location of the NAT gateway. */
+    /** Azure location of the NAT gateway, e.g. `eastus`. */
     location: string;
     /** Immutable GUID Azure assigned to the NAT gateway. */
     resourceGuid: string | undefined;
-    /** SKU name. */
+    /** SKU name: `Standard` or `StandardV2`. */
     sku: string;
     /** Availability zones. */
     zones: string[];
@@ -109,11 +117,26 @@ export interface NatGateway extends Resource<
 > {}
 
 /**
- * An Azure NAT gateway — managed outbound internet connectivity (SNAT)
- * for the subnets it is attached to, through static public IPs.
+ * An Azure NAT gateway (`Microsoft.Network/natGateways`): managed
+ * outbound internet access (SNAT) for the subnets it is attached to,
+ * through static public IPs. Azure's counterpart to an AWS NAT gateway.
  *
- * Attach it to subnets with `Subnet.natGatewayId`. A NAT gateway bills
- * hourly (~$0.045/h) plus processed data.
+ * Every resource in an attached subnet leaves the network from the
+ * gateway's public IPs, so partners can allowlist a fixed set of
+ * addresses. Inbound connections from the internet are never allowed
+ * through it. Attach it to subnets with `Subnet.natGatewayId`. A NAT
+ * gateway bills hourly (~$0.045/h) plus processed data.
+ *
+ * :::caution[Changing `name`, `location`, `resourceGroup`, `sku`, or `zones` replaces the NAT gateway]
+ * Alchemy creates a new NAT gateway and deletes the old one. Outbound
+ * connections from the attached subnets drop while the subnets move to
+ * the new gateway.
+ * :::
+ *
+ * :::caution[Deleting fails while a subnet uses the NAT gateway]
+ * Remove `natGatewayId` from the subnets first. Alchemy retries
+ * `NatGatewayInUse` for a while, then fails.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/nat-gateway/nat-overview
  *
@@ -123,12 +146,111 @@ export interface NatGateway extends Resource<
  * const ip = yield* Azure.Network.PublicIpAddress("egress");
  * const nat = yield* Azure.Network.NatGateway("egress", {
  *   publicIpAddressIds: [ip.publicIpAddressId],
- *   idleTimeoutInMinutes: 10,
  * });
  * const subnet = yield* Azure.Network.Subnet("app", {
  *   virtualNetwork: vnet.virtualNetworkName,
  *   addressPrefix: "10.0.1.0/24",
  *   natGatewayId: nat.natGatewayId,
+ * });
+ * // ip.ipAddress is the subnet's outbound address
+ * ```
+ *
+ * **Example:** NAT gateway with a fixed name and region
+ * ```typescript
+ * const nat = yield* Azure.Network.NatGateway("egress", {
+ *   name: "ng-egress-prod",
+ *   location: "westeurope",
+ *   publicIpAddressIds: [ip.publicIpAddressId],
+ *   tags: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Idle Timeout
+ * The gateway closes idle TCP flows after `idleTimeoutInMinutes` (4-120).
+ * Raise it for long-lived connections that send no keepalives.
+ *
+ * **Example:** 30-minute idle timeout
+ * ```typescript
+ * const nat = yield* Azure.Network.NatGateway("egress", {
+ *   publicIpAddressIds: [ip.publicIpAddressId],
+ *   idleTimeoutInMinutes: 30,
+ * });
+ * ```
+ *
+ * ### Outbound IP Addresses
+ * Each public IP adds 64,512 SNAT ports. Add IPs or a prefix (up to 16
+ * addresses in total) when many connections run at once. You can change
+ * them in place.
+ *
+ * **Example:** Two public IPs
+ * ```typescript
+ * const ip1 = yield* Azure.Network.PublicIpAddress("egress-1");
+ * const ip2 = yield* Azure.Network.PublicIpAddress("egress-2");
+ * const nat = yield* Azure.Network.NatGateway("egress", {
+ *   publicIpAddressIds: [ip1.publicIpAddressId, ip2.publicIpAddressId],
+ * });
+ * ```
+ *
+ * **Example:** A /30 prefix that partners can allowlist
+ * ```typescript
+ * const prefix = yield* Azure.Network.PublicIpPrefix("egress", {
+ *   prefixLength: 30,
+ * });
+ * const nat = yield* Azure.Network.NatGateway("egress", {
+ *   publicIpPrefixIds: [prefix.publicIpPrefixId],
+ * });
+ * // prefix.ipPrefix is the CIDR to allowlist
+ * ```
+ *
+ * ### Availability Zones
+ * A NAT gateway runs in one zone or, with no `zones`, in a zone Azure
+ * picks. Pin it to a zone with public IPs in the same zone.
+ *
+ * **Example:** Zonal NAT gateway
+ * ```typescript
+ * const ip = yield* Azure.Network.PublicIpAddress("egress-z1", {
+ *   zones: ["1"],
+ * });
+ * const nat = yield* Azure.Network.NatGateway("egress-z1", {
+ *   zones: ["1"],
+ *   publicIpAddressIds: [ip.publicIpAddressId],
+ * });
+ * ```
+ *
+ * ### Static Egress for Container Apps
+ * A workload profiles Container Apps environment in your network sends
+ * outbound traffic through the NAT gateway on its infrastructure subnet.
+ *
+ * **Example:** Container Apps environment with a fixed outbound IP
+ * ```typescript
+ * const subnet = yield* Azure.Network.Subnet("apps", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.2.0/23",
+ *   delegations: [{ serviceName: "Microsoft.App/environments" }],
+ *   natGatewayId: nat.natGatewayId,
+ * });
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
+ *   vnetConfiguration: { infrastructureSubnetId: subnet.subnetId },
+ * });
+ * ```
+ *
+ * ### Static Egress for App Service
+ * Route all of a Web App's outbound traffic through its integration
+ * subnet with `vnetRouteAllEnabled`, and the NAT gateway on that subnet
+ * gives the app a fixed outbound IP.
+ *
+ * **Example:** Web App with a fixed outbound IP
+ * ```typescript
+ * const subnet = yield* Azure.Network.Subnet("web-out", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.4.0/26",
+ *   delegations: [{ serviceName: "Microsoft.Web/serverFarms" }],
+ *   natGatewayId: nat.natGatewayId,
+ * });
+ * const api = yield* Azure.Web.WebApp("Api", {
+ *   main: "./src/api.ts",
+ *   virtualNetworkSubnetId: subnet.subnetId,
+ *   siteConfig: { vnetRouteAllEnabled: true },
  * });
  * ```
  *

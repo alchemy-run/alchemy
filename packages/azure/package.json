@@ -1028,6 +1028,8 @@
         "bun": "./src/Workloads/index.ts",
         "default": "./lib/Workloads/index.js"
       },
+      "./ContainerApps/internal/*": null,
+      "./internal/*": null,
       "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",
@@ -1042,9 +1044,11 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
+    "@alchemy.run/kubernetes": "workspace:*",
     "@distilled.cloud/azure": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
-    "@distilled.cloud/microsoft-graph": "workspace:*"
+    "@distilled.cloud/microsoft-graph": "workspace:*",
+    "yaml": "catalog:"
   },
   "devDependencies": {
     "@effect/platform-bun": "catalog:",

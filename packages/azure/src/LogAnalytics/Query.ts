@@ -11,36 +11,70 @@ import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { deterministicGuid, sameText } from "./Common.ts";
 
+/** What a query relates to; the Queries pane groups and filters by it. */
 export interface QueryRelated {
-  /** Related query categories, e.g. `["applications"]`. */
+  /**
+   * Related query categories, e.g. `["applications"]` or `["security"]`.
+   * @default []
+   */
   categories?: string[];
-  /** Related ARM resource types, e.g. `["microsoft.web/sites"]`. */
+  /**
+   * Related ARM resource types, e.g. `["microsoft.web/sites"]`.
+   * @default []
+   */
   resourceTypes?: string[];
-  /** Related Log Analytics solutions. */
+  /**
+   * Related Log Analytics solutions, e.g. `["SecurityCenter"]`.
+   * @default []
+   */
   solutions?: string[];
 }
 
 export interface QueryProps {
-  /** Resource group of the query pack. Changing it replaces the query. */
+  /**
+   * Resource group of the query pack.
+   *
+   * :::caution
+   * Changing it replaces the query.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Query pack that holds the query. Changing it replaces the query. */
+  /**
+   * Name of the query pack that holds the query, e.g. `pack.queryPackName`.
+   *
+   * :::caution
+   * Changing it replaces the query.
+   * :::
+   */
   queryPack: string;
   /**
-   * Query ID (a GUID). If omitted, a deterministic GUID is derived from the
-   * stack, stage, and logical ID. Changing it replaces the query.
+   * Query ID, a GUID such as `5f1a2b3c-0000-4000-8000-000000000000`.
+   *
+   * :::caution
+   * Changing it replaces the query.
+   * :::
+   * @default a GUID derived from the stack, stage, and logical ID
    */
   queryId?: string;
-  /** Name shown in the Queries pane. */
+  /** Name shown in the Queries pane, e.g. `Slow requests`. */
   displayName: string;
-  /** Description of the query. */
+  /**
+   * Description shown in the Queries pane.
+   * @default no description
+   */
   description?: string;
-  /** KQL query text. */
+  /** KQL query text, e.g. `AppRequests | where DurationMs > 1000`. */
   body: string;
-  /** Categories, resource types, and solutions the query relates to. */
+  /**
+   * Categories, resource types, and solutions the query relates to.
+   * @default nothing related
+   */
   related?: QueryRelated;
   /**
-   * User tags (each with a list of values). Alchemy ownership tags are
-   * merged in automatically.
+   * User tags, each with a list of values, e.g. `{ team: ["platform"] }`.
+   * Alchemy ownership tags are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string[]>;
 }
@@ -51,7 +85,7 @@ export interface Query extends Resource<
   {
     /** Query ID (a GUID). */
     queryId: string;
-    /** Query pack that holds the query. */
+    /** Name of the query pack that holds the query. */
     queryPack: string;
     /** Resource group of the query pack. */
     resourceGroup: string;
@@ -69,8 +103,19 @@ export interface Query extends Resource<
 > {}
 
 /**
- * A saved KQL query in a Log Analytics query pack. It appears in the
+ * A saved KQL query in a Log Analytics query pack
+ * (`Microsoft.OperationalInsights/queryPacks/queries`). It appears in the
  * Queries pane of Log Analytics for everyone who can read the pack.
+ *
+ * :::caution[Changing `queryId`, `queryPack`, or `resourceGroup` replaces the query]
+ * Alchemy creates the new query and deletes the old one. Change
+ * `displayName`, `body`, `description`, `related`, or `tags` to update the
+ * query in place.
+ * :::
+ *
+ * :::caution[The query pack must exist first]
+ * Declare an `Azure.LogAnalytics.QueryPack` and pass its `queryPackName`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-monitor/logs/query-packs
  *
@@ -83,6 +128,19 @@ export interface Query extends Resource<
  *   displayName: "Slow requests",
  *   body: "AppRequests | where DurationMs > 1000 | take 100",
  *   related: { categories: ["applications"] },
+ * });
+ * ```
+ *
+ * **Example:** Query for a resource type, with a description and tags
+ * ```typescript
+ * const pack = yield* Azure.LogAnalytics.QueryPack("queries");
+ * yield* Azure.LogAnalytics.Query("failed-functions", {
+ *   queryPack: pack.queryPackName,
+ *   displayName: "Failed function runs",
+ *   description: "Function invocations that failed in the last day.",
+ *   body: "AppRequests | where Success == false | summarize count() by Name",
+ *   related: { resourceTypes: ["microsoft.web/sites"] },
+ *   tags: { team: ["platform"] },
  * });
  * ```
  *

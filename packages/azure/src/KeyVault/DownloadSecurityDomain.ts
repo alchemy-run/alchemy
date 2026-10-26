@@ -29,6 +29,7 @@ export interface DownloadSecurityDomainRequest extends Omit<
  * // runtime
  * // certificates: SecurityDomainJsonWebKey[] (kty "RSA", n, e, x5c, x5t#S256)
  * const { value } = yield* download({ certificates, required: 2 });
+ * // …provided with Effect.provide(Azure.KeyVault.DownloadSecurityDomainHttp)
  * ```
  *
  * @binding

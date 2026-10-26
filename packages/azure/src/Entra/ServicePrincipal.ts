@@ -29,23 +29,32 @@ export interface ServicePrincipalProps {
    */
   appId: string;
   /**
-   * Whether the service principal may sign in.
+   * Whether the service principal may sign in. `false` blocks new tokens
+   * for the application in this tenant. Changing it updates the service
+   * principal in place.
    * @default true
    */
   accountEnabled?: boolean;
   /**
    * Require an app role assignment before users or apps get tokens for
-   * this application.
+   * this application. Changing it updates the service principal in place.
    * @default false
    */
   appRoleAssignmentRequired?: boolean;
-  /** Free-text description. */
+  /**
+   * Free-text description.
+   * @default no description
+   */
   description?: string;
-  /** Notes for the people who manage the service principal. */
+  /**
+   * Notes for the people who manage the service principal.
+   * @default no notes
+   */
   notes?: string;
   /**
    * User tags (plain strings). Alchemy adds its ownership tags
    * (`alchemy::stack=<stack>`, `alchemy::stage=<stage>`, `alchemy::id=<id>`).
+   * @default []
    */
   tags?: string[];
 }
@@ -75,21 +84,59 @@ export interface ServicePrincipal extends Resource<
 > {}
 
 /**
- * A Microsoft Entra ID service principal: the instance of an application
- * in a tenant. Azure RBAC roles are assigned to it, not to the
- * application.
+ * A Microsoft Entra ID service principal (Microsoft Graph
+ * `servicePrincipal`): the instance of an application in a tenant. Azure
+ * RBAC roles are assigned to it, not to the application.
  *
  * Alchemy tags the service principal like the application
  * (`alchemy::stack=<stack>`, `alchemy::stage=<stage>`, `alchemy::id=<id>` in
  * `tags`). Destroy deletes it and purges it from the deleted items. A new
  * service principal takes up to about two minutes to replicate to Azure
- * RBAC; `Azure.Authorization.RoleAssignment` waits for it.
+ * RBAC; `Azure.Authorization.RoleAssignment` waits for it. If a service
+ * principal for the application already exists (a concurrent create),
+ * Alchemy uses it.
+ *
+ * :::caution[Changing `appId` replaces the service principal]
+ * The new service principal has a new `objectId`, so every role assignment
+ * granted to it is replaced too. Every other prop updates in place.
+ * :::
+ *
+ * :::caution[The deploying identity needs a Microsoft Graph permission]
+ * The deploying service principal needs the Microsoft Graph application
+ * permission `Application.ReadWrite.OwnedBy` (or
+ * `Application.ReadWrite.All`), with admin consent.
+ * :::
  *
  * @see https://learn.microsoft.com/graph/api/resources/serviceprincipal
  *
  * ### Creating a Service Principal
+ * One application has at most one service principal per tenant.
+ *
+ * **Example:** Service principal for an application
+ * ```typescript
+ * const app = yield* Azure.Entra.Application("Ci");
+ * const principal = yield* Azure.Entra.ServicePrincipal("CiPrincipal", {
+ *   appId: app.appId,
+ * });
+ * ```
+ *
+ * **Example:** Description and notes for the people who manage it
+ * ```typescript
+ * const principal = yield* Azure.Entra.ServicePrincipal("CiPrincipal", {
+ *   appId: app.appId,
+ *   description: "Deploys the shop stack",
+ *   notes: "Owned by the platform team",
+ *   tags: ["team:platform"],
+ * });
+ * ```
+ *
+ * ### Granting Azure Roles
+ * Pass `objectId` as the role assignment's `principalId`, with
+ * `principalType: "ServicePrincipal"`.
+ *
  * **Example:** Grant an application a role on a storage account
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("files");
  * const app = yield* Azure.Entra.Application("Ci");
  * const principal = yield* Azure.Entra.ServicePrincipal("CiPrincipal", {
  *   appId: app.appId,
@@ -102,9 +149,36 @@ export interface ServicePrincipal extends Resource<
  * });
  * ```
  *
+ * ### Signing In from CI
+ * Credentials belong to the application, not the service principal. Add a
+ * federated credential (or a client secret) to the application, and sign
+ * in with its `appId`.
+ *
+ * **Example:** GitHub Actions deploys to one resource group
+ * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
+ * const app = yield* Azure.Entra.Application("Deployer");
+ * const principal = yield* Azure.Entra.ServicePrincipal("DeployerPrincipal", {
+ *   appId: app.appId,
+ * });
+ * yield* Azure.Entra.FederatedIdentityCredential("DeployerGitHubMain", {
+ *   applicationObjectId: app.objectId,
+ *   issuer: "https://token.actions.githubusercontent.com",
+ *   subject: "repo:my-org/my-repo:ref:refs/heads/main",
+ * });
+ * yield* Azure.Authorization.RoleAssignment("DeployerContributes", {
+ *   scope: group.resourceGroupId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.Contributor,
+ *   principalId: principal.objectId,
+ *   principalType: "ServicePrincipal",
+ * });
+ * ```
+ *
+ * ### Restricting Sign-In
  * **Example:** A disabled service principal that requires role assignment
  * ```typescript
- * const principal = yield* Azure.Entra.ServicePrincipal("Internal", {
+ * const app = yield* Azure.Entra.Application("Internal");
+ * const principal = yield* Azure.Entra.ServicePrincipal("InternalPrincipal", {
  *   appId: app.appId,
  *   accountEnabled: false,
  *   appRoleAssignmentRequired: true,

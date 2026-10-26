@@ -126,6 +126,7 @@ export interface WriteBlobContainerClient {
  * yield* files.put("reports/latest.json", JSON.stringify(report), {
  *   contentType: "application/json",
  * });
+ * // …provided with Effect.provide(Azure.Storage.BlobContainerWriteHttp)
  * ```
  *
  * **Example:** Delete a blob

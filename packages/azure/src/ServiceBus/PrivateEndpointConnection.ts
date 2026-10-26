@@ -29,32 +29,56 @@ export class PrivateEndpointConnectionMissing extends Data.TaggedError(
 export type PrivateEndpointConnectionStatus = "Approved" | "Rejected";
 
 export interface PrivateEndpointConnectionProps {
-  /** Resource group of the namespace. Changing it replaces the resource. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the resource.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Premium namespace the private endpoint targets. Changing it replaces the resource. */
+  /**
+   * Name of the Premium namespace the private endpoint targets, e.g.
+   * `bus.namespaceName` of an `Azure.ServiceBus.Namespace`.
+   *
+   * :::caution
+   * Changing it replaces the resource.
+   * :::
+   */
   namespace: string;
   /**
-   * ARM resource ID of the private endpoint whose connection is managed —
-   * typically `Azure.Network.PrivateEndpoint(...).privateEndpointId`. The
-   * connection is looked up by this ID. Changing it replaces the resource.
+   * ARM resource ID of the private endpoint whose connection you manage,
+   * usually `endpoint.privateEndpointId` of an
+   * `Azure.Network.PrivateEndpoint`. Alchemy finds the connection by this
+   * ID. Set `privateEndpointId` or `name`.
+   *
+   * :::caution
+   * Changing it replaces the resource.
+   * :::
+   * @default none (then `name` is required)
    */
   privateEndpointId?: string;
   /**
-   * Name of the connection, when known (Azure generates it when the
-   * private endpoint is created). Either `name` or `privateEndpointId` is
-   * required. Changing it replaces the resource.
+   * Name of the connection, when you know it. Azure generates it when the
+   * private endpoint is created. Set `name` or `privateEndpointId`.
+   *
+   * :::caution
+   * Changing it replaces the resource.
+   * :::
+   * @default none (Alchemy finds the connection by `privateEndpointId`)
    */
   name?: string;
   /**
-   * Approval decision.
+   * Approval decision: `Approved` or `Rejected`.
    * @default "Approved"
    */
   status?: PrivateEndpointConnectionStatus;
   /**
    * Reason shown to the private endpoint owner. Service Bus records it only
-   * with a status transition (it rejects same-state updates), so changing
-   * only the description leaves the recorded one in place until the status
-   * next changes.
+   * with a status change (it rejects same-state updates), so a change to
+   * only the description has no effect until the status next changes.
+   * @default the description already on the connection
    */
   description?: string;
 }
@@ -67,7 +91,7 @@ export interface PrivateEndpointConnection extends Resource<
     privateEndpointConnectionName: string;
     /** ARM resource ID of the connection. */
     privateEndpointConnectionId: string;
-    /** Namespace the connection belongs to. */
+    /** Name of the namespace the connection belongs to. */
     namespaceName: string;
     /** Resource group of the namespace. */
     resourceGroup: string;
@@ -75,7 +99,7 @@ export interface PrivateEndpointConnection extends Resource<
     privateEndpointId: string | undefined;
     /** Connection status: `Pending`, `Approved`, `Rejected`, or `Disconnected`. */
     status: string | undefined;
-    /** Status description. */
+    /** Status description; `undefined` when none was recorded. */
     description: string | undefined;
   },
   never,
@@ -83,15 +107,32 @@ export interface PrivateEndpointConnection extends Resource<
 > {}
 
 /**
- * Approves (or rejects) a private endpoint connection to a Premium Service
- * Bus namespace. The connection itself is created by the private endpoint
- * (`Azure.Network.PrivateEndpoint` with
+ * A Service Bus private endpoint connection
+ * (`Microsoft.ServiceBus/namespaces/privateEndpointConnections`): the
+ * approval state of one private endpoint that reaches a Premium namespace.
+ * The private endpoint creates the connection (an
+ * `Azure.Network.PrivateEndpoint` with
  * `manualPrivateLinkServiceConnections`); this resource takes it over and
- * drives its approval state. Deleting it removes the connection, which
+ * approves or rejects it. Deleting it removes the connection, which
  * disconnects the endpoint.
  *
- * The connection is identified by the private endpoint you reference, so
- * Alchemy treats it as owned without tags.
+ * :::caution[Changing `name`, `privateEndpointId`, `namespace`, or `resourceGroup` replaces the resource]
+ * Alchemy deletes the old connection, which disconnects its private
+ * endpoint, and manages the new one.
+ * :::
+ *
+ * :::caution[Private endpoints need a Premium namespace]
+ * Only a namespace with `sku: "Premium"` accepts private endpoints.
+ * :::
+ *
+ * :::caution[The private endpoint must exist]
+ * Create the `Azure.Network.PrivateEndpoint` first. Alchemy waits up to
+ * 2 minutes for its connection to appear on the namespace, then fails with
+ * `PrivateEndpointConnectionMissing`.
+ * :::
+ *
+ * Alchemy finds the connection through the private endpoint you reference,
+ * so it treats the connection as owned without tags.
  *
  * @see https://learn.microsoft.com/azure/service-bus-messaging/private-link-service
  *
@@ -100,6 +141,13 @@ export interface PrivateEndpointConnection extends Resource<
  * ```typescript
  * const bus = yield* Azure.ServiceBus.Namespace("bus", {
  *   sku: "Premium",
+ * });
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("endpoints", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
  * });
  * const endpoint = yield* Azure.Network.PrivateEndpoint("bus-pe", {
  *   subnetId: subnet.subnetId,
@@ -111,6 +159,19 @@ export interface PrivateEndpointConnection extends Resource<
  *   namespace: bus.namespaceName,
  *   privateEndpointId: endpoint.privateEndpointId,
  *   description: "approved by platform team",
+ * });
+ * ```
+ *
+ * ### Rejecting a Private Endpoint
+ * Use the `bus` and `endpoint` from the example above.
+ *
+ * **Example:** Reject a connection with a reason
+ * ```typescript
+ * yield* Azure.ServiceBus.PrivateEndpointConnection("bus-pe-approval", {
+ *   namespace: bus.namespaceName,
+ *   privateEndpointId: endpoint.privateEndpointId,
+ *   status: "Rejected",
+ *   description: "not an approved network",
  * });
  * ```
  *

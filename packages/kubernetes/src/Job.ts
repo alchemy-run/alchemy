@@ -567,7 +567,7 @@ export const JobProvider = () =>
           };
           const podTemplate = deepMerge(
             {
-              metadata: { labels },
+              metadata: { labels: { ...identity?.podLabels, ...labels } },
               spec: {
                 serviceAccountName,
                 restartPolicy: news.restartPolicy ?? "Never",

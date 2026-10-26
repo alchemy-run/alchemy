@@ -65,6 +65,7 @@ export interface WriteTableClient {
  *
  * // runtime
  * yield* events.insert({ PartitionKey: "events", RowKey: eventId, kind: "signup" });
+ * // …provided with Effect.provide(Azure.Storage.TableWriteHttp)
  * ```
  *
  * **Example:** Optimistic concurrency

@@ -26,6 +26,7 @@ export interface GetSecurityDomainDownloadStatusRequest extends Omit<
  *
  * // runtime
  * const { status } = yield* downloadStatus();
+ * // …provided with Effect.provide(Azure.KeyVault.GetSecurityDomainDownloadStatusHttp)
  * ```
  *
  * @binding

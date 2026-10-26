@@ -29,6 +29,7 @@ export interface ReadWriteBlobContainerClient
  * // runtime
  * const blob = yield* files.get("in/data.csv");
  * if (blob) yield* files.put("out/data.csv", blob.body);
+ * // …provided with Effect.provide(Azure.Storage.BlobContainerReadWriteHttp)
  * ```
  *
  * @binding

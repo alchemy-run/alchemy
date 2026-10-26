@@ -30,21 +30,43 @@ import {
 } from "./Common.ts";
 
 export interface ProjectProps {
-  /** Resource group of the account. Changing it replaces the project. */
+  /**
+   * Resource group of the account.
+   *
+   * :::caution
+   * Changing it replaces the project and deletes its agents, threads, and
+   * files.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Account that holds the project: kind `AIServices` with
-   * `allowProjectManagement: true`. Changing it replaces the project.
+   * `allowProjectManagement: true`.
+   *
+   * :::caution
+   * Changing it replaces the project and deletes its agents, threads, and
+   * files.
+   * :::
    */
   account: string;
   /**
-   * Project name. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the project.
+   * Project name.
+   *
+   * :::caution
+   * Changing it replaces the project and deletes its agents, threads, and
+   * files.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Location of the project; it must equal the account's location.
-   * Changing it replaces the project.
+   *
+   * :::caution
+   * Changing it replaces the project and deletes its agents, threads, and
+   * files.
+   * :::
    * @default the account's location
    */
   location?: string;
@@ -53,13 +75,20 @@ export interface ProjectProps {
    * @default { type: "SystemAssigned" }
    */
   identity?: CognitiveServicesIdentity;
-  /** Display name shown in the Azure AI Foundry portal. */
+  /**
+   * Display name shown in the Azure AI Foundry portal.
+   * @default none
+   */
   displayName?: string;
-  /** Description of the project. */
+  /**
+   * Description of the project.
+   * @default none
+   */
   description?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -100,25 +129,75 @@ export interface Project extends Resource<
 
 /**
  * An Azure AI Foundry project (`Microsoft.CognitiveServices/accounts/projects`):
- * a container for agents, connections, evaluations, and access control
- * inside an `AIServices` account.
+ * a container for agents, threads, files, datasets, indexes, and
+ * connections inside an `AIServices` account.
  *
- * The parent account must have `allowProjectManagement: true` and a custom
- * subdomain (Alchemy sets the subdomain by default).
+ * The parent account needs `allowProjectManagement: true` and a custom
+ * subdomain (Alchemy sets the subdomain by default). Alchemy gives the
+ * project a system-assigned identity by default. Runtimes call the Foundry
+ * Agent Service and the project APIs through bindings on the project, each
+ * assigning a custom role with one data action on this project only.
  *
- * @see https://learn.microsoft.com/azure/ai-foundry/how-to/create-projects
+ * :::caution[Changing `name`, `account`, `location`, or `resourceGroup` replaces the project]
+ * Alchemy creates a new project and deletes the old one with its agents,
+ * threads, and files.
+ * :::
+ *
+ * See [Create a project for Azure AI Foundry](https://learn.microsoft.com/azure/ai-foundry/how-to/create-projects).
  *
  * ### Creating a Project
  * **Example:** Foundry account and project
  * ```typescript
- * const account = yield* Azure.CognitiveServices.Account("foundry", {
+ * const account = yield* Azure.CognitiveServices.Account("Foundry", {
  *   allowProjectManagement: true,
  *   identity: { type: "SystemAssigned" },
  * });
- * const project = yield* Azure.CognitiveServices.Project("agents", {
+ * const project = yield* Azure.CognitiveServices.Project("Agents", {
  *   account: account.accountName,
  *   displayName: "Agents",
+ *   description: "Support agents",
  * });
+ * // project.endpoints["AI Foundry API"] → "https://<subdomain>.services.ai.azure.com/api/projects/<name>"
+ * ```
+ *
+ * **Example:** Model for the project's agents
+ * ```typescript
+ * // Agents name a deployment of the parent account as their `model`.
+ * yield* Azure.CognitiveServices.Deployment("Chat", {
+ *   account: account.accountName,
+ *   name: "chat",
+ *   model: { format: "OpenAI", name: "gpt-4.1-mini", version: "2025-04-14" },
+ *   sku: { name: "GlobalStandard", capacity: 10 },
+ * });
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Create an agent and run a thread
+ * ```typescript
+ * // init
+ * const createAgent = yield* Azure.CognitiveServices.CreateAgent(project);
+ * const createAgentThreadAndRun = yield* Azure.CognitiveServices.CreateAgentThreadAndRun(project);
+ * const getAgentRun = yield* Azure.CognitiveServices.GetAgentRun(project);
+ *
+ * // runtime
+ * const agent = yield* createAgent({ model: "chat", name: "support", instructions: "Answer in one sentence." });
+ * const run = yield* createAgentThreadAndRun({
+ *   assistant_id: agent.id,
+ *   thread: { messages: [{ role: "user", content: "Hello" }] },
+ * });
+ * const latest = yield* getAgentRun({ threadId: run.thread_id, runId: run.id });
+ * // latest.status: "queued" → "in_progress" → "completed"
+ * // …provided with Effect.provide([Azure.CognitiveServices.CreateAgentHttp, Azure.CognitiveServices.CreateAgentThreadAndRunHttp, Azure.CognitiveServices.GetAgentRunHttp])
+ * ```
+ *
+ * **Example:** List the project's model deployments
+ * ```typescript
+ * // init
+ * const listProjectDeployments = yield* Azure.CognitiveServices.ListProjectDeployments(project);
+ *
+ * // runtime
+ * const deployments = yield* listProjectDeployments();
+ * // …provided with Effect.provide(Azure.CognitiveServices.ListProjectDeploymentsHttp)
  * ```
  *
  * @resource

@@ -34,18 +34,18 @@ import {
 export type RecordType = "A" | "AAAA" | "CAA" | "CNAME" | "MX" | "NS" | "PTR" | "SRV" | "TXT";
 
 export interface MxRecord {
-  /** Preference of this mail exchanger; lower values are preferred. */
+  /** Preference of this mail exchanger (0-65535); lower values are preferred. */
   preference: number;
   /** Domain name of the mail host. */
   exchange: string;
 }
 
 export interface SrvRecord {
-  /** Priority of the target host; lower values are preferred. */
+  /** Priority of the target host (0-65535); lower values are preferred. */
   priority: number;
-  /** Relative weight among targets with the same priority. */
+  /** Relative weight (0-65535) among targets with the same priority. */
   weight: number;
-  /** Port the service listens on. */
+  /** Port the service listens on (0-65535). */
   port: number;
   /** Domain name of the target host. */
   target: string;
@@ -90,7 +90,10 @@ export interface RecordSetProps extends Records {
   resourceGroup: string;
   /** Name of the DNS zone. Changing it replaces the record set. */
   zoneName: string;
-  /** DNS record type. Changing it replaces the record set. */
+  /**
+   * DNS record type. Changing it replaces the record set; under the same
+   * name, Alchemy deletes the old record set before it creates the new one.
+   */
   recordType: RecordType;
   /**
    * Record set name relative to the zone, e.g. `www`, or `@` for the zone
@@ -109,13 +112,15 @@ export interface RecordSetProps extends Records {
    * address, Traffic Manager profile, Front Door, or CDN endpoint). Only
    * valid for `A`, `AAAA`, and `CNAME` record sets, and mutually exclusive
    * with literal records — Azure keeps the records in sync with the
-   * resource.
+   * resource. Changing it updates the record set in place.
+   * @default no alias (literal records)
    */
   targetResourceId?: string;
   /**
    * User metadata (keys: letters, digits, and `_`). Alchemy ownership
    * markers (`alchemy_stack`, `alchemy_stage`, `alchemy_id`) are merged in
    * because record sets have no tags.
+   * @default {}
    */
   metadata?: Record<string, string>;
 }
@@ -166,14 +171,58 @@ export interface RecordSet extends Resource<
 > {}
 
 /**
- * A DNS record set in an Azure public DNS zone: all records of one type
- * under one name.
+ * A DNS record set in an Azure public DNS zone
+ * (`Microsoft.Network/dnsZones/{type}`): all records of one type under one
+ * name.
  *
- * Record sets cannot be tagged, so Alchemy records ownership in the record
- * set's metadata. A record set either holds literal records or aliases an
- * Azure resource via `targetResourceId`.
+ * A record set either holds literal records (set the field for its
+ * `recordType`, e.g. `aRecords` for `A`) or aliases an Azure resource via
+ * `targetResourceId`. Record sets cannot be tagged, so Alchemy records
+ * ownership in the record set's metadata. Every change to the records,
+ * `ttl`, or `metadata` is one in-place write.
+ *
+ * :::caution[Changing `name`, `recordType`, `zoneName`, or `resourceGroup` replaces the record set]
+ * Alchemy creates the new record set and deletes the old one. When only
+ * `recordType` changes, it deletes the old record set first, because a
+ * `CNAME` cannot share a name with other records: the name does not
+ * resolve until the new record set exists.
+ * :::
+ *
+ * :::caution[The zone must exist first]
+ * Create the zone with `Azure.Dns.Zone` (or name one that exists) and pass
+ * `zone.zoneName`. Azure owns the zone's `SOA` record set and its apex `NS`
+ * record set; you cannot manage them here.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/dns/dns-zones-records#record-sets
+ *
+ * ### Creating a Record Set
+ * Set `name` relative to the zone (`www` for `www.contoso.com`, `@` for the
+ * apex). If you omit it, Alchemy generates a unique name.
+ *
+ * **Example:** A record for `www`
+ * ```typescript
+ * const zone = yield* Azure.Dns.Zone("contoso", { name: "contoso.com" });
+ * const www = yield* Azure.Dns.RecordSet("www", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "A",
+ *   name: "www",
+ *   aRecords: ["203.0.113.10"],
+ * });
+ * // www.fqdn → "www.contoso.com."
+ * ```
+ *
+ * **Example:** Short TTL and metadata
+ * ```typescript
+ * yield* Azure.Dns.RecordSet("canary", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "A",
+ *   name: "canary",
+ *   ttl: 60,
+ *   aRecords: ["203.0.113.20"],
+ *   metadata: { owner: "platform_team" },
+ * });
+ * ```
  *
  * ### Address Records
  * **Example:** A record with two addresses
@@ -187,66 +236,212 @@ export interface RecordSet extends Resource<
  * });
  * ```
  *
- * **Example:** Alias record pointing at a public IP address
+ * **Example:** AAAA record
  * ```typescript
+ * yield* Azure.Dns.RecordSet("www-v6", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "AAAA",
+ *   name: "www",
+ *   aaaaRecords: ["2001:db8::10"],
+ * });
+ * ```
+ *
+ * ### Alias Records
+ * An alias record set follows an Azure resource: Azure updates the records
+ * when the resource's address changes. Set `targetResourceId` and leave the
+ * literal record fields empty. Aliases work for `A`, `AAAA`, and `CNAME`.
+ *
+ * **Example:** Apex alias to a public IP address
+ * ```typescript
+ * const ip = yield* Azure.Network.PublicIpAddress("ingress");
  * yield* Azure.Dns.RecordSet("apex", {
  *   zoneName: zone.zoneName,
  *   recordType: "A",
  *   name: "@",
- *   targetResourceId: publicIp.publicIpAddressId,
+ *   targetResourceId: ip.publicIpAddressId,
  * });
  * ```
  *
- * ### Aliases and Text
- * **Example:** CNAME record
+ * **Example:** Apex alias to a Front Door endpoint
  * ```typescript
+ * const profile = yield* Azure.Cdn.Profile("cdn");
+ * const endpoint = yield* Azure.Cdn.AfdEndpoint("web", {
+ *   profile: profile.profileName,
+ * });
+ * yield* Azure.Dns.RecordSet("apex", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "A",
+ *   name: "@",
+ *   targetResourceId: endpoint.endpointId,
+ * });
+ * ```
+ *
+ * ### Canonical Names
+ * A `CNAME` record set holds exactly one `cname` and cannot share its name
+ * with any other record set, so it cannot sit at the zone apex. Use an
+ * alias `A` record set for the apex.
+ *
+ * **Example:** CNAME to a Web App
+ * ```typescript
+ * const api = yield* Azure.Web.WebApp("Api", { main: "./src/api.ts" });
  * yield* Azure.Dns.RecordSet("api", {
  *   zoneName: zone.zoneName,
  *   recordType: "CNAME",
  *   name: "api",
+ *   cname: api.defaultHostName,
+ * });
+ * ```
+ *
+ * **Example:** CNAME to a fixed host name
+ * ```typescript
+ * yield* Azure.Dns.RecordSet("docs", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "CNAME",
+ *   name: "docs",
  *   cname: "contoso.azurewebsites.net",
  * });
  * ```
  *
- * **Example:** TXT record for domain verification
+ * ### Text Records
+ * Each entry in `txtRecords` is one TXT record. Alchemy splits a value
+ * longer than 255 characters into 255-character strings, as DNS requires.
+ *
+ * **Example:** SPF and site verification at the apex
  * ```typescript
  * yield* Azure.Dns.RecordSet("verify", {
  *   zoneName: zone.zoneName,
  *   recordType: "TXT",
  *   name: "@",
- *   txtRecords: ["v=spf1 include:spf.protection.outlook.com -all"],
+ *   txtRecords: [
+ *     "v=spf1 include:spf.protection.outlook.com -all",
+ *     "google-site-verification=abc123",
+ *   ],
  * });
  * ```
  *
- * ### Mail and Services
- * **Example:** MX record
+ * **Example:** DKIM public key
+ * ```typescript
+ * yield* Azure.Dns.RecordSet("dkim", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "TXT",
+ *   name: "selector1._domainkey",
+ *   txtRecords: ["v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA..."],
+ * });
+ * ```
+ *
+ * ### Mail Records
+ * **Example:** MX records with a backup mail host
  * ```typescript
  * yield* Azure.Dns.RecordSet("mail", {
  *   zoneName: zone.zoneName,
  *   recordType: "MX",
  *   name: "@",
- *   mxRecords: [{ preference: 10, exchange: "contoso-com.mail.protection.outlook.com" }],
+ *   mxRecords: [
+ *     { preference: 10, exchange: "contoso-com.mail.protection.outlook.com" },
+ *     { preference: 20, exchange: "backup-mx.contoso.com" },
+ *   ],
  * });
  * ```
  *
- * **Example:** CAA record restricting certificate issuers
+ * ### Certificate Authority Authorization
+ * `CAA` records list the certificate authorities that may issue
+ * certificates for the domain. Set `flags: 128` to mark a record critical.
+ *
+ * **Example:** Allow one issuer and report violations
  * ```typescript
  * yield* Azure.Dns.RecordSet("caa", {
  *   zoneName: zone.zoneName,
  *   recordType: "CAA",
  *   name: "@",
- *   caaRecords: [{ flags: 0, tag: "issue", value: "letsencrypt.org" }],
+ *   caaRecords: [
+ *     { flags: 0, tag: "issue", value: "letsencrypt.org" },
+ *     { flags: 0, tag: "iodef", value: "mailto:security@contoso.com" },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Service Records
+ * **Example:** SRV record for SIP over TLS
+ * ```typescript
+ * yield* Azure.Dns.RecordSet("sip", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "SRV",
+ *   name: "_sips._tcp",
+ *   srvRecords: [{ priority: 10, weight: 60, port: 5061, target: "sip.contoso.com" }],
+ * });
+ * ```
+ *
+ * ### Reverse DNS
+ * Put `PTR` records in a reverse-lookup zone such as
+ * `113.0.203.in-addr.arpa`.
+ *
+ * **Example:** PTR record for 203.0.113.10
+ * ```typescript
+ * const reverse = yield* Azure.Dns.Zone("reverse", {
+ *   name: "113.0.203.in-addr.arpa",
+ * });
+ * yield* Azure.Dns.RecordSet("ptr-10", {
+ *   zoneName: reverse.zoneName,
+ *   recordType: "PTR",
+ *   name: "10",
+ *   ptrRecords: ["mail.contoso.com"],
  * });
  * ```
  *
  * ### Delegating a Subdomain
  * **Example:** NS record for a child zone
  * ```typescript
+ * const childZone = yield* Azure.Dns.Zone("dev", { name: "dev.contoso.com" });
  * yield* Azure.Dns.RecordSet("dev", {
  *   zoneName: zone.zoneName,
  *   recordType: "NS",
  *   name: "dev",
  *   nsRecords: childZone.nameServers,
+ * });
+ * ```
+ *
+ * ### Custom Domain Validation
+ * App Service and Front Door prove you own a domain through TXT records.
+ * Create the record sets in the same stack as the domain.
+ *
+ * **Example:** Web App custom domain (`asuid` TXT plus CNAME)
+ * ```typescript
+ * const api = yield* Azure.Web.WebApp("Api", { main: "./src/api.ts" });
+ * yield* Azure.Dns.RecordSet("www-verify", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "TXT",
+ *   name: "asuid.www",
+ *   txtRecords: [api.customDomainVerificationId.as<string>()],
+ * });
+ * yield* Azure.Dns.RecordSet("www", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "CNAME",
+ *   name: "www",
+ *   cname: api.defaultHostName,
+ * });
+ * ```
+ *
+ * **Example:** Front Door custom domain (`_dnsauth` TXT plus CNAME)
+ * ```typescript
+ * const profile = yield* Azure.Cdn.Profile("cdn");
+ * const endpoint = yield* Azure.Cdn.AfdEndpoint("web", {
+ *   profile: profile.profileName,
+ * });
+ * const domain = yield* Azure.Cdn.AfdCustomDomain("www", {
+ *   profile: profile.profileName,
+ *   hostName: "www.contoso.com",
+ * });
+ * yield* Azure.Dns.RecordSet("www-dnsauth", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "TXT",
+ *   name: "_dnsauth.www",
+ *   txtRecords: [domain.validationToken.as<string>()],
+ * });
+ * yield* Azure.Dns.RecordSet("www", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "CNAME",
+ *   name: "www",
+ *   cname: endpoint.hostName,
  * });
  * ```
  *

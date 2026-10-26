@@ -21,13 +21,19 @@ import {
 } from "./CdnCommon.ts";
 
 export interface AfdSharedPrivateLink {
-  /** ARM ID of the private-link target, e.g. a storage account or App Service. */
+  /**
+   * ARM ID of the private-link target, e.g. `account.storageAccountId` or
+   * a Web App's `siteId`.
+   */
   privateLink: string;
-  /** Location of the private-link target. */
+  /** Region of the private-link target, e.g. `eastus`. */
   privateLinkLocation: string;
-  /** Sub-resource (group ID) of the target, e.g. `blob` or `sites`. */
+  /**
+   * Sub-resource (group ID) of the target: `blob` or `web` for a storage
+   * account, `sites` for App Service.
+   */
   groupId?: string;
-  /** Message sent with the private endpoint connection request. */
+  /** Message shown to the target's owner with the connection request. */
   requestMessage?: string;
 }
 
@@ -44,7 +50,10 @@ export interface AfdOriginProps {
    * ID. Changing it replaces the origin.
    */
   name?: string;
-  /** Address of the origin: a domain name, IPv4, or IPv6 address. */
+  /**
+   * Address of the origin: a domain name, IPv4, or IPv6 address, e.g. a
+   * Web App's `defaultHostName`. Changing it updates the origin in place.
+   */
   hostName: string;
   /**
    * Host header sent to the origin. Web Apps and Blob Storage need it to
@@ -64,16 +73,29 @@ export interface AfdOriginProps {
   enabledState?: "Enabled" | "Disabled";
   /** Validate the origin certificate's name. @default true */
   enforceCertificateNameCheck?: boolean;
-  /** How the origin certificate name is validated. */
+  /**
+   * How the origin certificate name is validated: against the origin's
+   * `hostName`, against `customCertificateSubjects`, or against the
+   * incoming request's host header. Applies when
+   * `enforceCertificateNameCheck` is `true`.
+   */
   certificateNameCheckValidationMode?:
     | "OriginHostname"
     | "CustomCertificateSubject"
     | "IncomingHostHeader";
   /** Allowed subjects (1-2) for `CustomCertificateSubject` validation. */
   customCertificateSubjects?: string[];
-  /** ARM ID of the Azure resource behind the origin (informational). */
+  /**
+   * ARM ID of the Azure resource behind the origin (informational), e.g. a
+   * Web App's `siteId`.
+   * @default none
+   */
   azureOrigin?: string;
-  /** Connect to the origin over Private Link (Premium only). */
+  /**
+   * Connect to the origin over Private Link (Premium only). The target's
+   * owner must approve the connection request before traffic flows.
+   * @default public connection
+   */
   sharedPrivateLinkResource?: AfdSharedPrivateLink;
 }
 
@@ -101,20 +123,109 @@ export interface AfdOrigin extends Resource<
 > {}
 
 /**
- * A Front Door origin — a backend (App Service, Storage static website,
- * public host, or IP) in an origin group.
+ * A Front Door origin (`Microsoft.Cdn/profiles/originGroups/origins`): a
+ * backend that an origin group sends traffic to. It can be an App Service
+ * Web App, a Container App, a Storage static website, any public host
+ * name, or an IP address.
+ *
+ * Alchemy sends the origin's `hostName` as the `Host` header unless you
+ * set `originHostHeader`, uses ports 80 and 443, and validates the
+ * origin's certificate name. Origins carry no tags; Alchemy treats one as
+ * owned when its profile carries this stack's ownership tags.
+ *
+ * :::caution[Changing `name`, `originGroup`, `profile`, or `resourceGroup` replaces the origin]
+ * Alchemy creates the new origin and then deletes the old one. Changing
+ * `hostName`, ports, priority, or weight updates the origin in place.
+ * :::
+ *
+ * :::caution[The origin group must exist first]
+ * Create the group with `Azure.Cdn.AfdOriginGroup` and pass
+ * `origins.originGroupName`. A route on the group deploys only after the
+ * group has an enabled origin.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/frontdoor/origin
  *
  * ### Creating an Origin
  * **Example:** Storage static website origin
  * ```typescript
+ * const profile = yield* Azure.Cdn.Profile("cdn");
+ * const origins = yield* Azure.Cdn.AfdOriginGroup("site", {
+ *   profile: profile.profileName,
+ * });
  * const origin = yield* Azure.Cdn.AfdOrigin("site", {
  *   profile: profile.profileName,
  *   originGroup: origins.originGroupName,
  *   hostName: "mysite.z13.web.core.windows.net",
  * });
  * ```
+ *
+ * **Example:** Public host with a fixed name
+ * ```typescript
+ * const origin = yield* Azure.Cdn.AfdOrigin("legacy", {
+ *   profile: profile.profileName,
+ *   originGroup: origins.originGroupName,
+ *   name: "legacy-api",
+ *   hostName: "api.contoso.com",
+ * });
+ * ```
+ *
+ * ### Web App Origins
+ * Use the app's `defaultHostName`. App Service routes by host header, so
+ * keep `originHostHeader` at its default (the same host name).
+ *
+ * **Example:** App Service Web App behind Front Door
+ * ```typescript
+ * const api = yield* Azure.Web.WebApp("Api", { main: "./src/api.ts" });
+ * yield* Azure.Cdn.AfdOrigin("api", {
+ *   profile: profile.profileName,
+ *   originGroup: origins.originGroupName,
+ *   hostName: api.defaultHostName,
+ *   azureOrigin: api.siteId,
+ * });
+ * ```
+ *
+ * ### Container App Origins
+ * Use the app's ingress `fqdn`; the app needs external ingress.
+ *
+ * **Example:** Container App behind Front Door
+ * ```typescript
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env");
+ * const app = yield* Azure.ContainerApps.ContainerApp("api", {
+ *   environmentId: env.environmentId,
+ *   configuration: { ingress: { external: true, targetPort: 80 } },
+ *   template: {
+ *     containers: [{ name: "api", image: "mcr.microsoft.com/k8se/quickstart:latest" }],
+ *   },
+ * });
+ * yield* Azure.Cdn.AfdOrigin("api", {
+ *   profile: profile.profileName,
+ *   originGroup: origins.originGroupName,
+ *   hostName: app.fqdn.as<string>(),
+ * });
+ * ```
+ *
+ * ### Host Header and Ports
+ * Set `originHostHeader` when the origin serves several sites and picks
+ * one by host name. Set `httpPort` and `httpsPort` (1-65535) when the
+ * origin listens on other ports.
+ *
+ * **Example:** Shared host on custom ports
+ * ```typescript
+ * yield* Azure.Cdn.AfdOrigin("shop", {
+ *   profile: profile.profileName,
+ *   originGroup: origins.originGroupName,
+ *   hostName: "203.0.113.10",
+ *   originHostHeader: "shop.contoso.com",
+ *   httpPort: 8080,
+ *   httpsPort: 8443,
+ * });
+ * ```
+ *
+ * ### Priority and Weight
+ * Front Door sends traffic to the healthy origins with the lowest
+ * `priority` (1-5). Among those, `weight` (1-1000) sets each origin's
+ * share.
  *
  * **Example:** Weighted secondary origin
  * ```typescript
@@ -125,6 +236,95 @@ export interface AfdOrigin extends Resource<
  *   priority: 2,
  *   weight: 500,
  * });
+ * ```
+ *
+ * **Example:** Split traffic 90/10 between two origins
+ * ```typescript
+ * yield* Azure.Cdn.AfdOrigin("stable", {
+ *   profile: profile.profileName,
+ *   originGroup: origins.originGroupName,
+ *   hostName: "stable.contoso.com",
+ *   weight: 900,
+ * });
+ * yield* Azure.Cdn.AfdOrigin("canary", {
+ *   profile: profile.profileName,
+ *   originGroup: origins.originGroupName,
+ *   hostName: "canary.contoso.com",
+ *   weight: 100,
+ * });
+ * ```
+ *
+ * ### Draining an Origin
+ * Set `enabledState: "Disabled"` to stop sending traffic to the origin
+ * and keep it in the group.
+ *
+ * **Example:** Take an origin out of rotation
+ * ```diff
+ *  yield* Azure.Cdn.AfdOrigin("canary", {
+ *    profile: profile.profileName,
+ *    originGroup: origins.originGroupName,
+ *    hostName: "canary.contoso.com",
+ * +  enabledState: "Disabled",
+ *  });
+ * ```
+ *
+ * ### Certificate Validation
+ * Front Door checks that the origin's certificate matches its host name.
+ * Validate against fixed subjects when the certificate names another
+ * host.
+ *
+ * **Example:** Accept a certificate issued for another name
+ * ```typescript
+ * yield* Azure.Cdn.AfdOrigin("internal", {
+ *   profile: profile.profileName,
+ *   originGroup: origins.originGroupName,
+ *   hostName: "east.origin.contoso.com",
+ *   certificateNameCheckValidationMode: "CustomCertificateSubject",
+ *   customCertificateSubjects: ["origin.contoso.com"],
+ * });
+ * ```
+ *
+ * ### Private Link Origins
+ * On a Premium profile, Front Door can reach the origin over Private Link
+ * so the origin can turn off public access. Front Door creates a pending
+ * connection request on the target; approve it on the target before
+ * traffic flows.
+ *
+ * **Example:** Private storage static website
+ * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("site");
+ * const profile = yield* Azure.Cdn.Profile("cdn", { sku: "Premium_AzureFrontDoor" });
+ * yield* Azure.Cdn.AfdOrigin("site", {
+ *   profile: profile.profileName,
+ *   originGroup: origins.originGroupName,
+ *   hostName: "mysite.z13.web.core.windows.net",
+ *   sharedPrivateLinkResource: {
+ *     privateLink: account.storageAccountId,
+ *     privateLinkLocation: "eastus",
+ *     groupId: "web",
+ *     requestMessage: "Front Door for contoso.com",
+ *   },
+ * });
+ * ```
+ *
+ * ### Deleting an Origin
+ * Front Door refuses to delete the last origin of a group while a route
+ * still uses the group (`AfdLastOriginInUse`). When you remove both in one
+ * deploy, Alchemy retries the origin delete for up to 10 minutes until the
+ * route is gone.
+ *
+ * **Example:** Remove the route and its only origin together
+ * ```diff
+ * -yield* Azure.Cdn.AfdOrigin("api", {
+ * -  profile: profile.profileName,
+ * -  originGroup: origins.originGroupName,
+ * -  hostName: api.defaultHostName,
+ * -});
+ * -yield* Azure.Cdn.Route("default", {
+ * -  profile: profile.profileName,
+ * -  endpoint: endpoint.endpointName,
+ * -  originGroupId: origins.originGroupId,
+ * -});
  * ```
  *
  * @resource

@@ -36,6 +36,7 @@ export type AlertProcessingRuleAction =
       actionGroupIds: string[];
     };
 
+/** One filter on the alerts a rule processes. */
 export interface AlertProcessingRuleCondition {
   /**
    * Alert field to filter on, e.g. `Severity`, `AlertRuleName`,
@@ -59,52 +60,100 @@ export interface AlertProcessingRuleCondition {
   values: string[];
 }
 
+/** A recurring window, inside the effective window, when the rule is active. */
 export interface AlertProcessingRuleRecurrence {
-  /** Recurrence cadence. */
+  /** Recurrence cadence: `Daily`, `Weekly`, or `Monthly`. */
   recurrenceType: "Daily" | "Weekly" | "Monthly";
-  /** Daily start time, `HH:mm:ss`. */
+  /**
+   * Start time of each day's window, `HH:mm:ss` in `timeZone`.
+   * @default not set (the whole day)
+   */
   startTime?: string;
-  /** Daily end time, `HH:mm:ss`. */
+  /**
+   * End time of each day's window, `HH:mm:ss` in `timeZone`.
+   * @default not set (the whole day)
+   */
   endTime?: string;
-  /** Days of the week (`Weekly`), e.g. `["Saturday", "Sunday"]`. */
+  /**
+   * Days of the week (`Weekly` only), e.g. `["Saturday", "Sunday"]`.
+   * @default none
+   */
   daysOfWeek?: string[];
-  /** Days of the month (`Monthly`), 1–31. */
+  /**
+   * Days of the month (`Monthly` only), 1–31.
+   * @default none
+   */
   daysOfMonth?: number[];
 }
 
+/** When an alert processing rule is active. */
 export interface AlertProcessingRuleSchedule {
-  /** Start of the effective window, ISO 8601 without a timezone suffix. */
+  /**
+   * Start of the effective window, ISO 8601 without a timezone suffix,
+   * e.g. `2026-12-24T18:00:00`.
+   * @default not set (in effect from creation)
+   */
   effectiveFrom?: string;
-  /** End of the effective window, ISO 8601 without a timezone suffix. */
+  /**
+   * End of the effective window, ISO 8601 without a timezone suffix.
+   * @default not set (no end)
+   */
   effectiveUntil?: string;
-  /** Windows time zone name, e.g. `UTC` or `Pacific Standard Time`. */
+  /**
+   * Windows time zone name, e.g. `UTC` or `Pacific Standard Time`.
+   * @default not set (Azure's default)
+   */
   timeZone?: string;
-  /** Recurring windows inside the effective window. */
+  /**
+   * Recurring windows inside the effective window.
+   * @default none (active for the whole effective window)
+   */
   recurrences?: AlertProcessingRuleRecurrence[];
 }
 
 export interface AlertProcessingRuleProps {
   /**
-   * Resource group the rule is created in. Changing it replaces the rule.
+   * Resource group the rule is created in.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
-   * Rule name. If omitted, a unique name is generated from the app, stage,
-   * and logical ID. Changing it replaces the rule.
+   * Rule name, up to 64 characters.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * ARM IDs of the subscriptions, resource groups, or resources whose alerts
-   * the rule processes.
+   * the rule processes, e.g. `[group.resourceGroupId]`.
    */
   scopes: string[];
-  /** Action applied to matching alerts (exactly one). */
+  /**
+   * Action applied to matching alerts: exactly one entry,
+   * `RemoveAllActionGroups` or `AddActionGroups`.
+   */
   actions: AlertProcessingRuleAction[];
-  /** Filters that select which alerts the rule applies to (all must match). */
+  /**
+   * Filters that select which alerts the rule applies to (all must match).
+   * @default [] (every alert in `scopes`)
+   */
   conditions?: AlertProcessingRuleCondition[];
-  /** When the rule is active. Unset means always. */
+  /**
+   * When the rule is active.
+   * @default always active
+   */
   schedule?: AlertProcessingRuleSchedule;
-  /** Description of the rule. */
+  /**
+   * Description of the rule.
+   * @default no description
+   */
   description?: string;
   /**
    * Whether the rule is applied.
@@ -114,6 +163,7 @@ export interface AlertProcessingRuleProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -140,9 +190,21 @@ export interface AlertProcessingRule extends Resource<
 > {}
 
 /**
- * An Azure Monitor alert processing rule (formerly action rule) — suppresses
- * notifications or adds action groups to fired alerts that match its scope,
- * filters, and schedule. Rules are global resources.
+ * An Azure Monitor alert processing rule
+ * (`Microsoft.AlertsManagement/actionRules`, formerly action rule): it
+ * suppresses notifications or adds action groups to fired alerts that match
+ * its scope, filters, and schedule. Use it for planned maintenance windows,
+ * quiet weekends, or to send every critical alert to on-call. Rules are
+ * global resources (location `global`) and cost nothing.
+ *
+ * :::caution[Changing `name` or `resourceGroup` replaces the rule]
+ * Alchemy creates a new rule and deletes the old one.
+ * :::
+ *
+ * :::caution[`AddActionGroups` needs an existing action group]
+ * Alchemy has no action group resource yet. Create the action group
+ * (`Microsoft.Insights/actionGroups`) outside Alchemy and pass its ARM ID.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-monitor/alerts/alerts-processing-rules
  *
@@ -165,9 +227,28 @@ export interface AlertProcessingRule extends Resource<
  * });
  * ```
  *
+ * **Example:** Suppress every alert during a one-off maintenance window
+ * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
+ * const rule = yield* Azure.Monitor.AlertProcessingRule("maintenance", {
+ *   scopes: [group.resourceGroupId],
+ *   actions: [{ actionType: "RemoveAllActionGroups" }],
+ *   schedule: {
+ *     timeZone: "UTC",
+ *     effectiveFrom: "2026-12-24T18:00:00",
+ *     effectiveUntil: "2026-12-26T08:00:00",
+ *   },
+ *   description: "Holiday maintenance",
+ * });
+ * ```
+ *
  * ### Routing Alerts
  * **Example:** Add an action group to every critical alert
  * ```typescript
+ * // an action group created outside Alchemy
+ * const oncallId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/ops/providers/Microsoft.Insights/actionGroups/oncall";
+ * const group = yield* Azure.Resources.ResourceGroup("app");
  * const rule = yield* Azure.Monitor.AlertProcessingRule("page-oncall", {
  *   scopes: [group.resourceGroupId],
  *   actions: [{ actionType: "AddActionGroups", actionGroupIds: [oncallId] }],

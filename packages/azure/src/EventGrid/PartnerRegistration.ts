@@ -25,19 +25,28 @@ import { createEventGridName, sameName } from "./common.ts";
 
 export interface PartnerRegistrationProps {
   /**
-   * Resource group the registration is created in. Changing it replaces the
-   * registration.
+   * Resource group the registration is created in.
+   *
+   * :::caution
+   * Changing it replaces the registration.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Registration name: 3-50 letters, digits, and hyphens. If omitted, a
    * unique name is generated from the app, stage, and logical ID.
+   *
+   * :::caution
    * Changing it replaces the registration.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -74,9 +83,19 @@ export interface PartnerRegistration extends Resource<
  * that references the registration. Subscribers authorize the registration's
  * `partnerRegistrationImmutableId` in their `Azure.EventGrid.PartnerConfiguration`.
  *
- * A new registration is unverified (`visibilityState: Hidden`): it can
- * create partner topics, but subscribers cannot find it by partner name
- * until Microsoft verifies the partner.
+ * :::caution[Changing `name` or `resourceGroup` replaces the registration]
+ * Alchemy creates a new registration with a new
+ * `partnerRegistrationImmutableId` and deletes the old one. Every subscriber
+ * must authorize the new ID before your channels can create partner topics
+ * for them again.
+ * :::
+ *
+ * :::caution[A new registration is unverified]
+ * Azure creates it with `visibilityState: Hidden`. It can create partner
+ * topics, but subscribers cannot find it by partner name until Microsoft
+ * verifies the partner. Give subscribers the
+ * `partnerRegistrationImmutableId` to authorize instead.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/onboard-partner
  *
@@ -90,6 +109,15 @@ export interface PartnerRegistration extends Resource<
  * ```typescript
  * const registration = yield* Azure.EventGrid.PartnerRegistration("contoso", {
  *   tags: { team: "integrations" },
+ * });
+ * ```
+ *
+ * ### Publishing Partner Events
+ * **Example:** Registration and the partner namespace that publishes for it
+ * ```typescript
+ * const registration = yield* Azure.EventGrid.PartnerRegistration("contoso");
+ * const namespace = yield* Azure.EventGrid.PartnerNamespace("contoso-events", {
+ *   partnerRegistration: registration.partnerRegistrationId,
  * });
  * ```
  *

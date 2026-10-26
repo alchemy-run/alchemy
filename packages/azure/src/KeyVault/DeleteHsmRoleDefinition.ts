@@ -26,6 +26,7 @@ export interface DeleteHsmRoleDefinitionRequest extends Omit<
  *
  * // runtime
  * yield* deleteRole({ scope: "/", roleDefinitionName: roleGuid });
+ * // …provided with Effect.provide(Azure.KeyVault.DeleteHsmRoleDefinitionHttp)
  * ```
  *
  * @binding

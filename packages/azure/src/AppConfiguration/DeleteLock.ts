@@ -26,6 +26,7 @@ export interface DeleteLockRequest extends Omit<appconfig.DeleteLockRequest, "en
  *
  * // runtime
  * const unlocked = yield* deleteLock({ key: "App:Color", label: "prod" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.DeleteLockHttp)
  * ```
  *
  * @binding

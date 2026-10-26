@@ -35,9 +35,24 @@ export interface NetworkRuleSetVirtualNetworkRule {
 }
 
 export interface NetworkRuleSetProps {
-  /** Resource group of the namespace. Changing it replaces the rule set. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the rule set.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Namespace the firewall applies to. Changing it replaces the rule set. */
+  /**
+   * Name of the namespace the firewall applies to, e.g.
+   * `namespace.namespaceName`.
+   *
+   * :::caution
+   * Changing it replaces the rule set: Alchemy resets the old namespace's
+   * firewall to allow all traffic.
+   * :::
+   */
   namespace: string;
   /**
    * What happens to traffic that matches no rule. Use `Deny` with `ipRules`
@@ -48,7 +63,7 @@ export interface NetworkRuleSetProps {
   /**
    * Whether the public endpoint accepts traffic. Shared with the namespace's
    * `publicNetworkAccess`.
-   * @default the namespace's current value
+   * @default the namespace's current value (else `"Enabled"`)
    */
   publicNetworkAccess?: "Enabled" | "Disabled" | "SecuredByPerimeter";
   /**
@@ -56,9 +71,17 @@ export interface NetworkRuleSetProps {
    * @default false
    */
   trustedServiceAccessEnabled?: boolean;
-  /** IP addresses or ranges that may connect. */
+  /**
+   * IPv4 addresses or CIDR ranges that may connect. Alchemy replaces the
+   * whole list on every change.
+   * @default []
+   */
   ipRules?: NetworkRuleSetIpRule[];
-  /** Subnets that may connect. */
+  /**
+   * Subnets that may connect. Alchemy replaces the whole list on every
+   * change.
+   * @default []
+   */
   virtualNetworkRules?: NetworkRuleSetVirtualNetworkRule[];
 }
 
@@ -78,9 +101,9 @@ export interface NetworkRuleSet extends Resource<
     publicNetworkAccess: string | undefined;
     /** Whether trusted Microsoft services bypass the firewall. */
     trustedServiceAccessEnabled: boolean | undefined;
-    /** Allowed IP addresses or ranges. */
+    /** Allowed IPv4 addresses or CIDR ranges. */
     ipRules: string[];
-    /** Allowed subnet IDs. */
+    /** ARM IDs of the allowed subnets. */
     virtualNetworkRules: string[];
   },
   never,
@@ -88,18 +111,33 @@ export interface NetworkRuleSet extends Resource<
 > {}
 
 /**
- * The IP firewall and virtual network rules of an Event Hubs namespace.
+ * The IP firewall and virtual network rules of an Event Hubs namespace
+ * (`Microsoft.EventHub/namespaces/networkRuleSets`). Use it to limit which
+ * networks reach the namespace's public endpoint.
  *
  * Every namespace has exactly one rule set (`default`), so this resource
- * configures it rather than creating it; deleting the resource resets the
- * firewall to allow all traffic. IP and virtual network rules need a
- * `Standard` (or higher) namespace.
+ * configures it rather than creating it. Deleting the resource resets the
+ * firewall to allow all traffic. Declare at most one per namespace.
+ *
+ * :::caution[Changing `namespace` or `resourceGroup` replaces the rule set]
+ * Alchemy configures the new namespace's firewall and resets the old one
+ * to allow all traffic.
+ * :::
+ *
+ * :::caution[Needs a `Standard` (or higher) namespace]
+ * IP and virtual network rules need a `Standard` (or higher) namespace.
+ * A subnet in `virtualNetworkRules` needs the `Microsoft.EventHub` service
+ * endpoint, unless you set `ignoreMissingVnetServiceEndpoint`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-hubs/network-security
  *
  * ### Restricting Access
  * **Example:** Allow only one office range
  * ```typescript
+ * const namespace = yield* Azure.EventHub.Namespace("events", {
+ *   sku: "Standard",
+ * });
  * yield* Azure.EventHub.NetworkRuleSet("firewall", {
  *   namespace: namespace.namespaceName,
  *   defaultAction: "Deny",
@@ -109,6 +147,14 @@ export interface NetworkRuleSet extends Resource<
  *
  * **Example:** Allow a subnet and trusted Azure services
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("producers", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ *   serviceEndpoints: [{ service: "Microsoft.EventHub" }],
+ * });
  * yield* Azure.EventHub.NetworkRuleSet("firewall", {
  *   namespace: namespace.namespaceName,
  *   defaultAction: "Deny",

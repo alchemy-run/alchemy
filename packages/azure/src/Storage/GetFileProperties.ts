@@ -30,6 +30,7 @@ export type GetFilePropertiesRequest = FileShareRequest<files.GetFilePropertiesR
  * // runtime
  * const props = yield* getFileProperties({ fileName: "reports/q1.csv" });
  * const size = props.contentLength;
+ * // …provided with Effect.provide(Azure.Storage.GetFilePropertiesHttp)
  * ```
  *
  * @binding

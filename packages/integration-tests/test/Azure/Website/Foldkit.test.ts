@@ -8,26 +8,29 @@ import {
   verifyFoldkitBrowser,
   verifyFoldkitRendering,
 } from "../../Website/Foldkit.ts";
-import { runPaidOnly } from "../gates.ts";
+import { runExpensive } from "../gates.ts";
 import {
-  appServiceUrl,
   assertGroupGone,
   fetchPage,
-  APP_SERVICE_LOCATION,
+  FRONT_DOOR_TIMEOUT,
+  frontDoorUrl,
+  frontDoorWait,
+  getProfile,
   LOCATION,
   logLevel,
   staticWebsiteEnabled,
   storageWebUrl,
   tags,
+  viaFrontDoor,
   waitForPage,
-  webAppConfig,
 } from "./site.ts";
 
 const { test } = Test.make({ providers: Azure.providers() });
 
 describe("Azure.Website.Foldkit", { tags }, () => {
-  // Browser-only and prerendered builds go to a storage static website:
-  // no Docker image, no server. One stack walks SPA → static.
+  // ~$0.01/run (one Standard_LRS account); ~5 min. Browser-only and
+  // prerendered builds without Front Door go to a storage static website:
+  // no server. One stack walks SPA → static.
   test.provider(
     "SPA and prerendered builds on a storage static website",
     (stack) =>
@@ -41,20 +44,17 @@ describe("Azure.Website.Foldkit", { tags }, () => {
             return yield* Azure.Website.Foldkit("Web", {
               rootDir: spaRoot,
               location: LOCATION,
+              frontDoor: false,
               memo: foldkitMemo,
             });
           }),
         );
         const url = spa.url as string;
         expect(url).toMatch(storageWebUrl);
-        expect(spa.assets).toBeDefined();
-        expect(spa.app).toBeUndefined();
-        expect(
-          yield* staticWebsiteEnabled(
-            spa.storageAccount!.resourceGroup,
-            spa.storageAccount!.storageAccountName,
-          ),
-        ).toBe(true);
+        expect(spa.assets!.fileCount).toBeGreaterThan(1);
+        expect(spa.server).toBeUndefined();
+        expect(spa.frontDoor).toBeUndefined();
+        expect(yield* staticWebsiteEnabled(spa.storageAccount!.storageAccountName)).toBe(true);
 
         const root = yield* waitForPage(`${url}/`, (page) => page.status === 200);
         expect(root.body).toContain("Foldkit Fixture");
@@ -75,6 +75,7 @@ describe("Azure.Website.Foldkit", { tags }, () => {
               rootDir: staticRoot,
               location: LOCATION,
               output: "static",
+              frontDoor: false,
               memo: foldkitMemo,
             });
           }),
@@ -90,12 +91,12 @@ describe("Azure.Website.Foldkit", { tags }, () => {
     { timeout: 900_000 },
   );
 
-  // A server build runs Foldkit's fetch handler on a Linux App Service web
-  // app (Node.js runtime, zip deploy). B1 plan: ~$0.02 for one run. New
-  // plans in eastus fail with "Cannot acquire exclusive lock to create or
-  // update this server farm"; the Web suites use westus3.
-  test.provider(
-    "SSR build on an App Service web app",
+  // ~$0.10/run (Front Door Standard by the hour, a Flex Consumption
+  // Function, two Standard_LRS accounts); 35-55 min with the profile delete.
+  // A server build runs Foldkit's fetch handler on the Function; Front Door
+  // sends pages to it and the client assets to Blob Storage.
+  test.provider.skipIf(!runExpensive)(
+    "SSR build on a Function behind Front Door",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
@@ -105,34 +106,40 @@ describe("Azure.Website.Foldkit", { tags }, () => {
           Effect.gen(function* () {
             return yield* Azure.Website.Foldkit("Web", {
               rootDir,
-              location: APP_SERVICE_LOCATION,
+              location: LOCATION,
               output: "server",
               memo: foldkitMemo,
             });
           }),
         );
         const url = site.url as string;
-        expect(url).toMatch(appServiceUrl);
-        expect(site.assets).toBeUndefined();
-        const config = yield* webAppConfig(site.app!.resourceGroup, site.app!.siteName);
-        expect(config.linuxFxVersion).toBe(Azure.Website.DEFAULT_NODE_STACK);
-        expect(config.appCommandLine).toMatch(/^node .*index\.mjs$/);
+        expect(url).toMatch(frontDoorUrl);
+        expect(site.server!.functionAppName.length).toBeGreaterThan(0);
 
+        const home = yield* waitForPage(
+          `${url}/`,
+          (page) => page.status === 200 && page.body.includes("Foldkit"),
+          frontDoorWait,
+        );
+        expect(viaFrontDoor(home)).toBe(true);
         yield* verifyFoldkitRendering(url, "ssr");
         yield* verifyFoldkitBrowser(url, "ssr");
 
         const groupName = site.resourceGroup!.resourceGroupName;
+        const profileGroup = site.frontDoor!.profile.resourceGroup;
+        const profileName = site.frontDoor!.profile.profileName;
         yield* stack.destroy();
+        expect(yield* getProfile(profileGroup, profileName)).toBeUndefined();
         yield* assertGroupGone(groupName);
       }).pipe(logLevel),
-    { timeout: 1_200_000 },
+    { timeout: FRONT_DOOR_TIMEOUT },
   );
 
-  // Front Door Standard bills ~$35/month plus traffic and its endpoints take
-  // 10-20 minutes to propagate, so this runs only with AZURE_TEST_PAID=1.
-  // Front Door's rewrite rule answers SPA deep links with a 200. The title
-  // stays short: Front Door rejects resource group names over 80 characters.
-  test.provider.skipIf(!runPaidOnly)(
+  // ~$0.10/run (Front Door Standard by the hour, one Standard_LRS account);
+  // 35-55 min with the profile delete. Front Door (the default) rewrites
+  // SPA deep links to the shell with a 200. The title stays short: Front
+  // Door rejects resource group names over 80 characters.
+  test.provider.skipIf(!runExpensive)(
     "Front Door SPA",
     (stack) =>
       Effect.gen(function* () {
@@ -144,29 +151,26 @@ describe("Azure.Website.Foldkit", { tags }, () => {
             return yield* Azure.Website.Foldkit("Web", {
               rootDir,
               location: LOCATION,
-              frontDoor: true,
               memo: foldkitMemo,
             });
           }),
         );
         const url = site.url as string;
-        expect(url).toMatch(/^https:\/\/.+\.azurefd\.net$/);
-        expect(site.frontDoor).toBeDefined();
-        // A new endpoint answers Front Door's own 404 until the route
-        // propagates (10-20 minutes); wait for the shell first.
-        yield* waitForPage(`${url}/`, (page) => page.body.includes("Foldkit Fixture"), {
-          spacing: "30 seconds",
-          times: 50,
-        });
+        expect(url).toMatch(frontDoorUrl);
+        expect(site.server).toBeUndefined();
+        yield* waitForPage(`${url}/`, (page) => page.body.includes("Foldkit Fixture"), frontDoorWait);
         const deepLink = yield* fetchPage(`${url}/counter/42`);
         expect(deepLink.status).toBe(200);
         expect(deepLink.body).toContain("Foldkit Fixture");
         yield* verifyFoldkitRendering(url, "spa");
 
         const groupName = site.resourceGroup!.resourceGroupName;
+        const profileGroup = site.frontDoor!.profile.resourceGroup;
+        const profileName = site.frontDoor!.profile.profileName;
         yield* stack.destroy();
+        expect(yield* getProfile(profileGroup, profileName)).toBeUndefined();
         yield* assertGroupGone(groupName);
       }).pipe(logLevel),
-    { timeout: 3_600_000 },
+    { timeout: FRONT_DOOR_TIMEOUT },
   );
 });

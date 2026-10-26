@@ -31,6 +31,7 @@ export type DeleteDirectoryRequest = FileShareRequest<files.DeleteDirectoryReque
  *
  * // runtime
  * yield* deleteDirectory({ directory: "tmp" });
+ * // …provided with Effect.provide(Azure.Storage.DeleteDirectoryHttp)
  * ```
  *
  * @binding

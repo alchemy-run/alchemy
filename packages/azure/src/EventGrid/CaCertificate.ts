@@ -17,27 +17,54 @@ import {
 } from "./MqttShared.ts";
 
 export interface CaCertificateProps {
-  /** Resource group of the namespace. Changing it replaces the CA certificate. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the CA certificate.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
-   * Name of the Event Grid namespace (MQTT broker enabled). Changing it
-   * replaces the CA certificate.
+   * Name of the Event Grid namespace, e.g. `namespace.namespaceName` of an
+   * `Azure.EventGrid.Namespace` with the MQTT broker enabled.
+   *
+   * :::caution
+   * Changing it replaces the CA certificate.
+   * :::
    */
   namespace: string;
   /**
-   * Client group name: 3-50 letters, digits, and hyphens. If omitted, a
-   * unique name is generated from the app, stage, and logical ID. Changing
-   * it replaces the CA certificate.
+   * CA certificate name: 3-50 letters, digits, and hyphens. If omitted, a
+   * unique name is generated from the app, stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the CA certificate.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * The CA certificate in PEM format, including the
    * `-----BEGIN CERTIFICATE-----` header and `-----END CERTIFICATE-----`
    * footer (surrounding whitespace is trimmed). Must not contain a private
-   * key. Changing it replaces the resource.
+   * key.
+   *
+   * :::caution
+   * Changing it replaces the CA certificate.
+   * :::
    */
   encodedCertificate: string;
-  /** Description of the CA certificate. Changing it replaces the resource. */
+  /**
+   * Description of the CA certificate. Alchemy appends its ownership marker
+   * (` [alchemy:{stack}/{stage}/{id}]`) to it.
+   *
+   * :::caution
+   * Changing it replaces the CA certificate.
+   * :::
+   * @default no description (only the ownership marker)
+   */
   description?: string;
 }
 
@@ -53,9 +80,9 @@ export interface CaCertificate extends Resource<
     resourceGroup: string;
     /** Name of the namespace. */
     namespace: string;
-    /** Issue time of the certificate (UTC). */
+    /** Issue time of the certificate (ISO 8601, UTC). */
     issueTimeInUtc: string | undefined;
-    /** Expiry time of the certificate (UTC). */
+    /** Expiry time of the certificate (ISO 8601, UTC). */
     expiryTimeInUtc: string | undefined;
     /** Description (Alchemy ownership marker stripped). */
     description: string | undefined;
@@ -65,19 +92,36 @@ export interface CaCertificate extends Resource<
 > {}
 
 /**
- * A CA certificate registered with an Event Grid namespace's MQTT broker.
- * Clients whose certificates chain to it authenticate with the
- * `*MatchesAuthenticationName` validation schemes.
+ * A CA certificate of an Event Grid MQTT broker
+ * (`Microsoft.EventGrid/namespaces/caCertificates`). Register your device
+ * CA so clients whose certificates chain to it can authenticate with the
+ * `*MatchesAuthenticationName` validation schemes of `Azure.EventGrid.Client`.
  *
- * CA certificates are immutable: Azure rejects updates, so changing any
- * prop replaces the certificate. They have no tags; Alchemy appends an
- * ownership marker to the `description`.
+ * CA certificates have no tags; Alchemy appends an ownership marker to the
+ * `description`.
+ *
+ * :::caution[Changing any prop replaces the CA certificate]
+ * Azure rejects every update of a CA certificate, so a change to
+ * `encodedCertificate`, `description`, `name`, `namespace`, or
+ * `resourceGroup` makes Alchemy create a new certificate and delete the old
+ * one.
+ * :::
+ *
+ * :::caution[The namespace needs the MQTT broker]
+ * Declare the parent `Azure.EventGrid.Namespace` with
+ * `topicSpacesConfiguration: { state: "Enabled" }`. Azure cannot turn the
+ * broker off again: switching it to `Disabled` replaces the namespace.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/mqtt-certificate-chain-client-authentication
  *
  * ### Registering a CA
  * **Example:** CA certificate from a PEM file
  * ```typescript
+ * const fs = yield* FileSystem.FileSystem;
+ * const namespace = yield* Azure.EventGrid.Namespace("iot", {
+ *   topicSpacesConfiguration: { state: "Enabled" },
+ * });
  * const ca = yield* Azure.EventGrid.CaCertificate("devices-ca", {
  *   namespace: namespace.namespaceName,
  *   encodedCertificate: yield* fs.readFileString("ca.pem"),

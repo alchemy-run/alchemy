@@ -45,9 +45,9 @@ export interface ManagedEnvironmentWorkloadProfile {
    * the regional vCPU quota.
    */
   workloadProfileType: string;
-  /** Minimum node count of a dedicated profile. */
+  /** Minimum node count of a dedicated profile. Not used for `Consumption`. */
   minimumCount?: number;
-  /** Maximum node count of a dedicated profile. */
+  /** Maximum node count of a dedicated profile. Not used for `Consumption`. */
   maximumCount?: number;
 }
 
@@ -69,13 +69,20 @@ export interface ManagedEnvironmentLogs {
 
 /** Virtual network integration of the environment (immutable). */
 export interface ManagedEnvironmentVnet {
-  /** ARM ID of the infrastructure subnet (delegated to `Microsoft.App/environments`). */
+  /**
+   * ARM ID of the infrastructure subnet (`subnet.subnetId`). Workload
+   * profiles environments need at least a `/27` delegated to
+   * `Microsoft.App/environments`; `ConsumptionOnly` needs at least a `/23`.
+   */
   infrastructureSubnetId?: string;
-  /** Expose apps only on the virtual network (internal load balancer). */
+  /**
+   * Expose apps only on the virtual network (internal load balancer).
+   * @default false
+   */
   internal?: boolean;
-  /** CIDR for the Docker bridge network. */
+  /** CIDR for the Docker bridge network; must not overlap the subnet. */
   dockerBridgeCidr?: string;
-  /** CIDR reserved for platform infrastructure. */
+  /** CIDR reserved for platform infrastructure; must not overlap the subnet. */
   platformReservedCidr?: string;
   /** IP of the platform DNS server inside `platformReservedCidr`. */
   platformReservedDnsIP?: string;
@@ -85,6 +92,7 @@ export interface ManagedEnvironmentProps {
   /**
    * Resource group the environment is created in. Changing it replaces the
    * environment.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -108,7 +116,8 @@ export interface ManagedEnvironmentProps {
   environmentMode?: "ConsumptionOnly" | "WorkloadProfiles" | "Express";
   /**
    * Workload profiles of a `WorkloadProfiles` environment. Include a
-   * `Consumption` profile for serverless apps.
+   * `Consumption` profile for serverless apps. Changes in place.
+   * @default Azure's default for the `environmentMode`
    */
   workloadProfiles?: ManagedEnvironmentWorkloadProfile[];
   /**
@@ -118,6 +127,7 @@ export interface ManagedEnvironmentProps {
   appLogsConfiguration?: ManagedEnvironmentLogs;
   /**
    * Virtual network integration. Changing it replaces the environment.
+   * @default no virtual network (Azure manages the network)
    */
   vnetConfiguration?: ManagedEnvironmentVnet;
   /**
@@ -147,11 +157,16 @@ export interface ManagedEnvironmentProps {
    * @default Azure's default (`Enabled`)
    */
   publicNetworkAccess?: "Enabled" | "Disabled";
-  /** Managed identity of the environment. */
+  /**
+   * Managed identity of the environment, used for Key Vault certificates
+   * and Dapr components. Changes in place.
+   * @default no identity
+   */
   identity?: ContainerAppsIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -172,7 +187,7 @@ export interface ManagedEnvironment extends Resource<
     environmentMode: string | undefined;
     /** Default domain of apps in the environment, e.g. `{hash}.eastus.azurecontainerapps.io`. */
     defaultDomain: string | undefined;
-    /** Static IP address of the environment. */
+    /** Static IP address of the environment (the internal load balancer IP when `internal`). */
     staticIp: string | undefined;
     /** Event stream endpoint of the environment. */
     eventStreamEndpoint: string | undefined;
@@ -194,18 +209,40 @@ export interface ManagedEnvironment extends Resource<
  *
  * Creating a standard environment takes 3-6 minutes; deleting one 2-5
  * minutes (10+ minutes after a failed create). An `Express` environment
- * provisions in seconds. Environments cost nothing while idle. New
- * subscriptions may be limited to one standard environment per region.
+ * provisions in seconds. Environments cost nothing while idle.
+ *
+ * Alchemy creates the environment in the stack's resource group with no
+ * log destination, public network access, and no virtual network. Apps in
+ * one environment share its default domain, static IP, and network.
+ *
+ * :::caution[Changing `name`, `resourceGroup`, `location`, `environmentMode`, `vnetConfiguration`, `zoneRedundant`, or `infrastructureResourceGroup` replaces the environment]
+ * Alchemy creates a new environment with a new default domain and static
+ * IP, and replaces the apps and jobs that reference it. Each app gets a new
+ * `*.azurecontainerapps.io` URL, so update DNS records for custom domains.
+ * :::
+ *
+ * :::caution[A fresh subscription needs two providers and has a low environment quota]
+ * Alchemy registers the `Microsoft.App` and `Microsoft.ContainerService`
+ * resource providers before the first environment; the deploying identity
+ * needs permission to register resource providers. New subscriptions may
+ * be limited to one standard environment per region.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/container-apps/environment
  *
  * ### Creating an Environment
- * **Example:** Workload profiles environment with a Consumption profile
+ * **Example:** Default environment
+ * ```typescript
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env");
+ * // env.environmentId → pass as `environmentId` to apps and jobs
+ * ```
+ *
+ * **Example:** Environment with a fixed name and region
  * ```typescript
  * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
- *   workloadProfiles: [
- *     { name: "Consumption", workloadProfileType: "Consumption" },
- *   ],
+ *   name: "contoso-prod",
+ *   location: "westeurope",
+ *   tags: { team: "platform" },
  * });
  * ```
  *
@@ -216,18 +253,90 @@ export interface ManagedEnvironment extends Resource<
  * });
  * ```
  *
+ * ### Workload Profiles
+ * A `Consumption` profile runs serverless apps that scale to zero. A
+ * dedicated profile (`D4`, `E4`, ...) reserves nodes for the apps that pick
+ * it with `workloadProfileName`, and counts against the regional vCPU quota.
+ *
+ * **Example:** Workload profiles environment with a Consumption profile
+ * ```typescript
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
+ *   workloadProfiles: [
+ *     { name: "Consumption", workloadProfileType: "Consumption" },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Dedicated profile for memory-heavy apps
+ * ```typescript
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
+ *   workloadProfiles: [
+ *     { name: "Consumption", workloadProfileType: "Consumption" },
+ *     { name: "memory", workloadProfileType: "E4", minimumCount: 1, maximumCount: 3 },
+ *   ],
+ * });
+ * const api = yield* Azure.ContainerApps.ContainerApp("api", {
+ *   environmentId: env.environmentId,
+ *   workloadProfileName: "memory",
+ *   template: {
+ *     containers: [{ name: "api", image: "mcr.microsoft.com/k8se/quickstart:latest" }],
+ *   },
+ * });
+ * ```
+ *
  * ### Logging
  * **Example:** Stream logs to a Log Analytics workspace
  * ```typescript
+ * import type * as Redacted from "effect/Redacted";
+ *
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
  *   appLogsConfiguration: {
  *     destination: "log-analytics",
  *     logAnalyticsConfiguration: {
- *       customerId: workspaceId,
- *       sharedKey: Redacted.make(workspaceKey),
+ *       customerId: logs.customerId,
+ *       sharedKey: logs.primarySharedKey.as<Redacted.Redacted<string>>(),
  *     },
  *   },
  * });
+ * ```
+ *
+ * **Example:** Send logs through Azure Monitor diagnostic settings
+ * ```typescript
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
+ *   appLogsConfiguration: { destination: "azure-monitor" },
+ * });
+ * ```
+ *
+ * ### Virtual Network
+ * Give a workload profiles environment a subnet of at least `/27`
+ * delegated to `Microsoft.App/environments`. A `ConsumptionOnly`
+ * environment needs an undelegated subnet of at least `/23`.
+ *
+ * **Example:** Environment in your virtual network
+ * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("apps", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.2.0/23",
+ *   delegations: [{ serviceName: "Microsoft.App/environments" }],
+ * });
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
+ *   workloadProfiles: [{ name: "Consumption", workloadProfileType: "Consumption" }],
+ *   vnetConfiguration: { infrastructureSubnetId: subnet.subnetId },
+ * });
+ * ```
+ *
+ * **Example:** Internal, zone-redundant environment
+ * ```typescript
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
+ *   workloadProfiles: [{ name: "Consumption", workloadProfileType: "Consumption" }],
+ *   vnetConfiguration: { infrastructureSubnetId: subnet.subnetId, internal: true },
+ *   zoneRedundant: true,
+ * });
+ * // apps are reachable only from the virtual network, at env.staticIp
  * ```
  *
  * ### Security
@@ -235,6 +344,67 @@ export interface ManagedEnvironment extends Resource<
  * ```typescript
  * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
  *   mtlsEnabled: true,
+ * });
+ * ```
+ *
+ * **Example:** Encrypt peer traffic and turn off public access
+ * ```typescript
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
+ *   peerTrafficEncryptionEnabled: true,
+ *   publicNetworkAccess: "Disabled",
+ * });
+ * ```
+ *
+ * **Example:** System-assigned identity for Key Vault certificates
+ * ```typescript
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env", {
+ *   identity: { type: "SystemAssigned" },
+ * });
+ * const cert = yield* Azure.ContainerApps.Certificate("tls", {
+ *   environment: env.environmentName,
+ *   keyVaultUrl: "https://my-vault.vault.azure.net/secrets/tls",
+ *   keyVaultIdentity: "system",
+ * });
+ * // grant env.principalId Key Vault Secrets User on the vault
+ * ```
+ *
+ * ### Running Apps and Jobs
+ * **Example:** A Container App and a Job in one environment
+ * ```typescript
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env");
+ * const api = yield* Azure.ContainerApps.ContainerApp("api", {
+ *   environmentId: env.environmentId,
+ *   configuration: { ingress: { external: true, targetPort: 80 } },
+ *   template: {
+ *     containers: [{ name: "api", image: "mcr.microsoft.com/k8se/quickstart:latest" }],
+ *   },
+ * });
+ * const job = yield* Azure.ContainerApps.Job("Nightly", {
+ *   main: "./src/nightly.ts",
+ *   environmentId: env.environmentId,
+ * });
+ * ```
+ *
+ * ### Shared Components
+ * Register Dapr components, file shares, and certificates once on the
+ * environment; apps reference them by name.
+ *
+ * **Example:** Dapr cron binding for one app
+ * ```typescript
+ * yield* Azure.ContainerApps.DaprComponent("cron", {
+ *   environment: env.environmentName,
+ *   componentType: "bindings.cron",
+ *   metadata: [{ name: "schedule", value: "@every 10m" }],
+ *   scopes: ["worker"],
+ * });
+ * ```
+ *
+ * **Example:** Managed certificate for a custom domain
+ * ```typescript
+ * yield* Azure.ContainerApps.ManagedCertificate("www", {
+ *   environment: env.environmentName,
+ *   subjectName: "www.example.com",
+ *   domainControlValidation: "CNAME",
  * });
  * ```
  *

@@ -10,6 +10,11 @@ import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLogAnalyticsName, isWorkspaceOwnedByStack, sameText } from "./Common.ts";
 
+/**
+ * Kind of legacy-agent data source, e.g. `WindowsEvent`,
+ * `WindowsPerformanceCounter`, `LinuxSyslog`, or `CustomLog`. Each kind
+ * takes its own `properties` shape.
+ */
 export type DataSourceKind =
   | "WindowsEvent"
   | "WindowsPerformanceCounter"
@@ -25,20 +30,46 @@ export type DataSourceKind =
   | (string & {});
 
 export interface DataSourceProps {
-  /** Resource group of the workspace. Changing it replaces the data source. */
+  /**
+   * Resource group of the workspace.
+   *
+   * :::caution
+   * Changing it replaces the data source.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Workspace that holds the data source. Changing it replaces it. */
+  /**
+   * Name of the workspace that holds the data source, e.g.
+   * `logs.workspaceName`.
+   *
+   * :::caution
+   * Changing it replaces the data source.
+   * :::
+   */
   workspace: string;
   /**
-   * Data source name. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the data source.
+   * Data source name: letters, digits, hyphens, and underscores, unique in
+   * the workspace.
+   *
+   * :::caution
+   * Changing it replaces the data source.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Kind of data source. Changing it replaces the data source. */
+  /**
+   * Kind of data source, e.g. `WindowsEvent` or `LinuxSyslog`.
+   *
+   * :::caution
+   * Changing it replaces the data source.
+   * :::
+   */
   kind: DataSourceKind;
   /**
    * Kind-specific settings, e.g. for `WindowsEvent`:
    * `{ eventLogName: "System", eventTypes: [{ eventType: "Error" }] }`.
+   * Alchemy updates them in place.
    */
   properties: Record<string, unknown>;
 }
@@ -49,13 +80,13 @@ export interface DataSource extends Resource<
   {
     /** Name of the data source. */
     dataSourceName: string;
-    /** Workspace that holds the data source. */
+    /** Name of the workspace that holds the data source. */
     workspace: string;
     /** Resource group of the workspace. */
     resourceGroup: string;
     /** ARM resource ID of the data source. */
     dataSourceId: string;
-    /** Kind of data source. */
+    /** Kind of data source, e.g. `WindowsEvent`. */
     kind: string;
     /** ETag of the data source. */
     etag: string | undefined;
@@ -65,13 +96,22 @@ export interface DataSource extends Resource<
 > {}
 
 /**
- * A data source of a Log Analytics workspace: what the legacy Log Analytics
- * agent collects (Windows event logs, performance counters, Syslog, custom
- * logs, IIS logs).
+ * A data source of a Log Analytics workspace
+ * (`Microsoft.OperationalInsights/workspaces/dataSources`): what the legacy
+ * Log Analytics agent collects, such as Windows event logs, performance
+ * counters, Syslog, custom logs, and IIS logs.
  *
- * The Log Analytics agent was retired in August 2024; new collection
- * should use data collection rules with the Azure Monitor agent. This
- * resource manages workspaces that still serve legacy agents.
+ * :::caution[Changing `name`, `kind`, `workspace`, or `resourceGroup` replaces the data source]
+ * Alchemy deletes the old data source before it creates the new one,
+ * because settings such as a Windows event log name are unique in the
+ * workspace. The agents collect nothing for that source in between.
+ * :::
+ *
+ * :::caution[The Log Analytics agent is retired]
+ * Microsoft retired the Log Analytics agent in August 2024. Data sources
+ * only affect machines that still run it. For new collection, use data
+ * collection rules with the Azure Monitor agent.
+ * :::
  *
  * Azure drops tags on data sources, so Alchemy treats a data source as
  * owned when its workspace is owned by the current stack and stage.
@@ -81,6 +121,7 @@ export interface DataSource extends Resource<
  * ### Collecting Windows Events
  * **Example:** System log errors and warnings
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * yield* Azure.LogAnalytics.DataSource("system-events", {
  *   workspace: logs.workspaceName,
  *   kind: "WindowsEvent",
@@ -94,6 +135,7 @@ export interface DataSource extends Resource<
  * ### Collecting Performance Counters
  * **Example:** CPU every 60 seconds
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * yield* Azure.LogAnalytics.DataSource("cpu", {
  *   workspace: logs.workspaceName,
  *   kind: "WindowsPerformanceCounter",

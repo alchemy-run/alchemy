@@ -41,11 +41,23 @@ export interface EventHubRetention {
    * @default "Delete"
    */
   cleanupPolicy?: "Delete" | "Compact" | "DeleteOrCompact";
-  /** Hours to retain events, up to the namespace tier's maximum. */
+  /**
+   * Hours to retain events, up to the namespace tier's maximum (Basic 24,
+   * Standard 168, Premium and Dedicated 2160).
+   * @default Azure's default for the tier
+   */
   retentionTimeInHours?: number;
-  /** Minimum minutes an event stays ineligible for compaction. */
+  /**
+   * Minimum minutes an event stays ineligible for compaction (`Compact`
+   * policies only).
+   * @default Azure's default
+   */
   minCompactionLagTimeInMinutes?: number;
-  /** Hours to retain tombstone markers of a compacted event hub. */
+  /**
+   * Hours to retain tombstone markers of a compacted event hub (`Compact`
+   * policies only).
+   * @default Azure's default
+   */
   tombstoneRetentionTimeInHours?: number;
 }
 
@@ -57,11 +69,21 @@ export interface EventHubCapture {
    * @default "Avro"
    */
   encoding?: "Avro" | "AvroDeflate";
-  /** Capture window in seconds (60-900). */
+  /**
+   * Capture time window in seconds (60-900): a file is written when this
+   * window or the size window ends, whichever comes first.
+   * @default Azure's default (`300`)
+   */
   intervalInSeconds?: number;
-  /** Capture size window in bytes (10485760-524288000). */
+  /**
+   * Capture size window in bytes (10485760-524288000).
+   * @default Azure's default (`314572800`, 300 MB)
+   */
   sizeLimitInBytes?: number;
-  /** Skip writing empty archive files. */
+  /**
+   * Skip writing archive files for windows with no events.
+   * @default false
+   */
   skipEmptyArchives?: boolean;
   /** Blob storage destination. */
   destination: {
@@ -79,8 +101,12 @@ export interface EventHubCapture {
      * `{Namespace}/{EventHub}/{PartitionId}/{Year}/{Month}/{Day}/{Hour}/{Minute}/{Second}`.
      */
     archiveNameFormat: string;
-    /** Managed identity Capture writes with. */
+    /**
+     * Managed identity Capture writes with.
+     * @default the namespace's own access to the storage account
+     */
     identity?: {
+      /** Identity type. */
       type: "SystemAssigned" | "UserAssigned";
       /** ARM ID of the user-assigned identity (for `UserAssigned`). */
       userAssignedIdentity?: string;
@@ -89,21 +115,41 @@ export interface EventHubCapture {
 }
 
 export interface EventHubProps {
-  /** Resource group of the namespace. Changing it replaces the event hub. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the event hub.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Namespace that holds the event hub. Changing it replaces the event hub. */
+  /**
+   * Name of the namespace that holds the event hub (`namespace.namespaceName`).
+   *
+   * :::caution
+   * Changing it replaces the event hub.
+   * :::
+   */
   namespace: string;
   /**
    * Event hub name: 1-256 letters, digits, periods, hyphens, and
    * underscores, starting and ending with a letter or digit. If omitted, a
-   * unique name is generated from the app, stage, and logical ID. Changing
-   * it replaces the event hub.
+   * unique name is generated from the app, stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the event hub.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Number of partitions (1-32 on Basic/Standard). Partitions can only be
-   * added on Premium and Dedicated namespaces; any other change replaces the
-   * event hub.
+   * Number of partitions (1-32 on Basic/Standard).
+   *
+   * :::caution
+   * Premium and dedicated namespaces add partitions in place. Any other
+   * change replaces the event hub.
+   * :::
    * @default 4
    */
   partitionCount?: number;
@@ -113,20 +159,36 @@ export interface EventHubProps {
    * @default 1 (when `retention` is not set)
    */
   messageRetentionInDays?: number;
-  /** Retention settings. Changing `cleanupPolicy` replaces the event hub. */
+  /**
+   * Retention settings.
+   *
+   * :::caution
+   * Changing `cleanupPolicy` replaces the event hub.
+   * :::
+   * @default `messageRetentionInDays` applies
+   */
   retention?: EventHubRetention;
   /**
    * Entity status, e.g. `SendDisabled` to stop producers.
    * @default "Active"
    */
   status?: EventHubStatus;
-  /** Capture events to Blob Storage (Standard and above, billed separately). */
+  /**
+   * Capture events to Blob Storage (Standard and above, billed
+   * separately). Removing it turns an enabled Capture off.
+   * @default Capture off
+   */
   capture?: EventHubCapture;
-  /** Timestamp events carry: broker append time or producer create time. */
+  /**
+   * Timestamp events carry: broker append time (`LogAppend`) or producer
+   * create time (`Create`).
+   * @default Azure's default (`LogAppend`)
+   */
   timestampType?: "LogAppend" | "Create";
   /**
    * Free-form user metadata. Alchemy appends an ownership marker
    * (`[alchemy <stack>/<stage>/<id>]`) because event hubs have no tags.
+   * @default only the ownership marker
    */
   userMetadata?: string;
 }
@@ -161,50 +223,201 @@ export interface EventHub extends Resource<
 > {}
 
 /**
- * An event hub — a partitioned, append-only event stream inside an Event
- * Hubs namespace.
+ * An Azure event hub (`Microsoft.EventHub/namespaces/eventhubs`): a
+ * partitioned, append-only stream of events inside an Event Hubs namespace.
+ * Producers append events; each consumer group reads the stream at its own
+ * pace.
  *
- * Event hubs cannot be tagged, so Alchemy records ownership as a
- * `[alchemy <stack>/<stage>/<id>]` marker at the end of `userMetadata`.
+ * Alchemy creates the event hub with four partitions and one day of
+ * retention. Bind it to a runtime with `Send` to produce events (the binding
+ * assigns **Azure Event Hubs Data Sender** on this event hub only), and read
+ * it with `consumeEvents`. Event hubs have no tags, so Alchemy records
+ * ownership as a `[alchemy <stack>/<stage>/<id>]` marker at the end of
+ * `userMetadata`.
+ *
+ * :::caution[Changing `name`, `namespace`, `resourceGroup`, or `retention.cleanupPolicy` replaces the event hub]
+ * Alchemy creates a new event hub and deletes the old one with every
+ * retained event. Lowering `partitionCount`, or raising it on a `Basic` or
+ * `Standard` namespace, replaces it too: only `Premium` and dedicated
+ * namespaces add partitions in place.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-hubs/event-hubs-features
  *
  * ### Creating an Event Hub
- * **Example:** Event hub with four partitions
+ * **Example:** Event hub in a new namespace
  * ```typescript
- * const namespace = yield* Azure.EventHub.Namespace("events");
- * const orders = yield* Azure.EventHub.EventHub("orders", {
- *   namespace: namespace.namespaceName,
- *   partitionCount: 4,
- *   messageRetentionInDays: 1,
+ * const hubs = yield* Azure.EventHub.Namespace("hubs");
+ * const readings = yield* Azure.EventHub.EventHub("readings", {
+ *   namespace: hubs.namespaceName,
+ * });
+ * ```
+ *
+ * ### Partitions
+ * Partitions set how many consumers read in parallel. Events with the same
+ * partition key land in the same partition, in send order.
+ *
+ * **Example:** Two partitions
+ * ```typescript
+ * const readings = yield* Azure.EventHub.EventHub("readings", {
+ *   namespace: hubs.namespaceName,
+ *   partitionCount: 2,
  * });
  * ```
  *
  * ### Retention
- * **Example:** Keep events for three days
+ * **Example:** Keep events for seven days (Standard)
  * ```typescript
- * const orders = yield* Azure.EventHub.EventHub("orders", {
- *   namespace: namespace.namespaceName,
+ * const readings = yield* Azure.EventHub.EventHub("readings", {
+ *   namespace: hubs.namespaceName,
+ *   messageRetentionInDays: 7,
+ * });
+ * ```
+ *
+ * **Example:** Keep events for 72 hours
+ * ```typescript
+ * const readings = yield* Azure.EventHub.EventHub("readings", {
+ *   namespace: hubs.namespaceName,
  *   retention: { cleanupPolicy: "Delete", retentionTimeInHours: 72 },
  * });
  * ```
  *
- * ### Capture
- * **Example:** Archive events to Blob Storage
+ * **Example:** Keep the latest event per key (Premium)
  * ```typescript
- * const orders = yield* Azure.EventHub.EventHub("orders", {
- *   namespace: namespace.namespaceName,
+ * const hubs = yield* Azure.EventHub.Namespace("hubs", { sku: "Premium" });
+ * const devices = yield* Azure.EventHub.EventHub("device-state", {
+ *   namespace: hubs.namespaceName,
+ *   retention: { cleanupPolicy: "Compact", tombstoneRetentionTimeInHours: 24 },
+ * });
+ * ```
+ *
+ * ### Capture
+ * Capture writes every event to Blob Storage as Avro files, per time or
+ * size window (`Standard` and above, billed separately).
+ *
+ * **Example:** Archive events to a blob container every five minutes
+ * ```typescript
+ * const archive = yield* Azure.Storage.StorageAccount("archive");
+ * const raw = yield* Azure.Storage.BlobContainer("raw", {
+ *   storageAccount: archive.storageAccountName,
+ * });
+ * const readings = yield* Azure.EventHub.EventHub("readings", {
+ *   namespace: hubs.namespaceName,
  *   capture: {
  *     enabled: true,
  *     intervalInSeconds: 300,
+ *     skipEmptyArchives: true,
  *     destination: {
- *       storageAccountResourceId: account.storageAccountId,
- *       blobContainer: container.containerName,
+ *       storageAccountResourceId: archive.storageAccountId,
+ *       blobContainer: raw.containerName,
  *       archiveNameFormat:
  *         "{Namespace}/{EventHub}/{PartitionId}/{Year}/{Month}/{Day}/{Hour}/{Minute}/{Second}",
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Consumer Groups
+ * Give each reading application its own consumer group (`Standard` and
+ * above), so they keep separate positions in the stream.
+ *
+ * **Example:** A consumer group for analytics
+ * ```typescript
+ * const analytics = yield* Azure.EventHub.ConsumerGroup("analytics", {
+ *   namespace: hubs.namespaceName,
+ *   eventHub: readings.eventHubName,
+ *   name: "analytics",
+ * });
+ * ```
+ *
+ * ### Pausing an Event Hub
+ * **Example:** Stop accepting new events
+ * ```typescript
+ * const readings = yield* Azure.EventHub.EventHub("readings", {
+ *   namespace: hubs.namespaceName,
+ *   status: "SendDisabled",
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * `Send` assigns **Azure Event Hubs Data Sender** on this event hub only.
+ * It works on any host: a managed-identity host (an Azure Function, Web
+ * App, Container App, container group, or VM) gets the role on its
+ * identity; any other host (a Cloudflare Worker, an AWS Lambda) gets an
+ * Entra service principal. Event Hubs has no HTTP read API, so reading
+ * goes through an event source.
+ *
+ * **Example:** Send events from an Azure Function
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const hub = yield* Readings;
+ *     const readings = yield* Azure.EventHub.Send(hub);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* readings.send({ deviceId: "d1", temperature: 21 }, { partitionKey: "d1" });
+ *         return HttpServerResponse.text("sent", { status: 202 });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.EventHub.SendHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Send one event, a batch, or to one partition
+ * ```typescript
+ * // init
+ * const readings = yield* Azure.EventHub.Send(hub);
+ *
+ * // runtime
+ * yield* readings.send({ deviceId, temperature }, { partitionKey: deviceId });
+ * yield* readings.sendBatch(batch, { properties: { source: "gateway" } });
+ * yield* readings.sendToPartition("0", { kind: "rebalance" });
+ * yield* readings.sendAsPublisher(deviceId, { kind: "online" }); // Standard or higher
+ * ```
+ *
+ * ### Event Sources
+ * Run a handler for each batch of events. The host checkpoints after the
+ * handler returns, whether it succeeded or failed: Event Hubs does not
+ * deliver a failed batch again, so handle errors inside the handler.
+ *
+ * **Example:** Consume events in an Azure Function
+ * ```typescript
+ * export default class Worker extends Azure.Functions.Function<Worker>()(
+ *   "Worker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     yield* Azure.EventHub.consumeEvents(Readings, (batch) =>
+ *       Effect.log(`${batch.events.length} readings`),
+ *     );
+ *     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+ *   }).pipe(Effect.provide(Azure.Functions.EventHubEventSource)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Read with your own consumer group
+ * ```typescript
+ * // the `analytics` consumer group from "Consumer Groups" above
+ * yield* Azure.EventHub.consumeEvents(
+ *   Readings,
+ *   { consumerGroup: "analytics" },
+ *   (batch) => Effect.log(batch.sequenceNumbers),
+ * );
+ * ```
+ *
+ * ### Deleting an Event Hub
+ * Destroying the event hub deletes its retained events and consumer
+ * groups.
+ *
+ * **Example:** Keep the event hub when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const readings = yield* Azure.EventHub.EventHub("readings", {
+ *   namespace: hubs.namespaceName,
+ * }).pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

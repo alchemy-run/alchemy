@@ -74,9 +74,13 @@ export interface WebApplicationFirewallPolicyProps {
   /**
    * Managed rule sets (e.g. `Microsoft_DefaultRuleSet` 2.1,
    * `Microsoft_BotManagerRuleSet` 1.1) and exceptions. Premium only.
+   * @default no managed rule sets
    */
   managedRules?: WebApplicationFirewallManagedRules;
-  /** User tags. Alchemy's ownership tags are merged in automatically. */
+  /**
+   * User tags. Alchemy's ownership tags are merged in automatically.
+   * @default {}
+   */
   tags?: Record<string, string>;
 }
 
@@ -113,14 +117,40 @@ export interface WebApplicationFirewallPolicy extends Resource<
 > {}
 
 /**
- * An Azure Front Door Web Application Firewall (WAF) policy — custom
- * match/rate-limit rules and managed rule sets that protect Front Door
- * Standard/Premium endpoints. Attach it to an endpoint or custom domain with
- * `Azure.Cdn.SecurityPolicy`.
+ * An Azure Front Door Web Application Firewall (WAF) policy
+ * (`Microsoft.Network/frontDoorWebApplicationFirewallPolicies`): custom
+ * match and rate-limit rules plus managed rule sets that protect Front
+ * Door Standard/Premium endpoints at the edge. Attach it to an endpoint
+ * or custom domain with `Azure.Cdn.SecurityPolicy`.
+ *
+ * A new policy is enabled and in `Prevention` mode, so matching rules
+ * block requests. The policy is global (`location` is `Global`). Alchemy
+ * registers the `Microsoft.Network` resource provider for you, and every
+ * deploy compares the live rules and settings with your props and sends
+ * the whole policy when they differ.
+ *
+ * :::caution[Changing `name`, `sku`, or `resourceGroup` replaces the policy]
+ * Alchemy creates a new policy, updates the `Azure.Cdn.SecurityPolicy`
+ * that passes `waf.policyId` to use the new ID, and deletes the old
+ * policy. With a fixed `name` that stays the same, Alchemy deletes the old
+ * policy before it creates the new one.
+ * :::
+ *
+ * :::caution[`sku` must match the profile's tier]
+ * A `Standard_AzureFrontDoor` policy attaches only to a Standard profile,
+ * and a `Premium_AzureFrontDoor` policy only to a Premium profile. Managed
+ * rule sets, bot protection, JavaScript challenge, and CAPTCHA need
+ * Premium.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/web-application-firewall/afds/afds-overview
  *
  * ### Creating a Policy
+ * **Example:** Policy with no rules yet
+ * ```typescript
+ * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf");
+ * ```
+ *
  * **Example:** Detection-mode policy blocking an IP range
  * ```typescript
  * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
@@ -143,6 +173,79 @@ export interface WebApplicationFirewallPolicy extends Resource<
  * });
  * ```
  *
+ * ### Custom Match Rules
+ * Front Door evaluates custom rules in ascending `priority` order before
+ * the managed rules. All `matchConditions` of a rule must match. Set
+ * `negateCondition: true` to match when a condition does not.
+ *
+ * **Example:** Block requests from two countries
+ * ```typescript
+ * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
+ *   customRules: [
+ *     {
+ *       name: "GeoBlock",
+ *       priority: 100,
+ *       ruleType: "MatchRule",
+ *       action: "Block",
+ *       matchConditions: [
+ *         { matchVariable: "RemoteAddr", operator: "GeoMatch", matchValue: ["KP", "IR"] },
+ *       ],
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Allow the admin path only from the office network
+ * ```typescript
+ * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
+ *   customRules: [
+ *     {
+ *       name: "AdminOfficeOnly",
+ *       priority: 110,
+ *       ruleType: "MatchRule",
+ *       action: "Block",
+ *       matchConditions: [
+ *         { matchVariable: "RequestUri", operator: "BeginsWith", matchValue: ["/admin"] },
+ *         {
+ *           matchVariable: "RemoteAddr",
+ *           operator: "IPMatch",
+ *           negateCondition: true,
+ *           matchValue: ["203.0.113.0/24"],
+ *         },
+ *       ],
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Block a user agent, case-insensitively
+ * ```typescript
+ * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
+ *   customRules: [
+ *     {
+ *       name: "BlockBadBot",
+ *       priority: 120,
+ *       ruleType: "MatchRule",
+ *       action: "Block",
+ *       matchConditions: [
+ *         {
+ *           matchVariable: "RequestHeader",
+ *           selector: "User-Agent",
+ *           operator: "Contains",
+ *           transforms: ["Lowercase"],
+ *           matchValue: ["badbot"],
+ *         },
+ *       ],
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Rate Limiting
+ * A `RateLimitRule` counts matching requests per `groupBy` key in a window
+ * of `rateLimitDurationInMinutes` (1 or 5) and applies `action` once a
+ * client passes `rateLimitThreshold`.
+ *
  * **Example:** Rate limit requests per client IP
  * ```typescript
  * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
@@ -164,6 +267,10 @@ export interface WebApplicationFirewallPolicy extends Resource<
  * ```
  *
  * ### Managed Rule Sets
+ * On a Premium policy, add Microsoft's managed rule sets: the Default Rule
+ * Set blocks common attacks such as SQL injection and cross-site
+ * scripting, and the Bot Manager rule set acts on known bots.
+ *
  * **Example:** Premium policy with the default rule set
  * ```typescript
  * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
@@ -180,15 +287,171 @@ export interface WebApplicationFirewallPolicy extends Resource<
  * });
  * ```
  *
+ * **Example:** Default rule set plus bot protection
+ * ```typescript
+ * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
+ *   sku: "Premium_AzureFrontDoor",
+ *   managedRules: {
+ *     managedRuleSets: [
+ *       { ruleSetType: "Microsoft_DefaultRuleSet", ruleSetVersion: "2.1", ruleSetAction: "Block" },
+ *       { ruleSetType: "Microsoft_BotManagerRuleSet", ruleSetVersion: "1.1" },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
+ * ### Tuning Managed Rules
+ * Turn off a single rule that blocks legitimate traffic, or exclude a
+ * request field from inspection, instead of turning off the rule set.
+ *
+ * **Example:** Disable one rule and exclude a cookie
+ * ```typescript
+ * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
+ *   sku: "Premium_AzureFrontDoor",
+ *   managedRules: {
+ *     managedRuleSets: [
+ *       {
+ *         ruleSetType: "Microsoft_DefaultRuleSet",
+ *         ruleSetVersion: "2.1",
+ *         ruleSetAction: "Block",
+ *         exclusions: [
+ *           { matchVariable: "RequestCookieNames", selectorMatchOperator: "Equals", selector: "session" },
+ *         ],
+ *         ruleGroupOverrides: [
+ *           {
+ *             ruleGroupName: "SQLI",
+ *             rules: [{ ruleId: "942440", enabledState: "Disabled" }],
+ *           },
+ *         ],
+ *       },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
+ * ### Detection Mode
+ * In `Detection` mode the policy logs matches and blocks nothing. Start a
+ * new rule set there, check the logs, then switch to `Prevention`.
+ *
+ * **Example:** Switch a tuned policy to blocking
+ * ```diff
+ *  const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
+ * -  policySettings: { mode: "Detection" },
+ * +  policySettings: { mode: "Prevention" },
+ *  });
+ * ```
+ *
+ * ### Block Responses and Redirects
+ * Set the status code and body that blocked clients get, or send them to
+ * a page with a `Redirect` action. `customBlockResponseBody` is base64.
+ *
+ * **Example:** Custom 403 body
+ * ```typescript
+ * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
+ *   policySettings: {
+ *     mode: "Prevention",
+ *     customBlockResponseStatusCode: 403,
+ *     customBlockResponseBody: "QmxvY2tlZA==", // "Blocked"
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Redirect blocked countries to a notice page
+ * ```typescript
+ * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
+ *   policySettings: { redirectUrl: "https://www.contoso.com/unavailable" },
+ *   customRules: [
+ *     {
+ *       name: "GeoRedirect",
+ *       priority: 100,
+ *       ruleType: "MatchRule",
+ *       action: "Redirect",
+ *       matchConditions: [
+ *         { matchVariable: "RemoteAddr", operator: "GeoMatch", matchValue: ["KP"] },
+ *       ],
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * ### JavaScript Challenge and CAPTCHA
+ * On a Premium policy, a rule can challenge a client instead of blocking
+ * it. The challenge cookie lives 5-1440 minutes (30 by default).
+ *
+ * **Example:** Challenge sign-in traffic
+ * ```typescript
+ * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
+ *   sku: "Premium_AzureFrontDoor",
+ *   policySettings: { javascriptChallengeExpirationInMinutes: 60 },
+ *   customRules: [
+ *     {
+ *       name: "ChallengeLogin",
+ *       priority: 100,
+ *       ruleType: "MatchRule",
+ *       action: "JSChallenge",
+ *       matchConditions: [
+ *         { matchVariable: "RequestUri", operator: "BeginsWith", matchValue: ["/login"] },
+ *       ],
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Log Scrubbing
+ * Remove sensitive fields from the WAF logs.
+ *
+ * **Example:** Scrub client IPs and the authorization header
+ * ```typescript
+ * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
+ *   policySettings: {
+ *     logScrubbing: {
+ *       state: "Enabled",
+ *       scrubbingRules: [
+ *         { matchVariable: "RequestIPAddress", selectorMatchOperator: "EqualsAny" },
+ *         {
+ *           matchVariable: "RequestHeaderNames",
+ *           selectorMatchOperator: "Equals",
+ *           selector: "Authorization",
+ *         },
+ *       ],
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * ### Attaching to Front Door
+ * `Azure.Cdn.SecurityPolicy` applies the policy to endpoints and custom
+ * domains of one profile. The policy's `sku` must match the profile's.
+ *
  * **Example:** Protect an endpoint
  * ```typescript
+ * const profile = yield* Azure.Cdn.Profile("cdn");
+ * const endpoint = yield* Azure.Cdn.AfdEndpoint("web", {
+ *   profile: profile.profileName,
+ * });
  * yield* Azure.Cdn.SecurityPolicy("waf", {
  *   profile: profile.profileName,
  *   wafPolicyId: waf.policyId,
  *   associations: [
  *     { domainIds: [endpoint.endpointId], patternsToMatch: ["/*"] },
  *   ],
+ * });
+ * ```
+ *
+ * **Example:** Premium profile and policy on a custom domain
+ * ```typescript
+ * const profile = yield* Azure.Cdn.Profile("cdn", { sku: "Premium_AzureFrontDoor" });
+ * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf", {
+ *   sku: "Premium_AzureFrontDoor",
+ * });
+ * const domain = yield* Azure.Cdn.AfdCustomDomain("www", {
+ *   profile: profile.profileName,
+ *   hostName: "www.contoso.com",
+ * });
+ * yield* Azure.Cdn.SecurityPolicy("waf", {
+ *   profile: profile.profileName,
+ *   wafPolicyId: waf.policyId,
+ *   associations: [{ domainIds: [domain.customDomainId] }],
  * });
  * ```
  *

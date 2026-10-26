@@ -46,6 +46,7 @@ export interface SendStorageQueueClient {
  *
  * // runtime
  * yield* jobs.send(JSON.stringify({ jobId }));
+ * // …provided with Effect.provide(Azure.Storage.QueueSendHttp)
  * ```
  *
  * @binding

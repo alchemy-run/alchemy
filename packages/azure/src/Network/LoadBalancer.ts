@@ -49,26 +49,37 @@ export interface LoadBalancerFrontendIpConfiguration {
    * @default "IPv4"
    */
   privateIpAddressVersion?: "IPv4" | "IPv6";
-  /** Availability zones of an internal frontend, e.g. `["1", "2", "3"]`. */
+  /**
+   * Availability zones of an internal frontend, e.g. `["1", "2", "3"]`
+   * (zone-redundant) or `["1"]` (zonal). A public frontend takes the zones
+   * of its public IP.
+   * @default Azure's default for the region
+   */
   zones?: string[];
 }
 
 export interface LoadBalancerBackendAddressPoolSpec {
-  /** Name of the pool; rules reference it by this name. */
+  /**
+   * Name of the pool; rules reference it by this name, and the
+   * `backendAddressPoolIds` attribute is keyed by it.
+   */
   name: string;
 }
 
 export interface LoadBalancerProbe {
   /** Name of the probe; rules reference it by this name. */
   name: string;
-  /** Probe protocol. */
+  /**
+   * Probe protocol. `Tcp` passes when the port accepts a connection;
+   * `Http` and `Https` pass on a 200 response.
+   */
   protocol: "Tcp" | "Http" | "Https";
-  /** Port probed on each backend. */
+  /** Port probed on each backend (1-65535). */
   port: number;
-  /** URI probed for `Http` / `Https` probes, e.g. `/healthz`. */
+  /** URI probed for `Http` / `Https` probes, e.g. `/healthz`. Required for them. */
   requestPath?: string;
   /**
-   * Seconds between probes.
+   * Seconds between probes (5 or more).
    * @default 5
    */
   intervalInSeconds?: number;
@@ -87,14 +98,17 @@ export interface LoadBalancingRule {
   frontendIpConfiguration: string;
   /** Name of the backend address pool traffic is sent to. */
   backendAddressPool?: string;
-  /** Name of the health probe. */
+  /**
+   * Name of the health probe. Backends that fail it get no new flows.
+   * @default no probe
+   */
   probe?: string;
   /** Transport protocol (`All` for HA ports on internal load balancers). */
   protocol: "Tcp" | "Udp" | "All";
-  /** Frontend port (0 with `All`). */
+  /** Frontend port (0-65534; 0 with `All`). */
   frontendPort: number;
   /**
-   * Backend port.
+   * Backend port (0-65535; 0 with `All`).
    * @default the frontend port
    */
   backendPort?: number;
@@ -135,7 +149,11 @@ export interface LoadBalancerOutboundRule {
   backendAddressPool: string;
   /** Transport protocol. */
   protocol: "Tcp" | "Udp" | "All";
-  /** SNAT ports allocated per backend instance. */
+  /**
+   * SNAT ports allocated per backend instance, a multiple of 8. Each
+   * frontend IP provides 64,000 ports to share across the pool.
+   * @default 0 (Azure allocates ports by backend pool size)
+   */
   allocatedOutboundPorts?: number;
   /**
    * Send TCP resets on idle timeout.
@@ -153,6 +171,7 @@ export interface LoadBalancerProps {
   /**
    * Resource group the load balancer is created in. Changing it replaces
    * the load balancer.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -168,8 +187,9 @@ export interface LoadBalancerProps {
    */
   location?: string;
   /**
-   * SKU. Basic load balancers were retired in 2025. Changing it replaces
-   * the load balancer.
+   * SKU: `Standard`, or `Gateway` to chain network virtual appliances.
+   * Basic load balancers were retired in 2025. Changing it replaces the
+   * load balancer.
    * @default "Standard"
    */
   sku?: "Standard" | "Gateway";
@@ -179,23 +199,38 @@ export interface LoadBalancerProps {
    * @default "Regional"
    */
   tier?: "Regional" | "Global";
-  /** Frontend IP configurations (public or internal). */
+  /**
+   * Frontend IP configurations (public or internal). Updated in place.
+   */
   frontendIpConfigurations: LoadBalancerFrontendIpConfiguration[];
   /**
    * Backend address pools. Network interfaces join a pool through
    * `NetworkInterface.ipConfigurations[].loadBalancerBackendAddressPoolIds`
-   * using the IDs in the `backendAddressPoolIds` attribute.
+   * using the IDs in the `backendAddressPoolIds` attribute. Pools created
+   * with `Azure.Network.LoadBalancerBackendAddressPool` are kept. Updated
+   * in place.
+   * @default []
    */
   backendAddressPools?: LoadBalancerBackendAddressPoolSpec[];
-  /** Health probes. */
+  /**
+   * Health probes. Updated in place.
+   * @default []
+   */
   probes?: LoadBalancerProbe[];
-  /** Load-balancing rules. */
+  /**
+   * Load-balancing rules. Updated in place.
+   * @default []
+   */
   loadBalancingRules?: LoadBalancingRule[];
-  /** Outbound (SNAT) rules. */
+  /**
+   * Outbound (SNAT) rules. Updated in place.
+   * @default []
+   */
   outboundRules?: LoadBalancerOutboundRule[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -210,17 +245,23 @@ export interface LoadBalancer extends Resource<
     loadBalancerId: string;
     /** Resource group that holds the load balancer. */
     resourceGroup: string;
-    /** Location of the load balancer. */
+    /** Azure location of the load balancer, e.g. `eastus`. */
     location: string;
-    /** SKU name. */
+    /** SKU name: `Standard` or `Gateway`. */
     sku: string;
-    /** SKU tier. */
+    /** SKU tier: `Regional` or `Global`. */
     tier: string;
     /** Frontend IP configuration IDs keyed by name. */
     frontendIpConfigurationIds: Record<string, string>;
-    /** Private IPs of internal frontends keyed by frontend name. */
+    /**
+     * Private IPs of internal frontends keyed by frontend name, e.g.
+     * `{ private: "10.0.1.100" }`.
+     */
     frontendPrivateIpAddresses: Record<string, string>;
-    /** Backend address pool IDs keyed by name. */
+    /**
+     * Backend address pool IDs keyed by name; pass one in a NIC's
+     * `loadBalancerBackendAddressPoolIds`.
+     */
     backendAddressPoolIds: Record<string, string>;
     /** Probe IDs keyed by name. */
     probeIds: Record<string, string>;
@@ -232,17 +273,35 @@ export interface LoadBalancer extends Resource<
 > {}
 
 /**
- * An Azure Load Balancer (Standard SKU) — layer-4 TCP/UDP load balancing
- * for VMs and scale sets, public (internet-facing, through a public IP) or
- * internal (private IP in a subnet).
+ * An Azure Load Balancer (`Microsoft.Network/loadBalancers`, Standard
+ * SKU): layer-4 TCP/UDP load balancing for VMs and scale sets, public
+ * (internet-facing, through a public IP) or internal (private IP in a
+ * subnet). Azure's counterpart to an AWS Network Load Balancer.
  *
  * Frontends, backend pools, probes, load-balancing rules, and outbound
  * rules are declared inline and cross-reference each other by name.
- * Inbound NAT rules created outside this resource are preserved.
+ * Alchemy keeps inbound NAT rules (`Azure.Network.InboundNatRule`) and
+ * pools (`Azure.Network.LoadBalancerBackendAddressPool`) created outside
+ * this resource. A Standard load balancer is closed to inbound traffic:
+ * the backends' NSGs must allow it.
+ *
+ * :::caution[Changing `name`, `location`, `resourceGroup`, `sku`, or `tier` replaces the load balancer]
+ * Alchemy creates a new load balancer and deletes the old one. The pool,
+ * frontend, and probe IDs change, so every NIC in a pool is updated, and
+ * traffic stops until the backends join the new pools.
+ * :::
+ *
+ * :::caution[Frontends, NICs, and the load balancer must share one region]
+ * A public frontend needs a Standard public IP in the same region. An
+ * internal frontend needs a subnet of a virtual network in that region.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/load-balancer/load-balancer-overview
  *
- * ### Public Load Balancer
+ * ### Creating a Public Load Balancer
+ * A public load balancer receives internet traffic on a Standard public
+ * IP and spreads it across the backend pool.
+ *
  * **Example:** HTTP load balancer with a health probe
  * ```typescript
  * const ip = yield* Azure.Network.PublicIpAddress("lb");
@@ -266,7 +325,46 @@ export interface LoadBalancer extends Resource<
  * });
  * ```
  *
+ * **Example:** Load balancer with a fixed name and region
+ * ```typescript
+ * const ip = yield* Azure.Network.PublicIpAddress("lb", { location: "westeurope" });
+ * const lb = yield* Azure.Network.LoadBalancer("web", {
+ *   name: "lb-web-prod",
+ *   location: "westeurope",
+ *   frontendIpConfigurations: [
+ *     { name: "public", publicIpAddressId: ip.publicIpAddressId },
+ *   ],
+ *   tags: { env: "prod" },
+ * });
+ * ```
+ *
  * ### Internal Load Balancer
+ * An internal frontend takes a private IP in a subnet. Use it for
+ * private tiers and for network virtual appliances.
+ *
+ * **Example:** Zone-redundant internal frontend on a dynamic IP
+ * ```typescript
+ * const lb = yield* Azure.Network.LoadBalancer("api", {
+ *   frontendIpConfigurations: [
+ *     { name: "private", subnetId: subnet.subnetId, zones: ["1", "2", "3"] },
+ *   ],
+ *   backendAddressPools: [{ name: "api" }],
+ *   probes: [{ name: "tcp", protocol: "Tcp", port: 8080 }],
+ *   loadBalancingRules: [
+ *     {
+ *       name: "api",
+ *       frontendIpConfiguration: "private",
+ *       backendAddressPool: "api",
+ *       probe: "tcp",
+ *       protocol: "Tcp",
+ *       frontendPort: 80,
+ *       backendPort: 8080,
+ *     },
+ *   ],
+ * });
+ * // lb.frontendPrivateIpAddresses.private is the allocated address
+ * ```
+ *
  * **Example:** HA-ports internal load balancer
  * ```typescript
  * const lb = yield* Azure.Network.LoadBalancer("internal", {
@@ -289,7 +387,111 @@ export interface LoadBalancer extends Resource<
  * });
  * ```
  *
+ * ### Health Probes
+ * A backend that fails its probe `probeThreshold` times in a row gets no
+ * new flows until it passes again. `Http` and `Https` probes need a 200
+ * response from `requestPath`.
+ *
+ * **Example:** HTTPS health check every 10 seconds
+ * ```typescript
+ * const lb = yield* Azure.Network.LoadBalancer("web", {
+ *   frontendIpConfigurations: [
+ *     { name: "public", publicIpAddressId: ip.publicIpAddressId },
+ *   ],
+ *   backendAddressPools: [{ name: "web" }],
+ *   probes: [
+ *     {
+ *       name: "healthz",
+ *       protocol: "Https",
+ *       port: 443,
+ *       requestPath: "/healthz",
+ *       intervalInSeconds: 10,
+ *       probeThreshold: 3,
+ *     },
+ *   ],
+ *   loadBalancingRules: [
+ *     {
+ *       name: "https",
+ *       frontendIpConfiguration: "public",
+ *       backendAddressPool: "web",
+ *       probe: "healthz",
+ *       protocol: "Tcp",
+ *       frontendPort: 443,
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Load-Balancing Rules
+ * A rule maps a frontend port to a backend port. `loadDistribution`
+ * pins a client to one backend, and `enableTcpReset` tells both ends when
+ * an idle flow times out.
+ *
+ * **Example:** Sticky sessions with a 15-minute idle timeout
+ * ```typescript
+ * const lb = yield* Azure.Network.LoadBalancer("app", {
+ *   frontendIpConfigurations: [
+ *     { name: "public", publicIpAddressId: ip.publicIpAddressId },
+ *   ],
+ *   backendAddressPools: [{ name: "app" }],
+ *   probes: [{ name: "tcp", protocol: "Tcp", port: 8080 }],
+ *   loadBalancingRules: [
+ *     {
+ *       name: "app",
+ *       frontendIpConfiguration: "public",
+ *       backendAddressPool: "app",
+ *       probe: "tcp",
+ *       protocol: "Tcp",
+ *       frontendPort: 80,
+ *       backendPort: 8080,
+ *       loadDistribution: "SourceIP",
+ *       idleTimeoutInMinutes: 15,
+ *       enableTcpReset: true,
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Outbound Rules
+ * An outbound rule gives the backends explicit SNAT through the frontend
+ * IPs, with a fixed number of ports per instance. Set
+ * `disableOutboundSnat: true` on the load-balancing rules so only the
+ * outbound rule is used. For outbound only, prefer an
+ * `Azure.Network.NatGateway` on the subnet.
+ *
+ * **Example:** 1,024 SNAT ports per backend
+ * ```typescript
+ * const lb = yield* Azure.Network.LoadBalancer("web", {
+ *   frontendIpConfigurations: [
+ *     { name: "public", publicIpAddressId: ip.publicIpAddressId },
+ *   ],
+ *   backendAddressPools: [{ name: "web" }],
+ *   loadBalancingRules: [
+ *     {
+ *       name: "http",
+ *       frontendIpConfiguration: "public",
+ *       backendAddressPool: "web",
+ *       protocol: "Tcp",
+ *       frontendPort: 80,
+ *       disableOutboundSnat: true,
+ *     },
+ *   ],
+ *   outboundRules: [
+ *     {
+ *       name: "egress",
+ *       frontendIpConfigurations: ["public"],
+ *       backendAddressPool: "web",
+ *       protocol: "All",
+ *       allocatedOutboundPorts: 1024,
+ *     },
+ *   ],
+ * });
+ * ```
+ *
  * ### Joining the Backend Pool
+ * A NIC joins a pool by ID from `lb.backendAddressPoolIds`, keyed by pool
+ * name.
+ *
  * **Example:** Network interface in the backend pool
  * ```typescript
  * const nic = yield* Azure.Network.NetworkInterface("web-1", {
@@ -297,6 +499,59 @@ export interface LoadBalancer extends Resource<
  *     {
  *       subnetId: subnet.subnetId,
  *       loadBalancerBackendAddressPoolIds: [lb.backendAddressPoolIds.web],
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Two load-balanced VMs
+ * ```typescript
+ * for (const n of [1, 2]) {
+ *   const nic = yield* Azure.Network.NetworkInterface(`web-${n}`, {
+ *     ipConfigurations: [
+ *       {
+ *         subnetId: subnet.subnetId,
+ *         loadBalancerBackendAddressPoolIds: [lb.backendAddressPoolIds.web],
+ *       },
+ *     ],
+ *   });
+ *   yield* Azure.Compute.VirtualMachine(`web-${n}`, {
+ *     vmSize: "Standard_B1s",
+ *     networkInterfaceIds: [nic.networkInterfaceId],
+ *     adminUsername: "azureuser",
+ *     sshPublicKeys: ["ssh-ed25519 AAAAC3Nza... me@example.com"],
+ *   });
+ * }
+ * ```
+ *
+ * **Example:** IP-based backend pool
+ * ```typescript
+ * yield* Azure.Network.LoadBalancerBackendAddressPool("web-ips", {
+ *   loadBalancer: lb.loadBalancerName,
+ *   virtualNetworkId: vnet.virtualNetworkId,
+ *   addresses: [{ name: "web1", ipAddress: "10.0.1.4" }],
+ * });
+ * ```
+ *
+ * ### Inbound NAT Rules
+ * An inbound NAT rule forwards one frontend port to one VM, e.g. for SSH.
+ * Declare it with `Azure.Network.InboundNatRule` and attach it to the
+ * NIC.
+ *
+ * **Example:** SSH to one VM on port 50022
+ * ```typescript
+ * const ssh = yield* Azure.Network.InboundNatRule("web-1-ssh", {
+ *   loadBalancer: lb.loadBalancerName,
+ *   frontendIpConfiguration: "public",
+ *   protocol: "Tcp",
+ *   frontendPort: 50022,
+ *   backendPort: 22,
+ * });
+ * const nic = yield* Azure.Network.NetworkInterface("web-1", {
+ *   ipConfigurations: [
+ *     {
+ *       subnetId: subnet.subnetId,
+ *       loadBalancerInboundNatRuleIds: [ssh.inboundNatRuleId],
  *     },
  *   ],
  * });

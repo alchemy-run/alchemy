@@ -20,36 +20,60 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLogAnalyticsName, sameText } from "./Common.ts";
 
 export interface SavedSearchProps {
-  /** Resource group of the workspace. Changing it replaces the search. */
+  /**
+   * Resource group of the workspace.
+   *
+   * :::caution
+   * Changing it replaces the search.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Workspace that holds the search. Changing it replaces the search. */
+  /**
+   * Name of the workspace that holds the search, e.g. `logs.workspaceName`.
+   *
+   * :::caution
+   * Changing it replaces the search.
+   * :::
+   */
   workspace: string;
   /**
-   * ID (name) of the saved search. If omitted, a unique name is generated
-   * from the app, stage, and logical ID. Changing it replaces the search.
+   * ID (name) of the saved search: letters, digits, hyphens, and
+   * underscores, unique in the workspace.
+   *
+   * :::caution
+   * Changing it replaces the search.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Category the search is listed under in the portal. */
+  /** Category the search is listed under in the portal, e.g. `App`. */
   category: string;
-  /** Display name of the search. */
+  /** Display name of the search, e.g. `Recent errors`. */
   displayName: string;
-  /** KQL query text. */
+  /** KQL query text, e.g. `AppEvents_CL | take 100`. */
   query: string;
   /**
-   * Function alias. When set, the search is a workspace function that
-   * queries can call by this name.
+   * Function alias. When set, the search is a workspace function that other
+   * queries call by this name, e.g. `EventsByLevel`.
+   * @default not a function
    */
   functionAlias?: string;
   /**
-   * Function parameters, e.g. `"minLevel:int = 3, source:string"`. Only
-   * with `functionAlias`.
+   * Function parameters as `name:type` pairs with optional defaults, e.g.
+   * `"minLevel:int = 3, source:string"`. Use it only with `functionAlias`.
+   * @default no parameters
    */
   functionParameters?: string;
-  /** Version of the query language. @default 2 */
+  /**
+   * Version of the query language.
+   * @default 2
+   */
   version?: number;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -60,13 +84,13 @@ export interface SavedSearch extends Resource<
   {
     /** Name (ID) of the saved search. */
     savedSearchName: string;
-    /** Workspace that holds the search. */
+    /** Name of the workspace that holds the search. */
     workspace: string;
     /** Resource group of the workspace. */
     resourceGroup: string;
     /** ARM resource ID of the saved search. */
     savedSearchId: string;
-    /** Function alias, when the search is a function. */
+    /** Function alias; `undefined` when the search is not a function. */
     functionAlias: string | undefined;
     /** ETag of the saved search. */
     etag: string | undefined;
@@ -78,14 +102,27 @@ export interface SavedSearch extends Resource<
 > {}
 
 /**
- * A saved search in a Log Analytics workspace: a named KQL query, or — with
- * `functionAlias` — a workspace function other queries can call.
+ * A saved search in a Log Analytics workspace
+ * (`Microsoft.OperationalInsights/workspaces/savedSearches`): a named KQL
+ * query, or, with `functionAlias`, a workspace function that other queries
+ * call by name.
+ *
+ * :::caution[Changing `name`, `workspace`, or `resourceGroup` replaces the search]
+ * Alchemy creates the new search and deletes the old one. Change the query,
+ * category, display name, function settings, or tags to update it in
+ * place.
+ * :::
+ *
+ * :::caution[The workspace must exist first]
+ * Declare the `Azure.LogAnalytics.Workspace` and pass its `workspaceName`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-monitor/logs/functions
  *
  * ### Saving a Query
  * **Example:** Saved search
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * const errors = yield* Azure.LogAnalytics.SavedSearch("errors", {
  *   workspace: logs.workspaceName,
  *   category: "App",
@@ -97,6 +134,7 @@ export interface SavedSearch extends Resource<
  * ### Workspace Functions
  * **Example:** Function with parameters
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * const byLevel = yield* Azure.LogAnalytics.SavedSearch("by-level", {
  *   workspace: logs.workspaceName,
  *   category: "App",

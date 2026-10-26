@@ -32,6 +32,7 @@ export interface RecoverDeletedSecretRequest extends Omit<
  *
  * // runtime
  * const restored = yield* recover();
+ * // …provided with Effect.provide(Azure.KeyVault.RecoverDeletedSecretHttp)
  * ```
  *
  * @binding

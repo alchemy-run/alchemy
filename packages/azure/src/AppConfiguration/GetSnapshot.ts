@@ -27,6 +27,7 @@ export interface GetSnapshotRequest extends Omit<appconfig.GetSnapshotRequest, "
  *
  * // runtime
  * const snapshot = yield* getSnapshot({ name: "release-1" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.GetSnapshotHttp)
  * ```
  *
  * @binding

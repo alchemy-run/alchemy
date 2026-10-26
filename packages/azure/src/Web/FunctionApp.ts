@@ -419,17 +419,43 @@ const transformFunctionAppProps = (_id: string, props: FunctionAppProps) =>
  * ) {}
  * ```
  *
- * ### Bindings
+ * ### Networking
+ * `virtualNetworkSubnetId` routes outbound traffic through a subnet
+ * delegated to `Microsoft.Web/serverFarms` (Flex Consumption apps delegate
+ * to `Microsoft.App/environments`). Elastic Premium, dedicated, and Flex
+ * Consumption plans support it; Consumption (`Y1`) does not.
+ *
+ * **Example:** Elastic Premium app in a virtual network
+ * ```typescript
+ * const subnet = yield* Azure.Network.Subnet("Functions", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.2.0/24",
+ *   delegations: [{ serviceName: "Microsoft.Web/serverFarms" }],
+ * });
+ * const plan = yield* Azure.Web.AppServicePlan("Plan", { sku: "EP1" });
+ * const app = yield* Azure.Web.FunctionApp("Api", {
+ *   main: "./src/api.ts",
+ *   serverFarmId: plan.appServicePlanId,
+ *   hostStorageAccountId: account.storageAccountId,
+ *   virtualNetworkSubnetId: subnet.subnetId,
+ * });
+ * ```
+ *
+ * ### Storage Bindings
  * Bindings grant the app's managed identity the smallest data role on the
- * bound resource and hand the program a typed client. The app runs as its
- * system-assigned identity, so no secret is stored.
+ * bound resource only, and hand the program a typed client. The app runs
+ * as its system-assigned identity, so no secret is stored.
+ * `BlobContainerReadWrite` grants **Storage Blob Data Contributor** on the
+ * container.
  *
  * **Example:** Read and write blobs
  * ```typescript
  * Effect.gen(function* () {
+ *   // init
  *   const files = yield* Azure.Storage.BlobContainerReadWrite(uploads);
  *   return {
  *     fetch: Effect.gen(function* () {
+ *       // runtime
  *       yield* files.put("hello.txt", "hi");
  *       const blob = yield* files.get("hello.txt");
  *       return HttpServerResponse.text(blob?.text() ?? "missing");
@@ -438,11 +464,68 @@ const transformFunctionAppProps = (_id: string, props: FunctionAppProps) =>
  * }).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp))
  * ```
  *
+ * **Example:** Send to a Storage queue
+ * ```typescript
+ * // init: Storage Queue Data Message Sender on the queue
+ * const jobs = yield* Azure.Storage.QueueSend(queue);
+ *
+ * // runtime
+ * yield* jobs.send(JSON.stringify({ id: 1 }));
+ * // …provided with Effect.provide(Azure.Storage.QueueSendHttp)
+ * ```
+ *
+ * ### Key Vault Bindings
+ * `SecretRead` grants **Key Vault Secrets User** on the one secret.
+ *
  * **Example:** Read a Key Vault secret
  * ```typescript
+ * // init
  * const apiKey = yield* Azure.KeyVault.SecretRead(apiKeySecret);
+ *
  * // runtime: the latest version, as a Redacted<string>
  * const value = yield* apiKey.get();
+ * // …provided with Effect.provide(Azure.KeyVault.SecretReadHttp)
+ * ```
+ *
+ * ### Service Bus Bindings
+ * `QueueSend` grants **Azure Service Bus Data Sender** on the queue.
+ *
+ * **Example:** Send a message
+ * ```typescript
+ * // init
+ * const orders = yield* Azure.ServiceBus.QueueSend(queue);
+ *
+ * // runtime
+ * yield* orders.send({ id: 1 }, { messageId: "order-1" });
+ * // …provided with Effect.provide(Azure.ServiceBus.QueueSendHttp)
+ * ```
+ *
+ * ### Event Hubs Bindings
+ * `Send` grants **Azure Event Hubs Data Sender** on the event hub.
+ *
+ * **Example:** Send an event
+ * ```typescript
+ * // init
+ * const readings = yield* Azure.EventHub.Send(hub);
+ *
+ * // runtime
+ * yield* readings.send({ deviceId: "d1", temperature: 21 }, { partitionKey: "d1" });
+ * // …provided with Effect.provide(Azure.EventHub.SendHttp)
+ * ```
+ *
+ * ### Cosmos DB Bindings
+ * `SqlContainerReadWrite` assigns a Cosmos DB data-plane role scoped to the
+ * one container.
+ *
+ * **Example:** Read and upsert a document
+ * ```typescript
+ * // init
+ * const carts = yield* Azure.CosmosDB.SqlContainerReadWrite(cartsContainer);
+ *
+ * // runtime
+ * const { document } = yield* carts.get({ documentId: "c-1", partitionKey: ["u-1"] });
+ * yield* carts.upsert({ document: { id: "c-2", user: "u-1" }, partitionKey: ["u-1"] });
+ * // …provided with Effect.provide(Azure.CosmosDB.SqlContainerReadWriteHttp)
  * ```
  *
  * ### Timers
@@ -485,6 +568,24 @@ const transformFunctionAppProps = (_id: string, props: FunctionAppProps) =>
  * );
  * // …provided with Azure.Functions.ServiceBusQueueEventSource and
  * // Azure.Functions.EventHubEventSource
+ * ```
+ *
+ * **Example:** Subscribe to Event Grid events
+ * ```typescript
+ * yield* Azure.EventGrid.consumeEvents(
+ *   "AccountEvents",
+ *   { scope: account.storageAccountId, includedEventTypes: ["Microsoft.Storage.BlobDeleted"] },
+ *   (event) => Effect.log(event.subject),
+ * );
+ * // …provided with Effect.provide(Azure.Functions.EventGridEventSource)
+ * ```
+ *
+ * **Example:** Consume a Cosmos DB change feed
+ * ```typescript
+ * yield* Azure.CosmosDB.consumeChangeFeed(orders, { leases }, (documents) =>
+ *   Effect.log(`${documents.length} changed`),
+ * );
+ * // …provided with Effect.provide(Azure.Functions.CosmosDBChangeFeedEventSource)
  * ```
  *
  * @resource

@@ -19,44 +19,89 @@ export type SearchIndexSemanticSearch = searchData.SemanticSearch;
 export type SearchIndexVectorSearch = searchData.VectorSearch;
 
 export interface SearchIndexProps {
-  /** Resource group of the search service. Changing it replaces the index. */
+  /**
+   * Resource group of the search service.
+   *
+   * :::caution
+   * Changing it replaces the index and deletes its documents.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
-   * Name of the search service that holds the index. The service must accept
-   * Microsoft Entra ID tokens (`authMode: "aadOrApiKey"`, or
-   * `disableLocalAuth: true`). Changing it replaces the index.
+   * Name of the `Azure.Search.SearchService` that holds the index. The
+   * service must accept Microsoft Entra ID tokens (`authMode: "aadOrApiKey"`,
+   * or `disableLocalAuth: true`).
+   *
+   * :::caution
+   * Changing it replaces the index and deletes its documents.
+   * :::
    */
   searchService: string;
   /**
    * Index name: lowercase letters, digits, and dashes, at most 128
-   * characters. If omitted, a unique name is generated from the app, stage,
-   * and logical ID. Changing it replaces the index.
+   * characters.
+   *
+   * :::caution
+   * Changing it replaces the index and deletes its documents.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Description of the index. */
+  /**
+   * Description of the index.
+   * @default none
+   */
   description?: string;
   /**
    * Fields of the index. Exactly one top-level `Edm.String` field must have
-   * `key: true`. New fields are added in place; removing a field or
-   * changing anything on an existing field other than `retrievable`,
-   * `searchAnalyzer`, or `synonymMaps` replaces the index (its documents
-   * are lost).
+   * `key: true`. New fields are added in place.
+   *
+   * :::caution
+   * Removing a field, or changing anything on an existing field other than
+   * `retrievable`, `searchAnalyzer`, or `synonymMaps`, replaces the index and
+   * deletes its documents.
+   * :::
    */
   fields: SearchIndexField[];
   /**
-   * Suggesters for `suggest` and `autocomplete` queries. Removing or
-   * changing an existing suggester replaces the index.
+   * Suggesters for `suggest` and `autocomplete` queries. Adding one
+   * happens in place.
+   *
+   * :::caution
+   * Removing or changing an existing suggester replaces the index and
+   * deletes its documents.
+   * :::
+   * @default []
    */
   suggesters?: SearchIndexSuggester[];
-  /** Scoring profiles. */
+  /**
+   * Scoring profiles that boost results by field values, freshness, or
+   * distance. Changes happen in place.
+   * @default []
+   */
   scoringProfiles?: SearchIndexScoringProfile[];
-  /** Scoring profile used when a query names none. */
+  /**
+   * Scoring profile used when a query names none.
+   * @default none (plain relevance)
+   */
   defaultScoringProfile?: string;
-  /** Cross-origin resource sharing for browser queries. */
+  /**
+   * Cross-origin resource sharing for browser queries.
+   * @default no CORS
+   */
   corsOptions?: SearchIndexCorsOptions;
-  /** Semantic ranker configurations. */
+  /**
+   * Semantic ranker configurations. The service needs `semanticSearch`
+   * enabled.
+   * @default none
+   */
   semantic?: SearchIndexSemanticSearch;
-  /** Vector search algorithms, profiles, and vectorizers. */
+  /**
+   * Vector search algorithms, profiles, and vectorizers. A vector field
+   * names its profile in `vectorSearchProfile`.
+   * @default none
+   */
   vectorSearch?: SearchIndexVectorSearch;
 }
 
@@ -90,45 +135,202 @@ export interface SearchIndex extends Resource<
 /**
  * An index in an Azure AI Search service: the schema (fields, suggesters,
  * scoring profiles, semantic and vector configuration) that documents are
- * loaded into and queried against. Alchemy manages the index through the
- * search data plane with Microsoft Entra ID, so the service must use
- * `authMode: "aadOrApiKey"` (or `disableLocalAuth: true`). Bind it to a
- * Function or Worker with `Azure.Search.SearchIndexRead`,
- * `SearchIndexWrite`, or one binding per operation (`SearchDocuments`,
- * `IndexDocuments`, …).
+ * loaded into and queried against.
  *
- * @see https://learn.microsoft.com/azure/search/search-what-is-an-index
+ * Alchemy manages the index through the search data plane with Microsoft
+ * Entra ID, so the service must use `authMode: "aadOrApiKey"` (or
+ * `disableLocalAuth: true`). New fields, scoring profiles, CORS, semantic,
+ * and vector settings update the index in place and keep its documents.
+ * Runtimes query and load it through `Azure.Search.SearchIndexRead`,
+ * `SearchIndexWrite`, `SearchIndexReadWrite`, or one binding per operation
+ * (`SearchDocuments`, `IndexDocuments`, …).
+ *
+ * :::caution[Removing a field or changing an existing one replaces the index]
+ * Alchemy deletes the index with its documents and creates it again with
+ * the new schema. Changing `name`, `searchService`, or `resourceGroup`, or
+ * removing or changing a suggester, replaces it too. Only `retrievable`,
+ * `searchAnalyzer`, and `synonymMaps` change in place on an existing field.
+ * :::
+ *
+ * See [Search indexes in Azure AI Search](https://learn.microsoft.com/azure/search/search-what-is-an-index).
  *
  * ### Creating an Index
  * **Example:** Hotels index with a suggester
  * ```typescript
- * const service = yield* Azure.Search.SearchService("search", {
+ * const service = yield* Azure.Search.SearchService("Search", {
+ *   sku: "basic",
  *   authMode: "aadOrApiKey",
  * });
- * const hotels = yield* Azure.Search.SearchIndex("hotels", {
+ * const fields: Azure.Search.SearchIndexField[] = [
+ *   { name: "id", type: "Edm.String", key: true },
+ *   { name: "name", type: "Edm.String", searchable: true },
+ *   { name: "description", type: "Edm.String", searchable: true },
+ *   { name: "city", type: "Edm.String", filterable: true, facetable: true },
+ *   { name: "rating", type: "Edm.Int32", filterable: true, sortable: true },
+ * ];
+ * const hotels = yield* Azure.Search.SearchIndex("Hotels", {
  *   searchService: service.searchServiceName,
- *   fields: [
- *     { name: "id", type: "Edm.String", key: true },
- *     { name: "name", type: "Edm.String", searchable: true },
- *     { name: "rating", type: "Edm.Int32", filterable: true, sortable: true },
- *   ],
+ *   fields,
  *   suggesters: [{ name: "names", searchMode: "analyzingInfixMatching", sourceFields: ["name"] }],
  * });
  * ```
  *
  * ### Evolving the Schema
  * **Example:** Add a field in place
- * ```typescript
- * const hotels = yield* Azure.Search.SearchIndex("hotels", {
+ * ```diff
+ * const hotels = yield* Azure.Search.SearchIndex("Hotels", {
  *   searchService: service.searchServiceName,
  *   fields: [
  *     { name: "id", type: "Edm.String", key: true },
  *     { name: "name", type: "Edm.String", searchable: true },
  *     { name: "rating", type: "Edm.Int32", filterable: true, sortable: true },
- *     { name: "city", type: "Edm.String", filterable: true, facetable: true },
+ * +    { name: "tags", type: "Collection(Edm.String)", filterable: true, facetable: true },
  *   ],
  * });
  * ```
+ *
+ * ### Relevance
+ * **Example:** Boost matches in the name
+ * ```typescript
+ * const hotels = yield* Azure.Search.SearchIndex("Hotels", {
+ *   searchService: service.searchServiceName,
+ *   fields,
+ *   scoringProfiles: [{ name: "byName", text: { weights: { name: 3 } } }],
+ *   defaultScoringProfile: "byName",
+ * });
+ * ```
+ *
+ * **Example:** Semantic ranking configuration
+ * ```typescript
+ * // The service needs semanticSearch: "free" or "standard".
+ * const hotels = yield* Azure.Search.SearchIndex("Hotels", {
+ *   searchService: service.searchServiceName,
+ *   fields,
+ *   semantic: {
+ *     defaultConfiguration: "default",
+ *     configurations: [
+ *       {
+ *         name: "default",
+ *         prioritizedFields: {
+ *           titleField: { fieldName: "name" },
+ *           prioritizedContentFields: [{ fieldName: "description" }],
+ *         },
+ *       },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
+ * ### Vector Search
+ * **Example:** Index with a 1536-dimension embedding field
+ * ```typescript
+ * const docs = yield* Azure.Search.SearchIndex("Docs", {
+ *   searchService: service.searchServiceName,
+ *   fields: [
+ *     { name: "id", type: "Edm.String", key: true },
+ *     { name: "content", type: "Edm.String", searchable: true },
+ *     {
+ *       name: "embedding",
+ *       type: "Collection(Edm.Single)",
+ *       searchable: true,
+ *       dimensions: 1536,
+ *       vectorSearchProfile: "default",
+ *     },
+ *   ],
+ *   vectorSearch: {
+ *     algorithms: [{ name: "hnsw", kind: "hnsw" }],
+ *     profiles: [{ name: "default", algorithm: "hnsw" }],
+ *   },
+ * });
+ * ```
+ *
+ * ### Browser Queries
+ * **Example:** Allow CORS from your site
+ * ```typescript
+ * const hotels = yield* Azure.Search.SearchIndex("Hotels", {
+ *   searchService: service.searchServiceName,
+ *   fields,
+ *   corsOptions: { allowedOrigins: ["https://app.example.com"], maxAgeInSeconds: 300 },
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * `SearchIndexRead` assigns **Search Index Data Reader** on this index
+ * only. `SearchIndexWrite` assigns a custom role with exactly
+ * `indexes/documents/write` and `indexes/documents/delete` on this index
+ * only. `SearchIndexReadWrite` assigns both. The roles go to the host's
+ * managed identity (an Azure Function, Web App, Container App, container
+ * group, or VM) or, on any other host, to an Entra service principal.
+ *
+ * **Example:** Query and load the index from an Azure Function
+ * ```typescript
+ * // src/Api.ts
+ * import * as Azure from "@alchemy.run/azure";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import { Hotels } from "./resources.ts";
+ *
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const hotels = yield* Hotels;
+ *     const index = yield* Azure.Search.SearchIndexReadWrite(hotels);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* index.mergeOrUpload([{ id: "1", name: "Seaside Inn", rating: 4 }]);
+ *         const results = yield* index.search({ search: "seaside", top: 10 });
+ *         return yield* HttpServerResponse.json(results.value);
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.Search.SearchIndexReadWriteHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Search, look up, count, and suggest
+ * ```typescript
+ * // init
+ * const hotels = yield* Azure.Search.SearchIndexRead(index);
+ *
+ * // runtime
+ * const results = yield* hotels.search({ search: "beach", filter: "rating ge 4", top: 10 });
+ * const hotel = yield* hotels.get("1", ["id", "name"]); // undefined when missing
+ * const total = yield* hotels.count();
+ * const suggestions = yield* hotels.suggest({ search: "sea", suggesterName: "names" });
+ * const completions = yield* hotels.autocomplete({ search: "sea", suggesterName: "names" });
+ * // …provided with Effect.provide(Azure.Search.SearchIndexReadHttp)
+ * ```
+ *
+ * **Example:** Upload, merge, and delete documents
+ * ```typescript
+ * // init
+ * const hotels = yield* Azure.Search.SearchIndexWrite(index);
+ *
+ * // runtime: one indexing batch per call, one result per document
+ * const results = yield* hotels.upload([{ id: "1", name: "Seaside Inn", rating: 4 }]);
+ * const failed = results.filter((result) => !result.status);
+ * yield* hotels.merge([{ id: "1", rating: 5 }]);
+ * yield* hotels.delete([{ id: "1" }]);
+ * // …provided with Effect.provide(Azure.Search.SearchIndexWriteHttp)
+ * ```
+ *
+ * **Example:** One operation per binding
+ * ```typescript
+ * // init
+ * const searchHotels = yield* Azure.Search.SearchDocuments(index);
+ * const statistics = yield* Azure.Search.GetIndexStatistics(index);
+ *
+ * // runtime
+ * const page = yield* searchHotels({ search: "beach", count: true });
+ * const total = page._odata_count;
+ * const stats = yield* statistics();
+ * // …provided with Effect.provide([Azure.Search.SearchDocumentsHttp, Azure.Search.GetIndexStatisticsHttp])
+ * ```
+ *
+ * ### Deleting an Index
+ * Destroying the index deletes it and its documents. Deleting the search
+ * service deletes every index in it.
  *
  * @resource
  */

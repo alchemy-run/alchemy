@@ -66,6 +66,7 @@ export interface ReadSecretClient {
  *
  * // runtime
  * const key = Redacted.value(yield* apiKey.get());
+ * // …provided with Effect.provide(Azure.KeyVault.SecretReadHttp)
  * ```
  *
  * **Example:** List the secret's versions

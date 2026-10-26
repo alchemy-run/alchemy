@@ -25,39 +25,63 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createNamespaceName } from "./Common.ts";
 
 export interface ClusterProps {
-  /** Resource group the cluster is created in. Changing it replaces the cluster. */
+  /**
+   * Resource group the cluster is created in.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Cluster name: 6-50 letters, digits, and hyphens, starting with a letter
-   * and ending with a letter or digit. If omitted, a unique name is
-   * generated from the app, stage, and logical ID. Changing it replaces the
-   * cluster.
+   * and ending with a letter or digit.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the cluster. Changing it replaces the cluster.
+   * Azure location of the cluster.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
-   * Capacity units (CUs). Changeable in place only when `supportsScaling`
-   * is `true`.
+   * Capacity units (CUs), the unit Azure bills per hour. Changeable in place
+   * only when `supportsScaling` is `true`.
    * @default 1
    */
   capacity?: number;
   /**
    * Create a self-serve scalable cluster whose capacity can change after
-   * creation. Changing it replaces the cluster.
+   * creation.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
+   * @default not sent (Azure's default, a cluster that cannot scale)
    */
   supportsScaling?: boolean;
   /**
-   * Spread the cluster across availability zones. Changing it replaces the
-   * cluster.
+   * Spread the cluster across availability zones.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
+   * @default not sent (Azure's default)
    */
   zoneRedundant?: boolean;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -74,7 +98,7 @@ export interface Cluster extends Resource<
     resourceGroup: string;
     /** Location of the cluster. */
     location: string;
-    /** Capacity units. */
+    /** Capacity units (CUs). */
     capacity: number | undefined;
     /** Whether capacity can change after creation. */
     supportsScaling: boolean | undefined;
@@ -82,7 +106,7 @@ export interface Cluster extends Resource<
     zoneRedundant: boolean | undefined;
     /** Identifier for Azure Monitor metrics. */
     metricId: string | undefined;
-    /** Cluster status. */
+    /** Cluster status as Azure reports it, e.g. `Active`. */
     status: string | undefined;
     /** User tags (Alchemy ownership tags stripped). */
     tags: Record<string, string>;
@@ -92,13 +116,24 @@ export interface Cluster extends Resource<
 > {}
 
 /**
- * A dedicated Event Hubs cluster — single-tenant capacity that hosts
- * namespaces (set a namespace's `clusterArmId`).
+ * A dedicated Event Hubs cluster (`Microsoft.EventHub/clusters`):
+ * single-tenant capacity that hosts your namespaces. Use it when you need
+ * guaranteed throughput, isolation, or limits beyond the `Premium` tier.
+ * Place a namespace in it with the namespace's `clusterArmId`.
  *
- * Dedicated clusters bill per capacity unit-hour (several dollars per hour)
- * with a 4-hour minimum: a cluster cannot be deleted until 4 hours after it
- * was created, so a delete issued earlier blocks (retrying) until then.
- * Provisioning can take an hour or more.
+ * :::caution[Dedicated clusters are expensive and have a 4-hour minimum]
+ * Azure bills a cluster per capacity unit-hour (several dollars per hour
+ * for each CU), from creation until deletion. A cluster cannot be deleted
+ * until 4 hours after it was created, so a delete issued earlier blocks
+ * (and retries) until then. Creating a cluster can take an hour or more.
+ * Do not create one in a short-lived stage.
+ * :::
+ *
+ * :::caution[Changing `name`, `location`, `supportsScaling`, `zoneRedundant`, or `resourceGroup` replaces the cluster]
+ * Alchemy creates a new cluster, then deletes the old one. You pay for both
+ * clusters until the old one is gone (at least 4 hours after it was
+ * created).
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-hubs/event-hubs-dedicated-overview
  *

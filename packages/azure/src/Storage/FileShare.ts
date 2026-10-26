@@ -32,7 +32,10 @@ export type FileShareRootSquash = storage.RootSquashType;
 export type FileShareAccessTier = storage.ShareAccessTier;
 
 export interface FileShareProps {
-  /** Resource group of the storage account. Changing it replaces the share. */
+  /**
+   * Resource group of the storage account. Changing it replaces the share.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Storage account that holds the share. Changing it replaces the share. */
   storageAccount: string;
@@ -70,11 +73,14 @@ export interface FileShareProps {
    * User metadata (letters, digits, and `_` in keys). Alchemy ownership
    * markers (`alchemy_stack`, `alchemy_stage`, `alchemy_id`) are merged in
    * because shares have no tags.
+   * @default {}
    */
   metadata?: Record<string, string>;
   /**
    * Stored access policies (at most 5) that shared access signatures can
-   * reference.
+   * reference. File permissions are `r` (read), `c` (create), `w`
+   * (write), `d` (delete), and `l` (list).
+   * @default []
    */
   accessPolicies?: StorageAccessPolicy[];
 }
@@ -107,13 +113,21 @@ export interface FileShare extends Resource<
 > {}
 
 /**
- * An Azure Files share in a Storage account, mountable over SMB (or NFS on
- * premium `FileStorage` accounts).
+ * An Azure Files share (`Microsoft.Storage/storageAccounts/fileServices/shares`):
+ * a managed file system in a Storage account that you mount over SMB (or
+ * NFS on premium `FileStorage` accounts) or read and write through
+ * bindings.
  *
- * Shares cannot be tagged, so Alchemy records ownership in share metadata
- * (`alchemy_stack`, `alchemy_stage`, `alchemy_id`). Deleting the share
- * deletes every file and snapshot in it (subject to the account's share
- * soft-delete policy).
+ * Use it when a program expects a file system: a Container App volume, a
+ * VM mount, or files shared between apps. For object storage, use
+ * `Azure.Storage.BlobContainer`. Shares cannot be tagged, so Alchemy
+ * records ownership in share metadata (`alchemy_stack`, `alchemy_stage`,
+ * `alchemy_id`).
+ *
+ * :::caution[Changing `name`, `storageAccount`, `resourceGroup`, or `enabledProtocols` replaces the share]
+ * Alchemy creates a new, empty share and deletes the old one with every
+ * file and snapshot in it.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/storage/files/storage-files-introduction
  *
@@ -137,6 +151,22 @@ export interface FileShare extends Resource<
  * });
  * ```
  *
+ * **Example:** NFS share on a premium account
+ * ```typescript
+ * const premium = yield* Azure.Storage.StorageAccount("premium-files", {
+ *   kind: "FileStorage",
+ *   sku: "Premium_LRS",
+ *   // NFS does not use HTTPS; Azure rejects NFS mounts on accounts that require it.
+ *   supportsHttpsTrafficOnly: false,
+ * });
+ * const nfs = yield* Azure.Storage.FileShare("shared", {
+ *   storageAccount: premium.storageAccountName,
+ *   shareQuota: 100,
+ *   enabledProtocols: "NFS",
+ *   rootSquash: "RootSquash",
+ * });
+ * ```
+ *
  * ### Access Policies
  * **Example:** Stored access policy for SAS tokens
  * ```typescript
@@ -146,6 +176,98 @@ export interface FileShare extends Resource<
  *     { id: "readers", permission: "rl", expiryTime: "2030-01-01T00:00:00Z" },
  *   ],
  * });
+ * ```
+ *
+ * ### Soft Delete
+ * Share soft delete is an account setting on
+ * `Azure.Storage.FileServiceProperties`.
+ *
+ * **Example:** Keep deleted shares for 14 days
+ * ```typescript
+ * yield* Azure.Storage.FileServiceProperties("files-settings", {
+ *   storageAccount: account.storageAccountName,
+ *   shareDeleteRetentionPolicy: { enabled: true, days: 14 },
+ * });
+ * ```
+ *
+ * ### Mounting in Container Apps
+ * **Example:** Register the share with an environment and mount it
+ * ```typescript
+ * const storage = yield* Azure.ContainerApps.EnvironmentStorage("files", {
+ *   environment: env.environmentName,
+ *   azureFile: {
+ *     accountName: account.storageAccountName,
+ *     accountKey: Config.redacted("FILES_ACCOUNT_KEY"),
+ *     shareName: share.shareName,
+ *     accessMode: "ReadWrite",
+ *   },
+ * });
+ * // then add a volume with storageType "AzureFile" and storageName
+ * // storage.storageName to the app's template
+ * ```
+ *
+ * ### Binding to a runtime
+ * Bindings call the File REST API with Microsoft Entra tokens on any host.
+ * `FileShareRead` grants **Storage File Data Privileged Reader** on this
+ * share only. `FileShareWrite` grants two custom roles (write, delete), and
+ * `FileShareReadWrite` grants all three; none grants ACL changes.
+ *
+ * **Example:** Read and write files from an Azure Function
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const documents = yield* Documents;
+ *     const docs = yield* Azure.Storage.FileShareReadWrite(documents);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* docs.put("reports/latest.json", JSON.stringify({ ok: true }), {
+ *           contentType: "application/json",
+ *         });
+ *         const file = yield* docs.get("reports/latest.json");
+ *         return HttpServerResponse.text(file?.text() ?? "missing");
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.Storage.FileShareReadWriteHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** List a directory
+ * ```typescript
+ * // init
+ * const docs = yield* Azure.Storage.FileShareRead(share);
+ *
+ * // runtime
+ * const { files, directories, nextMarker } = yield* docs.list({ directory: "reports" });
+ * const head = yield* docs.head("reports/q1.csv"); // undefined when missing
+ * // …provided with Effect.provide(Azure.Storage.FileShareReadHttp)
+ * ```
+ *
+ * **Example:** Write, then clean up a directory
+ * ```typescript
+ * // init
+ * const docs = yield* Azure.Storage.FileShareWrite(share);
+ *
+ * // runtime
+ * yield* docs.put("tmp/upload.bin", bytes); // creates missing parent directories
+ * yield* docs.delete("tmp/upload.bin");
+ * yield* docs.deleteDirectory("tmp"); // fails with DirectoryNotEmpty if not empty
+ * // …provided with Effect.provide(Azure.Storage.FileShareWriteHttp)
+ * ```
+ *
+ * ### Deleting a Share
+ * Destroying the share deletes every file and snapshot in it. With share
+ * soft delete on, Azure keeps it recoverable for the retention period.
+ *
+ * **Example:** Keep the share when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const share = yield* Azure.Storage.FileShare("documents", {
+ *   storageAccount: account.storageAccountName,
+ * }).pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

@@ -26,6 +26,7 @@ export interface CheckRevisionsRequest extends Omit<appconfig.CheckRevisionsRequ
  *
  * // runtime
  * yield* checkRevisions({ key: "App:Color" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.CheckRevisionsHttp)
  * ```
  *
  * @binding

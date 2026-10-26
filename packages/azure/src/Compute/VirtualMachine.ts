@@ -417,6 +417,13 @@ const transformVirtualMachineProps = (id: string, props: VirtualMachineProps) =>
  * The VM is deleted first (its NICs cannot be shared), then created again.
  * :::
  *
+ * :::caution[A program needs outbound internet and a systemd Linux image]
+ * The install command downloads Node.js 22 from `nodejs.org` and the
+ * release from the staging storage account with `curl`, so the subnet
+ * needs outbound access (a NAT gateway or public IP once default outbound
+ * access is off). The image needs `curl`, `tar`, `xz`, and systemd.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/virtual-machines/overview
  *
  * ### Creating a Linux VM
@@ -620,7 +627,7 @@ const transformVirtualMachineProps = (id: string, props: VirtualMachineProps) =>
  *     port: 8080,
  *     vmSize: "Standard_D2as_v5",
  *     osDiskStorageAccountType: "StandardSSD_LRS",
- *     build: { input: { external: ["sharp"] } },
+ *     build: { output: { sourcemap: true } },
  *     networkInterfaceIds: [nic.networkInterfaceId],
  *     adminUsername: "azureuser",
  *     sshPublicKeys: [publicKey],
@@ -629,17 +636,21 @@ const transformVirtualMachineProps = (id: string, props: VirtualMachineProps) =>
  * ) {}
  * ```
  *
- * ### Bindings
+ * ### Storage Bindings
  * Bindings grant the VM's managed identity the smallest data role on the
- * bound resource and hand the program a typed client. The program calls
- * Azure with the identity's tokens from the instance metadata service.
+ * bound resource only, and hand the program a typed client. The program
+ * calls Azure with the identity's tokens from the instance metadata
+ * service. `BlobContainerReadWrite` grants **Storage Blob Data
+ * Contributor** on the container.
  *
  * **Example:** Read and write blobs
  * ```typescript
  * Effect.gen(function* () {
+ *   // init
  *   const files = yield* Azure.Storage.BlobContainerReadWrite(uploads);
  *   return {
  *     fetch: Effect.gen(function* () {
+ *       // runtime
  *       yield* files.put("hello.txt", "hi");
  *       const blob = yield* files.get("hello.txt");
  *       return HttpServerResponse.text(blob?.text() ?? "missing");
@@ -648,6 +659,19 @@ const transformVirtualMachineProps = (id: string, props: VirtualMachineProps) =>
  * }).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp))
  * ```
  *
+ * **Example:** Send to a Storage queue
+ * ```typescript
+ * // init: Storage Queue Data Message Sender on the queue
+ * const send = yield* Azure.Storage.QueueSend(jobs);
+ *
+ * // runtime
+ * yield* send.send(JSON.stringify({ id: 1 }));
+ * // …provided with Effect.provide(Azure.Storage.QueueSendHttp)
+ * ```
+ *
+ * ### Key Vault Bindings
+ * `SecretRead` grants **Key Vault Secrets User** on the one secret.
+ *
  * **Example:** Read a Key Vault secret
  * ```typescript
  * // init
@@ -655,13 +679,70 @@ const transformVirtualMachineProps = (id: string, props: VirtualMachineProps) =>
  *
  * // runtime: the latest version, as a Redacted<string>
  * const value = yield* apiKey.get();
+ * // …provided with Effect.provide(Azure.KeyVault.SecretReadHttp)
  * ```
  *
- * **Example:** Send to a Storage queue
+ * ### Service Bus Bindings
+ * `QueueSend` grants **Azure Service Bus Data Sender** on the queue.
+ *
+ * **Example:** Send a message
  * ```typescript
- * const send = yield* Azure.Storage.QueueSend(jobs);
- * yield* send.send(JSON.stringify({ id: 1 }));
- * // …provided with Effect.provide(Azure.Storage.QueueSendHttp)
+ * // init
+ * const orders = yield* Azure.ServiceBus.QueueSend(queue);
+ *
+ * // runtime
+ * yield* orders.send({ id: 1 }, { messageId: "order-1" });
+ * // …provided with Effect.provide(Azure.ServiceBus.QueueSendHttp)
+ * ```
+ *
+ * ### Cosmos DB Bindings
+ * `SqlContainerReadWrite` assigns a Cosmos DB data-plane role scoped to the
+ * one container.
+ *
+ * **Example:** Upsert a document
+ * ```typescript
+ * // init
+ * const orders = yield* Azure.CosmosDB.SqlContainerReadWrite(ordersContainer);
+ *
+ * // runtime
+ * yield* orders.upsert({
+ *   document: { id: "o-1", tenant: "t1", status: "open" },
+ *   partitionKey: ["t1"],
+ * });
+ * // …provided with Effect.provide(Azure.CosmosDB.SqlContainerReadWriteHttp)
+ * ```
+ *
+ * ### Controlling the VM from a Runtime
+ * `StartVirtualMachine`, `DeallocateVirtualMachine`, `RestartVirtualMachine`,
+ * `PowerOffVirtualMachine`, `RedeployVirtualMachine`, and
+ * `RunVirtualMachineCommand` let another runtime operate the VM. Each
+ * grants a custom role with only its one action, on this VM only.
+ *
+ * **Example:** Start and stop a VM from a Function
+ * ```typescript
+ * export default class Ops extends Azure.Functions.Function<Ops>()(
+ *   "Ops",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const vm = yield* Vm;
+ *     // init
+ *     const start = yield* Azure.Compute.StartVirtualMachine(vm);
+ *     const deallocate = yield* Azure.Compute.DeallocateVirtualMachine(vm);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime
+ *         const request = yield* HttpServerRequest;
+ *         yield* request.url.endsWith("/stop") ? deallocate() : start();
+ *         return HttpServerResponse.text("accepted");
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(
+ *     Effect.provide([
+ *       Azure.Compute.StartVirtualMachineHttp,
+ *       Azure.Compute.DeallocateVirtualMachineHttp,
+ *     ]),
+ *   ),
+ * ) {}
  * ```
  *
  * ### Event Sources

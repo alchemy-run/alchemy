@@ -27,6 +27,7 @@ export interface CheckSnapshotRequest extends Omit<appconfig.CheckSnapshotReques
  *
  * // runtime
  * yield* checkSnapshot({ name: "release-1" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.CheckSnapshotHttp)
  * ```
  *
  * @binding

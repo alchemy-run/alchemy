@@ -27,17 +27,33 @@ export type NamespaceSkuName = "Basic" | "Standard" | "Premium";
 export type NamespaceTlsVersion = "1.0" | "1.1" | "1.2" | "1.3";
 
 export interface NamespaceProps {
-  /** Resource group the namespace is created in. Changing it replaces the namespace. */
+  /**
+   * Resource group the namespace is created in.
+   *
+   * :::caution
+   * Changing it replaces the namespace.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Globally unique namespace name (`{name}.servicebus.windows.net`): 6-50
    * letters, digits, and hyphens, starting with a letter and ending with a
    * letter or digit. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the namespace.
+   * stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the namespace.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the namespace. Changing it replaces the namespace.
+   * Azure location of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the namespace.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
@@ -45,8 +61,11 @@ export interface NamespaceProps {
    * Pricing tier. `Basic` allows only the `$Default` consumer group and
    * 1-day retention; `Standard` adds consumer groups, Kafka, Capture,
    * schema registry, and IP firewall rules. Moving between `Basic` and
-   * `Standard` happens in place; moving to or from `Premium` replaces the
-   * namespace.
+   * `Standard` happens in place.
+   *
+   * :::caution
+   * Moving to or from `Premium` replaces the namespace.
+   * :::
    * @default "Standard"
    */
   sku?: NamespaceSkuName;
@@ -64,6 +83,7 @@ export interface NamespaceProps {
   /**
    * Upper limit for auto-inflate (`Standard` only, 0-40). Required when
    * `isAutoInflateEnabled` is `true`.
+   * @default not set (auto-inflate off)
    */
   maximumThroughputUnits?: number;
   /**
@@ -84,18 +104,29 @@ export interface NamespaceProps {
    */
   disableLocalAuth?: boolean;
   /**
-   * Spread the namespace across availability zones. Set only at creation;
-   * changing it replaces the namespace.
+   * Spread the namespace across availability zones. Azure sets it only at
+   * creation.
+   *
+   * :::caution
+   * Changing it replaces the namespace.
+   * :::
+   * @default Azure's default for the region
    */
   zoneRedundant?: boolean;
   /**
-   * ARM ID of a dedicated Event Hubs cluster to place the namespace in.
+   * ARM ID of a dedicated Event Hubs cluster (`Azure.EventHub.Cluster`) to
+   * place the namespace in.
+   *
+   * :::caution
    * Changing it replaces the namespace.
+   * :::
+   * @default no cluster (shared capacity)
    */
   clusterArmId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -141,29 +172,69 @@ export interface Namespace extends Resource<
 > {}
 
 /**
- * An Azure Event Hubs namespace — the container and DNS endpoint
- * (`{name}.servicebus.windows.net`) for event hubs, consumer groups, and
- * shared access policies.
+ * An Azure Event Hubs namespace (`Microsoft.EventHub/namespaces`): the
+ * container and endpoint (`<name>.servicebus.windows.net`) for your event
+ * hubs, consumer groups, schema groups, and access policies.
+ *
+ * Alchemy creates a `Standard` namespace with one throughput unit in the
+ * stack's resource group, with TLS 1.2 as the minimum. Bind the event hubs
+ * in it to your runtimes: each binding assigns an Event Hubs data role on
+ * that one event hub, so your code never handles a connection string. The
+ * built-in `RootManageSharedAccessKey` connection string is still an
+ * attribute (a `Redacted` secret) for Kafka clients and tools that need one.
+ *
+ * :::caution[Changing `name`, `resourceGroup`, `location`, `zoneRedundant`, `clusterArmId`, or moving to or from `Premium` replaces the namespace]
+ * Alchemy creates a new namespace and deletes the old one with every event
+ * hub and every retained event in it.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-hubs/event-hubs-features
  *
  * ### Creating a Namespace
  * **Example:** Standard namespace
  * ```typescript
- * const namespace = yield* Azure.EventHub.Namespace("events");
+ * const hubs = yield* Azure.EventHub.Namespace("hubs");
  * ```
  *
- * **Example:** Cheapest Basic namespace
+ * **Example:** Namespace with a fixed name and region
  * ```typescript
- * const namespace = yield* Azure.EventHub.Namespace("events", {
+ * const hubs = yield* Azure.EventHub.Namespace("hubs", {
+ *   name: "contoso-telemetry",
+ *   location: "westeurope",
+ * });
+ * ```
+ *
+ * ### Choosing a Tier
+ * `Basic` has only the `$Default` consumer group and one day of retention.
+ * `Standard` adds consumer groups, seven days of retention, the Kafka
+ * endpoint, Capture, the schema registry, and IP firewall rules. `Premium`
+ * runs on dedicated processing units with up to 90 days of retention. You
+ * can switch between `Basic` and `Standard` in place.
+ *
+ * **Example:** Basic namespace
+ * ```typescript
+ * const hubs = yield* Azure.EventHub.Namespace("hubs", {
  *   sku: "Basic",
  * });
  * ```
  *
- * ### Scaling
- * **Example:** Auto-inflate throughput units
+ * **Example:** Zone-redundant Premium namespace with two processing units
  * ```typescript
- * const namespace = yield* Azure.EventHub.Namespace("events", {
+ * const hubs = yield* Azure.EventHub.Namespace("hubs", {
+ *   sku: "Premium",
+ *   capacity: 2,
+ *   zoneRedundant: true,
+ * });
+ * ```
+ *
+ * ### Scaling
+ * One throughput unit takes 1 MB/s or 1,000 events/s in, and sends 2 MB/s
+ * out. Auto-inflate raises the count under load, up to
+ * `maximumThroughputUnits` (`Standard` only).
+ *
+ * **Example:** Start at two throughput units, grow to ten
+ * ```typescript
+ * const hubs = yield* Azure.EventHub.Namespace("hubs", {
  *   sku: "Standard",
  *   capacity: 2,
  *   isAutoInflateEnabled: true,
@@ -171,12 +242,88 @@ export interface Namespace extends Resource<
  * });
  * ```
  *
- * ### Entra ID Only
- * **Example:** Disable shared access keys
+ * ### Authentication
+ * **Example:** Accept Microsoft Entra ID only
  * ```typescript
- * const namespace = yield* Azure.EventHub.Namespace("events", {
+ * const hubs = yield* Azure.EventHub.Namespace("hubs", {
  *   disableLocalAuth: true,
  * });
+ * ```
+ *
+ * **Example:** Listen-only SAS policy for a Kafka consumer
+ * ```typescript
+ * const reader = yield* Azure.EventHub.NamespaceAuthorizationRule("reader", {
+ *   namespace: hubs.namespaceName,
+ *   rights: ["Listen"],
+ * });
+ * // reader.primaryConnectionString is a Redacted secret
+ * ```
+ *
+ * ### Network Access
+ * **Example:** Allow one IP range and trusted Azure services
+ * ```typescript
+ * yield* Azure.EventHub.NetworkRuleSet("hubs-firewall", {
+ *   namespace: hubs.namespaceName,
+ *   defaultAction: "Deny",
+ *   ipRules: [{ ipMask: "203.0.113.0/24" }],
+ *   trustedServiceAccessEnabled: true,
+ * });
+ * ```
+ *
+ * **Example:** Private endpoint in your virtual network
+ * ```typescript
+ * const hubs = yield* Azure.EventHub.Namespace("hubs", {
+ *   publicNetworkAccess: "Disabled",
+ * });
+ * yield* Azure.Network.PrivateEndpoint("hubs-endpoint", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: hubs.namespaceId, groupIds: ["namespace"] },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Dedicated Clusters
+ * **Example:** Place a namespace in an Event Hubs cluster
+ * ```typescript
+ * // A dedicated cluster bills by the hour, whether you use it or not.
+ * const cluster = yield* Azure.EventHub.Cluster("cluster");
+ * const hubs = yield* Azure.EventHub.Namespace("hubs", {
+ *   clusterArmId: cluster.clusterId,
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * Bind the event hubs in the namespace, not the namespace itself. `Send`
+ * assigns **Azure Event Hubs Data Sender** on that event hub only.
+ *
+ * **Example:** Send events from an Azure Function
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const hub = yield* Readings;
+ *     const readings = yield* Azure.EventHub.Send(hub);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* readings.send({ deviceId: "d1", temperature: 21 }, { partitionKey: "d1" });
+ *         return HttpServerResponse.text("sent", { status: 202 });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.EventHub.SendHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Deleting a Namespace
+ * Destroying the namespace deletes every event hub and retained event in
+ * it.
+ *
+ * **Example:** Keep the namespace when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const hubs = yield* Azure.EventHub.Namespace("hubs").pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

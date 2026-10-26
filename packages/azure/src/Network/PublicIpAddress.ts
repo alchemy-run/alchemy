@@ -42,6 +42,7 @@ export interface PublicIpAddressProps {
   /**
    * Resource group the public IP is created in. Changing it replaces the
    * public IP.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -85,37 +86,53 @@ export interface PublicIpAddressProps {
    */
   allocationMethod?: "Static" | "Dynamic";
   /**
-   * ARM ID of a public IP prefix to allocate the address from. Changing it
+   * ARM ID of a public IP prefix to allocate the address from; the prefix
+   * must be in the same region and have the same IP version. Changing it
    * replaces the public IP.
+   * @default an address from Azure's pool
    */
   publicIpPrefixId?: string;
   /**
    * DNS label: the address gets the FQDN
-   * `{label}.{location}.cloudapp.azure.com`.
+   * `{label}.{location}.cloudapp.azure.com`. The label must be unique in
+   * the region: 3-63 lowercase letters, digits, and `-`, starting with a
+   * letter. Updated in place.
+   * @default no DNS name
    */
   domainNameLabel?: string;
   /**
    * Reuse policy that hashes the DNS label to make it unique. Changing it
    * replaces the public IP.
+   * @default no hash (the label is used as is)
    */
   domainNameLabelScope?: "TenantReuse" | "SubscriptionReuse" | "ResourceGroupReuse" | "NoReuse";
-  /** Reverse DNS FQDN that resolves back to this address. */
+  /**
+   * Reverse DNS FQDN that resolves back to this address (PTR record). The
+   * FQDN must resolve forward to this address or to its `fqdn`. Updated
+   * in place.
+   * @default no reverse DNS
+   */
   reverseFqdn?: string;
   /**
-   * TCP idle timeout in minutes (4-30).
+   * TCP idle timeout in minutes (4-30). Updated in place.
    * @default 4
    */
   idleTimeoutInMinutes?: number;
-  /** IP tags. Changing them replaces the public IP. */
+  /**
+   * IP tags. Changing them replaces the public IP.
+   * @default []
+   */
   ipTags?: PublicIpTag[];
   /**
-   * What happens to the public IP when the VM using it is deleted.
+   * What happens to the public IP when the VM using it is deleted. Updated
+   * in place.
    * @default Azure's default (`Detach`)
    */
   deleteOption?: "Delete" | "Detach";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -126,25 +143,28 @@ export interface PublicIpAddress extends Resource<
   {
     /** Name of the public IP. */
     publicIpAddressName: string;
-    /** ARM resource ID of the public IP. */
+    /**
+     * ARM resource ID of the public IP; pass it as `publicIpAddressId` to
+     * a network interface or load balancer frontend.
+     */
     publicIpAddressId: string;
     /** Resource group that holds the public IP. */
     resourceGroup: string;
-    /** Location of the public IP. */
+    /** Azure location of the public IP, e.g. `eastus`. */
     location: string;
-    /** The allocated IP address. */
+    /** The allocated IP address, e.g. `20.42.0.10`. */
     ipAddress: string | undefined;
-    /** FQDN when a DNS label is set. */
+    /** FQDN when a DNS label is set, e.g. `my-app.eastus.cloudapp.azure.com`. */
     fqdn: string | undefined;
-    /** SKU name. */
+    /** SKU name: `Standard` or `StandardV2`. */
     sku: string;
-    /** SKU tier. */
+    /** SKU tier: `Regional` or `Global`. */
     tier: string;
-    /** Availability zones. */
+    /** Availability zones of the address, e.g. `["1", "2", "3"]`. */
     zones: string[];
-    /** IP version. */
+    /** IP version: `IPv4` or `IPv6`. */
     ipVersion: string;
-    /** Allocation method. */
+    /** Allocation method: `Static` or `Dynamic`. */
     allocationMethod: string;
     /** TCP idle timeout in minutes. */
     idleTimeoutInMinutes: number | undefined;
@@ -156,9 +176,27 @@ export interface PublicIpAddress extends Resource<
 > {}
 
 /**
- * An Azure public IP address — a static internet-facing IPv4 or IPv6
- * address for load balancers, NAT gateways, network interfaces, and
- * gateways. Standard SKU, static allocation by default.
+ * An Azure public IP address (`Microsoft.Network/publicIPAddresses`): a
+ * static internet-facing IPv4 or IPv6 address for load balancers, NAT
+ * gateways, network interfaces, and gateways. Azure's counterpart to an
+ * AWS Elastic IP.
+ *
+ * Alchemy creates a Standard SKU, static address by default. A Standard
+ * address is closed to inbound traffic until a network security group
+ * allows it. Basic SKU addresses were retired in 2025.
+ *
+ * :::caution[Changing `name`, `location`, `resourceGroup`, `sku`, `tier`, `zones`, `ipVersion`, `allocationMethod`, `publicIpPrefixId`, `domainNameLabelScope`, or `ipTags` replaces the public IP]
+ * Alchemy creates a new address and deletes the old one. The new address
+ * has a different IP, so DNS records, firewall allowlists, and partners
+ * that pinned the old IP break. Use a DNS label or an alias record to give
+ * clients a stable name.
+ * :::
+ *
+ * :::caution[Deleting fails while the address is in use]
+ * Detach the address from its network interface, load balancer, or NAT
+ * gateway first. Alchemy retries `PublicIPAddressInUse` for a while, then
+ * fails.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-network/ip-services/public-ip-addresses
  *
@@ -166,22 +204,131 @@ export interface PublicIpAddress extends Resource<
  * **Example:** Standard static IPv4 address
  * ```typescript
  * const ip = yield* Azure.Network.PublicIpAddress("ingress");
+ * // ip.ipAddress is the allocated address
  * ```
+ *
+ * **Example:** Address with a fixed name and region
+ * ```typescript
+ * const ip = yield* Azure.Network.PublicIpAddress("ingress", {
+ *   name: "pip-ingress-prod",
+ *   location: "westeurope",
+ *   tags: { env: "prod" },
+ * });
+ * ```
+ *
+ * **Example:** IPv6 address
+ * ```typescript
+ * const ip = yield* Azure.Network.PublicIpAddress("ingress-v6", {
+ *   ipVersion: "IPv6",
+ * });
+ * ```
+ *
+ * ### DNS Names
+ * A DNS label gives the address the FQDN
+ * `{label}.{location}.cloudapp.azure.com`. The label must be unique in
+ * the region and can change in place.
  *
  * **Example:** Address with a DNS label
  * ```typescript
  * const ip = yield* Azure.Network.PublicIpAddress("ingress", {
  *   domainNameLabel: "my-app",
- *   idleTimeoutInMinutes: 10,
  * });
  * // ip.fqdn === "my-app.eastus.cloudapp.azure.com"
  * ```
  *
- * ### Zones
+ * **Example:** Label hashed for uniqueness, with reverse DNS
+ * ```typescript
+ * const ip = yield* Azure.Network.PublicIpAddress("mail", {
+ *   domainNameLabel: "mail",
+ *   domainNameLabelScope: "ResourceGroupReuse",
+ *   reverseFqdn: "mail.contoso.com",
+ * });
+ * ```
+ *
+ * **Example:** Point your own domain at the address
+ * ```typescript
+ * const zone = yield* Azure.Dns.Zone("contoso", { name: "contoso.com" });
+ * yield* Azure.Dns.RecordSet("www", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "A",
+ *   name: "www",
+ *   targetResourceId: ip.publicIpAddressId,
+ * });
+ * ```
+ *
+ * ### Availability Zones
+ * A zonal address lives in one zone. A zone-redundant address survives
+ * the loss of a zone. Set `zones` at creation; changing them replaces the
+ * address.
+ *
  * **Example:** Zonal address
  * ```typescript
  * const ip = yield* Azure.Network.PublicIpAddress("ingress", {
  *   zones: ["1"],
+ * });
+ * ```
+ *
+ * **Example:** Zone-redundant address
+ * ```typescript
+ * const ip = yield* Azure.Network.PublicIpAddress("ingress", {
+ *   zones: ["1", "2", "3"],
+ * });
+ * ```
+ *
+ * ### Allocating from a Prefix
+ * A public IP prefix reserves a contiguous range. Addresses taken from it
+ * are predictable, so a partner can allowlist one CIDR.
+ *
+ * **Example:** Address from a /28 prefix
+ * ```typescript
+ * const prefix = yield* Azure.Network.PublicIpPrefix("egress", {
+ *   prefixLength: 28,
+ * });
+ * const ip = yield* Azure.Network.PublicIpAddress("egress-1", {
+ *   publicIpPrefixId: prefix.publicIpPrefixId,
+ * });
+ * ```
+ *
+ * ### Attaching to a Virtual Machine
+ * Associate the address with the VM's network interface, and allow the
+ * port in a network security group.
+ *
+ * **Example:** VM with a public IP
+ * ```typescript
+ * const ip = yield* Azure.Network.PublicIpAddress("vm");
+ * const nic = yield* Azure.Network.NetworkInterface("vm", {
+ *   ipConfigurations: [
+ *     { subnetId: subnet.subnetId, publicIpAddressId: ip.publicIpAddressId },
+ *   ],
+ *   networkSecurityGroupId: nsg.networkSecurityGroupId,
+ * });
+ * const vm = yield* Azure.Compute.VirtualMachine("vm", {
+ *   vmSize: "Standard_B1s",
+ *   networkInterfaceIds: [nic.networkInterfaceId],
+ *   adminUsername: "azureuser",
+ *   sshPublicKeys: ["ssh-ed25519 AAAAC3Nza... me@example.com"],
+ * });
+ * ```
+ *
+ * ### Load Balancer and NAT Gateway Frontends
+ * A public load balancer receives traffic on the address. A NAT gateway
+ * sends a subnet's outbound traffic from it.
+ *
+ * **Example:** Load balancer frontend
+ * ```typescript
+ * const ip = yield* Azure.Network.PublicIpAddress("lb");
+ * const lb = yield* Azure.Network.LoadBalancer("web", {
+ *   frontendIpConfigurations: [
+ *     { name: "public", publicIpAddressId: ip.publicIpAddressId },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** NAT gateway egress address
+ * ```typescript
+ * const ip = yield* Azure.Network.PublicIpAddress("egress");
+ * const nat = yield* Azure.Network.NatGateway("egress", {
+ *   publicIpAddressIds: [ip.publicIpAddressId],
  * });
  * ```
  *

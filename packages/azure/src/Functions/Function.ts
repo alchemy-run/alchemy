@@ -31,7 +31,7 @@ import {
 import { syncBindingAssignments } from "../ContainerApps/ContainerApp.ts";
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { stackResourceGroup } from "../StackResourceGroup.ts";
+import { runsLocal, stackResourceGroup, stackResourceGroupName } from "../StackResourceGroup.ts";
 import { BlobContainer } from "../Storage/BlobContainer.ts";
 import { StorageAccount } from "../Storage/StorageAccount.ts";
 import { AppServicePlan } from "../Web/AppServicePlan.ts";
@@ -249,6 +249,10 @@ const transformFunctionProps = (id: string, props: FunctionProps) =>
     // Composition is a deploy concern; inside the bundle props are final.
     if (globalThis.__ALCHEMY_RUNTIME__) return props;
     if (props.app !== undefined) return props;
+    // Under `alchemy dev` the program runs locally: no plan, storage, or group.
+    if (yield* runsLocal) {
+      return { ...props, resourceGroup: props.resourceGroup ?? (yield* stackResourceGroupName) };
+    }
     const resourceGroup = props.resourceGroup ?? (yield* stackResourceGroup).name;
     const hosting = yield* Effect.gen(function* () {
       const plan = yield* AppServicePlan("Plan", {
@@ -541,6 +545,33 @@ const transformFunctionProps = (id: string, props: FunctionProps) =>
  * // …provided with Effect.provide(Azure.Functions.CosmosDBChangeFeedEventSource)
  * ```
  *
+ * ### Local Development
+ * Under `alchemy dev` the Function runs on your machine: Alchemy bundles it
+ * and runs `node` on `http://localhost:<port>`, with the same app settings
+ * and no Azure resources. A code change restarts it on the same URL.
+ * `Azure.Storage.StorageAccount`, `BlobContainer`, and `Queue` run on
+ * [Azurite](https://github.com/Azure/Azurite) in Docker, and the Storage
+ * bindings and the Storage queue and timer triggers work against it. Other
+ * triggers do not run locally. Pipe the Function through `Alchemy.remote()`
+ * to deploy it to Azure during dev.
+ *
+ * **Example:** One program for `alchemy dev` and `alchemy deploy`
+ * ```typescript
+ * // alchemy dev → http://localhost:<port>, Storage on Azurite
+ * // alchemy deploy → https://<app>.azurewebsites.net, Azure Storage
+ * const api = yield* Api;
+ * const uploads = yield* Azure.Storage.BlobContainer("Uploads", {
+ *   storageAccount: account.storageAccountName,
+ * });
+ * ```
+ *
+ * **Example:** Keep the Function in Azure during dev
+ * ```typescript
+ * const api = yield* Effect.gen(function* () {
+ *   return yield* Api;
+ * }).pipe(Alchemy.remote());
+ * ```
+ *
  * @resource
  * @category Functions
  */
@@ -759,6 +790,8 @@ export const FunctionProvider = () =>
           if (managed && news.hosting !== undefined) {
             desired.AzureWebJobsStorage__accountName = news.hosting.storageAccountName;
           }
+          // `GET /` goes to `fetch`, not the host's default landing page.
+          desired.AzureWebJobsDisableHomepage = "true";
           desired.ALCHEMY_STACK_NAME = stack.name;
           desired.ALCHEMY_STAGE = stack.stage;
           desired.ALCHEMY_PHASE = "runtime";

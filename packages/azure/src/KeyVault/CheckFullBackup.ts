@@ -26,6 +26,7 @@ export interface CheckFullBackupRequest extends Omit<admin.PreFullBackupRequest,
  *   storageResourceUri: "https://account.blob.core.windows.net/backups",
  *   useManagedIdentity: true,
  * });
+ * // …provided with Effect.provide(Azure.KeyVault.CheckFullBackupHttp)
  * ```
  *
  * @binding

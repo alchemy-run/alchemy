@@ -9,8 +9,9 @@ export interface WriteSchemaGroupClient {
   /**
    * Register `content` under `schemaName`. A new name starts at version 1;
    * new content under an existing name adds the next version; identical
-   * content returns the existing version. `format` defaults to the group's
-   * `schemaType`.
+   * content returns the existing version. `format` is `Avro`, `Json`,
+   * `Protobuf`, or `Custom`; it defaults to the group's `schemaType`
+   * (`Custom` for any other type).
    */
   registerSchema(
     schemaName: string,
@@ -39,13 +40,34 @@ export interface WriteSchemaGroupClient {
  * (see `AzureBindings`). Provide {@link SchemaGroupWriteHttp}.
  *
  * ### Registering Schemas
- * **Example:** Register an Avro schema at startup of a producer
+ * **Example:** Register an Avro schema from a producer
  * ```typescript
- * // init
- * const registry = yield* Azure.EventHub.SchemaGroupWrite(schemas);
+ * // Schemas: a module-scope Azure.EventHub.SchemaGroup declaration
+ * const orderSchema = {
+ *   type: "record",
+ *   name: "Order",
+ *   fields: [{ name: "id", type: "string" }],
+ * };
  *
- * // runtime
- * const { id, version } = yield* registry.registerSchema("Order", JSON.stringify(orderSchema));
+ * export default class Producer extends Azure.Functions.Function<Producer>()(
+ *   "Producer",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const schemas = yield* Schemas;
+ *     // init: assigns the schemas/write role on the group's namespace
+ *     const registry = yield* Azure.EventHub.SchemaGroupWrite(schemas);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime: the format defaults to the group's schemaType
+ *         const { id, version } = yield* registry.registerSchema(
+ *           "Order",
+ *           JSON.stringify(orderSchema),
+ *         );
+ *         return yield* HttpServerResponse.json({ id, version });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.EventHub.SchemaGroupWriteHttp)),
+ * ) {}
  * ```
  *
  * @binding

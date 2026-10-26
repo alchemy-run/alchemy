@@ -27,9 +27,15 @@ export interface NamespaceSubscriptionFilter {
   operatorType: eventgrid.FilterOperatorType;
   /** CloudEvent attribute to filter on, e.g. `source`, `subject`, `data.region`. */
   key: string;
-  /** Single comparison value (`NumberGreaterThan`, `BoolEquals`, …). */
+  /**
+   * Single comparison value (`NumberGreaterThan`, `BoolEquals`, …).
+   * @default none (use `values`)
+   */
   value?: number | boolean;
-  /** Comparison values (`StringIn`, `NumberIn`, `NumberInRange`, …). */
+  /**
+   * Comparison values (`StringIn`, `NumberIn`, `NumberInRange`, …).
+   * @default none (use `value`)
+   */
   values?: (string | number | number[])[];
 }
 
@@ -57,40 +63,89 @@ export interface NamespaceSubscriptionPush {
   /**
    * Deliver with the namespace's managed identity instead of keys. The
    * namespace must have that identity and it needs a role on the destination.
+   * @default no identity
    */
   deliveryIdentity?: EventSubscriptionDeliveryIdentity;
   /** Maximum delivery attempts (1-10). @default Azure's default (`10`) */
   maxDeliveryCount?: number;
-  /** How long events stay deliverable, as an ISO 8601 duration. */
+  /**
+   * How long events stay deliverable, as an ISO 8601 duration (e.g. `P1D`).
+   * @default Azure's default
+   */
   eventTimeToLive?: string;
 }
 
 export interface NamespaceTopicEventSubscriptionProps {
-  /** Resource group of the namespace. Changing it replaces the subscription. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the Event Grid namespace. Changing it replaces the subscription. */
+  /**
+   * Name of the Event Grid namespace, e.g. `namespace.namespaceName` of an
+   * `Azure.EventGrid.Namespace`.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   */
   namespace: string;
-  /** Name of the namespace topic. Changing it replaces the subscription. */
+  /**
+   * Name of the namespace topic, e.g. `topic.namespaceTopicName` of an
+   * `Azure.EventGrid.NamespaceTopic`.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   */
   topic: string;
   /**
    * Subscription name: 3-50 letters, digits, and hyphens. If omitted, a
-   * unique name is generated from the app, stage, and logical ID. Changing
-   * it replaces the subscription.
+   * unique name is generated from the app, stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Pull delivery: consumers receive, acknowledge, release, or reject events
-   * through the namespace data plane. Set exactly one of `queue` or `push`;
-   * switching between them replaces the subscription.
+   * through the namespace data plane. Set at most one of `queue` or `push`.
+   *
+   * :::caution
+   * Switching between `queue` and `push` replaces the subscription.
+   * :::
+   * @default queue delivery with Azure's defaults when `push` is unset
    */
   queue?: NamespaceSubscriptionQueue;
-  /** Push delivery to a destination. Mutually exclusive with `queue`. */
+  /**
+   * Push delivery to a destination. Mutually exclusive with `queue`.
+   *
+   * :::caution
+   * Switching between `queue` and `push` replaces the subscription.
+   * :::
+   * @default no push delivery (queue delivery)
+   */
   push?: NamespaceSubscriptionPush;
-  /** Event types to deliver. Omit for all event types. */
+  /**
+   * Event types to deliver, e.g. `Order.Created`.
+   * @default every event type
+   */
   includedEventTypes?: string[];
-  /** Filters on CloudEvent attributes (all must match). */
+  /**
+   * Filters on CloudEvent attributes (all must match).
+   * @default []
+   */
   filters?: NamespaceSubscriptionFilter[];
-  /** Expiration time (ISO 8601). Azure deletes the subscription after it. */
+  /**
+   * Expiration time (ISO 8601). Azure deletes the subscription after it.
+   * @default never expires
+   */
   expirationTimeUtc?: string;
 }
 
@@ -121,12 +176,19 @@ export interface NamespaceTopicEventSubscription extends Resource<
 > {}
 
 /**
- * An event subscription on an Event Grid namespace topic. In `Queue` mode
- * consumers pull CloudEvents through the namespace data plane; in `Push`
- * mode Event Grid delivers them to an Event Hub or webhook.
+ * An event subscription on an Event Grid namespace topic
+ * (`Microsoft.EventGrid/namespaces/topics/eventSubscriptions`). In `Queue`
+ * mode consumers pull CloudEvents through the namespace data plane; in
+ * `Push` mode Event Grid delivers them to an Event Hub or webhook.
  *
  * Namespace subscriptions have no tags or labels; ownership follows the
  * parent namespace.
+ *
+ * :::caution[Changing `name`, `topic`, `namespace`, `resourceGroup`, or the delivery mode replaces the subscription]
+ * Alchemy creates a new subscription and deletes the old one. Events
+ * waiting in the old queue subscription are lost. Switching between `queue`
+ * and `push` changes the delivery mode.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/pull-delivery-overview
  *
@@ -149,15 +211,29 @@ export interface NamespaceTopicEventSubscription extends Resource<
  * ```
  *
  * ### Push Delivery
+ * Give the namespace a system-assigned identity, and grant that identity
+ * `Azure Event Hubs Data Sender` on the hub (for example with an
+ * `Azure.Authorization.RoleAssignment`).
+ *
  * **Example:** Push to an Event Hub with the namespace identity
  * ```typescript
+ * const namespace = yield* Azure.EventGrid.Namespace("events", {
+ *   identity: { type: "SystemAssigned" },
+ * });
+ * const orders = yield* Azure.EventGrid.NamespaceTopic("orders", {
+ *   namespace: namespace.namespaceName,
+ * });
+ * const hubs = yield* Azure.EventHub.Namespace("hubs");
+ * const hub = yield* Azure.EventHub.EventHub("orders", {
+ *   namespace: hubs.namespaceName,
+ * });
  * const toHub = yield* Azure.EventGrid.NamespaceTopicEventSubscription(
  *   "to-hub",
  *   {
  *     namespace: namespace.namespaceName,
  *     topic: orders.namespaceTopicName,
  *     push: {
- *       destination: { endpointType: "EventHub", resourceId: hubId },
+ *       destination: { endpointType: "EventHub", resourceId: hub.eventHubId },
  *       deliveryIdentity: { type: "SystemAssigned" },
  *     },
  *   },

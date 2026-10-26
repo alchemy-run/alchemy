@@ -52,21 +52,26 @@ export interface RoleDefinitionProps {
   scope?: string;
   /**
    * Display name of the role. Role names are unique across the whole
-   * Microsoft Entra directory (tenant), built-in roles included.
-   * @default a unique name generated from the app, stage and logical ID
+   * Microsoft Entra directory (tenant), built-in roles included. Changing
+   * it renames the role in place.
+   * @default a unique name of at most 128 characters, generated from the app, stage and logical ID
    */
   roleName?: string;
   /**
    * Description shown in the portal. Alchemy appends an ownership marker
    * (`[alchemy <stack>/<stage>/<id>]`) because role definitions have no
-   * tags.
+   * tags. Changing it updates the role in place.
+   * @default only the ownership marker
    */
   description?: string;
-  /** Operations the role grants (and excludes). */
+  /**
+   * Operations the role grants (and excludes). Changing them updates the
+   * role in place, and every assignment of it picks up the change.
+   */
   permissions: RolePermission[];
   /**
    * Scopes the role can be assigned at (subscription or resource-group
-   * IDs).
+   * IDs). Changing them updates the role in place.
    * @default [scope]
    */
   assignableScopes?: string[];
@@ -96,21 +101,37 @@ export interface RoleDefinition extends Resource<
 > {}
 
 /**
- * An Azure RBAC custom role — a named set of control-plane and data-plane
- * permissions that can be granted with a
- * {@link RoleAssignment}.
+ * An Azure RBAC custom role (`Microsoft.Authorization/roleDefinitions`): a
+ * named set of control-plane and data-plane permissions that you grant
+ * with an `Azure.Authorization.RoleAssignment`. Use
+ * one when a built-in role grants more than a principal needs.
  *
  * Role definitions cannot be tagged, so Alchemy records ownership as a
  * `[alchemy <stack>/<stage>/<id>]` marker at the end of the description.
  * The role's GUID name is derived from the stack, stage, logical ID and
  * instance ID, so re-running a deploy converges on the same role. Role
  * names are tenant-unique; the default name is generated per stage.
+ * Alchemy registers the `Microsoft.Authorization` resource provider on the
+ * subscription if needed.
+ *
+ * :::caution[Changing `scope` replaces the role]
+ * Alchemy creates a new role with a new GUID, so every assignment that
+ * references the old `roleDefinitionId` is replaced too. `roleName`,
+ * `description`, `permissions`, and `assignableScopes` update in place.
+ * :::
+ *
+ * :::caution[The deploying identity needs Owner to define roles]
+ * Creating a custom role needs `Microsoft.Authorization/roleDefinitions/write`
+ * on every assignable scope, which **Owner** (or **User Access
+ * Administrator**) has and **Contributor** does not.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/role-based-access-control/custom-roles
  *
  * ### Defining a Custom Role
  * **Example:** Read-only access to storage accounts in one resource group
  * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
  * const role = yield* Azure.Authorization.RoleDefinition("StorageReader", {
  *   scope: group.resourceGroupId,
  *   description: "Reads storage account metadata",
@@ -118,9 +139,93 @@ export interface RoleDefinition extends Resource<
  * });
  * ```
  *
+ * **Example:** Subscription-wide role with a fixed name
+ * ```typescript
+ * // No `scope`: the role is defined on the current subscription.
+ * const role = yield* Azure.Authorization.RoleDefinition("VmOperator", {
+ *   roleName: "Contoso VM Operator",
+ *   permissions: [
+ *     {
+ *       actions: [
+ *         "Microsoft.Compute/virtualMachines/read",
+ *         "Microsoft.Compute/virtualMachines/start/action",
+ *         "Microsoft.Compute/virtualMachines/restart/action",
+ *       ],
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Data-Plane Permissions
+ * `dataActions` grant access to data inside a resource, such as blobs,
+ * queue messages, or secrets.
+ *
+ * **Example:** Read and write blobs, but never delete them
+ * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
+ * const role = yield* Azure.Authorization.RoleDefinition("BlobWriterNoDelete", {
+ *   scope: group.resourceGroupId,
+ *   permissions: [
+ *     {
+ *       dataActions: [
+ *         "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read",
+ *         "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write",
+ *       ],
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Excluding Operations
+ * `notActions` and `notDataActions` subtract operations from a wildcard.
+ * They are not deny rules: another role can still grant them.
+ *
+ * **Example:** Everything on storage accounts except deleting them
+ * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
+ * const role = yield* Azure.Authorization.RoleDefinition("StorageAdminNoDelete", {
+ *   scope: group.resourceGroupId,
+ *   permissions: [
+ *     {
+ *       actions: ["Microsoft.Storage/storageAccounts/*"],
+ *       notActions: ["Microsoft.Storage/storageAccounts/delete"],
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Assignable Scopes
+ * By default the role is assignable only at its own `scope` and below.
+ * List more scopes to reuse one role across resource groups.
+ *
+ * **Example:** One role for two resource groups
+ * ```typescript
+ * const staging = yield* Azure.Resources.ResourceGroup("staging");
+ * const prod = yield* Azure.Resources.ResourceGroup("prod");
+ * const role = yield* Azure.Authorization.RoleDefinition("QueueReader", {
+ *   scope: staging.resourceGroupId,
+ *   permissions: [
+ *     {
+ *       dataActions: ["Microsoft.Storage/storageAccounts/queueServices/queues/messages/read"],
+ *     },
+ *   ],
+ *   assignableScopes: [staging.resourceGroupId, prod.resourceGroupId],
+ * });
+ * ```
+ *
  * ### Granting a Custom Role
+ * Pass `roleDefinitionId` to a role assignment. A role can't be deleted
+ * while assignments reference it; destroy deletes the assignments first and
+ * retries the role's delete for up to 60 seconds while Azure catches up.
+ *
  * **Example:** Assign the custom role to a managed identity
  * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("app");
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api");
+ * const role = yield* Azure.Authorization.RoleDefinition("StorageReader", {
+ *   scope: group.resourceGroupId,
+ *   permissions: [{ actions: ["Microsoft.Storage/storageAccounts/read"] }],
+ * });
  * yield* Azure.Authorization.RoleAssignment("api-reads-storage", {
  *   scope: group.resourceGroupId,
  *   roleDefinitionId: role.roleDefinitionId,

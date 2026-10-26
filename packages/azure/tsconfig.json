@@ -17,6 +17,9 @@
       "path": "../alchemy/tsconfig.json"
     },
     {
+      "path": "../kubernetes/tsconfig.json"
+    },
+    {
       "path": "../../submodules/distilled/packages/core/tsconfig.json"
     },
     {

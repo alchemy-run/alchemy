@@ -31,6 +31,7 @@ export interface GetSecretsRequest extends Omit<secrets.GetSecretsRequest, "vaul
  * // runtime
  * const page = yield* listSecrets();
  * const names = page.value.map((s) => s.id?.split("/").pop());
+ * // …provided with Effect.provide(Azure.KeyVault.GetSecretsHttp)
  * ```
  *
  * @binding

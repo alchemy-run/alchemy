@@ -7,25 +7,40 @@ export type EventSubscriptionDestination =
   | {
       /** Deliver to an Azure Storage queue. */
       endpointType: "StorageQueue";
-      /** ARM ID of the storage account. */
+      /** ARM ID of the storage account, e.g. `account.storageAccountId`. */
       resourceId: string;
-      /** Name of the queue. */
+      /** Name of the queue, e.g. `queue.queueName` of an `Azure.Storage.Queue`. */
       queueName: string;
-      /** Time-to-live of queue messages in seconds (`-1` = never expire). */
+      /**
+       * Time-to-live of queue messages in seconds (`-1` = never expire).
+       * @default Azure's default (7 days)
+       */
       queueMessageTimeToLiveInSeconds?: number;
     }
   | {
       /** Deliver to an HTTPS webhook (must answer the validation handshake). */
       endpointType: "WebHook";
-      /** Webhook URL. */
+      /** Webhook URL (`https://...`). */
       endpointUrl: string;
-      /** Maximum events per batch (1-5000). */
+      /**
+       * Maximum events per batch (1-5000).
+       * @default Azure's default (`1`)
+       */
       maxEventsPerBatch?: number;
-      /** Preferred batch size in kilobytes (1-1024). */
+      /**
+       * Preferred batch size in kilobytes (1-1024).
+       * @default Azure's default (`64`)
+       */
       preferredBatchSizeInKilobytes?: number;
-      /** Entra tenant ID used to obtain a bearer token for delivery. */
+      /**
+       * Entra tenant ID used to obtain a bearer token for delivery.
+       * @default no bearer token
+       */
       azureActiveDirectoryTenantId?: string;
-      /** Entra application ID or URI used to obtain a bearer token. */
+      /**
+       * Entra application ID or URI used to obtain a bearer token.
+       * @default no bearer token
+       */
       azureActiveDirectoryApplicationIdOrUri?: string;
     }
   | {
@@ -33,9 +48,15 @@ export type EventSubscriptionDestination =
       endpointType: "AzureFunction";
       /** ARM ID of the function, e.g. `.../sites/{app}/functions/{name}`. */
       resourceId: string;
-      /** Maximum events per batch (1-5000). */
+      /**
+       * Maximum events per batch (1-5000).
+       * @default Azure's default (`1`)
+       */
       maxEventsPerBatch?: number;
-      /** Preferred batch size in kilobytes (1-1024). */
+      /**
+       * Preferred batch size in kilobytes (1-1024).
+       * @default Azure's default (`64`)
+       */
       preferredBatchSizeInKilobytes?: number;
     }
   | {
@@ -54,7 +75,11 @@ export type EventSubscriptionDestination =
 export interface EventSubscriptionDeliveryIdentity {
   /** Identity of the topic to use. */
   type: "SystemAssigned" | "UserAssigned";
-  /** ARM ID of the user-assigned identity (with `type: "UserAssigned"`). */
+  /**
+   * ARM ID of the user-assigned identity. Required with
+   * `type: "UserAssigned"`.
+   * @default none (system-assigned identity)
+   */
   userAssignedIdentity?: string;
 }
 
@@ -64,25 +89,43 @@ export interface EventSubscriptionAdvancedFilter {
   operatorType: eventgrid.AdvancedFilterOperatorType;
   /** Event field to filter on, e.g. `data.api` or `subject`. */
   key: string;
-  /** Single comparison value (`NumberGreaterThan`, `BoolEquals`, …). */
+  /**
+   * Single comparison value (`NumberGreaterThan`, `BoolEquals`, …).
+   * @default none (use `values`)
+   */
   value?: number | boolean;
-  /** Comparison values (`StringIn`, `NumberIn`, `NumberInRange`, …). */
+  /**
+   * Comparison values (`StringIn`, `NumberIn`, `NumberInRange`, …).
+   * @default none (use `value`)
+   */
   values?: (string | number | number[])[];
 }
 
 /** Which events a subscription receives. */
 export interface EventSubscriptionFilter {
-  /** Event types to deliver. Omit for all event types. */
+  /**
+   * Event types to deliver, e.g. `Microsoft.Storage.BlobCreated`.
+   * @default every event type
+   */
   includedEventTypes?: string[];
-  /** Deliver only events whose subject starts with this prefix. */
+  /**
+   * Deliver only events whose subject starts with this prefix.
+   * @default no prefix filter
+   */
   subjectBeginsWith?: string;
-  /** Deliver only events whose subject ends with this suffix. */
+  /**
+   * Deliver only events whose subject ends with this suffix.
+   * @default no suffix filter
+   */
   subjectEndsWith?: string;
   /** Match `subjectBeginsWith`/`subjectEndsWith` case-sensitively. @default false */
   isSubjectCaseSensitive?: boolean;
   /** Evaluate advanced filters against array values. @default false */
   enableAdvancedFilteringOnArrays?: boolean;
-  /** Advanced filters (all must match). */
+  /**
+   * Advanced filters (all must match).
+   * @default []
+   */
   advancedFilters?: EventSubscriptionAdvancedFilter[];
 }
 
@@ -91,39 +134,62 @@ export interface EventSubscriptionSettings {
   /**
    * Event subscription name: 3-64 letters, digits, and hyphens. If omitted,
    * a unique name is generated from the app, stage, and logical ID.
+   *
+   * :::caution
    * Changing it replaces the subscription.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Where events are delivered. */
+  /** Where events are delivered. Updated in place. */
   destination: EventSubscriptionDestination;
   /**
    * Deliver with the topic's managed identity instead of keys. The topic
    * (or system topic) must have that identity, and the identity needs a
    * role on the destination.
+   * @default no identity (Event Grid delivers with its own access)
    */
   deliveryIdentity?: EventSubscriptionDeliveryIdentity;
-  /** Which events are delivered. */
+  /**
+   * Which events are delivered.
+   * @default every event
+   */
   filter?: EventSubscriptionFilter;
-  /** User labels. Alchemy adds an ownership label (`alchemy:{stack}/{stage}/{id}`). */
+  /**
+   * User labels. Alchemy adds an ownership label (`alchemy:{stack}/{stage}/{id}`).
+   * @default []
+   */
   labels?: string[];
-  /** Expiration time (ISO 8601). Azure deletes the subscription after it. */
+  /**
+   * Expiration time (ISO 8601). Azure deletes the subscription after it.
+   * @default never expires
+   */
   expirationTimeUtc?: string;
   /**
-   * Schema of delivered events. Immutable: changing it replaces the
-   * subscription.
+   * Schema of delivered events.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
    * @default "EventGridSchema"
    */
   eventDeliverySchema?: "EventGridSchema" | "CustomInputSchema" | "CloudEventSchemaV1_0";
-  /** Delivery retry policy. */
+  /**
+   * Delivery retry policy.
+   * @default Azure's default (30 attempts, 1440 minutes)
+   */
   retryPolicy?: {
     /** Maximum delivery attempts (1-30). @default 30 */
     maxDeliveryAttempts?: number;
     /** Time-to-live of an event in minutes (1-1440). @default 1440 */
     eventTimeToLiveInMinutes?: number;
   };
-  /** Blob container that receives undeliverable events. */
+  /**
+   * Blob container that receives undeliverable events.
+   * @default no dead-lettering (Event Grid drops undeliverable events)
+   */
   deadLetterDestination?: {
-    /** ARM ID of the storage account. */
+    /** ARM ID of the storage account, e.g. `account.storageAccountId`. */
     resourceId: string;
     /** Name of the blob container. */
     blobContainerName: string;

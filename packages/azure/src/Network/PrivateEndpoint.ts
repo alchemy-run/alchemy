@@ -42,11 +42,16 @@ export interface PrivateLinkServiceConnectionSpec {
    */
   privateLinkServiceId: string;
   /**
-   * Target sub-resources, e.g. `["blob"]` for a storage account or
-   * `["vault"]` for Key Vault. Omit for a private link service.
+   * Target sub-resources, e.g. `["blob"]`, `["file"]`, `["queue"]`, or
+   * `["dfs"]` for a storage account, `["vault"]` for Key Vault, or
+   * `["registry"]` for a container registry. Omit for a private link
+   * service.
    */
   groupIds?: string[];
-  /** Message sent to the owner of the target with a manual request. */
+  /**
+   * Message sent to the owner of the target with a manual request (up to
+   * 140 characters).
+   */
   requestMessage?: string;
 }
 
@@ -57,7 +62,7 @@ export interface PrivateEndpointStaticIpConfiguration {
   groupId: string;
   /** Member name of the sub-resource, e.g. `blob`. */
   memberName: string;
-  /** Static private IP inside the subnet. */
+  /** Static private IP inside the subnet, e.g. `10.0.3.10`. */
   privateIpAddress: string;
 }
 
@@ -65,6 +70,7 @@ export interface PrivateEndpointProps {
   /**
    * Resource group the private endpoint is created in. Changing it
    * replaces the private endpoint.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -80,13 +86,14 @@ export interface PrivateEndpointProps {
    */
   location?: string;
   /**
-   * ARM ID of the subnet the endpoint's NIC is placed in. Changing it
-   * replaces the private endpoint.
+   * ARM ID of the subnet the endpoint's NIC is placed in. The subnet must
+   * not be delegated. Changing it replaces the private endpoint.
    */
   subnetId: string;
   /**
-   * Auto-approved connections (targets you own or have access to).
-   * Changing a target or its group IDs replaces the private endpoint.
+   * Auto-approved connections (targets you own or have access to). Set
+   * this or `manualPrivateLinkServiceConnections`. Changing a target or
+   * its group IDs replaces the private endpoint.
    */
   privateLinkServiceConnections?: PrivateLinkServiceConnectionSpec[];
   /**
@@ -106,11 +113,16 @@ export interface PrivateEndpointProps {
    * @default dynamically allocated
    */
   ipConfigurations?: PrivateEndpointStaticIpConfiguration[];
-  /** ARM IDs of application security groups the endpoint joins. */
+  /**
+   * ARM IDs of application security groups the endpoint joins. Updated in
+   * place.
+   * @default []
+   */
   applicationSecurityGroupIds?: string[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -132,7 +144,7 @@ export interface PrivateEndpoint extends Resource<
     privateEndpointId: string;
     /** Resource group that holds the private endpoint. */
     resourceGroup: string;
-    /** Location of the private endpoint. */
+    /** Azure location of the private endpoint, e.g. `eastus`. */
     location: string;
     /** Subnet the endpoint lives in. */
     subnetId: string;
@@ -153,17 +165,38 @@ export interface PrivateEndpoint extends Resource<
 > {}
 
 /**
- * An Azure private endpoint — a NIC with a private IP in your subnet that
- * connects privately to a PaaS resource (Storage, Key Vault, SQL, ...) or
- * a private link service over Azure Private Link.
+ * An Azure private endpoint (`Microsoft.Network/privateEndpoints`): a
+ * network interface with a private IP in your subnet that connects to a
+ * PaaS resource (Storage, Key Vault, SQL, Container Registry, ...) or a
+ * private link service over Azure Private Link. Azure's counterpart to an
+ * AWS interface VPC endpoint.
  *
- * Pair it with a `privatelink.*` Private DNS zone so the target's FQDN
- * resolves to the private IP; until then `customDnsConfigs` lists the
- * mappings.
+ * Azure creates and owns the endpoint's network interface. Pair the
+ * endpoint with a `privatelink.*` Private DNS zone and an
+ * `Azure.Network.PrivateDnsZoneGroup` so the target's normal FQDN (e.g.
+ * `<account>.blob.core.windows.net`) resolves to the private IP. Until
+ * then, `customDnsConfigs` lists the FQDN-to-IP mappings. Set
+ * `publicNetworkAccess: "Disabled"` on the target to make the endpoint the
+ * only way in.
+ *
+ * :::caution[Changing `name`, `location`, `resourceGroup`, `subnetId`, a connection's target or group IDs, `customNetworkInterfaceName`, or `ipConfigurations` replaces the private endpoint]
+ * Alchemy creates a new endpoint and deletes the old one. The new
+ * endpoint gets a new private IP unless you pin one with
+ * `ipConfigurations`, and its DNS zone group is recreated with it.
+ * Clients that cached the old IP fail until DNS catches up.
+ * :::
+ *
+ * :::caution[The endpoint must be in the same region as its virtual network]
+ * The target resource can be in any region. Place the endpoint in a
+ * subnet that is not delegated to a service.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/private-link/private-endpoint-overview
  *
  * ### Connecting to a Storage Account
+ * Use one endpoint per storage service (`blob`, `file`, `queue`, `table`,
+ * `dfs`, `web`).
+ *
  * **Example:** Private endpoint for blob storage
  * ```typescript
  * const account = yield* Azure.Storage.StorageAccount("files", {
@@ -177,7 +210,113 @@ export interface PrivateEndpoint extends Resource<
  * });
  * ```
  *
+ * **Example:** Endpoint with a fixed name and NIC name
+ * ```typescript
+ * const endpoint = yield* Azure.Network.PrivateEndpoint("files-blob", {
+ *   name: "pe-files-blob",
+ *   customNetworkInterfaceName: "pe-files-blob-nic",
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: account.storageAccountId, groupIds: ["blob"] },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Private DNS
+ * Create the `privatelink.*` zone for the service, link it to the virtual
+ * network, and add a zone group. Azure then keeps the endpoint's A record
+ * in the zone.
+ *
+ * **Example:** Resolve the blob endpoint privately
+ * ```typescript
+ * const zone = yield* Azure.PrivateDns.Zone("blob", {
+ *   name: "privatelink.blob.core.windows.net",
+ * });
+ * yield* Azure.PrivateDns.VirtualNetworkLink("blob", {
+ *   privateZoneName: zone.privateZoneName,
+ *   virtualNetworkId: vnet.virtualNetworkId,
+ * });
+ * const endpoint = yield* Azure.Network.PrivateEndpoint("files-blob", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: account.storageAccountId, groupIds: ["blob"] },
+ *   ],
+ * });
+ * yield* Azure.Network.PrivateDnsZoneGroup("files-blob-dns", {
+ *   privateEndpoint: endpoint.privateEndpointName,
+ *   privateDnsZoneConfigs: [{ privateDnsZoneId: zone.privateZoneId }],
+ * });
+ * ```
+ *
+ * ### Connecting to a Key Vault
+ * Key Vault uses the `vault` sub-resource and the
+ * `privatelink.vaultcore.azure.net` zone.
+ *
+ * **Example:** Private vault
+ * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("secrets", {
+ *   publicNetworkAccess: "Disabled",
+ * });
+ * const endpoint = yield* Azure.Network.PrivateEndpoint("vault", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: vault.vaultId, groupIds: ["vault"] },
+ *   ],
+ * });
+ * const zone = yield* Azure.PrivateDns.Zone("vault", {
+ *   name: "privatelink.vaultcore.azure.net",
+ * });
+ * yield* Azure.PrivateDns.VirtualNetworkLink("vault", {
+ *   privateZoneName: zone.privateZoneName,
+ *   virtualNetworkId: vnet.virtualNetworkId,
+ * });
+ * yield* Azure.Network.PrivateDnsZoneGroup("vault-dns", {
+ *   privateEndpoint: endpoint.privateEndpointName,
+ *   privateDnsZoneConfigs: [{ privateDnsZoneId: zone.privateZoneId }],
+ * });
+ * ```
+ *
+ * ### Reaching the Endpoint from an App
+ * An app with VNet integration sends its outbound traffic through the
+ * virtual network, so the target's FQDN resolves to the private IP
+ * through the linked zone. The app's default plan (`B1`) supports VNet
+ * integration.
+ *
+ * **Example:** Web App that reaches a private storage account
+ * ```typescript
+ * const outbound = yield* Azure.Network.Subnet("web-out", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.4.0/26",
+ *   delegations: [{ serviceName: "Microsoft.Web/serverFarms" }],
+ * });
+ * const api = yield* Azure.Web.WebApp("Api", {
+ *   main: "./src/api.ts",
+ *   virtualNetworkSubnetId: outbound.subnetId,
+ * });
+ * ```
+ *
+ * ### Static IP Addresses
+ * Pin the endpoint's IP when firewalls or clients outside Azure DNS need
+ * a fixed address. The address must be free in the subnet.
+ *
+ * **Example:** Blob endpoint on 10.0.3.10
+ * ```typescript
+ * const endpoint = yield* Azure.Network.PrivateEndpoint("files-blob", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: account.storageAccountId, groupIds: ["blob"] },
+ *   ],
+ *   ipConfigurations: [
+ *     { name: "blob", groupId: "blob", memberName: "blob", privateIpAddress: "10.0.3.10" },
+ *   ],
+ * });
+ * ```
+ *
  * ### Manual Approval
+ * Use a manual connection when you cannot approve on the target, e.g. a
+ * partner's private link service. `connectionStatus` reads `Pending`
+ * until the owner approves.
+ *
  * **Example:** Connection the target owner approves
  * ```typescript
  * const endpoint = yield* Azure.Network.PrivateEndpoint("partner", {
@@ -188,6 +327,24 @@ export interface PrivateEndpoint extends Resource<
  *       requestMessage: "Please approve",
  *     },
  *   ],
+ * });
+ * // endpoint.connectionStatus === "Pending"
+ * ```
+ *
+ * ### Application Security Groups
+ * Add the endpoint to an application security group so NSG rules can
+ * target it. The subnet needs `privateEndpointNetworkPolicies` set to
+ * `"Enabled"` or `"NetworkSecurityGroupEnabled"` for the rules to apply.
+ *
+ * **Example:** Endpoint in the data tier
+ * ```typescript
+ * const data = yield* Azure.Network.ApplicationSecurityGroup("data");
+ * const endpoint = yield* Azure.Network.PrivateEndpoint("files-blob", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: account.storageAccountId, groupIds: ["blob"] },
+ *   ],
+ *   applicationSecurityGroupIds: [data.applicationSecurityGroupId],
  * });
  * ```
  *

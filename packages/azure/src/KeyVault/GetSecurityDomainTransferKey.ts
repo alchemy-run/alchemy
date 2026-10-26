@@ -26,6 +26,7 @@ export interface GetSecurityDomainTransferKeyRequest extends Omit<
  *
  * // runtime
  * const { transfer_key } = yield* transferKey();
+ * // …provided with Effect.provide(Azure.KeyVault.GetSecurityDomainTransferKeyHttp)
  * ```
  *
  * @binding

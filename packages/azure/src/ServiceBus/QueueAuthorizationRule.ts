@@ -25,21 +25,46 @@ import {
 } from "./internal.ts";
 
 export interface QueueAuthorizationRuleProps {
-  /** Resource group of the namespace. Changing it replaces the rule. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Namespace that holds the queue. Changing it replaces the rule. */
+  /**
+   * Name of the namespace that holds the queue, e.g. `bus.namespaceName` of
+   * an `Azure.ServiceBus.Namespace`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   */
   namespace: string;
-  /** Queue the rule grants access to. Changing it replaces the rule. */
+  /**
+   * Name of the queue the rule grants access to, e.g. `orders.queueName`
+   * of an `Azure.ServiceBus.Queue`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   */
   queue: string;
   /**
-   * Rule name: 1-50 letters, digits, `.`, `-`, and `_`. If omitted, a unique
-   * name is generated from the app, stage, and logical ID. Changing it
-   * replaces the rule.
+   * Rule name: 1-50 letters, digits, `.`, `-`, and `_`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Granted rights. `Manage` implies `Listen` and `Send`; Alchemy adds them
-   * automatically.
+   * Granted rights: any of `Listen`, `Send`, and `Manage`. `Manage`
+   * implies `Listen` and `Send`; Alchemy adds them for you. Changing the
+   * rights updates the rule in place and keeps its keys.
    */
   rights: AccessRight[];
 }
@@ -50,23 +75,30 @@ export interface QueueAuthorizationRule extends Resource<
   {
     /** Name of the rule. */
     authorizationRuleName: string;
-    /** ARM resource ID of the rule. */
+    /**
+     * ARM resource ID of the rule
+     * (`/subscriptions/.../namespaces/{namespace}/queues/{queue}/authorizationRules/{name}`).
+     */
     authorizationRuleId: string;
-    /** Queue the rule grants access to. */
+    /** Name of the queue the rule grants access to. */
     queueName: string;
-    /** Namespace that holds the queue. */
+    /** Name of the namespace that holds the queue. */
     namespaceName: string;
     /** Resource group of the namespace. */
     resourceGroup: string;
     /** Granted rights (sorted; `Manage` implies `Listen` and `Send`). */
     rights: AccessRight[];
-    /** Primary SAS key. */
+    /** Primary SAS key, as a secret. `undefined` when Azure did not return the keys. */
     primaryKey: Redacted.Redacted<string> | undefined;
-    /** Secondary SAS key. */
+    /** Secondary SAS key, as a secret. `undefined` when Azure did not return the keys. */
     secondaryKey: Redacted.Redacted<string> | undefined;
-    /** Primary connection string (`Endpoint=sb://...;SharedAccessKeyName=...`). */
+    /**
+     * Primary connection string
+     * (`Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...;EntityPath=<queue>`),
+     * as a secret.
+     */
     primaryConnectionString: Redacted.Redacted<string> | undefined;
-    /** Secondary connection string. */
+    /** Secondary connection string, as a secret. */
     secondaryConnectionString: Redacted.Redacted<string> | undefined;
   },
   never,
@@ -74,10 +106,23 @@ export interface QueueAuthorizationRule extends Resource<
 > {}
 
 /**
- * A shared access (SAS) authorization rule scoped to a single Service Bus
- * queue. It grants `Listen`, `Send`, and/or `Manage` on that queue only and
- * exposes the rule's keys and connection strings (with
- * `EntityPath=<queue>`) as secrets.
+ * A Service Bus queue SAS rule
+ * (`Microsoft.ServiceBus/namespaces/queues/authorizationRules`): a shared
+ * access key that grants `Listen` (receive), `Send`, and/or `Manage` on that one queue. Its connection
+ * strings carry `EntityPath=<queue>`. Use them for clients that cannot use
+ * Entra ID. For an Alchemy host, prefer a binding such as
+ * `Azure.ServiceBus.QueueSend` or `Azure.ServiceBus.QueueRead`: it
+ * assigns a role and needs no key.
+ *
+ * :::caution[Changing `name`, `queue`, `namespace`, or `resourceGroup` replaces the rule]
+ * Alchemy creates a new rule with new keys and deletes the old one.
+ * Clients that use the old connection string stop working.
+ * :::
+ *
+ * :::caution[The queue must exist]
+ * Create the `Azure.ServiceBus.Queue` first and pass its `queueName`.
+ * Deleting the queue deletes its rules.
+ * :::
  *
  * Authorization rules have no tags or metadata: Alchemy treats a rule it
  * did not create (e.g. an existing rule with the same explicit `name`) as
@@ -88,6 +133,7 @@ export interface QueueAuthorizationRule extends Resource<
  * ### Creating a Rule
  * **Example:** Send-only connection string for one queue
  * ```typescript
+ * const bus = yield* Azure.ServiceBus.Namespace("bus");
  * const orders = yield* Azure.ServiceBus.Queue("orders", {
  *   namespace: bus.namespaceName,
  * });
@@ -101,6 +147,10 @@ export interface QueueAuthorizationRule extends Resource<
  *
  * **Example:** Listen-only rule for a consumer
  * ```typescript
+ * const bus = yield* Azure.ServiceBus.Namespace("bus");
+ * const orders = yield* Azure.ServiceBus.Queue("orders", {
+ *   namespace: bus.namespaceName,
+ * });
  * const consumer = yield* Azure.ServiceBus.QueueAuthorizationRule("consumer", {
  *   namespace: bus.namespaceName,
  *   queue: orders.queueName,

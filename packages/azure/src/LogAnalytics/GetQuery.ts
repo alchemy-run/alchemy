@@ -4,6 +4,17 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type { Workspace } from "./Workspace.ts";
 
+/**
+ * Request of a {@link GetQuery} call. The bound workspace supplies
+ * `workspaceId`.
+ *
+ * - `query`: the KQL query text, e.g. `"Heartbeat | count"`.
+ * - `timespan` (optional): ISO 8601 duration or interval applied on top of
+ *   any time filter in the query, e.g. `PT1H` or `P1D`. Default: no extra
+ *   time filter.
+ * - `endpoint` (optional): Log Analytics endpoint. Default:
+ *   `https://api.loganalytics.io`.
+ */
 export interface GetQueryRequest extends Omit<query.GetQueryRequest, "workspaceId"> {}
 
 /**
@@ -21,22 +32,27 @@ export interface GetQueryRequest extends Omit<query.GetQueryRequest, "workspaceI
  * `AzureBindings`).
  * Provide {@link GetQueryHttp}.
  *
- * ### Calling GetQuery
- * **Example:** GetQuery from a Function
+ * ### Running a Short Query
+ * **Example:** Count heartbeats from an Azure Function
  * ```typescript
- * // init
- * const getQuery = yield* Azure.LogAnalytics.GetQuery(workspace);
+ * const Logs = Azure.LogAnalytics.Workspace("Logs", {});
  *
- * // runtime
- * const result = yield* getQuery({ query: "Heartbeat | count", timespan: "P1D" });
- * ```
- *
- * **Example:** Provide the implementation on the Function
- * ```typescript
- * Effect.gen(function* () {
- *   const getQuery = yield* Azure.LogAnalytics.GetQuery(workspace);
- *   // ...
- * }).pipe(Effect.provide(Azure.LogAnalytics.GetQueryHttp));
+ * export default class Reports extends Azure.Functions.Function<Reports>()(
+ *   "Reports",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const workspace = yield* Logs;
+ *     // init: assigns Log Analytics Data Reader on the workspace only
+ *     const getQuery = yield* Azure.LogAnalytics.GetQuery(workspace);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime
+ *         const result = yield* getQuery({ query: "Heartbeat | count", timespan: "P1D" });
+ *         return yield* HttpServerResponse.json({ count: result.tables[0]?.rows[0]?.[0] });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.LogAnalytics.GetQueryHttp)),
+ * ) {}
  * ```
  *
  * @binding

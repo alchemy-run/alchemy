@@ -29,94 +29,195 @@ import {
 } from "./common.ts";
 
 export interface DatabaseProps {
-  /** Resource group of the server. Changing it replaces the database. */
+  /**
+   * Resource group of the server.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the SQL server. Changing it replaces the database. */
+  /**
+   * Name of the `Azure.Sql.Server` that holds the database.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
+   */
   server: string;
   /**
-   * Database name (1-128 characters, no `<>*%&:\/?`, not `master`). If
-   * omitted, a unique name is generated from the app, stage, and logical
-   * ID. Changing it replaces the database.
+   * Database name: 1-128 characters, no `<>*%&:\/?`, not `master`.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Location; must equal the server's location. Changing it replaces the
-   * database.
+   * Location; it must equal the server's location.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
    * @default the server's location
    */
   location?: string;
   /**
-   * Service objective, e.g. `{ name: "Basic" }`, `{ name: "S0" }`, or
-   * serverless `{ name: "GP_S_Gen5_2" }`. Scaling is an online operation.
-   * Ignored while the database is in an elastic pool.
+   * Service objective, e.g. `{ name: "Basic" }` (5 DTU), `{ name: "S0" }`
+   * (10 DTU), serverless `{ name: "GP_S_Gen5_2" }`, or Hyperscale
+   * `{ name: "HS_Gen5_2" }`. Scaling is an online operation; the deploy
+   * waits until the new objective is active. Ignored while the database is
+   * in an elastic pool.
    * @default Azure's default (`GP_Gen5_2`, provisioned vCore)
    */
   sku?: SqlSku;
-  /** Maximum data size in bytes (must be a size the SKU allows). */
+  /**
+   * Maximum data size in bytes. It must be a size the SKU allows, e.g.
+   * `2147483648` (2 GiB) for `Basic`.
+   * @default the SKU's default size
+   */
   maxSizeBytes?: number;
-  /** ARM ID of the elastic pool to place the database in. */
+  /**
+   * ARM ID of the `Azure.Sql.ElasticPool` to place the database in. Moving
+   * a database in or out of a pool happens in place.
+   * @default not in a pool
+   */
   elasticPoolId?: string;
   /**
-   * Database collation. Changing it replaces the database.
+   * Database collation.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
    * @default "SQL_Latin1_General_CP1_CI_AS"
    */
   collation?: string;
   /**
-   * Collation of the metadata catalog. Changing it replaces the database.
+   * Collation of the metadata catalog.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
+   * @default Azure's default (`SQL_Latin1_General_CP1_CI_AS`)
    */
   catalogCollation?: "DATABASE_DEFAULT" | "SQL_Latin1_General_CP1_CI_AS";
   /**
-   * Sample schema loaded at creation. Changing it replaces the database.
+   * Sample schema loaded at creation.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
+   * @default an empty database
    */
   sampleName?: "AdventureWorksLT" | "WideWorldImportersStd" | "WideWorldImportersFull";
   /**
-   * Creation mode (`Default`, `Copy`, `Secondary`, `PointInTimeRestore`,
-   * …). Create-only: changing it replaces the database.
+   * Creation mode: `Default`, `Copy`, `Secondary`, `PointInTimeRestore`,
+   * `Restore`, `Recovery`, … Create-only.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
    * @default "Default"
    */
   createMode?: string;
   /**
    * Source database ARM ID for `Copy`, `Secondary`, and restore modes.
-   * Changing it replaces the database.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
+   * @default none
    */
   sourceDatabaseId?: string;
-  /** Point in time (ISO 8601) to restore for `PointInTimeRestore`. */
+  /**
+   * Point in time (ISO 8601) to restore for `PointInTimeRestore`. Read only
+   * at creation.
+   * @default none
+   */
   restorePointInTime?: string;
-  /** Spread replicas across availability zones. */
+  /**
+   * Spread replicas across availability zones (Premium, Business Critical,
+   * General Purpose, and Hyperscale in supported regions).
+   * @default Azure's default (`false`)
+   */
   zoneRedundant?: boolean;
-  /** Read-only routing to a secondary replica (Premium/Business Critical/Hyperscale). */
+  /**
+   * Route read-only connections (`ApplicationIntent=ReadOnly`) to a
+   * secondary replica (Premium, Business Critical, and Hyperscale).
+   * @default Azure's default for the SKU
+   */
   readScale?: "Enabled" | "Disabled";
-  /** Number of high-availability secondary replicas. */
+  /**
+   * Number of high-availability secondary replicas (Business Critical,
+   * Premium, and Hyperscale).
+   * @default Azure's default for the SKU
+   */
   highAvailabilityReplicaCount?: number;
-  /** Serverless auto-pause delay in minutes (`-1` disables auto-pause). */
+  /**
+   * Serverless auto-pause delay in minutes (minimum 15, `-1` disables
+   * auto-pause).
+   * @default Azure's default (`60`) on serverless SKUs
+   */
   autoPauseDelay?: number;
-  /** Serverless minimum vCores. */
+  /**
+   * Serverless minimum vCores, e.g. `0.5`.
+   * @default Azure's default for the SKU
+   */
   minCapacity?: number;
-  /** Backup storage redundancy. */
+  /**
+   * Backup storage redundancy. `Local` is the cheapest.
+   * @default Azure's default (`Geo`)
+   */
   requestedBackupStorageRedundancy?: "Geo" | "Local" | "Zone" | "GeoZone";
   /**
-   * Make every table a ledger table. Cannot be changed after creation, so
-   * changing it replaces the database.
+   * Make every table a ledger table.
+   *
+   * :::caution
+   * Azure cannot change it after creation. Changing it replaces the
+   * database and deletes its data.
+   * :::
    * @default false
    */
   isLedgerOn?: boolean;
-  /** License model (`LicenseIncluded` or Azure Hybrid Benefit `BasePrice`). */
+  /**
+   * License model: `LicenseIncluded`, or `BasePrice` for Azure Hybrid
+   * Benefit (vCore SKUs).
+   * @default Azure's default (`LicenseIncluded`)
+   */
   licenseType?: "LicenseIncluded" | "BasePrice";
-  /** Maintenance configuration ARM ID. */
+  /**
+   * ARM ID of a public maintenance configuration, e.g.
+   * `/subscriptions/{id}/providers/Microsoft.Maintenance/publicMaintenanceConfigurations/SQL_EastUS_DB_1`.
+   * @default the system default window
+   */
   maintenanceConfigurationId?: string;
   /**
    * Use the subscription's free Azure SQL Database offer (serverless
-   * `GP_S_Gen5_2`, limited per subscription). Changing it replaces the
-   * database.
+   * `GP_S_Gen5_2`, a limited number per subscription).
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
+   * @default false
    */
   useFreeLimit?: boolean;
-  /** What happens when the free monthly limit is exhausted. */
+  /**
+   * What happens when the free monthly limit runs out: pause until next
+   * month, or bill the overage.
+   * @default Azure's default (`AutoPause`) with `useFreeLimit`
+   */
   freeLimitExhaustionBehavior?: "AutoPause" | "BillForUsage";
-  /** Secure enclave type. */
+  /**
+   * Secure enclave type for Always Encrypted.
+   * @default Azure's default (`Default`)
+   */
   preferredEnclaveType?: "Default" | "VBS";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -161,26 +262,43 @@ export interface Database extends Resource<
 > {}
 
 /**
- * A single database on an Azure SQL logical server.
+ * A single database on an Azure SQL logical server
+ * (`Microsoft.Sql/servers/databases`).
  *
- * Choose the SKU deliberately: Azure's default is a provisioned
- * `GP_Gen5_2` vCore database. `Basic` (5 DTU) is the cheapest fixed tier
- * and `useFreeLimit` uses the free serverless offer.
+ * Pick the SKU on purpose: Azure's default is a provisioned `GP_Gen5_2`
+ * vCore database, billed every hour. `Basic` (5 DTU, 2 GiB) is the cheapest
+ * fixed tier, serverless `GP_S_Gen5_*` pauses when idle, and `useFreeLimit`
+ * uses the subscription's free serverless offer. Scaling to another SKU
+ * happens online; the deploy waits until the new service objective is
+ * active.
  *
- * @see https://learn.microsoft.com/azure/azure-sql/database/single-database-overview
+ * :::caution[Changing `name`, `server`, `location`, `collation`, `createMode`, `isLedgerOn`, or `useFreeLimit` replaces the database]
+ * Alchemy creates a new, empty database and deletes the old one with its
+ * data. The other create-only props are `catalogCollation`, `sampleName`,
+ * and `sourceDatabaseId`.
+ * :::
+ *
+ * See [What is a single database in Azure SQL Database](https://learn.microsoft.com/azure/azure-sql/database/single-database-overview).
  *
  * ### Creating a Database
  * **Example:** Basic tier database
  * ```typescript
- * const db = yield* Azure.Sql.Database("app", {
+ * const server = yield* Azure.Sql.Server("Sql", {
+ *   location: "centralus",
+ *   administratorLogin: "sqladmin",
+ *   administratorLoginPassword: password,
+ * });
+ * const db = yield* Azure.Sql.Database("Todos", {
  *   server: server.serverName,
  *   sku: { name: "Basic" },
+ *   requestedBackupStorageRedundancy: "Local",
  * });
+ * // db.databaseName, db.databaseId
  * ```
  *
  * **Example:** Free serverless database
  * ```typescript
- * const db = yield* Azure.Sql.Database("app", {
+ * const db = yield* Azure.Sql.Database("Todos", {
  *   server: server.serverName,
  *   sku: { name: "GP_S_Gen5_2" },
  *   useFreeLimit: true,
@@ -188,17 +306,215 @@ export interface Database extends Resource<
  * });
  * ```
  *
+ * **Example:** Serverless database that pauses after an hour
+ * ```typescript
+ * const db = yield* Azure.Sql.Database("Todos", {
+ *   server: server.serverName,
+ *   sku: { name: "GP_S_Gen5_2" },
+ *   minCapacity: 0.5,
+ *   autoPauseDelay: 60,
+ * });
+ * ```
+ *
+ * **Example:** Standard tier with a size cap
+ * ```typescript
+ * const db = yield* Azure.Sql.Database("Todos", {
+ *   server: server.serverName,
+ *   sku: { name: "S0" },
+ *   maxSizeBytes: 10 * 1024 * 1024 * 1024, // 10 GiB
+ * });
+ * ```
+ *
+ * ### Scaling
+ * Change `sku` and deploy again. Azure scales the database online, and
+ * connections drop for a few seconds at the switch.
+ *
+ * **Example:** Scale from Basic to S1
+ * ```diff
+ * const db = yield* Azure.Sql.Database("Todos", {
+ *   server: server.serverName,
+ * -  sku: { name: "Basic" },
+ * +  sku: { name: "S1" },
+ * });
+ * ```
+ *
  * ### Elastic Pools
  * **Example:** Database in an elastic pool
  * ```typescript
- * const pool = yield* Azure.Sql.ElasticPool("pool", {
+ * const pool = yield* Azure.Sql.ElasticPool("Tenants", {
  *   server: server.serverName,
  *   sku: { name: "BasicPool", capacity: 50 },
  * });
- * const db = yield* Azure.Sql.Database("tenant-a", {
+ * const db = yield* Azure.Sql.Database("TenantA", {
  *   server: server.serverName,
  *   elasticPoolId: pool.elasticPoolId,
  * });
+ * ```
+ *
+ * ### High Availability
+ * **Example:** Zone-redundant Business Critical database with read scale-out
+ * ```typescript
+ * const db = yield* Azure.Sql.Database("Orders", {
+ *   server: server.serverName,
+ *   sku: { name: "BC_Gen5_2" },
+ *   zoneRedundant: true,
+ *   readScale: "Enabled",
+ *   requestedBackupStorageRedundancy: "Zone",
+ * });
+ * ```
+ *
+ * **Example:** Hyperscale with two high-availability replicas
+ * ```typescript
+ * const db = yield* Azure.Sql.Database("Orders", {
+ *   server: server.serverName,
+ *   sku: { name: "HS_Gen5_2" },
+ *   highAvailabilityReplicaCount: 2,
+ * });
+ * ```
+ *
+ * ### Backups and Restores
+ * Azure backs up every database automatically. Tune the windows with
+ * `Azure.Sql.BackupShortTermRetentionPolicy` and
+ * `Azure.Sql.LongTermRetentionPolicy`.
+ *
+ * **Example:** Keep point-in-time backups for 14 days and weekly backups for 8 weeks
+ * ```typescript
+ * yield* Azure.Sql.BackupShortTermRetentionPolicy("TodosPitr", {
+ *   server: server.serverName,
+ *   database: db.databaseName,
+ *   retentionDays: 14,
+ * });
+ * yield* Azure.Sql.LongTermRetentionPolicy("TodosLtr", {
+ *   server: server.serverName,
+ *   database: db.databaseName,
+ *   weeklyRetention: "P8W",
+ * });
+ * ```
+ *
+ * **Example:** Restore a point in time into a new database
+ * ```typescript
+ * const restored = yield* Azure.Sql.Database("TodosRestored", {
+ *   server: server.serverName,
+ *   createMode: "PointInTimeRestore",
+ *   sourceDatabaseId: db.databaseId,
+ *   restorePointInTime: "2026-10-24T12:00:00Z",
+ * });
+ * ```
+ *
+ * **Example:** Copy a database
+ * ```typescript
+ * const copy = yield* Azure.Sql.Database("TodosCopy", {
+ *   server: server.serverName,
+ *   createMode: "Copy",
+ *   sourceDatabaseId: db.databaseId,
+ * });
+ * ```
+ *
+ * ### Geo-Replication
+ * Put the database in an `Azure.Sql.FailoverGroup` to replicate it to a
+ * server in another region behind one listener endpoint.
+ *
+ * **Example:** Replicate to a second region
+ * ```typescript
+ * const secondary = yield* Azure.Sql.Server("SqlWest", {
+ *   location: "westus2",
+ *   administratorLogin: "sqladmin",
+ *   administratorLoginPassword: password,
+ * });
+ * const group = yield* Azure.Sql.FailoverGroup("Todos", {
+ *   server: server.serverName,
+ *   partnerServers: [secondary.serverId],
+ *   databases: [db.databaseId],
+ * });
+ * // connect to group.readWriteListenerEndpoint
+ * ```
+ *
+ * ### Ledger
+ * **Example:** Ledger database
+ * ```typescript
+ * // Every table keeps a tamper-evident history. Azure cannot turn it off later.
+ * const db = yield* Azure.Sql.Database("Audit", {
+ *   server: server.serverName,
+ *   sku: { name: "S0" },
+ *   isLedgerOn: true,
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * The runtime connects with a SQL driver. Yield `server.fullyQualifiedDomainName`
+ * and `db.databaseName` inside the host to put them in its app settings,
+ * then read them at runtime (see `Azure.Sql.Server` for the whole Function).
+ *
+ * **Example:** Read the connection values inside an Azure Function
+ * ```typescript
+ * // init
+ * const host = yield* server.fullyQualifiedDomainName;
+ * const databaseName = yield* database.databaseName;
+ *
+ * // runtime
+ * const resolvedHost = yield* host;
+ * const resolvedDatabase = yield* databaseName;
+ * // MssqlClient.layer({ server: resolvedHost, database: resolvedDatabase, … })
+ * ```
+ *
+ * ### Runtime Operations
+ * Each binding assigns a custom role with exactly one action on this
+ * database only, to the host's managed identity (an Azure Function, Web
+ * App, Container App, container group, or VM) or to an Entra service
+ * principal on any other host. Provide the matching `*Http` layer.
+ *
+ * **Example:** Export the database to a BACPAC file
+ * ```typescript
+ * // init
+ * const exportDatabase = yield* Azure.Sql.ExportDatabase(db);
+ *
+ * // runtime
+ * yield* exportDatabase({
+ *   storageUri: "https://backups.blob.core.windows.net/bacpac/todos.bacpac",
+ *   storageKeyType: "StorageAccessKey",
+ *   storageKey: Redacted.value(storageKey),
+ *   administratorLogin: "sqladmin",
+ *   administratorLoginPassword: adminPassword,
+ * });
+ * // …provided with Effect.provide(Azure.Sql.ExportDatabaseHttp)
+ * ```
+ *
+ * **Example:** Fail over to another replica to test retries
+ * ```typescript
+ * // init
+ * const failoverDatabase = yield* Azure.Sql.FailoverDatabase(db);
+ *
+ * // runtime: Azure allows one failover every 15 minutes per database
+ * yield* failoverDatabase({ replicaType: "Primary" });
+ * // …provided with Effect.provide(Azure.Sql.FailoverDatabaseHttp)
+ * ```
+ *
+ * **Example:** Pause and resume a dedicated SQL pool
+ * ```typescript
+ * // init: dedicated SQL pool (DataWarehouse) databases only
+ * const pauseDatabase = yield* Azure.Sql.PauseDatabase(warehouse);
+ * const resumeDatabase = yield* Azure.Sql.ResumeDatabase(warehouse);
+ * const createRestorePoint = yield* Azure.Sql.CreateRestorePoint(warehouse);
+ *
+ * // runtime
+ * yield* createRestorePoint({ restorePointLabel: "before-load" });
+ * yield* pauseDatabase();
+ * yield* resumeDatabase();
+ * // …provided with Effect.provide([Azure.Sql.PauseDatabaseHttp, Azure.Sql.ResumeDatabaseHttp, Azure.Sql.CreateRestorePointHttp])
+ * ```
+ *
+ * ### Deleting a Database
+ * Destroying the database deletes it and its data. Deleting its server
+ * deletes it too.
+ *
+ * **Example:** Keep the database when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const db = yield* Azure.Sql.Database("Todos", {
+ *   server: server.serverName,
+ *   sku: { name: "Basic" },
+ * }).pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

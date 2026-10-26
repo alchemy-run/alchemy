@@ -37,6 +37,7 @@ export interface PutHsmRoleDefinitionRequest extends Omit<
  *     assignableScopes: ["/"],
  *   },
  * });
+ * // …provided with Effect.provide(Azure.KeyVault.PutHsmRoleDefinitionHttp)
  * ```
  *
  * @binding

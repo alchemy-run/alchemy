@@ -1,8 +1,14 @@
+import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Layer from "effect/Layer";
 import {
   AdvancedPlatformMetrics,
   AdvancedPlatformMetricsProvider,
 } from "./AdvancedPlatformMetrics.ts";
+import {
+  BlobContainerProviderLocal,
+  QueueProviderLocal,
+  StorageAccountProviderLocal,
+} from "./Azurite.ts";
 import {
   BlobAccessPointConfiguration,
   BlobAccessPointConfigurationProvider,
@@ -70,7 +76,10 @@ export const layers = () =>
   Layer.mergeAll(
     AdvancedPlatformMetricsProvider(),
     BlobAccessPointConfigurationProvider(),
-    BlobContainerProvider(),
+    ProviderLayer.dual(BlobContainer, {
+      live: BlobContainerProvider,
+      local: BlobContainerProviderLocal,
+    }),
     BlobInventoryPolicyProvider(),
     BlobServicePropertiesProvider(),
     ConnectorProvider(),
@@ -85,9 +94,12 @@ export const layers = () =>
     ManagementPolicyProvider(),
     ObjectReplicationPolicyProvider(),
     PrivateEndpointConnectionProvider(),
-    QueueProvider(),
+    ProviderLayer.dual(Queue, { live: QueueProvider, local: QueueProviderLocal }),
     QueueServicePropertiesProvider(),
-    StorageAccountProvider(),
+    ProviderLayer.dual(StorageAccount, {
+      live: StorageAccountProvider,
+      local: StorageAccountProviderLocal,
+    }),
     StorageTaskAssignmentProvider(),
     TableProvider(),
     TableServicePropertiesProvider(),

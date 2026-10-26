@@ -48,6 +48,7 @@ export interface ReadFileShareClient {
  * // runtime
  * const file = yield* docs.get("reports/latest.json");
  * const report = file ? JSON.parse(file.text()) : undefined;
+ * // …provided with Effect.provide(Azure.Storage.FileShareReadHttp)
  * ```
  *
  * **Example:** List a directory

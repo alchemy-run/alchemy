@@ -48,6 +48,12 @@ export interface FunctionsBundleProps {
   isExternal?: boolean;
   /** Extra `extensions` entries for host.json (`durableTask` for a WorkflowFunction). */
   hostExtensions?: Record<string, unknown>;
+  /**
+   * Bundle for the local runtime (`alchemy dev`): a Node.js HTTP server
+   * instead of the Functions worker, and the ambient (emulator) credentials
+   * instead of a managed identity.
+   */
+  local?: boolean;
 }
 
 /**
@@ -180,6 +186,26 @@ import { ${handler} as handler } from ${JSON.stringify(importPath)};
 serve(handler, ${JSON.stringify(envKeys)});
 `;
 
+/** Generated entry of an Effect Function under `alchemy dev`. */
+const localEffectEntry = (handler: string) => (importPath: string) =>
+  `
+import { bootstrap } from "@alchemy.run/azure/Bootstrap/FunctionsLocal";
+
+globalThis.__ALCHEMY_RUNTIME__ = true;
+const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
+
+await bootstrap(entrypoint);
+`;
+
+/** Generated entry of an async Function under `alchemy dev`. */
+const localAsyncEntry = (handler: string, envKeys: readonly string[]) => (importPath: string) =>
+  `
+import { serve } from "@alchemy.run/azure/Bootstrap/FunctionsLocalAsync";
+import { ${handler} as handler } from ${JSON.stringify(importPath)};
+
+await serve(handler, ${JSON.stringify(envKeys)});
+`;
+
 /** Bundles `main` into the package the Functions Node.js worker loads. */
 export const makeBundler = Effect.gen(function* () {
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
@@ -188,19 +214,28 @@ export const makeBundler = Effect.gen(function* () {
     const cwd = yield* findCwdForBundle(realMain);
     const handler = props.handler ?? "default";
     const envKeys = Object.keys(props.env ?? {}).sort();
-    const entry = props.isExternal ? asyncEntry(handler, envKeys) : effectEntry(handler);
+    const entry = props.local
+      ? props.isExternal
+        ? localAsyncEntry(handler, envKeys)
+        : localEffectEntry(handler)
+      : props.isExternal
+        ? asyncEntry(handler, envKeys)
+        : effectEntry(handler);
+    const input = {
+      ...props.build?.input,
+      input: realMain,
+      cwd,
+      platform: "node" as const,
+      resolve: {
+        conditionNames: [...Bundle.NODE_CONDITION_NAMES],
+        ...props.build?.input?.resolve,
+      },
+      plugins: [props.build?.input?.plugins, virtualEntryPlugin(entry)],
+    };
     const output = yield* Bundle.build(
-      managedIdentityHostBundle({
-        ...props.build?.input,
-        input: realMain,
-        cwd,
-        platform: "node",
-        resolve: {
-          conditionNames: [...Bundle.NODE_CONDITION_NAMES],
-          ...props.build?.input?.resolve,
-        },
-        plugins: [props.build?.input?.plugins, virtualEntryPlugin(entry)],
-      }),
+      // A local runtime has no managed identity: bindings use the
+      // credentials its bootstrap provides.
+      props.local ? input : managedIdentityHostBundle(input),
       {
         ...props.build?.output,
         format: "esm",

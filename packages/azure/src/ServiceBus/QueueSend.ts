@@ -4,25 +4,54 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type { Queue } from "./Queue.ts";
 
+/** Broker and custom properties of one sent message. */
 export interface ServiceBusSendOptions {
-  /** `Content-Type` of the body. @default "application/json" for objects, else "text/plain" */
+  /**
+   * `Content-Type` stored with the message and returned on receive.
+   * @default "application/json" for an object body, else "text/plain"
+   */
   contentType?: string;
-  /** Message ID, used for duplicate detection. */
+  /**
+   * Message ID. Queues and topics with duplicate detection drop a second
+   * message with the same ID.
+   * @default an ID Service Bus generates
+   */
   messageId?: string;
-  /** Session ID; required by session-enabled queues. */
+  /**
+   * Session ID. Session-enabled queues and subscriptions require it.
+   * @default no session
+   */
   sessionId?: string;
+  /**
+   * Correlation ID, e.g. the ID of the request this message answers.
+   * Correlation filters can match on it.
+   * @default no correlation ID
+   */
   correlationId?: string;
-  /** Message label (subject). */
+  /**
+   * Message label (subject). Subscription rules often filter on it.
+   * @default no label
+   */
   label?: string;
-  /** Time to live in seconds. */
+  /**
+   * Time to live in seconds. Service Bus expires the message after it.
+   * @default the queue's or topic's default message time to live
+   */
   timeToLiveSeconds?: number;
-  /** Application properties, sent as custom headers. */
+  /**
+   * Application properties, sent as custom headers. A receiver gets them
+   * back JSON-quoted (`"high"`).
+   * @default {}
+   */
   properties?: Record<string, string>;
 }
 
 /** Send-only client for one Service Bus queue. */
 export interface SendServiceBusQueueClient {
-  /** Send one message; objects are JSON-encoded. */
+  /**
+   * Send one message. A string body is sent as it is; an object body is
+   * JSON-encoded.
+   */
   send(
     body: string | object,
     options?: ServiceBusSendOptions,
@@ -30,7 +59,8 @@ export interface SendServiceBusQueueClient {
 }
 
 /**
- * Send messages to an Azure Service Bus queue from any host.
+ * Send messages, one at a time, to an Azure Service Bus queue from any
+ * host. {@link QueueWrite} adds `sendBatch`.
  *
  * Binding assigns **Azure Service Bus Data Sender** on the queue only. On a
  * host with a managed identity (an Azure Function, Function App, Web App,
@@ -43,11 +73,43 @@ export interface SendServiceBusQueueClient {
  * ### Sending Messages
  * **Example:** Send a JSON message
  * ```typescript
- * // init
- * const orders = yield* Azure.ServiceBus.QueueSend(queue);
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const queue = yield* Orders;
+ *     // init: assigns the role on the queue only
+ *     const orders = yield* Azure.ServiceBus.QueueSend(queue);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime
+ *         yield* orders.send({ orderId: "42" }, { messageId: "42" });
+ *         return HttpServerResponse.text("sent");
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.ServiceBus.QueueSendHttp)),
+ * ) {}
+ * ```
  *
- * // runtime
- * yield* orders.send({ orderId }, { messageId: orderId });
+ * **Example:** Send from a Container App
+ * ```typescript
+ * export default class Api extends Azure.ContainerApps.ContainerApp<Api>()(
+ *   "Api",
+ *   Effect.gen(function* () {
+ *     const env = yield* Environment;
+ *     return { main: import.meta.url, environmentId: env.environmentId };
+ *   }),
+ *   Effect.gen(function* () {
+ *     const queue = yield* Orders;
+ *     const orders = yield* Azure.ServiceBus.QueueSend(queue);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* orders.send("plain text", { label: "note", timeToLiveSeconds: 600 });
+ *         return HttpServerResponse.text("sent");
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.ServiceBus.QueueSendHttp)),
+ * ) {}
  * ```
  *
  * @binding

@@ -32,6 +32,7 @@ export interface CheckFullRestoreRequest extends Omit<
  *     useManagedIdentity: true,
  *   },
  * });
+ * // …provided with Effect.provide(Azure.KeyVault.CheckFullRestoreHttp)
  * ```
  *
  * @binding

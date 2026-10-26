@@ -16,14 +16,33 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEventGridName, sameName } from "./common.ts";
 
 export interface DomainTopicProps {
-  /** Resource group of the domain. Changing it replaces the domain topic. */
+  /**
+   * Resource group of the domain.
+   *
+   * :::caution
+   * Changing it replaces the domain topic.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the parent Event Grid domain. Changing it replaces the domain topic. */
+  /**
+   * Name of the parent Event Grid domain, e.g. `domain.domainName` of an
+   * `Azure.EventGrid.Domain`.
+   *
+   * :::caution
+   * Changing it replaces the domain topic.
+   * :::
+   */
   domain: string;
   /**
-   * Domain topic name: 3-50 letters, digits, and hyphens. If omitted, a
-   * unique name is generated from the app, stage, and logical ID. Changing
-   * it replaces the domain topic.
+   * Domain topic name: 3-50 letters, digits, and hyphens. Publishers set the
+   * event's `topic` field to it. If omitted, a unique name is generated from
+   * the app, stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the domain topic.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
 }
@@ -46,12 +65,22 @@ export interface DomainTopic extends Resource<
 > {}
 
 /**
- * A topic inside an Event Grid domain. Events published to the domain
- * endpoint with `topic` set to this name are routed to its subscriptions.
+ * A topic inside an Event Grid domain (`Microsoft.EventGrid/domains/topics`).
+ * Use one per tenant or customer: events published to the domain endpoint
+ * with `topic` set to this name go to the domain topic's subscriptions.
  *
- * Domain topics have no tags; ownership follows the parent domain. If the
- * domain has `autoDeleteTopicWithLastSubscription` enabled, Azure deletes
- * the topic when its last subscription is removed.
+ * Domain topics have no tags; ownership follows the parent domain.
+ *
+ * :::caution[Changing `name`, `domain`, or `resourceGroup` replaces the domain topic]
+ * Alchemy creates a new domain topic and deletes the old one with its
+ * event subscriptions.
+ * :::
+ *
+ * :::caution[Azure may delete the topic for you]
+ * If the domain has `autoDeleteTopicWithLastSubscription` enabled, Azure
+ * deletes the topic when its last subscription is removed. The next deploy
+ * creates it again.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/event-domains
  *

@@ -18,34 +18,68 @@ import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, namespaceOwnedByStage } from "./Common.ts";
 
+/** Serialization format of the schemas in a group. */
 export type SchemaType = "Avro" | "Json" | "ProtoBuf" | "Unknown";
+/**
+ * Rule a new schema version must pass: `None` (no check), `Backward` (new
+ * readers can read old data), or `Forward` (old readers can read new data).
+ */
 export type SchemaCompatibility = "None" | "Backward" | "Forward";
 
 export interface SchemaGroupProps {
-  /** Resource group of the namespace. Changing it replaces the schema group. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the schema group and deletes its schemas.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Namespace that hosts the schema registry. Changing it replaces the schema group. */
+  /**
+   * Name of the `Standard` (or higher) namespace that hosts the schema
+   * registry, e.g. `namespace.namespaceName`.
+   *
+   * :::caution
+   * Changing it replaces the schema group and deletes its schemas.
+   * :::
+   */
   namespace: string;
   /**
-   * Schema group name: letters, digits, periods, hyphens, and underscores.
-   * If omitted, a unique name is generated from the app, stage, and logical
-   * ID. Changing it replaces the schema group.
+   * Schema group name, up to 50 characters: letters, digits, periods,
+   * hyphens, and underscores, starting and ending with a letter or digit.
+   *
+   * :::caution
+   * Changing it replaces the schema group and deletes its schemas.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Serialization format of every schema in the group. Changing it replaces
-   * the schema group.
+   * Serialization format of every schema in the group.
+   *
+   * :::caution
+   * Changing it replaces the schema group and deletes its schemas.
+   * :::
    * @default "Avro"
    */
   schemaType?: SchemaType;
   /**
    * Compatibility rule enforced when a new schema version is registered.
-   * Azure cannot change it on an existing group; changing it replaces the
-   * schema group.
+   * `Json` groups accept only `None`. Azure cannot change it on an existing
+   * group.
+   *
+   * :::caution
+   * Changing it replaces the schema group and deletes its schemas.
+   * :::
    * @default "None"
    */
   schemaCompatibility?: SchemaCompatibility;
-  /** Free-form properties attached to the group. */
+  /**
+   * Free-form string properties attached to the group. Changes apply in
+   * place.
+   * @default {}
+   */
   groupProperties?: Record<string, string>;
 }
 
@@ -61,9 +95,9 @@ export interface SchemaGroup extends Resource<
     namespace: string;
     /** Resource group of the namespace. */
     resourceGroup: string;
-    /** Serialization format. */
+    /** Serialization format (`Avro`, `Json`, `ProtoBuf`, `Unknown`). */
     schemaType: string | undefined;
-    /** Compatibility rule. */
+    /** Compatibility rule (`None`, `Backward`, `Forward`). */
     schemaCompatibility: string | undefined;
     /** Group properties. */
     groupProperties: Record<string, string>;
@@ -75,26 +109,74 @@ export interface SchemaGroup extends Resource<
 > {}
 
 /**
- * A schema group in the Event Hubs schema registry — a named collection of
- * versioned schemas sharing one format and compatibility rule. Needs a
- * `Standard` (or higher) namespace; `Standard` allows one schema group per
- * namespace, so replacements delete the old group first. `Json` groups
- * only accept `schemaCompatibility: "None"`. The schemas themselves are
- * data-plane objects registered by producers.
+ * A schema group in the Event Hubs schema registry
+ * (`Microsoft.EventHub/namespaces/schemagroups`): a named collection of
+ * versioned schemas that share one format and compatibility rule.
+ * Producers register schemas in it and stamp the schema ID on each event;
+ * consumers read the schema back by ID. The schemas themselves are
+ * data-plane objects: register and read them with the
+ * `Azure.EventHub.SchemaGroupReadWrite` binding.
  *
- * Schema groups have no tags; Alchemy treats a group as owned when its
+ * Schema groups have no tags. Alchemy treats a group as owned when its
  * namespace carries this stack's ownership tags.
+ *
+ * :::caution[Changing `name`, `namespace`, `schemaType`, `schemaCompatibility`, or `resourceGroup` replaces the group]
+ * Alchemy deletes the old group with every schema in it first (a
+ * `Standard` namespace holds one schema group), then creates the new one.
+ * Producers must register their schemas again, and the old schema IDs stop
+ * resolving.
+ * :::
+ *
+ * :::caution[Needs a `Standard` (or higher) namespace]
+ * A `Basic` namespace has no schema registry. A `Standard` namespace
+ * allows one schema group.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-hubs/schema-registry-overview
  *
  * ### Creating a Schema Group
  * **Example:** Avro schemas with backward compatibility
  * ```typescript
+ * const namespace = yield* Azure.EventHub.Namespace("events", {
+ *   sku: "Standard",
+ * });
  * const schemas = yield* Azure.EventHub.SchemaGroup("orders-schemas", {
  *   namespace: namespace.namespaceName,
  *   schemaType: "Avro",
  *   schemaCompatibility: "Backward",
  * });
+ * ```
+ *
+ * ### Using the Registry from a Runtime
+ * Bind the group to a host to register and read schemas.
+ *
+ * **Example:** Register a schema, then read it by ID
+ * ```typescript
+ * // Schemas: the SchemaGroup above, declared at module scope
+ * const orderSchema = {
+ *   type: "record",
+ *   name: "Order",
+ *   fields: [{ name: "id", type: "string" }],
+ * };
+ *
+ * export default class Producer extends Azure.Functions.Function<Producer>()(
+ *   "Producer",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const group = yield* Schemas;
+ *     // init: assigns Schema Registry Reader on the group and the
+ *     // schemas/write role on its namespace
+ *     const registry = yield* Azure.EventHub.SchemaGroupReadWrite(group);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime
+ *         const { id } = yield* registry.registerSchema("Order", JSON.stringify(orderSchema));
+ *         const schema = yield* registry.getSchema(id);
+ *         return yield* HttpServerResponse.json({ id, version: schema.version });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.EventHub.SchemaGroupReadWriteHttp)),
+ * ) {}
  * ```
  *
  * @resource

@@ -4,6 +4,13 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type { Workspace } from "./Workspace.ts";
 
+/**
+ * Optional request of a {@link GetMetadata} call. The bound workspace
+ * supplies `workspaceId`.
+ *
+ * - `endpoint` (optional): Log Analytics endpoint. Default:
+ *   `https://api.loganalytics.io`.
+ */
 export interface GetMetadataRequest extends Omit<query.GetMetadataRequest, "workspaceId"> {}
 
 /**
@@ -20,23 +27,28 @@ export interface GetMetadataRequest extends Omit<query.GetMetadataRequest, "work
  * `AzureBindings`).
  * Provide {@link GetMetadataHttp}.
  *
- * ### Calling GetMetadata
- * **Example:** GetMetadata from a Function
+ * ### Reading the Schema
+ * **Example:** List the workspace's tables from an Azure Function
  * ```typescript
- * // init
- * const getMetadata = yield* Azure.LogAnalytics.GetMetadata(workspace);
+ * const Logs = Azure.LogAnalytics.Workspace("Logs", {});
  *
- * // runtime
- * const metadata = yield* getMetadata();
- * const tables = (metadata.tables ?? []).map((table) => table.name);
- * ```
- *
- * **Example:** Provide the implementation on the Function
- * ```typescript
- * Effect.gen(function* () {
- *   const getMetadata = yield* Azure.LogAnalytics.GetMetadata(workspace);
- *   // ...
- * }).pipe(Effect.provide(Azure.LogAnalytics.GetMetadataHttp));
+ * export default class Reports extends Azure.Functions.Function<Reports>()(
+ *   "Reports",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const workspace = yield* Logs;
+ *     // init: assigns Log Analytics Data Reader on the workspace only
+ *     const getMetadata = yield* Azure.LogAnalytics.GetMetadata(workspace);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime
+ *         const metadata = yield* getMetadata();
+ *         const tables = (metadata.tables ?? []).map((table) => table.name);
+ *         return yield* HttpServerResponse.json({ tables });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.LogAnalytics.GetMetadataHttp)),
+ * ) {}
  * ```
  *
  * @binding

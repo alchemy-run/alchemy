@@ -31,6 +31,7 @@ import type { Table } from "./Table.ts";
  *
  * // runtime
  * yield* sessions.upsert({ PartitionKey: "sessions", RowKey: sessionId, user });
+ * // …provided with Effect.provide(Azure.CosmosDB.TableWriteHttp)
  * ```
  *
  * @binding

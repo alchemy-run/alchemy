@@ -6,6 +6,8 @@ export * from "./FleetManagedNamespace.ts";
 export * from "./FleetMember.ts";
 export * from "./FleetUpdateStrategy.ts";
 export * from "./IdentityBinding.ts";
+export * from "./KubernetesAdapter.ts";
+export * from "./KubernetesConnection.ts";
 export * from "./MaintenanceConfiguration.ts";
 export * from "./ManagedCluster.ts";
 export * from "./ManagedNamespace.ts";

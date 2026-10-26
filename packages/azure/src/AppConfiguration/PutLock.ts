@@ -27,6 +27,7 @@ export interface PutLockRequest extends Omit<appconfig.PutLockRequest, "endpoint
  *
  * // runtime
  * const locked = yield* putLock({ key: "App:Color", label: "prod" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.PutLockHttp)
  * ```
  *
  * @binding

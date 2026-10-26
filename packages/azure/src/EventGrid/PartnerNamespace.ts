@@ -37,18 +37,32 @@ export type PartnerTopicRoutingMode = "SourceEventAttribute" | "ChannelNameHeade
 
 export interface PartnerNamespaceProps {
   /**
-   * Resource group the namespace is created in. Changing it replaces the
-   * namespace.
+   * Resource group the namespace is created in.
+   *
+   * :::caution
+   * Changing it replaces the namespace (and deletes its channels).
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
    * Namespace name: 3-50 letters, digits, and hyphens, unique per region.
    * If omitted, a unique name is generated from the app, stage, and logical
-   * ID. Changing it replaces the namespace.
+   * ID.
+   *
+   * :::caution
+   * Changing it replaces the namespace (and deletes its channels).
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the namespace. Changing it replaces the namespace.
+   * Azure location of the namespace. Partner topics its channels create
+   * live in this region.
+   *
+   * :::caution
+   * Changing it replaces the namespace (and deletes its channels).
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
@@ -97,6 +111,7 @@ export interface PartnerNamespaceProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -135,6 +150,19 @@ export interface PartnerNamespace extends Resource<
  * — the regional endpoint a SaaS partner publishes events to. Each
  * `Azure.EventGrid.Channel` in the namespace creates one partner topic in a
  * subscriber's resource group and routes matching events to it.
+ *
+ * :::caution[Changing `name`, `location`, `partnerRegistration`, `partnerTopicRoutingMode`, or `resourceGroup` replaces the namespace]
+ * Alchemy creates a new namespace with a new endpoint and keys, and deletes
+ * the old one with its channels. Subscribers must activate the partner
+ * topics the new channels create.
+ * :::
+ *
+ * :::caution[You need a partner registration]
+ * Create an `Azure.EventGrid.PartnerRegistration` first and pass its
+ * `partnerRegistrationId`. A channel only creates a partner topic in a
+ * resource group whose `Azure.EventGrid.PartnerConfiguration` authorizes
+ * that registration.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/onboard-partner
  *

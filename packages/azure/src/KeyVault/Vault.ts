@@ -70,7 +70,10 @@ export interface VaultNetworkAcls {
 }
 
 export interface VaultProps {
-  /** Resource group the vault is created in. Changing it replaces the vault. */
+  /**
+   * Resource group the vault is created in. Changing it replaces the vault.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Globally unique vault name (`{name}.vault.azure.net`): 3-24 letters,
@@ -156,6 +159,7 @@ export interface VaultProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -194,12 +198,19 @@ export interface Vault extends Resource<
 > {}
 
 /**
- * An Azure Key Vault for keys, secrets, and certificates.
+ * An Azure Key Vault (`Microsoft.KeyVault/vaults`): the managed store for
+ * your app's secrets, cryptographic keys, and certificates.
  *
- * Vaults use Azure RBAC for data-plane access by default and keep 90 days
- * of soft-delete. Destroying a vault deletes it and then purges it so the
- * name can be reused right away (set `purgeOnDelete: false` to keep the
- * soft-deleted vault recoverable).
+ * Alchemy creates a `standard` vault in the stack's resource group. Data
+ * access uses Azure RBAC by default, so each binding grants a role on one
+ * secret or key only, and deleted vaults and objects stay recoverable for
+ * 90 days (soft delete). Destroying a vault deletes it and then purges it,
+ * so you can reuse the name at once.
+ *
+ * :::caution[Changing `name`, `resourceGroup`, `location`, or `softDeleteRetentionInDays` replaces the vault]
+ * Alchemy creates a new, empty vault and deletes (and purges) the old one
+ * with every secret, key, and certificate in it.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/key-vault/general/overview
  *
@@ -207,17 +218,46 @@ export interface Vault extends Resource<
  * **Example:** RBAC-authorized vault
  * ```typescript
  * const vault = yield* Azure.KeyVault.Vault("secrets");
+ * // vault.vaultUri → "https://{name}.vault.azure.net/"
  * ```
  *
- * **Example:** Premium vault with short soft-delete retention
+ * **Example:** Vault with a fixed name and region
+ * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("secrets", {
+ *   name: "contoso-prod-secrets",
+ *   location: "westeurope",
+ * });
+ * ```
+ *
+ * **Example:** Premium vault for HSM-protected keys
  * ```typescript
  * const vault = yield* Azure.KeyVault.Vault("hsm-keys", {
  *   sku: "premium",
- *   softDeleteRetentionInDays: 7,
+ * });
+ * const key = yield* Azure.KeyVault.Key("cmk", {
+ *   vault: vault.vaultName,
+ *   kty: "RSA-HSM",
+ * });
+ * ```
+ *
+ * ### Storing Secrets and Keys
+ * **Example:** A secret and a key in one vault
+ * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("secrets");
+ * const apiKey = yield* Azure.KeyVault.Secret("api-key", {
+ *   vault: vault.vaultName,
+ *   value: Config.redacted("API_KEY"),
+ * });
+ * const dataKey = yield* Azure.KeyVault.Key("data-key", {
+ *   vault: vault.vaultName,
+ *   keyOps: ["encrypt", "decrypt"],
  * });
  * ```
  *
  * ### Access Policies
+ * Vaults use RBAC by default. Set `enableRbacAuthorization: false` only
+ * for tools that need the legacy access-policy model; bindings need RBAC.
+ *
  * **Example:** Vault with inline access policies
  * ```typescript
  * const vault = yield* Azure.KeyVault.Vault("legacy", {
@@ -235,6 +275,112 @@ export interface Vault extends Resource<
  *   networkAcls: { defaultAction: "Deny", ipRules: ["203.0.113.0/24"] },
  * });
  * ```
+ *
+ * **Example:** Private vault behind a private endpoint
+ * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("private", {
+ *   publicNetworkAccess: "Disabled",
+ * });
+ * const endpoint = yield* Azure.Network.PrivateEndpoint("vault", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: vault.vaultId, groupIds: ["vault"] },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Soft Delete and Purge Protection
+ * **Example:** Short retention for a dev vault
+ * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("dev", {
+ *   softDeleteRetentionInDays: 7,
+ * });
+ * ```
+ *
+ * **Example:** Purge protection for customer-managed keys
+ * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("keys", {
+ *   enablePurgeProtection: true,
+ * });
+ * ```
+ *
+ * :::caution[Purge protection is permanent]
+ * You cannot turn it off. A destroyed vault with purge protection keeps its
+ * name reserved until the retention period ends.
+ * :::
+ *
+ * ### Binding to a runtime
+ * Bind the secrets and keys in the vault: `Azure.KeyVault.SecretRead`
+ * grants **Key Vault Secrets User** on one secret, and the key bindings
+ * grant custom roles on one key. Certificate bindings bind to the vault.
+ * On an Azure Function, Web App, Container App, container group, or VM the
+ * role goes to the host's managed identity; any other host gets an Entra
+ * service principal.
+ *
+ * **Example:** Read a secret in an Azure Function
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const secret = yield* ApiKey;
+ *     const apiKey = yield* Azure.KeyVault.SecretRead(secret);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         const expected = yield* apiKey.get(); // the latest version, as a Redacted<string>
+ *         const ok = request.headers["x-api-key"] === Redacted.value(expected);
+ *         return HttpServerResponse.text(ok ? "ok" : "unauthorized", { status: ok ? 200 : 401 });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.KeyVault.SecretReadHttp)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Encrypt with a key
+ * ```typescript
+ * // init
+ * const encrypt = yield* Azure.KeyVault.Encrypt(dataKey);
+ *
+ * // runtime
+ * const result = yield* encrypt({ alg: "RSA-OAEP-256", value: plaintextBase64Url });
+ * // …provided with Effect.provide(Azure.KeyVault.EncryptHttp)
+ * ```
+ *
+ * **Example:** Read the vault's certificates
+ * ```typescript
+ * // init
+ * const certs = yield* Azure.KeyVault.CertificateRead(vault);
+ *
+ * // runtime
+ * const cert = yield* certs.get("api-tls");
+ * // …provided with Effect.provide(Azure.KeyVault.CertificateReadHttp)
+ * ```
+ *
+ * ### Event Sources
+ * Key Vault publishes events (new versions, near expiry, expiry) to Event
+ * Grid.
+ *
+ * **Example:** React when a secret is about to expire
+ * ```typescript
+ * yield* Azure.EventGrid.consumeEvents(
+ *   "SecretExpiry",
+ *   { scope: vault.vaultId, includedEventTypes: ["Microsoft.KeyVault.SecretNearExpiry"] },
+ *   (event) => Effect.log(`${event.subject} expires soon`),
+ * );
+ * // …provided with Effect.provide(Azure.Functions.EventGridEventSource)
+ * ```
+ *
+ * ### Deleting a Vault
+ * **Example:** Keep the soft-deleted vault recoverable
+ * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("secrets", {
+ *   purgeOnDelete: false,
+ * });
+ * ```
+ *
+ * With `purgeOnDelete: false`, the deleted vault holds its name until the
+ * retention period ends or you purge it.
  *
  * @resource
  */

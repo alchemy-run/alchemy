@@ -33,18 +33,21 @@ export type GetSchemaByIdClient = (
  * ### Reading Schemas
  * **Example:** Resolve the schema of a message
  * ```typescript
+ * // Schemas: a module-scope Azure.EventHub.SchemaGroup declaration
  * export default class Api extends Azure.Functions.Function<Api>()(
  *   "Api",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     // init: assigns the role on the schema group
+ *     const schemas = yield* Schemas;
+ *     // init: assigns Schema Registry Reader on the schema group only
  *     const getSchema = yield* Azure.EventHub.GetSchemaById(schemas);
  *     return {
  *       fetch: Effect.gen(function* () {
  *         // runtime: the namespace endpoint is filled in
+ *         // schemaId: the ID the producer stamped on the message
  *         const schema = yield* getSchema({ id: schemaId });
  *         const text = new TextDecoder().decode(schema.body);
- *         return HttpServerResponse.text("ok");
+ *         return HttpServerResponse.text(text);
  *       }).pipe(Effect.orDie),
  *     };
  *   }).pipe(Effect.provide(Azure.EventHub.GetSchemaByIdHttp)),

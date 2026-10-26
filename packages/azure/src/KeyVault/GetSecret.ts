@@ -33,6 +33,7 @@ export interface GetSecretRequest extends Omit<
  * // runtime
  * const latest = yield* getSecret();
  * const pinned = yield* getSecret({ secretVersion: version });
+ * // …provided with Effect.provide(Azure.KeyVault.GetSecretHttp)
  * ```
  *
  * @binding

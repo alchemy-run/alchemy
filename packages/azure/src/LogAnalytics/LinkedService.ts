@@ -20,32 +20,56 @@ import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameText } from "./Common.ts";
 
+/**
+ * Kind of link, which is also its name: `Automation` (an Automation
+ * account) or `cluster` (a dedicated Log Analytics cluster).
+ */
 export type LinkedServiceName = "Automation" | "cluster";
 
 export interface LinkedServiceProps {
-  /** Resource group of the workspace. Changing it replaces the link. */
+  /**
+   * Resource group of the workspace.
+   *
+   * :::caution
+   * Changing it replaces the link.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Workspace to link. Changing it replaces the link. */
+  /**
+   * Name of the workspace to link, e.g. `logs.workspaceName`.
+   *
+   * :::caution
+   * Changing it replaces the link.
+   * :::
+   */
   workspace: string;
   /**
    * Kind of link, which is also its name: `Automation` links an Automation
    * account (read access), `cluster` links a dedicated Log Analytics
-   * cluster (write access). Changing it replaces the link.
+   * cluster (write access).
+   *
+   * :::caution
+   * Changing it replaces the link.
+   * :::
    */
   name: LinkedServiceName;
   /**
-   * ARM resource ID of the resource that needs read access, e.g. an
-   * Automation account (`Automation` links).
+   * ARM resource ID of the resource that gets read access, e.g.
+   * `account.automationAccountId`. Set it for `Automation` links.
+   * @default not sent
    */
   resourceId?: string;
   /**
-   * ARM resource ID of the resource that needs write access, e.g. a
-   * Log Analytics cluster (`cluster` links).
+   * ARM resource ID of the resource that gets write access, e.g.
+   * `cluster.clusterId`. Set it for `cluster` links.
+   * @default not sent
    */
   writeAccessResourceId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -54,17 +78,17 @@ export interface LinkedService extends Resource<
   "Azure.LogAnalytics.LinkedService",
   LinkedServiceProps,
   {
-    /** Name of the link (`Automation` or `cluster`). */
+    /** Name of the link: `Automation` or `cluster`. */
     linkedServiceName: string;
-    /** Workspace that is linked. */
+    /** Name of the workspace that is linked. */
     workspace: string;
     /** Resource group of the workspace. */
     resourceGroup: string;
     /** ARM resource ID of the link. */
     linkedServiceId: string;
-    /** Linked resource with read access. */
+    /** ARM resource ID of the linked resource with read access. */
     resourceId: string | undefined;
-    /** Linked resource with write access. */
+    /** ARM resource ID of the linked resource with write access. */
     writeAccessResourceId: string | undefined;
     /** User tags (Alchemy ownership tags stripped). */
     tags: Record<string, string>;
@@ -74,28 +98,42 @@ export interface LinkedService extends Resource<
 > {}
 
 /**
- * Links a Log Analytics workspace to another service: an Automation
- * account (for Update Management, Change Tracking, and runbook job logs)
- * or a dedicated Log Analytics cluster.
+ * A link from a Log Analytics workspace to another service
+ * (`Microsoft.OperationalInsights/workspaces/linkedServices`): an Automation
+ * account (for Update Management, Change Tracking, and runbook job logs),
+ * or a dedicated Log Analytics cluster that the workspace ingests into.
  *
- * An Automation account can be linked to only one workspace. Linking a
- * cluster moves the workspace's new data into the cluster.
+ * :::caution[Changing `name`, `workspace`, or `resourceGroup` replaces the link]
+ * Alchemy creates the new link and deletes the old one. Deleting a
+ * `cluster` link moves the workspace's new data out of the cluster.
+ * :::
+ *
+ * :::caution[Each linked resource has rules]
+ * An Automation account can be linked to only one workspace, in a
+ * supported region pair. A `cluster` link needs an existing
+ * `Azure.LogAnalytics.Cluster` in the workspace's region. Linking a cluster
+ * moves the workspace's new data into the cluster.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/automation/how-to/region-mappings
  *
  * ### Linking an Automation Account
  * **Example:** Link an Automation account
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const account = yield* Azure.Automation.AutomationAccount("ops");
  * yield* Azure.LogAnalytics.LinkedService("automation", {
  *   workspace: logs.workspaceName,
  *   name: "Automation",
- *   resourceId: automationAccountId,
+ *   resourceId: account.automationAccountId,
  * });
  * ```
  *
  * ### Linking a Dedicated Cluster
  * **Example:** Move a workspace into a cluster
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const cluster = yield* Azure.LogAnalytics.Cluster("logs-cluster");
  * yield* Azure.LogAnalytics.LinkedService("cluster", {
  *   workspace: logs.workspaceName,
  *   name: "cluster",

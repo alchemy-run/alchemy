@@ -35,6 +35,7 @@ export interface StartSelectiveKeyRestoreRequest extends Omit<
  *     useManagedIdentity: true,
  *   },
  * });
+ * // …provided with Effect.provide(Azure.KeyVault.StartSelectiveKeyRestoreHttp)
  * ```
  *
  * @binding

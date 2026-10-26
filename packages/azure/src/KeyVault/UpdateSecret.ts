@@ -33,6 +33,7 @@ export interface UpdateSecretRequest extends Omit<
  *
  * // runtime
  * yield* updateSecret({ secretVersion: oldVersion, attributes: { enabled: false } });
+ * // …provided with Effect.provide(Azure.KeyVault.UpdateSecretHttp)
  * ```
  *
  * @binding

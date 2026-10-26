@@ -96,11 +96,13 @@ export interface Secret extends Resource<
  * ### Bring Your Own Certificate
  * **Example:** Key Vault certificate for a custom domain
  * ```typescript
+ * import * as Output from "alchemy/Output";
+ *
  * const cert = yield* Azure.Cdn.Secret("cert", {
  *   profile: profile.profileName,
  *   parameters: {
  *     type: "CustomerCertificate",
- *     secretSourceId: `${vault.vaultId}/secrets/www-example-com`,
+ *     secretSourceId: Output.interpolate`${vault.vaultId}/secrets/www-example-com`,
  *     useLatestVersion: true,
  *   },
  * });

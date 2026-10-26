@@ -24,78 +24,108 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 
 /** Managed identity used by a workbook to reach bring-your-own storage. */
 export interface WorkbookIdentity {
-  /** Identity type. Workbooks only accept user-assigned identities. */
+  /** Identity type: `UserAssigned` or `None`. Workbooks only accept user-assigned identities. */
   type: "UserAssigned" | "None";
   /**
    * ARM resource IDs of the user-assigned identities, e.g.
    * `identity.identityId` of an `Azure.ManagedIdentity.UserAssignedIdentity`.
+   * @default []
    */
   userAssignedIdentities?: string[];
 }
 
 export interface WorkbookProps {
   /**
-   * Resource group the workbook is created in. Changing it replaces the
-   * workbook.
+   * Resource group the workbook is created in.
+   *
+   * :::caution
+   * Changing it replaces the workbook.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
-   * ARM name of the workbook. Azure requires a GUID. If omitted, a
-   * deterministic GUID is derived from the stack, stage, logical ID and
-   * instance ID. Changing it replaces the workbook.
+   * ARM name of the workbook. Azure requires a GUID.
+   *
+   * :::caution
+   * Changing it replaces the workbook.
+   * :::
+   * @default a GUID derived from the stack, stage, logical ID, and instance ID
    */
   name?: string;
   /**
-   * Azure location of the workbook. Changing it replaces the workbook.
+   * Azure location of the workbook, e.g. `eastus`.
+   *
+   * :::caution
+   * Changing it replaces the workbook.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
-   * Display name shown in the Azure portal. Must be unique within the
-   * resource group, category and source.
+   * Display name shown in the Azure portal. It must be unique within the
+   * resource group, category, and source.
    * @default the logical ID
    */
   displayName?: string;
   /**
-   * Workbook definition (the gallery template JSON). Pass a JSON string or
-   * an object, which is serialized with `JSON.stringify`.
+   * Workbook definition (the gallery template JSON). Pass a JSON string, or
+   * an object that Alchemy serializes with `JSON.stringify`. Alchemy
+   * compares it as canonical JSON, so key order and whitespace do not cause
+   * an update.
    * @default `{"version":"Notebook/1.0","items":[]}`
    */
   serializedData?: string | Record<string, unknown>;
   /**
-   * Gallery category, e.g. `workbook`, `sentinel`, `TSG`.
+   * Gallery category, e.g. `workbook`, `sentinel`, or `TSG`.
    * @default "workbook"
    */
   category?: string;
   /**
-   * ARM resource ID of the resource the workbook is linked to. Changing it
-   * replaces the workbook.
-   * @default "azure monitor"
+   * ARM resource ID of the resource the workbook is linked to, e.g. a Log
+   * Analytics workspace (`workspace.workspaceId`) or a resource group
+   * (`group.resourceGroupId`). The workbook shows up in that resource's
+   * Workbooks blade.
+   *
+   * :::caution
+   * Changing it replaces the workbook.
+   * :::
+   * @default "azure monitor" (the Azure Monitor gallery)
    */
   sourceId?: string;
   /**
-   * Workbook schema version, e.g. `Notebook/1.0`. Should match the version
-   * in `serializedData`.
+   * Workbook schema version, e.g. `Notebook/1.0`. Match the version in
+   * `serializedData`.
+   * @default not sent
    */
   version?: string;
-  /** Description of the workbook. */
+  /**
+   * Description of the workbook.
+   * @default no description
+   */
   description?: string;
   /**
-   * ARM resource ID of a storage account for bring-your-own storage.
-   * Requires `identity`.
+   * ARM resource ID of a storage account for bring-your-own storage. Set
+   * `identity` too.
+   * @default Azure-managed storage
    */
   storageUri?: string;
-  /** Managed identity used for bring-your-own storage. */
+  /**
+   * Managed identity used for bring-your-own storage.
+   * @default not sent (no identity)
+   */
   identity?: WorkbookIdentity;
   /**
-   * Workbook labels (`properties.tags`), shown in the gallery. Distinct
-   * from the ARM `tags`.
+   * Workbook labels (`properties.tags`), shown in the gallery. They are not
+   * the ARM `tags`.
+   * @default []
    */
   labels?: string[];
   /**
    * User ARM tags. Alchemy ownership tags (`alchemy::stack`,
    * `alchemy::stage`, `alchemy::id`) are merged in automatically, and the
    * `hidden-title` tag Azure uses for the display name is kept in sync.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -110,17 +140,17 @@ export interface Workbook extends Resource<
     workbookId: string;
     /** Resource group that holds the workbook. */
     resourceGroup: string;
-    /** Location of the workbook. */
+    /** Location of the workbook, e.g. `eastus`. */
     location: string;
     /** Display name shown in the Azure portal. */
     displayName: string;
-    /** Gallery category of the workbook. */
+    /** Gallery category of the workbook, e.g. `workbook`. */
     category: string;
-    /** Resource the workbook is linked to. */
+    /** ARM resource ID of the linked resource, or `azure monitor`. */
     sourceId: string;
     /** Revision ID of the current workbook definition. */
     revision: string | undefined;
-    /** Time (UTC) the definition was last modified. */
+    /** Time (UTC, ISO 8601) the definition was last modified. */
     timeModified: string | undefined;
     /** ID of the user that owns the workbook. */
     userId: string | undefined;
@@ -132,9 +162,16 @@ export interface Workbook extends Resource<
 > {}
 
 /**
- * An Azure Monitor workbook — an interactive report of queries,
- * metrics and visualizations, stored as a shared ARM resource
- * (`Microsoft.Insights/workbooks`).
+ * An Azure Monitor workbook (`Microsoft.Insights/workbooks`): an
+ * interactive report of text, KQL queries, metrics, and charts, saved as a
+ * shared resource that everyone with read access to the resource group
+ * can open.
+ *
+ * :::caution[Changing `name`, `location`, `sourceId`, or `resourceGroup` replaces the workbook]
+ * Alchemy creates a new workbook and deletes the old one. Its URL in the
+ * portal changes. Change `displayName`, `serializedData`, `category`,
+ * `labels`, or `tags` to update it in place.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-monitor/visualize/workbooks-overview
  *
@@ -146,10 +183,11 @@ export interface Workbook extends Resource<
  * });
  * ```
  *
- * **Example:** Workbook with a query step
+ * **Example:** Workbook with a text step
  * ```typescript
  * const workbook = yield* Azure.ApplicationInsights.Workbook("errors", {
  *   displayName: "Errors",
+ *   labels: ["ops"],
  *   serializedData: {
  *     version: "Notebook/1.0",
  *     items: [
@@ -163,12 +201,45 @@ export interface Workbook extends Resource<
  * });
  * ```
  *
- * ### Linking to a Resource
- * **Example:** Workbook linked to a Log Analytics workspace
+ * ### Workbooks over a Log Analytics Workspace
+ * Set `sourceId` to the workspace's `workspaceId`. The workbook shows up in
+ * the workspace's Workbooks blade, and its query steps run against the
+ * workspace.
+ *
+ * **Example:** Workbook with a KQL query step over a workspace
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * const workbook = yield* Azure.ApplicationInsights.Workbook("logs", {
  *   displayName: "Workspace logs",
- *   sourceId: workspace.workspaceId,
+ *   sourceId: logs.workspaceId,
+ *   serializedData: {
+ *     version: "Notebook/1.0",
+ *     items: [
+ *       {
+ *         type: 3,
+ *         content: {
+ *           version: "KqlItem/1.0",
+ *           query: "Heartbeat | summarize count() by bin(TimeGenerated, 1h)",
+ *           size: 0,
+ *           queryType: 0,
+ *           resourceType: "microsoft.operationalinsights/workspaces",
+ *         },
+ *         name: "heartbeats",
+ *       },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
+ * ### Linking to a Resource Group
+ * **Example:** Workbook in a resource group's Workbooks blade
+ * ```typescript
+ * const group = yield* Azure.Resources.ResourceGroup("ops", {
+ *   location: "eastus",
+ * });
+ * const workbook = yield* Azure.ApplicationInsights.Workbook("report", {
+ *   displayName: "Ops report",
+ *   sourceId: group.resourceGroupId,
  * });
  * ```
  *

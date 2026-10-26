@@ -23,33 +23,54 @@ import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 
+/** Alert severity, from `Sev0` (critical) to `Sev4` (verbose). */
 export type SmartDetectorSeverity = "Sev0" | "Sev1" | "Sev2" | "Sev3" | "Sev4";
 
 export interface SmartDetectorAlertRuleProps {
   /**
-   * Resource group the rule is created in. Changing it replaces the rule.
+   * Resource group the rule is created in.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
-   * Rule name. If omitted, a unique name is generated from the app, stage,
-   * and logical ID. Changing it replaces the rule.
+   * Rule name, up to 64 characters.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Smart detector to run, e.g. `FailureAnomaliesDetector`,
    * `RequestPerformanceDegradationDetector`,
    * `DependencyPerformanceDegradationDetector`, `TraceSeverityDetector`,
-   * `MemoryLeakDetector`. Changing the detector id replaces the rule.
+   * `MemoryLeakDetector`.
+   *
+   * :::caution
+   * Changing `detector.id` replaces the rule. Alchemy deletes the old rule
+   * before it creates the new one.
+   * :::
    */
   detector: {
-    /** Detector id. */
+    /** Detector id, e.g. `FailureAnomaliesDetector`. */
     id: string;
-    /** Detector-specific parameters. */
+    /**
+     * Detector-specific parameters.
+     * @default {}
+     */
     parameters?: Record<string, unknown>;
   };
-  /** ARM IDs of the resources (Application Insights components) to watch. */
+  /**
+   * ARM IDs of the resources to watch: Application Insights components
+   * (`Microsoft.Insights/components`).
+   */
   scopes: string[];
-  /** Alert severity. */
+  /** Alert severity, `Sev0` (critical) to `Sev4` (verbose). */
   severity: SmartDetectorSeverity;
   /**
    * How often the detector runs, ISO 8601 duration in whole minutes (e.g.
@@ -58,28 +79,41 @@ export interface SmartDetectorAlertRuleProps {
   frequency: string;
   /** Action groups notified when the detector fires. */
   actionGroups: {
-    /** ARM resource IDs of the action groups. */
+    /** ARM resource IDs of the action groups (`Microsoft.Insights/actionGroups`). */
     groupIds: string[];
-    /** Custom subject for email notifications. */
+    /**
+     * Custom subject for email notifications.
+     * @default Azure's default subject
+     */
     customEmailSubject?: string;
-    /** Custom JSON payload for webhook notifications. */
+    /**
+     * Custom JSON payload for webhook notifications.
+     * @default Azure's default payload
+     */
     customWebhookPayload?: string;
   };
   /**
-   * Whether the rule is evaluated.
+   * Whether the rule is evaluated: `Enabled` or `Disabled`.
    * @default "Enabled"
    */
   state?: "Enabled" | "Disabled";
-  /** Wait this ISO 8601 duration before notifying on the rule again. */
+  /**
+   * Wait this long before notifying on the rule again.
+   * @default no throttling
+   */
   throttling?: {
-    /** Throttling duration in whole minutes, e.g. `PT30M`. */
+    /** Throttling duration, ISO 8601 in whole minutes, e.g. `PT30M`. */
     duration?: string;
   };
-  /** Description of the rule. */
+  /**
+   * Description of the rule.
+   * @default no description
+   */
   description?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -110,16 +144,35 @@ export interface SmartDetectorAlertRule extends Resource<
 > {}
 
 /**
- * An Azure Monitor smart detector alert rule — runs an Application Insights
- * smart detector (failure anomalies, performance degradation, memory leaks,
- * …) and notifies action groups when it finds an anomaly. Rules are global
- * resources.
+ * An Azure Monitor smart detector alert rule
+ * (`microsoft.alertsManagement/smartDetectorAlertRules`): it runs an
+ * Application Insights smart detector (failure anomalies, performance
+ * degradation, memory leaks, …) on a schedule and notifies action groups
+ * when it finds an anomaly. Rules are global resources (location `global`).
+ *
+ * :::caution[Changing `name`, `detector.id`, or `resourceGroup` replaces the rule]
+ * Azure allows one rule per detector and watched resource, so Alchemy
+ * deletes the old rule before it creates the new one.
+ * :::
+ *
+ * :::caution[The watched component and the action group must exist]
+ * Alchemy has no Application Insights component or action group resource
+ * yet. Create the component (`Microsoft.Insights/components`) and the
+ * action group (`Microsoft.Insights/actionGroups`) outside Alchemy and pass
+ * their ARM IDs.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-monitor/alerts/proactive-failure-diagnostics
  *
  * ### Failure Anomalies
  * **Example:** Notify an action group about failure anomalies of an app
  * ```typescript
+ * // created outside Alchemy
+ * const appInsightsId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/app/providers/Microsoft.Insights/components/web";
+ * const actionGroupId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/ops/providers/Microsoft.Insights/actionGroups/oncall";
+ *
  * const rule = yield* Azure.Monitor.SmartDetectorAlertRule("failures", {
  *   detector: { id: "FailureAnomaliesDetector" },
  *   scopes: [appInsightsId],
@@ -142,6 +195,7 @@ export interface SmartDetectorAlertRule extends Resource<
  *     groupIds: [actionGroupId],
  *     customEmailSubject: "Failure anomaly detected",
  *   },
+ *   description: "Failure anomalies on the web app",
  *   tags: { team: "platform" },
  * });
  * ```

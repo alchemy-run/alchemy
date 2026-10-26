@@ -31,6 +31,7 @@ export interface ScheduledQueryRuleIdentity {
   /**
    * ARM resource IDs of user-assigned identities. Required when `type` is
    * `UserAssigned`.
+   * @default []
    */
   userAssignedIdentities?: string[];
 }
@@ -50,19 +51,35 @@ export interface ScheduledQueryRuleCondition {
    * @default "StaticThresholdCriterion"
    */
   criterionType?: "StaticThresholdCriterion" | "DynamicThresholdCriterion";
-  /** KQL log query evaluated against the rule's scopes. */
+  /**
+   * KQL log query evaluated against the rule's scopes.
+   * @default none (required for `LogAlert` and `SimpleLogAlert`)
+   */
   query?: string;
   /**
    * Aggregation applied to the query result. Required for `LogAlert`.
+   * @default none
    */
   timeAggregation?: "Count" | "Average" | "Minimum" | "Maximum" | "Total";
-  /** Column holding the measured number (non-`Count` aggregations). */
+  /**
+   * Column holding the measured number (non-`Count` aggregations).
+   * @default none (counts rows)
+   */
   metricMeasureColumn?: string;
-  /** Column holding the ARM resource ID the alert fires for. */
+  /**
+   * Column holding the ARM resource ID the alert fires for.
+   * @default none
+   */
   resourceIdColumn?: string;
-  /** Dimension splitting and filtering. */
+  /**
+   * Dimension splitting and filtering.
+   * @default [] (one alert for the whole result)
+   */
   dimensions?: ScheduledQueryRuleDimension[];
-  /** Comparison operator. Required for `LogAlert`. */
+  /**
+   * Comparison operator. Required for `LogAlert`.
+   * @default none
+   */
   operator?:
     | "Equals"
     | "GreaterThan"
@@ -70,60 +87,109 @@ export interface ScheduledQueryRuleCondition {
     | "LessThan"
     | "LessThanOrEqual"
     | "GreaterOrLessThan";
-  /** Static threshold that fires the alert. */
+  /**
+   * Static threshold that fires the alert (`StaticThresholdCriterion`).
+   * @default none
+   */
   threshold?: number;
-  /** Dynamic threshold sensitivity: `Low`, `Medium` or `High`. */
+  /**
+   * Dynamic threshold sensitivity: `Low`, `Medium` or `High`
+   * (`DynamicThresholdCriterion`).
+   * @default Azure's default
+   */
   alertSensitivity?: string;
-  /** ISO 8601 date before which dynamic thresholds ignore history. */
+  /**
+   * ISO 8601 date before which dynamic thresholds ignore history.
+   * @default all history is used
+   */
   ignoreDataBefore?: string;
-  /** Number of violating evaluation periods required to fire. */
+  /**
+   * Number of violating evaluation periods required to fire.
+   * @default one failing period out of one
+   */
   failingPeriods?: {
     /** Number of aggregated lookback points. @default 1 */
     numberOfEvaluationPeriods?: number;
     /** Violations needed to fire (≤ `numberOfEvaluationPeriods`). @default 1 */
     minFailingPeriodsToAlert?: number;
   };
-  /** Metric name to emit. Required for `LogToMetric`. */
+  /**
+   * Metric name to emit. Required for `LogToMetric`.
+   * @default none
+   */
   metricName?: string;
-  /** Minimum result count that fires a `SimpleLogAlert`. */
+  /**
+   * Minimum result count that fires a `SimpleLogAlert`.
+   * @default Azure's default
+   */
   minRecurrenceCount?: number;
 }
 
 export interface ScheduledQueryRuleProps {
   /**
-   * Resource group the rule is created in. Changing it replaces the rule.
+   * Resource group the rule is created in.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
-   * Rule name. If omitted, a unique name is generated from the app, stage,
-   * and logical ID. Changing it replaces the rule.
+   * Rule name (at most 64 characters). If omitted, a unique name is
+   * generated from the app, stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * Azure location of the rule; must match the region of the scoped
-   * resources. Changing it replaces the rule.
+   * resources.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
-   * Rule kind. Changing it replaces the rule.
+   * Rule kind: `LogAlert` (aggregated query with a threshold),
+   * `SimpleLogAlert` (fires on matching results), or `LogToMetric` (emits
+   * a metric).
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
    * @default "LogAlert"
    */
   kind?: ScheduledQueryRuleKind;
   /**
    * ARM resource IDs the query runs against (Log Analytics workspaces,
-   * Application Insights components, or other resources). Changing them
-   * replaces the rule.
+   * Application Insights components, or other resources).
+   *
+   * :::caution
+   * Changing them replaces the rule.
+   * :::
    */
   scopes: string[];
-  /** Conditions evaluated on every run (`criteria.allOf`). */
+  /** Conditions evaluated on every run (`criteria.allOf`); all must hold. */
   criteria: ScheduledQueryRuleCondition[];
-  /** Display name of the alert rule. */
+  /**
+   * Display name of the alert rule.
+   * @default none
+   */
   displayName?: string;
-  /** Description of the alert rule. */
+  /**
+   * Description of the alert rule.
+   * @default none
+   */
   description?: string;
   /**
    * Alert severity, 0 (critical) to 4 (verbose). Required for `LogAlert`.
+   * @default none
    */
   severity?: 0 | 1 | 2 | 3 | 4;
   /**
@@ -131,46 +197,81 @@ export interface ScheduledQueryRuleProps {
    * @default true
    */
   enabled?: boolean;
-  /** How often the rule runs, ISO 8601 duration (e.g. `PT5M`). */
+  /**
+   * How often the rule runs, ISO 8601 duration (e.g. `PT5M`). Required for
+   * `LogAlert`.
+   * @default none
+   */
   evaluationFrequency?: string;
-  /** Query time window (bin size), ISO 8601 duration (e.g. `PT15M`). */
+  /**
+   * Query time window (bin size), ISO 8601 duration (e.g. `PT15M`).
+   * Required for `LogAlert`.
+   * @default none
+   */
   windowSize?: string;
-  /** Overrides the query time range, ISO 8601 duration. */
+  /**
+   * Overrides the query time range, ISO 8601 duration.
+   * @default `windowSize`
+   */
   overrideQueryTimeRange?: string;
-  /** Resource types an alert is split by when the scope is a group. */
+  /**
+   * Resource types an alert is split by when the scope is a resource
+   * group or subscription.
+   * @default []
+   */
   targetResourceTypes?: string[];
-  /** Mute actions for this ISO 8601 duration after the alert fires. */
+  /**
+   * Mute actions for this ISO 8601 duration after the alert fires.
+   * @default no muting
+   */
   muteActionsDuration?: string;
-  /** Actions invoked when the alert fires. */
+  /**
+   * Actions invoked when the alert fires.
+   * @default no actions (the alert only appears in Azure Monitor)
+   */
   actions?: {
-    /** Action group ARM resource IDs. */
+    /** Action group ARM resource IDs. @default [] */
     actionGroups?: string[];
-    /** Custom properties added to the alert payload. */
+    /** Custom properties added to the alert payload. @default {} */
     customProperties?: Record<string, string>;
-    /** Action properties. */
+    /** Action properties. @default {} */
     actionProperties?: Record<string, string>;
   };
-  /** Store the rule in the workspace's customer-managed storage. */
+  /**
+   * Store the rule in the workspace's customer-managed storage.
+   * @default Azure's default (`false`)
+   */
   checkWorkspaceAlertsStorageConfigured?: boolean;
   /**
    * Skip validating the query on write (useful when the queried tables do
    * not exist yet). Write-only; not compared against observed state.
+   * @default false
    */
   skipQueryValidation?: boolean;
-  /** Automatically resolve fired alerts. Unset leaves the service default. */
+  /**
+   * Automatically resolve fired alerts. Unset leaves the service default.
+   * @default Azure's default
+   */
   autoMitigate?: boolean;
-  /** How fired alerts are resolved. */
+  /**
+   * How fired alerts are resolved.
+   * @default Azure's default
+   */
   resolveConfiguration?: {
-    /** Whether fired alerts are resolved automatically. */
+    /** Whether fired alerts are resolved automatically. @default Azure's default */
     autoResolved?: boolean;
-    /** Healthy duration (ISO 8601) before an alert is resolved. */
+    /** Healthy duration (ISO 8601) before an alert is resolved. @default Azure's default */
     timeToResolve?: string;
   };
-  /** Managed identity used to run the query. Unset leaves identity unmanaged. */
+  /**
+   * Managed identity used to run the query. Unset leaves identity unmanaged.
+   * @default the observed identity is kept (none on a new rule)
+   */
   identity?: ScheduledQueryRuleIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -211,9 +312,19 @@ export interface ScheduledQueryRule extends Resource<
 > {}
 
 /**
- * An Azure Monitor scheduled query rule (log search alert) — runs a KQL
- * query against Log Analytics, Application Insights, or other resources on
- * a schedule and fires alerts (or emits metrics) when its conditions hold.
+ * An Azure Monitor scheduled query rule, or log search alert
+ * (`Microsoft.Insights/scheduledQueryRules`): it runs a KQL query against a
+ * Log Analytics workspace, an Application Insights component, or another
+ * resource on a schedule, and fires an alert (or emits a metric) when its
+ * conditions hold.
+ *
+ * Alchemy creates an enabled `LogAlert` rule in the stack's resource group.
+ * The rule runs in the region of the resources it queries, so set
+ * `location` to their region when it differs from the stack's default.
+ *
+ * :::caution[Changing `name`, `resourceGroup`, `location`, `kind`, or `scopes` replaces the rule]
+ * Alchemy creates a new rule and deletes the old one.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-monitor/alerts/alerts-types#log-alerts
  *
@@ -221,7 +332,7 @@ export interface ScheduledQueryRule extends Resource<
  * **Example:** Alert when a workspace receives no heartbeats
  * ```typescript
  * const logs = yield* Azure.LogAnalytics.Workspace("logs");
- * const rule = yield* Azure.Monitor.ScheduledQueryRule("no-heartbeat", {
+ * const noHeartbeat = yield* Azure.Monitor.ScheduledQueryRule("no-heartbeat", {
  *   scopes: [logs.workspaceId],
  *   severity: 2,
  *   evaluationFrequency: "PT5M",
@@ -237,14 +348,54 @@ export interface ScheduledQueryRule extends Resource<
  * });
  * ```
  *
- * ### Routing Alerts
- * **Example:** Notify an action group, split by computer
+ * **Example:** Alert on a custom table that does not exist yet
  * ```typescript
- * const rule = yield* Azure.Monitor.ScheduledQueryRule("errors", {
+ * const errors = yield* Azure.Monitor.ScheduledQueryRule("app-errors", {
  *   scopes: [logs.workspaceId],
  *   severity: 1,
  *   evaluationFrequency: "PT5M",
  *   windowSize: "PT5M",
+ *   skipQueryValidation: true,
+ *   criteria: [
+ *     {
+ *       query: "AppEvents_CL | where Level == 'error'",
+ *       timeAggregation: "Count",
+ *       operator: "GreaterThan",
+ *       threshold: 10,
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Measuring a Column
+ * **Example:** Average request duration above 2 seconds
+ * ```typescript
+ * const slow = yield* Azure.Monitor.ScheduledQueryRule("slow-requests", {
+ *   scopes: [logs.workspaceId],
+ *   severity: 3,
+ *   evaluationFrequency: "PT5M",
+ *   windowSize: "PT15M",
+ *   criteria: [
+ *     {
+ *       query: "AppRequests | project TimeGenerated, DurationMs",
+ *       timeAggregation: "Average",
+ *       metricMeasureColumn: "DurationMs",
+ *       operator: "GreaterThan",
+ *       threshold: 2000,
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Splitting and Noise Control
+ * **Example:** One alert per computer, three bad periods out of four
+ * ```typescript
+ * const errorsPerHost = yield* Azure.Monitor.ScheduledQueryRule("errors-per-host", {
+ *   scopes: [logs.workspaceId],
+ *   severity: 2,
+ *   evaluationFrequency: "PT5M",
+ *   windowSize: "PT5M",
+ *   muteActionsDuration: "PT1H",
  *   criteria: [
  *     {
  *       query: "Event | where EventLevelName == 'Error'",
@@ -252,11 +403,72 @@ export interface ScheduledQueryRule extends Resource<
  *       operator: "GreaterThan",
  *       threshold: 10,
  *       dimensions: [{ name: "Computer", operator: "Include", values: ["*"] }],
+ *       failingPeriods: { numberOfEvaluationPeriods: 4, minFailingPeriodsToAlert: 3 },
  *     },
  *   ],
- *   actions: { actionGroups: [actionGroupId] },
- *   tags: { team: "platform" },
  * });
+ * ```
+ *
+ * ### Routing Alerts
+ * **Example:** Notify an action group with extra payload fields
+ * ```typescript
+ * // an action group created outside Alchemy
+ * const oncallId =
+ *   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/ops/providers/Microsoft.Insights/actionGroups/oncall";
+ * const errors = yield* Azure.Monitor.ScheduledQueryRule("errors", {
+ *   scopes: [logs.workspaceId],
+ *   severity: 1,
+ *   evaluationFrequency: "PT5M",
+ *   windowSize: "PT5M",
+ *   criteria: [
+ *     {
+ *       query: "AppEvents_CL | where Level == 'error'",
+ *       timeAggregation: "Count",
+ *       operator: "GreaterThan",
+ *       threshold: 10,
+ *     },
+ *   ],
+ *   actions: {
+ *     actionGroups: [oncallId],
+ *     customProperties: { team: "platform", runbook: "https://example.com/runbooks/errors" },
+ *   },
+ * });
+ * ```
+ *
+ * ### Pausing a Rule
+ * **Example:** Keep the rule but stop evaluating it
+ * ```typescript
+ * const noHeartbeat = yield* Azure.Monitor.ScheduledQueryRule("no-heartbeat", {
+ *   scopes: [logs.workspaceId],
+ *   enabled: false,
+ *   severity: 2,
+ *   evaluationFrequency: "PT5M",
+ *   windowSize: "PT15M",
+ *   criteria: [
+ *     { query: "Heartbeat", timeAggregation: "Count", operator: "LessThan", threshold: 1 },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Querying with a Managed Identity
+ * **Example:** Run the query as the rule's system-assigned identity
+ * ```typescript
+ * const rule = yield* Azure.Monitor.ScheduledQueryRule("errors", {
+ *   scopes: [logs.workspaceId],
+ *   identity: { type: "SystemAssigned" },
+ *   severity: 2,
+ *   evaluationFrequency: "PT5M",
+ *   windowSize: "PT5M",
+ *   criteria: [
+ *     {
+ *       query: "AppEvents_CL | where Level == 'error'",
+ *       timeAggregation: "Count",
+ *       operator: "GreaterThan",
+ *       threshold: 0,
+ *     },
+ *   ],
+ * });
+ * // grant rule.principalId Log Analytics Reader on the workspace
  * ```
  *
  * @resource

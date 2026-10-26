@@ -29,6 +29,7 @@ import type { Table } from "./Table.ts";
  *
  * // runtime
  * const session = yield* sessions.get("sessions", sessionId);
+ * // …provided with Effect.provide(Azure.CosmosDB.TableReadHttp)
  * ```
  *
  * @binding

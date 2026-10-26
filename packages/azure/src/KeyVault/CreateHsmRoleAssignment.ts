@@ -36,6 +36,7 @@ export interface CreateHsmRoleAssignmentRequest extends Omit<
  *     principalId: tenantPrincipalId,
  *   },
  * });
+ * // …provided with Effect.provide(Azure.KeyVault.CreateHsmRoleAssignmentHttp)
  * ```
  *
  * @binding

@@ -31,6 +31,7 @@ export type CreateFileRequest = FileShareRequest<files.CreateFileRequest>;
  *
  * // runtime
  * yield* createFile({ fileName: "logs/today.log", xMsContentLength: 1024 });
+ * // …provided with Effect.provide(Azure.Storage.CreateFileHttp)
  * ```
  *
  * @binding

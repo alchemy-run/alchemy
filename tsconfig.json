@@ -428,13 +428,25 @@
       "path": "./examples/docker-postgres/tsconfig.json"
     },
     {
+      "path": "./examples/azure-aks/tsconfig.json"
+    },
+    {
       "path": "./examples/azure-container-app/tsconfig.json"
     },
     {
       "path": "./examples/azure-container-app-job/tsconfig.json"
     },
     {
+      "path": "./examples/azure-cosmos/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-dev/tsconfig.json"
+    },
+    {
       "path": "./examples/azure-effect-workflows/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-event-hubs/tsconfig.json"
     },
     {
       "path": "./examples/azure-function/tsconfig.json"
@@ -446,10 +458,28 @@
       "path": "./examples/azure-function-httpapi/tsconfig.json"
     },
     {
+      "path": "./examples/azure-key-vault/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-openai/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-postgres-drizzle/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-redis/tsconfig.json"
+    },
+    {
       "path": "./examples/azure-schedule/tsconfig.json"
     },
     {
       "path": "./examples/azure-service-bus/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-service-to-service/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-sql/tsconfig.json"
     },
     {
       "path": "./examples/azure-storage/tsconfig.json"
@@ -459,6 +489,9 @@
     },
     {
       "path": "./examples/azure-storage-uploads/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-vm/tsconfig.json"
     },
     {
       "path": "./examples/azure-website-vite/tsconfig.json"

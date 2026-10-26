@@ -80,6 +80,7 @@ export interface ReadBlobContainerClient {
  * // runtime
  * const blob = yield* files.get("reports/latest.json");
  * const report = blob ? JSON.parse(blob.text()) : undefined;
+ * // …provided with Effect.provide(Azure.Storage.BlobContainerReadHttp)
  * ```
  *
  * **Example:** List blobs under a prefix

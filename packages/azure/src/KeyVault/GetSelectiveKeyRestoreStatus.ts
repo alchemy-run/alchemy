@@ -26,6 +26,7 @@ export interface GetSelectiveKeyRestoreStatusRequest extends Omit<
  *
  * // runtime
  * const { status } = yield* keyRestoreStatus({ jobId });
+ * // …provided with Effect.provide(Azure.KeyVault.GetSelectiveKeyRestoreStatusHttp)
  * ```
  *
  * @binding

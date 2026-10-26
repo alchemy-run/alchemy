@@ -37,7 +37,11 @@ export interface EventSubscriptionProps extends EventSubscriptionSettings {
    * ARM ID of the event source: a custom topic (`topic.topicId`), domain,
    * domain topic, resource group, subscription, or an Azure resource.
    * Subscribing directly on an Azure resource makes Azure create a hidden
-   * system topic for it. Changing it replaces the subscription.
+   * system topic for it.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
    */
   scope: string;
 }
@@ -54,49 +58,177 @@ export interface EventSubscription extends Resource<
 > {}
 
 /**
- * An Event Grid event subscription attached to any scope: a custom topic,
- * a domain or domain topic, a resource group, a subscription, or an Azure
- * resource. It routes matching events to a destination such as a Storage
- * queue, webhook, Event Hub, Service Bus, or Azure Function.
+ * An Event Grid event subscription on any scope
+ * (`Microsoft.EventGrid/eventSubscriptions`): it routes the events of a
+ * custom topic, a domain or domain topic, a resource group, an Azure
+ * subscription, or an Azure resource to a destination such as a Storage
+ * queue, a webhook, an event hub, a Service Bus queue or topic, or an Azure
+ * Function.
  *
- * Event subscriptions have no tags; Alchemy records ownership in a label
+ * Use it when the source has no declared parent in your stack (a resource
+ * group, an Azure subscription, a resource you do not manage). Under a
+ * declared topic, prefer `TopicEventSubscription`, `DomainEventSubscription`,
+ * or `SystemTopicEventSubscription`. To run your own code on events, use
+ * `Azure.EventGrid.consumeEvents` in a Function. Event subscriptions have no
+ * tags, so Alchemy records ownership in a label
  * (`alchemy:{stack}/{stage}/{id}`).
+ *
+ * :::caution[Changing `scope`, `name`, or `eventDeliverySchema` replaces the event subscription]
+ * Alchemy deletes the old subscription and creates a new one. Events
+ * published between the two are not delivered.
+ * :::
+ *
+ * :::caution[Webhook destinations must answer the validation handshake]
+ * Event Grid sends a `SubscriptionValidationEvent` to a `WebHook` endpoint
+ * when you create the subscription, and fails the create when the endpoint
+ * does not echo the validation code.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/subscribe-through-portal
  *
  * ### Subscribing to a Custom Topic
- * **Example:** Deliver topic events to a Storage queue
+ * **Example:** Deliver `Order.Created` events to a Storage queue
  * ```typescript
- * const topic = yield* Azure.EventGrid.Topic("orders", {
- *   resourceGroup: group.resourceGroupName,
+ * const orders = yield* Azure.EventGrid.Topic("orders");
+ * const account = yield* Azure.Storage.StorageAccount("sink");
+ * const inbox = yield* Azure.Storage.Queue("inbox", {
+ *   storageAccount: account.storageAccountName,
  * });
- * const toQueue = yield* Azure.EventGrid.EventSubscription("orders-to-queue", {
- *   scope: topic.topicId,
+ * yield* Azure.EventGrid.EventSubscription("orders-to-inbox", {
+ *   scope: orders.topicId,
  *   destination: {
  *     endpointType: "StorageQueue",
  *     resourceId: account.storageAccountId,
- *     queueName: "orders",
+ *     queueName: inbox.queueName,
  *   },
  *   filter: { includedEventTypes: ["Order.Created"] },
  * });
  * ```
  *
- * ### Filtering and Retries
- * **Example:** Advanced filter and retry policy
+ * ### Subscribing to Azure Resources
+ * **Example:** Resource writes in the stack's resource group
  * ```typescript
- * const bigOrders = yield* Azure.EventGrid.EventSubscription("big-orders", {
- *   scope: topic.topicId,
+ * const group = yield* Azure.Resources.ResourceGroup("app", { location: "eastus" });
+ * yield* Azure.EventGrid.EventSubscription("group-writes", {
+ *   scope: group.resourceGroupId,
+ *   destination: { endpointType: "EventHub", resourceId: hub.eventHubId },
+ *   filter: { includedEventTypes: ["Microsoft.Resources.ResourceWriteSuccess"] },
+ * });
+ * ```
+ *
+ * **Example:** New blobs in one storage account
+ * ```typescript
+ * yield* Azure.EventGrid.EventSubscription("new-blobs", {
+ *   scope: account.storageAccountId,
+ *   destination: { endpointType: "ServiceBusQueue", resourceId: queue.queueId },
+ *   filter: {
+ *     includedEventTypes: ["Microsoft.Storage.BlobCreated"],
+ *     subjectBeginsWith: "/blobServices/default/containers/uploads/",
+ *   },
+ * });
+ * ```
+ *
+ * ### Destinations
+ * **Example:** Webhook with batching
+ * ```typescript
+ * yield* Azure.EventGrid.EventSubscription("orders-to-hook", {
+ *   scope: orders.topicId,
  *   destination: {
  *     endpointType: "WebHook",
  *     endpointUrl: "https://example.com/api/events",
+ *     maxEventsPerBatch: 10,
+ *     preferredBatchSizeInKilobytes: 64,
  *   },
+ * });
+ * ```
+ *
+ * **Example:** A function in a function app
+ * ```typescript
+ * import * as Output from "alchemy/Output";
+ *
+ * yield* Azure.EventGrid.EventSubscription("orders-to-function", {
+ *   scope: orders.topicId,
+ *   destination: {
+ *     endpointType: "AzureFunction",
+ *     resourceId: Output.interpolate`${app.functionAppId}/functions/onOrder`,
+ *   },
+ * });
+ * ```
+ *
+ * ### Filtering
+ * **Example:** Orders over 100 from the EU, CloudEvents delivery
+ * ```typescript
+ * yield* Azure.EventGrid.EventSubscription("big-eu-orders", {
+ *   scope: orders.topicId,
+ *   destination: { endpointType: "ServiceBusQueue", resourceId: queue.queueId },
+ *   eventDeliverySchema: "CloudEventSchemaV1_0",
  *   filter: {
+ *     includedEventTypes: ["Order.Created"],
  *     advancedFilters: [
  *       { operatorType: "NumberGreaterThan", key: "data.total", value: 100 },
+ *       { operatorType: "StringIn", key: "data.region", values: ["eu-west", "eu-north"] },
  *     ],
  *   },
- *   retryPolicy: { maxDeliveryAttempts: 10, eventTimeToLiveInMinutes: 60 },
  * });
+ * ```
+ *
+ * ### Retries and Dead-Lettering
+ * Event Grid retries a failed delivery with backoff. After
+ * `maxDeliveryAttempts` or `eventTimeToLiveInMinutes`, it writes the event to
+ * the dead-letter container, or drops it when there is none.
+ *
+ * **Example:** Ten attempts within an hour, then dead-letter
+ * ```typescript
+ * const deadLetters = yield* Azure.Storage.BlobContainer("dead-letters", {
+ *   storageAccount: account.storageAccountName,
+ * });
+ * yield* Azure.EventGrid.EventSubscription("orders-to-hook", {
+ *   scope: orders.topicId,
+ *   destination: { endpointType: "WebHook", endpointUrl: "https://example.com/api/events" },
+ *   retryPolicy: { maxDeliveryAttempts: 10, eventTimeToLiveInMinutes: 60 },
+ *   deadLetterDestination: {
+ *     resourceId: account.storageAccountId,
+ *     blobContainerName: deadLetters.containerName,
+ *   },
+ * });
+ * ```
+ *
+ * ### Expiring a Subscription
+ * **Example:** Subscription that Azure deletes at the end of the year
+ * ```typescript
+ * yield* Azure.EventGrid.EventSubscription("year-end-audit", {
+ *   scope: orders.topicId,
+ *   destination: {
+ *     endpointType: "StorageQueue",
+ *     resourceId: account.storageAccountId,
+ *     queueName: inbox.queueName,
+ *   },
+ *   expirationTimeUtc: "2026-12-31T23:59:59Z",
+ * });
+ * ```
+ *
+ * ### Event Sources
+ * To run your own handler, skip the event subscription: `consumeEvents`
+ * creates one that pushes to your Function.
+ *
+ * **Example:** Handle resource-group writes in an Azure Function
+ * ```typescript
+ * export default class Audit extends Azure.Functions.Function<Audit>()(
+ *   "Audit",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const group = yield* AppGroup;
+ *     yield* Azure.EventGrid.consumeEvents(
+ *       "ResourceWrites",
+ *       {
+ *         scope: group.resourceGroupId,
+ *         includedEventTypes: ["Microsoft.Resources.ResourceWriteSuccess"],
+ *       },
+ *       (event) => Effect.log(`${event.eventType} ${event.subject}`),
+ *     );
+ *     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+ *   }).pipe(Effect.provide(Azure.Functions.EventGridEventSource)),
+ * ) {}
  * ```
  *
  * @resource

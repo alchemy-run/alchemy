@@ -26,6 +26,7 @@ export interface UserAssignedIdentityProps {
   /**
    * Resource group the identity is created in. Changing it replaces the
    * identity.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -42,7 +43,9 @@ export interface UserAssignedIdentityProps {
   location?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
-   * `alchemy::id`) are merged in automatically.
+   * `alchemy::id`) are merged in automatically. Changing them updates the
+   * identity in place.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -79,28 +82,145 @@ export interface UserAssignedIdentity extends Resource<
 > {}
 
 /**
- * A user-assigned managed identity — a Microsoft Entra service principal
- * whose lifecycle Azure manages. Attach it to compute (Container Apps,
- * Functions, VMs) and grant it access with role assignments instead of
- * distributing keys.
+ * A user-assigned managed identity
+ * (`Microsoft.ManagedIdentity/userAssignedIdentities`): a Microsoft Entra
+ * service principal whose lifecycle Azure manages. Attach it to compute
+ * (Container Apps, Web Apps, container groups, VMs) and grant it access
+ * with role assignments instead of distributing keys.
+ *
+ * Unlike a system-assigned identity, it exists before the compute that
+ * uses it, so its roles are in place on the compute's first start (for
+ * example an AcrPull grant for the first image pull), and several apps can
+ * share it. Bindings do not need one: they assign roles to the host's own
+ * identity. Alchemy registers the `Microsoft.ManagedIdentity` resource
+ * provider on the subscription if needed.
+ *
+ * :::caution[Changing `name`, `location`, or `resourceGroup` replaces the identity]
+ * The new identity has a new `principalId` and `clientId`. Every role
+ * assignment and federated credential that references the old one is
+ * replaced, and compute that lists its `identityId` is updated. Code that
+ * stored the old client ID stops getting tokens. Tags update in place.
+ * :::
  *
  * @see https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview
  *
  * ### Creating an Identity
- * **Example:** Identity in a resource group
+ * **Example:** Identity in the stack's resource group
  * ```typescript
  * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api");
  * ```
  *
+ * **Example:** Identity with a fixed name, location, and tags
+ * ```typescript
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api", {
+ *   name: "id-shop-api",
+ *   location: "westeurope",
+ *   tags: { team: "shop" },
+ * });
+ * ```
+ *
  * ### Granting Access
+ * Pass `principalId` to a role assignment, with
+ * `principalType: "ServicePrincipal"`.
+ *
  * **Example:** Let the identity read blobs in a storage account
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("files");
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api");
  * yield* Azure.Authorization.RoleAssignment("api-reads-files", {
  *   scope: account.storageAccountId,
  *   roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataReader,
  *   principalId: identity.principalId,
  *   principalType: "ServicePrincipal",
  * });
+ * ```
+ *
+ * **Example:** Let the identity read Key Vault secrets
+ * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("secrets");
+ * yield* Azure.Authorization.RoleAssignment("api-reads-secrets", {
+ *   scope: vault.vaultId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.KeyVaultSecretsUser,
+ *   principalId: identity.principalId,
+ *   principalType: "ServicePrincipal",
+ * });
+ * ```
+ *
+ * ### Attaching to a Container App
+ * List `identityId` in the app's `identity`. Use `"SystemAssigned,UserAssigned"`
+ * to keep the system-assigned identity as well.
+ *
+ * **Example:** Pull a private image with the identity
+ * ```typescript
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("env");
+ * const registry = yield* Azure.ContainerRegistry.Registry("images");
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api-pull");
+ * yield* Azure.Authorization.RoleAssignment("api-acr-pull", {
+ *   scope: registry.registryId,
+ *   roleDefinitionId: "7f951dda-4ed3-4680-a7ca-43fe172d538d", // AcrPull
+ *   principalId: identity.principalId,
+ *   principalType: "ServicePrincipal",
+ * });
+ * const api = yield* Azure.ContainerApps.ContainerApp("api", {
+ *   environmentId: env.environmentId,
+ *   identity: { type: "UserAssigned", userAssignedIdentities: [identity.identityId] },
+ *   configuration: {
+ *     registries: [{ server: registry.loginServer, identity: identity.identityId }],
+ *   },
+ *   template: {
+ *     containers: [{ name: "api", image: Output.interpolate`${registry.loginServer}/api:v1` }],
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Tell the Azure SDK which identity to use
+ * ```typescript
+ * // With several identities attached, DefaultAzureCredential reads AZURE_CLIENT_ID.
+ * const api = yield* Azure.ContainerApps.ContainerApp("api", {
+ *   environmentId: env.environmentId,
+ *   identity: {
+ *     type: "SystemAssigned,UserAssigned",
+ *     userAssignedIdentities: [identity.identityId],
+ *   },
+ *   template: {
+ *     containers: [
+ *       {
+ *         name: "api",
+ *         image: "mcr.microsoft.com/k8se/quickstart:latest",
+ *         env: [{ name: "AZURE_CLIENT_ID", value: identity.clientId }],
+ *       },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
+ * ### Attaching to a Web App
+ * **Example:** Web App that runs as the identity
+ * ```typescript
+ * const plan = yield* Azure.Web.AppServicePlan("plan", { sku: "B1" });
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("site");
+ * const site = yield* Azure.Web.WebApp("site", {
+ *   serverFarmId: plan.appServicePlanId,
+ *   identity: { type: "UserAssigned", userAssignedIdentityIds: [identity.identityId] },
+ * });
+ * ```
+ *
+ * ### Trusting External Workloads
+ * Add an `Azure.ManagedIdentity.FederatedIdentityCredential` so GitHub
+ * Actions or a Kubernetes service account signs in as the identity with
+ * its own OIDC token, without a secret.
+ *
+ * **Example:** Deploy from GitHub Actions as the identity
+ * ```typescript
+ * const deployer = yield* Azure.ManagedIdentity.UserAssignedIdentity("deployer");
+ * yield* Azure.ManagedIdentity.FederatedIdentityCredential("github-main", {
+ *   identity: deployer.identityName,
+ *   issuer: "https://token.actions.githubusercontent.com",
+ *   subject: "repo:my-org/my-repo:ref:refs/heads/main",
+ * });
+ * // In the workflow, azure/login takes client-id: deployer.clientId and
+ * // tenant-id: deployer.tenantId.
+ * return { clientId: deployer.clientId, tenantId: deployer.tenantId };
  * ```
  *
  * @resource

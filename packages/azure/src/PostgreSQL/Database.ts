@@ -24,24 +24,49 @@ import {
 } from "./common.ts";
 
 export interface DatabaseProps {
-  /** Resource group of the server. Changing it replaces the database. */
+  /**
+   * Resource group of the server.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the flexible server. Changing it replaces the database. */
+  /**
+   * Name of the `Azure.PostgreSQL.FlexibleServer` that holds the database.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
+   */
   server: string;
   /**
-   * Database name (case-sensitive, up to 63 characters). If omitted, a
-   * unique name is generated from the app, stage, and logical ID. The
-   * built-in `postgres`, `azure_maintenance`, and `azure_sys` databases
-   * cannot be managed. Changing it replaces the database.
+   * Database name (case-sensitive, up to 63 characters). The built-in
+   * `postgres`, `azure_maintenance`, and `azure_sys` databases cannot be
+   * managed.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Character set. Changing it replaces the database.
+   * Character set.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
    * @default "UTF8"
    */
   charset?: string;
   /**
-   * Collation. Changing it replaces the database.
+   * Collation, e.g. `en_US.utf8` or `C`.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
    * @default "en_US.utf8"
    */
   collation?: string;
@@ -69,29 +94,56 @@ export interface Database extends Resource<
 > {}
 
 /**
- * A database on an Azure Database for PostgreSQL flexible server.
+ * A database on an Azure Database for PostgreSQL flexible server
+ * (`Microsoft.DBforPostgreSQL/flexibleServers/databases`).
  *
- * Databases cannot be tagged; Alchemy treats a database as its own when its
+ * Databases cannot be tagged. Alchemy treats a database as its own when its
  * server carries this stack and stage's ownership tags.
  *
- * @see https://learn.microsoft.com/azure/postgresql/flexible-server/quickstart-create-server
+ * :::caution[Changing `name`, `server`, `charset`, `collation`, or `resourceGroup` replaces the database]
+ * Alchemy creates a new, empty database and drops the old one with its
+ * data.
+ * :::
+ *
+ * See [Create a database in Azure Database for PostgreSQL](https://learn.microsoft.com/azure/postgresql/flexible-server/quickstart-create-server).
  *
  * ### Creating a Database
  * **Example:** Database with the default charset and collation
  * ```typescript
- * const server = yield* Azure.PostgreSQL.FlexibleServer("db");
- * const app = yield* Azure.PostgreSQL.Database("app", {
+ * const server = yield* Azure.PostgreSQL.FlexibleServer("Postgres", {
+ *   location: "centralus",
+ * });
+ * const db = yield* Azure.PostgreSQL.Database("App", {
  *   server: server.serverName,
  *   name: "app",
  * });
+ * // db.databaseName === "app"
  * ```
  *
  * **Example:** Custom collation
  * ```typescript
- * const reports = yield* Azure.PostgreSQL.Database("reports", {
+ * const reports = yield* Azure.PostgreSQL.Database("Reports", {
  *   server: server.serverName,
  *   collation: "C",
  * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * The runtime connects with a PostgreSQL driver. Yield the host name and
+ * database name inside the host to put them in its app settings, then read
+ * them at runtime (see `Azure.PostgreSQL.FlexibleServer` for the whole
+ * Function).
+ *
+ * **Example:** Read the connection values inside an Azure Function
+ * ```typescript
+ * // init
+ * const host = yield* server.fullyQualifiedDomainName;
+ * const databaseName = yield* db.databaseName;
+ *
+ * // runtime
+ * const hostName = yield* host;
+ * const name = yield* databaseName;
+ * // `postgresql://<user>:<password>@${hostName}:5432/${name}?sslmode=require`
  * ```
  *
  * @resource

@@ -24,44 +24,74 @@ import { createDnsName, lower } from "./common.ts";
 export interface FailoverGroupReadWriteEndpoint {
   /**
    * `Automatic` fails over after the grace period on an outage; `Manual`
-   * only fails over on request.
+   * fails over only on request.
    */
   failoverPolicy: "Manual" | "Automatic";
   /**
-   * Grace period in minutes before an automatic failover with data loss
-   * (required for `Automatic`, minimum 60).
+   * Grace period in minutes before an automatic failover with data loss.
+   * Required for `Automatic`; minimum 60.
+   * @default none
    */
   failoverWithDataLossGracePeriodMinutes?: number;
 }
 
 /** Read-only listener behaviour. */
 export interface FailoverGroupReadOnlyEndpoint {
-  /** Whether read-only traffic fails over to the primary when the secondary is down. */
+  /**
+   * Whether read-only traffic fails over to the primary when the secondary
+   * is down.
+   * @default Azure's default (`Disabled`)
+   */
   failoverPolicy?: "Disabled" | "Enabled";
-  /** ARM ID of the server that serves read-only traffic. */
+  /**
+   * ARM ID of the server that serves read-only traffic.
+   * @default Azure's default (a partner server)
+   */
   targetServer?: string;
 }
 
 export interface FailoverGroupProps {
-  /** Resource group of the primary server. Changing it replaces the group. */
+  /**
+   * Resource group of the primary server.
+   *
+   * :::caution
+   * Changing it replaces the group.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the primary SQL server. Changing it replaces the group. */
+  /**
+   * Name of the primary `Azure.Sql.Server`.
+   *
+   * :::caution
+   * Changing it replaces the group.
+   * :::
+   */
   server: string;
   /**
    * Globally unique group name (the listener DNS label
    * `<name>.database.windows.net`): lowercase letters, digits, and
-   * hyphens. If omitted, a unique name is generated from the app, stage,
-   * and logical ID. Changing it replaces the group.
+   * hyphens.
+   *
+   * :::caution
+   * Changing it replaces the group, and clients must use the new listener.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
    * ARM IDs of the partner (secondary) servers, typically in another
-   * region. Changing them replaces the group.
+   * region.
+   *
+   * :::caution
+   * Changing them replaces the group.
+   * :::
    */
   partnerServers: string[];
   /**
    * ARM IDs of primary databases to replicate. Adding a database seeds a
-   * geo-secondary on each partner server.
+   * geo-secondary on each partner server; removing one stops its
+   * replication. Changes happen in place.
    * @default []
    */
   databases?: string[];
@@ -70,16 +100,21 @@ export interface FailoverGroupProps {
    * @default { failoverPolicy: "Manual" }
    */
   readWriteEndpoint?: FailoverGroupReadWriteEndpoint;
-  /** Read-only listener behaviour. */
+  /**
+   * Read-only listener behaviour.
+   * @default Azure's default
+   */
   readOnlyEndpoint?: FailoverGroupReadOnlyEndpoint;
   /**
-   * Secondary type: `Geo` (readable) or `Standby` (license-free DR).
+   * Secondary type: `Geo` (readable) or `Standby` (license-free disaster
+   * recovery replica).
    * @default Azure's default (`Geo`)
    */
   secondaryType?: "Geo" | "Standby";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -118,43 +153,100 @@ export interface FailoverGroup extends Resource<
 > {}
 
 /**
- * An Azure SQL auto-failover group — geo-replicates databases from a
- * primary server to partner servers behind stable read-write and
- * read-only listener endpoints.
+ * An Azure SQL auto-failover group (`Microsoft.Sql/servers/failoverGroups`):
+ * it geo-replicates databases from a primary server to partner servers
+ * behind stable read-write and read-only listener endpoints. Clients
+ * connect to the listener, so a failover needs no connection-string change.
  *
- * Deleting the group stops replication but leaves the geo-secondary
- * databases on the partner servers; delete the partner server (or the
- * secondaries) to remove them.
+ * :::caution[Changing `name`, `server`, `partnerServers`, or `resourceGroup` replaces the group]
+ * Replication seeds again on the new group. A new `name` also gives the
+ * group a new listener host name, so clients must change it.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/azure-sql/database/failover-group-sql-db
+ * :::caution[Deleting the group keeps the geo-secondaries]
+ * Destroying the group stops replication but leaves the geo-secondary
+ * databases on the partner servers. Delete the partner server, or the
+ * secondaries, to remove them.
+ * :::
+ *
+ * See [Failover groups overview](https://learn.microsoft.com/azure/azure-sql/database/failover-group-sql-db).
  *
  * ### Creating a Failover Group
  * **Example:** Replicate a database to another region
  * ```typescript
- * const primary = yield* Azure.Sql.Server("primary", { ... });
- * const secondary = yield* Azure.Sql.Server("secondary", {
- *   location: "westus2",
- *   ...
+ * const primary = yield* Azure.Sql.Server("SqlEast", {
+ *   location: "eastus2",
+ *   administratorLogin: "sqladmin",
+ *   administratorLoginPassword: password,
  * });
- * const fog = yield* Azure.Sql.FailoverGroup("fog", {
+ * const secondary = yield* Azure.Sql.Server("SqlWest", {
+ *   location: "westus2",
+ *   administratorLogin: "sqladmin",
+ *   administratorLoginPassword: password,
+ * });
+ * const db = yield* Azure.Sql.Database("Orders", {
+ *   server: primary.serverName,
+ *   sku: { name: "S0" },
+ * });
+ * const group = yield* Azure.Sql.FailoverGroup("Orders", {
  *   server: primary.serverName,
  *   partnerServers: [secondary.serverId],
  *   databases: [db.databaseId],
  * });
- * // connect to fog.readWriteListenerEndpoint
+ * // clients connect to group.readWriteListenerEndpoint
  * ```
  *
  * ### Automatic Failover
  * **Example:** Fail over automatically after one hour
  * ```typescript
- * yield* Azure.Sql.FailoverGroup("fog", {
+ * yield* Azure.Sql.FailoverGroup("Orders", {
  *   server: primary.serverName,
  *   partnerServers: [secondary.serverId],
+ *   databases: [db.databaseId],
  *   readWriteEndpoint: {
  *     failoverPolicy: "Automatic",
  *     failoverWithDataLossGracePeriodMinutes: 60,
  *   },
  * });
+ * ```
+ *
+ * ### Read-Only Routing
+ * **Example:** Send read-only traffic to the secondary
+ * ```typescript
+ * const group = yield* Azure.Sql.FailoverGroup("Orders", {
+ *   server: primary.serverName,
+ *   partnerServers: [secondary.serverId],
+ *   databases: [db.databaseId],
+ *   readOnlyEndpoint: { failoverPolicy: "Enabled", targetServer: secondary.serverId },
+ * });
+ * // read-only clients connect to group.readOnlyListenerEndpoint
+ * ```
+ *
+ * ### Standby Replicas
+ * **Example:** License-free disaster-recovery secondary
+ * ```typescript
+ * yield* Azure.Sql.FailoverGroup("Orders", {
+ *   server: primary.serverName,
+ *   partnerServers: [secondary.serverId],
+ *   databases: [db.databaseId],
+ *   secondaryType: "Standby",
+ * });
+ * ```
+ *
+ * ### Runtime Operations
+ * `FailoverFailoverGroup` runs a planned failover: the partner server you
+ * bind becomes the primary with no data loss. The binding assigns a custom
+ * role with only `Microsoft.Sql/servers/failoverGroups/failover/action`, on
+ * the group as seen from that partner server.
+ *
+ * **Example:** Fail over to the secondary from a Function
+ * ```typescript
+ * // init
+ * const failover = yield* Azure.Sql.FailoverFailoverGroup(group, secondary);
+ *
+ * // runtime: Azure accepts the request; the failover finishes in the background
+ * yield* failover();
+ * // …provided with Effect.provide(Azure.Sql.FailoverFailoverGroupHttp)
  * ```
  *
  * @resource

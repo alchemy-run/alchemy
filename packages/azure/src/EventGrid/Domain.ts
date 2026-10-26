@@ -38,27 +38,51 @@ import {
 import type { EventGridInputSchema, JsonInputSchemaMapping } from "./Topic.ts";
 
 export interface DomainProps {
-  /** Resource group the domain is created in. Changing it replaces the domain. */
+  /**
+   * Resource group the domain is created in.
+   *
+   * :::caution
+   * Changing it replaces the domain.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Domain name: 3-50 letters, digits, and hyphens, unique per region. If
    * omitted, a unique name is generated from the app, stage, and logical ID.
+   *
+   * :::caution
    * Changing it replaces the domain.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the domain. Changing it replaces the domain.
+   * Azure location of the domain.
+   *
+   * :::caution
+   * Changing it replaces the domain.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
-   * Schema of published events. Immutable: changing it replaces the domain.
+   * Schema of published events: `EventGridSchema`, `CloudEventSchemaV1_0`,
+   * or `CustomEventSchema` (with `inputSchemaMapping`).
+   *
+   * :::caution
+   * Changing it replaces the domain.
+   * :::
    * @default "EventGridSchema"
    */
   inputSchema?: EventGridInputSchema;
   /**
-   * Field mappings used with `inputSchema: "CustomEventSchema"`. Changing
-   * it replaces the domain.
+   * Field mappings used with `inputSchema: "CustomEventSchema"`.
+   *
+   * :::caution
+   * Changing it replaces the domain.
+   * :::
+   * @default no mapping
    */
   inputSchemaMapping?: JsonInputSchemaMapping;
   /**
@@ -100,11 +124,16 @@ export interface DomainProps {
    * @default Azure's default (`true`)
    */
   autoDeleteTopicWithLastSubscription?: boolean;
-  /** Managed identity of the domain, used for identity-based delivery. */
+  /**
+   * Managed identity of the domain, used for identity-based delivery
+   * (`deliveryIdentity` on an event subscription).
+   * @default the observed identity is kept (none on a new domain)
+   */
   identity?: EventGridIdentity;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -145,26 +174,126 @@ export interface Domain extends Resource<
 > {}
 
 /**
- * An Event Grid domain — one publish endpoint that multiplexes many domain
- * topics, e.g. one topic per tenant of a multi-tenant application.
+ * An Event Grid domain (`Microsoft.EventGrid/domains`): one publish
+ * endpoint for many domain topics, for example one topic per tenant of a
+ * multi-tenant application. Publishers set each event's `topic` field to
+ * route it; each tenant subscribes to its own domain topic.
+ *
+ * Alchemy creates the domain in the stack's resource group with the Event
+ * Grid schema. Publishers outside Azure use the SAS keys (`Redacted`
+ * attributes) or Microsoft Entra ID with **EventGrid Data Sender** on the
+ * domain.
+ *
+ * :::caution[Changing `name`, `resourceGroup`, `location`, `inputSchema`, or `inputSchemaMapping` replaces the domain]
+ * Alchemy creates a new domain with a new endpoint and keys, and deletes the
+ * old one with every domain topic and event subscription in it.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/event-domains
  *
  * ### Creating a Domain
  * **Example:** Domain with default settings
  * ```typescript
- * const domain = yield* Azure.EventGrid.Domain("tenants");
+ * const tenants = yield* Azure.EventGrid.Domain("tenants");
+ * // tenants.endpoint → "https://<name>.<region>-1.eventgrid.azure.net/api/events"
  * ```
  *
- * **Example:** Domain whose topics are managed explicitly
+ * **Example:** CloudEvents domain
  * ```typescript
- * const domain = yield* Azure.EventGrid.Domain("tenants", {
+ * const tenants = yield* Azure.EventGrid.Domain("tenants", {
+ *   inputSchema: "CloudEventSchemaV1_0",
+ * });
+ * ```
+ *
+ * ### Domain Topics
+ * By default, Azure creates a domain topic with its first event
+ * subscription and deletes it with its last one. Turn both off to manage
+ * the topics yourself.
+ *
+ * **Example:** Declare each tenant's topic
+ * ```typescript
+ * const tenants = yield* Azure.EventGrid.Domain("tenants", {
  *   autoCreateTopicWithFirstSubscription: false,
  *   autoDeleteTopicWithLastSubscription: false,
  * });
  * const contoso = yield* Azure.EventGrid.DomainTopic("contoso", {
- *   domain: domain.domainName,
+ *   domain: tenants.domainName,
+ *   name: "contoso",
  * });
+ * ```
+ *
+ * ### Subscribing
+ * **Example:** Deliver one tenant's events to its queue
+ * ```typescript
+ * yield* Azure.EventGrid.DomainTopicEventSubscription("contoso-to-queue", {
+ *   domain: tenants.domainName,
+ *   domainTopic: contoso.domainTopicName,
+ *   destination: { endpointType: "ServiceBusQueue", resourceId: contosoQueue.queueId },
+ * });
+ * ```
+ *
+ * **Example:** Receive every tenant's events
+ * ```typescript
+ * yield* Azure.EventGrid.DomainEventSubscription("all-tenants-audit", {
+ *   domain: tenants.domainName,
+ *   destination: { endpointType: "EventHub", resourceId: audit.eventHubId },
+ * });
+ * ```
+ *
+ * ### Authentication and Network Access
+ * **Example:** Accept Microsoft Entra ID only, from one IP range
+ * ```typescript
+ * const tenants = yield* Azure.EventGrid.Domain("tenants", {
+ *   disableLocalAuth: true,
+ *   inboundIpRules: [{ ipMask: "203.0.113.0/24" }],
+ * });
+ * ```
+ *
+ * **Example:** Let a publisher identity send events
+ * ```typescript
+ * const publisher = yield* Azure.ManagedIdentity.UserAssignedIdentity("publisher");
+ * yield* Azure.Authorization.RoleAssignment("publisher-sends", {
+ *   scope: tenants.domainId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.EventGridDataSender,
+ *   principalId: publisher.principalId,
+ * });
+ * ```
+ *
+ * ### Delivering with a Managed Identity
+ * **Example:** Deliver to Service Bus with the domain's identity
+ * ```typescript
+ * const tenants = yield* Azure.EventGrid.Domain("tenants", {
+ *   identity: { type: "SystemAssigned" },
+ * });
+ * yield* Azure.Authorization.RoleAssignment("tenants-sender", {
+ *   scope: contosoQueue.queueId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.ServiceBusDataSender,
+ *   principalId: tenants.principalId.as<string>(),
+ * });
+ * yield* Azure.EventGrid.DomainTopicEventSubscription("contoso-to-queue", {
+ *   domain: tenants.domainName,
+ *   domainTopic: contoso.domainTopicName,
+ *   destination: { endpointType: "ServiceBusQueue", resourceId: contosoQueue.queueId },
+ *   deliveryIdentity: { type: "SystemAssigned" },
+ * });
+ * ```
+ *
+ * ### Event Sources
+ * **Example:** Handle one tenant's events in an Azure Function
+ * ```typescript
+ * export default class Contoso extends Azure.Functions.Function<Contoso>()(
+ *   "Contoso",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const topic = yield* ContosoTopic;
+ *     yield* Azure.EventGrid.consumeEvents(
+ *       "ContosoEvents",
+ *       { scope: topic.domainTopicId },
+ *       (event) => Effect.log(`${event.eventType} ${event.subject}`),
+ *     );
+ *     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+ *   }).pipe(Effect.provide(Azure.Functions.EventGridEventSource)),
+ * ) {}
  * ```
  *
  * @resource

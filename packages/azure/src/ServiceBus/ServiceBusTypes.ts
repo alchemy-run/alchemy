@@ -5,9 +5,12 @@ import type { SendServiceBusQueueClient, ServiceBusSendOptions } from "./QueueSe
 
 /** One message of {@link WriteServiceBusClient.sendBatch}. */
 export interface ServiceBusBatchEntry {
-  /** The payload; objects are JSON-encoded. */
+  /** The payload. A string is sent as it is; an object is JSON-encoded. */
   body: string | object;
-  /** The message's broker and custom properties. */
+  /**
+   * The message's broker and custom properties.
+   * @default {} (content type from the body, no ID, label, or properties)
+   */
   options?: ServiceBusSendOptions;
 }
 
@@ -41,7 +44,7 @@ export interface ServiceBusReceivedMessage {
   messageId: string | undefined;
   /** How many times the message was delivered (1 on the first delivery). */
   deliveryCount: number | undefined;
-  /** When Service Bus accepted the message, RFC 1123. */
+  /** When Service Bus accepted the message, RFC 1123 (`Tue, 01 Jan 2030 00:00:00 GMT`). */
   enqueuedTimeUtc: string | undefined;
   /** Every broker property the service returned. */
   brokerProperties: messaging.BrokerProperties;
@@ -56,12 +59,13 @@ export interface ServiceBusReceivedMessage {
 export interface ServiceBusLockedMessage extends ServiceBusReceivedMessage {
   /** The message reference of the lock URI (the sequence number, as text). */
   lockReference: string;
-  /** The lock token. */
+  /** The lock token (a GUID). */
   lockToken: string;
   /** When the lock expires, RFC 1123. */
   lockedUntilUtc: string | undefined;
 }
 
+/** How long `receive` and `receiveAndDelete` wait for a message. */
 export interface ServiceBusReceiveOptions {
   /**
    * Seconds to wait for a message; without one in time the result is
@@ -103,7 +107,7 @@ export interface ReceiveServiceBusClient {
   abandon(
     message: ServiceBusMessageLock,
   ): Effect.Effect<void, messaging.UnlockMessageError, RuntimeContext>;
-  /** Extend the lock on a message by the entity's lock duration. */
+  /** Extend the lock on a message by the entity's lock duration. Fails `MessageLockLost` once the lock expired. */
   renewLock(
     message: ServiceBusMessageLock,
   ): Effect.Effect<void, messaging.RenewMessageLockError, RuntimeContext>;

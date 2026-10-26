@@ -22,32 +22,65 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLogAnalyticsName, sameText } from "./Common.ts";
 
 export interface StorageInsightConfigProps {
-  /** Resource group of the workspace. Changing it replaces the config. */
+  /**
+   * Resource group of the workspace.
+   *
+   * :::caution
+   * Changing it replaces the config.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Workspace that reads the storage. Changing it replaces the config. */
+  /**
+   * Name of the workspace that reads the storage, e.g.
+   * `logs.workspaceName`.
+   *
+   * :::caution
+   * Changing it replaces the config.
+   * :::
+   */
   workspace: string;
   /**
-   * Config name. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the config.
+   * Config name: letters, digits, hyphens, and underscores, unique in the
+   * workspace.
+   *
+   * :::caution
+   * Changing it replaces the config.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * ARM resource ID of the storage account to read diagnostics from.
+   * ARM resource ID of the storage account to read diagnostics from, e.g.
+   * `account.storageAccountId`.
+   *
+   * :::caution
    * Changing it replaces the config.
+   * :::
    */
   storageAccountId: string;
   /**
    * Access key of the storage account. Azure never returns it, so Alchemy
-   * resends it whenever its hash changes.
+   * stores its SHA-256 hash and sends the key again whenever the hash
+   * changes (for example after you rotate the key).
    */
   storageAccountKey: Redacted.Redacted<string>;
-  /** Blob containers to read, e.g. `["wad-iis-logfiles"]`. */
+  /**
+   * Blob containers to read, e.g. `["wad-iis-logfiles"]`. Alchemy updates
+   * the list in place.
+   * @default no containers
+   */
   containers?: string[];
-  /** Tables to read, e.g. `["WADWindowsEventLogsTable"]`. */
+  /**
+   * Storage tables to read, e.g. `["WADWindowsEventLogsTable"]`. Alchemy
+   * updates the list in place.
+   * @default no tables
+   */
   tables?: string[];
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -58,19 +91,19 @@ export interface StorageInsightConfig extends Resource<
   {
     /** Name of the config. */
     storageInsightConfigName: string;
-    /** Workspace that reads the storage. */
+    /** Name of the workspace that reads the storage. */
     workspace: string;
     /** Resource group of the workspace. */
     resourceGroup: string;
     /** ARM resource ID of the config. */
     storageInsightConfigId: string;
-    /** Storage account the workspace reads from. */
+    /** ARM resource ID of the storage account the workspace reads from. */
     storageAccountId: string;
-    /** SHA-256 of the last storage key sent (the key is never returned). */
+    /** SHA-256 hash of the last storage key sent (Azure never returns the key). */
     storageAccountKeyHash: string;
-    /** Read status (`OK` or `ERROR`). */
+    /** Read status: `OK` or `ERROR`. */
     state: string | undefined;
-    /** Description of the read status. */
+    /** Description of the read status, e.g. why a read failed. */
     stateDescription: string | undefined;
     /** User tags (Alchemy ownership tags stripped). */
     tags: Record<string, string>;
@@ -80,22 +113,38 @@ export interface StorageInsightConfig extends Resource<
 > {}
 
 /**
- * A storage insight config: has a Log Analytics workspace read Azure
- * Diagnostics data (WAD tables and IIS log containers) that classic VMs
- * and cloud services write to a storage account.
+ * A storage insight config
+ * (`Microsoft.OperationalInsights/workspaces/storageInsightConfigs`): it
+ * makes a Log Analytics workspace read the Azure Diagnostics data (WAD
+ * tables and IIS log containers) that VMs and cloud services write to a
+ * storage account.
  *
- * This is a legacy ingestion path; new collection should use data
- * collection rules with the Azure Monitor agent.
+ * :::caution[Changing `name`, `storageAccountId`, `workspace`, or `resourceGroup` replaces the config]
+ * Alchemy creates the new config and deletes the old one. Change the key,
+ * `containers`, `tables`, or `tags` to update it in place.
+ * :::
+ *
+ * :::caution[You supply the storage account key]
+ * `Azure.Storage.StorageAccount` does not return its access keys. Read a
+ * key from config (or the portal) and pass it as a `Redacted` value. When
+ * you rotate the key in Azure, deploy again with the new key, or the
+ * config's `state` turns `ERROR`.
+ * :::
+ *
+ * This is a legacy ingestion path. For new collection, use data collection
+ * rules with the Azure Monitor agent.
  *
  * @see https://learn.microsoft.com/azure/azure-monitor/agents/diagnostics-extension-logs
  *
  * ### Reading Diagnostics from Storage
  * **Example:** Read Windows event logs and IIS logs
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const account = yield* Azure.Storage.StorageAccount("diagnostics");
  * yield* Azure.LogAnalytics.StorageInsightConfig("diagnostics", {
  *   workspace: logs.workspaceName,
  *   storageAccountId: account.storageAccountId,
- *   storageAccountKey: Redacted.make(accountKey),
+ *   storageAccountKey: yield* Config.redacted("DIAGNOSTICS_STORAGE_KEY"),
  *   tables: ["WADWindowsEventLogsTable"],
  *   containers: ["wad-iis-logfiles"],
  * });

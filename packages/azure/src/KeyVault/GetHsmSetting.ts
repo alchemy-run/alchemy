@@ -23,6 +23,7 @@ export interface GetHsmSettingRequest extends Omit<admin.GetSettingRequest, "vau
  *
  * // runtime
  * const setting = yield* getSetting({ settingName: "AllowKeyManagementOperationsThroughARM" });
+ * // …provided with Effect.provide(Azure.KeyVault.GetHsmSettingHttp)
  * ```
  *
  * @binding

@@ -20,29 +20,52 @@ import { createEntityName, sameName } from "./internal.ts";
 
 export interface DisasterRecoveryConfigProps {
   /**
-   * Resource group of the primary namespace. Changing it replaces the
-   * pairing.
+   * Resource group of the primary namespace.
+   *
+   * :::caution
+   * Changing it replaces the pairing.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
-  /** Primary Premium namespace. Changing it replaces the pairing. */
+  /**
+   * Name of the primary Premium namespace, e.g. `primary.namespaceName` of
+   * an `Azure.ServiceBus.Namespace`.
+   *
+   * :::caution
+   * Changing it replaces the pairing.
+   * :::
+   */
   namespace: string;
   /**
-   * ARM resource ID of the secondary Premium namespace (in another region).
-   * It must hold no entities. Changing it replaces the pairing.
+   * ARM resource ID of the secondary Premium namespace in another region,
+   * e.g. `secondary.namespaceId`. It must hold no queues or topics.
+   *
+   * :::caution
+   * Changing it replaces the pairing.
+   * :::
    */
   partnerNamespace: string;
   /**
-   * Alias name — a globally unique DNS name
+   * Alias name: a globally unique DNS name
    * (`<alias>.servicebus.windows.net`) clients use to reach whichever
-   * namespace is currently primary. 1-50 letters, digits, and hyphens,
-   * starting with a letter and ending with a letter or digit. If omitted, a
-   * unique lowercase name is generated from the app, stage, and logical ID.
+   * namespace is primary now. 1-50 letters, digits, and hyphens, starting
+   * with a letter and ending with a letter or digit.
+   *
+   * :::caution
    * Changing it replaces the pairing.
+   * :::
+   * @default a lowercase name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Alternate name for the primary namespace; required only when the alias
-   * equals the primary namespace's name. Changing it replaces the pairing.
+   * Alternate name for the primary namespace. Set it only when the alias
+   * equals the primary namespace's name.
+   *
+   * :::caution
+   * Changing it replaces the pairing.
+   * :::
+   * @default no alternate name
    */
   alternateName?: string;
 }
@@ -55,19 +78,19 @@ export interface DisasterRecoveryConfig extends Resource<
     alias: string;
     /** ARM resource ID of the alias. */
     disasterRecoveryConfigId: string;
-    /** Primary namespace the alias is configured on. */
+    /** Name of the primary namespace the alias is configured on. */
     namespaceName: string;
     /** Resource group of the primary namespace. */
     resourceGroup: string;
     /** ARM resource ID of the secondary namespace. */
     partnerNamespace: string | undefined;
-    /** Alternate name of the primary namespace, if set. */
+    /** Alternate name of the primary namespace; `undefined` when not set. */
     alternateName: string | undefined;
     /** Role of the namespace: `Primary`, `PrimaryNotReplicating`, or `Secondary`. */
     role: string | undefined;
     /** Provisioning state: `Accepted`, `Succeeded`, or `Failed`. */
     provisioningState: string | undefined;
-    /** Number of entities still pending replication. */
+    /** Number of entities still waiting to replicate to the secondary. */
     pendingReplicationOperationsCount: number | undefined;
   },
   never,
@@ -75,15 +98,26 @@ export interface DisasterRecoveryConfig extends Resource<
 > {}
 
 /**
- * A Service Bus Geo-Disaster Recovery alias that pairs a primary Premium
- * namespace with a secondary Premium namespace in another region and
- * continuously replicates metadata (entities, rules, settings) to it.
- * Clients connect through the alias; a failover repoints the alias to the
- * secondary.
+ * A Service Bus Geo-Disaster Recovery alias
+ * (`Microsoft.ServiceBus/namespaces/disasterRecoveryConfigs`): it pairs a
+ * primary Premium namespace with a secondary Premium namespace in another
+ * region and copies metadata (queues, topics, subscriptions, rules,
+ * settings) to it. Messages are not copied. Clients connect through the
+ * alias; a failover points the alias at the secondary.
  *
- * Creating the pairing blocks until replication reaches `Succeeded`.
- * Deleting it breaks the pairing first and then removes the alias, after
- * which both namespaces are independent and can be deleted.
+ * :::caution[Changing `name`, `namespace`, `partnerNamespace`, `alternateName`, or `resourceGroup` replaces the pairing]
+ * Alchemy breaks the old pairing, deletes the old alias, and creates a new
+ * one. Clients that use the old alias DNS name stop resolving it.
+ * :::
+ *
+ * :::caution[Both namespaces must be Premium]
+ * Geo-DR needs two Premium namespaces (`sku: "Premium"`) in different
+ * regions. The secondary must hold no queues or topics when you pair it.
+ * :::
+ *
+ * Creating the pairing waits until replication reaches `Succeeded` (up to
+ * 10 minutes). Deleting it breaks the pairing first and then removes the
+ * alias; after that both namespaces are independent and can be deleted.
  *
  * Aliases have no tags or metadata: Alchemy treats an alias it did not
  * create as unowned and only takes it over with `--adopt`.

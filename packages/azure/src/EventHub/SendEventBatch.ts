@@ -33,15 +33,21 @@ export type SendEventBatchClient = (
  * ### Sending a Batch
  * **Example:** Send readings for one device
  * ```typescript
+ * // Telemetry: a module-scope Azure.EventHub.EventHub declaration
  * export default class Api extends Azure.Functions.Function<Api>()(
  *   "Api",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     // init: assigns Azure Event Hubs Data Sender on the event hub
+ *     const telemetry = yield* Telemetry;
+ *     // init: assigns Azure Event Hubs Data Sender on the event hub only
  *     const sendBatch = yield* Azure.EventHub.SendEventBatch(telemetry);
  *     return {
  *       fetch: Effect.gen(function* () {
  *         // runtime: the namespace and event hub name are filled in
+ *         const readings = [
+ *           { deviceId: "d1", temperature: 21 },
+ *           { deviceId: "d1", temperature: 22 },
+ *         ];
  *         yield* sendBatch({
  *           events: readings.map((reading) => ({
  *             body: JSON.stringify(reading),

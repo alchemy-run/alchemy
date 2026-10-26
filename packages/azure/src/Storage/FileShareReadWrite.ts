@@ -28,6 +28,7 @@ export interface ReadWriteFileShareClient extends ReadFileShareClient, WriteFile
  * // runtime
  * const file = yield* docs.get("in/data.csv");
  * if (file) yield* docs.put("out/data.csv", file.body);
+ * // …provided with Effect.provide(Azure.Storage.FileShareReadWriteHttp)
  * ```
  *
  * @binding

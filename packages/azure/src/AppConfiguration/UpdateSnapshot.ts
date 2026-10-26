@@ -27,6 +27,7 @@ export interface UpdateSnapshotRequest extends Omit<appconfig.UpdateSnapshotRequ
  *
  * // runtime
  * const archived = yield* updateSnapshot({ name: "release-1", status: "archived" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.UpdateSnapshotHttp)
  * ```
  *
  * @binding

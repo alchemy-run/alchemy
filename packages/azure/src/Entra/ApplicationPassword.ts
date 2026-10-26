@@ -18,6 +18,7 @@ export interface ApplicationPasswordProps {
   /**
    * Friendly name of the password, shown in the Entra admin center.
    * Changing it replaces (rotates) the password.
+   * @default no name
    */
   displayName?: string;
   /**
@@ -42,9 +43,12 @@ export interface ApplicationPassword extends Resource<
     keyId: string;
     /** Object ID of the application that holds the password. */
     applicationObjectId: string;
-    /** The client secret. Entra returns it only once, when it is created. */
+    /**
+     * The client secret, kept in Alchemy state. Entra returns it only once,
+     * when it is created.
+     */
     secretText: Redacted.Redacted<string>;
-    /** First three characters of the secret. */
+    /** First three characters of the secret, to tell secrets apart. */
     hint: string | undefined;
     /** Friendly name. */
     displayName: string | undefined;
@@ -74,23 +78,43 @@ export class ApplicationPasswordDeleteTimedOut extends Data.TaggedError(
 }> {}
 
 /**
- * A client secret (password credential) on a Microsoft Entra ID
- * application. Programs sign in with the application's client ID and this
- * secret.
+ * A client secret (Microsoft Graph `passwordCredential`) on a Microsoft
+ * Entra ID application. Programs sign in with the application's client ID
+ * and this secret.
  *
  * Entra returns the secret only when it is created, so Alchemy keeps it in
- * state as a `Redacted` value. Every prop replaces the password: change
- * `endDateTime` (or `displayName`) to rotate it. The new password is
- * created before the old one is removed, so consumers that read
- * `secretText` from the stack switch over without a gap.
+ * state as a `Redacted` value. Passwords have no tags. They belong to their
+ * application and are removed with it. Prefer an
+ * `Azure.Entra.FederatedIdentityCredential` when the caller has an OIDC
+ * token (GitHub Actions, Kubernetes): there is no secret to leak or rotate.
  *
- * Passwords have no tags. They belong to their application and are
- * removed with it.
+ * :::caution[Changing any prop replaces (rotates) the password]
+ * `applicationObjectId`, `displayName`, `endDateTime`, and `startDateTime`
+ * all replace it. Alchemy creates the new password before it removes the
+ * old one, so consumers that read `secretText` from the stack switch over
+ * without a gap. A copy of the old secret stored outside the stack stops
+ * working.
+ * :::
+ *
+ * :::caution[The secret expires]
+ * Without `endDateTime` a password expires two years after it is created,
+ * and sign-ins with it then fail. Your tenant's app management policy can
+ * set a shorter maximum.
+ * :::
  *
  * @see https://learn.microsoft.com/graph/api/application-addpassword
  *
  * ### Creating a Client Secret
- * **Example:** A secret that expires at the end of 2027
+ * **Example:** A secret that expires after two years
+ * ```typescript
+ * const app = yield* Azure.Entra.Application("Ci");
+ * const secret = yield* Azure.Entra.ApplicationPassword("CiSecret", {
+ *   applicationObjectId: app.objectId,
+ * });
+ * // secret.secretText is a Redacted<string>; secret.hint is its first 3 characters
+ * ```
+ *
+ * **Example:** A named secret that expires at the end of 2027
  * ```typescript
  * const app = yield* Azure.Entra.Application("Ci");
  * const secret = yield* Azure.Entra.ApplicationPassword("CiSecret", {
@@ -98,17 +122,66 @@ export class ApplicationPasswordDeleteTimedOut extends Data.TaggedError(
  *   displayName: "ci",
  *   endDateTime: "2027-12-31T00:00:00Z",
  * });
- * // secret.secretText is a Redacted<string>
+ * ```
+ *
+ * **Example:** A secret that starts working later
+ * ```typescript
+ * const next = yield* Azure.Entra.ApplicationPassword("CiSecretNext", {
+ *   applicationObjectId: app.objectId,
+ *   displayName: "ci-2027",
+ *   startDateTime: "2027-01-01T00:00:00Z",
+ *   endDateTime: "2028-12-31T00:00:00Z",
+ * });
+ * ```
+ *
+ * ### Using the Secret
+ * A program signs in with the tenant ID, the application's client ID, and
+ * the secret.
+ *
+ * **Example:** Store the credentials in Key Vault
+ * ```typescript
+ * const vault = yield* Azure.KeyVault.Vault("secrets");
+ * const app = yield* Azure.Entra.Application("Partner");
+ * const secret = yield* Azure.Entra.ApplicationPassword("PartnerSecret", {
+ *   applicationObjectId: app.objectId,
+ * });
+ * yield* Azure.KeyVault.Secret("partner-client-secret", {
+ *   vault: vault.vaultName,
+ *   value: secret.secretText,
+ * });
+ * return { tenantId: app.tenantId, clientId: app.appId };
+ * ```
+ *
+ * **Example:** Give the application Azure roles
+ * ```typescript
+ * const principal = yield* Azure.Entra.ServicePrincipal("PartnerPrincipal", {
+ *   appId: app.appId,
+ * });
+ * yield* Azure.Authorization.RoleAssignment("PartnerReadsVault", {
+ *   scope: vault.vaultId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.KeyVaultSecretsUser,
+ *   principalId: principal.objectId,
+ *   principalType: "ServicePrincipal",
+ * });
  * ```
  *
  * ### Rotating a Secret
  * **Example:** Rotate by moving the expiry
- * ```typescript
- * // Changing endDateTime creates a new password, then removes the old one.
- * const secret = yield* Azure.Entra.ApplicationPassword("CiSecret", {
- *   applicationObjectId: app.objectId,
- *   endDateTime: "2028-06-30T00:00:00Z",
- * });
+ * ```diff
+ *  const secret = yield* Azure.Entra.ApplicationPassword("CiSecret", {
+ *    applicationObjectId: app.objectId,
+ * -  endDateTime: "2027-12-31T00:00:00Z",
+ * +  endDateTime: "2028-06-30T00:00:00Z",
+ *  });
+ * ```
+ *
+ * **Example:** Rotate on demand by renaming
+ * ```diff
+ *  const secret = yield* Azure.Entra.ApplicationPassword("CiSecret", {
+ *    applicationObjectId: app.objectId,
+ * -  displayName: "ci-1",
+ * +  displayName: "ci-2",
+ *  });
  * ```
  *
  * @resource

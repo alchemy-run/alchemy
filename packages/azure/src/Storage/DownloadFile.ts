@@ -30,6 +30,7 @@ export type DownloadFileRequest = FileShareRequest<files.DownloadFileRequest>;
  * // runtime
  * const file = yield* downloadFile({ fileName: "reports/q1.csv" });
  * const csv = new TextDecoder().decode(file.body);
+ * // …provided with Effect.provide(Azure.Storage.DownloadFileHttp)
  * ```
  *
  * **Example:** Read the first kilobyte

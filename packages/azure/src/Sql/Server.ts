@@ -43,7 +43,10 @@ export interface ServerEntraAdministrator {
    * @default the subscription's tenant
    */
   tenantId?: string;
-  /** Kind of principal. */
+  /**
+   * Kind of principal.
+   * @default Azure's default (`User`)
+   */
   principalType?: "User" | "Group" | "Application";
   /**
    * Allow only Microsoft Entra authentication (no SQL logins). Only applied
@@ -55,41 +58,67 @@ export interface ServerEntraAdministrator {
 
 /** Managed identities assigned to the server. */
 export interface ServerIdentity {
-  /** Identity type. */
+  /** Identity type. `None` removes every identity. */
   type: "None" | "SystemAssigned" | "UserAssigned" | "SystemAssigned,UserAssigned";
-  /** ARM resource IDs of user-assigned identities. */
+  /**
+   * ARM resource IDs of user-assigned identities. Only used with a type
+   * that includes `UserAssigned`.
+   * @default []
+   */
   userAssignedIdentityIds?: string[];
 }
 
 export interface ServerProps {
-  /** Resource group the server is created in. Changing it replaces the server. */
+  /**
+   * Resource group the server is created in.
+   *
+   * :::caution
+   * Changing it replaces the server and deletes every database on it.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Globally unique server name (the `<name>.database.windows.net` DNS
    * label): 1-63 lowercase letters, digits, and hyphens, not starting or
-   * ending with a hyphen. If omitted, a unique name is generated from the
-   * app, stage, and logical ID. Changing it replaces the server.
+   * ending with a hyphen.
+   *
+   * :::caution
+   * Changing it replaces the server and deletes every database on it.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the server. Changing it replaces the server.
+   * Azure location of the server, e.g. `centralus`.
+   *
+   * :::caution
+   * Changing it replaces the server and deletes every database on it.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
-   * SQL administrator login. Cannot be changed after creation, so changing
-   * it replaces the server. Omit it (together with the password) for an
-   * Entra-only server configured via {@link ServerProps.administrators}.
+   * SQL administrator login. Omit it (together with the password) for an
+   * Entra-only server configured with {@link ServerProps.administrators}.
+   *
+   * :::caution
+   * Azure cannot change the login after creation. Changing it replaces the
+   * server and deletes every database on it.
+   * :::
+   * @default no SQL administrator (Entra-only server)
    */
   administratorLogin?: string;
   /**
-   * SQL administrator password. Write-only: Azure never returns it, so
-   * Alchemy stores a salted fingerprint and only re-sends the password
-   * when it changes.
+   * SQL administrator password: 8-128 characters from three of upper case,
+   * lower case, digits, and symbols. Write-only: Azure never returns it, so
+   * Alchemy stores a salted fingerprint and re-sends the password only when
+   * it changes. Changing it updates the server in place.
+   * @default none (required together with `administratorLogin`)
    */
   administratorLoginPassword?: Redacted.Redacted<string>;
   /**
-   * Server version.
+   * Server version. Azure offers only `12.0`.
    * @default "12.0"
    */
   version?: string;
@@ -99,38 +128,57 @@ export interface ServerProps {
    */
   minimalTlsVersion?: "1.0" | "1.1" | "1.2" | "1.3";
   /**
-   * Whether the public endpoint accepts traffic (still subject to firewall
-   * rules).
+   * Whether the public endpoint accepts traffic. Firewall rules still
+   * apply when it is `Enabled`. `Disabled` leaves private endpoints as the
+   * only path.
    * @default Azure's default (`Enabled`)
    */
   publicNetworkAccess?: "Enabled" | "Disabled" | "SecuredByPerimeter";
   /**
-   * Restrict outbound network access to the FQDNs allowed by outbound
-   * firewall rules.
+   * Restrict outbound connections of the server to the FQDNs allowed by
+   * `Azure.Sql.OutboundFirewallRule`s.
    * @default Azure's default (`Disabled`)
    */
   restrictOutboundNetworkAccess?: SqlEnabledState;
   /**
-   * Enable IPv6 connectivity (required for IPv6 firewall rules).
+   * Enable IPv6 connectivity (required for `Azure.Sql.IPv6FirewallRule`).
    * @default Azure's default (`Disabled`)
    */
   isIPv6Enabled?: SqlEnabledState;
   /**
-   * Microsoft Entra administrator set at creation. Manage it afterwards
-   * with `Azure.Sql.ServerAzureADAdministrator`.
+   * Microsoft Entra administrator set at creation. Alchemy sends it only on
+   * create; manage it afterwards with `Azure.Sql.ServerAzureADAdministrator`.
+   * @default no Entra administrator
    */
   administrators?: ServerEntraAdministrator;
-  /** Managed identities assigned to the server. */
+  /**
+   * Managed identities assigned to the server. A customer-managed TDE key
+   * (`keyId`) needs one.
+   * @default no identity
+   */
   identity?: ServerIdentity;
-  /** ARM resource ID of the user-assigned identity used by default. */
+  /**
+   * ARM resource ID of the user-assigned identity the server uses by
+   * default (for example to read a customer-managed key).
+   * @default none
+   */
   primaryUserAssignedIdentityId?: string;
-  /** Key Vault key URI for customer-managed TDE encryption. */
+  /**
+   * Key Vault key URI for customer-managed transparent data encryption
+   * (TDE).
+   * @default service-managed TDE keys
+   */
   keyId?: string;
-  /** Client ID of a multi-tenant application used for cross-tenant CMK. */
+  /**
+   * Client ID of a multi-tenant application used for cross-tenant
+   * customer-managed keys.
+   * @default none
+   */
   federatedClientId?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -173,48 +221,333 @@ export interface Server extends Resource<
 > {}
 
 /**
- * An Azure SQL logical server — the endpoint, authentication boundary,
- * and firewall for Azure SQL databases and elastic pools. The server
- * itself has no compute charge.
+ * An Azure SQL logical server (`Microsoft.Sql/servers`): the endpoint,
+ * sign-in boundary, and firewall for Azure SQL databases and elastic pools.
+ * The server has no compute charge; you pay for the databases on it.
  *
- * Deleting the server deletes every database, pool, and rule on it.
+ * Alchemy creates the server in the stack's resource group with TLS 1.2 as
+ * the minimum version and no firewall rules, so no client connects until
+ * you add an `Azure.Sql.FirewallRule` or a private endpoint. The
+ * administrator password is write-only: Alchemy keeps a salted fingerprint
+ * in state and sends the password again only when it changes.
  *
- * Some subscriptions (e.g. free trials) may not create SQL servers in
- * every region. Azure accepts the request and fails it asynchronously
- * (`ProvisioningDisabled`), which surfaces as a provisioning timeout;
- * pick a region that accepts new servers.
+ * :::caution[Changing `name`, `location`, `resourceGroup`, or `administratorLogin` replaces the server]
+ * Alchemy creates a new, empty server and deletes the old one with every
+ * database, elastic pool, and firewall rule on it.
+ * :::
  *
- * @see https://learn.microsoft.com/azure/azure-sql/database/logical-servers
+ * :::caution[Some subscriptions cannot create servers in every region]
+ * Free-trial subscriptions often get `ProvisioningDisabled` in `eastus`.
+ * Azure accepts the request and fails it later, so the deploy ends in a
+ * provisioning timeout. Pick a region that accepts new servers, for
+ * example `centralus`.
+ * :::
+ *
+ * See [What is a logical server in Azure SQL Database](https://learn.microsoft.com/azure/azure-sql/database/logical-servers).
  *
  * ### Creating a Server
- * **Example:** Server with a SQL administrator
+ * **Example:** Server with a generated administrator password
  * ```typescript
- * const server = yield* Azure.Sql.Server("db", {
+ * import * as Azure from "@alchemy.run/azure";
+ * import * as Alchemy from "alchemy";
+ * import * as Output from "alchemy/Output";
+ * import * as Redacted from "effect/Redacted";
+ *
+ * // Azure wants three of four character kinds. Hex has two, so add a prefix.
+ * // Add Alchemy.RandomProvider() to the stack's providers.
+ * const random = yield* Alchemy.Random("SqlAdminPassword", { bytes: 24 });
+ * const password = Output.map(random.text, (hex) => Redacted.make(`Az!${Redacted.value(hex)}`));
+ *
+ * const server = yield* Azure.Sql.Server("Sql", {
+ *   location: "centralus",
  *   administratorLogin: "sqladmin",
- *   administratorLoginPassword: Redacted.make(password),
+ *   administratorLoginPassword: password,
+ * });
+ * // server.fullyQualifiedDomainName → "<name>.database.windows.net"
+ * ```
+ *
+ * **Example:** Password from config
+ * ```typescript
+ * import * as Config from "effect/Config";
+ *
+ * const password = yield* Config.redacted("SQL_ADMIN_PASSWORD");
+ * const server = yield* Azure.Sql.Server("Sql", {
+ *   administratorLogin: "sqladmin",
+ *   administratorLoginPassword: password,
  * });
  * ```
  *
  * **Example:** Entra-only server
  * ```typescript
- * const server = yield* Azure.Sql.Server("db", {
+ * const server = yield* Azure.Sql.Server("Sql", {
  *   administrators: {
  *     login: "dba-group",
- *     sid: dbaGroupObjectId,
+ *     sid: "00000000-0000-0000-0000-000000000000", // the group's object ID
  *     principalType: "Group",
  *     azureADOnlyAuthentication: true,
  *   },
  * });
  * ```
  *
- * ### Network Access
- * **Example:** Private-only server
+ * ### Authentication
+ * Change `administratorLoginPassword` and deploy again to rotate the
+ * password. The login stays the same, and Alchemy updates the server in
+ * place.
+ *
+ * **Example:** Manage the Entra administrator after creation
  * ```typescript
- * const server = yield* Azure.Sql.Server("db", {
+ * const server = yield* Azure.Sql.Server("Sql", {
  *   administratorLogin: "sqladmin",
- *   administratorLoginPassword: Redacted.make(password),
+ *   administratorLoginPassword: password,
+ * });
+ * yield* Azure.Sql.ServerAzureADAdministrator("SqlAdmins", {
+ *   server: server.serverName,
+ *   login: "dba-group",
+ *   sid: "00000000-0000-0000-0000-000000000000", // the group's object ID
+ * });
+ * yield* Azure.Sql.ServerAzureADOnlyAuthentication("EntraOnly", {
+ *   server: server.serverName,
+ *   azureADOnlyAuthentication: true,
+ * });
+ * ```
+ *
+ * ### Firewall Rules
+ * A new server accepts no public client. Each rule opens an IPv4 range to
+ * every database on the server.
+ *
+ * **Example:** Allow Azure services
+ * ```typescript
+ * // 0.0.0.0 - 0.0.0.0 is Azure's "allow Azure services" rule. Flex
+ * // Consumption Functions have no fixed outbound IP, so they need it.
+ * yield* Azure.Sql.FirewallRule("AllowAzureServices", {
+ *   server: server.serverName,
+ *   startIpAddress: "0.0.0.0",
+ *   endIpAddress: "0.0.0.0",
+ * });
+ * ```
+ *
+ * **Example:** Allow an office range
+ * ```typescript
+ * yield* Azure.Sql.FirewallRule("Office", {
+ *   server: server.serverName,
+ *   startIpAddress: "203.0.113.0",
+ *   endIpAddress: "203.0.113.255",
+ * });
+ * ```
+ *
+ * **Example:** Allow IPv6 clients
+ * ```typescript
+ * const server = yield* Azure.Sql.Server("Sql", {
+ *   administratorLogin: "sqladmin",
+ *   administratorLoginPassword: password,
+ *   isIPv6Enabled: "Enabled",
+ * });
+ * yield* Azure.Sql.IPv6FirewallRule("OfficeV6", {
+ *   server: server.serverName,
+ *   startIPv6Address: "2001:db8::",
+ *   endIPv6Address: "2001:db8::ffff",
+ * });
+ * ```
+ *
+ * ### Private Networking
+ * **Example:** Private-only server behind a private endpoint
+ * ```typescript
+ * const server = yield* Azure.Sql.Server("Sql", {
+ *   administratorLogin: "sqladmin",
+ *   administratorLoginPassword: password,
  *   publicNetworkAccess: "Disabled",
  * });
+ * yield* Azure.Network.PrivateEndpoint("SqlEndpoint", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: server.serverId, groupIds: ["sqlServer"] },
+ *   ],
+ * });
+ * ```
+ *
+ * **Example:** Restrict outbound connections to one storage account
+ * ```typescript
+ * const server = yield* Azure.Sql.Server("Sql", {
+ *   administratorLogin: "sqladmin",
+ *   administratorLoginPassword: password,
+ *   restrictOutboundNetworkAccess: "Enabled",
+ * });
+ * yield* Azure.Sql.OutboundFirewallRule("Backups", {
+ *   server: server.serverName,
+ *   fqdn: "backups.blob.core.windows.net",
+ * });
+ * ```
+ *
+ * ### Encryption
+ * **Example:** Require TLS 1.3
+ * ```typescript
+ * const server = yield* Azure.Sql.Server("Sql", {
+ *   administratorLogin: "sqladmin",
+ *   administratorLoginPassword: password,
+ *   minimalTlsVersion: "1.3",
+ * });
+ * ```
+ *
+ * **Example:** Customer-managed TDE key
+ * ```typescript
+ * const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("SqlKeys");
+ * // key: an Azure.KeyVault.Key that the identity may wrap and unwrap
+ * const server = yield* Azure.Sql.Server("Sql", {
+ *   administratorLogin: "sqladmin",
+ *   administratorLoginPassword: password,
+ *   identity: { type: "UserAssigned", userAssignedIdentityIds: [identity.identityId] },
+ *   primaryUserAssignedIdentityId: identity.identityId,
+ *   keyId: key.keyUriWithVersion,
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * Azure SQL has no data-plane binding: the runtime connects with a SQL
+ * driver. Yield an Output of the server inside the host. Alchemy puts the
+ * value in the host's app settings and returns an Effect that reads it at
+ * runtime. The host's identity gets no role, so the driver signs in with the
+ * SQL administrator (or another SQL login).
+ *
+ * **Example:** Declare the server, database, and firewall rule
+ * ```typescript
+ * // src/resources.ts
+ * import * as Azure from "@alchemy.run/azure";
+ * import * as Alchemy from "alchemy";
+ * import * as Output from "alchemy/Output";
+ * import * as Effect from "effect/Effect";
+ * import * as Redacted from "effect/Redacted";
+ *
+ * export const ADMIN_LOGIN = "todoadmin";
+ *
+ * // Output.named gives the password a stable app-setting key.
+ * export const AdminPassword = Effect.gen(function* () {
+ *   const random = yield* Alchemy.Random("SqlAdminPassword", { bytes: 24 });
+ *   return Output.named(
+ *     Output.map(random.text, (hex) => Redacted.make(`Az!${Redacted.value(hex)}`)),
+ *     "SQL_ADMIN_PASSWORD",
+ *   );
+ * });
+ *
+ * export const Sql = Effect.gen(function* () {
+ *   const password = yield* AdminPassword;
+ *   return yield* Azure.Sql.Server("Sql", {
+ *     location: "centralus",
+ *     administratorLogin: ADMIN_LOGIN,
+ *     administratorLoginPassword: password,
+ *   });
+ * });
+ *
+ * export const AllowAzureServices = Effect.gen(function* () {
+ *   const server = yield* Sql;
+ *   return yield* Azure.Sql.FirewallRule("AllowAzureServices", {
+ *     server: server.serverName,
+ *     startIpAddress: "0.0.0.0",
+ *     endIpAddress: "0.0.0.0",
+ *   });
+ * });
+ *
+ * export const Todos = Effect.gen(function* () {
+ *   const server = yield* Sql;
+ *   return yield* Azure.Sql.Database("Todos", {
+ *     server: server.serverName,
+ *     sku: { name: "Basic" },
+ *   });
+ * });
+ * ```
+ *
+ * **Example:** Query the database from an Azure Function
+ * ```typescript
+ * // src/Api.ts
+ * import * as Azure from "@alchemy.run/azure";
+ * import * as MssqlClient from "@effect/sql-mssql/MssqlClient";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/http/HttpServerResponse";
+ * import * as Layer from "effect/Layer";
+ * import * as SqlClient from "effect/sql/SqlClient";
+ * import { ADMIN_LOGIN, AdminPassword, AllowAzureServices, Sql, Todos } from "./resources.ts";
+ *
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     // init: bind the values the driver needs into the app settings
+ *     const server = yield* Sql;
+ *     const database = yield* Todos;
+ *     yield* AllowAzureServices;
+ *     const host = yield* server.fullyQualifiedDomainName;
+ *     const databaseName = yield* database.databaseName;
+ *     const passwordOutput = yield* AdminPassword;
+ *     const password = yield* passwordOutput;
+ *
+ *     // runtime: read them back and open one pool per request
+ *     const SqlLive = Layer.unwrap(
+ *       Effect.gen(function* () {
+ *         const resolvedHost = yield* host;
+ *         const resolvedDatabase = yield* databaseName;
+ *         const resolvedPassword = yield* password;
+ *         return MssqlClient.layer({
+ *           server: resolvedHost,
+ *           database: resolvedDatabase,
+ *           username: ADMIN_LOGIN,
+ *           password: resolvedPassword,
+ *           connectTimeout: "30 seconds",
+ *         });
+ *       }),
+ *     );
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const sql = yield* SqlClient.SqlClient;
+ *         const rows = yield* sql`SELECT TOP 10 title, done FROM todos`;
+ *         return yield* HttpServerResponse.json(rows);
+ *       }).pipe(Effect.provide(SqlLive), Effect.orDie),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * Database actions are bindings on `Azure.Sql.Database` (`PauseDatabase`,
+ * `ResumeDatabase`, `FailoverDatabase`, `ExportDatabase`,
+ * `CreateRestorePoint`). A planned failover-group failover binds the group
+ * and the partner server that becomes the primary. The binding assigns a
+ * custom role with only `Microsoft.Sql/servers/failoverGroups/failover/action`,
+ * on that failover group only.
+ *
+ * **Example:** Fail a failover group over to the secondary server
+ * ```typescript
+ * // init
+ * const failover = yield* Azure.Sql.FailoverFailoverGroup(group, secondary);
+ *
+ * // runtime
+ * yield* failover();
+ * // …provided with Effect.provide(Azure.Sql.FailoverFailoverGroupHttp)
+ * ```
+ *
+ * ### Deleting a Server
+ * Destroying the server deletes every database, elastic pool, and rule on
+ * it. The delete waits until Azure reports the server gone.
+ *
+ * **Example:** Keep the server when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const server = yield* Azure.Sql.Server("Sql", {
+ *   administratorLogin: "sqladmin",
+ *   administratorLoginPassword: password,
+ * }).pipe(RemovalPolicy.retain());
+ * ```
+ *
+ * **Example:** Adopt an existing server
+ * ```typescript
+ * import { adopt } from "alchemy/AdoptPolicy";
+ *
+ * // Alchemy refuses a server without its tags unless you adopt it.
+ * const server = yield* Azure.Sql.Server("Sql", {
+ *   name: "contoso-sql",
+ *   administratorLogin: "sqladmin",
+ *   administratorLoginPassword: password,
+ * }).pipe(adopt());
  * ```
  *
  * @resource

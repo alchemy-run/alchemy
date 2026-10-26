@@ -480,17 +480,66 @@ const transformContainerGroupProps = (id: string, props: ContainerGroupProps) =>
  * ) {}
  * ```
  *
- * ### Bindings
+ * ### Networking
+ * Pass `subnetIds` to run the group inside your virtual network with a
+ * private IP. The subnet is delegated to
+ * `Microsoft.ContainerInstance/containerGroups`. Changing either replaces
+ * the group.
+ *
+ * **Example:** Private group in a delegated subnet
+ * ```typescript
+ * const subnet = yield* Azure.Network.Subnet("Containers", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.3.0/24",
+ *   delegations: [{ serviceName: "Microsoft.ContainerInstance/containerGroups" }],
+ * });
+ * const api = yield* Azure.ContainerInstance.ContainerGroup("Api", {
+ *   main: "./src/api.ts",
+ *   subnetIds: [subnet.subnetId],
+ *   ipAddress: { type: "Private", ports: [{ port: 8080, protocol: "TCP" }] },
+ * });
+ * // api.ip is a 10.0.3.x address
+ * ```
+ *
+ * ### Logs and Cost
+ * **Example:** Send container logs to Log Analytics
+ * ```typescript
+ * import type * as Redacted from "effect/Redacted";
+ *
+ * const logs = yield* Azure.LogAnalytics.Workspace("Logs");
+ * const api = yield* Azure.ContainerInstance.ContainerGroup("Api", {
+ *   main: "./src/api.ts",
+ *   logAnalytics: {
+ *     workspaceId: logs.customerId,
+ *     workspaceKey: logs.primarySharedKey.as<Redacted.Redacted<string>>(),
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Run on Spot capacity
+ * ```typescript
+ * // Spot groups are evictable and cannot have a public IP
+ * const batch = yield* Azure.ContainerInstance.ContainerGroup("Batch", {
+ *   priority: "Spot",
+ *   restartPolicy: "Never",
+ *   containers: [{ name: "batch", image: "mcr.microsoft.com/azuredocs/aci-wordcount" }],
+ * });
+ * ```
+ *
+ * ### Storage Bindings
  * Bindings grant the group's managed identity the smallest data role on
- * the bound resource and hand the program a typed client. The roles a
- * deploy no longer asks for are revoked.
+ * the bound resource only, and hand the program a typed client. The roles a
+ * deploy no longer asks for are revoked. `BlobContainerReadWrite` grants
+ * **Storage Blob Data Contributor** on the container.
  *
  * **Example:** Read and write blobs
  * ```typescript
  * Effect.gen(function* () {
+ *   // init
  *   const files = yield* Azure.Storage.BlobContainerReadWrite(uploads);
  *   return {
  *     fetch: Effect.gen(function* () {
+ *       // runtime
  *       yield* files.put("hello.txt", "hi");
  *       const blob = yield* files.get("hello.txt");
  *       return HttpServerResponse.text(blob?.text() ?? "missing");
@@ -498,6 +547,9 @@ const transformContainerGroupProps = (id: string, props: ContainerGroupProps) =>
  *   };
  * }).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp))
  * ```
+ *
+ * ### Key Vault Bindings
+ * `SecretRead` grants **Key Vault Secrets User** on the one secret.
  *
  * **Example:** Read a Key Vault secret
  * ```typescript
@@ -509,9 +561,65 @@ const transformContainerGroupProps = (id: string, props: ContainerGroupProps) =>
  * // …provided with Effect.provide(Azure.KeyVault.SecretReadHttp)
  * ```
  *
+ * ### Service Bus Bindings
+ * `QueueSend` grants **Azure Service Bus Data Sender** and `QueueRead`
+ * grants **Azure Service Bus Data Receiver**, each on the queue only.
+ *
+ * **Example:** Send a message
+ * ```typescript
+ * // init
+ * const orders = yield* Azure.ServiceBus.QueueSend(queue);
+ *
+ * // runtime
+ * yield* orders.send({ id: 1 }, { messageId: "order-1" });
+ * // …provided with Effect.provide(Azure.ServiceBus.QueueSendHttp)
+ * ```
+ *
+ * ### Controlling the Group from a Runtime
+ * `StartContainerGroup`, `StopContainerGroup`, and `RestartContainerGroup`
+ * let another runtime operate the group. Each grants a custom role with
+ * only its one action, on this group only.
+ *
+ * **Example:** Restart the group from a Function
+ * ```typescript
+ * export default class Ops extends Azure.Functions.Function<Ops>()(
+ *   "Ops",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const worker = yield* Worker;
+ *     // init
+ *     const restart = yield* Azure.ContainerInstance.RestartContainerGroup(worker);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime
+ *         yield* restart();
+ *         return HttpServerResponse.text("accepted");
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.ContainerInstance.RestartContainerGroupHttp)),
+ * ) {}
+ * ```
+ *
  * ### Event Sources
  * Container Instances has no native triggers: a group serves HTTP and runs
- * its own loops. Poll a queue from `run` with a receive binding.
+ * its own loops. Poll a queue from `run` with a receive binding. For
+ * triggers that scale from zero, use `Azure.ContainerApps.ContainerApp` or
+ * `Azure.Functions.Function`.
+ *
+ * **Example:** Drain a Service Bus queue from `run`
+ * ```typescript
+ * const orders = yield* Azure.ServiceBus.QueueRead(queue);
+ * return {
+ *   run: Effect.gen(function* () {
+ *     const message = yield* orders.receive({ timeoutSeconds: 30 });
+ *     if (message !== undefined) {
+ *       yield* Effect.log(message.text);
+ *       yield* orders.complete(message);
+ *     }
+ *   }).pipe(Effect.orDie, Effect.forever),
+ * };
+ * // …provided with Effect.provide(Azure.ServiceBus.QueueReadHttp)
+ * ```
  *
  * **Example:** Drain a Storage queue from `run`
  * ```typescript

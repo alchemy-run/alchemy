@@ -13,14 +13,15 @@ import type {
 export interface ReadSchemaGroupClient {
   /** Read a schema by its namespace-unique ID (the ID producers stamp on messages). */
   getSchema(id: string): Effect.Effect<Schema, SchemaReadError, RuntimeContext>;
-  /** Read one version of a schema in the group. */
+  /** Read one version (1, 2, …) of a schema in the group. */
   getSchemaVersion(
     schemaName: string,
     version: number,
   ): Effect.Effect<Schema, SchemaReadError, RuntimeContext>;
   /**
-   * Find the ID and version of already-registered `content`.
-   * `format` defaults to the group's `schemaType`.
+   * Find the ID and version of already-registered `content` without
+   * registering it. `format` is `Avro`, `Json`, `Protobuf`, or `Custom`; it
+   * defaults to the group's `schemaType` (`Custom` for any other type).
    */
   getSchemaProperties(
     schemaName: string,
@@ -47,16 +48,30 @@ export interface ReadSchemaGroupClient {
  * ### Reading Schemas
  * **Example:** Resolve the schema of a message
  * ```typescript
- * // init
- * const registry = yield* Azure.EventHub.SchemaGroupRead(schemas);
- *
- * // runtime
- * const schema = yield* registry.getSchema(schemaId);
- * const avro = JSON.parse(schema.content);
+ * // Schemas: a module-scope Azure.EventHub.SchemaGroup declaration
+ * export default class Consumer extends Azure.Functions.Function<Consumer>()(
+ *   "Consumer",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const schemas = yield* Schemas;
+ *     // init: assigns Schema Registry Reader on the schema group only
+ *     const registry = yield* Azure.EventHub.SchemaGroupRead(schemas);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime
+ *         // schemaId: the ID the producer stamped on the message
+ *         const schema = yield* registry.getSchema(schemaId);
+ *         const avro = JSON.parse(schema.content);
+ *         return yield* HttpServerResponse.json(avro);
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.EventHub.SchemaGroupReadHttp)),
+ * ) {}
  * ```
  *
  * **Example:** List and read the versions of a schema
  * ```typescript
+ * // runtime, inside the host above
  * const versions = yield* registry.listSchemaVersions("Order");
  * const latest = yield* registry.getSchemaVersion("Order", versions.at(-1)!);
  * ```

@@ -20,9 +20,23 @@ import {
 } from "./EventSubscriptionShared.ts";
 
 export interface SystemTopicEventSubscriptionProps extends EventSubscriptionSettings {
-  /** Resource group of the system topic. Changing it replaces the subscription. */
+  /**
+   * Resource group of the system topic.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the parent system topic. Changing it replaces the subscription. */
+  /**
+   * Name of the parent system topic, e.g. `systemTopic.systemTopicName` of
+   * an `Azure.EventGrid.SystemTopic`.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   */
   systemTopic: string;
 }
 
@@ -40,18 +54,27 @@ export interface SystemTopicEventSubscription extends Resource<
 > {}
 
 /**
- * An event subscription on an Event Grid system topic — the recommended way
- * to route events emitted by an Azure resource (blob created, resource
+ * An event subscription on an Event Grid system topic
+ * (`Microsoft.EventGrid/systemTopics/eventSubscriptions`) — the recommended
+ * way to route events emitted by an Azure resource (blob created, resource
  * written, secret expiring, …) to a destination.
  *
  * Event subscriptions have no tags; Alchemy records ownership in a label
  * (`alchemy:{stack}/{stage}/{id}`).
+ *
+ * :::caution[Changing `name`, `systemTopic`, `eventDeliverySchema`, or `resourceGroup` replaces the subscription]
+ * Alchemy creates a new subscription and deletes the old one.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/create-view-manage-system-topics
  *
  * ### Subscribing to Azure Resource Events
  * **Example:** Blob-created events to a Storage queue
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("files");
+ * const queue = yield* Azure.Storage.Queue("uploads", {
+ *   storageAccount: account.storageAccountName,
+ * });
  * const events = yield* Azure.EventGrid.SystemTopic("files-events", {
  *   source: account.storageAccountId,
  *   topicType: "Microsoft.Storage.StorageAccounts",
@@ -63,7 +86,7 @@ export interface SystemTopicEventSubscription extends Resource<
  *     destination: {
  *       endpointType: "StorageQueue",
  *       resourceId: account.storageAccountId,
- *       queueName: "uploads",
+ *       queueName: queue.queueName,
  *     },
  *     filter: {
  *       includedEventTypes: ["Microsoft.Storage.BlobCreated"],

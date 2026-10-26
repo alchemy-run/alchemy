@@ -20,7 +20,10 @@ import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 
 export interface KeyValueProps {
-  /** Resource group of the configuration store. Changing it replaces the key-value. */
+  /**
+   * Resource group of the configuration store. Changing it replaces the key-value.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Configuration store that holds the key-value. Changing it replaces the key-value. */
   configurationStore: string;
@@ -45,11 +48,13 @@ export interface KeyValueProps {
    * Content type of the value, e.g. `application/json` or
    * `application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8`
    * for a Key Vault reference.
+   * @default none
    */
   contentType?: string;
   /**
    * Data-plane tags of the key-value. Alchemy ownership tags
    * (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) are merged in.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -86,14 +91,21 @@ export interface KeyValue extends Resource<
 > {}
 
 /**
- * A key-value in an Azure App Configuration store, managed through Azure
- * Resource Manager.
+ * A key-value (setting) in an Azure App Configuration store
+ * (`Microsoft.AppConfiguration/configurationStores/keyValues`), managed
+ * through Azure Resource Manager.
  *
- * Key-values have no ARM tags, so Alchemy records ownership in the
- * key-value's data-plane tags. If the store disables local auth, ARM only
- * proxies key-value operations when the store's `dataPlaneProxy.authenticationMode`
- * is `Pass-through` and the deployer holds the `App Configuration Data
- * Owner` role on the store.
+ * A setting is a key plus an optional label; the same key can hold one
+ * value per label, e.g. one per environment. Key-values have no ARM tags,
+ * so Alchemy records ownership in the key-value's data-plane tags. If the
+ * store disables local auth, ARM only proxies key-value operations when the
+ * store's `dataPlaneProxy.authenticationMode` is `Pass-through` and the
+ * deployer holds the `App Configuration Data Owner` role on the store.
+ *
+ * :::caution[Changing `key`, `label`, `configurationStore`, or `resourceGroup` replaces the key-value]
+ * Alchemy writes the new setting and deletes the old one. Runtimes that
+ * read the old key or label get nothing.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-app-configuration/concept-key-value
  *
@@ -124,9 +136,66 @@ export interface KeyValue extends Resource<
  * yield* Azure.AppConfiguration.KeyValue("token", {
  *   configurationStore: store.configurationStoreName,
  *   key: "App:Token",
- *   value: Redacted.make("s3cr3t"),
+ *   value: Config.redacted("APP_TOKEN"),
  * });
  * ```
+ *
+ * ### Key Vault References
+ * Keep the secret in Key Vault and store a reference to it. App
+ * Configuration client libraries resolve the reference; the reader also
+ * needs access to the secret.
+ *
+ * **Example:** Reference a Key Vault secret
+ * ```typescript
+ * import * as Output from "alchemy/Output";
+ *
+ * const password = yield* Azure.KeyVault.Secret("db-password", {
+ *   vault: vault.vaultName,
+ *   value: Config.redacted("DB_PASSWORD"),
+ * });
+ * yield* Azure.AppConfiguration.KeyValue("db-password-ref", {
+ *   configurationStore: store.configurationStoreName,
+ *   key: "Db:Password",
+ *   value: password.secretUri.pipe(Output.map((uri) => JSON.stringify({ uri }))),
+ *   contentType: "application/vnd.microsoft.appconfig.keyvaultref+json;charset=utf-8",
+ * });
+ * ```
+ *
+ * ### Feature Flags
+ * A feature flag is a key-value under `.appconfig.featureflag/` with the
+ * feature-flag content type.
+ *
+ * **Example:** Turn on a beta feature
+ * ```typescript
+ * yield* Azure.AppConfiguration.KeyValue("beta-flag", {
+ *   configurationStore: store.configurationStoreName,
+ *   key: ".appconfig.featureflag/Beta",
+ *   value: JSON.stringify({ id: "Beta", enabled: true, conditions: { client_filters: [] } }),
+ *   contentType: "application/vnd.microsoft.appconfig.ff+json;charset=utf-8",
+ * });
+ * ```
+ *
+ * ### Reading Settings at Runtime
+ * Bind the store, not the key-value: `ConfigurationStoreRead` grants a
+ * custom role with only `keyValues/read` on the store.
+ *
+ * **Example:** Read a setting in an Azure Function
+ * ```typescript
+ * // init
+ * const config = yield* Azure.AppConfiguration.ConfigurationStoreRead(store);
+ *
+ * // runtime
+ * const color = yield* config.get("App:Settings:Color", { label: "prod" });
+ * const value = color?.value ?? "blue";
+ * // …provided with Effect.provide(Azure.AppConfiguration.ConfigurationStoreReadHttp)
+ * ```
+ *
+ * A value a runtime writes with `ConfigurationStoreWrite` is not tracked by
+ * this resource: the next deploy writes the declared value again only if
+ * that value changed.
+ *
+ * ### Deleting a Key-Value
+ * Destroying the resource deletes the setting (that key and label only).
  *
  * @resource
  */

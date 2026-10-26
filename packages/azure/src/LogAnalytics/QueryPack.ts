@@ -24,23 +24,37 @@ import { createLogAnalyticsName, sameText } from "./Common.ts";
 
 export interface QueryPackProps {
   /**
-   * Resource group the query pack is created in. Changing it replaces the
-   * query pack.
+   * Resource group the query pack is created in.
+   *
+   * :::caution
+   * Changing it replaces the query pack and deletes its queries.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
-   * Query pack name. If omitted, a unique name is generated from the app,
-   * stage, and logical ID. Changing it replaces the query pack.
+   * Query pack name: letters, digits, hyphens, and underscores, up to 63
+   * characters.
+   *
+   * :::caution
+   * Changing it replaces the query pack and deletes its queries.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the query pack. Changing it replaces the query pack.
+   * Azure location of the query pack, e.g. `eastus`.
+   *
+   * :::caution
+   * Changing it replaces the query pack and deletes its queries.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -57,7 +71,7 @@ export interface QueryPack extends Resource<
     queryPackId: string;
     /** GUID of the query pack (`properties.queryPackId`). */
     queryPackGuid: string;
-    /** Location of the query pack. */
+    /** Location of the query pack, e.g. `eastus`. */
     location: string;
     /** User tags (Alchemy ownership tags stripped). */
     tags: Record<string, string>;
@@ -67,17 +81,27 @@ export interface QueryPack extends Resource<
 > {}
 
 /**
- * A Log Analytics query pack — a shareable collection of KQL queries that
- * shows up in the Queries pane of every Log Analytics workspace the user
- * can access. Add queries with `Azure.LogAnalytics.Query`.
+ * A Log Analytics query pack (`Microsoft.OperationalInsights/queryPacks`):
+ * a shareable collection of KQL queries. Its queries show up in the
+ * Queries pane of every Log Analytics workspace for users who can read the
+ * pack. Add queries with `Azure.LogAnalytics.Query`.
+ *
+ * :::caution[Changing `name`, `location`, or `resourceGroup` replaces the query pack]
+ * Alchemy creates a new pack and deletes the old one with its queries.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-monitor/logs/query-packs
  *
  * ### Creating a Query Pack
- * **Example:** Query pack
+ * **Example:** Query pack with one query
  * ```typescript
  * const pack = yield* Azure.LogAnalytics.QueryPack("queries", {
  *   tags: { team: "platform" },
+ * });
+ * yield* Azure.LogAnalytics.Query("errors", {
+ *   queryPack: pack.queryPackName,
+ *   displayName: "Recent errors",
+ *   body: "AppExceptions | where TimeGenerated > ago(1h)",
  * });
  * ```
  *

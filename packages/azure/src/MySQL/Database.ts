@@ -19,26 +19,50 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { MYSQL_NAMESPACE, serverOwnedByStack, type ServerRef, whileServerBusy } from "./common.ts";
 
 export interface DatabaseProps {
-  /** Resource group of the server. Changing it replaces the database. */
+  /**
+   * Resource group of the server.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the flexible server. Changing it replaces the database. */
+  /**
+   * Name of the `Azure.MySQL.FlexibleServer` that holds the database.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
+   */
   server: string;
   /**
-   * Database name (up to 64 characters). If omitted, a unique name is
-   * generated from the app, stage, and logical ID. The built-in `mysql`,
-   * `sys`, `information_schema`, and `performance_schema` databases cannot
-   * be managed. Changing it replaces the database.
+   * Database name (up to 64 characters). The built-in `mysql`, `sys`,
+   * `information_schema`, and `performance_schema` databases cannot be
+   * managed.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Character set. Changing it replaces the database.
+   * Character set.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
    * @default "utf8mb4"
    */
   charset?: string;
   /**
-   * Collation. Changing it replaces the database.
-   * @default the character set's default collation on the server
-   *   (`utf8mb4_0900_ai_ci` on MySQL 8)
+   * Collation, e.g. `utf8mb4_unicode_ci`.
+   *
+   * :::caution
+   * Changing it replaces the database and deletes its data.
+   * :::
+   * @default the character set's default collation on the server (`utf8mb4_0900_ai_ci` on MySQL 8)
    */
   collation?: string;
 }
@@ -65,18 +89,26 @@ export interface Database extends Resource<
 > {}
 
 /**
- * A database on an Azure Database for MySQL flexible server.
+ * A database on an Azure Database for MySQL flexible server
+ * (`Microsoft.DBforMySQL/flexibleServers/databases`).
  *
- * Databases cannot be tagged; Alchemy treats a database as its own when its
+ * Databases cannot be tagged. Alchemy treats a database as its own when its
  * server carries this stack and stage's ownership tags.
  *
- * @see https://learn.microsoft.com/azure/mysql/flexible-server/overview
+ * :::caution[Changing `name`, `server`, `charset`, `collation`, or `resourceGroup` replaces the database]
+ * Alchemy creates a new, empty database and drops the old one with its
+ * data.
+ * :::
+ *
+ * See [Create and manage databases in Azure Database for MySQL](https://learn.microsoft.com/azure/mysql/flexible-server/overview).
  *
  * ### Creating a Database
  * **Example:** Database with the default charset and collation
  * ```typescript
- * const server = yield* Azure.MySQL.FlexibleServer("db");
- * const app = yield* Azure.MySQL.Database("app", {
+ * const server = yield* Azure.MySQL.FlexibleServer("MySql", {
+ *   location: "centralus",
+ * });
+ * const db = yield* Azure.MySQL.Database("App", {
  *   server: server.serverName,
  *   name: "app",
  * });
@@ -84,11 +116,27 @@ export interface Database extends Resource<
  *
  * **Example:** Custom collation
  * ```typescript
- * const reports = yield* Azure.MySQL.Database("reports", {
+ * const reports = yield* Azure.MySQL.Database("Reports", {
  *   server: server.serverName,
  *   charset: "utf8mb4",
  *   collation: "utf8mb4_unicode_ci",
  * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * The runtime connects with a MySQL driver. Yield the host name and
+ * database name inside the host to put them in its app settings, then read
+ * them at runtime.
+ *
+ * **Example:** Read the connection values inside an Azure Function
+ * ```typescript
+ * // init
+ * const host = yield* server.fullyQualifiedDomainName;
+ * const databaseName = yield* db.databaseName;
+ *
+ * // runtime
+ * const hostName = yield* host;
+ * const name = yield* databaseName;
  * ```
  *
  * @resource

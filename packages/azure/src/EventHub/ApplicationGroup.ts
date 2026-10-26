@@ -16,6 +16,10 @@ import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { createEntityName, matchesObserved, namespaceOwnedByStage } from "./Common.ts";
 
+/**
+ * Metric a throttling policy caps: bytes or messages, sent to the namespace
+ * (`Incoming*`) or read from it (`Outgoing*`).
+ */
 export type ApplicationGroupMetric =
   | "IncomingBytes"
   | "OutgoingBytes"
@@ -26,25 +30,53 @@ export type ApplicationGroupMetric =
 export interface ApplicationGroupThrottlingPolicy {
   /** Name of the policy, unique within the application group. */
   name: string;
-  /** Per-second limit above which the application group is throttled. */
+  /**
+   * Per-second limit above which the group's clients are throttled, in the
+   * unit of `metricId` (bytes or messages per second).
+   */
   rateLimitThreshold: number;
   /** Metric the limit applies to. */
   metricId: ApplicationGroupMetric;
 }
 
 export interface ApplicationGroupProps {
-  /** Resource group of the namespace. Changing it replaces the application group. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the application group.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Namespace that hosts the application group. Changing it replaces the application group. */
+  /**
+   * Name of the `Premium` (or Dedicated cluster) namespace that hosts the
+   * application group, e.g. `namespace.namespaceName`.
+   *
+   * :::caution
+   * Changing it replaces the application group.
+   * :::
+   */
   namespace: string;
   /**
-   * Application group name. If omitted, a unique name is generated from the
-   * app, stage, and logical ID. Changing it replaces the application group.
+   * Application group name, up to 50 characters: letters, digits, periods,
+   * hyphens, and underscores, starting and ending with a letter or digit.
+   *
+   * :::caution
+   * Changing it replaces the application group.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Clients that belong to the group: `SASKeyName=<authorization rule>` or
-   * `AADAppID=<application id>`. Changing it replaces the application group.
+   * Clients that belong to the group: `SASKeyName=<authorization rule name>`
+   * or `AADAppID=<Entra application (client) ID>`. A namespace holds one
+   * group per identifier.
+   *
+   * :::caution
+   * Changing it replaces the application group. Alchemy deletes the old
+   * group before it creates the new one.
+   * :::
    */
   clientAppGroupIdentifier: string;
   /**
@@ -53,7 +85,10 @@ export interface ApplicationGroupProps {
    * @default true
    */
   isEnabled?: boolean;
-  /** Throttling policies applied to the group's clients. */
+  /**
+   * Throttling policies applied to the group's clients.
+   * @default []
+   */
   policies?: ApplicationGroupThrottlingPolicy[];
 }
 
@@ -81,22 +116,40 @@ export interface ApplicationGroup extends Resource<
 > {}
 
 /**
- * An Event Hubs application group — a set of client applications,
- * identified by a SAS rule or an Entra application ID, that share
- * resource-governance policies such as ingress/egress throttling.
- * Needs a `Premium` namespace or a namespace in a Dedicated cluster; Basic
- * and Standard namespaces reject application groups with
- * `EventHubApplicationGroupNotSupported`.
+ * An Event Hubs application group
+ * (`Microsoft.EventHub/namespaces/applicationGroups`): a set of client
+ * applications, identified by a SAS rule or an Entra application ID, that
+ * share resource-governance policies such as ingress and egress throttling.
+ * Use it to stop one noisy producer or consumer from starving the others.
  *
- * Application groups have no tags; Alchemy treats a group as owned when
- * its namespace carries this stack's ownership tags.
+ * Application groups have no tags. Alchemy treats a group as owned when its
+ * namespace carries this stack's ownership tags.
+ *
+ * :::caution[Changing `name`, `namespace`, `clientAppGroupIdentifier`, or `resourceGroup` replaces the group]
+ * Alchemy deletes the old group first (a namespace holds one group per
+ * client identifier), then creates the new one. Its clients run without
+ * the group's policies in between.
+ * :::
+ *
+ * :::caution[Needs a `Premium` namespace]
+ * Application groups need a `Premium` namespace or a namespace in a
+ * Dedicated cluster. A `Basic` or `Standard` namespace rejects them with
+ * `EventHubApplicationGroupNotSupported`. A `Premium` namespace bills per
+ * processing unit-hour.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-hubs/resource-governance-overview
  *
  * ### Creating an Application Group
  * **Example:** Group the clients of a SAS rule
  * ```typescript
- * const rule = yield* Azure.EventHub.NamespaceAuthorizationRule("Producers", {
+ * import * as Output from "alchemy/Output";
+ *
+ * const namespace = yield* Azure.EventHub.Namespace("events", {
+ *   sku: "Premium",
+ *   capacity: 1,
+ * });
+ * const rule = yield* Azure.EventHub.NamespaceAuthorizationRule("producers", {
  *   namespace: namespace.namespaceName,
  *   rights: ["Send"],
  * });
@@ -107,6 +160,8 @@ export interface ApplicationGroup extends Resource<
  * ```
  *
  * ### Throttling
+ * Each policy caps one metric per second for every client in the group.
+ *
  * **Example:** Cap incoming messages per second
  * ```typescript
  * const producers = yield* Azure.EventHub.ApplicationGroup("producers", {

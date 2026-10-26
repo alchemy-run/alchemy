@@ -56,7 +56,10 @@ export interface SqlContainerComputedProperty {
 }
 
 export interface SqlContainerProps extends ThroughputProps {
-  /** Resource group of the account. Changing it replaces the container. */
+  /**
+   * Resource group of the account. Changing it replaces the container.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /** Name of the Cosmos DB account. Changing it replaces the container. */
   account: string;
@@ -82,19 +85,40 @@ export interface SqlContainerProps extends ThroughputProps {
   /**
    * Default time to live for items in seconds; `-1` enables TTL without a
    * default expiry. Omit to disable TTL.
+   * @default TTL disabled
    */
   defaultTtl?: number;
-  /** Analytical store TTL in seconds (`-1` keeps data forever). */
+  /**
+   * Analytical store TTL in seconds (`-1` keeps data forever). Needs
+   * `enableAnalyticalStorage` on the account.
+   * @default analytical store off
+   */
   analyticalStorageTtl?: number;
-  /** Unique key constraints. Changing them replaces the container. */
+  /**
+   * Unique key constraints. Changing them replaces the container.
+   * @default none
+   */
   uniqueKeys?: SqlContainerUniqueKey[];
-  /** Conflict resolution for multi-region writes. Changing it replaces the container. */
+  /**
+   * Conflict resolution for multi-region writes. Changing it replaces the container.
+   * @default Azure's default (last writer wins on `/_ts`)
+   */
   conflictResolutionPolicy?: ConflictResolutionPolicy;
-  /** Computed properties. */
+  /**
+   * Computed properties.
+   * @default none
+   */
   computedProperties?: SqlContainerComputedProperty[];
-  /** Vector embedding policy for vector search. Changing it replaces the container. */
+  /**
+   * Vector embedding policy for vector search. Needs the
+   * `EnableNoSQLVectorSearch` capability. Changing it replaces the container.
+   * @default none
+   */
   vectorEmbeddingPolicy?: VectorEmbeddingPolicy;
-  /** Full-text search policy. */
+  /**
+   * Full-text search policy. Needs the `EnableNoSQLFullTextSearch` capability.
+   * @default none
+   */
   fullTextPolicy?: FullTextPolicy;
 }
 
@@ -130,16 +154,42 @@ export interface SqlContainer extends Resource<
 > {}
 
 /**
- * A container in an Azure Cosmos DB for NoSQL database — the unit that holds
- * JSON items, is partitioned by a partition key, and is indexed by an
- * indexing policy.
+ * A container in an Azure Cosmos DB for NoSQL database
+ * (`Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers`): the
+ * unit that holds your JSON documents, partitioned by a partition key and
+ * indexed by an indexing policy.
  *
- * Cosmos DB does not keep tags on containers; Alchemy treats one it created
- * (or one under a generated name) as its own.
+ * Every document needs an `id`, unique within its logical partition. Bind
+ * the container to a runtime and the binding assigns a Cosmos DB data role
+ * on this container only. Cosmos DB does not keep tags on containers;
+ * Alchemy treats one it created (or one under a generated name) as its own.
+ *
+ * :::caution[Changing the partition key replaces the container]
+ * So do `name`, `account`, `database`, `resourceGroup`, `uniqueKeys`,
+ * `conflictResolutionPolicy`, `vectorEmbeddingPolicy`, and adding or
+ * removing dedicated throughput. Alchemy creates a new, empty container and
+ * deletes the old one with every document in it.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/cosmos-db/nosql/
  *
  * ### Creating a Container
+ * **Example:** Container partitioned by owner
+ * ```typescript
+ * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
+ *   location: "centralus",
+ *   capabilities: ["EnableServerless"],
+ * });
+ * const database = yield* Azure.CosmosDB.SqlDatabase("app", {
+ *   account: account.accountName,
+ * });
+ * const todos = yield* Azure.CosmosDB.SqlContainer("todos", {
+ *   account: account.accountName,
+ *   database: database.databaseName,
+ *   partitionKey: { paths: ["/owner"] },
+ * });
+ * ```
+ *
  * **Example:** Container partitioned by tenant
  * ```typescript
  * const orders = yield* Azure.CosmosDB.SqlContainer("orders", {
@@ -183,6 +233,181 @@ export interface SqlContainer extends Resource<
  *   partitionKey: { paths: ["/id"] },
  *   autoscaleMaxThroughput: 4000,
  * });
+ * ```
+ *
+ * ### Unique Keys and Computed Properties
+ * **Example:** One email per tenant
+ * ```typescript
+ * const users = yield* Azure.CosmosDB.SqlContainer("users", {
+ *   account: account.accountName,
+ *   database: database.databaseName,
+ *   partitionKey: { paths: ["/tenantId"] },
+ *   uniqueKeys: [{ paths: ["/email"] }],
+ * });
+ * ```
+ *
+ * **Example:** Query on a lowercase name
+ * ```typescript
+ * const users = yield* Azure.CosmosDB.SqlContainer("users", {
+ *   account: account.accountName,
+ *   database: database.databaseName,
+ *   partitionKey: { paths: ["/tenantId"] },
+ *   computedProperties: [{ name: "cp_lowerName", query: "SELECT VALUE LOWER(c.name) FROM c" }],
+ * });
+ * ```
+ *
+ * ### Vector Search
+ * **Example:** Container with a vector index
+ * ```typescript
+ * const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
+ *   capabilities: ["EnableServerless", "EnableNoSQLVectorSearch"],
+ * });
+ * const chunks = yield* Azure.CosmosDB.SqlContainer("chunks", {
+ *   account: account.accountName,
+ *   database: database.databaseName,
+ *   partitionKey: { paths: ["/documentId"] },
+ *   vectorEmbeddingPolicy: {
+ *     vectorEmbeddings: [
+ *       { path: "/embedding", dataType: "float32", distanceFunction: "cosine", dimensions: 1536 },
+ *     ],
+ *   },
+ *   indexingPolicy: {
+ *     indexingMode: "consistent",
+ *     includedPaths: [{ path: "/*" }],
+ *     excludedPaths: [{ path: "/embedding/*" }],
+ *     vectorIndexes: [{ path: "/embedding", type: "diskANN" }],
+ *   },
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * `SqlContainerRead` assigns the built-in **Cosmos DB Built-in Data
+ * Reader** role on this container. `SqlContainerWrite` (create, upsert,
+ * replace, patch, delete) and `SqlContainerReadWrite` assign a custom data
+ * role with exactly the actions their client calls. The role goes to the
+ * host's managed identity on an Azure Function, Web App, Container App,
+ * container group, or VM, and to an Entra service principal on any other
+ * host.
+ *
+ * **Example:** A todo API on Azure Functions
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const todosContainer = yield* Todos;
+ *     const todos = yield* Azure.CosmosDB.SqlContainerReadWrite(todosContainer);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const page = yield* todos.query({
+ *           query: "SELECT * FROM c WHERE c.owner = @owner",
+ *           parameters: [{ name: "@owner", value: "sam" }],
+ *           partitionKey: ["sam"],
+ *         });
+ *         return yield* HttpServerResponse.json({ todos: page.Documents ?? [] });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.CosmosDB.SqlContainerReadWriteHttp)),
+ * ) {}
+ * ```
+ *
+ * **Example:** Read-only access
+ * ```typescript
+ * // init
+ * const changes = yield* Azure.CosmosDB.SqlContainerRead(changesContainer);
+ *
+ * // runtime
+ * const { document } = yield* changes.get({ documentId: id, partitionKey: [owner] });
+ * // …provided with Effect.provide(Azure.CosmosDB.SqlContainerReadHttp)
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Create and read a document
+ * ```typescript
+ * const todo = { id: crypto.randomUUID(), owner: "sam", title: "ship", done: false };
+ * const created = yield* todos.create({ document: todo, partitionKey: [todo.owner] });
+ * const { document, etag } = yield* todos.get({ documentId: todo.id, partitionKey: ["sam"] });
+ * ```
+ *
+ * **Example:** Patch with optimistic concurrency
+ * ```typescript
+ * yield* todos
+ *   .patch({
+ *     documentId: id,
+ *     partitionKey: [owner],
+ *     operations: [{ op: "set", path: "/done", value: true }],
+ *     ifMatch: etag,
+ *   })
+ *   .pipe(
+ *     Effect.catchTag("CosmosNotFound", () => Effect.void),
+ *     Effect.catchTag("CosmosPreconditionFailed", () => Effect.log("changed since read")),
+ *   );
+ * ```
+ *
+ * **Example:** Upsert, replace, and delete
+ * ```typescript
+ * yield* todos.upsert({ document: todo, partitionKey: [todo.owner] });
+ * yield* todos.replace({ documentId: todo.id, document: { ...todo, done: true }, partitionKey: [todo.owner] });
+ * yield* todos.delete({ documentId: todo.id, partitionKey: [todo.owner] });
+ * ```
+ *
+ * **Example:** Page through a partition
+ * ```typescript
+ * const first = yield* todos.list({ partitionKey: ["sam"], maxItemCount: 100 });
+ * const next = first.continuation
+ *   ? yield* todos.list({ partitionKey: ["sam"], continuation: first.continuation })
+ *   : undefined;
+ * ```
+ *
+ * ### Event Sources
+ * `consumeChangeFeed` runs a handler on each batch of created or updated
+ * documents (deletes are not in the feed). It needs a lease container
+ * (partition key `/id`) in the same database.
+ *
+ * **Example:** Copy each changed todo in an Azure Function
+ * ```typescript
+ * export default class Worker extends Azure.Functions.Function<Worker>()(
+ *   "Worker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const leases = yield* Leases;
+ *     const changesContainer = yield* Changes;
+ *     const changes = yield* Azure.CosmosDB.SqlContainerWrite(changesContainer);
+ *     yield* Azure.CosmosDB.consumeChangeFeed(Todos, { leases }, (documents) =>
+ *       Effect.forEach(documents, (document) =>
+ *         changes.upsert({ document, partitionKey: [String(document.owner)] }),
+ *       ).pipe(Effect.orDie, Effect.asVoid),
+ *     );
+ *     return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+ *   }).pipe(
+ *     Effect.provide([Azure.Functions.CosmosDBChangeFeedEventSource, Azure.CosmosDB.SqlContainerWriteHttp]),
+ *   ),
+ * ) {}
+ * ```
+ *
+ * The trigger starts once the app's data role applies, a few minutes after
+ * the first deploy. Set `startFromBeginning` so documents written before
+ * that are not skipped.
+ *
+ * **Example:** Read changes made before the trigger started
+ * ```typescript
+ * yield* Azure.CosmosDB.consumeChangeFeed(orders, { leases, startFromBeginning: true }, (documents) =>
+ *   Effect.log(`${documents.length} orders`),
+ * );
+ * ```
+ *
+ * ### Deleting a Container
+ * Destroying the container deletes every document in it.
+ *
+ * **Example:** Keep the container when the stack is destroyed
+ * ```typescript
+ * import * as RemovalPolicy from "alchemy/RemovalPolicy";
+ *
+ * const todos = yield* Azure.CosmosDB.SqlContainer("todos", {
+ *   account: account.accountName,
+ *   database: database.databaseName,
+ *   partitionKey: { paths: ["/owner"] },
+ * }).pipe(RemovalPolicy.retain());
  * ```
  *
  * @resource

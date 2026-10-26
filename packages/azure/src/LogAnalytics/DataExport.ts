@@ -11,30 +11,54 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { createLogAnalyticsName, isWorkspaceOwnedByStack, sameText } from "./Common.ts";
 
 export interface DataExportProps {
-  /** Resource group of the workspace. Changing it replaces the rule. */
+  /**
+   * Resource group of the workspace.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Workspace whose data is exported. Changing it replaces the rule. */
+  /**
+   * Name of the workspace whose data is exported, e.g.
+   * `logs.workspaceName`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   */
   workspace: string;
   /**
-   * Rule name: 4-63 letters, digits, and hyphens. If omitted, a unique name
-   * is generated from the app, stage, and logical ID. Changing it replaces
-   * the rule.
+   * Rule name: 4-63 letters, digits, and hyphens, unique in the workspace.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Tables to export. Each table must support data export. */
+  /**
+   * Names of the tables to export, e.g. `["AppEvents_CL"]`. Each table must
+   * support data export. Alchemy updates the list in place.
+   */
   tableNames: string[];
   /**
-   * ARM resource ID of the destination: a storage account, or an Event Hubs
-   * namespace. It must be in the workspace's region.
+   * ARM resource ID of the destination: a storage account
+   * (`storageAccountId`) or an Event Hubs namespace (`namespaceId`). It must
+   * be in the workspace's region, and one destination can appear in only
+   * one rule of the workspace.
    */
   destinationResourceId: string;
   /**
-   * Event hub to send to, for an Event Hubs namespace destination. If
-   * omitted, one event hub per table (`am-<table>`) is created.
+   * Event hub to send all tables to, for an Event Hubs namespace
+   * destination. Ignored for a storage account.
+   * @default one event hub per table, named `am-<table>`
    */
   eventHubName?: string;
   /**
-   * Whether the rule exports data.
+   * Whether the rule exports data. Set `false` to pause the export and keep
+   * the rule.
    * @default true
    */
   enable?: boolean;
@@ -46,7 +70,7 @@ export interface DataExport extends Resource<
   {
     /** Name of the rule. */
     dataExportName: string;
-    /** Workspace whose data is exported. */
+    /** Name of the workspace whose data is exported. */
     workspace: string;
     /** Resource group of the workspace. */
     resourceGroup: string;
@@ -54,9 +78,9 @@ export interface DataExport extends Resource<
     dataExportId: string;
     /** GUID of the rule (`properties.dataExportId`). */
     dataExportRuleId: string | undefined;
-    /** Destination kind (`StorageAccount` or `EventHub`). */
+    /** Destination kind: `StorageAccount` or `EventHub`. */
     destinationType: string | undefined;
-    /** Exported tables. */
+    /** Names of the exported tables. */
     tableNames: string[];
     /** Whether the rule exports data. */
     enable: boolean;
@@ -66,19 +90,39 @@ export interface DataExport extends Resource<
 > {}
 
 /**
- * A Log Analytics data export rule: continuously copies new records of the
- * selected tables to a storage account or an Event Hubs namespace in the
- * workspace's region.
+ * A Log Analytics data export rule
+ * (`Microsoft.OperationalInsights/workspaces/dataExports`): it copies new
+ * records of the selected tables to a storage account or an Event Hubs
+ * namespace, continuously. Use it to archive logs or to stream them to
+ * another system.
  *
- * Export rules have no tags; Alchemy treats a rule as owned when its
- * workspace is owned by the current stack and stage. A workspace holds at
- * most 10 enabled rules.
+ * :::caution[Changing `name`, `workspace`, or `resourceGroup` replaces the rule]
+ * Alchemy deletes the old rule before it creates the new one, because a
+ * destination can appear in only one rule. No data is exported in between.
+ * :::
+ *
+ * :::caution[The destination must be in the workspace's region]
+ * Create the storage account or Event Hubs namespace in the same location
+ * as the workspace. A workspace holds at most 10 enabled rules.
+ * :::
+ *
+ * Export rules have no tags. Alchemy treats a rule as owned when its
+ * workspace is owned by the current stack and stage.
  *
  * @see https://learn.microsoft.com/azure/azure-monitor/logs/logs-data-export
  *
  * ### Exporting to Storage
  * **Example:** Export a custom table to a storage account
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const events = yield* Azure.LogAnalytics.Table("events", {
+ *   workspace: logs.workspaceName,
+ *   name: "AppEvents_CL",
+ *   columns: [
+ *     { name: "TimeGenerated", type: "dateTime" },
+ *     { name: "Message", type: "string" },
+ *   ],
+ * });
  * const archive = yield* Azure.Storage.StorageAccount("archive");
  * const exportRule = yield* Azure.LogAnalytics.DataExport("archive", {
  *   workspace: logs.workspaceName,
@@ -90,11 +134,26 @@ export interface DataExport extends Resource<
  * ### Exporting to Event Hubs
  * **Example:** Stream tables to one event hub
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
+ * const namespace = yield* Azure.EventHub.Namespace("events", {
+ *   sku: "Standard",
+ * });
  * const exportRule = yield* Azure.LogAnalytics.DataExport("stream", {
  *   workspace: logs.workspaceName,
  *   tableNames: ["AppEvents_CL"],
  *   destinationResourceId: namespace.namespaceId,
  *   eventHubName: "logs",
+ * });
+ * ```
+ *
+ * ### Pausing an Export
+ * **Example:** Keep the rule but stop exporting
+ * ```typescript
+ * const exportRule = yield* Azure.LogAnalytics.DataExport("archive", {
+ *   workspace: logs.workspaceName,
+ *   tableNames: ["AppEvents_CL"],
+ *   destinationResourceId: archive.storageAccountId,
+ *   enable: false,
  * });
  * ```
  *

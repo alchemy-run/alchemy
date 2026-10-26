@@ -20,27 +20,42 @@ import {
 } from "./CdnCommon.ts";
 
 export interface AfdLoadBalancingSettings {
-  /** Number of samples considered for load-balancing decisions. */
+  /**
+   * Number of recent health-probe samples Front Door considers when it
+   * decides whether an origin is healthy. Alchemy sends `4` when you omit
+   * `loadBalancingSettings`.
+   */
   sampleSize?: number;
-  /** Number of samples in the window that must succeed. */
+  /**
+   * Number of samples in the window that must succeed for an origin to
+   * count as healthy. Alchemy sends `3` when you omit
+   * `loadBalancingSettings`.
+   */
   successfulSamplesRequired?: number;
-  /** Extra latency (ms) within which origins count as equally fast. */
+  /**
+   * Extra latency, in milliseconds, within which origins count as equally
+   * fast; Front Door spreads traffic across all origins in that band.
+   * Alchemy sends `50` when you omit `loadBalancingSettings`.
+   */
   additionalLatencyInMilliseconds?: number;
 }
 
 export interface AfdHealthProbeSettings {
   /** Path probed on each origin, e.g. `/health`. */
   probePath?: string;
-  /** Probe request method. */
+  /** Probe request method. `HEAD` costs the origin less than `GET`. */
   probeRequestType?: "NotSet" | "GET" | "HEAD";
   /** Probe protocol. */
   probeProtocol?: "NotSet" | "Http" | "Https";
-  /** Seconds between probes. */
+  /** Seconds between probes from each Front Door edge location. */
   probeIntervalInSeconds?: number;
 }
 
 export interface AfdOriginAuthentication {
-  /** Identity used to authenticate to origins. */
+  /**
+   * Identity used to authenticate to origins: the profile's
+   * system-assigned identity or one of its user-assigned identities.
+   */
   type: "SystemAssignedIdentity" | "UserAssignedIdentity";
   /** ARM ID of the user-assigned identity (for `UserAssignedIdentity`). */
   userAssignedIdentity?: string;
@@ -66,13 +81,25 @@ export interface AfdOriginGroupProps {
    * @default `{ sampleSize: 4, successfulSamplesRequired: 3, additionalLatencyInMilliseconds: 50 }`
    */
   loadBalancingSettings?: AfdLoadBalancingSettings;
-  /** Health-probe settings. Omit to disable health probes. */
+  /**
+   * Health-probe settings. Omit to disable health probes; Front Door then
+   * treats every enabled origin as healthy.
+   * @default no health probes
+   */
   healthProbeSettings?: AfdHealthProbeSettings;
-  /** Whether requests from a client stick to the same origin. */
+  /**
+   * Whether requests from a client stick to the same origin (cookie
+   * based).
+   * @default Azure's default (`Disabled`)
+   */
   sessionAffinityState?: "Enabled" | "Disabled";
   /** Minutes to shift traffic gradually to a recovered or new origin. */
   trafficRestorationTimeToHealedOrNewEndpointsInMinutes?: number;
-  /** Managed-identity authentication to origins (Premium). */
+  /**
+   * Managed-identity authentication to origins (Premium): Front Door gets
+   * an Entra token for `scope` and sends it to every origin in the group.
+   * @default no authentication
+   */
   authentication?: AfdOriginAuthentication;
 }
 
@@ -96,15 +123,39 @@ export interface AfdOriginGroup extends Resource<
 > {}
 
 /**
- * A Front Door origin group — a load-balanced, health-probed pool of
- * origins that routes forward traffic to.
+ * A Front Door origin group (`Microsoft.Cdn/profiles/originGroups`): a
+ * load-balanced, health-probed pool of origins that routes forward
+ * traffic to.
  *
- * Origin groups carry no tags; Alchemy treats one as owned when its
- * profile carries this stack's ownership tags.
+ * Add origins to the group with `Azure.Cdn.AfdOrigin`, then point a route
+ * at `originGroupId`. Front Door sends each request to the fastest healthy
+ * origin with the lowest `priority`. Origin groups carry no tags; Alchemy
+ * treats one as owned when its profile carries this stack's ownership
+ * tags.
+ *
+ * :::caution[Changing `name`, `profile`, or `resourceGroup` replaces the origin group]
+ * Alchemy creates a new group with a new `originGroupId`, recreates the
+ * origins that reference it, updates the routes, and deletes the old
+ * group.
+ * :::
+ *
+ * :::caution[A route needs an origin in the group]
+ * Front Door rejects a route whose origin group has no enabled origin.
+ * Declare at least one `Azure.Cdn.AfdOrigin` in the group; Alchemy retries
+ * the route for up to 10 minutes while the origin deploys.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/frontdoor/origin
  *
  * ### Creating an Origin Group
+ * **Example:** Origin group with default load balancing
+ * ```typescript
+ * const profile = yield* Azure.Cdn.Profile("cdn");
+ * const origins = yield* Azure.Cdn.AfdOriginGroup("origins", {
+ *   profile: profile.profileName,
+ * });
+ * ```
+ *
  * **Example:** Origin group with an HTTPS health probe
  * ```typescript
  * const origins = yield* Azure.Cdn.AfdOriginGroup("origins", {
@@ -116,6 +167,134 @@ export interface AfdOriginGroup extends Resource<
  *     probeRequestType: "HEAD",
  *     probeIntervalInSeconds: 100,
  *   },
+ * });
+ * ```
+ *
+ * ### Health Probes
+ * Front Door probes every origin from each edge location and stops
+ * sending traffic to an origin that fails. Probe a cheap path. With a
+ * single origin, omit `healthProbeSettings` to save the probe traffic.
+ *
+ * **Example:** Probe a health endpoint every 30 seconds
+ * ```typescript
+ * const origins = yield* Azure.Cdn.AfdOriginGroup("api", {
+ *   profile: profile.profileName,
+ *   healthProbeSettings: {
+ *     probePath: "/health",
+ *     probeProtocol: "Https",
+ *     probeRequestType: "GET",
+ *     probeIntervalInSeconds: 30,
+ *   },
+ * });
+ * ```
+ *
+ * ### Load Balancing
+ * Origins whose latency is within `additionalLatencyInMilliseconds` of
+ * the fastest one share the traffic by `weight`.
+ *
+ * **Example:** Spread traffic across origins within 200 ms
+ * ```typescript
+ * const origins = yield* Azure.Cdn.AfdOriginGroup("api", {
+ *   profile: profile.profileName,
+ *   loadBalancingSettings: {
+ *     sampleSize: 4,
+ *     successfulSamplesRequired: 2,
+ *     additionalLatencyInMilliseconds: 200,
+ *   },
+ * });
+ * ```
+ *
+ * ### Active-Passive Failover
+ * Give the standby origin a higher `priority`. Front Door sends it traffic
+ * only when every origin with a lower priority fails its health probe.
+ *
+ * **Example:** Primary and standby Web Apps
+ * ```typescript
+ * const primary = yield* Azure.Web.WebApp("ApiEast", { main: "./src/api.ts" });
+ * const standby = yield* Azure.Web.WebApp("ApiWest", {
+ *   main: "./src/api.ts",
+ *   location: "westus2",
+ * });
+ * const origins = yield* Azure.Cdn.AfdOriginGroup("api", {
+ *   profile: profile.profileName,
+ *   healthProbeSettings: { probePath: "/health", probeProtocol: "Https" },
+ * });
+ * yield* Azure.Cdn.AfdOrigin("east", {
+ *   profile: profile.profileName,
+ *   originGroup: origins.originGroupName,
+ *   hostName: primary.defaultHostName,
+ *   priority: 1,
+ * });
+ * yield* Azure.Cdn.AfdOrigin("west", {
+ *   profile: profile.profileName,
+ *   originGroup: origins.originGroupName,
+ *   hostName: standby.defaultHostName,
+ *   priority: 2,
+ * });
+ * ```
+ *
+ * ### Session Affinity
+ * With `sessionAffinityState: "Enabled"`, Front Door sets a cookie and
+ * sends a client's later requests to the same origin.
+ *
+ * **Example:** Sticky sessions
+ * ```typescript
+ * const origins = yield* Azure.Cdn.AfdOriginGroup("app", {
+ *   profile: profile.profileName,
+ *   sessionAffinityState: "Enabled",
+ * });
+ * ```
+ *
+ * ### Traffic Restoration
+ * `trafficRestorationTimeToHealedOrNewEndpointsInMinutes` ramps traffic to
+ * a recovered or new origin over that many minutes instead of all at
+ * once.
+ *
+ * **Example:** Ramp a recovered origin over 10 minutes
+ * ```typescript
+ * const origins = yield* Azure.Cdn.AfdOriginGroup("api", {
+ *   profile: profile.profileName,
+ *   trafficRestorationTimeToHealedOrNewEndpointsInMinutes: 10,
+ * });
+ * ```
+ *
+ * ### Origin Authentication
+ * On a Premium profile with a managed identity, Front Door can send an
+ * Entra token to the origins. Grant the profile's identity a role on the
+ * origin resource.
+ *
+ * **Example:** Read a private storage account as the profile
+ * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("assets");
+ * const profile = yield* Azure.Cdn.Profile("cdn", {
+ *   sku: "Premium_AzureFrontDoor",
+ *   identity: { type: "SystemAssigned" },
+ * });
+ * yield* Azure.Authorization.RoleAssignment("cdn-reads-assets", {
+ *   scope: account.storageAccountId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataReader,
+ *   principalId: profile.principalId.as<string>(),
+ *   principalType: "ServicePrincipal",
+ * });
+ * const origins = yield* Azure.Cdn.AfdOriginGroup("assets", {
+ *   profile: profile.profileName,
+ *   authentication: {
+ *     type: "SystemAssignedIdentity",
+ *     scope: "https://storage.azure.com/.default",
+ *   },
+ * });
+ * ```
+ *
+ * ### Routing to the Group
+ * **Example:** Send an endpoint's traffic to the group
+ * ```typescript
+ * const endpoint = yield* Azure.Cdn.AfdEndpoint("web", {
+ *   profile: profile.profileName,
+ * });
+ * yield* Azure.Cdn.Route("default", {
+ *   profile: profile.profileName,
+ *   endpoint: endpoint.endpointName,
+ *   originGroupId: origins.originGroupId,
  * });
  * ```
  *

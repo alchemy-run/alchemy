@@ -21,11 +21,27 @@ import { GroupedResource } from "../StackResourceGroup.ts";
 import { ACCOUNT_BUDGET, createChildName, sameArm, whileAccountBusy } from "./Common.ts";
 
 export interface DeploymentModel {
-  /** Model format, e.g. `OpenAI`, `Microsoft`, `Meta`. Changing it replaces the deployment. */
+  /**
+   * Model format, e.g. `OpenAI`, `Microsoft`, `Meta`.
+   *
+   * :::caution
+   * Changing it replaces the deployment.
+   * :::
+   */
   format: string;
-  /** Model name, e.g. `gpt-4o-mini`. Changing it replaces the deployment. */
+  /**
+   * Model name, e.g. `gpt-4.1-mini`.
+   *
+   * :::caution
+   * Changing it replaces the deployment.
+   * :::
+   */
   name: string;
-  /** Model version, e.g. `2024-07-18`. If omitted, the default version is used. */
+  /**
+   * Model version, e.g. `2025-04-14`. Changing it upgrades the deployment
+   * in place.
+   * @default the model's default version
+   */
   version?: string;
 }
 
@@ -35,22 +51,40 @@ export interface DeploymentSku {
    * `GlobalBatch`, `ProvisionedManaged`, ...
    */
   name: string;
-  /** Capacity in units of the SKU (thousands of tokens per minute for Standard types). */
+  /**
+   * Capacity in units of the SKU (thousands of tokens per minute for the
+   * Standard types). Changing it updates the deployment in place.
+   * @default 1
+   */
   capacity?: number;
 }
 
 export interface DeploymentProps {
-  /** Resource group of the account. Changing it replaces the deployment. */
+  /**
+   * Resource group of the account.
+   *
+   * :::caution
+   * Changing it replaces the deployment.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Account (kind `OpenAI` or `AIServices`) that holds the deployment.
+   *
+   * :::caution
    * Changing it replaces the deployment.
+   * :::
    */
   account: string;
   /**
-   * Deployment name, used by clients as the model ID. If omitted, a unique
-   * name is generated from the app, stage, and logical ID. Changing it
-   * replaces the deployment.
+   * Deployment name, used by clients as the model ID (`deploymentId`).
+   *
+   * :::caution
+   * Changing it replaces the deployment. Clients that send the old name
+   * fail until they switch.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /** Model to deploy. */
@@ -60,7 +94,10 @@ export interface DeploymentProps {
    * @default { name: "GlobalStandard", capacity: 1 }
    */
   sku?: DeploymentSku;
-  /** Name of a `CognitiveServices.RaiPolicy` (content filter) to apply. */
+  /**
+   * Name of a `CognitiveServices.RaiPolicy` (content filter) to apply.
+   * @default Azure's default content filter
+   */
   raiPolicyName?: string;
   /**
    * When to upgrade the model version.
@@ -73,6 +110,7 @@ export interface DeploymentProps {
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -110,32 +148,113 @@ export interface Deployment extends Resource<
 
 /**
  * A model deployment (`Microsoft.CognitiveServices/accounts/deployments`)
- * of an Azure OpenAI or Azure AI Foundry account — e.g. `gpt-4o-mini` with
- * `GlobalStandard` capacity — addressed by clients through its name.
+ * of an Azure OpenAI or Azure AI Foundry account, for example `gpt-4.1-mini`
+ * with `GlobalStandard` capacity. Clients address it by its name: the
+ * `deploymentId` of an OpenAI binding, or `model` for Foundry agents.
  *
- * Deployments consume model quota (tokens per minute) of the subscription
- * and region; Azure free trial subscriptions have none.
+ * Deployments use the subscription's model quota (tokens per minute) in
+ * the account's region; Azure free-trial subscriptions have none. Capacity,
+ * model version, content filter, and upgrade option change in place.
  *
- * @see https://learn.microsoft.com/azure/ai-foundry/openai/how-to/create-resource
+ * :::caution[Changing `name`, `account`, `model.format`, `model.name`, or `resourceGroup` replaces the deployment]
+ * Alchemy creates the new deployment and deletes the old one. Clients that
+ * send the old name fail until they switch.
+ * :::
+ *
+ * :::caution[An account runs one deployment operation at a time]
+ * Azure rejects a second create or update on the same account while one is
+ * running. Alchemy retries for about two minutes; make each deployment wait
+ * for the previous one (yield it first) so they do not contend.
+ * :::
+ *
+ * See [Create and deploy an Azure OpenAI resource](https://learn.microsoft.com/azure/ai-foundry/openai/how-to/create-resource).
  *
  * ### Deploying a Model
- * **Example:** gpt-4o-mini, global standard
+ * **Example:** gpt-4.1-mini, global standard
  * ```typescript
- * const chat = yield* Azure.CognitiveServices.Deployment("chat", {
+ * const account = yield* Azure.CognitiveServices.Account("OpenAI");
+ * const chat = yield* Azure.CognitiveServices.Deployment("Chat", {
  *   account: account.accountName,
- *   model: { format: "OpenAI", name: "gpt-4o-mini", version: "2024-07-18" },
+ *   name: "chat",
+ *   model: { format: "OpenAI", name: "gpt-4.1-mini", version: "2025-04-14" },
+ *   sku: { name: "GlobalStandard", capacity: 10 },
+ * });
+ * // chat.deploymentName === "chat"
+ * ```
+ *
+ * **Example:** Two deployments on one account
+ * ```typescript
+ * const chat = yield* Azure.CognitiveServices.Deployment("Chat", {
+ *   account: account.accountName,
+ *   name: "chat",
+ *   model: { format: "OpenAI", name: "gpt-4.1-mini", version: "2025-04-14" },
+ *   sku: { name: "GlobalStandard", capacity: 10 },
+ * });
+ * // Created after Chat, so the two never run at the same time.
+ * const embeddings = yield* Azure.CognitiveServices.Deployment("Embeddings", {
+ *   account: account.accountName,
+ *   name: "embeddings",
+ *   model: { format: "OpenAI", name: "text-embedding-3-small", version: "1" },
  *   sku: { name: "GlobalStandard", capacity: 10 },
  * });
  * ```
  *
- * ### Content Filtering
- * **Example:** Apply a custom RAI policy
+ * ### Capacity and Upgrades
+ * **Example:** Raise capacity and pin the model version
  * ```typescript
- * const chat = yield* Azure.CognitiveServices.Deployment("chat", {
+ * const chat = yield* Azure.CognitiveServices.Deployment("Chat", {
  *   account: account.accountName,
- *   model: { format: "OpenAI", name: "gpt-4o-mini" },
+ *   name: "chat",
+ *   model: { format: "OpenAI", name: "gpt-4.1-mini", version: "2025-04-14" },
+ *   sku: { name: "GlobalStandard", capacity: 50 },
+ *   versionUpgradeOption: "NoAutoUpgrade",
+ * });
+ * ```
+ *
+ * **Example:** Keep data in one geography
+ * ```typescript
+ * const chat = yield* Azure.CognitiveServices.Deployment("Chat", {
+ *   account: account.accountName,
+ *   name: "chat",
+ *   model: { format: "OpenAI", name: "gpt-4.1-mini", version: "2025-04-14" },
+ *   sku: { name: "DataZoneStandard", capacity: 10 },
+ * });
+ * ```
+ *
+ * ### Content Filtering
+ * **Example:** Apply a custom content filter
+ * ```typescript
+ * const policy = yield* Azure.CognitiveServices.RaiPolicy("Strict", {
+ *   account: account.accountName,
+ *   mode: "Blocking",
+ *   contentFilters: [
+ *     { name: "Hate", enabled: true, blocking: true, severityThreshold: "Low", source: "Prompt" },
+ *   ],
+ * });
+ * const chat = yield* Azure.CognitiveServices.Deployment("Chat", {
+ *   account: account.accountName,
+ *   name: "chat",
+ *   model: { format: "OpenAI", name: "gpt-4.1-mini", version: "2025-04-14" },
  *   raiPolicyName: policy.raiPolicyName,
  * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * Bind the account, not the deployment, and pass the deployment's name as
+ * `deploymentId`. The binding assigns a custom role with one data action on
+ * the account to the host's identity (see `Azure.CognitiveServices.Account`).
+ *
+ * **Example:** Chat with the deployment from an Azure Function
+ * ```typescript
+ * // init
+ * const chat = yield* Azure.CognitiveServices.OpenAICreateChatCompletion(account);
+ *
+ * // runtime
+ * const reply = yield* chat({
+ *   deploymentId: "chat",
+ *   messages: [{ role: "user", content: "Say hello" }],
+ * });
+ * // …provided with Effect.provide(Azure.CognitiveServices.OpenAICreateChatCompletionHttp)
  * ```
  *
  * @resource

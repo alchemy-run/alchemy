@@ -29,6 +29,7 @@ export interface GetHsmRoleDefinitionRequest extends Omit<
  *   scope: "/",
  *   roleDefinitionName: "21dbd100-6940-42c2-9190-5d6cb909625b",
  * });
+ * // …provided with Effect.provide(Azure.KeyVault.GetHsmRoleDefinitionHttp)
  * ```
  *
  * @binding

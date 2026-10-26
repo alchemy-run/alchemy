@@ -1,0 +1,171 @@
+---
+title: Static sites
+description: "Deploy any build command's output to Blob Storage behind Azure Front Door with Azure.Website.StaticSite — no server, no Docker, and a purge of changed paths on every deploy."
+sidebar:
+  order: 3
+---
+
+`Azure.Website.StaticSite` runs a build command, uploads the output
+directory to the static website endpoint of an Azure Storage account, and
+serves it through Azure Front Door. Use it when the site has its own build
+step — Hugo, Zola, Eleventy, or any custom pipeline.
+
+For Vite-based projects, prefer
+[`Azure.Website.Vite`](/azure/frontend/vite).
+
+## Declare the site
+
+`command` and `outdir` are required:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyStaticSite",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Azure.Website.StaticSite("Blog", {
+      command: "hugo --minify",
+      outdir: "public",
+    });
+    return { url: site.url };
+  }),
+);
+```
+
+`site.url` is the Front Door endpoint, `https://{endpoint}.z01.azurefd.net`.
+A new endpoint takes 10-20 minutes to serve everywhere.
+
+The build is a [`Command.Build`](/providers/command/build). It is
+memoized, so unchanged inputs skip the rebuild
+([details](/command/memoization)). Narrow the hashed files with
+`memo: { include: [...] }`, or set `memo: false` to rebuild on every
+deploy.
+
+## What gets deployed
+
+One `StaticSite` creates these resources under its id:
+
+| Resource | Purpose |
+| --- | --- |
+| `Azure.Storage.StorageAccount` | `Standard_LRS` account whose `$web` container holds the files (omitted when you pass `storageAccount`) |
+| `Azure.Authorization.RoleAssignment` | **Storage Blob Data Contributor** for the deployer, so uploads use its Microsoft Entra token (no account keys, no SAS) |
+| `Azure.Cdn.Profile` | Front Door Standard profile (omitted when you pass `frontDoor: { profile }`) |
+| `Azure.Cdn.AfdEndpoint`, `AfdOriginGroup`, `AfdOrigin`, `Route` | the endpoint and a cached `/*` route to the storage endpoint |
+| `Azure.Website.StaticWebsite` | the upload and the Front Door purge |
+
+The site goes into the stack's resource group unless you pass
+`resourceGroup`.
+
+## Redeploy
+
+A redeploy uploads only new and changed files (by MD5) and deletes removed
+files. HTML is uploaded with `Cache-Control:
+max-age=0,no-cache,no-store,must-revalidate`; every other file with
+`max-age=31536000,public,immutable`. Alchemy then purges the paths of
+replaced and deleted files from Front Door (`/*` when more than 100 paths
+changed).
+
+## SPAs and 404 pages
+
+A miss is a request that matches no output file. You can answer it in one
+of two ways. Do not pass both: the deploy fails.
+
+```typescript
+// Single-page app: misses serve index.html with a 200 so the
+// client-side router takes over.
+const app = yield* Azure.Website.StaticSite("App", {
+  command: "npm run build",
+  outdir: "dist",
+  spa: true,
+});
+
+// Static site: misses return a real 404 status with your error page.
+const docs = yield* Azure.Website.StaticSite("Docs", {
+  command: "hugo --minify",
+  outdir: "public",
+  errorPage: "404.html",
+});
+```
+
+## Front Door
+
+Each Front Door profile bills a monthly base fee. Share one profile across
+sites:
+
+```typescript
+const profile = yield* Azure.Cdn.Profile("Edge");
+const docs = yield* Azure.Website.StaticSite("Docs", {
+  command: "npm run build",
+  outdir: "dist",
+  frontDoor: { profile },
+});
+```
+
+`frontDoor: false` serves the site straight from the storage endpoint,
+`https://{account}.z13.web.core.windows.net`. With `spa: true` the storage
+endpoint answers deep links with `index.html` and a `404` status.
+
+```typescript
+const preview = yield* Azure.Website.StaticSite("Preview", {
+  command: "npm run build",
+  outdir: "dist",
+  frontDoor: false,
+});
+```
+
+## Building from a subdirectory
+
+`cwd` is the working directory for `command`. `outdir` is relative to
+`cwd`:
+
+```typescript
+const web = yield* Azure.Website.StaticSite("Web", {
+  cwd: "apps/web",
+  command: "npm run build",
+  outdir: "dist",
+});
+```
+
+## Environment variables
+
+`env` is set on the build command. Generators that inline values at build
+time pick them up. There is no server at runtime.
+
+```diff lang="typescript"
+const site = yield* Azure.Website.StaticSite("Blog", {
+  command: "hugo --minify",
+  outdir: "public",
++  env: {
++    HUGO_ENV: "production",
++  },
+});
+```
+
+## Local development
+
+During `alchemy dev`, `dev.command` replaces the build with a long-lived
+local process. No Azure resources are created, and `site.url` is the local
+address detected from stdout (`dev.url` sets it when detection fails):
+
+```typescript
+const site = yield* Azure.Website.StaticSite("Blog", {
+  command: "hugo --minify",
+  outdir: "public",
+  dev: { command: "hugo server" },
+});
+```
+
+Without `dev`, the site still builds and a local static server serves
+`outdir`. Pipe the site through `Alchemy.remote()` to deploy to Azure
+during dev.
+
+## Where next
+
+- [Websites on Azure](/azure/frontend/websites) — the hosting model for
+  every framework
+- [Website reference](/providers/azure/website) — every prop and
+  attribute

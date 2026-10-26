@@ -36,6 +36,7 @@ export interface VirtualMachineScaleSetProps {
   /**
    * Resource group the scale set is created in. Changing it replaces the
    * scale set.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
@@ -50,8 +51,9 @@ export interface VirtualMachineScaleSetProps {
    */
   location?: string;
   /**
-   * Availability zones to spread instances over. Changing them replaces the
-   * scale set.
+   * Availability zones to spread instances over, e.g. `["1", "2", "3"]`.
+   * Changing them replaces the scale set.
+   * @default no zones (regional)
    */
   zones?: string[];
   /**
@@ -67,22 +69,28 @@ export interface VirtualMachineScaleSetProps {
    */
   platformFaultDomainCount?: number;
   /**
-   * ARM ID of a proximity placement group. Changing it replaces the scale
-   * set.
+   * ARM ID of a proximity placement group
+   * (`ppg.proximityPlacementGroupId`). Changing it replaces the scale set.
+   * @default no proximity placement group
    */
   proximityPlacementGroupId?: string;
   /**
-   * VM size of the instances. A change updates the scale set model;
-   * existing instances pick it up on upgrade (`upgradePolicyMode`).
+   * VM size of the instances, e.g. `Standard_B1s` or `Standard_D2s_v5`.
+   * A change updates the scale set model; existing instances pick it up on
+   * upgrade (`upgradePolicyMode`). Allowed sizes vary by region and
+   * subscription.
    */
   vmSize: string;
   /**
-   * Number of instances. Scaling happens in place.
+   * Number of instances, 0 or more. Scaling happens in place.
    * @default 1
    */
   capacity?: number;
   /**
-   * How model changes roll out to existing instances.
+   * How model changes roll out to existing instances: `Manual` (you
+   * upgrade each instance), `Automatic` (Azure upgrades them all), or
+   * `Rolling` (in batches; needs a health probe or the Application Health
+   * extension). Changes in place.
    * @default "Manual"
    */
   upgradePolicyMode?: "Manual" | "Automatic" | "Rolling";
@@ -103,18 +111,20 @@ export interface VirtualMachineScaleSetProps {
     | "StandardSSD_ZRS"
     | "Premium_ZRS";
   /**
-   * ARM ID of the subnet the instances' primary NIC joins. Changing it
-   * replaces the scale set.
+   * ARM ID of the subnet the instances' primary NIC joins
+   * (`subnet.subnetId`). Changing it replaces the scale set.
    */
   subnetId: string;
   /**
-   * ARM ID of a network security group for the instances' NICs. Changing
-   * it replaces the scale set.
+   * ARM ID of a network security group for the instances' NICs
+   * (`nsg.networkSecurityGroupId`). Changing it replaces the scale set.
+   * @default no NSG on the NICs
    */
   networkSecurityGroupId?: string;
   /**
-   * ARM IDs of load balancer backend pools the instances join. Changing
-   * them replaces the scale set.
+   * ARM IDs of load balancer backend pools the instances join
+   * (`lb.backendAddressPoolIds.<pool>`). Changing them replaces the scale set.
+   * @default no backend pools
    */
   loadBalancerBackendAddressPoolIds?: string[];
   /**
@@ -122,13 +132,15 @@ export interface VirtualMachineScaleSetProps {
    */
   adminUsername: string;
   /**
-   * Administrator password (required for Windows). Changing it replaces the
-   * scale set.
+   * Administrator password (required for Windows). Setting or removing
+   * it replaces the scale set. On Linux with `sshPublicKeys`, omitting it
+   * turns off password sign-in.
    */
   adminPassword?: Redacted.Redacted<string>;
   /**
-   * OpenSSH public keys authorised for `adminUsername` (Linux). Changing
-   * them replaces the scale set.
+   * OpenSSH public keys authorised for `adminUsername` (Linux), written to
+   * `/home/{adminUsername}/.ssh/authorized_keys`. Changing them replaces the
+   * scale set.
    */
   sshPublicKeys?: string[];
   /**
@@ -138,8 +150,8 @@ export interface VirtualMachineScaleSetProps {
    */
   computerNamePrefix?: string;
   /**
-   * Base64-encoded custom data (cloud-init). Changing it replaces the scale
-   * set.
+   * Base64-encoded custom data (cloud-init on Linux), at most 65,535
+   * bytes before encoding. Changing it replaces the scale set.
    */
   customData?: string;
   /**
@@ -149,6 +161,7 @@ export interface VirtualMachineScaleSetProps {
   bootDiagnostics?: boolean;
   /**
    * Managed identities of the instances. Updated in place.
+   * @default no identity
    */
   identity?: VirtualMachineIdentity;
   /**
@@ -157,13 +170,15 @@ export interface VirtualMachineScaleSetProps {
    */
   priority?: "Regular" | "Spot" | "Low";
   /**
-   * What happens to evicted Spot instances. Changing it replaces the scale
-   * set.
+   * What happens to evicted Spot instances: `Deallocate` (keep the disks)
+   * or `Delete`. Changing it replaces the scale set.
+   * @default Azure's default for Spot (`Deallocate`)
    */
   evictionPolicy?: "Deallocate" | "Delete";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -184,7 +199,7 @@ export interface VirtualMachineScaleSet extends Resource<
     location: string;
     /** Zones of the scale set. */
     zones: string[];
-    /** Orchestration mode. */
+    /** Orchestration mode: `Flexible` or `Uniform`. */
     orchestrationMode: string | undefined;
     /** VM size of the instances. */
     vmSize: string | undefined;
@@ -208,18 +223,48 @@ export interface VirtualMachineScaleSet extends Resource<
 > {}
 
 /**
- * An Azure virtual machine scale set — a group of load-balanced VMs whose
- * instance count scales in place. Instances' OS disks and NICs are deleted
- * with the scale set.
+ * An Azure virtual machine scale set (`Microsoft.Compute/virtualMachineScaleSets`):
+ * a group of VMs built from one model, whose instance count scales in
+ * place. Put it behind a load balancer to serve one app from many VMs.
  *
- * Model changes (size, profile) apply to new instances; existing
- * instances follow the `upgradePolicyMode`.
+ * Alchemy creates a `Flexible` scale set of one Ubuntu 24.04 LTS instance
+ * with a `Standard_LRS` OS disk, no public IP, and a `Manual` upgrade
+ * policy. Linux instances that get `sshPublicKeys` and no `adminPassword`
+ * only accept SSH keys. Instances' OS disks and NICs are deleted with the
+ * scale set.
+ *
+ * Model changes (`vmSize`, boot diagnostics) apply to new instances;
+ * existing instances follow the `upgradePolicyMode`.
+ *
+ * :::caution[Changing the image, network, OS profile, or placement replaces the scale set]
+ * That covers `name`, `resourceGroup`, `location`, `zones`,
+ * `orchestrationMode`, `platformFaultDomainCount`,
+ * `proximityPlacementGroupId`, `image`, `osDiskStorageAccountType`,
+ * `subnetId`, `networkSecurityGroupId`, `loadBalancerBackendAddressPoolIds`,
+ * `adminUsername`, `adminPassword` (set or unset), `sshPublicKeys`,
+ * `computerNamePrefix`, `customData`, `priority`, and `evictionPolicy`.
+ * Alchemy creates a new scale set with new instances, private IPs, and
+ * empty OS disks, then deletes the old one with every instance and disk.
+ * :::
+ *
+ * :::caution[Each instance counts against the regional vCPU quota]
+ * A fresh subscription has a low vCPU quota per VM family and region, and
+ * a create or scale-out fails when it runs out. Alchemy registers the
+ * `Microsoft.Compute` resource provider before the first scale set.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/virtual-machine-scale-sets/overview
  *
  * ### Creating a Scale Set
  * **Example:** Flexible scale set with two Linux instances
  * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const subnet = yield* Azure.Network.Subnet("web", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.1.0/24",
+ * });
  * const scaleSet = yield* Azure.Compute.VirtualMachineScaleSet("web", {
  *   vmSize: "Standard_B1s",
  *   capacity: 2,
@@ -229,22 +274,162 @@ export interface VirtualMachineScaleSet extends Resource<
  * });
  * ```
  *
- * ### Behind a Load Balancer
- * **Example:** Instances in a load balancer backend pool
+ * **Example:** Fixed name, region, image, and Premium SSD disks
  * ```typescript
+ * const scaleSet = yield* Azure.Compute.VirtualMachineScaleSet("web", {
+ *   name: "vmss-web-prod",
+ *   location: "westeurope",
+ *   vmSize: "Standard_D2s_v5",
+ *   image: { publisher: "Canonical", offer: "ubuntu-24_04-lts", sku: "server" },
+ *   osDiskStorageAccountType: "Premium_LRS",
+ *   subnetId: subnet.subnetId,
+ *   adminUsername: "azureuser",
+ *   sshPublicKeys: [publicKey],
+ *   tags: { tier: "web" },
+ * });
+ * ```
+ *
+ * **Example:** Windows instances with a password
+ * ```typescript
+ * const scaleSet = yield* Azure.Compute.VirtualMachineScaleSet("win", {
+ *   vmSize: "Standard_D2s_v5",
+ *   image: {
+ *     publisher: "MicrosoftWindowsServer",
+ *     offer: "WindowsServer",
+ *     sku: "2022-datacenter-azure-edition",
+ *   },
+ *   subnetId: subnet.subnetId,
+ *   adminUsername: "azureuser",
+ *   adminPassword: Redacted.make(password),
+ *   computerNamePrefix: "win",
+ * });
+ * ```
+ *
+ * ### Scaling
+ * Change `capacity` to scale in place. Change `vmSize` to update the model;
+ * with `upgradePolicyMode: "Automatic"` Azure moves existing instances to
+ * the new size, and with `"Manual"` only new instances get it.
+ *
+ * **Example:** Scale out to five instances
+ * ```diff
+ *  const scaleSet = yield* Azure.Compute.VirtualMachineScaleSet("web", {
+ *    vmSize: "Standard_B1s",
+ * -  capacity: 2,
+ * +  capacity: 5,
+ *    subnetId: subnet.subnetId,
+ *    adminUsername: "azureuser",
+ *    sshPublicKeys: [publicKey],
+ *  });
+ * ```
+ *
+ * ### Bootstrapping Instances
+ * **Example:** cloud-init through `customData`
+ * ```typescript
+ * const cloudInit = "#cloud-config\npackages:\n  - nginx\n";
+ * const scaleSet = yield* Azure.Compute.VirtualMachineScaleSet("web", {
+ *   vmSize: "Standard_B1s",
+ *   subnetId: subnet.subnetId,
+ *   adminUsername: "azureuser",
+ *   sshPublicKeys: [publicKey],
+ *   customData: Buffer.from(cloudInit).toString("base64"),
+ * });
+ * ```
+ *
+ * **Example:** Custom Script extension
+ * ```typescript
+ * yield* Azure.Compute.VirtualMachineScaleSetExtension("bootstrap", {
+ *   virtualMachineScaleSet: scaleSet.virtualMachineScaleSetName,
+ *   publisher: "Microsoft.Azure.Extensions",
+ *   type: "CustomScript",
+ *   typeHandlerVersion: "2.1",
+ *   settings: { commandToExecute: "apt-get install -y nginx" },
+ * });
+ * ```
+ *
+ * ### Behind a Load Balancer
+ * **Example:** Zone-redundant instances in a load balancer backend pool
+ * ```typescript
+ * const ip = yield* Azure.Network.PublicIpAddress("web");
+ * const lb = yield* Azure.Network.LoadBalancer("web", {
+ *   frontendIpConfigurations: [{ name: "public", publicIpAddressId: ip.publicIpAddressId }],
+ *   backendAddressPools: [{ name: "web" }],
+ *   probes: [{ name: "http", protocol: "Http", port: 80, requestPath: "/" }],
+ *   loadBalancingRules: [
+ *     {
+ *       name: "http",
+ *       frontendIpConfiguration: "public",
+ *       backendAddressPool: "web",
+ *       probe: "http",
+ *       protocol: "Tcp",
+ *       frontendPort: 80,
+ *       backendPort: 80,
+ *     },
+ *   ],
+ * });
  * const scaleSet = yield* Azure.Compute.VirtualMachineScaleSet("web", {
  *   vmSize: "Standard_B2s",
  *   capacity: 3,
  *   zones: ["1", "2", "3"],
  *   subnetId: subnet.subnetId,
- *   loadBalancerBackendAddressPoolIds: [lb.backendAddressPoolIds[0]],
+ *   loadBalancerBackendAddressPoolIds: [lb.backendAddressPoolIds.web],
  *   adminUsername: "azureuser",
  *   sshPublicKeys: [publicKey],
  *   upgradePolicyMode: "Automatic",
  * });
  * ```
  *
- * ### Uniform Orchestration
+ * **Example:** Health probe for rolling upgrades
+ * ```typescript
+ * yield* Azure.Compute.VirtualMachineScaleSetExtension("health", {
+ *   virtualMachineScaleSet: scaleSet.virtualMachineScaleSetName,
+ *   publisher: "Microsoft.ManagedServices",
+ *   type: "ApplicationHealthLinux",
+ *   typeHandlerVersion: "1.0",
+ *   settings: { protocol: "http", port: 80, requestPath: "/healthz" },
+ * });
+ * ```
+ *
+ * ### Network Security
+ * **Example:** Allow only HTTP into the instances
+ * ```typescript
+ * const nsg = yield* Azure.Network.NetworkSecurityGroup("web");
+ * yield* Azure.Network.SecurityRule("allow-http", {
+ *   networkSecurityGroup: nsg.networkSecurityGroupName,
+ *   priority: 100,
+ *   direction: "Inbound",
+ *   access: "Allow",
+ *   protocol: "Tcp",
+ *   sourceAddressPrefix: "Internet",
+ *   destinationPortRange: "80",
+ * });
+ * const scaleSet = yield* Azure.Compute.VirtualMachineScaleSet("web", {
+ *   vmSize: "Standard_B1s",
+ *   subnetId: subnet.subnetId,
+ *   networkSecurityGroupId: nsg.networkSecurityGroupId,
+ *   adminUsername: "azureuser",
+ *   sshPublicKeys: [publicKey],
+ * });
+ * ```
+ *
+ * ### Identity
+ * **Example:** Let the instances read blobs with a managed identity
+ * ```typescript
+ * const scaleSet = yield* Azure.Compute.VirtualMachineScaleSet("web", {
+ *   vmSize: "Standard_B1s",
+ *   subnetId: subnet.subnetId,
+ *   adminUsername: "azureuser",
+ *   sshPublicKeys: [publicKey],
+ *   identity: { systemAssigned: true },
+ * });
+ * yield* Azure.Authorization.RoleAssignment("web-reads-files", {
+ *   scope: account.storageAccountId,
+ *   roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataReader,
+ *   principalId: scaleSet.principalId,
+ *   principalType: "ServicePrincipal",
+ * });
+ * ```
+ *
+ * ### Placement and Spot Instances
  * **Example:** Uniform scale set of Spot instances
  * ```typescript
  * const batch = yield* Azure.Compute.VirtualMachineScaleSet("batch", {
@@ -259,6 +444,87 @@ export interface VirtualMachineScaleSet extends Resource<
  * });
  * // batch.instanceIds, e.g. ["0", "1", "2", "3"]
  * ```
+ *
+ * **Example:** Instances close together in a proximity placement group
+ * ```typescript
+ * const ppg = yield* Azure.Compute.ProximityPlacementGroup("hpc", {
+ *   zones: ["1"],
+ *   intentVmSizes: ["Standard_D2s_v5"],
+ * });
+ * const scaleSet = yield* Azure.Compute.VirtualMachineScaleSet("hpc", {
+ *   vmSize: "Standard_D2s_v5",
+ *   capacity: 4,
+ *   zones: ["1"],
+ *   proximityPlacementGroupId: ppg.proximityPlacementGroupId,
+ *   subnetId: subnet.subnetId,
+ *   adminUsername: "azureuser",
+ *   sshPublicKeys: [publicKey],
+ * });
+ * ```
+ *
+ * ### Binding to a runtime
+ * Each power action is its own binding. A binding creates a custom role
+ * with only that action (for example `AzureComputeScaleSetRestartRole` with
+ * `virtualMachineScaleSets/restart/action`) and assigns it on this scale set
+ * only. On an Azure Function, Web App, Container App, container group, VM,
+ * or AKS workload identity the role goes to the host's managed identity;
+ * any other host gets an Entra service principal.
+ *
+ * **Example:** Restart the scale set from an Azure Function
+ * ```typescript
+ * const Workers = Azure.Compute.VirtualMachineScaleSet("Workers", {
+ *   vmSize: "Standard_B1s",
+ *   subnetId: subnet.subnetId,
+ *   adminUsername: "azureuser",
+ *   sshPublicKeys: [publicKey],
+ * });
+ *
+ * export default class Ops extends Azure.Functions.Function<Ops>()(
+ *   "Ops",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const workers = yield* Workers;
+ *     const restart = yield* Azure.Compute.RestartVirtualMachineScaleSet(workers);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         yield* restart();
+ *         return HttpServerResponse.text("accepted");
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.Compute.RestartVirtualMachineScaleSetHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * Each call returns when Azure accepts it (HTTP 202); the instances change
+ * state in the background. Omit `instanceIds` to act on every instance.
+ *
+ * **Example:** Stop billing at night and start again in the morning
+ * ```typescript
+ * // init
+ * const deallocate = yield* Azure.Compute.DeallocateVirtualMachineScaleSet(workers);
+ * const start = yield* Azure.Compute.StartVirtualMachineScaleSet(workers);
+ *
+ * // runtime
+ * yield* deallocate();
+ * yield* start();
+ * // …provided with Effect.provide([Azure.Compute.DeallocateVirtualMachineScaleSetHttp, Azure.Compute.StartVirtualMachineScaleSetHttp])
+ * ```
+ *
+ * **Example:** Power off or redeploy chosen instances of a Uniform scale set
+ * ```typescript
+ * // init
+ * const powerOff = yield* Azure.Compute.PowerOffVirtualMachineScaleSet(batch);
+ * const redeploy = yield* Azure.Compute.RedeployVirtualMachineScaleSet(batch);
+ *
+ * // runtime: IDs from batch.instanceIds
+ * yield* powerOff({ instanceIds: ["0"], skipShutdown: true });
+ * yield* redeploy({ instanceIds: ["1"] });
+ * // …provided with Effect.provide([Azure.Compute.PowerOffVirtualMachineScaleSetHttp, Azure.Compute.RedeployVirtualMachineScaleSetHttp])
+ * ```
+ *
+ * A powered-off instance still bills for compute; a deallocated one does
+ * not.
  *
  * @resource
  */

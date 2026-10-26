@@ -30,58 +30,116 @@ import {
 
 /** Per-database limits inside an elastic pool. */
 export interface ElasticPoolPerDatabaseSettings {
-  /** Minimum capacity (eDTUs or vCores) each database is guaranteed. */
+  /**
+   * Minimum capacity (eDTUs or vCores) each database is guaranteed.
+   * @default Azure's default (`0`)
+   */
   minCapacity?: number;
-  /** Maximum capacity (eDTUs or vCores) one database may use. */
+  /**
+   * Maximum capacity (eDTUs or vCores) one database may use.
+   * @default Azure's default (the pool's capacity, up to the tier's limit)
+   */
   maxCapacity?: number;
-  /** Serverless auto-pause delay in minutes (`-1` disables auto-pause). */
+  /**
+   * Serverless auto-pause delay in minutes (`-1` disables auto-pause).
+   * @default Azure's default
+   */
   autoPauseDelay?: number;
 }
 
 export interface ElasticPoolProps {
-  /** Resource group of the server. Changing it replaces the pool. */
+  /**
+   * Resource group of the server.
+   *
+   * :::caution
+   * Changing it replaces the pool.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the SQL server. Changing it replaces the pool. */
+  /**
+   * Name of the `Azure.Sql.Server` that holds the pool.
+   *
+   * :::caution
+   * Changing it replaces the pool.
+   * :::
+   */
   server: string;
   /**
-   * Pool name (1-128 characters, no `<>*%&:\/?`). If omitted, a unique
-   * name is generated from the app, stage, and logical ID. Changing it
-   * replaces the pool.
+   * Pool name: 1-128 characters, no `<>*%&:\/?`.
+   *
+   * :::caution
+   * Changing it replaces the pool.
+   * :::
+   * @default a unique name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Location; must equal the server's location. Changing it replaces the
-   * pool.
+   * Location; it must equal the server's location.
+   *
+   * :::caution
+   * Changing it replaces the pool.
+   * :::
    * @default the server's location
    */
   location?: string;
   /**
-   * Pool SKU, e.g. `{ name: "BasicPool", capacity: 50 }`,
-   * `{ name: "StandardPool", capacity: 50 }`, or `{ name: "GP_Gen5", capacity: 2 }`.
+   * Pool SKU, e.g. `{ name: "BasicPool", capacity: 50 }` (50 eDTU),
+   * `{ name: "StandardPool", capacity: 100 }`, or vCore
+   * `{ name: "GP_Gen5", capacity: 2 }`. Scaling happens online.
    * @default Azure's default (`GP_Gen5`, 2 vCores)
    */
   sku?: SqlSku;
-  /** Maximum storage of the pool in bytes. */
+  /**
+   * Maximum storage of the pool in bytes.
+   * @default the SKU's default size
+   */
   maxSizeBytes?: number;
-  /** Serverless minimum capacity of the pool. */
+  /**
+   * Serverless minimum capacity of the pool, in vCores.
+   * @default Azure's default for the SKU
+   */
   minCapacity?: number;
-  /** Per-database capacity limits. */
+  /**
+   * Per-database capacity limits.
+   * @default Azure's defaults
+   */
   perDatabaseSettings?: ElasticPoolPerDatabaseSettings;
-  /** Spread replicas across availability zones. */
+  /**
+   * Spread replicas across availability zones.
+   * @default Azure's default (`false`)
+   */
   zoneRedundant?: boolean;
-  /** License model (`LicenseIncluded` or Azure Hybrid Benefit `BasePrice`). */
+  /**
+   * License model: `LicenseIncluded`, or `BasePrice` for Azure Hybrid
+   * Benefit (vCore SKUs).
+   * @default Azure's default (`LicenseIncluded`)
+   */
   licenseType?: "LicenseIncluded" | "BasePrice";
-  /** Maintenance configuration ARM ID. */
+  /**
+   * ARM ID of a public maintenance configuration.
+   * @default the system default window
+   */
   maintenanceConfigurationId?: string;
-  /** Number of high-availability secondary replicas (Hyperscale). */
+  /**
+   * Number of high-availability secondary replicas (Hyperscale pools).
+   * @default Azure's default for the SKU
+   */
   highAvailabilityReplicaCount?: number;
-  /** Serverless auto-pause delay in minutes. */
+  /**
+   * Serverless auto-pause delay in minutes.
+   * @default Azure's default
+   */
   autoPauseDelay?: number;
-  /** Secure enclave type. */
+  /**
+   * Secure enclave type for Always Encrypted.
+   * @default Azure's default (`Default`)
+   */
   preferredEnclaveType?: "Default" | "VBS";
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -118,31 +176,90 @@ export interface ElasticPool extends Resource<
 > {}
 
 /**
- * An Azure SQL elastic pool — shared compute and storage for many
- * databases on one server.
+ * An Azure SQL elastic pool (`Microsoft.Sql/servers/elasticPools`): shared
+ * compute and storage for many databases on one server. Databases in a
+ * pool share its eDTUs or vCores, so a pool suits many small databases
+ * with uneven load, such as one database per tenant.
  *
- * Delete the pooled databases before the pool; Alchemy does this
- * automatically when databases reference the pool's `elasticPoolId`.
+ * Alchemy deletes the pooled databases before the pool when they reference
+ * its `elasticPoolId`.
  *
- * @see https://learn.microsoft.com/azure/azure-sql/database/elastic-pool-overview
+ * :::caution[Changing `name`, `server`, `location`, or `resourceGroup` replaces the pool]
+ * Alchemy creates a new pool and deletes the old one. Point the pooled
+ * databases' `elasticPoolId` at the new pool in the same deploy.
+ * :::
+ *
+ * See [Elastic pools in Azure SQL Database](https://learn.microsoft.com/azure/azure-sql/database/elastic-pool-overview).
  *
  * ### Creating a Pool
  * **Example:** Basic 50 eDTU pool
  * ```typescript
- * const pool = yield* Azure.Sql.ElasticPool("pool", {
+ * const server = yield* Azure.Sql.Server("Sql", {
+ *   administratorLogin: "sqladmin",
+ *   administratorLoginPassword: password,
+ * });
+ * const pool = yield* Azure.Sql.ElasticPool("Tenants", {
  *   server: server.serverName,
  *   sku: { name: "BasicPool", capacity: 50 },
  *   perDatabaseSettings: { minCapacity: 0, maxCapacity: 5 },
  * });
  * ```
  *
+ * **Example:** General Purpose vCore pool
+ * ```typescript
+ * const pool = yield* Azure.Sql.ElasticPool("Tenants", {
+ *   server: server.serverName,
+ *   sku: { name: "GP_Gen5", capacity: 4 },
+ *   perDatabaseSettings: { minCapacity: 0.25, maxCapacity: 2 },
+ *   licenseType: "BasePrice",
+ * });
+ * ```
+ *
  * ### Pooling Databases
  * **Example:** Place a database in the pool
  * ```typescript
- * yield* Azure.Sql.Database("tenant-a", {
+ * const tenantA = yield* Azure.Sql.Database("TenantA", {
  *   server: server.serverName,
  *   elasticPoolId: pool.elasticPoolId,
  * });
+ * ```
+ *
+ * ### Scaling
+ * Change `sku` or `perDatabaseSettings` and deploy again. Azure scales the
+ * pool online; the deploy waits until the pool is ready.
+ *
+ * **Example:** Grow the pool to 100 eDTU
+ * ```diff
+ * const pool = yield* Azure.Sql.ElasticPool("Tenants", {
+ *   server: server.serverName,
+ * -  sku: { name: "BasicPool", capacity: 50 },
+ * +  sku: { name: "StandardPool", capacity: 100 },
+ * });
+ * ```
+ *
+ * ### High Availability
+ * **Example:** Zone-redundant Premium pool
+ * ```typescript
+ * const pool = yield* Azure.Sql.ElasticPool("Tenants", {
+ *   server: server.serverName,
+ *   sku: { name: "PremiumPool", capacity: 125 },
+ *   zoneRedundant: true,
+ * });
+ * ```
+ *
+ * ### Runtime Operations
+ * `FailoverElasticPool` fails every database of the pool over to another
+ * replica in its region. The binding assigns a custom role with only
+ * `Microsoft.Sql/servers/elasticPools/failover/action`, on this pool only.
+ *
+ * **Example:** Fail the pool over from a Function
+ * ```typescript
+ * // init
+ * const failoverElasticPool = yield* Azure.Sql.FailoverElasticPool(pool);
+ *
+ * // runtime
+ * yield* failoverElasticPool();
+ * // …provided with Effect.provide(Azure.Sql.FailoverElasticPoolHttp)
  * ```
  *
  * @resource

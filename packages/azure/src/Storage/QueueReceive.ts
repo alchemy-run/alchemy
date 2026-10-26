@@ -74,6 +74,7 @@ export interface ReceiveStorageQueueClient extends PeekStorageQueueClient {
  *   yield* handle(JSON.parse(message.text));
  *   yield* jobs.delete(message);
  * }
+ * // …provided with Effect.provide(Azure.Storage.QueueReceiveHttp)
  * ```
  *
  * @binding

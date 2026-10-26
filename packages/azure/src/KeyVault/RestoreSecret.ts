@@ -31,6 +31,7 @@ export interface RestoreSecretRequest extends Omit<secrets.RestoreSecretRequest,
  *
  * // runtime
  * const restored = yield* restore({ value: blob });
+ * // …provided with Effect.provide(Azure.KeyVault.RestoreSecretHttp)
  * ```
  *
  * @binding

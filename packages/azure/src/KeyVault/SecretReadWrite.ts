@@ -26,6 +26,7 @@ export interface ReadWriteSecretClient extends ReadSecretClient, WriteSecretClie
  * // runtime
  * const written = yield* token.set(Redacted.make(fresh));
  * const current = yield* token.get(written.version);
+ * // …provided with Effect.provide(Azure.KeyVault.SecretReadWriteHttp)
  * ```
  *
  * @binding

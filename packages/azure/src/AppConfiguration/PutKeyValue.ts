@@ -29,6 +29,7 @@ export interface PutKeyValueRequest extends Omit<appconfig.PutKeyValueRequest, "
  *
  * // runtime
  * const written = yield* putKeyValue({ key: "App:Color", label: "prod", value: "green" });
+ * // …provided with Effect.provide(Azure.AppConfiguration.PutKeyValueHttp)
  * ```
  *
  * @binding

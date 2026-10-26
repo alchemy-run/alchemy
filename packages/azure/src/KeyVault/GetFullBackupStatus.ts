@@ -26,6 +26,7 @@ export interface GetFullBackupStatusRequest extends Omit<
  *
  * // runtime
  * const { status, azureStorageBlobContainerUri } = yield* backupStatus({ jobId });
+ * // …provided with Effect.provide(Azure.KeyVault.GetFullBackupStatusHttp)
  * ```
  *
  * @binding

@@ -31,6 +31,7 @@ export type SetFileHTTPHeadersRequest = FileShareRequest<files.SetFileHTTPHeader
  *
  * // runtime
  * yield* setFileHTTPHeaders({ fileName: "site/index.html", xMsContentType: "text/html" });
+ * // …provided with Effect.provide(Azure.Storage.SetFileHTTPHeadersHttp)
  * ```
  *
  * @binding

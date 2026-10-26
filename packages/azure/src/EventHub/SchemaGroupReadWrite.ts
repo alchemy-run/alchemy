@@ -30,12 +30,31 @@ export interface ReadWriteSchemaGroupClient extends ReadSchemaGroupClient, Write
  * ### Registering and Reading Schemas
  * **Example:** Register a schema, then read it back by ID
  * ```typescript
- * // init
- * const registry = yield* Azure.EventHub.SchemaGroupReadWrite(schemas);
+ * // Schemas: a module-scope Azure.EventHub.SchemaGroup declaration
+ * const orderSchema = {
+ *   type: "record",
+ *   name: "Order",
+ *   fields: [{ name: "id", type: "string" }],
+ * };
  *
- * // runtime
- * const { id } = yield* registry.registerSchema("Order", JSON.stringify(orderSchema));
- * const schema = yield* registry.getSchema(id);
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const schemas = yield* Schemas;
+ *     // init: assigns Schema Registry Reader on the group and the
+ *     // schemas/write role on its namespace
+ *     const registry = yield* Azure.EventHub.SchemaGroupReadWrite(schemas);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime
+ *         const { id } = yield* registry.registerSchema("Order", JSON.stringify(orderSchema));
+ *         const schema = yield* registry.getSchema(id);
+ *         return yield* HttpServerResponse.json({ id, version: schema.version });
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.EventHub.SchemaGroupReadWriteHttp)),
+ * ) {}
  * ```
  *
  * @binding

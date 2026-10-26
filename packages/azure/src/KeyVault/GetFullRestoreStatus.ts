@@ -26,6 +26,7 @@ export interface GetFullRestoreStatusRequest extends Omit<
  *
  * // runtime
  * const { status } = yield* restoreStatus({ jobId });
+ * // …provided with Effect.provide(Azure.KeyVault.GetFullRestoreStatusHttp)
  * ```
  *
  * @binding

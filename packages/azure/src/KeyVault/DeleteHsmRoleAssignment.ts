@@ -26,6 +26,7 @@ export interface DeleteHsmRoleAssignmentRequest extends Omit<
  *
  * // runtime
  * yield* revoke({ scope: "/keys/tenant-a", roleAssignmentName });
+ * // …provided with Effect.provide(Azure.KeyVault.DeleteHsmRoleAssignmentHttp)
  * ```
  *
  * @binding

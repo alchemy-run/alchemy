@@ -29,6 +29,7 @@ export interface ListHsmRoleAssignmentsRequest extends Omit<
  *   scope: "/",
  *   _filter: `principalId eq '${principalId}'`,
  * });
+ * // …provided with Effect.provide(Azure.KeyVault.ListHsmRoleAssignmentsHttp)
  * ```
  *
  * @binding

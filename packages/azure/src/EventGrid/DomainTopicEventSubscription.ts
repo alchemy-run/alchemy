@@ -20,11 +20,32 @@ import {
 } from "./EventSubscriptionShared.ts";
 
 export interface DomainTopicEventSubscriptionProps extends EventSubscriptionSettings {
-  /** Resource group of the domain. Changing it replaces the subscription. */
+  /**
+   * Resource group of the domain.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Name of the parent Event Grid domain. Changing it replaces the subscription. */
+  /**
+   * Name of the parent Event Grid domain, e.g. `domain.domainName` of an
+   * `Azure.EventGrid.Domain`.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   */
   domain: string;
-  /** Name of the domain topic to subscribe to. Changing it replaces the subscription. */
+  /**
+   * Name of the domain topic to subscribe to, e.g.
+   * `domainTopic.domainTopicName` of an `Azure.EventGrid.DomainTopic`.
+   *
+   * :::caution
+   * Changing it replaces the subscription.
+   * :::
+   */
   domainTopic: string;
 }
 
@@ -44,19 +65,28 @@ export interface DomainTopicEventSubscription extends Resource<
 > {}
 
 /**
- * An event subscription on a single topic of an Event Grid domain. It
- * receives only the events published to that domain topic. It is the same
- * ARM object that `Azure.EventGrid.EventSubscription` creates with
+ * An event subscription on a single topic of an Event Grid domain
+ * (`Microsoft.EventGrid/domains/topics/eventSubscriptions`). It receives
+ * only the events published to that domain topic. It is the same ARM object
+ * that `Azure.EventGrid.EventSubscription` creates with
  * `scope: domainTopic.domainTopicId`.
  *
  * Event subscriptions have no tags; Alchemy records ownership in a label
  * (`alchemy:{stack}/{stage}/{id}`).
+ *
+ * :::caution[Changing `name`, `domain`, `domainTopic`, `eventDeliverySchema`, or `resourceGroup` replaces the subscription]
+ * Alchemy creates a new subscription and deletes the old one.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/event-domains
  *
  * ### Subscribing to a Domain Topic
  * **Example:** Deliver one tenant's events to a Storage queue
  * ```typescript
+ * const account = yield* Azure.Storage.StorageAccount("sink");
+ * const queue = yield* Azure.Storage.Queue("tenant-a", {
+ *   storageAccount: account.storageAccountName,
+ * });
  * const domain = yield* Azure.EventGrid.Domain("tenants");
  * const tenantA = yield* Azure.EventGrid.DomainTopic("tenant-a", {
  *   domain: domain.domainName,
@@ -67,11 +97,12 @@ export interface DomainTopicEventSubscription extends Resource<
  *   destination: {
  *     endpointType: "StorageQueue",
  *     resourceId: account.storageAccountId,
- *     queueName: "tenant-a",
+ *     queueName: queue.queueName,
  *   },
  * });
  * ```
  *
+ * ### Filtering and Retries
  * **Example:** Filter by event type with a retry policy
  * ```typescript
  * const orders = yield* Azure.EventGrid.DomainTopicEventSubscription("orders", {
@@ -80,7 +111,7 @@ export interface DomainTopicEventSubscription extends Resource<
  *   destination: {
  *     endpointType: "StorageQueue",
  *     resourceId: account.storageAccountId,
- *     queueName: "orders",
+ *     queueName: queue.queueName,
  *   },
  *   filter: { includedEventTypes: ["Order.Created"] },
  *   retryPolicy: { maxDeliveryAttempts: 10, eventTimeToLiveInMinutes: 60 },

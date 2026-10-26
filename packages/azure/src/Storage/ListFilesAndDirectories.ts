@@ -31,6 +31,7 @@ export type ListFilesAndDirectoriesRequest =
  * // runtime
  * const page = yield* listFilesAndDirectories({ directory: "" });
  * const names = page.Segment.FileItems.map((item) => item.Name.content);
+ * // …provided with Effect.provide(Azure.Storage.ListFilesAndDirectoriesHttp)
  * ```
  *
  * **Example:** List a directory by prefix

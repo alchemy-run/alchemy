@@ -31,6 +31,7 @@ export type SetFileMetadataRequest = FileShareRequest<files.SetFileMetadataReque
  *
  * // runtime
  * yield* setFileMetadata({ fileName: "reports/q1.csv", metadata: { owner: "finance" } });
+ * // …provided with Effect.provide(Azure.Storage.SetFileMetadataHttp)
  * ```
  *
  * @binding

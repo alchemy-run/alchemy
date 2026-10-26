@@ -31,6 +31,7 @@ export type DeleteFileRequest = FileShareRequest<files.DeleteFileRequest>;
  *
  * // runtime
  * yield* deleteFile({ fileName: "tmp/upload.bin" });
+ * // …provided with Effect.provide(Azure.Storage.DeleteFileHttp)
  * ```
  *
  * @binding

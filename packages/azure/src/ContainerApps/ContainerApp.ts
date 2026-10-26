@@ -345,6 +345,14 @@ const transformContainerAppProps = (id: string, props: ContainerAppProps) =>
  * one across apps.
  * :::
  *
+ * :::caution[The app scales to zero]
+ * Azure's default minimum is 0 replicas. With no replica running, the
+ * first request waits for a cold start (image pull and program init), and
+ * background `run` loops stop. Set `template.scale.minReplicas: 1` to keep
+ * one replica warm (billed while idle). Event sources wake the app through
+ * their KEDA rules, and `appSchedule` keeps one replica running.
+ * :::
+ *
  * @see https://learn.microsoft.com/azure/container-apps/overview
  *
  * ### Effect Container Apps
@@ -508,16 +516,60 @@ const transformContainerAppProps = (id: string, props: ContainerAppProps) =>
  * };
  * ```
  *
- * ### Bindings
+ * ### Networking
+ * Put the environment in your virtual network to reach private endpoints,
+ * and set `internal: true` to serve apps on the virtual network only. The
+ * infrastructure subnet is delegated to `Microsoft.App/environments` and
+ * needs at least a `/27` for a Workload Profiles environment. The
+ * environment's network settings cannot change after creation.
+ *
+ * **Example:** Environment in a virtual network
+ * ```typescript
+ * const vnet = yield* Azure.Network.VirtualNetwork("Vnet", {
+ *   addressPrefixes: ["10.0.0.0/16"],
+ * });
+ * const infra = yield* Azure.Network.Subnet("AppsInfra", {
+ *   virtualNetwork: vnet.virtualNetworkName,
+ *   addressPrefix: "10.0.0.0/23",
+ *   delegations: [{ serviceName: "Microsoft.App/environments" }],
+ * });
+ * const env = yield* Azure.ContainerApps.ManagedEnvironment("Env", {
+ *   workloadProfiles: [{ name: "Consumption", workloadProfileType: "Consumption" }],
+ *   vnetConfiguration: { infrastructureSubnetId: infra.subnetId, internal: true },
+ * });
+ * ```
+ *
+ * **Example:** Allow one IP range on public ingress
+ * ```typescript
+ * const props = {
+ *   main: import.meta.url,
+ *   environmentId: env.environmentId,
+ *   configuration: {
+ *     ingress: {
+ *       external: true,
+ *       targetPort: 8080,
+ *       ipSecurityRestrictions: [
+ *         { name: "office", ipAddressRange: "203.0.113.0/24", action: "Allow" },
+ *       ],
+ *     },
+ *   },
+ * };
+ * ```
+ *
+ * ### Storage Bindings
  * Bindings grant the app's managed identity the smallest data role on the
- * bound resource and hand the program a typed client.
+ * bound resource only, and hand the program a typed client. Provide the
+ * `*Http` layer of each binding on the program. `BlobContainerReadWrite`
+ * grants **Storage Blob Data Contributor** on the container.
  *
  * **Example:** Read and write blobs
  * ```typescript
  * Effect.gen(function* () {
+ *   // init
  *   const files = yield* Azure.Storage.BlobContainerReadWrite(uploads);
  *   return {
  *     fetch: Effect.gen(function* () {
+ *       // runtime
  *       yield* files.put("hello.txt", "hi");
  *       const blob = yield* files.get("hello.txt");
  *       return HttpServerResponse.text(blob?.text() ?? "missing");
@@ -526,6 +578,19 @@ const transformContainerAppProps = (id: string, props: ContainerAppProps) =>
  * }).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp))
  * ```
  *
+ * **Example:** Send to a Storage queue
+ * ```typescript
+ * // init: Storage Queue Data Message Sender on the queue
+ * const jobs = yield* Azure.Storage.QueueSend(queue);
+ *
+ * // runtime
+ * yield* jobs.send(JSON.stringify({ id: 1 }));
+ * // …provided with Effect.provide(Azure.Storage.QueueSendHttp)
+ * ```
+ *
+ * ### Key Vault Bindings
+ * `SecretRead` grants **Key Vault Secrets User** on the one secret.
+ *
  * **Example:** Read a Key Vault secret
  * ```typescript
  * // init
@@ -533,12 +598,82 @@ const transformContainerAppProps = (id: string, props: ContainerAppProps) =>
  *
  * // runtime: the latest version, as a Redacted<string>
  * const value = yield* apiKey.get();
+ * // …provided with Effect.provide(Azure.KeyVault.SecretReadHttp)
  * ```
  *
- * **Example:** Send a Service Bus message
+ * ### Service Bus Bindings
+ * `QueueSend` grants **Azure Service Bus Data Sender** on the queue, and
+ * `TopicWrite` grants it on the topic.
+ *
+ * **Example:** Send to a queue and publish to a topic
  * ```typescript
+ * // init
  * const orders = yield* Azure.ServiceBus.QueueSend(queue);
+ * const events = yield* Azure.ServiceBus.TopicWrite(topic);
+ *
+ * // runtime
  * yield* orders.send({ id: 1 }, { messageId: "order-1" });
+ * yield* events.send({ type: "order.created", orderId: "1" }, { label: "order" });
+ * // …provided with Azure.ServiceBus.QueueSendHttp and Azure.ServiceBus.TopicWriteHttp
+ * ```
+ *
+ * ### Event Hubs Bindings
+ * `Send` grants **Azure Event Hubs Data Sender** on the event hub.
+ *
+ * **Example:** Send a batch of events
+ * ```typescript
+ * // init
+ * const readings = yield* Azure.EventHub.Send(hub);
+ *
+ * // runtime
+ * yield* readings.sendBatch([{ deviceId: "d1" }, { deviceId: "d2" }]);
+ * // …provided with Effect.provide(Azure.EventHub.SendHttp)
+ * ```
+ *
+ * ### Cosmos DB Bindings
+ * `SqlContainerReadWrite` assigns a Cosmos DB data-plane role scoped to the
+ * one container.
+ *
+ * **Example:** Upsert and query documents
+ * ```typescript
+ * // init
+ * const orders = yield* Azure.CosmosDB.SqlContainerReadWrite(ordersContainer);
+ *
+ * // runtime
+ * yield* orders.upsert({
+ *   document: { id: "o-1", tenant: "t1", status: "open" },
+ *   partitionKey: ["t1"],
+ * });
+ * const { Documents } = yield* orders.query({
+ *   query: "SELECT * FROM c WHERE c.status = @status",
+ *   parameters: [{ name: "@status", value: "open" }],
+ * });
+ * // …provided with Effect.provide(Azure.CosmosDB.SqlContainerReadWriteHttp)
+ * ```
+ *
+ * ### Controlling the App from a Runtime
+ * `StartContainerApp`, `StopContainerApp`, and `RestartContainerAppRevision`
+ * let another runtime operate the app. Each grants a custom role with only
+ * its one action, on this app only.
+ *
+ * **Example:** Stop the app from a Function
+ * ```typescript
+ * export default class Ops extends Azure.Functions.Function<Ops>()(
+ *   "Ops",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const api = yield* Api;
+ *     // init
+ *     const stop = yield* Azure.ContainerApps.StopContainerApp(api);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // runtime
+ *         yield* stop();
+ *         return HttpServerResponse.text("accepted");
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.ContainerApps.StopContainerAppHttp)),
+ * ) {}
  * ```
  *
  * ### Event Sources

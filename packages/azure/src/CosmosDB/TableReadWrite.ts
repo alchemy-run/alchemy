@@ -32,6 +32,7 @@ import type { Table } from "./Table.ts";
  * const current = yield* counters.get("counters", "visits");
  * const n = typeof current?.n === "number" ? current.n + 1 : 1;
  * yield* counters.upsert({ PartitionKey: "counters", RowKey: "visits", n });
+ * // …provided with Effect.provide(Azure.CosmosDB.TableReadWriteHttp)
  * ```
  *
  * @binding

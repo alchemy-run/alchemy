@@ -31,11 +31,14 @@ export interface AfdCustomDomainTlsSettings {
     | "ManagedCertificate"
     | "CustomerCertificate"
     | "AzureFirstPartyManagedCertificate";
-  /** Minimum TLS version (with `cipherSuiteSetType: "Customized"`). */
+  /** Minimum TLS version clients must use (with `cipherSuiteSetType: "Customized"`). */
   minimumTlsVersion?: "TLS10" | "TLS12" | "TLS13";
-  /** Predefined cipher suite set. */
+  /** Predefined cipher suite set offered to clients. */
   cipherSuiteSetType?: "Customized" | "TLS10_2019" | "TLS12_2022" | "TLS12_2023";
-  /** ARM ID of the `Secret` holding the certificate (`CustomerCertificate`). */
+  /**
+   * ARM ID of the `Azure.Cdn.Secret` holding the certificate
+   * (`secret.secretId`), for `CustomerCertificate`.
+   */
   secretId?: string;
 }
 
@@ -54,15 +57,25 @@ export interface AfdCustomDomainProps {
   hostName: string;
   /** HTTPS settings. @default a Front Door managed certificate */
   tlsSettings?: AfdCustomDomainTlsSettings;
-  /** Mutual TLS scenario (not for wildcard host names). */
+  /**
+   * Mutual TLS scenario: whether Front Door requires client certificates
+   * and who validates them (not for wildcard host names).
+   * @default no mutual TLS
+   */
   mtlsScenario?:
     | "ClientCertificateRequiredAndValidated"
     | "ClientCertificateRequiredAndOriginValidates"
     | "ClientCertificateValidatedIfPresented"
     | "CompleteMtlsPassthroughToOrigin";
-  /** ARM ID of the Azure DNS zone hosting the domain. */
+  /**
+   * ARM ID of the Azure DNS zone hosting the domain (`zone.zoneId`).
+   * @default none
+   */
   azureDnsZoneId?: string;
-  /** ARM ID of a resource where domain ownership was pre-validated. */
+  /**
+   * ARM ID of a resource where domain ownership was pre-validated.
+   * @default none
+   */
   preValidatedCustomDomainResourceId?: string;
 }
 
@@ -94,10 +107,28 @@ export interface AfdCustomDomain extends Resource<
 > {}
 
 /**
- * A custom domain on a Front Door profile. Front Door validates ownership
- * asynchronously: publish `validationToken` as a TXT record at
- * `_dnsauth.<hostName>` (or set `azureDnsZoneId`) and point a CNAME at the
- * endpoint. The deploy does not wait for validation, which can take hours.
+ * A custom domain on a Front Door profile
+ * (`Microsoft.Cdn/profiles/customDomains`): serves an endpoint's routes
+ * under your own host name, with HTTPS.
+ *
+ * Front Door validates ownership asynchronously: publish `validationToken`
+ * as a TXT record at `_dnsauth.<hostName>` (or set `azureDnsZoneId`) and
+ * point a CNAME at the endpoint. The deploy does not wait for validation,
+ * which can take hours. By default Front Door issues and renews a managed
+ * certificate for the domain once it validates.
+ *
+ * :::caution[Changing `hostName`, `name`, `profile`, or `resourceGroup` replaces the domain]
+ * Alchemy creates a new domain resource and deletes the old one. The new
+ * one has a new `validationToken`, so ownership must validate again and
+ * HTTPS on the name fails until it does.
+ * :::
+ *
+ * :::caution[Updates fail while validation is pending]
+ * Front Door rejects every update to a domain whose
+ * `domainValidationState` is `Submitting` or `Pending`. Alchemy retries for
+ * one minute, then fails with `Azure.Cdn.AfdCustomDomainValidationPending`.
+ * Publish the `_dnsauth` TXT record first.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/frontdoor/standard-premium/how-to-add-custom-domain
  *
@@ -116,6 +147,138 @@ export interface AfdCustomDomain extends Resource<
  *   customDomainIds: [domain.customDomainId],
  * });
  * // TXT _dnsauth.www.example.com = domain.validationToken
+ * ```
+ *
+ * **Example:** Minimal domain with a managed certificate
+ * ```typescript
+ * const domain = yield* Azure.Cdn.AfdCustomDomain("www", {
+ *   profile: profile.profileName,
+ *   hostName: "www.example.com",
+ * });
+ * ```
+ *
+ * ### Validating with Azure DNS
+ * When the domain's zone is in Azure DNS, create the TXT and CNAME record
+ * sets in the same stack and link the zone with `azureDnsZoneId`.
+ *
+ * **Example:** `www.contoso.com` validated and routed
+ * ```typescript
+ * const zone = yield* Azure.Dns.Zone("contoso", { name: "contoso.com" });
+ * const profile = yield* Azure.Cdn.Profile("cdn");
+ * const endpoint = yield* Azure.Cdn.AfdEndpoint("web", {
+ *   profile: profile.profileName,
+ * });
+ * const domain = yield* Azure.Cdn.AfdCustomDomain("www", {
+ *   profile: profile.profileName,
+ *   hostName: "www.contoso.com",
+ *   azureDnsZoneId: zone.zoneId,
+ * });
+ * yield* Azure.Dns.RecordSet("www-dnsauth", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "TXT",
+ *   name: "_dnsauth.www",
+ *   txtRecords: [domain.validationToken.as<string>()],
+ * });
+ * yield* Azure.Dns.RecordSet("www", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "CNAME",
+ *   name: "www",
+ *   cname: endpoint.hostName,
+ * });
+ * ```
+ *
+ * ### Apex Domains
+ * The zone apex cannot hold a CNAME. Point it at the endpoint with an
+ * alias `A` record set, and publish the token at `_dnsauth`.
+ *
+ * **Example:** `contoso.com` on Front Door
+ * ```typescript
+ * const apex = yield* Azure.Cdn.AfdCustomDomain("apex", {
+ *   profile: profile.profileName,
+ *   hostName: "contoso.com",
+ *   azureDnsZoneId: zone.zoneId,
+ * });
+ * yield* Azure.Dns.RecordSet("apex-dnsauth", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "TXT",
+ *   name: "_dnsauth",
+ *   txtRecords: [apex.validationToken.as<string>()],
+ * });
+ * yield* Azure.Dns.RecordSet("apex", {
+ *   zoneName: zone.zoneName,
+ *   recordType: "A",
+ *   name: "@",
+ *   targetResourceId: endpoint.endpointId,
+ * });
+ * ```
+ *
+ * ### TLS Settings
+ * Pick a predefined cipher suite set, or `Customized` with a minimum TLS
+ * version.
+ *
+ * **Example:** TLS 1.2 with the 2023 cipher suites
+ * ```typescript
+ * const domain = yield* Azure.Cdn.AfdCustomDomain("www", {
+ *   profile: profile.profileName,
+ *   hostName: "www.example.com",
+ *   tlsSettings: { certificateType: "ManagedCertificate", cipherSuiteSetType: "TLS12_2023" },
+ * });
+ * ```
+ *
+ * ### Bring Your Own Certificate
+ * Store the certificate in Key Vault, reference it with an
+ * `Azure.Cdn.Secret`, and set `certificateType: "CustomerCertificate"`.
+ * The profile's identity needs read access to the vault.
+ *
+ * **Example:** Key Vault certificate for a wildcard domain
+ * ```typescript
+ * import * as Output from "alchemy/Output";
+ *
+ * const vault = yield* Azure.KeyVault.Vault("certs");
+ * const cert = yield* Azure.Cdn.Secret("wildcard", {
+ *   profile: profile.profileName,
+ *   parameters: {
+ *     type: "CustomerCertificate",
+ *     secretSourceId: Output.interpolate`${vault.vaultId}/secrets/wildcard-example-com`,
+ *     useLatestVersion: true,
+ *   },
+ * });
+ * const domain = yield* Azure.Cdn.AfdCustomDomain("wildcard", {
+ *   profile: profile.profileName,
+ *   hostName: "*.example.com",
+ *   tlsSettings: { certificateType: "CustomerCertificate", secretId: cert.secretId },
+ * });
+ * ```
+ *
+ * ### Mutual TLS
+ * Set `mtlsScenario` to require client certificates. Pair it with
+ * `enforceMtls: "Enabled"` on the endpoint so no route serves the domain
+ * without mTLS.
+ *
+ * **Example:** Client certificates validated by the origin
+ * ```typescript
+ * const endpoint = yield* Azure.Cdn.AfdEndpoint("partners", {
+ *   profile: profile.profileName,
+ *   enforceMtls: "Enabled",
+ * });
+ * const domain = yield* Azure.Cdn.AfdCustomDomain("partners", {
+ *   profile: profile.profileName,
+ *   hostName: "partners.example.com",
+ *   mtlsScenario: "ClientCertificateRequiredAndOriginValidates",
+ * });
+ * ```
+ *
+ * ### Web Application Firewall
+ * Protect the domain by listing `customDomainId` in a security policy.
+ *
+ * **Example:** WAF on the custom domain and the endpoint
+ * ```typescript
+ * const waf = yield* Azure.FrontDoor.WebApplicationFirewallPolicy("waf");
+ * yield* Azure.Cdn.SecurityPolicy("waf", {
+ *   profile: profile.profileName,
+ *   wafPolicyId: waf.policyId,
+ *   associations: [{ domainIds: [domain.customDomainId, endpoint.endpointId] }],
+ * });
  * ```
  *
  * @resource

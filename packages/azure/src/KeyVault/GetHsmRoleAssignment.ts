@@ -26,6 +26,7 @@ export interface GetHsmRoleAssignmentRequest extends Omit<
  *
  * // runtime
  * const assignment = yield* getAssignment({ scope: "/", roleAssignmentName });
+ * // …provided with Effect.provide(Azure.KeyVault.GetHsmRoleAssignmentHttp)
  * ```
  *
  * @binding

@@ -17,26 +17,55 @@ import {
 } from "./MqttShared.ts";
 
 export interface PermissionBindingProps {
-  /** Resource group of the namespace. Changing it replaces the permission binding. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the permission binding.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
-   * Name of the Event Grid namespace (MQTT broker enabled). Changing it
-   * replaces the permission binding.
+   * Name of the Event Grid namespace, e.g. `namespace.namespaceName` of an
+   * `Azure.EventGrid.Namespace` with the MQTT broker enabled.
+   *
+   * :::caution
+   * Changing it replaces the permission binding.
+   * :::
    */
   namespace: string;
   /**
-   * Topic space name: 3-50 letters, digits, and hyphens. If omitted, a
-   * unique name is generated from the app, stage, and logical ID. Changing
-   * it replaces the permission binding.
+   * Permission binding name: 3-50 letters, digits, and hyphens. If omitted,
+   * a unique name is generated from the app, stage, and logical ID.
+   *
+   * :::caution
+   * Changing it replaces the permission binding.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
-  /** Name of the topic space the permission applies to (same namespace). */
+  /**
+   * Name of the topic space the permission applies to (same namespace),
+   * e.g. `topicSpace.topicSpaceName`. Updated in place.
+   */
   topicSpace: string;
-  /** Name of the client group granted the permission (same namespace). */
+  /**
+   * Name of the client group granted the permission (same namespace), e.g.
+   * `clientGroup.clientGroupName`, or `$all` for every client. Updated in
+   * place.
+   */
   clientGroup: string;
-  /** Whether the client group may publish to or subscribe to the topic space. */
+  /**
+   * `Publisher` lets the client group publish to the topic space;
+   * `Subscriber` lets it subscribe. Updated in place.
+   */
   permission: "Publisher" | "Subscriber";
-  /** Description of the permission binding. */
+  /**
+   * Description of the permission binding. Alchemy appends its ownership
+   * marker (` [alchemy:{stack}/{stage}/{id}]`) to it.
+   * @default no description (only the ownership marker)
+   */
   description?: string;
 }
 
@@ -56,7 +85,7 @@ export interface PermissionBinding extends Resource<
     topicSpace: string | undefined;
     /** Name of the client group. */
     clientGroup: string | undefined;
-    /** Granted permission. */
+    /** Granted permission (`Publisher` or `Subscriber`). */
     permission: "Publisher" | "Subscriber" | undefined;
     /**
      * Description. Azure does not return it on GET, so this is the desired
@@ -69,17 +98,33 @@ export interface PermissionBinding extends Resource<
 > {}
 
 /**
- * Grants an MQTT client group publish or subscribe access to a topic space
- * in an Event Grid namespace.
+ * An MQTT permission binding of an Event Grid MQTT broker
+ * (`Microsoft.EventGrid/namespaces/permissionBindings`): it grants one
+ * client group publish or subscribe access to one topic space. Clients
+ * have no access to any topic until a permission binding grants it.
  *
  * Permission bindings have no tags and Azure does not return their
  * `description` on GET, so ownership follows the parent namespace.
+ *
+ * :::caution[Changing `name`, `namespace`, or `resourceGroup` replaces the permission binding]
+ * Alchemy creates a new binding and deletes the old one. `topicSpace`,
+ * `clientGroup`, and `permission` update in place.
+ * :::
+ *
+ * :::caution[The namespace needs the MQTT broker]
+ * Declare the parent `Azure.EventGrid.Namespace` with
+ * `topicSpacesConfiguration: { state: "Enabled" }`. Azure cannot turn the
+ * broker off again: switching it to `Disabled` replaces the namespace.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/event-grid/mqtt-access-control
  *
  * ### Granting Access
  * **Example:** Sensors may publish telemetry
  * ```typescript
+ * const namespace = yield* Azure.EventGrid.Namespace("iot", {
+ *   topicSpacesConfiguration: { state: "Enabled" },
+ * });
  * const telemetry = yield* Azure.EventGrid.TopicSpace("telemetry", {
  *   namespace: namespace.namespaceName,
  *   topicTemplates: ["devices/${client.authenticationName}/telemetry"],
@@ -93,6 +138,20 @@ export interface PermissionBinding extends Resource<
  *   topicSpace: telemetry.topicSpaceName,
  *   clientGroup: sensors.clientGroupName,
  *   permission: "Publisher",
+ * });
+ * ```
+ *
+ * **Example:** Every client may subscribe to commands
+ * ```typescript
+ * const commands = yield* Azure.EventGrid.TopicSpace("commands", {
+ *   namespace: namespace.namespaceName,
+ *   topicTemplates: ["devices/+/commands"],
+ * });
+ * const subscribe = yield* Azure.EventGrid.PermissionBinding("all-subscribe", {
+ *   namespace: namespace.namespaceName,
+ *   topicSpace: commands.topicSpaceName,
+ *   clientGroup: "$all",
+ *   permission: "Subscriber",
  * });
  * ```
  *

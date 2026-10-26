@@ -24,74 +24,120 @@ import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import { sameText } from "./Common.ts";
 
+/** Managed identity of a Log Analytics cluster. */
 export interface ClusterIdentity {
-  /** Kind of managed identity attached to the cluster. */
+  /**
+   * Kind of managed identity attached to the cluster: `SystemAssigned`,
+   * `UserAssigned`, both (`SystemAssigned,UserAssigned`), or `None`.
+   */
   type: "SystemAssigned" | "UserAssigned" | "SystemAssigned,UserAssigned" | "None";
-  /** ARM resource IDs of user-assigned identities. */
+  /**
+   * ARM resource IDs of user-assigned identities. Required when `type`
+   * includes `UserAssigned`.
+   * @default []
+   */
   userAssignedIdentities?: string[];
 }
 
+/** Customer-managed key (in Azure Key Vault) that encrypts the cluster's data. */
 export interface ClusterKeyVaultProperties {
-  /** URI of the Key Vault that holds the customer-managed key. */
+  /** URI of the Key Vault that holds the key, e.g. `https://my-vault.vault.azure.net`. */
   keyVaultUri: string;
-  /** Name of the key. */
+  /** Name of the key in the vault. */
   keyName: string;
-  /** Version of the key; omit to follow the latest version. */
+  /**
+   * Version of the key.
+   * @default the latest version of the key (key rotation follows it)
+   */
   keyVersion?: string;
-  /** RSA key size (2048, 3072, or 4096). */
+  /**
+   * RSA key size in bits: `2048`, `3072`, or `4096`.
+   * @default Azure's default (the size of the key in the vault)
+   */
   keyRsaSize?: number;
 }
 
 export interface ClusterProps {
   /**
-   * Resource group the cluster is created in. Changing it replaces the
-   * cluster.
+   * Resource group the cluster is created in.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
    */
   resourceGroup: string;
   /**
-   * Cluster name: 4-63 letters, digits, and hyphens. If omitted, a unique
-   * name is generated from the app, stage, and logical ID. Changing it
-   * replaces the cluster.
+   * Cluster name: 4-63 letters, digits, and hyphens, starting and ending
+   * with a letter or digit. A deleted cluster keeps its name reserved for
+   * 14 days.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Azure location of the cluster. Changing it replaces the cluster.
+   * Azure location of the cluster, e.g. `eastus`. Linked workspaces must be
+   * in the same region.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
    * @default the `Azure.Location` layer, else the profile location, else `eastus`
    */
   location?: string;
   /**
-   * Daily commitment tier in GB (100, 200, 300, 400, 500, 1000, 2000,
-   * 5000, 10000, 25000, 50000). Can be raised at any time and lowered
-   * after 31 days.
+   * Daily commitment tier in GB per day: `100`, `200`, `300`, `400`, `500`,
+   * `1000`, `2000`, `5000`, `10000`, `25000`, or `50000`. You can raise it
+   * at any time and lower it 31 days after the last change. Alchemy updates
+   * it in place.
    * @default 100
    */
   capacity?: number;
   /**
-   * Who is billed for the commitment: the cluster, or the linked
-   * workspaces in proportion to their ingestion.
+   * Who is billed for the commitment: `Cluster` (the cluster's resource
+   * group), or `Workspaces` (the linked workspaces, in proportion to their
+   * ingestion).
    * @default "Cluster"
    */
   billingType?: "Cluster" | "Workspaces";
   /**
-   * Managed identity of the cluster, used to reach a customer-managed key.
+   * Managed identity of the cluster. The cluster uses it to read a
+   * customer-managed key from Key Vault.
    * @default { type: "SystemAssigned" }
    */
   identity?: ClusterIdentity;
-  /** Customer-managed key for data encryption. */
+  /**
+   * Customer-managed key for data encryption. Give the cluster's identity
+   * the Key Vault access to the key (get, wrap key, unwrap key) first.
+   * @default no customer-managed key (Microsoft-managed keys)
+   */
   keyVaultProperties?: ClusterKeyVaultProperties;
   /**
-   * Encrypt data twice (infrastructure encryption). Changing it replaces
-   * the cluster.
+   * Encrypt data twice (infrastructure encryption).
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
+   * @default not sent (Azure's default)
    */
   isDoubleEncryptionEnabled?: boolean;
   /**
    * Spread the cluster across availability zones, where the region
-   * supports it. Changing it replaces the cluster.
+   * supports them.
+   *
+   * :::caution
+   * Changing it replaces the cluster.
+   * :::
+   * @default not sent (Azure's default)
    */
   isAvailabilityZonesEnabled?: boolean;
   /**
    * User tags. Alchemy ownership tags (`alchemy::stack`, `alchemy::stage`,
    * `alchemy::id`) are merged in automatically.
+   * @default {}
    */
   tags?: Record<string, string>;
 }
@@ -108,11 +154,11 @@ export interface Cluster extends Resource<
     clusterId: string;
     /** GUID of the cluster (`properties.clusterId`). */
     clusterGuid: string | undefined;
-    /** Location of the cluster. */
+    /** Location of the cluster, e.g. `eastus`. */
     location: string;
-    /** Daily commitment tier in GB. */
+    /** Daily commitment tier in GB per day. */
     capacity: number | undefined;
-    /** Principal ID of the system-assigned identity, if any. */
+    /** Principal ID of the system-assigned identity; `undefined` without one. */
     principalId: string | undefined;
     /** ARM resource IDs of the workspaces linked to the cluster. */
     associatedWorkspaces: string[];
@@ -124,22 +170,36 @@ export interface Cluster extends Resource<
 > {}
 
 /**
- * A dedicated Log Analytics cluster: a commitment tier of at least
- * 100 GB/day that linked workspaces ingest into, adding customer-managed
- * keys, double encryption, availability zones, and cross-workspace query
- * speedups. Link workspaces with `Azure.LogAnalytics.LinkedService`
- * (`name: "cluster"`).
+ * A dedicated Log Analytics cluster (`Microsoft.OperationalInsights/clusters`):
+ * a daily commitment tier that linked workspaces ingest into. Use it for
+ * customer-managed keys, double encryption, availability zones, and faster
+ * queries across its workspaces. Link a workspace with
+ * `Azure.LogAnalytics.LinkedService` (`name: "cluster"`).
  *
- * **Cost:** billing starts when the cluster is created — about $200+ per
- * day at the minimum 100 GB/day tier, with a 31-day minimum commitment.
- * Provisioning can take up to two hours. A deleted cluster stays
- * soft-deleted for 14 days and its name is reserved meanwhile.
+ * :::caution[A dedicated cluster is expensive]
+ * Billing starts when Azure creates the cluster: the commitment tier is at
+ * least 100 GB per day (about $200 or more per day), with a 31-day minimum.
+ * You pay for the tier even if the workspaces ingest less. Creating a
+ * cluster can take up to two hours.
+ * :::
+ *
+ * :::caution[Changing `name`, `location`, `resourceGroup`, `isDoubleEncryptionEnabled`, or `isAvailabilityZonesEnabled` replaces the cluster]
+ * Alchemy creates a new cluster, which starts a new commitment, and deletes
+ * the old one. A `LinkedService` that references `cluster.clusterId` gets
+ * the new ID.
+ * :::
+ *
+ * :::caution[A deleted cluster reserves its name for 14 days]
+ * Azure keeps a deleted cluster soft-deleted for 14 days. Its name stays
+ * taken in that time, so give a replacement cluster a different `name`.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-monitor/logs/logs-dedicated-clusters
  *
  * ### Creating a Cluster
- * **Example:** Minimum commitment tier
+ * **Example:** Minimum commitment tier with a linked workspace
  * ```typescript
+ * const logs = yield* Azure.LogAnalytics.Workspace("logs");
  * const cluster = yield* Azure.LogAnalytics.Cluster("logs-cluster", {
  *   capacity: 100,
  * });
@@ -150,10 +210,22 @@ export interface Cluster extends Resource<
  * });
  * ```
  *
+ * **Example:** Bill the linked workspaces instead of the cluster
+ * ```typescript
+ * const cluster = yield* Azure.LogAnalytics.Cluster("logs-cluster", {
+ *   capacity: 500,
+ *   billingType: "Workspaces",
+ * });
+ * ```
+ *
  * ### Customer-Managed Keys
+ * Give the cluster's system-assigned identity access to the key, then set
+ * `keyVaultProperties`.
+ *
  * **Example:** Encrypt with a Key Vault key
  * ```typescript
  * const cluster = yield* Azure.LogAnalytics.Cluster("logs-cluster", {
+ *   identity: { type: "SystemAssigned" },
  *   keyVaultProperties: {
  *     keyVaultUri: "https://my-vault.vault.azure.net",
  *     keyName: "logs-key",

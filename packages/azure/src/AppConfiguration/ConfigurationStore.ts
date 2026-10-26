@@ -46,7 +46,10 @@ export interface ConfigurationStoreDataPlaneProxy {
 }
 
 export interface ConfigurationStoreProps {
-  /** Resource group the store is created in. Changing it replaces the store. */
+  /**
+   * Resource group the store is created in. Changing it replaces the store.
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
   /**
    * Globally unique store name (`<name>.azconfig.io`): 5-50 letters, digits,
@@ -71,11 +74,15 @@ export interface ConfigurationStoreProps {
    * @default false
    */
   disableLocalAuth?: boolean;
-  /** Whether the store accepts traffic from public networks. */
+  /**
+   * Whether the store accepts traffic from public networks.
+   * @default unmanaged (Azure's default accepts public traffic)
+   */
   publicNetworkAccess?: "Enabled" | "Disabled";
   /**
    * Days a deleted store is kept in the soft-deleted state (1-7). Only
    * applies to `Standard` and `Premium`; changing it replaces the store.
+   * @default Azure's default (7 days)
    */
   softDeleteRetentionInDays?: number;
   /**
@@ -85,11 +92,20 @@ export interface ConfigurationStoreProps {
    * @default false
    */
   enablePurgeProtection?: boolean;
-  /** Seconds to retain key-value revisions. */
+  /**
+   * Seconds to retain key-value revisions.
+   * @default unmanaged (Azure's default for the SKU)
+   */
   defaultKeyValueRevisionRetentionPeriodInSeconds?: number;
-  /** ARM data-plane proxy settings. */
+  /**
+   * ARM data-plane proxy settings.
+   * @default Azure's default (`Local` authentication, private link delegation off)
+   */
   dataPlaneProxy?: ConfigurationStoreDataPlaneProxy;
-  /** User tags. Alchemy ownership tags are merged in. */
+  /**
+   * User tags. Alchemy ownership tags are merged in.
+   * @default {}
+   */
   tags?: Record<string, string>;
 }
 
@@ -123,12 +139,20 @@ export interface ConfigurationStore extends Resource<
 > {}
 
 /**
- * An Azure App Configuration store — a managed service for application
- * settings and feature flags.
+ * An Azure App Configuration store (`Microsoft.AppConfiguration/configurationStores`):
+ * a managed service for application settings and feature flags that your
+ * runtimes read at startup or on each request.
  *
- * Destroying a `Standard` or `Premium` store soft-deletes it; Alchemy then
- * purges it (unless purge protection is on) so the name can be reused. A
- * store recreated under the name of a soft-deleted one is recovered.
+ * Alchemy creates a `Free` store in the stack's resource group. Declare
+ * settings with `Azure.AppConfiguration.KeyValue`, and bind the store to a
+ * runtime to read or write them with Microsoft Entra ID; each binding
+ * grants a custom role with exactly the data actions its client calls.
+ *
+ * :::caution[Changing `name`, `resourceGroup`, `location`, or `softDeleteRetentionInDays`, or a lower `sku`, replaces the store]
+ * Alchemy creates a new, empty store and deletes the old one with every
+ * setting in it. Moving to a higher `sku` (`Free` → `Standard`) applies in
+ * place.
+ * :::
  *
  * @see https://learn.microsoft.com/azure/azure-app-configuration/overview
  *
@@ -136,8 +160,39 @@ export interface ConfigurationStore extends Resource<
  * **Example:** Free store
  * ```typescript
  * const store = yield* Azure.AppConfiguration.ConfigurationStore("config");
+ * // store.endpoint → "https://{name}.azconfig.io"
  * ```
  *
+ * A subscription may hold only one `Free` store per region.
+ *
+ * **Example:** Standard store with a fixed name and region
+ * ```typescript
+ * const store = yield* Azure.AppConfiguration.ConfigurationStore("config", {
+ *   name: "contoso-prod-config",
+ *   location: "westeurope",
+ *   sku: "Standard",
+ * });
+ * ```
+ *
+ * ### Adding Settings
+ * **Example:** Settings for two environments
+ * ```typescript
+ * const store = yield* Azure.AppConfiguration.ConfigurationStore("config");
+ * yield* Azure.AppConfiguration.KeyValue("color-prod", {
+ *   configurationStore: store.configurationStoreName,
+ *   key: "App:Color",
+ *   label: "prod",
+ *   value: "blue",
+ * });
+ * yield* Azure.AppConfiguration.KeyValue("color-staging", {
+ *   configurationStore: store.configurationStoreName,
+ *   key: "App:Color",
+ *   label: "staging",
+ *   value: "green",
+ * });
+ * ```
+ *
+ * ### Authentication
  * **Example:** Standard store that only accepts Entra ID
  * ```typescript
  * const store = yield* Azure.AppConfiguration.ConfigurationStore("config", {
@@ -145,6 +200,135 @@ export interface ConfigurationStore extends Resource<
  *   disableLocalAuth: true,
  *   dataPlaneProxy: { authenticationMode: "Pass-through" },
  * });
+ * ```
+ *
+ * With local auth disabled, `KeyValue` resources deploy through ARM
+ * pass-through, so the deployer needs **App Configuration Data Owner** on
+ * the store, and `primaryConnectionString` is `undefined`.
+ *
+ * ### Network Access
+ * **Example:** Private store behind a private endpoint
+ * ```typescript
+ * const store = yield* Azure.AppConfiguration.ConfigurationStore("config", {
+ *   sku: "Standard",
+ *   publicNetworkAccess: "Disabled",
+ * });
+ * const endpoint = yield* Azure.Network.PrivateEndpoint("config", {
+ *   subnetId: subnet.subnetId,
+ *   privateLinkServiceConnections: [
+ *     { privateLinkServiceId: store.configurationStoreId, groupIds: ["configurationStores"] },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Geo-Replication and Snapshots
+ * **Example:** Replica in a second region
+ * ```typescript
+ * const store = yield* Azure.AppConfiguration.ConfigurationStore("config", {
+ *   location: "eastus",
+ *   sku: "Standard",
+ * });
+ * const replica = yield* Azure.AppConfiguration.Replica("west", {
+ *   configurationStore: store.configurationStoreName,
+ *   location: "westus2",
+ * });
+ * ```
+ *
+ * **Example:** Immutable snapshot of a release's settings
+ * ```typescript
+ * const snapshot = yield* Azure.AppConfiguration.Snapshot("release", {
+ *   configurationStore: store.configurationStoreName,
+ *   filters: [{ key: "App:*", label: "prod" }],
+ * });
+ * ```
+ *
+ * ### Soft Delete and Purge Protection
+ * `Standard` and `Premium` stores are soft-deleted. Alchemy purges a
+ * destroyed store so you can reuse the name at once; a store created under
+ * the name of a soft-deleted one recovers it.
+ *
+ * **Example:** One-day retention for a dev store
+ * ```typescript
+ * const store = yield* Azure.AppConfiguration.ConfigurationStore("config", {
+ *   sku: "Standard",
+ *   softDeleteRetentionInDays: 1,
+ * });
+ * ```
+ *
+ * **Example:** Purge protection for production
+ * ```typescript
+ * const store = yield* Azure.AppConfiguration.ConfigurationStore("config", {
+ *   sku: "Standard",
+ *   enablePurgeProtection: true,
+ * });
+ * ```
+ *
+ * :::caution[Purge protection is permanent]
+ * You cannot turn it off. A destroyed store with purge protection keeps
+ * its name reserved until the retention period ends.
+ * :::
+ *
+ * ### Binding to a runtime
+ * `ConfigurationStoreRead` grants a custom role with only
+ * `keyValues/read` on this store. `ConfigurationStoreWrite` grants only
+ * `keyValues/write` and `keyValues/delete`, and
+ * `ConfigurationStoreReadWrite` grants both. The role goes to the host's
+ * managed identity on an Azure Function, Web App, Container App, container
+ * group, or VM, and to an Entra service principal on any other host.
+ *
+ * **Example:** Read settings in an Azure Function
+ * ```typescript
+ * export default class Api extends Azure.Functions.Function<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const store = yield* Store;
+ *     const config = yield* Azure.AppConfiguration.ConfigurationStoreRead(store);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const color = yield* config.get("App:Color", { label: "prod" });
+ *         return HttpServerResponse.text(color?.value ?? "unset");
+ *       }).pipe(Effect.orDie),
+ *     };
+ *   }).pipe(Effect.provide(Azure.AppConfiguration.ConfigurationStoreReadHttp)),
+ * ) {}
+ * ```
+ *
+ * ### Runtime Operations
+ * **Example:** Read every setting under a prefix
+ * ```typescript
+ * // init
+ * const config = yield* Azure.AppConfiguration.ConfigurationStoreRead(store);
+ *
+ * // runtime: every page, as one array
+ * const settings = yield* config.list({ key: "App:*", label: "prod" });
+ * const byKey = Object.fromEntries(settings.map((s) => [s.key, s.value]));
+ * // …provided with Effect.provide(Azure.AppConfiguration.ConfigurationStoreReadHttp)
+ * ```
+ *
+ * **Example:** Change and delete settings
+ * ```typescript
+ * // init
+ * const config = yield* Azure.AppConfiguration.ConfigurationStoreReadWrite(store);
+ *
+ * // runtime
+ * yield* config.set("App:Color", "green", { label: "prod" });
+ * yield* config.delete("App:Legacy", { label: "prod" }); // succeeds when missing
+ * // …provided with Effect.provide(Azure.AppConfiguration.ConfigurationStoreReadWriteHttp)
+ * ```
+ *
+ * ### Event Sources
+ * **Example:** React when a setting changes
+ * ```typescript
+ * yield* Azure.EventGrid.consumeEvents(
+ *   "ConfigChanges",
+ *   {
+ *     scope: store.configurationStoreId,
+ *     includedEventTypes: ["Microsoft.AppConfiguration.KeyValueModified"],
+ *   },
+ *   (event) => Effect.log(`setting changed: ${event.subject}`),
+ * );
+ * // …provided with Effect.provide(Azure.Functions.EventGridEventSource)
  * ```
  *
  * @resource

@@ -30,19 +30,37 @@ export type { AccessRight };
 export const ROOT_MANAGE_RULE = "RootManageSharedAccessKey";
 
 export interface NamespaceAuthorizationRuleProps {
-  /** Resource group of the namespace. Changing it replaces the rule. */
+  /**
+   * Resource group of the namespace.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default the stack's resource group (`Azure.resourceGroup(...)`, else `<stack>-<stage>`)
+   */
   resourceGroup: string;
-  /** Namespace the rule grants access to. Changing it replaces the rule. */
+  /**
+   * Name of the namespace the rule grants access to, e.g.
+   * `bus.namespaceName` of an `Azure.ServiceBus.Namespace`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   */
   namespace: string;
   /**
-   * Rule name: 1-50 letters, digits, `.`, `-`, and `_`. If omitted, a unique
-   * name is generated from the app, stage, and logical ID. Changing it
-   * replaces the rule.
+   * Rule name: 1-50 letters, digits, `.`, `-`, and `_`.
+   *
+   * :::caution
+   * Changing it replaces the rule.
+   * :::
+   * @default a name generated from the app, stage, and logical ID
    */
   name?: string;
   /**
-   * Granted rights. `Manage` implies `Listen` and `Send`; Alchemy adds them
-   * automatically.
+   * Granted rights: any of `Listen`, `Send`, and `Manage`. `Manage`
+   * implies `Listen` and `Send`; Alchemy adds them for you. Changing the
+   * rights updates the rule in place and keeps its keys.
    */
   rights: AccessRight[];
 }
@@ -53,21 +71,28 @@ export interface NamespaceAuthorizationRule extends Resource<
   {
     /** Name of the rule. */
     authorizationRuleName: string;
-    /** ARM resource ID of the rule. */
+    /**
+     * ARM resource ID of the rule
+     * (`/subscriptions/.../namespaces/{namespace}/authorizationRules/{name}`).
+     */
     authorizationRuleId: string;
-    /** Namespace the rule grants access to. */
+    /** Name of the namespace the rule grants access to. */
     namespaceName: string;
     /** Resource group of the namespace. */
     resourceGroup: string;
     /** Granted rights (sorted; `Manage` implies `Listen` and `Send`). */
     rights: AccessRight[];
-    /** Primary SAS key. */
+    /** Primary SAS key, as a secret. `undefined` when Azure did not return the keys. */
     primaryKey: Redacted.Redacted<string> | undefined;
-    /** Secondary SAS key. */
+    /** Secondary SAS key, as a secret. `undefined` when Azure did not return the keys. */
     secondaryKey: Redacted.Redacted<string> | undefined;
-    /** Primary connection string (`Endpoint=sb://...;SharedAccessKeyName=...`). */
+    /**
+     * Primary connection string
+     * (`Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...`), as a
+     * secret.
+     */
     primaryConnectionString: Redacted.Redacted<string> | undefined;
-    /** Secondary connection string. */
+    /** Secondary connection string, as a secret. */
     secondaryConnectionString: Redacted.Redacted<string> | undefined;
   },
   never,
@@ -75,14 +100,28 @@ export interface NamespaceAuthorizationRule extends Resource<
 > {}
 
 /**
- * A shared access (SAS) authorization rule on a Service Bus namespace. It
- * grants `Listen`, `Send`, and/or `Manage` on every entity in the namespace
- * and exposes the rule's keys and connection strings as secrets.
+ * A Service Bus namespace SAS rule
+ * (`Microsoft.ServiceBus/namespaces/authorizationRules`): a shared access
+ * key that grants `Listen`, `Send`, and/or `Manage` on every queue and
+ * topic in the namespace. Use its connection strings for clients that
+ * cannot use Entra ID (an SDK or tool that only takes a connection string).
+ * For an Alchemy host, prefer a binding such as
+ * `Azure.ServiceBus.QueueSend`: it assigns a role and needs no key.
+ *
+ * :::caution[Changing `name`, `namespace`, or `resourceGroup` replaces the rule]
+ * Alchemy creates a new rule with new keys and deletes the old one.
+ * Clients that use the old connection string stop working.
+ * :::
+ *
+ * :::caution[The namespace must exist]
+ * Create the `Azure.ServiceBus.Namespace` first and pass its
+ * `namespaceName`. Deleting the namespace deletes its rules.
+ * :::
  *
  * Authorization rules have no tags or metadata: Alchemy treats a rule it
  * did not create (e.g. an existing rule with the same explicit `name`) as
- * unowned and only takes it over with `--adopt`. The built-in
- * `RootManageSharedAccessKey` rule is never deleted.
+ * unowned and only takes it over with `--adopt`. Alchemy never deletes the
+ * built-in `RootManageSharedAccessKey` rule.
  *
  * @see https://learn.microsoft.com/azure/service-bus-messaging/service-bus-sas
  *
@@ -102,9 +141,21 @@ export interface NamespaceAuthorizationRule extends Resource<
  *
  * **Example:** Listen and send
  * ```typescript
+ * const bus = yield* Azure.ServiceBus.Namespace("bus");
  * const worker = yield* Azure.ServiceBus.NamespaceAuthorizationRule("worker", {
  *   namespace: bus.namespaceName,
  *   rights: ["Listen", "Send"],
+ * });
+ * ```
+ *
+ * ### Managing the Namespace
+ * **Example:** A rule for an admin tool
+ * ```typescript
+ * const bus = yield* Azure.ServiceBus.Namespace("bus");
+ * const admin = yield* Azure.ServiceBus.NamespaceAuthorizationRule("admin", {
+ *   namespace: bus.namespaceName,
+ *   // Manage implies Listen and Send
+ *   rights: ["Manage"],
  * });
  * ```
  *

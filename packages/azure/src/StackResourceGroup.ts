@@ -1,4 +1,5 @@
 import { AdoptPolicy } from "alchemy/AdoptPolicy";
+import { AlchemyContext } from "alchemy/AlchemyContext";
 import { toFqn } from "alchemy/FQN";
 import type { Input, InputProps, PropsInput } from "alchemy/Input";
 import { CurrentNamespace, Namespace } from "alchemy/Namespace";
@@ -120,6 +121,37 @@ export const stackResourceGroup = Effect.gen(function* () {
 });
 
 /**
+ * Name of the stack's resource group without registering the implicit
+ * group: the {@link StackResourceGroup} override, else `<stack>-<stage>`.
+ */
+export const stackResourceGroupName = Effect.gen(function* () {
+  const override = yield* Effect.serviceOption(StackResourceGroup);
+  if (Option.isSome(override)) return override.value;
+  const stack = yield* StackContext;
+  return defaultResourceGroupName(stack.name, stack.stage);
+});
+
+/**
+ * Whether a resource registered here runs on its local provider: an
+ * `alchemy dev` run, and no `Alchemy.remote()` around it.
+ */
+export const runsLocal = Effect.gen(function* () {
+  const ctx = yield* Effect.serviceOption(AlchemyContext);
+  if (Option.isNone(ctx) || !ctx.value.dev) return false;
+  return (yield* ProviderModePolicy) !== true;
+});
+
+export interface GroupedResourceOptions extends ResourceOptions {
+  /**
+   * The type has a local provider (`alchemy dev`). A local instance takes
+   * the stack group's name but never creates the group, so a dev run of
+   * local resources makes no Azure call.
+   * @default false
+   */
+  readonly local?: boolean;
+}
+
+/**
  * Props as callers write them: `resourceGroup` is optional and defaults to
  * the {@link StackResourceGroup}. Distributes over union props.
  */
@@ -168,13 +200,19 @@ export type GroupedResourceClass<R extends ResourceLike> = GroupedResourceConstr
  */
 export const GroupedResource = <R extends ResourceLike>(
   type: R["Type"],
-  options?: ResourceOptions,
+  options?: GroupedResourceOptions,
 ): GroupedResourceClass<R> => {
-  const base = Resource<R>(type, options);
+  const { local = false, ...resourceOptions } = options ?? {};
+  const base = Resource<R>(type, resourceOptions);
+  const groupOf = local
+    ? Effect.flatMap(runsLocal, (isLocal) =>
+        isLocal ? Effect.map(stackResourceGroupName, (name) => ({ name })) : stackResourceGroup,
+      )
+    : stackResourceGroup;
   const withGroup = (props: Record<string, unknown> | undefined) =>
     props?.resourceGroup !== undefined
       ? Effect.succeed(props)
-      : Effect.map(stackResourceGroup, ({ name }) => ({ ...props, resourceGroup: name }));
+      : Effect.map(groupOf, ({ name }) => ({ ...props, resourceGroup: name }));
   const construct = (id: string, props: unknown) =>
     Effect.gen(function* () {
       const stack = yield* StackContext;
