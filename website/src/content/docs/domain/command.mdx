@@ -101,8 +101,8 @@ The aggregate computes it from its state after the events, in a `reply` handler 
 
 ```typescript title="src/Account.aggregate.ts"
 reply: {
-  DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }),
-  WithdrawMoney: (s) => ({ balance: mustBeOpen(s).balance }),
+  DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
+  WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
 },
 ```
 
