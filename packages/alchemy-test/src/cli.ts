@@ -4,7 +4,7 @@
  * ```sh
  * alchemy-test [paths...] [-t pattern] [--exclude path]... [--timeout ms]
  *              [--retry n] [--concurrency n] [--sequential] [--tui]
- *              [--profile name] [--fast]
+ *              [--profile name] [--stage name] [--fast]
  *              [--tags 'unit || (e2e && !live)']
  * ```
  *
@@ -31,6 +31,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Runtime from "effect/Runtime";
+import * as Schema from "effect/Schema";
 import packageJson from "../package.json" with { type: "json" };
 import { PlainReporterLive, printSummary } from "./PlainReporter.ts";
 import { parsePlan } from "./Plan.ts";
@@ -120,6 +121,14 @@ const profile = Flag.String("profile").pipe(
   Flag.optional,
 );
 
+const stage = Flag.String("stage").pipe(
+  Flag.withSchema(Schema.String.check(Schema.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/i))),
+  Flag.withDescription(
+    'Set ALCHEMY_TEST_STAGE for the run (e.g. "test_sam_feat-x") before any test module is imported',
+  ),
+  Flag.optional,
+);
+
 const fast = Flag.Boolean("fast").pipe(
   Flag.withDescription(
     "Set FAST=1 — suites skip their slow tests (long-provisioning resources, smoke tests)",
@@ -163,6 +172,7 @@ const rootCommand = Command.make(
     sequential,
     tui,
     profile,
+    stage,
     fast,
   },
   Effect.fn(function* (args) {
@@ -174,6 +184,9 @@ const rootCommand = Command.make(
     yield* Effect.sync(() => {
       if (Option.isSome(args.profile)) {
         process.env.ALCHEMY_PROFILE = args.profile.value;
+      }
+      if (Option.isSome(args.stage)) {
+        process.env.ALCHEMY_TEST_STAGE = args.stage.value;
       }
       if (args.fast) {
         process.env.FAST = "1";
