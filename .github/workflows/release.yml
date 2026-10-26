@@ -66,11 +66,6 @@ jobs:
           node scripts/release/prepare.ts '${{ inputs.version }}' | tee -a "$GITHUB_OUTPUT"
 
       - name: Build release packages
-        # The cold tsgo build can starve the runner without Go heap limits on
-        # this 32 GB machine, and a lost runner mid-release is costly.
-        env:
-          GOMEMLIMIT: 6GiB
-          GOGC: "40"
         run: pnpm build:pkg
 
       - name: Pack release artifacts
@@ -116,7 +111,7 @@ jobs:
           cache: true
           install: false
 
-      # Release scripts import changelogithub, but publishing does not need
+      # Release scripts import changelogen, but publishing does not need
       # package lifecycle scripts.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -139,7 +134,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.build.outputs.version }}
           CHANNEL: ${{ needs.build.outputs.channel }}
-        run: bun scripts/release/github-release.ts "v${VERSION}" "$CHANNEL"
+        run: node scripts/release/github-release.ts "v${VERSION}" "$CHANNEL"
 
       - name: Notify Discord
         if: needs.build.outputs.channel != 'tag'
@@ -147,4 +142,4 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
           VERSION: ${{ needs.build.outputs.version }}
           CHANNEL: ${{ needs.build.outputs.channel }}
-        run: bun scripts/release/discord-notify.ts "v${VERSION}" "$CHANNEL"
+        run: node scripts/release/discord-notify.ts "v${VERSION}" "$CHANNEL"

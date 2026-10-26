@@ -17,6 +17,7 @@ const VIRTUAL_MODULE_REGEXP = /^\0?distilled:.*$/;
 export const WORKER_ENTRY_PREFIX = "\0distilled:worker-entry:" as const;
 const USER_ENTRY_PREFIX = "\0distilled:user-entry:" as const;
 const INJECT_PREFIX = "\0distilled:inject:" as const;
+const NODEJS_UNENV_PLUGIN_NAME = "distilled-cloudflare:nodejs-unenv";
 
 /**
  * The id of the generated Worker entry that wraps the user entry `id`.
@@ -44,10 +45,15 @@ export const virtualModulesPlugin = createPlugin("virtual-modules", (options) =>
   return {
     vite: {
       enforce: "pre",
+      // Vite's dev server starts the build without the plugin list, so the
+      // Worker entry would skip the polyfills and injected globals.
+      configResolved(config) {
+        unenvApi = resolvePluginApi<UnenvApi>(config.plugins, NODEJS_UNENV_PLUGIN_NAME);
+      },
     },
     shared: {
       buildStart({ plugins }) {
-        unenvApi = resolvePluginApi<UnenvApi>(plugins, "distilled-cloudflare:nodejs-unenv");
+        unenvApi = resolvePluginApi<UnenvApi>(plugins ?? [], NODEJS_UNENV_PLUGIN_NAME) ?? unenvApi;
       },
       resolveId: {
         filter: { id: VIRTUAL_MODULE_REGEXP },

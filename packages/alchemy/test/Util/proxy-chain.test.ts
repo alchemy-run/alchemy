@@ -1,4 +1,4 @@
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { proxyChain } from "@/Util/proxy-chain.ts";

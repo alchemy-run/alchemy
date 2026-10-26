@@ -4,7 +4,11 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { toOutputFile, type BuildOutput } from "./BuildOutput.ts";
 import { DeployTargetError, type DeployTarget } from "./DeployTarget.ts";
-import { pinNodeServeModule, type NodeServeEntryOptions } from "./NodeServe.ts";
+import {
+  pinNodeServeModule,
+  staticAssetPathSource,
+  type NodeServeEntryOptions,
+} from "./NodeServe.ts";
 
 /** Fetch entry emitted for Neon Functions; no listening socket is created. */
 export const NEON_SERVE_ENTRY_FILE_NAME = "serve-neon.mjs";
@@ -20,7 +24,7 @@ ${handler?.kind === "node" ? 'import { toFetchHandler } from "srvx/node";' : ""}
 ${handler?.imports ?? ""}
 const handle = ${handler === undefined ? "undefined" : handler.kind === "node" ? `toFetchHandler((request, response) => { Promise.resolve((${handler.expr})(request, response)).catch(error => response.destroy(error)); })` : handler.expr};
 const client = ${options.clientDirExpression ?? "undefined"};
-const mime = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".ico": "image/x-icon", ".webp": "image/webp", ".avif": "image/avif", ".woff": "font/woff", ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8", ".xml": "application/xml", ".wasm": "application/wasm", ".pdf": "application/pdf" };
+${staticAssetPathSource(options.assetBasePath)}const mime = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".ico": "image/x-icon", ".webp": "image/webp", ".avif": "image/avif", ".woff": "font/woff", ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8", ".xml": "application/xml", ".wasm": "application/wasm", ".pdf": "application/pdf" };
 const within = (root, file) => file === root || file.startsWith(root + path.sep);
 const lookup = (pathname, directoryIndex = true) => {
   if (client === undefined) return;
@@ -57,18 +61,19 @@ export default {
       let pathname;
       try { pathname = decodeURIComponent(url.pathname); } catch { return new Response("Bad Request", { status: 400 }); }
       if (pathname.includes("\\0") || pathname.includes("\\\\")) return new Response("Bad Request", { status: 400 });
-      if (request.method === "GET" || request.method === "HEAD") {
-        const found = lookup(pathname, handle === undefined || pathname !== "/")${options.htmlHandling === "drop-trailing-slash" ? ' ?? (!path.extname(pathname) ? lookup(pathname + ".html") : undefined)' : ""};
+      const staticPath = staticPathFor(pathname);
+      if ((request.method === "GET" || request.method === "HEAD") && staticPath !== undefined) {
+        const found = lookup(staticPath, ${options.serveRootIndex ? "true" : 'handle === undefined || staticPath !== "/"'})${options.htmlHandling === "drop-trailing-slash" ? ' ?? (!path.extname(staticPath) ? lookup(staticPath + ".html") : undefined)' : ""};
         if (found) return serve(found, request);
 ${options.notFoundHandling === "spa" ? '        const fallback = lookup("/index.html");\n        if (fallback) return serve(fallback, request);' : ""}
       }
+${options.notFoundHandling === "404-page" ? '      if ((request.method === "GET" || request.method === "HEAD") && staticPath !== undefined) {\n        const missing = lookup("/404.html");\n        if (missing) return serve(missing, request, 404);\n      }' : ""}
       if (handle) {
         const response = await handle(request);
         if (request.method !== "HEAD" || response.body === null) return response;
         await response.body.cancel();
         return new Response(null, { status: response.status, statusText: response.statusText, headers: response.headers });
       }
-${options.notFoundHandling === "404-page" ? '      if (request.method === "GET" || request.method === "HEAD") {\n        const missing = lookup("/404.html");\n        if (missing) return serve(missing, request, 404);\n      }' : ""}
       return new Response(request.method === "HEAD" ? null : "Not Found", { status: 404 });
     } catch (error) {
       console.error("Neon website request failed", error);

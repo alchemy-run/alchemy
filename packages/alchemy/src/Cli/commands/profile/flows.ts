@@ -3,7 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Profiles from "../../../Alchemist/routes/profile.ts";
-import * as CliKit from "../../../Cli/CliKit/index.ts";
+import * as Interaction from "../../../Interaction.ts";
+import { glyphsFor } from "../../../Util/Theme.ts";
 import { confirmOrDecline } from "../confirm.ts";
 import { isPromptCancellation } from "../errors.ts";
 
@@ -48,14 +49,14 @@ export const renameProfileFlow = Effect.fn(function* (
 ) {
   const newName = (
     suppliedNewName ??
-    (yield* CliKit.accessors.prompt.text({
+    (yield* Interaction.text({
       message: `Rename profile '${name}' to`,
       placeholder: `${name}-new`,
       validate: (value) => (value.trim().length > 0 ? undefined : "Profile name is required"),
     }))
   ).trim();
   yield* Profiles.rename({ name, newName });
-  yield* CliKit.accessors.output.success(`Renamed profile '${name}' to '${newName}'.`);
+  yield* Interaction.success(`Renamed profile '${name}' to '${newName}'.`);
   return newName;
 });
 
@@ -84,7 +85,7 @@ export const deleteProfileFlow = Effect.fn(function* (options: {
     cancelLabel: "Cancel",
   });
   yield* Profiles.deleteProfile({ name: options.name });
-  yield* CliKit.accessors.output.success(`Deleted profile '${options.name}' and its credentials.`);
+  yield* Interaction.success(`Deleted profile '${options.name}' and its credentials.`);
   return true;
 });
 
@@ -126,9 +127,12 @@ export const editProfileFlow = Effect.fn(function* (options: {
     });
     const connected = new Map(profile.providers.map((item) => [item.name, item]));
     const names = [...new Set([...connected.keys(), ...available.map(({ name }) => name)])].sort();
-    const prompt = yield* CliKit.CliKit;
+    const prompt = yield* Interaction.Interaction;
     const { editStateStyle } = yield* profileTui;
-    const glyphs = CliKit.glyphsFor(prompt.terminal.unicode);
+    const { cycleSelectScreen } = yield* Effect.promise(
+      () => import("../../../Cli/components/view/Prompts.tsx"),
+    );
+    const glyphs = glyphsFor(prompt.terminal.unicode);
     const state = (
       key: keyof typeof editStateStyle,
       value: { provider: string; action: EditAction } | null,
@@ -154,11 +158,13 @@ export const editProfileFlow = Effect.fn(function* (options: {
             states: [state("skip", null), state("add", { provider, action: "add" })],
           },
     );
-    plan = (yield* prompt.prompt.cycle({
-      message: `Manage accounts in profile '${options.selectedProfile}'`,
-      options: choices,
-      requireChange: true,
-    })).filter((item) => item !== null);
+    plan = (yield* prompt.prompt.screen(
+      cycleSelectScreen({
+        message: `Manage accounts in profile '${options.selectedProfile}'`,
+        options: choices,
+        requireChange: true,
+      }),
+    )).filter((item) => item !== null);
   }
 
   const outcomes: EditOutcome[] = [];
