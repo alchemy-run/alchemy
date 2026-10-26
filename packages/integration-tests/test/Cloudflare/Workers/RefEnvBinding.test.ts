@@ -132,3 +132,46 @@ test.provider(
     timeout: 240_000,
   },
 );
+
+/**
+ * `Cloudflare.Worker.ref(Declaration)` references the Worker by the
+ * declaration's logical id (#2607). The caller stack only refs the target,
+ * so the greeting proves the ref resolved to the deployed target.
+ */
+test.provider(
+  "a Worker ref taken from a declaration targets the declared worker",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const Target = Cloudflare.Worker("ref-declaration-target", {
+        script: targetScript,
+      });
+
+      yield* stack.deploy(Target);
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const target = yield* Target;
+          const caller = yield* Cloudflare.Worker("ref-declaration-caller", {
+            script: callerScript,
+            workersDev: true,
+            env: {
+              API: Cloudflare.WorkerEntrypoint(yield* Cloudflare.Worker.ref(Target), "Api"),
+            },
+          });
+          return { target, caller };
+        }),
+      );
+
+      yield* expectUrlContains(deployed.caller.url!, "hello alice from ref target", {
+        label: "declaration-ref-bound entrypoint caller",
+      });
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 240_000,
+  },
+);
