@@ -52,7 +52,7 @@ The steps:
 - `state(ref, partial | fn)` asserts aggregate state.
 - `view(View, ref, partial | fn | Story.none)` asserts view state. `emitted(View, ref, [...])` asserts a view's emitted events, and `streamed(Stream, ref, ...)` a stream's entries.
 - `provide(Service, value)` stands in for middleware on the commands that follow.
-- `clock("2026-01-02T09:00:00Z")` moves time: commands are stamped with it, and scheduled commands and saga sleeps that are now due fire. It also takes epoch milliseconds or a `DateTime`.
+- `clock("2026-01-02T09:00:00Z")` moves time: commands are stamped with it, and scheduled commands and saga sleeps that are now due fire. It also takes epoch milliseconds or a `DateTime`. It only moves forward: a time before the current one fails the story, unless only `provide` steps ran before it.
 
 The steps type-check against the last `when`: `rejected` takes only a rejection its command declares in `rejects`, and `replied` only its reply type. A `when` type-checks only after a `provide` for every service its command's middleware provides. A helper typed as plain `Step` turns these checks off until the next `when`, so let helpers infer their return type.
 
@@ -109,6 +109,14 @@ Story.signal(ExecuteTransfer, t1, Decision, "approved"),    // complete a Durabl
 ```
 
 The statuses are `NotStarted`, `Running`, `Completed`, `Rejected`, `Interrupted` and `Died`. A run that dies fails the story unless a step asserts `{ _tag: "Died" }`.
+
+### The declaration
+
+`Domain.verify(Model)` returns every definition problem that would fail the model's Layer build (missing `keyOf`, view `state` without `initial`, a policy or projection `on` an event no source emits, a stream with two writers, duplicate names). Keep one test that expects it to be empty:
+
+```ts
+it("the model is well defined", () => expect(Domain.verify(Bank)).toEqual([]));
+```
 
 ### What to cover
 

@@ -1,6 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Fly from "@alchemy.run/fly";
+import * as GCP from "@alchemy.run/gcp";
 import * as Hetzner from "@alchemy.run/hetzner";
 import * as Neon from "@alchemy.run/neon";
 import * as Planetscale from "@alchemy.run/planetscale";
@@ -16,20 +17,19 @@ export default Alchemy.Stack(
   "Nuke",
   {
     providers: Layer.mergeAll(
-      Cloudflare.providers(),
       AWS.providers(),
-      Hetzner.providers(),
+      Cloudflare.providers(),
       Fly.providers(),
-      Railway.providers(),
+      GCP.providers(),
+      Hetzner.providers(),
       Neon.providers(),
       Planetscale.providers(),
-      // Prisma credentials resolve at layer build like Neon/Planetscale:
-      // set PRISMA_SERVICE_TOKEN (with CI=1) or configure the profile.
       Prisma.providers(),
+      Railway.providers(),
       Stripe.providers(),
       Turso.providers(),
     ),
     state: Cloudflare.state(),
   },
-  Effect.gen(function* () {}),
+  Effect.void,
 );

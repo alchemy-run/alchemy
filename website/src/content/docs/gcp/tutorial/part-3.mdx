@@ -28,10 +28,10 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 });
 ```
 
-:::note[Using Vitest?]
-`alchemy/Test/Vitest` has the same API. Take `expect` from
-`@effect/vitest` instead. See
-[Test harness → Bun vs Vitest](/testing/test-harness#bun-vs-vitest).
+:::note[Using Vitest or alchemy-test?]
+`alchemy/Test/Vitest` and `alchemy/Test/Alchemy` have the same API.
+Take `expect` from `@effect/vitest` or `@alchemy.run/test` instead. See
+[Test harness → Runners](/testing/test-harness#runners).
 :::
 
 ## Deploy before the tests

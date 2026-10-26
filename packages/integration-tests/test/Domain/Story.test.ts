@@ -839,4 +839,62 @@ describe("Domain Story", () => {
       Story.then(c1, new Reminded()),
     ),
   );
+
+  it.effect("the clock never moves back", () =>
+    story(
+      Story.clock("2026-01-02T00:00:00Z"),
+      Story.when(c1, new Increment({ by: 1 })),
+      Story.then(c1, new Incremented({ by: 1, total: 1 })),
+      Story.clock("2026-01-01T12:00:00Z"),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.step).toBe(4);
+        expect(failure.reason).toBe(
+          "Clock: the clock cannot move back, from 2026-01-02T00:00:00.000Z to 2026-01-01T12:00:00.000Z",
+        );
+        expect(failure.message).toContain(
+          [
+            "  ✗ 4 Clock      expected 2026-01-02T00:00:00.000Z or later",
+            "                 got      2026-01-01T12:00:00.000Z",
+          ].join("\n"),
+        );
+      }),
+    ),
+  );
+
+  it.effect("a command at the start time keeps the clock from moving before it", () =>
+    story(
+      Story.when(c1, new Increment({ by: 1 })),
+      Story.then(c1, new Incremented({ by: 1, total: 1 })),
+      Story.clock("2025-12-31T00:00:00Z"),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(failure.reason).toContain(
+          "the clock cannot move back, from 2026-01-01T00:00:00.000Z",
+        ),
+      ),
+    ),
+  );
+
+  it.effect("the first clock step may set any time, and the same time again", () =>
+    story(
+      Story.provide(Operator, "sam"),
+      Story.clock("2025-06-01T00:00:00Z"),
+      Story.when(c1, new Increment({ by: 1 })),
+      Story.then(c1, new Incremented({ by: 1, total: 1 })),
+      Story.clock("2025-06-01T00:00:00Z"),
+    ),
+  );
+
+  it.effect("a clock step that is not a time fails", () =>
+    story(Story.clock("tomorrow")).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.reason).toBe("Clock: tomorrow is not a time");
+        expect(failure.message).toContain("  ✗ 1 Clock      tomorrow");
+      }),
+    ),
+  );
 });

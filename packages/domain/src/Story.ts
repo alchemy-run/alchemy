@@ -526,17 +526,21 @@ const refName = (ref: Aggregate.Ref) => `${ref.aggregate}/${ref.id}`;
 const callName = (tag: string | undefined, op: ExternalSystem.Op) =>
   `${tag === undefined ? "" : `"${tag}" `}${op.system}.${op.op}`;
 
+/** A `clock` step's time in epoch milliseconds; `NaN` for a string that is not a time. */
+const clockMillis = (at: string | number | DateTime.DateTime) =>
+  typeof at === "number"
+    ? at
+    : typeof at === "string"
+      ? Date.parse(at)
+      : DateTime.toEpochMillis(at);
+
 /** A one-line summary of a step, before it runs. */
 const describeStep = (s: Step): string => {
   switch (s._tag) {
-    case "Clock":
-      return new Date(
-        typeof s.at === "number"
-          ? s.at
-          : typeof s.at === "string"
-            ? Date.parse(s.at)
-            : DateTime.toEpochMillis(s.at),
-      ).toISOString();
+    case "Clock": {
+      const at = clockMillis(s.at);
+      return Number.isNaN(at) ? String(s.at) : new Date(at).toISOString();
+    }
     case "Provide":
       return `${s.service.key} = ${summarize(s.value)}`;
     case "Given":
@@ -878,12 +882,18 @@ const make =
           if ("ref" in s) touched.set(refName(s.ref), s.ref);
           switch (s._tag) {
             case "Clock": {
-              clockState.now =
-                typeof s.at === "number"
-                  ? s.at
-                  : typeof s.at === "string"
-                    ? Date.parse(s.at)
-                    : DateTime.toEpochMillis(s.at);
+              const at = clockMillis(s.at);
+              if (Number.isNaN(at)) return yield* fail(`${String(s.at)} is not a time`);
+              // Once a step has run at the current time, the clock only moves forward.
+              const started = steps.slice(0, index).some((earlier) => earlier._tag !== "Provide");
+              if (started && at < clockState.now) {
+                const now = new Date(clockState.now).toISOString();
+                return yield* fail(
+                  `the clock cannot move back, from ${now} to ${new Date(at).toISOString()}`,
+                  { expected: `${now} or later`, actual: new Date(at).toISOString() },
+                );
+              }
+              clockState.now = at;
               // Scheduled commands that are now due fire, and their policies run.
               yield* settle(step);
               break;

@@ -127,7 +127,7 @@ const PERMISSION_GROUPS: Record<S3CredentialsAccess, PermissionGroupRef[]> = {
   "read-write": ["Workers R2 Storage Bucket Item Read", "Workers R2 Storage Bucket Item Write"],
 };
 
-const liveEndpoint = (accountId: string, jurisdiction: Bucket.Jurisdiction): string =>
+export const liveEndpoint = (accountId: string, jurisdiction: Bucket.Jurisdiction): string =>
   jurisdiction === "default"
     ? `https://${accountId}.r2.cloudflarestorage.com`
     : `https://${accountId}.${jurisdiction}.r2.cloudflarestorage.com`;
