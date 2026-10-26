@@ -796,63 +796,6 @@ importers:
 
   .:
     devDependencies:
-      '@alchemy.run/aws':
-        specifier: workspace:*
-        version: link:packages/aws
-      '@alchemy.run/axiom':
-        specifier: workspace:*
-        version: link:packages/axiom
-      '@alchemy.run/cloudflare':
-        specifier: workspace:*
-        version: link:packages/cloudflare
-      '@alchemy.run/fly':
-        specifier: workspace:*
-        version: link:packages/fly
-      '@alchemy.run/gcp':
-        specifier: workspace:*
-        version: link:packages/gcp
-      '@alchemy.run/github':
-        specifier: workspace:*
-        version: link:packages/github
-      '@alchemy.run/hetzner':
-        specifier: workspace:*
-        version: link:packages/hetzner
-      '@alchemy.run/neon':
-        specifier: workspace:*
-        version: link:packages/neon
-      '@alchemy.run/pkg':
-        specifier: workspace:*
-        version: link:packages/pkg
-      '@alchemy.run/planetscale':
-        specifier: workspace:*
-        version: link:packages/planetscale
-      '@alchemy.run/prisma':
-        specifier: workspace:*
-        version: link:packages/prisma
-      '@alchemy.run/railway':
-        specifier: workspace:*
-        version: link:packages/railway
-      '@alchemy.run/redis':
-        specifier: workspace:*
-        version: link:packages/redis
-      '@alchemy.run/stripe':
-        specifier: workspace:*
-        version: link:packages/stripe
-      '@alchemy.run/test':
-        specifier: workspace:*
-        version: link:packages/alchemy-test
-      '@alchemy.run/turso':
-        specifier: workspace:*
-        version: link:packages/turso
-      '@distilled.cloud/aws':
-        specifier: workspace:*
-        version: link:submodules/distilled/packages/aws
-      '@effect/platform-bun':
-        specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)(redis@6.2.1)
       '@effect/tsgo':
         specifier: 'catalog:'
         version: 0.51.1
@@ -865,12 +808,6 @@ importers:
       alchemy:
         specifier: workspace:*
         version: link:packages/alchemy
-      changelogen:
-        specifier: 'catalog:'
-        version: 0.6.2(magicast@0.5.5)
-      effect:
-        specifier: 4.0.5
-        version: 4.0.5
       husky:
         specifier: 'catalog:'
         version: 9.1.7
@@ -8710,6 +8647,9 @@ importers:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
         version: link:../cloudflare-runtime
+      '@alchemy.run/redis':
+        specifier: workspace:*
+        version: link:../redis
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -10324,9 +10264,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
-      alchemy:
-        specifier: workspace:*
-        version: link:../alchemy
       effect:
         specifier: 4.0.5
         version: 4.0.5
@@ -10416,6 +10353,87 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+
+  scripts:
+    devDependencies:
+      '@alchemy.run/aws':
+        specifier: workspace:*
+        version: link:../packages/aws
+      '@distilled.cloud/aws':
+        specifier: workspace:*
+        version: link:../submodules/distilled/packages/aws
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.5(effect@4.0.5)(redis@6.2.1)
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      changelogen:
+        specifier: 'catalog:'
+        version: 0.6.2(magicast@0.5.5)
+      effect:
+        specifier: 4.0.5
+        version: 4.0.5
+      tsrs:
+        specifier: 'catalog:'
+        version: 0.18.0-ts7.1.0-dev.20260929
+
+  stacks:
+    devDependencies:
+      '@alchemy.run/aws':
+        specifier: workspace:*
+        version: link:../packages/aws
+      '@alchemy.run/axiom':
+        specifier: workspace:*
+        version: link:../packages/axiom
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../packages/cloudflare
+      '@alchemy.run/fly':
+        specifier: workspace:*
+        version: link:../packages/fly
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../packages/gcp
+      '@alchemy.run/github':
+        specifier: workspace:*
+        version: link:../packages/github
+      '@alchemy.run/hetzner':
+        specifier: workspace:*
+        version: link:../packages/hetzner
+      '@alchemy.run/neon':
+        specifier: workspace:*
+        version: link:../packages/neon
+      '@alchemy.run/pkg':
+        specifier: workspace:*
+        version: link:../packages/pkg
+      '@alchemy.run/planetscale':
+        specifier: workspace:*
+        version: link:../packages/planetscale
+      '@alchemy.run/prisma':
+        specifier: workspace:*
+        version: link:../packages/prisma
+      '@alchemy.run/railway':
+        specifier: workspace:*
+        version: link:../packages/railway
+      '@alchemy.run/stripe':
+        specifier: workspace:*
+        version: link:../packages/stripe
+      '@alchemy.run/turso':
+        specifier: workspace:*
+        version: link:../packages/turso
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      alchemy:
+        specifier: workspace:*
+        version: link:../packages/alchemy
+      effect:
+        specifier: 4.0.5
+        version: 4.0.5
 
   submodules/distilled/packages/acme:
     dependencies:

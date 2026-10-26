@@ -9,7 +9,10 @@
  * from the one they were validated on.
  */
 import * as Floci from "@alchemy.run/aws/Local/Floci";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
+import { ChildProcess } from "effect/process";
+import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 
 /** Emulator settings the suites assume, mirroring a real AWS account. */
 export const flociTestEnv: Readonly<Record<string, string>> = {
@@ -27,26 +30,43 @@ export const flociTestEnv: Readonly<Record<string, string>> = {
   }),
 };
 
-const containerEnv = (name: string): Set<string> | undefined => {
-  const inspect = Bun.spawnSync(["docker", "inspect", "--format", "{{json .Config.Env}}", name], {
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-  if (inspect.exitCode !== 0) return undefined;
-  return new Set(JSON.parse(inspect.stdout.toString()) as string[]);
-};
+/** The running container's environment, or undefined when there is none. */
+const containerEnv = Effect.fn(function* (name: string) {
+  const spawner = yield* ChildProcessSpawner;
+  const output = yield* spawner
+    .string(
+      ChildProcess.make("docker", ["inspect", "--format", "{{json .Config.Env}}", name], {
+        stdin: "ignore",
+        stderr: "ignore",
+      }),
+    )
+    .pipe(Effect.option);
+  if (output._tag === "None") return undefined;
+  return yield* Effect.try(() => new Set(JSON.parse(output.value) as string[])).pipe(
+    Effect.orElseSucceed(() => undefined),
+  );
+});
 
-export const startFlociForTests = async (label: string): Promise<void> => {
+export const startFlociForTests = Effect.fn(function* (label: string) {
+  const spawner = yield* ChildProcessSpawner;
   const name = Floci.DEFAULT_CONTAINER_NAME;
-  const env = containerEnv(name);
+  const env = yield* containerEnv(name);
   const missing = Object.entries(flociTestEnv).filter(
     ([key, value]) => !env?.has(`${key}=${value}`),
   );
   if (env !== undefined && missing.length > 0) {
-    console.log(`${label}: recreating ${name}; it lacks ${missing.map(([key]) => key).join(", ")}`);
-    Bun.spawnSync(["docker", "rm", "-f", name], { stdout: "ignore", stderr: "ignore" });
+    yield* Console.log(
+      `${label}: recreating ${name}; it lacks ${missing.map(([key]) => key).join(", ")}`,
+    );
+    yield* spawner
+      .exitCode(
+        ChildProcess.make("docker", ["rm", "-f", name], {
+          stdin: "ignore",
+          stdout: "ignore",
+          stderr: "ignore",
+        }),
+      )
+      .pipe(Effect.ignore);
   }
-  await Effect.runPromise(
-    Floci.ensureFloci({ port: Floci.DEFAULT_FLOCI_PORT, env: { ...flociTestEnv } }),
-  );
-};
+  yield* Floci.ensureFloci({ port: Floci.DEFAULT_FLOCI_PORT, env: { ...flociTestEnv } });
+});

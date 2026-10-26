@@ -36,6 +36,8 @@ tasks:
     dependsOn: []
 
 packages:
+  - scripts
+  - stacks
   - website
   - packages/*
   - examples/*
