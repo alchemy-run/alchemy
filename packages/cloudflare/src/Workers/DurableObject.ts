@@ -91,6 +91,10 @@ export interface DurableObject<Shape = unknown> extends DurableObjectLike<Shape>
    * the given jurisdiction (e.g. `"eu"`). The same name addresses a different
    * object than it does in the unrestricted namespace.
    *
+   * Enforced when deployed, not emulated in `alchemy dev`: local workerd does
+   * not implement jurisdictions, so there this returns the unrestricted
+   * namespace, and the same name addresses the same object in both.
+   *
    * @example
    * ```typescript
    * const room = rooms.jurisdiction("eu").getByName(roomId);
@@ -209,6 +213,30 @@ export const normalizeTransferredFrom = (
         ? (value as readonly DurableObjectTransferSource[])
         : [value as DurableObjectTransferSource]
       ).map((source) => resolveTransferSourceRef(source));
+
+/**
+ * `ns` restricted to `jurisdiction`. Local workerd (`alchemy dev`) does not
+ * implement jurisdictions and throws on `jurisdiction()`, so there the
+ * unrestricted namespace is used, the same way a D1 database, R2 bucket or
+ * Queue declared with a jurisdiction runs unrestricted on the local simulator.
+ */
+const restrictToJurisdiction = (
+  ns: cf.DurableObjectNamespace | undefined,
+  jurisdiction: DurableObjectJurisdiction,
+): cf.DurableObjectNamespace | undefined => {
+  try {
+    return ns?.jurisdiction(jurisdiction);
+  } catch (error) {
+    // workerd's message; a deployed Worker never throws it.
+    if (
+      error instanceof Error &&
+      error.message.includes("Jurisdiction restrictions are not implemented")
+    ) {
+      return ns;
+    }
+    throw error;
+  }
+};
 
 export interface DurableObjectProps {
   /**
@@ -1415,7 +1443,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           get: (id: DurableObjectId, options?: DurableObjectGetDurableObjectOptions) =>
             makeRpcStub(ns!.get(id, options), { errors }),
           jurisdiction: (jurisdiction: DurableObjectJurisdiction) =>
-            makeNamespace(ns?.jurisdiction(jurisdiction)),
+            makeNamespace(restrictToJurisdiction(ns, jurisdiction)),
         });
 
         return makeNamespace(binding);

@@ -85,12 +85,24 @@ import type { Worker } from "../Workers/Worker.ts";
  * ) {}
  * ```
  *
+ * ### Running executions in a jurisdiction
+ * **Example:** Every execution in the EU
+ * ```typescript
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
+ * import * as Layer from "effect/Layer";
+ * import { SendWelcomeLive } from "./SendWelcome.ts";
+ *
+ * const WorkflowsLive = SendWelcomeLive.pipe(
+ *   Layer.provideMerge(Cloudflare.Workflows.durableObjectEngine({ jurisdiction: "eu" })),
+ * );
+ * ```
+ *
  * @layer
  * @provides WorkflowEngine
  * @product Durable Objects
  */
 export const DurableObjectEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =
-  durableObjectEngine();
+  makeEngine(undefined);
 
 /** Options for {@link durableObjectEngine}. */
 export interface DurableObjectEngineOptions {
@@ -108,15 +120,36 @@ export interface DurableObjectEngineOptions {
   readonly jurisdiction?: DurableObjectJurisdiction;
 }
 
+const engines = new Map<
+  DurableObjectJurisdiction,
+  Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker>
+>();
+
 /**
- * {@link DurableObjectEngine}, configured, e.g. with a jurisdiction.
+ * {@link DurableObjectEngine}, configured. Use it to keep every workflow
+ * execution inside a jurisdiction, for example the EU for personal data.
+ * Calls with the same options return the same Layer, so providing it in
+ * several places builds one engine.
  *
  * @layer
  * @provides WorkflowEngine
  * @product Durable Objects
  */
-export function durableObjectEngine(
-  options: DurableObjectEngineOptions = {},
+export function durableObjectEngine({ jurisdiction }: DurableObjectEngineOptions = {}): Layer.Layer<
+  WorkflowEngine.WorkflowEngine,
+  never,
+  Worker
+> {
+  if (jurisdiction === undefined) return DurableObjectEngine;
+  let engine = engines.get(jurisdiction);
+  if (engine === undefined) engines.set(jurisdiction, (engine = makeEngine(jurisdiction)));
+  return engine;
+}
+
+// A function declaration: `DurableObjectEngine` above calls it while the
+// module is still evaluating.
+function makeEngine(
+  jurisdiction: DurableObjectJurisdiction | undefined,
 ): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> {
   return Layer.effect(
     WorkflowEngine.WorkflowEngine,
@@ -144,7 +177,10 @@ export function durableObjectEngine(
               `${workflow._tag.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
               executionObject({ workflow: workflow as AnyWorkflow, execute, engine: () => engine }),
             ).pipe(Effect.provide(init));
-            namespaces.set(workflow._tag, withJurisdiction(namespace, options.jurisdiction));
+            namespaces.set(
+              workflow._tag,
+              jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction),
+            );
           }),
 
         execute: (workflow, options) =>
@@ -589,30 +625,3 @@ const declare = CloudflareDurableObject as unknown as (
   name: string,
   impl: ObjectImpl,
 ) => Effect.Effect<Namespace, never, Worker>;
-
-/**
- * The namespace restricted to `jurisdiction`, when one is set. Local workerd
- * (`alchemy dev`) does not implement jurisdictions, so there the unrestricted
- * namespace is used, the same way a D1 database, R2 bucket or Queue declared
- * with a jurisdiction runs unrestricted on the local simulator.
- *
- * @internal
- */
-export const withJurisdiction = <
-  N extends { readonly jurisdiction: (j: DurableObjectJurisdiction) => N },
->(
-  namespace: N,
-  jurisdiction: DurableObjectJurisdiction | undefined,
-): N => {
-  if (jurisdiction === undefined) return namespace;
-  try {
-    return namespace.jurisdiction(jurisdiction);
-  } catch (error) {
-    if (isJurisdictionNotEmulated(error)) return namespace;
-    throw error;
-  }
-};
-
-/** Local workerd's answer to a jurisdiction-restricted namespace. */
-const isJurisdictionNotEmulated = (error: unknown) =>
-  error instanceof Error && error.message.includes("Jurisdiction restrictions are not implemented");

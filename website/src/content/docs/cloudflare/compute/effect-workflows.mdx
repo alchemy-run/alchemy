@@ -90,6 +90,12 @@ export default class AppWorker extends Cloudflare.Worker<AppWorker>()(
 Each workflow gets its own Durable Object class on the Worker, named after
 it (`GreetWorkflow`), and deploying the Worker deploys them.
 
+`Cloudflare.Workflows.durableObjectEngine({ jurisdiction: "eu" })` is the
+same engine with every run's Durable Object created and stored only inside
+that jurisdiction. Runs that already exist stay where they were, and
+`alchemy dev` runs it unrestricted, since local workerd doesn't emulate
+jurisdictions.
+
 ## Start a run
 
 `Workflows.RunWorkflow` gives you a client for the workflow. Resolve it

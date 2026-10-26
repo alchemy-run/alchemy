@@ -45,7 +45,10 @@ import {
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
 import type { Worker } from "../Workers/Worker.ts";
-import { durableObjectEngine, withJurisdiction } from "../Workflows/DurableObjectEngine.ts";
+import {
+  durableObjectEngine,
+  type DurableObjectEngineOptions,
+} from "../Workflows/DurableObjectEngine.ts";
 
 const pad = (n: number) => n.toString().padStart(12, "0");
 
@@ -841,25 +844,30 @@ const pollAfter = <A>(
 
 /** The aggregates, views, policies, projections and streams, each on its own Durable Object class. */
 const durableObjectPlatform = (
-  options: DurableObjectsOptions,
+  jurisdiction: DurableObjectJurisdiction | undefined,
 ): Layer.Layer<Platform, never, Worker> =>
   Layer.effect(
   Platform,
   Effect.gen(function* () {
-      const place = (namespace: Namespace): Namespace =>
-        withJurisdiction(namespace, options.jurisdiction);
     // Factories run while the Domain's Layer is built, inside the Worker's
     // init phase; declaring a Durable Object needs that context.
     const init = yield* captureContext<Worker>();
     const inInit = <A, E>(effect: Effect.Effect<A, E, Worker>): Effect.Effect<A, E> =>
       Effect.provide(effect, init);
+      // Every kind of object is declared through here, so none is left
+      // outside the jurisdiction.
+      const declareIn = (name: string, impl: ObjectImpl) =>
+        Effect.map(declare(name, impl), (namespace) =>
+          jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction),
+        );
 
     return Platform.of({
       aggregate: (aggregate, kit) =>
         inInit(
           Effect.gen(function* () {
-              const namespace = place(
-                yield* declare(`${aggregate.aggregateName}Aggregate`, aggregateObject(kit)),
+              const namespace = yield* declareIn(
+                `${aggregate.aggregateName}Aggregate`,
+                aggregateObject(kit),
             );
             return {
               send: (id, command, meta) =>
@@ -922,7 +930,7 @@ const durableObjectPlatform = (
       view: (view, kit) =>
         inInit(
           Effect.gen(function* () {
-              const namespace = place(yield* declare(`${view.viewName}View`, viewObject(kit)));
+              const namespace = yield* declareIn(`${view.viewName}View`, viewObject(kit));
             const read = (key: string) =>
               unwrapDefects<ViewSnapshot>(namespace.getByName(key).read());
             const after = (key: string, cursor: number) =>
@@ -961,8 +969,9 @@ const durableObjectPlatform = (
       projection: (projection, kit) =>
         inInit(
           Effect.gen(function* () {
-              const namespace = place(
-                yield* declare(`${projection.projectionName}Projection`, projectionObject(kit)),
+              const namespace = yield* declareIn(
+                `${projection.projectionName}Projection`,
+                projectionObject(kit),
             );
             return {
               receive: (delivery) =>
@@ -977,9 +986,7 @@ const durableObjectPlatform = (
       stream: (stream, kit) =>
         inInit(
           Effect.gen(function* () {
-              const namespace = place(
-                yield* declare(`${stream.streamName}Stream`, streamObject(kit)),
-              );
+              const namespace = yield* declareIn(`${stream.streamName}Stream`, streamObject(kit));
             const read = (key: string) =>
               unwrapDefects<StreamMeta>(namespace.getByName(key).read());
             const after = (key: string, cursor: number) =>
@@ -1008,9 +1015,7 @@ const durableObjectPlatform = (
       policy: (policy, kit) =>
         inInit(
           Effect.gen(function* () {
-              const namespace = place(
-                yield* declare(`${policy.policyName}Policy`, policyObject(kit)),
-              );
+              const namespace = yield* declareIn(`${policy.policyName}Policy`, policyObject(kit));
             return {
               receive: (delivery) =>
                 unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),
@@ -1064,10 +1069,10 @@ const durableObjectPlatform = (
  * @provides WorkflowEngine
  */
 export const DurableObjects: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker> =
-  durableObjects();
+  makeDurableObjects(undefined);
 
 /** Options for {@link durableObjects}. */
-export interface DurableObjectsOptions {
+export interface DurableObjectsOptions extends DurableObjectEngineOptions {
   /**
    * Create and store every Durable Object of the model (aggregates, views,
    * policies, projections, streams and saga executions) only inside this
@@ -1088,9 +1093,17 @@ export interface DurableObjectsOptions {
   readonly jurisdiction?: DurableObjectJurisdiction;
 }
 
+const platforms = new Map<
+  DurableObjectJurisdiction,
+  Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker>
+>();
+
 /**
  * {@link DurableObjects}, configured. Use it to keep a model's Durable
  * Objects inside a jurisdiction, for example the EU for personal data.
+ * Calls with the same options return the same Layer, so models that each
+ * provide it share one platform and one workflow engine, as they do with
+ * {@link DurableObjects}.
  *
  * ### Restricting a model to a jurisdiction
  * **Example:** Every Durable Object of the model in the EU
@@ -1108,8 +1121,22 @@ export interface DurableObjectsOptions {
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export function durableObjects(
-  options: DurableObjectsOptions = {},
+export function durableObjects({ jurisdiction }: DurableObjectsOptions = {}): Layer.Layer<
+  Platform | WorkflowEngine.WorkflowEngine,
+  never,
+  Worker
+> {
+  if (jurisdiction === undefined) return DurableObjects;
+  let platform = platforms.get(jurisdiction);
+  if (platform === undefined)
+    platforms.set(jurisdiction, (platform = makeDurableObjects(jurisdiction)));
+  return platform;
+}
+
+// A function declaration: `DurableObjects` above calls it while the module
+// is still evaluating.
+function makeDurableObjects(
+  jurisdiction: DurableObjectJurisdiction | undefined,
 ): Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker> {
-  return Layer.merge(durableObjectPlatform(options), durableObjectEngine(options));
+  return Layer.merge(durableObjectPlatform(jurisdiction), durableObjectEngine({ jurisdiction }));
 }

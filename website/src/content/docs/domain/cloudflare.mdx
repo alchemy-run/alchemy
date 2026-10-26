@@ -166,6 +166,19 @@ bun alchemy deploy
 
 Sagas run on `Cloudflare.Workflows.DurableObjectEngine`, the same engine you can use for plain Effect workflows. See [Effect workflows](/cloudflare/compute/effect-workflows).
 
+## Keep the model in a jurisdiction
+
+`DomainCloudflare.durableObjects({ jurisdiction })` creates and stores every Durable Object of the model, saga runs included, only inside a jurisdiction, for example the EU for personal data:
+
+```typescript
+const BankLive = SessionLive.pipe(
+  Layer.provideMerge(Bank.layer(BankPolicies)),
+  Layer.provide(DomainCloudflare.durableObjects({ jurisdiction: "eu" })),
+);
+```
+
+A Durable Object in a jurisdiction is a different object from the one with the same name outside it. A model that already has data starts empty when you add a jurisdiction, and its old objects stay where they were. `alchemy dev` doesn't emulate jurisdictions: local workerd runs the model unrestricted.
+
 ## Count on these guarantees
 
 Commands to one aggregate instance run one at a time. Its events, new state and reply commit together, or not at all.
