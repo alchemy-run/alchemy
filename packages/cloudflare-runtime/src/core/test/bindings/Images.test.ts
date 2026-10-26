@@ -404,7 +404,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Images binding", (it) =
   // Local delivery (upstream "Images local delivery")
   // ---------------------------------------------------------------------------
 
-  it.effect("variant URLs are absolute and use /cdn-cgi/mf/imagedelivery/ path", () =>
+  it.effect("variant URLs are absolute and use /__cf_local/imagedelivery/ path", () =>
     Effect.gen(function* () {
       const worker = yield* startImagesTestWorker("images-variant-url");
       const metadata = yield* upload(worker, TEST_IMAGE_BYTES, {
@@ -412,7 +412,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Images binding", (it) =
       });
       expect(metadata.variants).toHaveLength(1);
       expect(metadata.variants[0]).toBe(
-        `${worker.baseUrl.origin}/cdn-cgi/mf/imagedelivery/variant-test/public`,
+        `${worker.baseUrl.origin}/__cf_local/imagedelivery/variant-test/public`,
       );
     }),
   );
@@ -422,7 +422,20 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Images binding", (it) =
       const worker = yield* startImagesTestWorker("images-delivery");
       yield* upload(worker, TEST_IMAGE_BYTES, { id: "delivery-test" });
 
-      const response = yield* worker.fetch("/cdn-cgi/mf/imagedelivery/delivery-test/public");
+      const response = yield* worker.fetch("/__cf_local/imagedelivery/delivery-test/public");
+      expect(response.status).toBe(200);
+      const data = new Uint8Array(yield* Effect.promise(() => response.arrayBuffer()));
+      expect(data).toEqual(TEST_IMAGE_BYTES);
+    }),
+  );
+
+  // Miniflare's former delivery prefix keeps serving older variant URLs.
+  it.effect("image delivery still serves the /cdn-cgi/mf/imagedelivery prefix", () =>
+    Effect.gen(function* () {
+      const worker = yield* startImagesTestWorker("images-delivery-legacy");
+      yield* upload(worker, TEST_IMAGE_BYTES, { id: "delivery-legacy" });
+
+      const response = yield* worker.fetch("/cdn-cgi/mf/imagedelivery/delivery-legacy/public");
       expect(response.status).toBe(200);
       const data = new Uint8Array(yield* Effect.promise(() => response.arrayBuffer()));
       expect(data).toEqual(TEST_IMAGE_BYTES);
@@ -436,7 +449,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Images binding", (it) =
         id: "content-type-test",
       });
 
-      const response = yield* worker.fetch("/cdn-cgi/mf/imagedelivery/content-type-test/public");
+      const response = yield* worker.fetch("/__cf_local/imagedelivery/content-type-test/public");
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe("image/png");
       yield* Effect.promise(() => response.arrayBuffer());
@@ -446,7 +459,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Images binding", (it) =
   it.effect("image delivery returns 404 for non-existent image", () =>
     Effect.gen(function* () {
       const worker = yield* startImagesTestWorker("images-delivery-404");
-      const response = yield* worker.fetch("/cdn-cgi/mf/imagedelivery/does-not-exist/public");
+      const response = yield* worker.fetch("/__cf_local/imagedelivery/does-not-exist/public");
       expect(response.status).toBe(404);
       yield* Effect.promise(() => response.arrayBuffer());
     }),

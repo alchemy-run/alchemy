@@ -11,6 +11,7 @@
 import {
   currentFile,
   exclusiveOf,
+  registerFileCleanup,
   registerHook,
   registerTest,
   retryOf,
@@ -18,12 +19,13 @@ import {
   optInTagsOf,
   timeoutOf,
   type TestOptions,
-} from "alchemy-test";
+} from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import type { AlchemyContext } from "../AlchemyContext.ts";
-import type { CompiledStack } from "../Stack.ts";
+import type { CompiledStack, StackDefinition } from "../Stack.ts";
 import type { Stage } from "../Stage.ts";
 import * as Core from "./Core.ts";
 
@@ -106,8 +108,8 @@ export interface TestApi {
   afterAll: AfterAllFn;
   afterEach: AfterEachFn;
   deploy: Core.Deploy;
-  destroy: (
-    stack: TestEffect<CompiledStack, Stage | AlchemyContext>,
+  destroy: <ROut>(
+    stack: StackDefinition<ROut>,
     options?: { stage?: string; include?: never; exclude?: never },
   ) => ReturnType<typeof Core.destroy>;
 }
@@ -120,7 +122,7 @@ const DEFAULT_TIMEOUT = 120_000;
  *
  * ```ts
  * import * as Test from "@/Test/Alchemy";
- * import * as Cloudflare from "@/Cloudflare";
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
  *
  * const { test, deploy, destroy, beforeAll, afterAll } = Test.make({
  *   providers: Cloudflare.providers(),
@@ -134,14 +136,15 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // children) must outlive a single test boundary, otherwise the proxy is
   // killed the moment `beforeAll(deploy(Stack))` resolves and every later
   // `HttpClient.get(workerUrl)` hits a dead port. The scope is closed by
-  // `destroy(...)` (or by the fallback afterAll below).
-  const sharedScope = Scope.makeUnsafe("sequential");
-  // In dev mode, run local providers behind one file-scoped RPC sidecar
-  // (the `alchemy dev` topology). Lives in its own scope — NOT sharedScope,
-  // which `destroy(Stack)` closes mid-file in self-contained tests — and is
-  // closed by the fallback afterAll below.
-  const sidecar = Core.makeSidecarHandle(options);
-  const wrap = <A>(eff: TestEffect<A>) => Core.toEffect(eff, options, sharedScope, sidecar);
+  // `destroy(...)` (or by file cleanup below).
+  let sharedScope: Scope.Closeable | undefined = Scope.makeUnsafe("sequential");
+  // Session ownership outlives a mid-file destroy, but not file cleanup.
+  let sidecar = Core.makeSidecarHandle(options);
+  const clearResults = new Set<() => void>();
+  const wrap = <A>(eff: TestEffect<A>) =>
+    sharedScope === undefined
+      ? Effect.die("Test runtime is closed")
+      : Core.toEffect(eff, options, sharedScope, sidecar);
 
   const addTest = (
     name: string,
@@ -170,11 +173,32 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   test.only = (name, eff, opts) => addTest(name, eff, opts, "only");
   test.todo = (name, eff, opts) => addTest(name, eff, opts, "todo");
 
+  // One lock per scratch stack. When an attempt times out, the runner fires
+  // an interrupt and ABANDONS the attempt's fiber after a short grace — but
+  // the fiber keeps running its teardown (`scratch.destroy()` below) in the
+  // background, e.g. a CloudFront disable-wait. Without this lock the retry
+  // starts concurrently on the SAME scratch state: the stale teardown then
+  // deletes the state rows the retry just wrote for the same logical ids,
+  // orphaning the retry's cloud resources (observed: two leaked CloudFront
+  // distributions + buckets + OACs from one retried test). Holding the lock
+  // across body + teardown makes a retry wait (on its own timeout clock)
+  // until the previous attempt's teardown has fully settled.
+  const scratchLocks = new Map<string, Semaphore.Semaphore>();
+  const scratchLock = (name: string) => {
+    let lock = scratchLocks.get(name);
+    if (lock === undefined) {
+      lock = Semaphore.makeUnsafe(1);
+      scratchLocks.set(name, lock);
+    }
+    return lock;
+  };
+
   const wrapProvider = (
     name: string,
     fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
     file: string | undefined,
   ) => {
+    if (sharedScope === undefined) return Effect.die("Test runtime is closed");
     // Durable, file-namespaced scratch state (`.alchemy/state`). A run that
     // dies mid-delete — e.g. the runner abandons teardown 10s after a test
     // timeout while a CloudFront disable-wait is still in flight — leaves
@@ -192,6 +216,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     // runs the finalizer on success, failure, AND interruption.
     const body = Core.withProviders(fn(scratch), options, scratch.name).pipe(
       Effect.ensuring(scratch.destroy().pipe(Effect.ignore)),
+      scratchLock(scratch.name).withPermits(1),
     );
     return Core.toEffect(body, { ...options, state: scratch.state }, sharedScope, sidecar);
   };
@@ -227,18 +252,21 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   test.provider = provider;
 
   const beforeAll: BeforeAllFn = <A>(eff: TestEffect<A>, hookOptions?: TestOptions) => {
-    let result: A;
+    let result: A | undefined;
+    clearResults.add(() => {
+      result = undefined;
+    });
     registerHook("beforeAll", {
       body: () =>
         wrap(eff).pipe(
           Effect.map((value) => {
-            result = value;
+            if (sharedScope !== undefined) result = value;
           }),
         ),
       timeout: timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT,
       exclusive: exclusiveOf(hookOptions),
     });
-    return Effect.sync(() => result);
+    return Effect.sync(() => result as A);
   };
 
   const beforeEach: BeforeEachFn = (eff, hookOptions) => {
@@ -269,20 +297,26 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // for each worker. We close the shared scope only AFTER destroy completes.
   // `Scope.close` on an already-closed scope is a no-op, so it's safe for both
   // the destroy wrapper AND the fallback cleanup hook below to call it.
-  const closeScope = Effect.suspend(() => Scope.close(sharedScope, Exit.void)).pipe(Effect.ignore);
+  const closeScope = Effect.suspend(() =>
+    sharedScope === undefined ? Effect.void : Scope.close(sharedScope, Exit.void),
+  ).pipe(Effect.ignore);
 
-  // Fallback cleanup: if the user never calls `destroy(Stack)` (e.g.
-  // `NO_DESTROY=1`), nothing else closes the shared scope and the sidecar
-  // child process leaks past the test run. Register an `afterAll` that
-  // closes it (and the RPC sidecar, which lives in its own scope so that
-  // mid-file `destroy(Stack)` calls can't kill it for later tests). We defer
-  // registration to a microtask so it runs AFTER any user-registered
-  // `afterAll` (including `destroy(Stack)`); the runner executes afterAll
-  // hooks in registration order, and file collection flushes microtasks
-  // before sealing the file's suite tree and advancing to the next file.
-  const closeAll = sidecar ? Effect.andThen(closeScope, sidecar.close) : closeScope;
-  queueMicrotask(() => {
-    registerHook("afterAll", { body: () => closeAll, timeout: DEFAULT_TIMEOUT });
+  // File cleanup runs after user afterAll, including skipped/failed imports.
+  // Interactive retries retain the runtime until the runner releases the file.
+  registerFileCleanup({
+    body: () =>
+      closeScope.pipe(
+        Effect.ensuring(Effect.suspend(() => sidecar?.close ?? Effect.void)),
+        Effect.ensuring(
+          Effect.sync(() => {
+            sharedScope = undefined;
+            sidecar = undefined;
+            for (const clear of clearResults) clear();
+            clearResults.clear();
+          }),
+        ),
+      ),
+    timeout: DEFAULT_TIMEOUT,
   });
 
   return {

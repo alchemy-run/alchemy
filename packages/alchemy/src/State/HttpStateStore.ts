@@ -8,7 +8,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import { profileCommandHint } from "../Util/interactive.ts";
-import { StateApi } from "./HttpStateApi.ts";
+import { StateApi, StateStoreFailure } from "./HttpStateApi.ts";
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 import { StateStoreError, type PersistedState, type StateService } from "./State.ts";
 import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
@@ -51,13 +51,15 @@ export const checkHttpStateStoreAuth = ({ url, authToken }: { url: string; authT
       Effect.catchTag("Unauthorized", () => Effect.succeed(false)),
       Effect.retry({
         while: (error) =>
-          error._tag === "HttpClientError" &&
-          // transport-level failures (no response — DNS, TCP reset, TLS,
-          // "fetch failed") are as transient as the post-deploy 404s
-          (!error.response ||
-            // worker can 404 for a bit on first deploy
-            error.response.status === 404 ||
-            error.response.status >= 500),
+          // the store failing behind the API is as transient as a 5xx
+          error._tag === "StateStoreFailure" ||
+          (error._tag === "HttpClientError" &&
+            // transport-level failures (no response — DNS, TCP reset, TLS,
+            // "fetch failed") are as transient as the post-deploy 404s
+            (!error.response ||
+              // worker can 404 for a bit on first deploy
+              error.response.status === 404 ||
+              error.response.status >= 500)),
         // Bounded: a store that 404s/500s forever is a hard failure, not
         // something to spin on until the process is killed.
         schedule: Schedule.max([Schedule.fixed(200), Schedule.recurs(75)]),
@@ -187,6 +189,8 @@ export const makeHttpStateStore = ({ url, authToken, transformClient, id }: Http
  * shouldn't be hidden behind retries.
  */
 const isTransient = (e: any): boolean => {
+  // The store failed behind the API (e.g. a Durable Object or secret read).
+  if (e?._tag === "StateStoreFailure") return true;
   if (e?._tag !== "HttpClientError") return false;
   const status: number | undefined = e.response?.status;
   if (status == null) return true;
@@ -221,6 +225,9 @@ export const describeStateStoreFailure = (
       `The stored state-store credentials may be stale. Run \`${profileCommand}\` to reconfigure them.`
     );
   }
+  if (Schema.is(StateStoreFailure)(e)) {
+    return `${e.message}.`;
+  }
   if (HttpClientError.isHttpClientError(e)) {
     const status = e.response?.status;
     return `State store request failed (${e.reason._tag}${status === undefined ? "" : `, HTTP ${status}`}).`;
@@ -241,7 +248,9 @@ const mapStateStoreError = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
             ? { status: e.response?.status }
             : Schema.is(HttpApiError.Unauthorized)(e)
               ? { status: 401 }
-              : undefined,
+              : Schema.is(StateStoreFailure)(e)
+                ? { status: 500 }
+                : undefined,
         });
       }),
     ),

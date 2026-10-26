@@ -1,12 +1,12 @@
 ---
 /**
  * PostHog Cloud (US region) browser SDK loader, fronted by our reverse-proxy
- * Worker at `analytics.alchemy.run` (see `stacks/otel/Ingester.ts`). Routing
+ * Worker at `analytics.alchemy.run` (see `stacks/src/otel/Ingester.ts`). Routing
  * the SDK through a first-party domain hides the PostHog hostname from
  * clients, defeats most ad-blocker rules, and keeps event traffic on
  * `alchemy.run`.
  *
- * The project API key is a public `phc_…` value provisioned by `stacks/otel.ts`
+ * The project API key is a public `phc_…` value provisioned by `stacks/src/otel.ts`
  * and exposed to the build via `PUBLIC_POSTHOG_KEY`. Astro auto-inlines any
  * `PUBLIC_*` env var into `import.meta.env`. We render nothing when the key is
  * missing or in dev so PR previews / local builds don't ship events.
