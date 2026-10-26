@@ -50,16 +50,10 @@ A rejection with no fields: `class NotOpen extends Domain.Rejection("NotOpen") {
 
 ```ts
 // Account/Account.aggregate.ts
-import * as Optic from "effect/Optic";
-
 type Open = Extract<AccountState, { _tag: "Open" }>;
 
 // A shared rule: the narrowed state, or the rejection. Every decide handler starts from it.
 const openFor = (s: AccountState): Open | NotOpen => (s._tag === "Open" ? s : new NotOpen());
-
-// Optics focused on the Open state: on any other state they leave it unchanged.
-const open = Optic.id<AccountState>().tag("Open");
-const balance = open.key("balance");
 
 export class Account extends Domain.Aggregate("Account", {
   id: AccountId,
@@ -85,8 +79,9 @@ export class Account extends Domain.Aggregate("Account", {
   },
   evolve: {
     AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-    MoneyDeposited: (s, e) => Optic.replace(s, balance, e.balanceAfter),
-    MoneyWithdrawn: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    // decide already refused a closed account: keep any state the event can't follow
+    MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
+    MoneyWithdrawn: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
   },
   reply: { WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }) },
   // optional: let clients read/watch the aggregate through an Api
@@ -102,7 +97,8 @@ export class Account extends Domain.Aggregate("Account", {
 - **Name shared rules as pure guards** that return the narrowed state or the rejection (`openFor`), and start each handler from one. In an `Effect.fn` handler, fail with `return yield* o`.
 - **Events carry the outcome**, not just the request (`balanceAfter`), so `evolve` copies it and never repeats a rule. Views and policies see the same numbers.
 - **decide reads time from `now`** (its third argument) and the actor from middleware context. Never `Date.now()`, `Clock` or randomness.
-- **evolve and reply are total and never fail.** decide already refused the command, so a handler keeps any state its event can't follow. Focus on the stage with an optic: `Optic.replace(s, balance, e.balanceAfter)` for one field, `open.modify((o) => ({ ...o, ... }))(s)` for several. An event that changes the stage returns the new state whole.
+- **evolve and reply are total and never fail.** decide already refused the command, so a handler keeps any state its event can't follow: `s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s`. An event that changes the stage returns the new state whole.
+- **Optics are an opt-in shorthand** for many handlers that repeat the same check. `const balance = Optic.id<State>().tag("Open").key("balance")` focuses on the Open state; `Optic.replace(s, balance, e.balanceAfter)` sets one field and `open.modify((o) => ({ ...o, ... }))(s)` several, leaving other states unchanged. The example bank uses them.
 - **A compensation never refuses.** A command that undoes another process's step (`RefundTransfer`) records a fact for every state (`TransferRefunded`, or `RefundStranded` when the account closed), so the saga that sent it has no refusal to handle.
 
 ## Request context and middleware

@@ -49,7 +49,7 @@ A rule that spans aggregates never becomes a cross-aggregate transaction. Give t
 ## Rules that keep a model correct
 
 - `decide` is pure, or an `Effect.fn` that reads only what its command's middleware provides (`yield* CurrentActor`). It returns events or a rejection; it never performs I/O.
-- `evolve` only applies an event to state. It never decides anything. It and `reply` are total: they cover every state and never fail, because `decide` already refused what can't happen. Narrow with an optic (`Optic.replace(s, balance, e.balanceAfter)`), not a guard that throws.
+- `evolve` only applies an event to state. It never decides anything. It and `reply` are total: they cover every state and never fail, because `decide` already refused what can't happen. Keep a state the event can't follow (`s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s`), never a guard that throws.
 - Events carry the outcome `decide` worked out (`balanceAfter`), so `evolve` copies it instead of repeating a rule.
 - Every rejection a command can return is listed in its `rejects`. Callers handle each one with `Effect.catchTag`.
 - Policies and projections run at least once. Make their effects idempotent: commands sent from a handler get deterministic ids, and stores key rows by `stream:seq`.
