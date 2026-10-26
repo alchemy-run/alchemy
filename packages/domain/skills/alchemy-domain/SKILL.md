@@ -64,6 +64,6 @@ A rule that spans aggregates never becomes a cross-aggregate transaction. Give t
 1. Name the new facts, commands and rejections. Put each command in its own `<Command>.command.ts` with its events and rejections.
 2. Add the command to its aggregate's `commands`, with a `decide` branch for it and an `evolve` branch for each event.
 3. Update the views, policies and projections that care about the new events.
-4. Expose it through an Api, if a client sends or reads it, with the middleware it needs.
+4. Expose it through an Api, if a client sends or reads it, with the middleware it needs and a `description`.
 5. Write stories for the happy path, every rejection, and every policy reaction.
 6. Run the domain package's tests. Then type-check the monorepo (`tsc -b`) and run the server and web tests.

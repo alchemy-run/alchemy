@@ -169,9 +169,15 @@ export declare namespace Api {
   export type AggregateClient<A extends AggregateModule.Any> = ApiModule.AggregateClient<A>;
   /** Everything a read can fail with. */
   export type ReadError<D> = ApiModule.ReadError<D>;
+  /** An example an entry declares, in wire form: a command's call or a read's key. */
+  export type ExampleOf<E extends ApiModule.Entry> = ApiModule.ExampleOf<E>;
 }
 /** The public surface of a domain for one client. See {@link ApiModule.make}. */
 export const Api = ApiModule.make;
+/** The `description` an Api entry declares, for tools, CLIs and API docs. See {@link ApiModule.descriptionOf}. */
+export const descriptionOf = ApiModule.descriptionOf;
+/** The `examples` an Api entry declares, in wire form. See {@link ApiModule.examplesOf}. */
+export const examplesOf = ApiModule.examplesOf;
 /** An Api client protocol: everything over HTTP, live reads as streamed responses. */
 export const protocolHttp = ApiModule.protocolHttp;
 /** An Api client protocol: calls over HTTP, each live read a WebSocket to the object that owns it. */
