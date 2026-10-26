@@ -1,8 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
@@ -27,6 +29,40 @@ const fixtureEntries = [".gitignore", "package.json", "astro.config.mjs", "src",
 // topology assertions are meaningless there. Dev behavior is covered by
 // the co-located Astro.local.test.ts suite.
 const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
+
+// Plan-only: a static site's topology (no Lambda) is decided at plan time,
+// so this needs no CloudFront lifecycle and runs outside the live gate.
+describe.skipIf(runEmulated)(
+  "AWS.Website.Astro plan",
+  { tags: ["provider:aws", "provider:aws:website"] },
+  () => {
+    test.provider(
+      "a config-file output 'static' plans an assets-only site without the astro.output prop",
+      (stack) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-astro-aws-static-config-",
+            tempRoot,
+            entries: fixtureEntries.filter((entry) => entry !== "astro.config.mjs"),
+          });
+          yield* fs.writeFileString(
+            path.join(rootDir, "astro.config.mjs"),
+            'import { defineConfig } from "astro/config";\n\nexport default defineConfig({ output: "static" });\n',
+          );
+
+          const plan = yield* stack.plan(
+            AWS.Website.Astro("AstroStaticConfigSite", { rootDir, forceDestroy: true }),
+          );
+          const types = Object.values(plan.resources).map((node) => node.resource.Type);
+          expect(types).toContain("AWS.S3.Bucket");
+          expect(types.filter((type) => type.startsWith("AWS.Lambda."))).toEqual([]);
+        }),
+    );
+  },
+);
 
 describe.skipIf(!runLive || runEmulated)(
   "AWS.Website.Astro",

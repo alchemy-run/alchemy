@@ -17,8 +17,8 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import packageJson from "../../package.json" with { type: "json" };
+import * as Interaction from "../Interaction.ts";
 import { checkLatestVersion } from "./checkVersion.ts";
-import * as CliKit from "./CliKit/index.ts";
 import {
   compatibilityCommand,
   compatibilityCommands,
@@ -181,13 +181,7 @@ const services = Layer.mergeAll(
   Layer.succeed(ArtifactStore, createArtifactStore()),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
-  Layer.provide(
-    Layer.provideMerge(
-      Layer.mergeAll(selectCliServices(), CliKit.CliKitInteraction),
-      CliKit.layer(),
-    ),
-    PlatformServices,
-  ),
+  Layer.provide(Layer.provideMerge(selectCliServices(), Interaction.layer()), PlatformServices),
   // Debug run log under ~/.alchemy/logs — the console noise floor stays at
   // Info, but full causes and auth-flow breadcrumbs land in the file so
   // support can ask users for it.

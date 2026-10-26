@@ -33,6 +33,7 @@ import {
   type CompiledStack,
   make as makeStack,
   Stack,
+  type StackDefinition,
   type StackEffect,
   type StackServices,
 } from "../Stack.ts";
@@ -604,15 +605,15 @@ export const makeDeploy = (options: MakeOptions, scope: Scope.Scope): Deploy => 
   return run;
 };
 
-export const destroy = (
+export const destroy = <ROut>(
   options: MakeOptions,
-  stack: TestEffect<CompiledStack, Stage | AlchemyContext>,
+  stack: StackDefinition<ROut>,
   callOptions?: { stage?: string; scope?: Scope.Scope; include?: never; exclude?: never },
 ) =>
   _destroy({
     include: callOptions?.include,
     exclude: callOptions?.exclude,
-    stack: stack as Effect.Effect<CompiledStack, never, any>,
+    stack,
     stage: callOptions?.stage ?? resolveStage(options),
     dev: resolveDev(options),
     scope: callOptions?.scope,

@@ -206,7 +206,9 @@ const artifactContent = (
         port,
         build: news.build,
       });
-      const dockerfile = buildMicrovmDockerfile(news.dockerfile, runtime, port);
+      const dockerfile = buildMicrovmDockerfile(news.dockerfile, runtime, port, {
+        sourceMaps: files.some((f) => f.path.endsWith(".map")),
+      });
       const identity = `${bundleHash}:${dockerfile}`;
       const contentHash = yield* sha256(identity);
       const archive = yield* zipFiles([{ path: "Dockerfile", content: dockerfile }, ...files]);

@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as SQS from "@distilled.cloud/aws/sqs";
-import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -9,6 +9,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
 import QueueEventSourceFunctionLive, { QueueEventSourceFunction } from "./event-source-handler.ts";
 import InlineQueueEventSourceFunction from "./inline-event-source-handler.ts";
+import PartialFailureFunctionLive, { PartialFailureFunction } from "./partial-failure-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -29,37 +30,8 @@ describe.sequential(
 
         const functionUrl = fn.functionUrl!;
 
-        // First request rides out cold-start / URL propagation; keep polling
-        // until the fixture reports both queue identifiers.
-        const { sourceQueueUrl, sourceQueueArn, resultQueueUrl } = yield* HttpClient.get(
-          functionUrl,
-        ).pipe(
-          Effect.timeout("4 seconds"),
-          Effect.mapError(() => new FunctionNotReady("Function URL request timed out")),
-          Effect.flatMap((response) =>
-            response.status === 200
-              ? (response.json as Effect.Effect<{
-                  sourceQueueUrl?: string;
-                  sourceQueueArn?: string;
-                  resultQueueUrl?: string;
-                }>)
-              : Effect.fail(new FunctionNotReady(`Function not ready: ${response.status}`)),
-          ),
-          Effect.flatMap((body) =>
-            body.sourceQueueUrl && body.sourceQueueArn && body.resultQueueUrl
-              ? Effect.succeed(
-                  body as {
-                    sourceQueueUrl: string;
-                    sourceQueueArn: string;
-                    resultQueueUrl: string;
-                  },
-                )
-              : Effect.fail(new FunctionNotReady("Function returned empty queue identifiers")),
-          ),
-          Effect.retry({
-            schedule: Schedule.max([Schedule.fixed("4 seconds"), Schedule.recurs(10)]),
-          }),
-        );
+        const { sourceQueueUrl, sourceQueueArn, resultQueueUrl } =
+          yield* waitForFunctionQueues(functionUrl);
 
         // The event-source mapping activates asynchronously after deploy.
         const mapping = yield* waitForEventSourceMappingEnabled(fn.functionName, sourceQueueArn);
@@ -118,8 +90,108 @@ describe.sequential(
       (stack) => deliversThroughEventSource(stack, stack.deploy(InlineQueueEventSourceFunction)),
       { timeout: 240_000 },
     );
+
+    test.provider(
+      "retries only the messages reported in batchItemFailures",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const fn = yield* stack.deploy(
+            PartialFailureFunction.pipe(Effect.provide(PartialFailureFunctionLive)),
+          );
+          const { sourceQueueUrl, sourceQueueArn, resultQueueUrl } = yield* waitForFunctionQueues(
+            fn.functionUrl!,
+          );
+          yield* waitForEventSourceMappingEnabled(fn.functionName, sourceQueueArn);
+
+          // One send so both messages land in the same batch (the mapping
+          // gathers for up to 3 seconds).
+          const ok = `ok-${crypto.randomUUID()}`;
+          const fail = `fail-${crypto.randomUUID()}`;
+          yield* SQS.sendMessageBatch({
+            QueueUrl: sourceQueueUrl,
+            Entries: [
+              { Id: "ok", MessageBody: ok },
+              { Id: "fail", MessageBody: fail },
+            ],
+          });
+
+          // The handler forwards `<body>#<receiveCount>`. Collect until the
+          // failed message has come back on its retry (visibility timeout 10s).
+          const forwarded = new Set<string>();
+          yield* Effect.gen(function* () {
+            const result = yield* SQS.receiveMessage({
+              QueueUrl: resultQueueUrl,
+              MaxNumberOfMessages: 10,
+              WaitTimeSeconds: 2,
+            });
+            for (const message of result.Messages ?? []) {
+              forwarded.add(message.Body!);
+              yield* SQS.deleteMessage({
+                QueueUrl: resultQueueUrl,
+                ReceiptHandle: message.ReceiptHandle!,
+              });
+            }
+            if (!forwarded.has(`${fail}#2`)) {
+              return yield* Effect.fail(new MessageNotDelivered());
+            }
+          }).pipe(
+            Effect.retry({
+              while: (error) => error._tag === "MessageNotDelivered",
+              // Lambda redelivers the failed message once its 10s visibility
+              // timeout lapses and the poller picks it up again.
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(30)]),
+            }),
+          );
+
+          // The successful message was deleted after its first delivery and
+          // never reprocessed; only the failed one was retried.
+          expect([...forwarded].filter((body) => body.startsWith(ok))).toEqual([`${ok}#1`]);
+          expect([...forwarded].filter((body) => body.startsWith(fail))).toEqual([`${fail}#2`]);
+
+          yield* stack.destroy();
+
+          yield* assertQueueDeleted(sourceQueueUrl);
+          yield* assertQueueDeleted(resultQueueUrl);
+        }),
+      { timeout: 240_000 },
+    );
   },
 );
+
+/** Poll the fixture's Function URL until it reports its queue identifiers. */
+const waitForFunctionQueues = Effect.fn(function* (functionUrl: string) {
+  // First request rides out cold-start / URL propagation; keep polling until
+  // the fixture reports the queue identifiers.
+  return yield* HttpClient.get(functionUrl).pipe(
+    Effect.timeout("4 seconds"),
+    Effect.mapError(() => new FunctionNotReady("Function URL request timed out")),
+    Effect.flatMap((response) =>
+      response.status === 200
+        ? (response.json as Effect.Effect<{
+            sourceQueueUrl?: string;
+            sourceQueueArn?: string;
+            resultQueueUrl?: string;
+          }>)
+        : Effect.fail(new FunctionNotReady(`Function not ready: ${response.status}`)),
+    ),
+    Effect.flatMap((body) =>
+      body.sourceQueueUrl && body.sourceQueueArn && body.resultQueueUrl
+        ? Effect.succeed(
+            body as {
+              sourceQueueUrl: string;
+              sourceQueueArn: string;
+              resultQueueUrl: string;
+            },
+          )
+        : Effect.fail(new FunctionNotReady("Function returned empty queue identifiers")),
+    ),
+    Effect.retry({
+      schedule: Schedule.max([Schedule.fixed("4 seconds"), Schedule.recurs(10)]),
+    }),
+  );
+});
 
 const waitForEventSourceMappingEnabled = Effect.fn(function* (
   functionName: string,

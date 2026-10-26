@@ -4,7 +4,6 @@ import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
 import { Network, NetworkLive } from "./Network.ts";
 
 export default class Server extends AWS.EC2.Instance<Server>()(
@@ -28,8 +27,13 @@ export default class Server extends AWS.EC2.Instance<Server>()(
       visibilityTimeout: "60 seconds",
     });
 
-    yield* AWS.SQS.consumeQueueMessages(queue, (stream) =>
-      stream.pipe(Stream.mapEffect(Effect.logInfo), Stream.runDrain),
+    yield* AWS.SQS.consumeQueueMessages(
+      queue,
+      Effect.fn(function* (event) {
+        for (const record of event.Records) {
+          yield* Effect.logInfo(record);
+        }
+      }),
     );
 
     const sendMessage = yield* AWS.SQS.SendMessage(queue);

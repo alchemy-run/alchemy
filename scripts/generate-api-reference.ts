@@ -1,5 +1,19 @@
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
+// Generates the provider API reference under website/src/content/docs/providers
+// (plus the providers sidebar and reference redirects) from source JSDoc.
+//
+// Usage: node scripts/generate-api-reference.ts [--copy-markers]
+//   --copy-markers (or API_REFERENCE_COPY_MARKERS=1) emits the website's
+//   dev-time copy-editor markers.
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { Command, Flag } from "effect/cli";
+import * as Config from "effect/Config";
+import * as Console from "effect/Console";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import type * as PlatformError from "effect/PlatformError";
 import * as ts from "tsrs/unstable/ast";
 import type { Node, SourceFile } from "tsrs/unstable/ast";
 import {
@@ -12,10 +26,8 @@ import {
 } from "./jsdoc-blocks.ts";
 import { createSyntaxProject } from "./typescript-source.ts";
 
-const websiteRoot = path.join(import.meta.dir, "../website");
-
 interface SourceRoot {
-  /** Directory scanned for documented source files. */
+  /** Directory scanned for documented source files (repo-relative). */
   srcRoot: string;
   /**
    * Synthetic provider name for flat single-provider packages (their files
@@ -27,140 +39,105 @@ interface SourceRoot {
   sourceDisplayPrefix: string;
 }
 
-const repoRoot = path.join(import.meta.dir, "..");
-
-const config = {
-  outRoot: path.join(websiteRoot, "src/content/docs/providers"),
-  /**
-   * Emit `<!--copy:jsdoc:...-->` markers after each prose block so the
-   * website's dev-time copy editor can map rendered text back to the JSDoc
-   * it came from. Dev only — production builds never set this.
-   */
-  copyMarkers:
-    process.env.API_REFERENCE_COPY_MARKERS === "1" || process.argv.includes("--copy-markers"),
-  roots: [
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/alchemy/src"),
-      providerPrefix: "",
-      sourceDisplayPrefix: "src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/better-auth/src"),
-      providerPrefix: "BetterAuth",
-      sourceDisplayPrefix: "packages/better-auth/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/git/src"),
-      providerPrefix: "Git",
-      sourceDisplayPrefix: "packages/git/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/drizzle/src"),
-      providerPrefix: "Drizzle",
-      sourceDisplayPrefix: "packages/drizzle/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/acme/src"),
-      providerPrefix: "ACME",
-      sourceDisplayPrefix: "packages/acme/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/axiom/src"),
-      providerPrefix: "Axiom",
-      sourceDisplayPrefix: "packages/axiom/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/doppler/src"),
-      providerPrefix: "Doppler",
-      sourceDisplayPrefix: "packages/doppler/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/infisical/src"),
-      providerPrefix: "Infisical",
-      sourceDisplayPrefix: "packages/infisical/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/turso/src"),
-      providerPrefix: "Turso",
-      sourceDisplayPrefix: "packages/turso/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/planetscale/src"),
-      providerPrefix: "Planetscale",
-      sourceDisplayPrefix: "packages/planetscale/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/neon/src"),
-      providerPrefix: "Neon",
-      sourceDisplayPrefix: "packages/neon/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/prisma/src"),
-      providerPrefix: "Prisma",
-      sourceDisplayPrefix: "packages/prisma/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/hetzner/src"),
-      providerPrefix: "Hetzner",
-      sourceDisplayPrefix: "packages/hetzner/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/railway/src"),
-      providerPrefix: "Railway",
-      sourceDisplayPrefix: "packages/railway/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/fly/src"),
-      providerPrefix: "Fly",
-      sourceDisplayPrefix: "packages/fly/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/github/src"),
-      providerPrefix: "GitHub",
-      sourceDisplayPrefix: "packages/github/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/stripe/src"),
-      providerPrefix: "Stripe",
-      sourceDisplayPrefix: "packages/stripe/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/cloudflare/src"),
-      providerPrefix: "Cloudflare",
-      sourceDisplayPrefix: "packages/cloudflare/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/gcp/src"),
-      providerPrefix: "GCP",
-      sourceDisplayPrefix: "packages/gcp/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/aws/src"),
-      providerPrefix: "AWS",
-      sourceDisplayPrefix: "packages/aws/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/domain/src"),
-      providerPrefix: "Domain",
-      sourceDisplayPrefix: "packages/domain/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/kubernetes/src"),
-      providerPrefix: "Kubernetes",
-      sourceDisplayPrefix: "packages/kubernetes/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/docker/src"),
-      providerPrefix: "Docker",
-      sourceDisplayPrefix: "packages/docker/src",
-    },
-    {
-      srcRoot: path.join(import.meta.dir, "../packages/sql/src"),
-      providerPrefix: "SQL",
-      sourceDisplayPrefix: "packages/sql/src",
-    },
-  ] satisfies SourceRoot[],
-};
+/** Source roots, relative to the repo root (resolved in `main`). */
+const sourceRoots: SourceRoot[] = [
+  { srcRoot: "packages/alchemy/src", providerPrefix: "", sourceDisplayPrefix: "src" },
+  {
+    srcRoot: "packages/better-auth/src",
+    providerPrefix: "BetterAuth",
+    sourceDisplayPrefix: "packages/better-auth/src",
+  },
+  { srcRoot: "packages/git/src", providerPrefix: "Git", sourceDisplayPrefix: "packages/git/src" },
+  {
+    srcRoot: "packages/drizzle/src",
+    providerPrefix: "Drizzle",
+    sourceDisplayPrefix: "packages/drizzle/src",
+  },
+  {
+    srcRoot: "packages/acme/src",
+    providerPrefix: "ACME",
+    sourceDisplayPrefix: "packages/acme/src",
+  },
+  {
+    srcRoot: "packages/axiom/src",
+    providerPrefix: "Axiom",
+    sourceDisplayPrefix: "packages/axiom/src",
+  },
+  {
+    srcRoot: "packages/doppler/src",
+    providerPrefix: "Doppler",
+    sourceDisplayPrefix: "packages/doppler/src",
+  },
+  {
+    srcRoot: "packages/infisical/src",
+    providerPrefix: "Infisical",
+    sourceDisplayPrefix: "packages/infisical/src",
+  },
+  {
+    srcRoot: "packages/turso/src",
+    providerPrefix: "Turso",
+    sourceDisplayPrefix: "packages/turso/src",
+  },
+  {
+    srcRoot: "packages/planetscale/src",
+    providerPrefix: "Planetscale",
+    sourceDisplayPrefix: "packages/planetscale/src",
+  },
+  {
+    srcRoot: "packages/neon/src",
+    providerPrefix: "Neon",
+    sourceDisplayPrefix: "packages/neon/src",
+  },
+  {
+    srcRoot: "packages/prisma/src",
+    providerPrefix: "Prisma",
+    sourceDisplayPrefix: "packages/prisma/src",
+  },
+  {
+    srcRoot: "packages/hetzner/src",
+    providerPrefix: "Hetzner",
+    sourceDisplayPrefix: "packages/hetzner/src",
+  },
+  {
+    srcRoot: "packages/railway/src",
+    providerPrefix: "Railway",
+    sourceDisplayPrefix: "packages/railway/src",
+  },
+  { srcRoot: "packages/fly/src", providerPrefix: "Fly", sourceDisplayPrefix: "packages/fly/src" },
+  {
+    srcRoot: "packages/github/src",
+    providerPrefix: "GitHub",
+    sourceDisplayPrefix: "packages/github/src",
+  },
+  {
+    srcRoot: "packages/stripe/src",
+    providerPrefix: "Stripe",
+    sourceDisplayPrefix: "packages/stripe/src",
+  },
+  {
+    srcRoot: "packages/cloudflare/src",
+    providerPrefix: "Cloudflare",
+    sourceDisplayPrefix: "packages/cloudflare/src",
+  },
+  { srcRoot: "packages/gcp/src", providerPrefix: "GCP", sourceDisplayPrefix: "packages/gcp/src" },
+  { srcRoot: "packages/aws/src", providerPrefix: "AWS", sourceDisplayPrefix: "packages/aws/src" },
+  {
+    srcRoot: "packages/domain/src",
+    providerPrefix: "Domain",
+    sourceDisplayPrefix: "packages/domain/src",
+  },
+  {
+    srcRoot: "packages/kubernetes/src",
+    providerPrefix: "Kubernetes",
+    sourceDisplayPrefix: "packages/kubernetes/src",
+  },
+  {
+    srcRoot: "packages/docker/src",
+    providerPrefix: "Docker",
+    sourceDisplayPrefix: "packages/docker/src",
+  },
+  { srcRoot: "packages/sql/src", providerPrefix: "SQL", sourceDisplayPrefix: "packages/sql/src" },
+];
 
 interface FileEntry {
   /** Output-relative path (provider-prefixed for flat packages). */
@@ -195,25 +172,29 @@ interface PageDoc {
   peers: string[];
 }
 
-const normalizeSlashes = (value: string) => value.split(path.sep).join("/");
+// Paths are POSIX on every platform we run on; also fold Windows separators.
+const normalizeSlashes = (value: string) => value.replaceAll("\\", "/");
 
 const isSourceFile = (baseName: string) =>
   (baseName.endsWith(".ts") || baseName.endsWith(".tsx")) &&
   !baseName.endsWith(".d.ts") &&
   baseName !== "index.ts";
 
-async function discoverFiles(root: SourceRoot): Promise<FileEntry[]> {
+const discoverFiles = Effect.fn(function* (repoRoot: string, root: SourceRoot) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const srcRoot = path.join(repoRoot, root.srcRoot);
   const entries: FileEntry[] = [];
 
   // Flat single-provider packages: every file under srcRoot belongs to the
   // synthetic provider directory.
   if (root.providerPrefix) {
-    const files = (await fs.readdir(root.srcRoot, { recursive: true })) as string[];
+    const files = yield* fs.readDirectory(srcRoot, { recursive: true });
     for (const file of files) {
       if (!isSourceFile(path.basename(file))) continue;
       entries.push({
         relativePath: path.join(root.providerPrefix, file),
-        absolutePath: path.join(root.srcRoot, file),
+        absolutePath: path.join(srcRoot, file),
         sourceDisplay: `${root.sourceDisplayPrefix}/${normalizeSlashes(file)}`,
       });
     }
@@ -221,17 +202,13 @@ async function discoverFiles(root: SourceRoot): Promise<FileEntry[]> {
     return entries;
   }
 
-  const topLevelEntries = await fs.readdir(root.srcRoot, { withFileTypes: true });
-  const dirs = topLevelEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
-
-  for (const dir of dirs) {
-    const dirPath = path.join(root.srcRoot, dir);
-    let files: string[];
-    try {
-      files = (await fs.readdir(dirPath, { recursive: true })) as string[];
-    } catch {
-      continue;
-    }
+  for (const dir of yield* fs.readDirectory(srcRoot)) {
+    const dirPath = path.join(srcRoot, dir);
+    const info = yield* fs.stat(dirPath);
+    if (info.type !== "Directory") continue;
+    const files = yield* fs
+      .readDirectory(dirPath, { recursive: true })
+      .pipe(Effect.orElseSucceed((): string[] => []));
 
     for (const file of files) {
       if (!isSourceFile(path.basename(file))) continue;
@@ -239,7 +216,7 @@ async function discoverFiles(root: SourceRoot): Promise<FileEntry[]> {
       const relativePath = path.join(dir, file);
       entries.push({
         relativePath,
-        absolutePath: path.join(root.srcRoot, relativePath),
+        absolutePath: path.join(srcRoot, relativePath),
         sourceDisplay: `${root.sourceDisplayPrefix}/${normalizeSlashes(relativePath)}`,
       });
     }
@@ -247,7 +224,7 @@ async function discoverFiles(root: SourceRoot): Promise<FileEntry[]> {
 
   entries.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
   return entries;
-}
+});
 
 function getJsDocText(node: Node): string {
   return node.jsDoc?.map((doc) => doc.getText()).join("\n") ?? "";
@@ -490,6 +467,7 @@ function declName(node: Node): string {
   }
   if (
     ts.isClassDeclaration(node) ||
+    ts.isFunctionDeclaration(node) ||
     ts.isInterfaceDeclaration(node) ||
     ts.isTypeAliasDeclaration(node)
   ) {
@@ -599,6 +577,10 @@ export function findTaggedPrimary(
     ...sourceFile.statements
       .filter(ts.isInterfaceDeclaration)
       .filter((i) => Boolean(i.modifierFlags & ts.ModifierFlags.Export)),
+    // An overloaded function carries its JSDoc on the first signature.
+    ...sourceFile.statements
+      .filter(ts.isFunctionDeclaration)
+      .filter((f) => Boolean(f.modifierFlags & ts.ModifierFlags.Export)),
   ];
 
   for (const node of candidates) {
@@ -608,7 +590,10 @@ export function findTaggedPrimary(
     }
     // A primitive is its module's `make`; the page is named after the module.
     const exportName = doc.hasPrimitiveTag
-      ? path.basename(sourceFile.fileName).replace(/\.tsx?$/, "")
+      ? normalizeSlashes(sourceFile.fileName)
+          .split("/")
+          .pop()!
+          .replace(/\.tsx?$/, "")
       : declName(node);
     if (!exportName) continue;
     const name = doc.title || exportName;
@@ -1016,204 +1001,247 @@ function assertNoDuplicateSiblings(items: SidebarItem[], path: string[]) {
  * Writes `content` only when it differs from what's on disk, so a dev server
  * watching the output reloads just the pages that changed.
  */
-async function writeIfChanged(file: string, content: string): Promise<boolean> {
-  const current = await fs.readFile(file, "utf8").catch(() => undefined);
+const writeIfChanged = Effect.fn(function* (file: string, content: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const current = yield* fs
+    .readFileString(file)
+    .pipe(Effect.orElseSucceed((): string | undefined => undefined));
   if (current === content) return false;
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, content, "utf8");
+  yield* fs.makeDirectory(path.dirname(file), { recursive: true });
+  yield* fs.writeFileString(file, content);
   return true;
-}
+});
 
 /** Deletes files under `dir` not in `keep`, then any directories left empty. */
-async function pruneOutput(dir: string, keep: Set<string>): Promise<void> {
-  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      await pruneOutput(full, keep);
-      const left = await fs.readdir(full).catch(() => []);
-      if (left.length === 0) await fs.rmdir(full).catch(() => {});
-    } else if (!keep.has(full)) {
-      await fs.rm(full, { force: true });
-    }
-  }
-}
-
-async function main() {
-  await fs.mkdir(config.outRoot, { recursive: true });
-  const outputs = new Set<string>();
-
-  const seen = new Map<string, string>();
-  const pageEntries: PageEntry[] = [];
-  const pending: { outputRelative: string; product: string; doc: PageDoc }[] = [];
-  let written = 0;
-  const redirects: Record<string, string> = {};
-  const anchors = new Set<string>();
-  let skipped = 0;
-
-  for (const root of config.roots) {
-    const entries = await discoverFiles(root);
-    console.log(
-      `Discovered ${entries.length} source files in ${normalizeSlashes(
-        path.relative(path.join(import.meta.dir, ".."), root.srcRoot),
-      )}.`,
-    );
-
-    await using syntax = await createSyntaxProject(entries.map((entry) => entry.absolutePath));
-
-    for (const entry of entries) {
-      const sourceFile = await syntax.project.program.getSourceFile(entry.absolutePath);
-      if (!sourceFile) {
-        throw new Error(`Missing source file ${entry.absolutePath}`);
+const pruneOutput = (
+  dir: string,
+  keep: Set<string>,
+): Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const entries = yield* fs.readDirectory(dir).pipe(Effect.orElseSucceed((): string[] => []));
+    for (const name of entries) {
+      const full = path.join(dir, name);
+      const info = yield* fs.stat(full);
+      if (info.type === "Directory") {
+        yield* pruneOutput(full, keep);
+        const left = yield* fs.readDirectory(full).pipe(Effect.orElseSucceed((): string[] => []));
+        if (left.length === 0) yield* fs.remove(full, { recursive: true }).pipe(Effect.ignore);
+      } else if (!keep.has(full)) {
+        yield* fs.remove(full, { force: true });
       }
+    }
+  });
 
-      const primary = findTaggedPrimary(
-        sourceFile,
-        config.copyMarkers
-          ? {
-              file: normalizeSlashes(path.relative(repoRoot, entry.absolutePath)),
-              text: sourceFile.text,
+class DuplicateReferenceAnchor extends Data.TaggedError("DuplicateReferenceAnchor")<{
+  readonly message: string;
+}> {}
+
+const command = Command.make(
+  "generate-api-reference",
+  {
+    copyMarkers: Flag.Boolean("copy-markers").pipe(
+      Flag.withDefault(false),
+      Flag.withDescription(
+        "Emit copy-editor markers for the website's dev server (also API_REFERENCE_COPY_MARKERS=1)",
+      ),
+    ),
+  },
+  Effect.fn(function* (flags) {
+    const path = yield* Path.Path;
+    const fs = yield* FileSystem.FileSystem;
+    const repoRoot = path.resolve(import.meta.dirname, "..");
+    const websiteRoot = path.join(repoRoot, "website");
+    const envCopyMarkers = yield* Config.String("API_REFERENCE_COPY_MARKERS").pipe(
+      Config.withDefault(""),
+    );
+    const config = {
+      outRoot: path.join(websiteRoot, "src/content/docs/providers"),
+      /**
+       * Emit `<!--copy:jsdoc:...-->` markers after each prose block so the
+       * website's dev-time copy editor can map rendered text back to the JSDoc
+       * it came from. Dev only — production builds never set this.
+       */
+      copyMarkers: envCopyMarkers === "1" || flags.copyMarkers,
+    };
+
+    yield* fs.makeDirectory(config.outRoot, { recursive: true });
+    const outputs = new Set<string>();
+
+    const seen = new Map<string, string>();
+    const pageEntries: PageEntry[] = [];
+    const pending: { outputRelative: string; product: string; doc: PageDoc }[] = [];
+    let written = 0;
+    const redirects: Record<string, string> = {};
+    const anchors = new Set<string>();
+    let skipped = 0;
+
+    for (const root of sourceRoots) {
+      const entries = yield* discoverFiles(repoRoot, root);
+      yield* Console.log(`Discovered ${entries.length} source files in ${root.srcRoot}.`);
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const syntax = yield* createSyntaxProject(entries.map((entry) => entry.absolutePath));
+
+          for (const entry of entries) {
+            const sourceFile = yield* syntax.getSourceFile(entry.absolutePath);
+
+            const primary = findTaggedPrimary(
+              sourceFile,
+              config.copyMarkers
+                ? {
+                    file: normalizeSlashes(path.relative(repoRoot, entry.absolutePath)),
+                    text: sourceFile.text,
+                  }
+                : undefined,
+            );
+            if (!primary) {
+              skipped++;
+              continue;
             }
-          : undefined,
+
+            // Only emit a page when there's actual documented content; a bare
+            // frontmatter + source link stub is noise.
+            if (!primary.doc.summary && primary.doc.sections.length === 0) {
+              skipped++;
+              continue;
+            }
+
+            // Mirror the source directory structure; name the page after the
+            // tagged declaration (e.g. Cloudflare.AI.Search/AiSearchInstance.md).
+            const relDir = path.dirname(entry.relativePath);
+            const outputRelative = path.join(relDir, `${primary.name}.md`);
+
+            const existing = seen.get(outputRelative);
+            if (existing) {
+              yield* Console.warn(
+                `  collision: ${outputRelative} from ${entry.relativePath} (already from ${existing})`,
+              );
+            }
+            seen.set(outputRelative, entry.relativePath);
+
+            const doc: PageDoc = {
+              title: primary.name,
+              sourceDisplay: entry.sourceDisplay,
+              summary: primary.doc.summary,
+              sections: primary.doc.sections,
+              isLayer: primary.doc.hasLayerTag,
+              provides: primary.doc.provides,
+              peers: primary.doc.peers,
+            };
+            pending.push({ outputRelative, product: primary.product, doc });
+
+            const exportNames = exportedNames(sourceFile);
+
+            const segments = normalizeSlashes(outputRelative).split("/");
+            const location = referenceLocation(outputRelative, primary.product);
+            const oldLink = `/providers/${normalizeSlashes(outputRelative).replace(/\.md$/, "").toLowerCase()}`;
+            if (anchors.has(location.link)) {
+              return yield* new DuplicateReferenceAnchor({
+                message: `Duplicate reference anchor: ${location.link}`,
+              });
+            }
+            anchors.add(location.link);
+            // A resource whose page kept its old URL needs no redirect.
+            if (oldLink !== location.link.split("#")[0]) redirects[oldLink] = location.link;
+            pageEntries.push({
+              provider: segments[0] ?? "",
+              service: segments.length > 2 ? segments[1] : "",
+              resource: primary.name,
+              category: primary.category,
+              product: primary.product,
+              link: location.link,
+              dir: normalizeSlashes(relDir),
+              exports: exportNames,
+            });
+          }
+        }),
       );
-      if (!primary) {
-        skipped++;
-        continue;
-      }
-
-      // Only emit a page when there's actual documented content; a bare
-      // frontmatter + source link stub is noise.
-      if (!primary.doc.summary && primary.doc.sections.length === 0) {
-        skipped++;
-        continue;
-      }
-
-      // Mirror the source directory structure; name the page after the
-      // tagged declaration (e.g. Cloudflare.AI.Search/AiSearchInstance.md).
-      const relDir = path.dirname(entry.relativePath);
-      const outputRelative = path.join(relDir, `${primary.name}.md`);
-
-      const existing = seen.get(outputRelative);
-      if (existing) {
-        console.warn(
-          `  collision: ${outputRelative} from ${entry.relativePath} (already from ${existing})`,
-        );
-      }
-      seen.set(outputRelative, entry.relativePath);
-
-      const doc: PageDoc = {
-        title: primary.name,
-        sourceDisplay: entry.sourceDisplay,
-        summary: primary.doc.summary,
-        sections: primary.doc.sections,
-        isLayer: primary.doc.hasLayerTag,
-        provides: primary.doc.provides,
-        peers: primary.doc.peers,
-      };
-      pending.push({ outputRelative, product: primary.product, doc });
-
-      const exportNames = exportedNames(sourceFile);
-
-      const segments = normalizeSlashes(outputRelative).split("/");
-      const location = referenceLocation(outputRelative, primary.product);
-      const oldLink = `/providers/${normalizeSlashes(outputRelative).replace(/\.md$/, "").toLowerCase()}`;
-      if (anchors.has(location.link)) {
-        throw new Error(`Duplicate reference anchor: ${location.link}`);
-      }
-      anchors.add(location.link);
-      // A resource whose page kept its old URL needs no redirect.
-      if (oldLink !== location.link.split("#")[0]) redirects[oldLink] = location.link;
-      pageEntries.push({
-        provider: segments[0] ?? "",
-        service: segments.length > 2 ? segments[1] : "",
-        resource: primary.name,
-        category: primary.category,
-        product: primary.product,
-        link: location.link,
-        dir: normalizeSlashes(relDir),
-        exports: exportNames,
-      });
     }
-  }
 
-  // Second pass: render with `{@link}` resolution — the full page set must be
-  // known before symbol targets can resolve to their pages.
-  const resolverFor = makeLinkResolverFactory(pageEntries);
-  const groups = new Map<string, { title: string; sections: string[] }>();
-  for (const page of pending) {
-    const location = referenceLocation(page.outputRelative, page.product);
-    const resolve = resolverFor(normalizeSlashes(path.dirname(page.outputRelative)));
-    const group = groups.get(location.outputRelative) ?? { title: location.title, sections: [] };
-    group.sections.push(
-      `## ${location.resourceTitle}\n\n${nestResourceHeadings(renderResource(page.doc, resolve), location.resourceTitle)}`,
+    // Second pass: render with `{@link}` resolution — the full page set must be
+    // known before symbol targets can resolve to their pages.
+    const resolverFor = makeLinkResolverFactory(pageEntries);
+    const groups = new Map<string, { title: string; sections: string[] }>();
+    for (const page of pending) {
+      const location = referenceLocation(page.outputRelative, page.product);
+      const resolve = resolverFor(normalizeSlashes(path.dirname(page.outputRelative)));
+      const group = groups.get(location.outputRelative) ?? { title: location.title, sections: [] };
+      group.sections.push(
+        `## ${location.resourceTitle}\n\n${nestResourceHeadings(renderResource(page.doc, resolve), location.resourceTitle)}`,
+      );
+      groups.set(location.outputRelative, group);
+    }
+    for (const [relative, group] of groups) {
+      const outputPath = path.join(config.outRoot, relative);
+      outputs.add(outputPath);
+      if (
+        yield* writeIfChanged(
+          outputPath,
+          `${renderReferenceFrontmatter(group.title)}\n\n${group.sections.join("\n\n")}\n`,
+        )
+      ) {
+        written++;
+      }
+    }
+
+    const sidebar = buildProvidersSidebar(pageEntries);
+
+    // Landing page for the Reference tab (/providers): a provider directory.
+    // Each provider's reference belongs to its docs hub — the directory just
+    // routes there (or into the tree, for providers without a hub). The
+    // ProviderDirectory component reads the generated sidebar for counts.
+    // Regenerated with the rest of the tree on every run.
+    const referenceIndex = [
+      "---",
+      "title: API Reference",
+      "description: Every provider alchemy can manage — pick a provider to open its docs hub and resource reference.",
+      "---",
+      "",
+      'import ProviderDirectory from "../../../components/ProviderDirectory.astro";',
+      "",
+      "Every resource alchemy can manage, documented from the source JSDoc and",
+      "organized by provider. A provider's reference lives in its docs hub —",
+      "pick one below, or search with `⌘K`.",
+      "",
+      "<ProviderDirectory />",
+      "",
+    ].join("\n");
+    const indexPath = path.join(config.outRoot, "index.mdx");
+    outputs.add(indexPath);
+    yield* writeIfChanged(indexPath, referenceIndex);
+    yield* pruneOutput(config.outRoot, outputs);
+
+    const sidebarPath = path.join(websiteRoot, "src/generated/providers-sidebar.json");
+    yield* writeIfChanged(
+      path.join(websiteRoot, "src/generated/reference-redirects.json"),
+      `${JSON.stringify(redirects, null, 2)}\n`,
     );
-    groups.set(location.outputRelative, group);
-  }
-  for (const [relative, group] of groups) {
-    const outputPath = path.join(config.outRoot, relative);
-    outputs.add(outputPath);
-    if (
-      await writeIfChanged(
-        outputPath,
-        `${renderReferenceFrontmatter(group.title)}\n\n${group.sections.join("\n\n")}\n`,
-      )
-    ) {
-      written++;
+    // astro.config imports the sidebar, so rewriting it restarts a dev server.
+    yield* writeIfChanged(sidebarPath, `${JSON.stringify(sidebar, null, 2)}\n`);
+
+    yield* Console.log(
+      `Done. Wrote ${written} changed reference pages containing ${pending.length} resources (skipped ${skipped} untagged${
+        config.copyMarkers ? ", with copy markers" : ""
+      }) to ${normalizeSlashes(path.relative(repoRoot, config.outRoot))}.`,
+    );
+    if (unresolvedLinkTargets.size > 0) {
+      const list = [...unresolvedLinkTargets.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([target, n]) => (n > 1 ? `${target} ×${n}` : target))
+        .join(", ");
+      yield* Console.log(`{@link} targets without a page (rendered as inline code): ${list}`);
     }
-  }
+    yield* Console.log(
+      `Wrote provider sidebar to ${normalizeSlashes(path.relative(repoRoot, sidebarPath))}.`,
+    );
+  }),
+).pipe(Command.withDescription("Generate the provider API reference from source JSDoc"));
 
-  const sidebar = buildProvidersSidebar(pageEntries);
-
-  // Landing page for the Reference tab (/providers): a provider directory.
-  // Each provider's reference belongs to its docs hub — the directory just
-  // routes there (or into the tree, for providers without a hub). The
-  // ProviderDirectory component reads the generated sidebar for counts.
-  // Regenerated with the rest of the tree on every run.
-  const referenceIndex = [
-    "---",
-    "title: API Reference",
-    "description: Every provider alchemy can manage — pick a provider to open its docs hub and resource reference.",
-    "---",
-    "",
-    'import ProviderDirectory from "../../../components/ProviderDirectory.astro";',
-    "",
-    "Every resource alchemy can manage, documented from the source JSDoc and",
-    "organized by provider. A provider's reference lives in its docs hub —",
-    "pick one below, or search with `⌘K`.",
-    "",
-    "<ProviderDirectory />",
-    "",
-  ].join("\n");
-  const indexPath = path.join(config.outRoot, "index.mdx");
-  outputs.add(indexPath);
-  await writeIfChanged(indexPath, referenceIndex);
-  await pruneOutput(config.outRoot, outputs);
-
-  const sidebarPath = path.join(websiteRoot, "src/generated/providers-sidebar.json");
-  await writeIfChanged(
-    path.join(websiteRoot, "src/generated/reference-redirects.json"),
-    `${JSON.stringify(redirects, null, 2)}\n`,
-  );
-  // astro.config imports the sidebar, so rewriting it restarts a dev server.
-  await writeIfChanged(sidebarPath, `${JSON.stringify(sidebar, null, 2)}\n`);
-
-  console.log(
-    `Done. Wrote ${written} changed reference pages containing ${pending.length} resources (skipped ${skipped} untagged${
-      config.copyMarkers ? ", with copy markers" : ""
-    }) to ${normalizeSlashes(path.relative(path.join(import.meta.dir, ".."), config.outRoot))}.`,
-  );
-  if (unresolvedLinkTargets.size > 0) {
-    const list = [...unresolvedLinkTargets.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([target, n]) => (n > 1 ? `${target} ×${n}` : target))
-      .join(", ");
-    console.log(`{@link} targets without a page (rendered as inline code): ${list}`);
-  }
-  console.log(
-    `Wrote provider sidebar to ${normalizeSlashes(
-      path.relative(path.join(import.meta.dir, ".."), sidebarPath),
-    )}.`,
-  );
-}
-
-if (import.meta.main) await main();
+Command.run(command, { version: "0.0.0" }).pipe(
+  Effect.provide(NodeServices.layer),
+  NodeRuntime.runMain,
+);

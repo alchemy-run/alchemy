@@ -1,5 +1,5 @@
 import { matchRoute, routePatternUrl } from "@alchemy.run/cloudflare/Workers/RoutePattern";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 
 const route = (pattern: string) => ({ pattern });
 

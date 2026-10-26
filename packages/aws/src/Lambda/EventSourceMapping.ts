@@ -616,31 +616,63 @@ export const EventSourceMappingProvider = () =>
         state: config.State!,
       });
 
+      const deleteMapping = (uuid: string) =>
+        lambda.deleteEventSourceMapping({ UUID: uuid }).pipe(
+          Effect.retry({
+            while: (e) =>
+              e._tag === "ResourceInUseException" || e._tag === "ResourceConflictException",
+            schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(20)]),
+          }),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        );
+
       return {
         stables: ["uuid", "eventSourceMappingArn"],
         diff: Effect.fn(function* ({ news, olds }) {
-          if (!isResolved(news)) return;
-          if ((news.eventSourceArn as string) !== (olds.eventSourceArn as string)) {
+          // `functionName` is required, so this narrows `news` to the props object.
+          if (!("functionName" in news)) return;
+          const sourceArn = news.eventSourceArn;
+          if (isResolved(sourceArn) && sourceArn !== olds.eventSourceArn) {
             return { action: "replace" } as const;
           }
-          if (news.startingPosition !== olds.startingPosition) {
-            return { action: "replace" } as const;
+          // Lambda allows one mapping per function and source, so a replacement
+          // on the same source must delete the old mapping first.
+          const replace = { action: "replace", deleteFirst: true } as const;
+          if (
+            isResolved(news.startingPosition) &&
+            news.startingPosition !== olds.startingPosition
+          ) {
+            return replace;
           }
           if (
+            isResolved(news.startingPositionTimestamp) &&
             news.startingPositionTimestamp?.getTime() !== olds.startingPositionTimestamp?.getTime()
           ) {
-            return { action: "replace" } as const;
-          }
-          if (!deepEqual(news.selfManagedEventSource, olds.selfManagedEventSource)) {
-            return { action: "replace" } as const;
+            return replace;
           }
           if (
-            news.amazonManagedKafkaEventSourceConfig?.ConsumerGroupId !==
-              olds.amazonManagedKafkaEventSourceConfig?.ConsumerGroupId ||
-            news.selfManagedKafkaEventSourceConfig?.ConsumerGroupId !==
-              olds.selfManagedKafkaEventSourceConfig?.ConsumerGroupId
+            isResolved(news.selfManagedEventSource) &&
+            !deepEqual(news.selfManagedEventSource, olds.selfManagedEventSource)
           ) {
-            return { action: "replace" } as const;
+            return replace;
+          }
+          if (
+            (isResolved(news.amazonManagedKafkaEventSourceConfig) &&
+              news.amazonManagedKafkaEventSourceConfig?.ConsumerGroupId !==
+                olds.amazonManagedKafkaEventSourceConfig?.ConsumerGroupId) ||
+            (isResolved(news.selfManagedKafkaEventSourceConfig) &&
+              news.selfManagedKafkaEventSourceConfig?.ConsumerGroupId !==
+                olds.selfManagedKafkaEventSourceConfig?.ConsumerGroupId)
+          ) {
+            return replace;
+          }
+          // An unresolved source ARN may or may not change: a replaced queue
+          // gets a new ARN, but a Table updated in place keeps its stream ARN
+          // while exposing it as unstable. Update in place and let `reconcile`
+          // move the mapping if the source really changed, so the mapping's
+          // identity is not stable for downstream consumers.
+          if (!isResolved(sourceArn)) {
+            return { action: "update", stables: [] } as const;
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -660,6 +692,14 @@ export const EventSourceMappingProvider = () =>
             config = yield* lambda
               .getEventSourceMapping({ UUID: output.uuid })
               .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          }
+          // `updateEventSourceMapping` cannot change the source, so a mapping
+          // that reads another source (its source was replaced) is recreated
+          // for this source and the stale one deleted.
+          let stale: string | undefined;
+          if (config?.UUID && config.EventSourceArn !== eventSourceArn) {
+            stale = config.UUID;
+            config = undefined;
           }
           if (!config?.UUID) {
             config = yield* lambda.listEventSourceMappings
@@ -741,6 +781,9 @@ export const EventSourceMappingProvider = () =>
           }
 
           const uuid = config.UUID;
+          if (stale !== undefined && stale !== uuid) {
+            yield* deleteMapping(stale);
+          }
           const mappingArn = `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${uuid}`;
 
           // Sync configuration — `updateEventSourceMapping` is a full PUT
@@ -821,14 +864,7 @@ export const EventSourceMappingProvider = () =>
           return configToAttrs(config);
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* lambda.deleteEventSourceMapping({ UUID: output.uuid }).pipe(
-            Effect.retry({
-              while: (e: any) =>
-                e._tag === "ResourceInUseException" || e._tag === "ResourceConflictException",
-              schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(20)]),
-            }),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          yield* deleteMapping(output.uuid);
         }),
         // `list()` — AWS account/region collection (§4a). Exhaustively
         // paginate `listEventSourceMappings` with no `FunctionName` filter to

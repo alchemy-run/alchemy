@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as Logs from "../../Alchemist/routes/logs.ts";
-import { paint } from "../CliKit/index.ts";
+import { paint } from "../../Util/Terminal.ts";
 import { formatLocalTimestamp, TAIL_COLORS } from "../Format.ts";
 import { config, envFile, parseSince, profile, resolveStage, stage } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";

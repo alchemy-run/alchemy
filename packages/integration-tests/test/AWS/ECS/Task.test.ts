@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { Task } from "@alchemy.run/aws/ECS/Task";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
+import { expect } from "@alchemy.run/test";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

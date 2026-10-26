@@ -1,10 +1,13 @@
 import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
+import { expect } from "@alchemy.run/test";
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
-import { expect } from "alchemy-test";
+import { adopt } from "alchemy/AdoptPolicy";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
+import { State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -15,8 +18,12 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
+import { aliasFunction, AliasFunction } from "./fixtures/alias-handler.ts";
 import { TestFunction, TestFunctionLive } from "./handler.ts";
+import StreamingFunctionLive, { StreamingFunction } from "./streaming-handler.ts";
 
+const asyncHandlerPath = fileURLToPath(new URL("./async-handler.ts", import.meta.url));
+const namedHandlerPath = fileURLToPath(new URL("./named-handler.ts", import.meta.url));
 const timeoutHandlerPath = fileURLToPath(new URL("./timeout-handler.ts", import.meta.url));
 const externalPackageHandlerPath = fileURLToPath(
   new URL("./external-package-handler.ts", import.meta.url),
@@ -149,6 +156,73 @@ test.provider.skipIf(process.env.ALCHEMY_TEST_DEV === "1")(
       yield* stack.destroy();
       yield* assertFunctionDeleted(created.functionName);
       yield* assertRoleDeleted(created.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "async handler invokes the default export",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        AWS.Lambda.Function("AsyncHandlerFn", {
+          main: asyncHandlerPath,
+          functionUrl: false,
+        }),
+      );
+
+      const { Configuration } = yield* Lambda.getFunction({ FunctionName: fn.functionName });
+      expect(Configuration?.Handler).toBe("index.default");
+
+      const response = yield* Lambda.invoke({ FunctionName: fn.functionName, Payload: "{}" });
+      expect(response.FunctionError).toBeUndefined();
+      const payload = response.Payload
+        ? yield* response.Payload.pipe(Stream.decodeText(), Stream.mkString)
+        : "";
+      expect(JSON.parse(payload)).toEqual({ statusCode: 200, body: "ok" });
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+      yield* assertRoleDeleted(fn.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "async handler invokes the export named by `handler`",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        AWS.Lambda.Function("NamedHandlerFn", {
+          main: namedHandlerPath,
+          handler: "handler",
+          functionUrl: false,
+        }),
+      );
+
+      const { Configuration } = yield* Lambda.getFunction({ FunctionName: fn.functionName });
+      expect(Configuration?.Handler).toBe("index.handler");
+
+      const response = yield* Lambda.invoke({ FunctionName: fn.functionName, Payload: "{}" });
+      expect(response.FunctionError).toBeUndefined();
+      const payload = response.Payload
+        ? yield* response.Payload.pipe(Stream.decodeText(), Stream.mkString)
+        : "";
+      expect(JSON.parse(payload)).toEqual({ statusCode: 200, body: "named" });
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+      yield* assertRoleDeleted(fn.roleName);
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   {
     tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
@@ -562,6 +636,176 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 360_000 },
 );
 
+// #2435: `read` must observe the live configuration, or an out-of-band
+// memory/timeout change reads as `unchanged` and drift never repairs it.
+test.provider(
+  "drift detects and repairs out-of-band memory and timeout changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        AWS.Lambda.Function("DriftFn", {
+          main: timeoutHandlerPath,
+          handler: "handler",
+          isExternal: true,
+          functionUrl: false,
+          memorySize: 128,
+          timeout: Duration.seconds(3),
+        }),
+      );
+      expect(fn.memorySize).toBe(128);
+      expect(fn.timeoutSeconds).toBe(3);
+
+      const detectDrift = () => Drift.detect(stack).pipe(Effect.provide(stack.state));
+      expect((yield* detectDrift()).resources.DriftFn?.action).toBe("unchanged");
+
+      yield* Lambda.updateFunctionConfiguration({
+        FunctionName: fn.functionName,
+        MemorySize: 256,
+        Timeout: 10,
+      }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ResourceConflictException",
+          schedule: Schedule.exponential(500),
+          times: 8,
+        }),
+      );
+      yield* waitForConfiguration(fn.functionName, { memorySize: 256, timeout: 10 });
+
+      const drifted = (yield* detectDrift()).resources.DriftFn;
+      expect(drifted?.action).toBe("drifted");
+      expect(drifted?.attr).toMatchObject({ memorySize: 256, timeoutSeconds: 10 });
+
+      const repaired = yield* Drift.repair({ name: stack.name, stage: stack.stage }).pipe(
+        Effect.provide(stack.state),
+      );
+      expect(repaired.resources.DriftFn?.action).toBe("repaired");
+      yield* waitForConfiguration(fn.functionName, { memorySize: 128, timeout: 3 });
+      expect((yield* detectDrift()).resources.DriftFn?.action).toBe("unchanged");
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 240_000 },
+);
+
+// `read` reports a function whose ownership tags were stripped as `Unowned`;
+// drift repairs it anyway (state records it as ours). Repair must restore the
+// configuration and the tags, not refuse on the missing tags.
+test.provider(
+  "drift repairs a function whose ownership tags were stripped",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        AWS.Lambda.Function("DriftTagsFn", {
+          main: timeoutHandlerPath,
+          handler: "handler",
+          isExternal: true,
+          functionUrl: false,
+          memorySize: 128,
+          timeout: Duration.seconds(3),
+        }),
+      );
+      const before = yield* Lambda.getFunction({ FunctionName: fn.functionName });
+      const ownership = Object.keys(before.Tags ?? {}).filter((key) => key.startsWith("alchemy::"));
+      expect(ownership.length).toBeGreaterThan(0);
+
+      yield* Lambda.untagResource({ Resource: fn.functionArn, TagKeys: ownership });
+      yield* Lambda.updateFunctionConfiguration({
+        FunctionName: fn.functionName,
+        MemorySize: 256,
+      }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ResourceConflictException",
+          schedule: Schedule.exponential(500),
+          times: 8,
+        }),
+      );
+      yield* waitForConfiguration(fn.functionName, { memorySize: 256, timeout: 3 });
+
+      const target = { name: stack.name, stage: stack.stage };
+      const detected = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
+      expect(detected.resources.DriftTagsFn?.action).toBe("drifted");
+
+      const repaired = yield* Drift.repair(target).pipe(Effect.provide(stack.state));
+      expect(repaired.resources.DriftTagsFn?.action).toBe("repaired");
+      yield* waitForConfiguration(fn.functionName, { memorySize: 128, timeout: 3 });
+      const after = yield* Lambda.getFunction({ FunctionName: fn.functionName });
+      for (const key of ownership) expect(after.Tags?.[key]).toBe(before.Tags?.[key]);
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 240_000 },
+);
+
+// #1536: drift recreates a deleted function without its bindings, then
+// attaches them — the environment and IAM statements come back.
+test.provider(
+  "drift repair recreates a deleted function and restores its bindings",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        Effect.gen(function* () {
+          const fn = yield* AWS.Lambda.Function("DriftBoundFn", {
+            main: timeoutHandlerPath,
+            handler: "handler",
+            isExternal: true,
+            functionUrl: false,
+          });
+          yield* fn.bind("DriftBinding", {
+            env: { DRIFT_MARKER: "bound" },
+            policyStatements: [
+              {
+                Sid: "DriftBinding",
+                Effect: "Allow",
+                Action: ["sqs:GetQueueUrl"],
+                Resource: ["*"],
+              },
+            ],
+          });
+          return fn;
+        }),
+      );
+
+      yield* Lambda.deleteFunction({ FunctionName: fn.functionName });
+      yield* assertFunctionDeleted(fn.functionName);
+
+      const target = { name: stack.name, stage: stack.stage };
+      const detected = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
+      expect(detected.resources.DriftBoundFn?.action).toBe("missing");
+
+      const repaired = yield* Drift.repair(target).pipe(Effect.provide(stack.state));
+      expect(repaired.resources.DriftBoundFn?.action).toBe("recreated");
+
+      const config = yield* Lambda.getFunctionConfiguration({ FunctionName: fn.functionName });
+      const marker = config.Environment?.Variables?.DRIFT_MARKER;
+      expect(Redacted.isRedacted(marker) ? Redacted.value(marker) : marker).toBe("bound");
+      const policies = yield* iam.listRolePolicies({ RoleName: fn.roleName });
+      const documents = yield* Effect.all(
+        policies.PolicyNames.map((PolicyName) =>
+          iam.getRolePolicy({ RoleName: fn.roleName, PolicyName }),
+        ),
+      );
+      expect(
+        documents.some((doc) => decodeURIComponent(doc.PolicyDocument).includes("DriftBinding")),
+      ).toBe(true);
+      expect(
+        (yield* Drift.detect(target).pipe(Effect.provide(stack.state))).resources.DriftBoundFn
+          ?.action,
+      ).toBe("unchanged");
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 240_000 },
+);
+
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a
 // real function, resolve the provider from context via the typed
 // `Provider.findProvider`, call `list()`, and assert the deployed function
@@ -588,6 +832,63 @@ test.provider(
 
       yield* stack.destroy();
       yield* assertFunctionDeleted(deployed.functionName);
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 180_000 },
+);
+
+test.provider(
+  "streams an Effect HttpServerResponse through a RESPONSE_STREAM function URL",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { functionName, functionUrl } = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* StreamingFunction;
+        }).pipe(Effect.provide(StreamingFunctionLive)),
+      );
+      expect(functionUrl).toBeTruthy();
+
+      const response = yield* HttpClient.get(functionUrl!).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? Effect.succeed(response)
+            : Effect.fail(new Error(`Function URL returned ${response.status}`)),
+        ),
+        Effect.retry({
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
+        }),
+      );
+      expect(response.headers["content-type"]).toBe("text/event-stream");
+      expect(response.headers["x-streamed"]).toBe("true");
+      expect(response.headers["set-cookie"]).toContain("session=abc");
+
+      // Record when each event arrives: streamed events are ~2s apart, a
+      // buffered body arrives in one piece at the end.
+      const arrivals = yield* response.stream.pipe(
+        Stream.decodeText(),
+        Stream.mapEffect((text) =>
+          Effect.map(
+            Effect.clockWith((clock) => clock.currentTimeMillis),
+            (at) => ({
+              text,
+              at,
+            }),
+          ),
+        ),
+        Stream.runCollect,
+      );
+      expect(arrivals.map((a) => a.text).join("")).toBe(
+        "data: one\n\ndata: two\n\ndata: three\n\n",
+      );
+      expect(arrivals.length).toBeGreaterThanOrEqual(3);
+      expect(arrivals[arrivals.length - 1]!.at - arrivals[0]!.at).toBeGreaterThanOrEqual(3_000);
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(functionName);
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
@@ -677,6 +978,131 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 360_000 },
 );
 
+// `alias` publishes a version per deploy and routes every consumer through
+// the alias: the function URL and the event-source mapping target `:live`,
+// so moving the alias back to an earlier version rolls back without a
+// redeploy. Removing `alias` moves them back to the unqualified function.
+test.provider(
+  "alias routes the function URL and event sources through the alias",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (alias: string | undefined, marker: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const fn = yield* AliasFunction;
+            yield* fn.bind`ReleaseMarker`({ env: { RELEASE_MARKER: marker } });
+            return fn;
+          }).pipe(Effect.provide(aliasFunction(alias))),
+        );
+
+      const v1 = yield* deploy("live", "v1");
+      const aliasArn = `${v1.functionArn}:live`;
+      expect(v1.aliasName).toBe("live");
+      expect(v1.qualifiedArn).toBe(aliasArn);
+      expect(v1.version).toMatch(/^[1-9]\d*$/);
+      yield* assertAlias(v1.functionName, "live", v1.version!);
+      yield* assertUrlQualifier(v1.functionName, v1.functionUrl!, "live");
+      expect(yield* eventSourceMappingTargets(v1.functionName)).toEqual([aliasArn]);
+      yield* expectServes(`${v1.functionName}:live`, "v1");
+
+      // A new release advances the alias; consumers keep the same target.
+      const v2 = yield* deploy("live", "v2");
+      expect(v2.qualifiedArn).toBe(aliasArn);
+      expect(v2.functionUrl).toBe(v1.functionUrl);
+      expect(Number(v2.version)).toBeGreaterThan(Number(v1.version));
+      yield* assertAlias(v2.functionName, "live", v2.version!);
+      expect(yield* eventSourceMappingTargets(v2.functionName)).toEqual([aliasArn]);
+      yield* expectServes(`${v2.functionName}:live`, "v2");
+
+      // Rollback is one UpdateAlias call: everything wired to the alias
+      // serves v1 again.
+      yield* Lambda.updateAlias({
+        FunctionName: v2.functionName,
+        Name: "live",
+        FunctionVersion: v1.version!,
+      });
+      yield* expectServes(`${v2.functionName}:live`, "v1");
+
+      // Removing the alias moves the URL and mapping back to the function.
+      const unaliased = yield* deploy(undefined, "v2");
+      expect(unaliased.aliasName).toBeUndefined();
+      expect(unaliased.qualifiedArn).toBe(unaliased.functionArn);
+      yield* Lambda.getAlias({ FunctionName: unaliased.functionName, Name: "live" }).pipe(
+        Effect.flatMap(() => Effect.fail(new Error("alias live still exists"))),
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+      );
+      yield* assertUrlQualifier(unaliased.functionName, unaliased.functionUrl!, undefined);
+      expect(yield* eventSourceMappingTargets(unaliased.functionName)).toEqual([
+        unaliased.functionArn,
+      ]);
+      yield* expectServes(unaliased.functionName, "v2");
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(unaliased.functionName);
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:sqs", "live"],
+    timeout: 360_000,
+  },
+);
+
+// Alias moves are eventually consistent: poll until the qualifier serves the
+// expected release.
+const expectServes = Effect.fn(function* (functionName: string, marker: string) {
+  const body = yield* invokeHttpFunction(functionName).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (body) => body === marker,
+      times: 20,
+    }),
+  );
+  expect(body).toBe(marker);
+});
+
+const assertAlias = Effect.fn(function* (functionName: string, alias: string, version: string) {
+  const observed = yield* Lambda.getAlias({ FunctionName: functionName, Name: alias });
+  expect(observed.FunctionVersion).toBe(version);
+});
+
+// The function URL lives on exactly one qualifier: the alias, or the
+// unqualified function when there is none.
+const assertUrlQualifier = Effect.fn(function* (
+  functionName: string,
+  functionUrl: string,
+  qualifier: string | undefined,
+) {
+  const config = yield* Lambda.getFunctionUrlConfig({
+    FunctionName: functionName,
+    Qualifier: qualifier,
+  });
+  expect(config.FunctionUrl).toBe(functionUrl);
+  expect(config.FunctionArn).toMatch(qualifier ? new RegExp(`:${qualifier}$`) : /:function:[^:]+$/);
+  if (qualifier !== undefined) {
+    const unqualified = yield* Lambda.getFunctionUrlConfig({ FunctionName: functionName }).pipe(
+      Effect.map(() => "present" as const),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("absent" as const)),
+    );
+    expect(unqualified).toBe("absent");
+  }
+});
+
+// Function ARNs every event-source mapping on the function (any qualifier)
+// invokes.
+const eventSourceMappingTargets = Effect.fn(function* (functionName: string) {
+  const mappings = yield* Lambda.listEventSourceMappings.items({}).pipe(
+    Stream.filter((mapping) =>
+      (mapping.FunctionArn ?? "").split(":").slice(6, 7).includes(functionName),
+    ),
+    Stream.runCollect,
+  );
+  return Array.from(mappings).map((mapping) => mapping.FunctionArn);
+});
+
 const assertFunctionReady = Effect.fn(function* (functionName: string, marker: string) {
   // Deploy must finish configuration propagation; these checks never retry.
   const { Configuration } = yield* Lambda.getFunction({
@@ -718,6 +1144,132 @@ const invokeHttpFunction = Effect.fn(function* (functionName: string, path = "/"
   expect(body.statusCode).toBe(200);
   return body.body as string;
 });
+
+// A cycle precreates on unresolved props, before `read` can check ownership.
+// `observe` must refuse a foreign function at the precreate identity before
+// precreate's create-or-update overwrites it. The queue URL keeps the props
+// unresolved; the self-binding puts the function in a cycle.
+const cyclicFunction = (functionName: string, scoped?: boolean) =>
+  Effect.gen(function* () {
+    const queue = yield* AWS.SQS.Queue("CyclicQueue");
+    const declaration = AWS.Lambda.Function("CyclicDifferent", {
+      main: asyncHandlerPath,
+      functionName,
+      functionUrl: false,
+      env: { QUEUE_URL: queue.queueUrl },
+    });
+    const fn = yield* scoped === undefined ? declaration : declaration.pipe(adopt(scoped));
+    yield* fn.bind`Self`({ env: { SELF_NAME: fn.functionName } });
+    return fn;
+  });
+
+/**
+ * Deploys `CyclicOriginal`, then forgets it, leaving a function owned by
+ * another logical id. Returns a step that remembers it again, so destroy
+ * removes it — and its execution role — through normal stack cleanup.
+ */
+const plantForeignFunction = Effect.fn(function* (stack: Test.ScratchStack) {
+  yield* stack.destroy();
+  const original = yield* stack.deploy(
+    AWS.Lambda.Function("CyclicOriginal", { main: asyncHandlerPath, functionUrl: false }),
+  );
+  const key = { stack: stack.name, stage: stack.stage, fqn: "CyclicOriginal" };
+  const row = yield* Effect.gen(function* () {
+    const state = yield* yield* State;
+    const value = yield* state.get(key);
+    yield* state.delete(key);
+    return value!;
+  }).pipe(Effect.provide(stack.state));
+  const restore = Effect.gen(function* () {
+    const state = yield* yield* State;
+    yield* state.set({ ...key, value: row });
+  }).pipe(Effect.provide(stack.state));
+  return { original, restore };
+});
+
+for (const scoped of [undefined, false]) {
+  test.provider(
+    `a cyclic precreate refuses a foreign function (scoped adoption ${scoped})`,
+    (stack) =>
+      Effect.gen(function* () {
+        const { original, restore } = yield* plantForeignFunction(stack);
+        const before = yield* Lambda.getFunction({ FunctionName: original.functionName });
+        const program = cyclicFunction(original.functionName, scoped);
+        expect((yield* stack.plan(program)).resources.CyclicDifferent?.action).toBe("create");
+        const error = yield* stack.deploy(program).pipe(Effect.flip);
+        expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "CyclicDifferent" });
+        // Neither the function's code nor its configuration changed.
+        const after = yield* Lambda.getFunction({ FunctionName: original.functionName });
+        expect(after.Configuration?.CodeSha256).toBe(before.Configuration?.CodeSha256);
+        expect(after.Configuration?.LastModified).toBe(before.Configuration?.LastModified);
+        expect(after.Tags).toEqual(before.Tags);
+        yield* stack.destroy();
+        yield* restore;
+        yield* stack.destroy();
+        yield* assertFunctionDeleted(original.functionName);
+        yield* assertRoleDeleted(original.roleName);
+      }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+    {
+      tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+      timeout: 180_000,
+    },
+  );
+}
+
+// Outside a cycle `read` refuses the foreign function at plan time; with
+// adoption, reconcile updates it from the adopted attributes. That update must
+// not re-check the tags the engine already admitted, and re-brands it.
+test.provider(
+  "adopt(true) takes over a foreign function outside a cycle",
+  (stack) =>
+    Effect.gen(function* () {
+      const { original, restore } = yield* plantForeignFunction(stack);
+      const adopted = yield* stack.deploy(
+        AWS.Lambda.Function("AdoptedFn", {
+          main: asyncHandlerPath,
+          functionName: original.functionName,
+          functionUrl: false,
+        }).pipe(adopt(true)),
+      );
+      expect(adopted.functionName).toBe(original.functionName);
+      const { Tags } = yield* Lambda.getFunction({ FunctionName: original.functionName });
+      expect(Tags?.["alchemy::id"]).toBe("AdoptedFn");
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(original.functionName);
+      yield* assertRoleDeleted(adopted.roleName);
+      // The taken-over function's previous execution role is still `CyclicOriginal`'s.
+      yield* restore;
+      yield* stack.destroy();
+      yield* assertRoleDeleted(original.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+    timeout: 180_000,
+  },
+);
+
+test.provider(
+  "a cyclic precreate takes over a foreign function with adopt(true)",
+  (stack) =>
+    Effect.gen(function* () {
+      const { original, restore } = yield* plantForeignFunction(stack);
+      const adopted = yield* stack.deploy(cyclicFunction(original.functionName, true));
+      expect(adopted.functionName).toBe(original.functionName);
+      const { Tags } = yield* Lambda.getFunction({ FunctionName: original.functionName });
+      expect(Tags?.["alchemy::id"]).toBe("CyclicDifferent");
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(original.functionName);
+      yield* assertRoleDeleted(adopted.roleName);
+      // The taken-over function's previous execution role is still `CyclicOriginal`'s.
+      yield* restore;
+      yield* stack.destroy();
+      yield* assertRoleDeleted(original.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+    timeout: 180_000,
+  },
+);
 
 // Out-of-band proof that the trailing destroy actually removed the function
 // from the cloud (bounded retry to ride out delete propagation).
@@ -822,6 +1374,24 @@ const waitForReservedConcurrency = Effect.fn(function* (
     Effect.filterOrFail(
       (actual) => actual === expected,
       () => new Error("Reserved concurrency update has not propagated yet"),
+    ),
+    Effect.retry({
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
+    }),
+  );
+});
+
+const waitForConfiguration = Effect.fn(function* (
+  functionName: string,
+  expected: { memorySize: number; timeout: number },
+) {
+  return yield* Lambda.getFunctionConfiguration({ FunctionName: functionName }).pipe(
+    Effect.filterOrFail(
+      (config) =>
+        config.MemorySize === expected.memorySize &&
+        config.Timeout === expected.timeout &&
+        config.LastUpdateStatus === "Successful",
+      () => new Error("Lambda configuration update has not propagated yet"),
     ),
     Effect.retry({
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),

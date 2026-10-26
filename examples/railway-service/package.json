@@ -24,10 +24,7 @@
     "@effect/sql-pg": "catalog:",
     "alchemy": "workspace:*",
     "drizzle-orm": "catalog:",
-    "effect": "catalog:",
-    "pg": "catalog:"
+    "effect": "catalog:"
   },
-  "devDependencies": {
-    "@types/pg": "catalog:"
-  }
+  "devDependencies": {}
 }

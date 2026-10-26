@@ -1,12 +1,19 @@
 import * as AWS from "@alchemy.run/aws";
+import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { Role } from "@alchemy.run/aws/IAM";
+import { expect } from "@alchemy.run/test";
+import type { ResolvedCredentials } from "@distilled.cloud/aws/Credentials";
 import * as IAM from "@distilled.cloud/aws/iam";
-import { expect } from "alchemy-test";
+import * as STS from "@distilled.cloud/aws/sts";
 import { adopt } from "alchemy/AdoptPolicy";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -49,6 +56,13 @@ test.provider(
       // Duration.Input prop converts to whole wire seconds.
       expect(created.Role.MaxSessionDuration).toBe(7200);
 
+      // #1968: IAM stores `["sts:AssumeRole"]` as `"sts:AssumeRole"`; an
+      // equivalent document is not drift.
+      const clean = yield* Drift.detect({ name: stack.name, stage: stack.stage }).pipe(
+        Effect.provide(stack.state),
+      );
+      expect(clean.resources.IamRole?.action).toBe("unchanged");
+
       yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Role("IamRole", {
@@ -80,6 +94,157 @@ test.provider(
       const deleted = yield* IAM.getRole({ RoleName: role.roleName }).pipe(Effect.option);
       expect(deleted._tag).toBe("None");
     }),
+  { tags: ["provider:aws", "provider:aws:iam", "live"] },
+);
+
+test.provider(
+  "does not rewrite an inline policy IAM stores in an equivalent form",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployRole = (tags: Record<string, string>) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Role("EquivalentInlineRole", {
+              assumeRolePolicyDocument: assumeRolePolicy,
+              inlinePolicies: {
+                AllowLogs: {
+                  Version: "2012-10-17",
+                  Statement: [{ Effect: "Allow", Action: ["logs:CreateLogGroup"], Resource: "*" }],
+                },
+              },
+              tags,
+            });
+          }),
+        );
+
+      const role = yield* deployRole({ env: "test" });
+
+      // Store an equivalent document in a different form: reordered keys and
+      // a single-item list as a scalar.
+      const equivalent = JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [{ Resource: "*", Action: "logs:CreateLogGroup", Effect: "Allow" }],
+      });
+      yield* IAM.putRolePolicy({
+        RoleName: role.roleName,
+        PolicyName: "AllowLogs",
+        PolicyDocument: equivalent,
+      });
+
+      // A tags-only change runs reconcile, which must leave the policy alone.
+      yield* deployRole({ env: "prod" });
+
+      const observed = yield* IAM.getRolePolicy({
+        RoleName: role.roleName,
+        PolicyName: "AllowLogs",
+      });
+      expect(JSON.parse(decodeURIComponent(observed.PolicyDocument))).toEqual(
+        JSON.parse(equivalent),
+      );
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:iam", "live"] },
+);
+
+// Credentials the next deploy runs as; unset means the testing profile.
+let deployAs: ResolvedCredentials | undefined;
+
+const deployAsEnvironment = Layer.effect(
+  AWSEnvironment,
+  Effect.gen(function* () {
+    const profile = yield* AWSEnvironment;
+    return Effect.map(profile, (environment) => ({
+      ...environment,
+      credentials: Effect.suspend(() =>
+        deployAs ? Effect.succeed(deployAs) : environment.credentials,
+      ),
+    }));
+  }),
+).pipe(Layer.provide(AWS.providers()));
+
+const deployAsRole = Test.make({
+  providers: AWS.providers().pipe(Layer.provide(deployAsEnvironment)),
+});
+
+deployAsRole.test.provider(
+  "a role denied rewriting its own policies can deploy a change to itself",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { accountId, region } = yield* AWSEnvironment.current;
+      const deployRole = (tags: Record<string, string>) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Role("SelfDeployingRole", {
+              assumeRolePolicyDocument: {
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Effect: "Allow",
+                    Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+                    Action: ["sts:AssumeRole"],
+                  },
+                ],
+              },
+              inlinePolicies: {
+                Deploy: {
+                  Version: "2012-10-17",
+                  Statement: [
+                    { Effect: "Allow", Action: ["*"], Resource: "*" },
+                    {
+                      Effect: "Deny",
+                      Action: ["iam:UpdateAssumeRolePolicy", "iam:PutRolePolicy"],
+                      Resource: "*",
+                    },
+                  ],
+                },
+              },
+              tags,
+            });
+          }),
+        );
+
+      const role = yield* deployRole({ env: "test" });
+
+      // A freshly created role's trust policy takes a few seconds to apply.
+      const assumed = yield* STS.assumeRole({
+        RoleArn: role.roleArn,
+        RoleSessionName: "alchemy-self-deploy",
+      }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "AccessDeniedException",
+          schedule: Schedule.exponential("1 second"),
+          times: 8,
+        }),
+      );
+      deployAs = {
+        accessKeyId: Redacted.make(assumed.Credentials!.AccessKeyId),
+        secretAccessKey: Redacted.isRedacted(assumed.Credentials!.SecretAccessKey)
+          ? assumed.Credentials!.SecretAccessKey
+          : Redacted.make(assumed.Credentials!.SecretAccessKey),
+        sessionToken: Redacted.make(assumed.Credentials!.SessionToken),
+        region,
+        expiration: assumed.Credentials!.Expiration?.getTime(),
+      };
+
+      // As the role itself, change only its tags. Reconcile must not call
+      // UpdateAssumeRolePolicy or PutRolePolicy for unchanged documents
+      // that IAM returns in its own form.
+      yield* deployRole({ env: "prod" }).pipe(
+        Effect.ensuring(Effect.sync(() => (deployAs = undefined))),
+      );
+
+      const tags = yield* IAM.listRoleTags({ RoleName: role.roleName });
+      expect(
+        Object.fromEntries((tags.Tags ?? []).map((tag) => [tag.Key, tag.Value])),
+      ).toMatchObject({ env: "prod" });
+
+      yield* stack.destroy();
+    }).pipe(Effect.ensuring(Effect.sync(() => (deployAs = undefined)))),
   { tags: ["provider:aws", "provider:aws:iam", "live"] },
 );
 

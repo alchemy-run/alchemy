@@ -26,13 +26,14 @@ import {
   failCredentialsRequired,
   demandPlanCredentials,
 } from "./Auth/Demand.ts";
-import { havePropsChanged, stripUnresolved } from "./Diff.ts";
+import { havePropsChanged, isResolved, stripUnresolved } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import { type ActionApply, type Apply, type Delete, type Plan } from "./Plan.ts";
 import {
   type DeleteInProgress,
+  type ProviderService,
   findProviderByType,
   missingProviderError,
   tryFindProviderByType,
@@ -107,6 +108,21 @@ const track = (
   outputs[fqn] = entry.output;
 };
 
+/**
+ * Whether an attr-less checkpoint lost props to `stripUnresolved`. Its stored
+ * props no longer identify the physical resource it was creating (e.g. a
+ * stripped namespace makes a name match a different resource), so recovery
+ * must not look the resource up from them.
+ */
+const propsIncomplete = (value: {
+  attr?: unknown;
+  props?: unknown;
+  propsIncomplete?: true;
+}): true | undefined =>
+  value.attr === undefined && (value.propsIncomplete || !isResolved(value.props))
+    ? true
+    : undefined;
+
 const provideLifecycleScope =
   (resource: ResourceContext["Service"]) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -149,6 +165,62 @@ const instrumentLifecycle =
         },
       }),
     );
+
+/**
+ * Whether `observed` is this resource's previous generation: it matches that
+ * generation's attributes on every stable property it reports. A provider
+ * that cannot prove who owns a name it does not tag — an explicitly named
+ * Container application — reports even our own resource as `Unowned`.
+ */
+const isPreviousGeneration = (
+  observed: { readonly [key: string]: any },
+  stables: readonly string[] | undefined,
+  previous: { attr?: any } | undefined,
+): boolean => {
+  const keys = (stables ?? []).filter((key) => observed[key] !== undefined);
+  const attr = previous?.attr;
+  return keys.length > 0 && attr !== undefined && keys.every((key) => attr[key] === observed[key]);
+};
+
+/**
+ * A dependency cycle precreates on raw props, before `read` can check
+ * ownership. Ask the provider's `observe` what exists at the identity
+ * precreate would claim, and refuse a foreign resource unless adoption is
+ * allowed. A provider without `observe` precreates unchecked.
+ */
+const observeBeforePrecreate = Effect.fn(function* (
+  node: {
+    provider: Pick<ProviderService<any>, "observe" | "stables">;
+    props: any;
+    deferredAdoption?: { adopt: boolean };
+    resource: { Type: string };
+  },
+  fqn: string,
+  logicalId: string,
+  instanceId: string,
+  previous?: { attr?: any },
+) {
+  if (node.provider.observe === undefined || node.deferredAdoption === undefined) return;
+  const observed = yield* node.provider
+    .observe({ id: logicalId, fqn, instanceId, news: node.props })
+    .pipe(instrumentLifecycle("observe", fqn, node.resource.Type, logicalId, instanceId));
+  if (
+    observed !== undefined &&
+    Unowned.is(observed) &&
+    !node.deferredAdoption.adopt &&
+    !isPreviousGeneration(observed, node.provider.stables, previous)
+  ) {
+    return yield* new OwnedBySomeoneElse({
+      message:
+        `Cannot pre-create resource '${fqn}' (${node.resource.Type}): ` +
+        "it exists in the cloud but is not owned by this " +
+        "stack/stage/logical-id. Re-run with `--adopt` (or " +
+        "wrap the effect in `adopt(true)`) to take it over.",
+      resourceType: node.resource.Type,
+      logicalId,
+    });
+  }
+});
 
 export const apply = <P extends Plan>(
   plan: P,
@@ -562,6 +634,7 @@ const executeNode = (
         value: {
           ...value,
           adoptionBlocked: value.adoptionBlocked ?? node.adoptionBlocked,
+          propsIncomplete: propsIncomplete(value),
           props: stripUnresolved(value.props),
           bindings: stripUnresolved(value.bindings),
           namespace,
@@ -806,6 +879,7 @@ const executeNode = (
       // Durable Object classes are empty) can serve traffic while the real
       // version propagates.
       if (inCycle && node.provider.precreate && attr === undefined) {
+        yield* observeBeforePrecreate(node, fqn, logicalId, instanceId);
         // Some resources need a placeholder physical resource before their real
         // create can finish. Persist that stub so downstream evaluation can proceed.
         yield* report("pre-creating");
@@ -1173,14 +1247,73 @@ const executeNode = (
           }
         });
 
-      if (node.deleteFirst) {
+      const deleteFirst = Effect.fn(function* () {
         yield* scopedSession.note(
           "Deleting previous resource before creating its replacement (deleteFirst)...",
         );
         yield* deleteOldGenerations(replState.old);
-      }
+      });
 
       let attr: any = replState.attr;
+
+      // ── replacement admission ──
+      //
+      // The replacement may resolve to a physical identity that already
+      // exists and belongs to someone else (e.g. a renamed Worker pointing at
+      // a foreign script). Read it before anything is mutated — before
+      // precreate, reconcile, and delete-first cleanup of the previous
+      // generation — and refuse an unowned target unless adoption is allowed,
+      // exactly like a fresh create.
+      let admitted = attr !== undefined || node.deferredAdoption === undefined;
+      const admit = Effect.fn(function* (props: Record<string, any>) {
+        admitted = true;
+        const observed = yield* node.provider.read!({
+          id: logicalId,
+          fqn,
+          instanceId,
+          olds: props,
+          output: undefined,
+        }).pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
+        if (observed === undefined) return;
+        if (
+          Unowned.is(observed) &&
+          !node.deferredAdoption?.adopt &&
+          !isPreviousGeneration(observed, node.provider.stables, replState.old)
+        ) {
+          return yield* new OwnedBySomeoneElse({
+            message:
+              `Cannot replace resource '${fqn}' (${node.resource.Type}): ` +
+              "its replacement exists in the cloud but is not owned by this " +
+              "stack/stage/logical-id. Re-run with `--adopt` (or " +
+              "wrap the effect in `adopt(true)`) to take it over.",
+            resourceType: node.resource.Type,
+            logicalId,
+          });
+        }
+        // A delete-first target may be the previous generation itself, which
+        // is about to be deleted — never hand its attributes to reconcile.
+        if (!node.deleteFirst) attr = stripUnowned(observed);
+      });
+
+      if (!admitted && isResolved(node.props)) {
+        yield* admit(node.props);
+      }
+
+      // A cycle precreates before its props resolve, so `observe` admits the
+      // identity precreate will claim — before delete-first, too.
+      if (!admitted && inCycle) {
+        yield* observeBeforePrecreate(node, fqn, logicalId, instanceId, replState.old);
+      }
+
+      // A cycle must delete before precreate claims the identity. Plan has
+      // already refused one whose identity could not be admitted first.
+      // Otherwise the previous generation survives until reconcile is
+      // about to run, so a failed upstream never leaves the resource missing.
+      let deletedFirst = false;
+      if (node.deleteFirst && inCycle) {
+        yield* deleteFirst();
+        deletedFirst = true;
+      }
 
       if (attr !== undefined) {
         // If precreate already ran, expose that intermediate output immediately so
@@ -1232,6 +1365,13 @@ const executeNode = (
       const news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
 
       const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
+
+      if (!admitted && attr === undefined) {
+        yield* admit(news);
+      }
+      if (node.deleteFirst && !deletedFirst) {
+        yield* deleteFirst();
+      }
 
       attr = yield* node.provider
         .reconcile({
@@ -1897,6 +2037,9 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
         const adoptionBlocked = isDeleteNode(node)
           ? node.state.adoptionBlocked
           : generation.adoptionBlocked;
+        const incompleteProps = isDeleteNode(node)
+          ? node.state.propsIncomplete
+          : generation.propsIncomplete;
         // Mutable: an attr-less row (interrupted create) may recover its
         // attributes from `provider.read` below, right before deletion.
         let attr = persistedAttr;
@@ -2050,6 +2193,13 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                     "migrated predecessor. Any interrupted new physical " +
                     "resource must be identified and cleaned up manually.",
                 );
+              } else if (incompleteProps) {
+                yield* scopedSession.note(
+                  "Skipping recovery: unresolved properties were omitted from " +
+                    "this interrupted create's state, so they cannot identify it. " +
+                    "Any interrupted physical resource must be identified and " +
+                    "cleaned up manually.",
+                );
               } else if (provider.read) {
                 const recovered = yield* provider
                   .read({ id: logicalId, fqn, instanceId, olds: props as never, output: undefined })
@@ -2111,6 +2261,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                 removalPolicy: node.resource.RemovalPolicy,
                 providerMode,
                 adoptionBlocked,
+                propsIncomplete: incompleteProps,
               });
             }
 
@@ -2181,6 +2332,7 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                   bindings: excludeDeletedBindings(node.bindings),
                   removalPolicy: node.removalPolicy,
                   providerMode: node.providerMode,
+                  propsIncomplete: node.propsIncomplete,
                 });
               }
               yield* scopedSession.note(

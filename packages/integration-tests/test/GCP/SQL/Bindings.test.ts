@@ -1,8 +1,8 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
-import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";

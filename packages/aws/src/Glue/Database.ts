@@ -9,7 +9,12 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { cleanMap, databaseArn, retryWhileConcurrentModification } from "./internal.ts";
+import {
+  cleanMap,
+  databaseArn,
+  deleteGlueDatabase,
+  retryWhileConcurrentModification,
+} from "./internal.ts";
 
 export interface DatabaseProps {
   /**
@@ -198,15 +203,7 @@ export const DatabaseProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* glue
-            .deleteDatabase({
-              Name: output.databaseName,
-              CatalogId: output.catalogId,
-            })
-            .pipe(
-              retryWhileConcurrentModification,
-              Effect.catchTag("EntityNotFoundException", () => Effect.void),
-            );
+          yield* deleteGlueDatabase(output.databaseName, output.catalogId);
         }),
       });
     }),

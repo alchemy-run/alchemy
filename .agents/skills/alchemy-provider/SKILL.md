@@ -305,7 +305,7 @@ a hosted runtime, websites). A package holds:
 | `scripts/build.ts` | copied verbatim from a sibling package |
 | `src/Contributions.ts` | `Contributions.make({ name, auth, … })` — what the CLI, the Alchemist API, and the test harness load without the user's stack |
 | `src/AuthProvider.ts` | `makeStoredAuthProvider` fields, CI env vars, `<Provider>Auth` layer |
-| `src/Credentials.ts` | `fromAuthProvider()` → the distilled `Credentials` layer |
+| `src/Credentials.ts` | `fromAuthProvider()` = `lazyCredentials<Resolved, ConfigError>()(...)` → the distilled `Credentials` layer |
 | `src/Providers.ts` | `ProviderCollection` + `providers()` layer (provider layers, credentials, `FetchHttpClient`, auth, profile and credential stores) |
 | `src/<Provider>Bindings.ts` | how bindings reach the cloud from any host (step 5) |
 | `src/globals.d.ts` | `import type {} from "alchemy/Phase";` so `globalThis.__ALCHEMY_RUNTIME__` type-checks |
@@ -659,7 +659,7 @@ verification through distilled, typed wait-until-gone). Run with the
 profile from step 0:
 
 ```sh
-timeout 240 pnpm test:integration test/<Provider>/<Service>/<Resource>.test.ts --profile testing --retry 0
+pnpm test:integration test/<Provider>/<Service>/<Resource>.test.ts --profile testing --retry 0
 ```
 
 What a test must prove:

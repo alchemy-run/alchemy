@@ -1,5 +1,5 @@
 import * as NodeCrypto from "node:crypto";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { KeyPair, KeyPairProvider } from "@/KeyPair";

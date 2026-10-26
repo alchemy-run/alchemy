@@ -38,12 +38,7 @@ export const PLACEHOLDER_STAGE = "placeholder";
  * The default export of an `alchemy.run.ts` entrypoint: the stack effect
  * `Alchemy.Stack(...)` returns, carrying the metadata the factory attaches.
  */
-export type StackModule = ReturnType<ReturnType<typeof Stack.make>> & {
-  readonly stackName: string;
-  readonly providers: Layer.Layer<never> | undefined;
-  readonly state: Layer.Layer<never> | undefined;
-  readonly secrets: Stack.StackSecrets | undefined;
-};
+export type StackModule = ReturnType<ReturnType<typeof Stack.make>> & Stack.StackDefinition;
 
 export interface StackModuleLoader {
   readonly import: (url: string) => Promise<{ readonly default?: unknown }>;
@@ -100,6 +95,8 @@ export interface OpenOptions {
   readonly adopt?: boolean;
   /** Upgrade an out-of-date state store without prompting. */
   readonly updateStateStore?: boolean;
+  /** A destroy builds the stack's services but never runs its program. */
+  readonly operation?: "deploy" | "destroy";
 }
 
 interface SessionServicesOptions {
@@ -166,6 +163,7 @@ const stackSessionKey = (target: Target, options: OpenOptions) =>
     options.dev ?? false,
     options.adopt ?? false,
     options.updateStateStore ?? false,
+    options.operation ?? "deploy",
   ]);
 
 const authRegistryKey = (options: CollectAuthProvidersOptions) =>
@@ -258,6 +256,21 @@ const openUncached = Effect.fn("openStackSessionUncached")(function* (
     shared,
   );
   const sessionContext = yield* Layer.build(services);
+  if (options.operation === "destroy") {
+    const services = yield* Effect.provide(
+      Stack.build({
+        name: stackEffect.stackName,
+        providers: stackEffect.providers,
+        state: stackEffect.state,
+        secrets: stackEffect.secrets,
+      }),
+      sessionContext,
+    );
+    return {
+      stack: { ...Context.get(services, Stack.Stack), output: undefined },
+      context: Context.merge(sessionContext, services),
+    };
+  }
   const stack = yield* Effect.provide(stackEffect, sessionContext);
   return {
     stack,

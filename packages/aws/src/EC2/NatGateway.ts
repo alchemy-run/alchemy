@@ -20,6 +20,7 @@ import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { AllocationId } from "./EIP.ts";
 import type { SubnetId } from "./Subnet.ts";
+import type { VpcId } from "./Vpc.ts";
 
 export type NatGatewayId<ID extends string = string> = `nat-${ID}`;
 export const NatGatewayId = <ID extends string>(id: ID): ID & NatGatewayId<ID> =>
@@ -27,12 +28,70 @@ export const NatGatewayId = <ID extends string>(id: ID): ID & NatGatewayId<ID> =
 
 export type NatGatewayArn = `arn:aws:ec2:${RegionID}:${AccountID}:natgateway/${NatGatewayId}`;
 
+export interface NatGatewayAvailabilityZoneAddress {
+  /**
+   * The Availability Zone (e.g. `us-east-1a`) the addresses serve.
+   * Specify either this or `availabilityZoneId`.
+   */
+  availabilityZone?: string;
+
+  /**
+   * The Availability Zone ID (e.g. `use1-az1`) the addresses serve.
+   * Specify either this or `availabilityZone`.
+   */
+  availabilityZoneId?: string;
+
+  /**
+   * The allocation IDs of the Elastic IP addresses the gateway uses in this
+   * Availability Zone.
+   */
+  allocationIds: AllocationId[];
+}
+
 export interface NatGatewayProps {
   /**
-   * The subnet in which to create the NAT gateway.
-   * For public NAT gateways, this must be a public subnet.
+   * Whether the NAT gateway lives in a single Availability Zone (`"zonal"`) or
+   * spans every Availability Zone of a VPC (`"regional"`).
+   *
+   * A zonal gateway needs `subnetId`; a regional gateway needs `vpcId` and only
+   * supports public connectivity. Changing the mode replaces the gateway.
+   * @default "zonal"
    */
-  subnetId: SubnetId;
+  availabilityMode?: ec2.AvailabilityMode;
+
+  /**
+   * The subnet in which to create the NAT gateway.
+   * Required for zonal NAT gateways. For public NAT gateways, this must be a
+   * public subnet.
+   */
+  subnetId?: SubnetId;
+
+  /**
+   * The VPC in which to create a regional NAT gateway.
+   * Required when `availabilityMode` is `"regional"`. The VPC must have an
+   * internet gateway attached.
+   */
+  vpcId?: VpcId;
+
+  /**
+   * Elastic IP addresses to use per Availability Zone for a regional NAT
+   * gateway (manual mode).
+   *
+   * When omitted, a regional gateway runs in automatic mode: AWS allocates its
+   * addresses and expands it to every Availability Zone with workloads. When
+   * set, the gateway runs in manual mode and only serves the listed zones;
+   * addresses are associated and disassociated in place as this list changes.
+   * Switching between automatic and manual mode replaces the gateway.
+   */
+  availabilityZoneAddresses?: NatGatewayAvailabilityZoneAddress[];
+
+  /**
+   * How long (in seconds) to let in-flight connections drain before an Elastic
+   * IP removed from `availabilityZoneAddresses` is forcibly released.
+   * Between 1 and 4000. Changing it never replaces the gateway.
+   * @default 350
+   */
+  maxDrainDurationSeconds?: number;
 
   /**
    * The allocation ID of the Elastic IP address for the gateway.
@@ -92,8 +151,31 @@ export interface NatGateway extends Resource<
 
     /**
      * The ID of the subnet in which the NAT gateway is located.
+     * Undefined for regional NAT gateways.
      */
-    subnetId: SubnetId;
+    subnetId: SubnetId | undefined;
+
+    /**
+     * Whether the NAT gateway is zonal or regional.
+     */
+    availabilityMode: ec2.AvailabilityMode;
+
+    /**
+     * Whether a regional NAT gateway automatically expands to Availability
+     * Zones with workloads (`"enabled"` in automatic mode, `"disabled"` in
+     * manual mode).
+     */
+    autoProvisionZones?: ec2.AutoProvisionZonesState;
+
+    /**
+     * Whether a regional NAT gateway automatically scales its IP addresses.
+     */
+    autoScalingIps?: ec2.AutoScalingIpsState;
+
+    /**
+     * The ID of the route table AWS creates for a regional NAT gateway.
+     */
+    routeTableId?: string;
 
     /**
      * The ID of the VPC in which the NAT gateway is located.
@@ -132,6 +214,8 @@ export interface NatGateway extends Resource<
       isPrimary?: boolean;
       failureMessage?: string;
       status?: ec2.NatGatewayAddressStatus;
+      availabilityZone?: string;
+      availabilityZoneId?: string;
     }>;
 
     /**
@@ -166,9 +250,9 @@ export interface NatGateway extends Resource<
  * *public* subnet and requires an Elastic IP via `allocationId`, while a
  * `"private"` gateway has no public address and is used for VPC-to-VPC routing.
  * A NAT gateway only carries traffic once a `Route` sends `0.0.0.0/0` from the
- * private subnet's route table to it. Core properties (`subnetId`,
- * `connectivityType`, `allocationId`) are immutable, so changing them replaces
- * the gateway.
+ * private subnet's route table to it. Core properties (`availabilityMode`,
+ * `subnetId`, `vpcId`, `connectivityType`, `allocationId`) are immutable, so
+ * changing them replaces the gateway.
  *
  * ### Public NAT Gateways
  * Public gateways translate private addresses to a stable public IP, so they
@@ -218,6 +302,36 @@ export interface NatGateway extends Resource<
  * of simultaneous connections a private gateway can sustain to busy
  * destinations, which is only valid for private gateways.
  *
+ * ### Regional NAT Gateways
+ * A regional NAT gateway spans every Availability Zone of a VPC under one ID,
+ * so it needs a `vpcId` instead of a public subnet. The VPC must have an
+ * internet gateway attached.
+ * **Example:** Regional NAT Gateway in Automatic Mode
+ * ```typescript
+ * const natGateway = yield* AWS.EC2.NatGateway("RegionalNat", {
+ *   availabilityMode: "regional",
+ *   vpcId: vpc.vpcId,
+ * });
+ * ```
+ * In automatic mode AWS allocates the public addresses and expands the gateway
+ * to each Availability Zone where your workloads run.
+ *
+ * **Example:** Regional NAT Gateway with Your Own Elastic IPs
+ * ```typescript
+ * const natGateway = yield* AWS.EC2.NatGateway("RegionalNat", {
+ *   availabilityMode: "regional",
+ *   vpcId: vpc.vpcId,
+ *   availabilityZoneAddresses: [
+ *     { availabilityZone: "us-east-1a", allocationIds: [eipA.allocationId] },
+ *     { availabilityZone: "us-east-1b", allocationIds: [eipB.allocationId] },
+ *   ],
+ * });
+ * ```
+ * Listing `availabilityZoneAddresses` switches the gateway to manual mode: it
+ * serves only the listed zones with the given Elastic IPs, and adding or
+ * removing entries associates or disassociates addresses without replacing the
+ * gateway.
+ *
  * ### Routing Private Traffic
  * **Example:** Default Route Through the NAT Gateway
  * ```typescript
@@ -265,10 +379,14 @@ export const NatGatewayProvider = () =>
           natGatewayId: gw.NatGatewayId as NatGatewayId,
           natGatewayArn:
             `arn:aws:ec2:${region}:${accountId}:natgateway/${gw.NatGatewayId}` as NatGatewayArn,
-          subnetId: gw.SubnetId as SubnetId,
+          subnetId: gw.SubnetId as SubnetId | undefined,
           vpcId: gw.VpcId!,
           state: gw.State!,
           connectivityType: gw.ConnectivityType!,
+          availabilityMode: gw.AvailabilityMode ?? "zonal",
+          autoProvisionZones: gw.AutoProvisionZones,
+          autoScalingIps: gw.AutoScalingIps,
+          routeTableId: gw.RouteTableId,
           publicIp: primaryAddress?.PublicIp,
           privateIp: primaryAddress?.PrivateIp,
           natGatewayAddresses: gw.NatGatewayAddresses?.map((a) => ({
@@ -280,6 +398,8 @@ export const NatGatewayProvider = () =>
             isPrimary: a.IsPrimary,
             failureMessage: a.FailureMessage,
             status: a.Status,
+            availabilityZone: a.AvailabilityZone,
+            availabilityZoneId: a.AvailabilityZoneId,
           })),
           failureCode: gw.FailureCode,
           failureMessage: gw.FailureMessage,
@@ -340,13 +460,18 @@ export const NatGatewayProvider = () =>
           if (!isResolved(news)) return;
           // NAT Gateway is mostly immutable - any change to core properties requires replacement
           if (
+            (news.availabilityMode ?? "zonal") !== (olds.availabilityMode ?? "zonal") ||
             news.subnetId !== olds.subnetId ||
+            news.vpcId !== olds.vpcId ||
             news.connectivityType !== olds.connectivityType ||
-            news.allocationId !== olds.allocationId
+            news.allocationId !== olds.allocationId ||
+            // automatic <-> manual mode cannot be switched in place
+            (news.availabilityZoneAddresses === undefined) !==
+              (olds.availabilityZoneAddresses === undefined)
           ) {
             return { action: "replace" };
           }
-          // Tags can be updated in-place
+          // Tags and manual-mode zone addresses can be updated in-place
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -377,9 +502,18 @@ export const NatGatewayProvider = () =>
           if (gw === undefined) {
             yield* session.note("Creating NAT Gateway...");
             const result = yield* ec2.createNatGateway({
-              SubnetId: news.subnetId as string,
+              AvailabilityMode: news.availabilityMode,
+              SubnetId: news.subnetId,
+              VpcId: news.vpcId,
+              AvailabilityZoneAddresses: news.availabilityZoneAddresses?.map((a) => ({
+                AvailabilityZone: a.availabilityZone,
+                AvailabilityZoneId: a.availabilityZoneId,
+                AllocationIds: a.allocationIds,
+              })),
               AllocationId: news.allocationId as string | undefined,
-              ConnectivityType: news.connectivityType ?? "public",
+              ConnectivityType:
+                news.connectivityType ??
+                (news.availabilityMode === "regional" ? undefined : "public"),
               PrivateIpAddress: news.privateIpAddress,
               SecondaryAllocationIds: news.secondaryAllocationIds as string[] | undefined,
               SecondaryPrivateIpAddresses: news.secondaryPrivateIpAddresses,
@@ -398,6 +532,89 @@ export const NatGatewayProvider = () =>
           }
 
           const natGatewayId = gw.NatGatewayId!;
+
+          // Sync manual-mode zone addresses — observed associations vs desired.
+          if (news.availabilityZoneAddresses) {
+            // An in-flight association has no AssociationId yet, so it can be
+            // neither diffed nor disassociated — let it settle first.
+            const settled = yield* waitForNatGatewayAddresses(
+              natGatewayId,
+              (a) => a.Status === "associating",
+              session,
+            );
+            const observed = (settled.NatGatewayAddresses ?? []).filter(
+              (a) =>
+                a.AllocationId !== undefined &&
+                a.Status !== "disassociating" &&
+                a.Status !== "failed",
+            );
+            const desired = news.availabilityZoneAddresses.flatMap((zone) =>
+              zone.allocationIds.map((allocationId) => ({ zone, allocationId })),
+            );
+            const sameZone = (a: ec2.NatGatewayAddress, zone: NatGatewayAvailabilityZoneAddress) =>
+              zone.availabilityZoneId !== undefined
+                ? a.AvailabilityZoneId === zone.availabilityZoneId
+                : a.AvailabilityZone === zone.availabilityZone;
+            const stale = observed.filter(
+              (a) =>
+                a.AssociationId !== undefined &&
+                !desired.some((d) => d.allocationId === a.AllocationId && sameZone(a, d.zone)),
+            );
+            if (stale.length > 0) {
+              yield* session.note(`Disassociating ${stale.length} NAT Gateway address(es)...`);
+              yield* ec2.disassociateNatGatewayAddress({
+                NatGatewayId: natGatewayId,
+                AssociationIds: stale.map((a) => a.AssociationId!),
+                MaxDrainDurationSeconds: news.maxDrainDurationSeconds,
+              });
+              // An EIP moving between zones must be released before it can
+              // be associated again.
+              const moving = stale
+                .map((a) => a.AllocationId!)
+                .filter((allocationId) => desired.some((d) => d.allocationId === allocationId));
+              if (moving.length > 0) {
+                yield* waitForNatGatewayAddresses(
+                  natGatewayId,
+                  (a) => a.AllocationId !== undefined && moving.includes(a.AllocationId),
+                  session,
+                );
+              }
+            }
+            for (const zone of news.availabilityZoneAddresses) {
+              const missing = zone.allocationIds.filter(
+                (allocationId) =>
+                  !observed.some((a) => a.AllocationId === allocationId && sameZone(a, zone)),
+              );
+              if (missing.length > 0) {
+                yield* session.note(
+                  `Associating ${missing.length} address(es) in ${zone.availabilityZoneId ?? zone.availabilityZone}...`,
+                );
+                yield* ec2.associateNatGatewayAddress({
+                  NatGatewayId: natGatewayId,
+                  AvailabilityZone: zone.availabilityZone,
+                  AvailabilityZoneId: zone.availabilityZoneId,
+                  AllocationIds: missing,
+                });
+              }
+            }
+            const associated = yield* waitForNatGatewayAddresses(
+              natGatewayId,
+              (a) => a.Status === "associating",
+              session,
+            );
+            const failed = (associated.NatGatewayAddresses ?? []).find(
+              (a) =>
+                a.Status === "failed" &&
+                desired.some((d) => d.allocationId === a.AllocationId && sameZone(a, d.zone)),
+            );
+            if (failed) {
+              return yield* new NatGatewayAddressFailed({
+                natGatewayId,
+                allocationId: failed.AllocationId!,
+                failureMessage: failed.FailureMessage,
+              });
+            }
+          }
 
           // Sync tags — observed cloud tags vs desired.
           const currentTags =
@@ -553,3 +770,52 @@ const waitForNatGatewayDeleted = (natGatewayId: string, session: ScopedPlanStatu
       ),
     }),
   );
+
+// Terminal error: an Elastic IP could not be associated with the NAT Gateway
+class NatGatewayAddressFailed extends Data.TaggedError("NatGatewayAddressFailed")<{
+  natGatewayId: string;
+  allocationId: string;
+  failureMessage?: string;
+}> {}
+
+// Retryable error: NAT Gateway addresses are still transitioning
+class NatGatewayAddressesPending extends Data.TaggedError("NatGatewayAddressesPending")<{
+  natGatewayId: string;
+  allocationIds: string[];
+}> {}
+
+/**
+ * Wait until no NAT Gateway address matches `pending`, returning the settled gateway
+ */
+const waitForNatGatewayAddresses = Effect.fn(
+  function* (
+    natGatewayId: string,
+    pending: (address: ec2.NatGatewayAddress) => boolean,
+    session: ScopedPlanStatusSession,
+  ) {
+    const result = yield* ec2.describeNatGateways({ NatGatewayIds: [natGatewayId] });
+    const gw = result.NatGateways?.[0];
+    if (!gw) {
+      return yield* new NatGatewayNotFound({ natGatewayId });
+    }
+    const transitioning = (gw.NatGatewayAddresses ?? []).filter(pending);
+    if (transitioning.length > 0) {
+      return yield* new NatGatewayAddressesPending({
+        natGatewayId,
+        allocationIds: transitioning.map((a) => a.AllocationId ?? "unknown"),
+      });
+    }
+    return gw;
+  },
+  (effect, _natGatewayId, _pending, session) =>
+    effect.pipe(
+      Effect.retry({
+        while: (e) => e._tag === "NatGatewayAddressesPending",
+        schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(90)]).pipe(
+          Schedule.tap(({ attempt }) =>
+            session.note(`Waiting for NAT Gateway addresses to settle... (${attempt * 5}s)`),
+          ),
+        ),
+      }),
+    ),
+);

@@ -225,6 +225,7 @@ const pickSubscriberServices =
             ...service,
             scriptName: entry.scriptName,
             debugPortAddress: entry.debugPortAddress,
+            instanceId: entry.instanceId,
           };
           break;
         }

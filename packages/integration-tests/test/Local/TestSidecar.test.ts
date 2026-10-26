@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { describe, expect, registerFileCleanup } from "alchemy-test";
+import { describe, expect, registerFileCleanup } from "@alchemy.run/test";
 import { Interaction } from "alchemy/Interaction";
 import { RpcProviderProxy } from "alchemy/Local/RpcProviderProxy";
 import * as Test from "alchemy/Test/Alchemy";

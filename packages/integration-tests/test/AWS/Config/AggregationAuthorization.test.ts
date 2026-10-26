@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { AggregationAuthorization } from "@alchemy.run/aws/Config";
+import { expect } from "@alchemy.run/test";
 import * as config from "@distilled.cloud/aws/config-service";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

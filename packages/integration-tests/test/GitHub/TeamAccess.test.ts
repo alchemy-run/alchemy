@@ -1,8 +1,8 @@
 import * as GitHub from "@alchemy.run/github";
 import { GitHubCredentials } from "@alchemy.run/github/Credentials";
 import { Octokit } from "@alchemy.run/github/Octokit";
+import { expect } from "@alchemy.run/test";
 import { Octokit as RestOctokit } from "@octokit/rest";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";

@@ -1,8 +1,8 @@
+import { expect } from "@alchemy.run/test";
 import * as Turso from "@alchemy.run/turso";
 import { organization } from "@alchemy.run/turso/Credentials";
 import { Credentials, DEFAULT_API_BASE_URL } from "@distilled.cloud/turso/Credentials";
 import * as turso from "@distilled.cloud/turso/turso";
-import { expect } from "alchemy-test";
 import { Stage } from "alchemy/Stage";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";

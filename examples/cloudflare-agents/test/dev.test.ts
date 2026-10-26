@@ -4,7 +4,7 @@
  */
 import { afterAll, test } from "bun:test";
 import * as path from "node:path";
-import { DevCli, fetchOk } from "alchemy-test/DevCli";
+import { DevCli, fetchOk } from "@alchemy.run/test/DevCli";
 import { checkAssets, checkCallables, checkMcp, checkSchedule } from "./checks.ts";
 
 const root = path.resolve(import.meta.dirname, "..");

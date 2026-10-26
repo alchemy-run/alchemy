@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-Build a bank in six parts, starting with an account that opens, takes deposits and refuses overdrafts. This part runs on your machine: no cloud account needed yet.
+Build a bank in seven parts, starting with an account that opens, takes deposits and refuses overdrafts. This part runs on your machine: no cloud account needed yet.
 
 If commands, aggregates and events are new to you, read [What is Domain-Driven Design?](/domain/what-is-ddd) first.
 
@@ -203,10 +203,7 @@ import * as Schema from "effect/Schema";
 +import { NotOpen } from "./NotOpen.rejection.ts";
 
 export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
-```
-
-```diff lang="typescript"
-// src/DepositMoney.command.ts
+  amount: Schema.Int,
   balanceAfter: Schema.Int,
 }) {}
 +
@@ -230,19 +227,9 @@ import { AccountId } from "./Account.id.ts";
 +import { DepositMoney, MoneyDeposited } from "./DepositMoney.command.ts";
 +import { NotOpen } from "./NotOpen.rejection.ts";
 import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.command.ts";
-
-```
-
-```diff lang="typescript"
-// src/Account.aggregate.ts
+// ...
 type State = typeof State.Type;
 
-+// An event can only follow an open account; anything else is a bug.
-+const mustBeOpen = (s: State) => {
-+  if (s._tag !== "Open") throw new Error(`expected an open account, got ${s._tag}`);
-+  return s;
-+};
-+
 export class Account extends Domain.Aggregate("Account", {
   id: AccountId,
   state: State,
@@ -259,15 +246,15 @@ export class Account extends Domain.Aggregate("Account", {
   },
   evolve: {
     AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-+    MoneyDeposited: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
++    MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
 +  },
 +  reply: {
-+    DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }),
++    DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
   },
 }) {}
 ```
 
-`evolve` never refuses an event, because it already happened. An event that can't follow the current state is a bug, so `mustBeOpen` throws and the command that caused it is rolled back. `reply` answers from the state after the deposit.
+`evolve` never refuses an event, because it already happened. `decide` already returned `NotOpen` for an account that isn't open, so `evolve` and `reply` just cover every state. `reply` answers from the state after the deposit.
 
 ## Test deposits
 
@@ -278,11 +265,7 @@ import { Bank } from "../src/Bank.model.ts";
 +import { DepositMoney, MoneyDeposited } from "../src/DepositMoney.command.ts";
 +import { NotOpen } from "../src/NotOpen.rejection.ts";
 import { AccountOpened, AlreadyOpen, OpenAccount } from "../src/OpenAccount.command.ts";
-
-```
-
-```diff lang="typescript"
-// test/Account.test.ts
+    // ...
     Story.rejected(new AlreadyOpen()),
   ),
 );
@@ -342,20 +325,20 @@ import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.command.t
 +import { InsufficientFunds, MoneyWithdrawn, WithdrawMoney } from "./WithdrawMoney.command.ts";
 
 const State = Schema.Union([
-```
-
-```diff lang="typescript"
-// src/Account.aggregate.ts
+  // ...
+]);
+// ...
+export class Account extends Domain.Aggregate("Account", {
+  id: AccountId,
   state: State,
   initial: { _tag: "Unopened" },
 -  commands: [OpenAccount, DepositMoney],
 +  commands: [OpenAccount, DepositMoney, WithdrawMoney],
   decide: {
     OpenAccount: (s, cmd) =>
-```
-
-```diff lang="typescript"
-// src/Account.aggregate.ts
+      s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
+    DepositMoney: (s, cmd) =>
+      s._tag !== "Open"
         ? new NotOpen()
         : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
 +    WithdrawMoney: (s, cmd) =>
@@ -367,12 +350,12 @@ const State = Schema.Union([
   },
   evolve: {
     AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-    MoneyDeposited: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
-+    MoneyWithdrawn: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
+    MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
++    MoneyWithdrawn: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
   },
   reply: {
-    DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }),
-+    WithdrawMoney: (s) => ({ balance: mustBeOpen(s).balance }),
+    DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
++    WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
   },
 }) {}
 ```
@@ -388,10 +371,7 @@ import { AccountOpened, AlreadyOpen, OpenAccount } from "../src/OpenAccount.comm
 +import { InsufficientFunds, WithdrawMoney } from "../src/WithdrawMoney.command.ts";
 
 const story = Story.make(Bank);
-```
-
-```diff lang="typescript"
-// test/Account.test.ts
+  // ...
   story(Story.when(account, new DepositMoney({ amount: 100 })), Story.rejected(new NotOpen())),
 );
 +

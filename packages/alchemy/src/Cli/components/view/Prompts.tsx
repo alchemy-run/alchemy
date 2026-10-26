@@ -5,8 +5,6 @@ import type { ReactNode } from "react";
 import type {
   ConfirmOptions,
   CycleSelectOptions,
-  AwaitExternalOptions,
-  MenuOptions,
   MultiSelectOptions,
   PasswordInputOptions,
   Screen,
@@ -20,7 +18,8 @@ import {
   ChoiceGroup,
   filterChoices,
   CycleList,
-  ExternalWait,
+  BrowserLoginWait,
+  type BrowserLoginWaitProps,
   jumpSkippingDisabled,
   Menu,
   moveSkippingDisabled,
@@ -236,21 +235,9 @@ type SelectPromptProps<Value> = {
   readonly options: SelectOptions<Value>;
   readonly submit: (value: Value, summary?: ReactNode) => void;
   readonly cancel: () => void;
-  readonly summary?: boolean;
-  readonly header?: ReactNode;
-  readonly footer?: ReactNode;
-  readonly escapeLabel?: string;
 };
 
-function SelectPrompt<Value>({
-  options,
-  submit,
-  cancel,
-  summary = true,
-  header,
-  footer,
-  escapeLabel = "cancel",
-}: SelectPromptProps<Value>) {
+function SelectPrompt<Value>({ options, submit, cancel }: SelectPromptProps<Value>) {
   const keys = useKeyGlyphs();
   const { rows } = useTerminalSize();
   const visibleCount = options.visibleCount ?? Math.max(3, Math.min(16, rows - 8));
@@ -288,48 +275,41 @@ function SelectPrompt<Value>({
     if (key.enter) {
       const choice = filtered[cursor]?.choice;
       if (choice !== undefined && !choice.disabled) {
-        submit(
-          choice.value,
-          summary ? <AnsweredPrompt message={options.message} answer={choice.label} /> : undefined,
-        );
+        submit(choice.value, <AnsweredPrompt message={options.message} answer={choice.label} />);
       }
       return;
     }
     handleKey(input, key);
   });
   return (
-    <Box flexDirection="column" gap={1}>
-      {header}
-      <PromptFrame
-        message={options.message}
-        keys={[
-          [keys.upDown, "navigate"],
-          [keys.enter, "select"],
-          [keys.escape, query === "" ? escapeLabel : "clear filter"],
-        ]}
-      >
-        <Box flexDirection="column">
-          {searchable ? (
-            <FilterLine
-              query={query}
-              annotation={
-                query === ""
-                  ? `${options.options.length} choices`
-                  : `${filtered.length} of ${options.options.length}`
-              }
-            />
-          ) : null}
-          <Menu
-            choices={filtered.map(({ choice }) => choice)}
-            cursor={cursor}
-            visibleCount={visibleCount}
-            empty="No matching choices."
-            descriptionPlacement={options.descriptionPlacement}
+    <PromptFrame
+      message={options.message}
+      keys={[
+        [keys.upDown, "navigate"],
+        [keys.enter, "select"],
+        [keys.escape, query === "" ? "cancel" : "clear filter"],
+      ]}
+    >
+      <Box flexDirection="column">
+        {searchable ? (
+          <FilterLine
+            query={query}
+            annotation={
+              query === ""
+                ? `${options.options.length} choices`
+                : `${filtered.length} of ${options.options.length}`
+            }
           />
-        </Box>
-      </PromptFrame>
-      {footer}
-    </Box>
+        ) : null}
+        <Menu
+          choices={filtered.map(({ choice }) => choice)}
+          cursor={cursor}
+          visibleCount={visibleCount}
+          empty="No matching choices."
+          descriptionPlacement={options.descriptionPlacement}
+        />
+      </Box>
+    </PromptFrame>
   );
 }
 
@@ -339,24 +319,6 @@ export const selectScreen = <Value,>(options: SelectOptions<Value>): Screen<Valu
     <SelectPrompt options={options} submit={submit} cancel={cancel} />
   ),
 });
-
-export const menuScreen = <Value,>(options: MenuOptions<Value>): Screen<Value> => {
-  const hasBack = Object.hasOwn(options, "back");
-  return {
-    name: "menu",
-    render: ({ submit, cancel }) => (
-      <SelectPrompt
-        options={options}
-        submit={submit}
-        cancel={() => (hasBack ? submit(options.back as Value) : cancel())}
-        summary={false}
-        header={options.header}
-        footer={options.footer}
-        escapeLabel={hasBack ? "back" : "exit"}
-      />
-    ),
-  };
-};
 
 type MultiSelectPromptProps<Value> = {
   readonly options: MultiSelectOptions<Value>;
@@ -662,12 +624,12 @@ export const cycleSelectScreen = <State,>(
   ),
 });
 
-export const awaitExternalScreen = screen<AwaitExternalOptions, string>(
-  "external authorization",
-  ({ options, submit, cancel }) => (
-    <ExternalWait {...options} onSubmit={submit} onCancel={cancel} />
-  ),
-);
+export const browserLoginScreen = screen<
+  Omit<BrowserLoginWaitProps, "onSubmit" | "onCancel">,
+  string
+>("browser login", ({ options, submit, cancel }) => (
+  <BrowserLoginWait {...options} onSubmit={submit} onCancel={cancel} />
+));
 
 type ConfirmPromptProps = {
   readonly options: ConfirmOptions;

@@ -1,7 +1,9 @@
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import type { MemoOptions } from "alchemy/Command/Memo";
+import * as DNS from "alchemy/DNS/Adapter";
 import * as Output from "alchemy/Output";
 import { ProviderModePolicy } from "alchemy/ProviderMode";
+import type { ResourceLike } from "alchemy/Resource";
 import type { WebsiteAssetsProps } from "alchemy/Website/assets";
 import { Server, type ServerDevProps } from "alchemy/Website/Server";
 import * as Effect from "effect/Effect";
@@ -38,6 +40,37 @@ export type WebsiteComputeOptions = Pick<
   | "urlReadinessTimeoutSeconds"
 >;
 
+/** Custom hostname of a Prisma website: the hostname, or `{ name, dns }`. */
+export type WebsiteDomain =
+  | string
+  | {
+      /** Hostname, e.g. `www.example.com`. */
+      name: string;
+      /**
+       * DNS host that publishes the hostname's `CNAME` to the app's regional
+       * switchboard (`switchboard.{region}.prisma.build`) before the domain
+       * is registered — Prisma verifies it on registration (see
+       * [DNS Adapters](/infrastructure-as-code/dns-adapters)), e.g.
+       * `Cloudflare.DNS.Adapter()`. Omitted: publish it yourself first.
+       */
+      dns?: DNS.DnsConfig;
+    };
+
+/** The hostname of a {@link WebsiteDomain}. */
+export const websiteDomainName = (domain: WebsiteDomain | undefined): string | undefined =>
+  domain === undefined || typeof domain === "string" ? domain : domain.name;
+
+/**
+ * The regional switchboard a custom hostname CNAMEs to, derived from the
+ * app endpoint (`https://{app}.{region}.prisma.build` →
+ * `switchboard.{region}.prisma.build`).
+ */
+const switchboardTarget = (endpoint: string | undefined) => {
+  const host = (endpoint ?? "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  const dot = host.indexOf(".");
+  return dot < 0 ? host : `switchboard${host.slice(dot)}`;
+};
+
 /** Shared contract for Prisma's framework website composites. */
 export interface FrameworkSiteProps {
   /** Existing Project or ID reference, optionally produced by an Effect. Omission creates a project without a database, only on live deployments. */
@@ -52,8 +85,19 @@ export interface FrameworkSiteProps {
   assets?: WebsiteAssetsProps;
   /** Native framework development server options, including external-server mode. */
   dev?: ServerDevProps;
-  /** Custom hostname attached using Prisma.CustomDomain. Only apps on the default branch support custom domains; configure the returned DNS records before routing traffic. */
-  domain?: string;
+  /**
+   * Custom hostname attached using `Prisma.CustomDomain`. Only apps on the
+   * default branch support custom domains.
+   *
+   * A string (or `{ name }`) leaves DNS to you: Prisma verifies the
+   * hostname's `CNAME` to `switchboard.{region}.prisma.build` when the
+   * domain is registered, so publish it first (`domain.dnsRecords` lists
+   * it). Set `dns` (e.g.
+   * `{ name: "www.example.com", dns: Cloudflare.DNS.Adapter() }`) to
+   * publish it through the DNS host before registration. See
+   * [DNS Adapters](/infrastructure-as-code/dns-adapters).
+   */
+  domain?: WebsiteDomain;
   /** Compute region. Defaults to the project's default region, then us-east-1. */
   regionId?: PrismaRegionId;
   /** Existing branch ID. Mutually exclusive with branchGitName. */
@@ -134,8 +178,29 @@ export const deployWebsite = Effect.fn(function* (
       NODE_ENV: "production",
     },
   });
-  const domain = props.domain
-    ? yield* CustomDomain("Domain", { app: compute, hostname: props.domain })
+  const domainName = websiteDomainName(props.domain);
+  // Prisma verifies the CNAME when the domain is registered, so the record
+  // must exist first: the CustomDomain's hostname depends on it.
+  const routing =
+    domainName && typeof props.domain === "object" && props.domain.dns
+      ? yield* (yield* DNS.resolve(props.domain.dns)).alias("DomainAlias", {
+          name: domainName,
+          target: {
+            hostname: Output.map(compute.appEndpointDomain, switchboardTarget) as unknown as string,
+          },
+        })
+      : undefined;
+  const domain = domainName
+    ? yield* CustomDomain("Domain", {
+        app: compute,
+        hostname:
+          routing === undefined
+            ? domainName
+            : (Output.map(
+                Output.of(routing as ResourceLike),
+                () => domainName,
+              ) as unknown as string),
+      })
     : undefined;
   return {
     url: domain ? Output.map(domain.hostname, (hostname) => `https://${hostname}`) : compute.url,
