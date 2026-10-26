@@ -7,11 +7,7 @@
  * during prerendering. This mirrors the logic in astro's vite-plugin-assets.ts
  * but uses only workerd-safe APIs (no node: imports).
  */
-import {
-  joinPaths,
-  prependForwardSlash,
-  removeBase,
-} from "@astrojs/internal-helpers/path";
+import { joinPaths, prependForwardSlash, removeBase } from "@astrojs/internal-helpers/path";
 import { hashTransform, propsToFilename } from "astro/assets";
 import { isESMImportedImage } from "astro/assets/utils";
 
@@ -30,33 +26,22 @@ export function installAddStaticImage(config: CompileImageConfig): void {
     globalThis.astroAsset = { referencedImages: new Set() };
   }
 
-  globalThis.astroAsset.addStaticImage = (
-    options,
-    hashProperties,
-    _originalFSPath,
-  ) => {
+  globalThis.astroAsset.addStaticImage = (options, hashProperties, _originalFSPath) => {
     if (!globalThis.astroAsset.staticImages) {
       globalThis.astroAsset.staticImages = new Map();
     }
 
-    const ESMImportedImageSrc = isESMImportedImage(options.src)
-      ? options.src.src
-      : options.src;
+    const ESMImportedImageSrc = isESMImportedImage(options.src) ? options.src.src : options.src;
 
     const finalOriginalPath = removeBase(
       removeBase(ESMImportedImageSrc, config.base),
       config.assetsPrefix ?? "",
     );
 
-    const hash = hashTransform(
-      options,
-      config.imageServiceEntrypoint,
-      hashProperties,
-    );
+    const hash = hashTransform(options, config.imageServiceEntrypoint, hashProperties);
 
     let finalFilePath: string;
-    let transformsForPath =
-      globalThis.astroAsset.staticImages.get(finalOriginalPath);
+    let transformsForPath = globalThis.astroAsset.staticImages.get(finalOriginalPath);
     const transformForHash = transformsForPath?.transforms.get(hash);
 
     if (transformsForPath && transformForHash) {
@@ -65,9 +50,7 @@ export function installAddStaticImage(config: CompileImageConfig): void {
       finalFilePath = prependForwardSlash(
         joinPaths(
           isESMImportedImage(options.src) ? "" : config.buildAssets,
-          prependForwardSlash(
-            propsToFilename(finalOriginalPath, options, hash),
-          ),
+          prependForwardSlash(propsToFilename(finalOriginalPath, options, hash)),
         ),
       );
 
@@ -76,8 +59,7 @@ export function installAddStaticImage(config: CompileImageConfig): void {
           originalSrcPath: _originalFSPath,
           transforms: new Map(),
         });
-        transformsForPath =
-          globalThis.astroAsset.staticImages.get(finalOriginalPath)!;
+        transformsForPath = globalThis.astroAsset.staticImages.get(finalOriginalPath)!;
       }
 
       transformsForPath.transforms.set(hash, {
@@ -90,8 +72,6 @@ export function installAddStaticImage(config: CompileImageConfig): void {
     if (config.assetsPrefix) {
       return encodeURI(joinPaths(config.assetsPrefix, finalFilePath));
     }
-    return encodeURI(
-      prependForwardSlash(joinPaths(config.base, finalFilePath)),
-    );
+    return encodeURI(prependForwardSlash(joinPaths(config.base, finalFilePath)));
   };
 }

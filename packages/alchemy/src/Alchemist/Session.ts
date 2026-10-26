@@ -1,52 +1,33 @@
+import { pathToFileURL } from "node:url";
 import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
-import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import { pathToFileURL } from "node:url";
 import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { AuthError, AuthProviders } from "../Auth/AuthProvider.ts";
 import { SuppressMissingProviderConfig } from "../Auth/Profile.ts";
 import { withProfileOverride } from "../Auth/Resolve.ts";
-import { AwsAuth } from "../AWS/AuthProvider.ts";
-import { AxiomAuth } from "../Axiom/AuthProvider.ts";
-import { CloudflareAuth } from "../Cloudflare/Auth/AuthProvider.ts";
-import { FlyAuth } from "../Fly/AuthProvider.ts";
-import { DopplerAuth } from "../Doppler/AuthProvider.ts";
-import { GitHubAuth } from "../GitHub/AuthProvider.ts";
-import { HetznerAuth } from "../Hetzner/AuthProvider.ts";
-import { InfisicalAuth } from "../Infisical/AuthProvider.ts";
-import { NeonAuth } from "../Neon/AuthProvider.ts";
-import { PlanetscaleAuth } from "../Planetscale/AuthProvider.ts";
-import { PrismaAuth } from "../Prisma/AuthProvider.ts";
-import { RailwayAuth } from "../Railway/AuthProvider.ts";
-import { StripeAuth } from "../Stripe/AuthProvider.ts";
+import * as Contributions from "../Contributions.ts";
 import * as Stack from "../Stack.ts";
 import { Stage } from "../Stage.ts";
-import { Progress } from "./Progress.ts";
 import {
   loadConfigProvider,
   stackConfigLayer,
   StackConfigOverrides,
 } from "../Util/ConfigProvider.ts";
 import { fileLogger } from "../Util/FileLogger.ts";
-
-import {
-  DEFAULT_ENTRYPOINT,
-  resolveStackEntrypoint,
-  StackEntrypointError,
-} from "./Entrypoint.ts";
+import { DEFAULT_ENTRYPOINT, resolveStackEntrypoint, StackEntrypointError } from "./Entrypoint.ts";
+import { Progress } from "./Progress.ts";
 
 export { DEFAULT_ENTRYPOINT, resolveStackEntrypoint, StackEntrypointError };
 
@@ -57,12 +38,7 @@ export const PLACEHOLDER_STAGE = "placeholder";
  * The default export of an `alchemy.run.ts` entrypoint: the stack effect
  * `Alchemy.Stack(...)` returns, carrying the metadata the factory attaches.
  */
-export type StackModule = ReturnType<ReturnType<typeof Stack.make>> & {
-  readonly stackName: string;
-  readonly providers: Layer.Layer<never> | undefined;
-  readonly state: Layer.Layer<never> | undefined;
-  readonly secrets: Stack.StackSecrets | undefined;
-};
+export type StackModule = ReturnType<ReturnType<typeof Stack.make>> & Stack.StackDefinition;
 
 export interface StackModuleLoader {
   readonly import: (url: string) => Promise<{ readonly default?: unknown }>;
@@ -70,28 +46,23 @@ export interface StackModuleLoader {
 
 export const StackModuleLoader = Context.Reference<StackModuleLoader>(
   "Alchemy/Alchemist/StackModuleLoader",
-  {
-    defaultValue: () => ({ import: (url) => import(url) }),
-  },
+  { defaultValue: () => ({ import: (url) => import(url) }) },
 );
 
 export const importStack = Effect.fn(function* (main: string) {
   const absolutePath = yield* resolveStackEntrypoint(main);
   const loader = yield* StackModuleLoader;
-  const module = yield* Effect.promise(() =>
-    loader.import(pathToFileURL(absolutePath).href),
-  );
+  const module = yield* Effect.promise(() => loader.import(pathToFileURL(absolutePath).href));
   if (
     !Effect.isEffect(module.default) ||
     !Predicate.hasProperty(module.default, "stackName") ||
     typeof module.default.stackName !== "string"
   ) {
-    return yield* Effect.fail(
-      new StackEntrypointError({
-        message: `Stack entrypoint '${main}' must export a default stack definition (export default Alchemy.Stack({...})).`,
-      }),
-    );
+    return yield* new StackEntrypointError({
+      message: `Stack entrypoint '${main}' must export a default stack definition (export default Alchemy.Stack({...})).`,
+    });
   }
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- default export shape validated at runtime above
   return module.default as StackModule;
 });
 
@@ -124,6 +95,8 @@ export interface OpenOptions {
   readonly adopt?: boolean;
   /** Upgrade an out-of-date state store without prompting. */
   readonly updateStateStore?: boolean;
+  /** A destroy builds the stack's services but never runs its program. */
+  readonly operation?: "deploy" | "destroy";
 }
 
 interface SessionServicesOptions {
@@ -134,9 +107,7 @@ interface SessionServicesOptions {
 }
 
 /** Shared config and logging services used by every stack/auth build path. */
-const sessionServices = Effect.fn("sessionServices")(function* (
-  options: SessionServicesOptions,
-) {
+const sessionServices = Effect.fn("sessionServices")(function* (options: SessionServicesOptions) {
   const commandConfig = yield* loadConfigProvider(options.envFile);
 
   // `--env-file` only steers a stack's default secrets list and `--profile`
@@ -147,8 +118,7 @@ const sessionServices = Effect.fn("sessionServices")(function* (
       profile: options.profile,
     }),
     ConfigProvider.layer(withProfileOverride(commandConfig, options.profile)),
-    options.logger ??
-      Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
+    options.logger ?? Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
     options.extra ?? Layer.empty,
   );
 });
@@ -177,15 +147,12 @@ export interface CollectAuthProvidersOptions {
   readonly profile: string;
 }
 
-const RouteCache = Context.Reference<RouteCacheService>(
-  "Alchemy/Alchemist/RouteCache",
-  {
-    defaultValue: () => ({
-      open: (target, options) => openUncached(target, options),
-      authProviders: collectAuthProvidersUncached,
-    }),
-  },
-);
+const RouteCache = Context.Reference<RouteCacheService>("Alchemy/Alchemist/RouteCache", {
+  defaultValue: () => ({
+    open: (target, options) => openUncached(target, options),
+    authProviders: collectAuthProvidersUncached,
+  }),
+});
 
 const stackSessionKey = (target: Target, options: OpenOptions) =>
   JSON.stringify([
@@ -196,14 +163,11 @@ const stackSessionKey = (target: Target, options: OpenOptions) =>
     options.dev ?? false,
     options.adopt ?? false,
     options.updateStateStore ?? false,
+    options.operation ?? "deploy",
   ]);
 
 const authRegistryKey = (options: CollectAuthProvidersOptions) =>
-  JSON.stringify([
-    options.main,
-    Option.getOrNull(options.envFile),
-    options.profile,
-  ]);
+  JSON.stringify([options.main, Option.getOrNull(options.envFile), options.profile]);
 
 const cached = <A, E, R>(
   lock: Semaphore.Semaphore,
@@ -234,25 +198,12 @@ export const routeCacheLayer = Layer.effect(
   Effect.sync((): RouteCacheService => {
     const lock = Semaphore.makeUnsafe(1);
     const sessions = new Map<string, ReturnType<typeof openUncached>>();
-    const registries = new Map<
-      string,
-      ReturnType<typeof collectAuthProvidersUncached>
-    >();
+    const registries = new Map<string, ReturnType<typeof collectAuthProvidersUncached>>();
     return {
       open: (target, options) =>
-        cached(
-          lock,
-          sessions,
-          stackSessionKey(target, options),
-          openUncached(target, options),
-        ),
+        cached(lock, sessions, stackSessionKey(target, options), openUncached(target, options)),
       authProviders: (options) =>
-        cached(
-          lock,
-          registries,
-          authRegistryKey(options),
-          collectAuthProvidersUncached(options),
-        ),
+        cached(lock, registries, authRegistryKey(options), collectAuthProvidersUncached(options)),
     };
   }),
 );
@@ -274,9 +225,7 @@ const openUncached = Effect.fn("openStackSessionUncached")(function* (
   // inside this function, so only it can time them honestly.
   const report = yield* Progress;
   yield* report({ _tag: "plan.phase", phase: "importing-module" });
-  const stackEffect = yield* importStack(
-    target.entrypoint ?? DEFAULT_ENTRYPOINT,
-  );
+  const stackEffect = yield* importStack(target.entrypoint ?? DEFAULT_ENTRYPOINT);
   yield* report({ _tag: "plan.phase", phase: "resolving-services" });
   const shared = yield* sessionServices({
     envFile: Option.fromNullishOr(target.envFile),
@@ -307,6 +256,21 @@ const openUncached = Effect.fn("openStackSessionUncached")(function* (
     shared,
   );
   const sessionContext = yield* Layer.build(services);
+  if (options.operation === "destroy") {
+    const services = yield* Effect.provide(
+      Stack.build({
+        name: stackEffect.stackName,
+        providers: stackEffect.providers,
+        state: stackEffect.state,
+        secrets: stackEffect.secrets,
+      }),
+      sessionContext,
+    );
+    return {
+      stack: { ...Context.get(services, Stack.Stack), output: undefined },
+      context: Context.merge(sessionContext, services),
+    };
+  }
   const stack = yield* Effect.provide(stackEffect, sessionContext);
   return {
     stack,
@@ -367,23 +331,26 @@ export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
   return { authProviders, context, stackEffect };
 });
 
-const builtinAuth = Layer.mergeAll(
-  AwsAuth,
-  AxiomAuth,
-  CloudflareAuth,
-  FlyAuth,
-  GitHubAuth,
-  DopplerAuth,
-  HetznerAuth,
-  InfisicalAuth,
-  NeonAuth,
-  PlanetscaleAuth,
-  PrismaAuth,
-  RailwayAuth,
-  StripeAuth,
-);
+/**
+ * Every provider's auth provider, merged into one registering layer. One
+ * provider whose auth fails to load is skipped with a warning, so it can't
+ * take every other provider's auth down with it.
+ */
+const contributedAuth = Effect.fn("contributedAuth")(function* () {
+  const layers = yield* Effect.forEach(
+    yield* Contributions.load(),
+    (provider) =>
+      provider.auth
+        ? Contributions.resolve(provider, "auth", provider.auth).pipe(
+            Effect.catch((error) => Effect.as(Effect.logWarning(error.message), undefined)),
+          )
+        : Effect.void,
+    { concurrency: "unbounded" },
+  );
+  return Layer.mergeAll(Layer.empty, ...layers.filter((layer) => layer !== undefined));
+});
 
-const buildBuiltinAuthProviders = Effect.fn("buildBuiltinAuthProviders")(
+const buildContributedAuthProviders = Effect.fn("buildContributedAuthProviders")(
   function* (options: {
     readonly envFile: Option.Option<string>;
     readonly profile: string;
@@ -393,7 +360,7 @@ const buildBuiltinAuthProviders = Effect.fn("buildBuiltinAuthProviders")(
     const shared = yield* sessionServices(options);
     yield* Layer.build(
       Layer.provide(
-        builtinAuth,
+        yield* contributedAuth(),
         Layer.mergeAll(Layer.succeed(AuthProviders, authProviders), shared),
       ),
     );
@@ -412,7 +379,7 @@ const isMissingProviderConfig = Schema.is(
 const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
   function* (options: CollectAuthProvidersOptions) {
     const authProviders: AuthProviders["Service"] = {};
-    yield* buildBuiltinAuthProviders({
+    yield* buildContributedAuthProviders({
       envFile: options.envFile,
       profile: options.profile,
       registry: authProviders,
@@ -420,14 +387,11 @@ const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
 
     const fs = yield* FileSystem.FileSystem;
     const entrypointExists = yield* fs.exists(options.main);
-    const missingDefault =
-      options.main === DEFAULT_ENTRYPOINT && !entrypointExists;
+    const missingDefault = options.main === DEFAULT_ENTRYPOINT && !entrypointExists;
     if (!entrypointExists && !missingDefault) {
-      return yield* Effect.fail(
-        new AuthError({
-          message: `Stack entrypoint '${options.main}' does not exist.`,
-        }),
-      );
+      return yield* AuthError.make({
+        message: `Stack entrypoint '${options.main}' does not exist.`,
+      });
     }
     if (!missingDefault) {
       yield* buildStackProviders({ ...options, registry: authProviders }).pipe(
@@ -444,7 +408,7 @@ const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
           return suppressed
             ? Effect.void
             : Effect.fail(
-                new AuthError({
+                AuthError.make({
                   message: `Could not load auth providers from '${options.main}'.`,
                   cause,
                 }),
@@ -457,8 +421,8 @@ const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
   Effect.provideService(SuppressMissingProviderConfig, true),
 );
 
-export const collectAuthProviders = Effect.fn("collectAuthProviders")(
-  function* (options: CollectAuthProvidersOptions) {
-    return yield* (yield* RouteCache).authProviders(options);
-  },
-);
+export const collectAuthProviders = Effect.fn("collectAuthProviders")(function* (
+  options: CollectAuthProvidersOptions,
+) {
+  return yield* (yield* RouteCache).authProviders(options);
+});

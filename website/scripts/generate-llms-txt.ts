@@ -91,8 +91,12 @@ const SECTIONS: Section[] = [
         "infrastructure-as-code/outputs",
         "infrastructure-as-code/references",
         "infrastructure-as-code/resource-lifecycle",
+        "infrastructure-as-code/renaming",
         "infrastructure-as-code/provider",
         "infrastructure-as-code/custom-provider",
+        "infrastructure-as-code/local-provider",
+        "infrastructure-as-code/dns-adapters",
+        "infrastructure-as-code/contributions",
       ],
     },
   },
@@ -110,6 +114,7 @@ const SECTIONS: Section[] = [
         "infrastructure-as-effects/phases",
         "infrastructure-as-effects/circular-bindings",
         "infrastructure-as-effects/custom-runtime",
+        "infrastructure-as-effects/telemetry",
       ],
     },
   },
@@ -118,12 +123,7 @@ const SECTIONS: Section[] = [
     intro:
       "Typed calls between Functions and Servers: schemaless RPC for internal communication, Effect RPC and Effect HTTP for trust boundaries.",
     pages: {
-      slugs: [
-        "apis/index",
-        "apis/schemaless",
-        "apis/effect-rpc",
-        "apis/effect-http",
-      ],
+      slugs: ["apis/index", "apis/schemaless", "apis/effect-rpc", "apis/effect-http"],
     },
   },
   {
@@ -137,6 +137,9 @@ const SECTIONS: Section[] = [
         "environments/auth-providers",
         "environments/custom-auth-provider",
         "environments/secrets",
+        "environments/secret-providers",
+        "environments/doppler",
+        "environments/infisical",
         "environments/local-development",
         "environments/ci",
       ],
@@ -151,7 +154,12 @@ const SECTIONS: Section[] = [
     intro:
       "Scaling the codebase: file conventions for one stack, monorepos for many — single Stack or one per package.",
     pages: {
-      slugs: ["project-structure/file-layout", "project-structure/monorepo"],
+      slugs: [
+        "project-structure/file-layout",
+        "project-structure/monorepo",
+        "project-structure/monorepo-single-stack",
+        "project-structure/monorepo-multi-stack",
+      ],
     },
   },
   {
@@ -171,22 +179,14 @@ const SECTIONS: Section[] = [
   {
     heading: "Cloudflare — start here",
     intro:
-      "The Cloudflare hub: overview (resources + recipes) and setup (install, account, OAuth vs API token, profiles).",
-    pages: { slugs: ["cloudflare/index", "cloudflare/setup"] },
+      "The Cloudflare hub: overview (resources + recipes), setup (install, account, OAuth vs API token, profiles), and local development.",
+    pages: { slugs: ["cloudflare/index", "cloudflare/setup", "cloudflare/local-development"] },
   },
   {
     heading: "Cloudflare — tutorial",
     intro:
-      "A linear five-part walkthrough from zero to a tested, locally-developed, CI-deployed Cloudflare project. Each part builds on the previous one.",
-    pages: {
-      slugs: [
-        "cloudflare/tutorial/part-1",
-        "cloudflare/tutorial/part-2",
-        "cloudflare/tutorial/part-3",
-        "cloudflare/tutorial/part-4",
-        "cloudflare/tutorial/part-5",
-      ],
-    },
+      "A linear six-part walkthrough from zero to a tested, locally-developed, CI-deployed, observable Cloudflare project. Each part builds on the previous one.",
+    pages: { directory: "cloudflare/tutorial" },
   },
   {
     heading: "Cloudflare — Compute",
@@ -257,9 +257,9 @@ const SECTIONS: Section[] = [
   {
     heading: "AWS — start here",
     intro:
-      "The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EKS vs EC2 decision page.",
+      "The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), local development, and the Lambda vs ECS vs EKS vs EC2 decision page.",
     pages: {
-      slugs: ["aws/index", "aws/setup", "aws/compute/choosing-a-runtime"],
+      slugs: ["aws/index", "aws/setup", "aws/local-development", "aws/compute/choosing-a-runtime"],
     },
   },
   {
@@ -278,7 +278,7 @@ const SECTIONS: Section[] = [
   },
   {
     heading: "AWS — Compute",
-    pages: { directory: "aws/compute" },
+    pages: { directory: "aws/compute", exclude: ["aws/compute/choosing-a-runtime"] },
   },
   {
     heading: "AWS — Frontend",
@@ -291,6 +291,10 @@ const SECTIONS: Section[] = [
   {
     heading: "AWS — Data",
     pages: { directory: "aws/data" },
+  },
+  {
+    heading: "AWS — AI",
+    pages: { directory: "aws/ai" },
   },
   {
     heading: "AWS — Messaging & events",
@@ -313,16 +317,72 @@ const SECTIONS: Section[] = [
     pages: { directory: "aws/networking" },
   },
   {
-    heading: "Fly — start here",
+    heading: "GCP",
     intro:
-      "The Fly hub: overview (Apps, Machines, Services, Sprites) and setup (org, API token, profile).",
+      "Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/Sub, BigQuery, Secret Manager, Memorystore. Bindings grant IAM onto a per-host service account.",
     pages: {
-      slugs: ["fly/index", "fly/setup"],
+      slugs: ["gcp/index", "gcp/setup"],
     },
   },
   {
-    heading: "Fly — SQL",
-    pages: { slugs: ["fly/data/postgres", "fly/data/drizzle-postgres"] },
+    heading: "GCP — Tutorial",
+    pages: { directory: "gcp/tutorial" },
+  },
+  {
+    heading: "GCP — Compute",
+    pages: { directory: "gcp/compute" },
+  },
+  {
+    heading: "GCP — Frontend",
+    pages: { directory: "gcp/frontend" },
+  },
+  {
+    heading: "GCP — APIs",
+    pages: { directory: "gcp/apis" },
+  },
+  {
+    heading: "GCP — Data",
+    pages: { directory: "gcp/data" },
+  },
+  {
+    heading: "GCP — AI",
+    pages: { directory: "gcp/ai" },
+  },
+  {
+    heading: "GCP — Messaging & events",
+    pages: { directory: "gcp/messaging" },
+  },
+  {
+    heading: "GCP — Security & secrets",
+    pages: { directory: "gcp/security" },
+  },
+  {
+    heading: "GCP — Observability",
+    pages: { directory: "gcp/observability" },
+  },
+  {
+    heading: "GCP — Networking",
+    pages: { directory: "gcp/networking" },
+  },
+  {
+    heading: "Fly — start here",
+    intro:
+      "The Fly hub: overview (Apps, Machines, Services, Sprites), setup (org, API token, profile), and networking.",
+    pages: {
+      slugs: ["fly/index", "fly/setup", "fly/networking"],
+    },
+  },
+  {
+    heading: "Fly — Tutorial",
+    pages: { directory: "fly/tutorial" },
+  },
+  {
+    heading: "Fly — Compute",
+    pages: { directory: "fly/compute" },
+  },
+  {
+    heading: "Fly — Data",
+    pages: { directory: "fly/data" },
   },
   {
     heading: "Fly — Frontend",
@@ -337,8 +397,20 @@ const SECTIONS: Section[] = [
     },
   },
   {
-    heading: "Hetzner — SQL",
-    pages: { slugs: ["hetzner/data/drizzle-postgres"] },
+    heading: "Hetzner — Tutorial",
+    pages: { directory: "hetzner/tutorial" },
+  },
+  {
+    heading: "Hetzner — Compute",
+    pages: { directory: "hetzner/compute" },
+  },
+  {
+    heading: "Hetzner — Data",
+    pages: { directory: "hetzner/data" },
+  },
+  {
+    heading: "Hetzner — Networking",
+    pages: { directory: "hetzner/networking" },
   },
   {
     heading: "Hetzner — Frontend",
@@ -347,32 +419,22 @@ const SECTIONS: Section[] = [
   {
     heading: "Railway — start here",
     intro:
-      "The Railway hub: overview (Projects, Services, databases) and setup (workspace, API token, profile).",
+      "The Railway hub: overview (Projects, Services, databases), setup (workspace, API token, profile), and networking.",
     pages: {
-      slugs: ["railway/index", "railway/setup"],
+      slugs: ["railway/index", "railway/setup", "railway/networking"],
     },
   },
   {
-    heading: "Railway — SQL",
-    pages: {
-      slugs: [
-        "railway/data/postgres",
-        "railway/data/mysql",
-        "railway/data/drizzle-postgres",
-        "railway/data/drizzle-mysql",
-      ],
-    },
+    heading: "Railway — Tutorial",
+    pages: { directory: "railway/tutorial" },
   },
   {
-    heading: "Prisma — SQL",
-    pages: {
-      slugs: [
-        "prisma/data/postgres",
-        "prisma/data/branches",
-        "prisma/data/connections",
-        "prisma/data/drizzle-postgres",
-      ],
-    },
+    heading: "Railway — Compute",
+    pages: { directory: "railway/compute" },
+  },
+  {
+    heading: "Railway — Data",
+    pages: { directory: "railway/data" },
   },
   {
     heading: "Railway — Frontend",
@@ -417,9 +479,66 @@ const SECTIONS: Section[] = [
         "neon/tutorial/previews",
         "neon/data/branching",
         "neon/data/connections",
+        "neon/data/roles",
         "neon/data/migrations",
         "neon/guides/preview-branches",
         "neon/guides/drizzle",
+      ],
+    },
+  },
+  {
+    heading: "Neon — Frontend",
+    pages: { directory: "neon/frontend" },
+  },
+  {
+    heading: "Turso",
+    intro:
+      "Turso SQLite databases as Stack resources: groups, databases, migrations, connections, a database per tenant, preview databases, and scoped tokens.",
+    pages: {
+      slugs: [
+        "turso/index",
+        "turso/setup",
+        "turso/tutorial/part-1",
+        "turso/tutorial/part-2",
+        "turso/tutorial/part-3",
+        "turso/groups",
+        "turso/databases",
+        "turso/migrations",
+        "turso/connections",
+        "turso/database-per-tenant",
+        "turso/preview-databases",
+        "turso/tokens",
+        "turso/organization",
+      ],
+    },
+  },
+  {
+    heading: "Better Auth",
+    intro:
+      "Better Auth as an Effect service on Workers and Lambda: a tutorial, sign-in providers, database layers, and guides for config, middleware, secondary storage, migrations, and upgrades.",
+    pages: { slugs: ["better-auth/index"] },
+  },
+  {
+    heading: "Better Auth — Tutorial",
+    pages: { directory: "better-auth/tutorial" },
+  },
+  {
+    heading: "Better Auth — Sign-in providers",
+    pages: { directory: "better-auth/sign-in-providers" },
+  },
+  {
+    heading: "Better Auth — Databases",
+    pages: { directory: "better-auth/databases" },
+  },
+  {
+    heading: "Better Auth — Guides",
+    pages: {
+      slugs: [
+        "better-auth/guides/configuration",
+        "better-auth/guides/http-api-middleware",
+        "better-auth/guides/secondary-storage",
+        "better-auth/guides/migrations",
+        "better-auth/upgrades/from-1-6-to-1-7",
       ],
     },
   },
@@ -455,7 +574,7 @@ const SECTIONS: Section[] = [
   {
     heading: "Git",
     intro:
-      "A git server you build in one file, use like any remote, and reshape one block at a time: setup, a four-part tutorial (build it, repositories and tokens, your own rules, your app on the same domain), the REST and GitHub-compatible planes, the building blocks with their implementations, and recipes with the scaling model and measurements.",
+      "A git server you build in one file, use like any remote, and reshape one block at a time: setup, a six-part tutorial (push, access control, publishing, per-user credentials, your app's API, branch protection), the REST and GitHub-compatible planes, the building blocks with their implementations, and recipes with the scaling model and measurements.",
     pages: {
       slugs: [
         "git/index",
@@ -464,12 +583,15 @@ const SECTIONS: Section[] = [
         "git/tutorial/part-2",
         "git/tutorial/part-3",
         "git/tutorial/part-4",
+        "git/tutorial/part-5",
+        "git/tutorial/part-6",
         "git/clone-and-push",
         "git/repositories",
         "git/pull-requests",
         "git/github-api",
         "git/blocks/index",
         "git/blocks/server",
+        "git/blocks/engine",
         "git/blocks/repositories",
         "git/blocks/registry",
         "git/blocks/blob-store",
@@ -507,6 +629,35 @@ const SECTIONS: Section[] = [
         "docker/setup",
         "docker/local-services",
         "docker/build-and-push",
+        "docker/swarm",
+      ],
+    },
+  },
+  {
+    heading: "Kubernetes",
+    intro:
+      "Cluster-agnostic Kubernetes workloads — Deployments, Jobs and CronJobs (as images or Effect programs), raw manifests, and Helm charts — on a local cluster or any cluster reachable through a kubeconfig, token, client certificate, or exec plugin.",
+    pages: {
+      slugs: [
+        "kubernetes/index",
+        "kubernetes/setup",
+        "kubernetes/tutorial/part-1",
+        "kubernetes/tutorial/part-2",
+        "kubernetes/tutorial/part-3",
+        "kubernetes/tutorial/part-4",
+        "kubernetes/tutorial/part-5",
+        "kubernetes/clusters/connecting",
+        "kubernetes/clusters/registries",
+        "kubernetes/clusters/local",
+        "kubernetes/clusters/eks",
+        "kubernetes/clusters/cluster-adapters",
+        "kubernetes/workloads/deployments",
+        "kubernetes/workloads/jobs",
+        "kubernetes/workloads/images",
+        "kubernetes/workloads/bindings",
+        "kubernetes/workloads/object-lifecycle",
+        "kubernetes/objects/manifests",
+        "kubernetes/objects/helm-charts",
       ],
     },
   },
@@ -521,11 +672,13 @@ const SECTIONS: Section[] = [
         "sql/effect-sql/postgres",
         "sql/effect-sql/mysql",
         "sql/effect-sql/d1",
+        "sql/effect-sql/libsql",
         "sql/effect-sql/migrations",
         "sql/effect-sql/lifecycle",
         "sql/drizzle/postgres",
         "sql/drizzle/mysql",
         "sql/drizzle/d1",
+        "sql/drizzle/libsql",
         "sql/drizzle/migrations",
         "sql/prisma/postgres",
         "sql/prisma/contracts",
@@ -539,6 +692,66 @@ const SECTIONS: Section[] = [
       "Cloud-agnostic local process primitives — memoized builds, one-off commands, and dev servers; the static-site guides in each cloud hub consume them under the hood.",
     pages: {
       slugs: ["command/index", "command/memoization", "command/dev-servers"],
+    },
+  },
+  {
+    heading: "ACME",
+    intro:
+      "TLS certificates from any ACME certificate authority as Stack resources, validated over DNS, renewed on deploy, or issued at runtime.",
+    pages: {
+      slugs: [
+        "acme/index",
+        "acme/getting-started",
+        "acme/certificate-authorities",
+        "acme/dns-validation",
+        "acme/renewal",
+        "acme/runtime",
+        "acme/using-certificates",
+        "acme/troubleshooting",
+      ],
+    },
+  },
+  {
+    heading: "Domain",
+    intro:
+      "A domain-driven design framework: model commands, events, aggregates, views, projections, policies, and sagas once, then host them on Durable Objects or in memory.",
+    pages: {
+      slugs: [
+        "domain/index",
+        "domain/what-is-ddd",
+        "domain/project-layout",
+        "domain/tutorial/part-1",
+        "domain/tutorial/part-2",
+        "domain/tutorial/part-3",
+        "domain/tutorial/part-4",
+        "domain/tutorial/part-5",
+        "domain/tutorial/part-6",
+        "domain/tutorial/part-7",
+        "domain/model",
+        "domain/command",
+        "domain/event",
+        "domain/aggregate",
+        "domain/view",
+        "domain/projection",
+        "domain/stream",
+        "domain/policy",
+        "domain/saga",
+        "domain/external-system",
+        "domain/api",
+        "domain/story",
+        "domain/testing-models",
+        "domain/testing-apis",
+        "domain/foldkit",
+        "domain/optimistic-updates",
+        "domain/local-first",
+        "domain/sessions",
+        "domain/view-security",
+        "domain/unique-values",
+        "domain/deadlines",
+        "domain/cloudflare",
+        "domain/in-memory",
+        "domain/observability",
+      ],
     },
   },
 ];
@@ -646,7 +859,11 @@ async function loadPage(slug: string): Promise<Page> {
   for (const rel of candidates) {
     const full = path.join(docsDir, rel);
     try {
-      const source = await readFile(full, "utf8");
+      // Dev-generated reference pages carry copy-editor markers.
+      const source = (await readFile(full, "utf8")).replace(
+        /<!--copy:[^>]*?-->|^<div data-copy=[^\n]*>\n|^<\/div><!--\/copy-->\n/gm,
+        "",
+      );
       const fm = parseFrontmatter(source);
       const title = fm.title;
       const description = fm.description ?? fm.excerpt ?? "";
@@ -669,10 +886,7 @@ async function loadPage(slug: string): Promise<Page> {
   throw new Error(`Page not found: ${slug} (looked for .mdx and .md)`);
 }
 
-async function listSlugs(
-  directory: string,
-  exclude: string[] = [],
-): Promise<string[]> {
+async function listSlugs(directory: string, exclude: string[] = []): Promise<string[]> {
   const dir = path.join(docsDir, directory);
   const entries = await readdir(dir, { withFileTypes: true });
   const slugs: string[] = [];
@@ -704,8 +918,46 @@ function renderPage(page: Page): string {
   return `- [${page.title}](${url})${desc}`;
 }
 
+/**
+ * Fails when a published page is missing from SECTIONS or listed twice, so
+ * a new docs page can never silently drop out of llms.txt. The generated
+ * API reference (`providers/`) and the blog are indexed separately.
+ */
+async function assertCoverage(listed: string[]) {
+  const counts = new Map<string, number>();
+  for (const slug of listed) counts.set(slug, (counts.get(slug) ?? 0) + 1);
+  const duplicates = [...counts].filter(([, n]) => n > 1).map(([slug]) => slug);
+
+  const entries = await readdir(docsDir, { withFileTypes: true });
+  const published: string[] = [];
+  for (const entry of entries) {
+    if (entry.name === "providers" || entry.name === "blog") continue;
+    const slugs = entry.isDirectory()
+      ? await listSlugs(entry.name)
+      : [".md", ".mdx"].includes(path.extname(entry.name))
+        ? [entry.name.slice(0, -path.extname(entry.name).length)]
+        : [];
+    for (const page of await Promise.all(slugs.map(loadPage))) {
+      if (!page.draft) published.push(page.slug);
+    }
+  }
+  const missing = published.filter((slug) => !counts.has(slug));
+
+  const problems = [
+    ...missing.map((slug) => `not listed in any SECTIONS entry: ${slug}`),
+    ...duplicates.map((slug) => `listed in more than one SECTIONS entry: ${slug}`),
+  ];
+  if (problems.length > 0) {
+    throw new Error(
+      `llms.txt does not match the docs:\n  ${problems.join("\n  ")}\n` +
+        `Add each page to a section in scripts/generate-llms-txt.ts.`,
+    );
+  }
+}
+
 async function main() {
   const sections: string[] = [];
+  const listed: string[] = [];
 
   for (const section of SECTIONS) {
     const isDirectory = !("slugs" in section.pages);
@@ -713,9 +965,8 @@ async function main() {
       "slugs" in section.pages
         ? section.pages.slugs
         : await listSlugs(section.pages.directory, section.pages.exclude);
-    const pages = (await Promise.all(slugs.map(loadPage))).filter(
-      (p) => !p.draft,
-    );
+    listed.push(...slugs);
+    const pages = (await Promise.all(slugs.map(loadPage))).filter((p) => !p.draft);
     // Directory sections mirror the sidebar's `sidebar.order` ordering; slug
     // sections keep the curated order they were declared in.
     if (isDirectory) pages.sort(byOrderThenTitle);
@@ -725,9 +976,9 @@ async function main() {
     sections.push(pages.map(renderPage).join("\n"));
   }
 
-  const fullBody =
-    [FULL_HEADER, ...sections, await renderProvidersSection()].join("\n\n") +
-    "\n";
+  await assertCoverage(listed);
+
+  const fullBody = [FULL_HEADER, ...sections, await renderProvidersSection()].join("\n\n") + "\n";
   await writeFile(outFullFile, fullBody, "utf8");
   console.log(`Wrote ${outFullFile}`);
 

@@ -1,3 +1,5 @@
+import { expect } from "bun:test";
+import * as AWS from "@alchemy.run/aws";
 /**
  * LIVE counterpart to test/dev.test.ts: deploys the exact same fixture to
  * real AWS (Test.make + deploy, no CLI) and drives the same HTTP routes
@@ -9,13 +11,11 @@
  * Requires AWS credentials (run under `--profile testing` / test:examples).
  */
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
 import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

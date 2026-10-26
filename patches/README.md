@@ -20,3 +20,4 @@ OG routes hash the rendered React markup (including inline styles and the yantra
 SVG), font metadata and bytes, and render options. Their keys do not depend on a
 fixed slug or a document body digest. Astro additionally tracks the route's
 bundled dependencies and invalidates its cache when the lockfile changes.
+

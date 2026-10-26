@@ -2,6 +2,11 @@
   "name": "hetzner-website-react-router",
   "version": "0.0.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/hetzner-website-react-router"
+  },
   "type": "module",
   "scripts": {
     "dev": "alchemy dev",
@@ -18,6 +23,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/hetzner": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@react-router/dev": "catalog:",
@@ -31,10 +37,5 @@
   },
   "engines": {
     "node": ">=22"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/hetzner-website-react-router"
   }
 }

@@ -1,15 +1,24 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
+import type { StarlightPlugin } from "@astrojs/starlight/types";
 import tailwindcss from "@tailwindcss/vite";
 import type { AstroIntegration } from "astro";
 import { defineConfig } from "astro/config";
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import starlightBlog from "starlight-blog";
+import { JSDOC_COPY_STYLE } from "../scripts/jsdoc-blocks.ts";
 import { buildOutputChecks, noindexPaths } from "./plugins/build-output.ts";
+import { jsdocCopyHandler, jsdocMarkdownStyle } from "./plugins/jsdoc-copy.ts";
+import {
+  copyEditor,
+  markdownBlocks,
+  markdownFiles,
+  type MarkdownFilesOptions,
+} from "./src/copy-editor/index.ts";
 import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
 import { rewriteReferenceLinks } from "./src/reference-links.ts";
 
@@ -25,21 +34,25 @@ function providersSidebarEntry() {
     collapsed: false,
     items: [
       { label: "AWS", link: "/aws" },
+      { label: "GCP", link: "/gcp" },
       { label: "Cloudflare", link: "/cloudflare" },
       { label: "Hetzner", link: "/hetzner" },
       { label: "Fly", link: "/fly" },
       { label: "Railway", link: "/railway" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
+      { label: "Turso", link: "/turso" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
       { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
+      { label: "Kubernetes", link: "/kubernetes" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
       { label: "ACME", link: "/acme" },
+      { label: "Domain", link: "/domain" },
     ],
   };
 }
@@ -56,9 +69,7 @@ function providerResourcesEntry(...providers: string[]) {
   const entryItems = (provider: string) => {
     const group = providersSidebar.find((p) => p.label === provider);
     if (group) return group.items;
-    return [
-      { autogenerate: { directory: `providers/${provider}`, collapsed: true } },
-    ];
+    return [{ autogenerate: { directory: `providers/${provider}`, collapsed: true } }];
   };
   // A single provider's tree is inlined; a multi-namespace hub nests each
   // provider under its own subgroup so same-named resources (SQL.D1 vs
@@ -76,12 +87,8 @@ function providerResourcesEntry(...providers: string[]) {
 
 function sortFrontendItems(items: readonly { label: string; link: string }[]) {
   return items.toSorted((a, b) => {
-    const overviewOrder =
-      Number(b.label === "Overview") - Number(a.label === "Overview");
-    return (
-      overviewOrder ||
-      a.label.localeCompare(b.label, "en", { sensitivity: "base" })
-    );
+    const overviewOrder = Number(b.label === "Overview") - Number(a.label === "Overview");
+    return overviewOrder || a.label.localeCompare(b.label, "en", { sensitivity: "base" });
   });
 }
 
@@ -97,10 +104,7 @@ function providerApiReferenceEntry(...providers: string[]) {
     items.flatMap((item) => {
       if ("items" in item) {
         // Generated category and service groups can share a name.
-        return flatten(
-          item.items,
-          prefix.at(-1) === item.label ? prefix : [...prefix, item.label],
-        );
+        return flatten(item.items, prefix.at(-1) === item.label ? prefix : [...prefix, item.label]);
       }
       return [{ label: [...prefix, item.label].join("."), link: item.link }];
     });
@@ -122,6 +126,44 @@ function providerApiReferenceEntry(...providers: string[]) {
  * the directory layout but normalizing extensions to `.md`. This lets the worker
  * serve raw markdown for clients (e.g. coding agents) that prefer it.
  */
+/**
+ * Dev only: in-browser copy editing (`contenteditable`) is on for the home
+ * page. Every other page (docs, reference, compare) only gets it when the dev
+ * server is launched with `ALCHEMY_DOCS_EDIT=1`. Builds never ship the editor.
+ */
+const docsEditing = process.env.ALCHEMY_DOCS_EDIT === "1";
+const copyEditablePage = (pathname: string) => docsEditing || pathname === "/";
+
+/**
+ * Dev only, with `ALCHEMY_DOCS_EDIT=1`: hand-written docs (`.md`/`.mdx`) are
+ * editable in the browser. Generated reference pages are edited through their
+ * JSDoc instead, and blog posts aren't editable (in-place editing breaks
+ * selecting and copying text).
+ */
+const markdownCopy: MarkdownFilesOptions = {
+  root: fileURLToPath(new URL(".", import.meta.url)),
+  exclude: /\/src\/content\/docs\/(providers|blog)\//,
+  style: JSDOC_COPY_STYLE,
+};
+
+function markdownCopyEditing(): AstroIntegration {
+  return {
+    name: "markdown-copy-editing",
+    hooks: {
+      "astro:config:setup": ({ command, config }) => {
+        if (command !== "dev" || !docsEditing) return;
+        const processor = config.markdown.processor as
+          | { name: string; options?: { mdastPlugins?: unknown[] } }
+          | undefined;
+        if (processor?.name !== "satteri" || !processor.options?.mdastPlugins) {
+          return;
+        }
+        processor.options.mdastPlugins.unshift(markdownBlocks(markdownCopy));
+      },
+    },
+  };
+}
+
 function copyMarkdownSources(): AstroIntegration {
   return {
     name: "copy-markdown-sources",
@@ -163,24 +205,40 @@ function copyMarkdownSources(): AstroIntegration {
               if (opts.lowercase) rel = rel.toLowerCase();
               const target = path.join(outDir, rel);
               await fs.mkdir(path.dirname(target), { recursive: true });
-              await fs.writeFile(
-                target,
-                rewriteReferenceLinks(await fs.readFile(full, "utf8")),
-              );
+              await fs.writeFile(target, rewriteReferenceLinks(await fs.readFile(full, "utf8")));
             }),
           );
         }
 
         // Docs (Starlight content collection) — preserves nested layout under
         // /content/docs/ → /<path>.md, lowercased to match Starlight's URLs.
-        await walk(
-          fileURLToPath(new URL("./src/content/docs/", import.meta.url)),
-          { lowercase: true },
-        );
+        await walk(fileURLToPath(new URL("./src/content/docs/", import.meta.url)), {
+          lowercase: true,
+        });
         // Marketing pages (top-level Astro pages) — exposes /<page>.md so
         // agents can fetch raw MDX via the worker's content negotiation. Astro
         // page routing preserves case, so don't lowercase these.
         await walk(fileURLToPath(new URL("./src/pages/", import.meta.url)));
+      },
+    },
+  };
+}
+
+/**
+ * Registered after starlight-blog so it replaces the blog's MarkdownContent
+ * override (which ours wraps) instead of tripping its conflict warning.
+ */
+function markdownContentOverride(): StarlightPlugin {
+  return {
+    name: "markdown-content-override",
+    hooks: {
+      "config:setup": ({ config, updateConfig }) => {
+        updateConfig({
+          components: {
+            ...config.components,
+            MarkdownContent: "./src/components/starlight/MarkdownContent.astro",
+          },
+        });
       },
     },
   };
@@ -196,10 +254,19 @@ export default defineConfig({
     "/better-auth/database-layers": "/better-auth/databases",
     "/better-auth/migrations": "/better-auth/guides/migrations",
     "/better-auth/upgrading": "/better-auth/upgrades/from-1-6-to-1-7",
+    // The Birthday Week post was published as beta.82, then re-released as beta.83.
+    "/blog/2026-10-12-beta-82": "/blog/2026-10-12-beta-83",
+    // Get started was folded into the overview and the tutorial.
+    "/domain/getting-started": "/domain/tutorial/part-1",
+    "/domain/stories": "/domain/testing-models",
+    "/domain/sagas": "/domain/saga",
+    "/domain/external-systems": "/domain/external-system",
   },
   prefetch: true,
+  devToolbar: { enabled: false },
   trailingSlash: "ignore",
   integrations: [
+    markdownCopyEditing(),
     react(),
     copyMarkdownSources(),
     buildOutputChecks(),
@@ -221,10 +288,10 @@ export default defineConfig({
       customCss: ["./src/styles/global.css", "./src/styles/custom.css"],
       components: {
         ThemeProvider: "./src/components/ThemeProvider.astro",
+        ThemeSelect: "./src/components/starlight/ThemeSelect.astro",
         Header: "./src/components/starlight/Header.astro",
         Head: "./src/components/starlight/Head.astro",
         Sidebar: "./src/components/starlight/Sidebar.astro",
-        MarkdownContent: "./src/components/starlight/MarkdownContent.astro",
       },
       prerender: true,
       social: [
@@ -236,7 +303,7 @@ export default defineConfig({
         {
           icon: "discord",
           label: "Discord",
-          href: "https://discord.gg/jwKw8dBJdN",
+          href: "/discord",
         },
       ],
       editLink: {
@@ -287,6 +354,14 @@ export default defineConfig({
                 {
                   label: "Local Provider",
                   link: "/infrastructure-as-code/local-provider",
+                },
+                {
+                  label: "DNS Adapters",
+                  link: "/infrastructure-as-code/dns-adapters",
+                },
+                {
+                  label: "Provider Contributions",
+                  link: "/infrastructure-as-code/contributions",
                 },
               ],
             },
@@ -523,7 +598,12 @@ export default defineConfig({
                   link: "/cloudflare/compute/hibernatable-websockets",
                 },
                 { label: "Containers", link: "/cloudflare/compute/containers" },
+                {
+                  label: "Container lifecycle",
+                  link: "/cloudflare/compute/container-lifecycle",
+                },
                 { label: "Workflows", link: "/cloudflare/compute/workflows" },
+                { label: "Effect workflows", link: "/cloudflare/compute/effect-workflows" },
               ],
             },
             {
@@ -589,7 +669,15 @@ export default defineConfig({
                 { label: "D1", link: "/cloudflare/data/d1" },
                 { label: "KV", link: "/cloudflare/data/kv" },
                 { label: "R2", link: "/cloudflare/data/r2" },
+                {
+                  label: "R2 presigned URLs",
+                  link: "/cloudflare/data/r2-presigned-urls",
+                },
                 { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
+                {
+                  label: "Private database (Workers VPC)",
+                  link: "/cloudflare/data/hyperdrive-private-database",
+                },
                 { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
                 { label: "Prisma ORM", link: "/cloudflare/data/prisma" },
                 { label: "Drizzle on D1", link: "/cloudflare/data/d1-drizzle" },
@@ -602,12 +690,15 @@ export default defineConfig({
                   link: "/cloudflare/data/branch-from-shared-database",
                 },
                 { label: "Artifacts", link: "/cloudflare/data/artifacts" },
+                { label: "Pipelines", link: "/cloudflare/data/pipelines" },
+                { label: "Iceberg tables", link: "/cloudflare/data/iceberg-tables" },
               ],
             },
             {
               label: "Messaging & events",
               items: [
                 { label: "Queues", link: "/cloudflare/messaging/queues" },
+                { label: "K2 streams", link: "/cloudflare/messaging/k2" },
                 { label: "Cron triggers", link: "/cloudflare/messaging/cron" },
                 {
                   label: "GitHub events",
@@ -636,10 +727,6 @@ export default defineConfig({
                 },
                 { label: "Effect AI", link: "/cloudflare/ai/effect-ai" },
                 { label: "Vectorize", link: "/cloudflare/ai/vectorize" },
-                {
-                  label: "Release agent",
-                  link: "/cloudflare/ai/release-agent",
-                },
               ],
             },
             {
@@ -684,6 +771,10 @@ export default defineConfig({
                   label: "Custom domains & routes",
                   link: "/cloudflare/networking/custom-domains",
                 },
+                {
+                  label: "Federated APIs",
+                  link: "/cloudflare/networking/federated-apis",
+                },
                 { label: "Tunnel", link: "/cloudflare/networking/tunnel" },
               ],
             },
@@ -708,6 +799,8 @@ export default defineConfig({
                   link: "/aws/compute/choosing-a-runtime",
                 },
                 { label: "Lambda", link: "/aws/compute/lambda" },
+                { label: "Lambda Web Functions", link: "/aws/compute/web-functions" },
+                { label: "Effect workflows", link: "/aws/compute/effect-workflows" },
                 { label: "ECS", link: "/aws/compute/ecs" },
                 { label: "EC2", link: "/aws/compute/ec2" },
                 { label: "EKS", link: "/aws/compute/eks" },
@@ -785,9 +878,7 @@ export default defineConfig({
             },
             {
               label: "AI",
-              items: [
-                { label: "Bedrock & Effect AI", link: "/aws/ai/bedrock" },
-              ],
+              items: [{ label: "Bedrock & Effect AI", link: "/aws/ai/bedrock" }],
             },
             {
               label: "Messaging & events",
@@ -821,15 +912,11 @@ export default defineConfig({
             },
             {
               label: "Security & secrets",
-              items: [
-                { label: "Secrets & env", link: "/aws/security/secrets-env" },
-              ],
+              items: [{ label: "Secrets & env", link: "/aws/security/secrets-env" }],
             },
             {
               label: "Observability",
-              items: [
-                { label: "CloudWatch", link: "/aws/observability/cloudwatch" },
-              ],
+              items: [{ label: "CloudWatch", link: "/aws/observability/cloudwatch" }],
             },
             {
               label: "Networking",
@@ -842,6 +929,102 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("AWS"),
+          ],
+        },
+        {
+          label: "GCP",
+          items: [
+            { label: "Overview", link: "/gcp" },
+            { label: "Setup", link: "/gcp/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "gcp/tutorial" } }],
+            },
+            {
+              label: "Compute",
+              items: [
+                {
+                  label: "Choosing a runtime",
+                  link: "/gcp/compute/choosing-a-runtime",
+                },
+                { label: "Cloud Run", link: "/gcp/compute/cloud-run" },
+                { label: "Cloud Run jobs", link: "/gcp/compute/jobs" },
+                { label: "Worker pools", link: "/gcp/compute/worker-pools" },
+                { label: "Cloud Functions", link: "/gcp/compute/cloud-functions" },
+                { label: "GKE", link: "/gcp/compute/gke" },
+              ],
+            },
+            {
+              label: "Frontend",
+              items: sortFrontendItems([
+                { label: "Overview", link: "/gcp/frontend/websites" },
+                { label: "Astro", link: "/gcp/frontend/astro" },
+                { label: "Foldkit", link: "/gcp/frontend/foldkit" },
+                { label: "Next.js", link: "/gcp/frontend/nextjs" },
+                { label: "Nuxt", link: "/gcp/frontend/nuxt" },
+                { label: "Octane", link: "/gcp/frontend/octane" },
+                { label: "React Router", link: "/gcp/frontend/react-router" },
+                { label: "React SPA", link: "/gcp/frontend/vite-spa" },
+                { label: "SolidStart", link: "/gcp/frontend/solidstart" },
+                { label: "Static sites", link: "/gcp/frontend/static-site" },
+                { label: "SvelteKit", link: "/gcp/frontend/sveltekit" },
+                { label: "TanStack Start", link: "/gcp/frontend/tanstack-start" },
+                { label: "Vinext", link: "/gcp/frontend/vinext" },
+                { label: "Vite", link: "/gcp/frontend/vite" },
+                { label: "Vocs", link: "/gcp/frontend/vocs" },
+                { label: "Vue", link: "/gcp/frontend/vue" },
+                { label: "Waku", link: "/gcp/frontend/waku" },
+              ]),
+            },
+            {
+              label: "APIs",
+              items: [
+                { label: "Effect HTTP", link: "/gcp/apis/effect-http-api" },
+                { label: "Effect RPC", link: "/gcp/apis/effect-rpc" },
+              ],
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "Firestore", link: "/gcp/data/firestore" },
+                { label: "Cloud Storage", link: "/gcp/data/storage" },
+                { label: "Cloud SQL", link: "/gcp/data/cloud-sql" },
+                { label: "BigQuery", link: "/gcp/data/bigquery" },
+                { label: "Memorystore", link: "/gcp/data/memorystore" },
+              ],
+            },
+            {
+              label: "AI",
+              items: [{ label: "Vertex AI", link: "/gcp/ai/vertex-ai" }],
+            },
+            {
+              label: "Messaging & events",
+              items: [
+                { label: "Pub/Sub", link: "/gcp/messaging/pubsub" },
+                { label: "Cloud Scheduler", link: "/gcp/messaging/scheduler" },
+                { label: "Storage events", link: "/gcp/messaging/storage-events" },
+                { label: "Eventarc", link: "/gcp/messaging/eventarc" },
+              ],
+            },
+            {
+              label: "Security & secrets",
+              items: [
+                { label: "IAM & bindings", link: "/gcp/security/iam" },
+                { label: "Secret Manager & KMS", link: "/gcp/security/secrets-kms" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [{ label: "Logging & Monitoring", link: "/gcp/observability/monitoring" }],
+            },
+            {
+              label: "Networking",
+              items: [
+                { label: "VPC & private networking", link: "/gcp/networking/vpc" },
+                { label: "Private services", link: "/gcp/networking/private-services" },
+              ],
+            },
+            providerResourcesEntry("GCP"),
           ],
         },
         {
@@ -971,6 +1154,10 @@ export default defineConfig({
                 { label: "Apps", link: "/fly/compute/apps" },
                 { label: "Machines", link: "/fly/compute/machines" },
                 { label: "Services", link: "/fly/compute/services" },
+                {
+                  label: "Connect Services",
+                  link: "/fly/compute/connecting-services",
+                },
                 {
                   label: "Blue/green deployments",
                   link: "/fly/compute/deployments",
@@ -1127,6 +1314,36 @@ export default defineConfig({
           ],
         },
         {
+          label: "Turso",
+          items: [
+            { label: "Overview", link: "/turso" },
+            { label: "Setup", link: "/turso/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "turso/tutorial" } }],
+            },
+            {
+              label: "Databases",
+              items: [
+                { label: "Groups", link: "/turso/groups" },
+                { label: "Create & configure", link: "/turso/databases" },
+                { label: "Migrations", link: "/turso/migrations" },
+                { label: "Connections", link: "/turso/connections" },
+                { label: "Database per tenant", link: "/turso/database-per-tenant" },
+                { label: "Preview databases", link: "/turso/preview-databases" },
+              ],
+            },
+            {
+              label: "Access",
+              items: [
+                { label: "Tokens", link: "/turso/tokens" },
+                { label: "Team & organization", link: "/turso/organization" },
+              ],
+            },
+            providerResourcesEntry("Turso"),
+          ],
+        },
+        {
           label: "Neon",
           items: [
             { label: "Overview", link: "/neon" },
@@ -1168,6 +1385,7 @@ export default defineConfig({
               items: [
                 { label: "Branching", link: "/neon/data/branching" },
                 { label: "Connections", link: "/neon/data/connections" },
+                { label: "Roles", link: "/neon/data/roles" },
                 { label: "Migrations", link: "/neon/data/migrations" },
               ],
             },
@@ -1340,15 +1558,81 @@ export default defineConfig({
           ],
         },
         {
+          label: "Domain",
+          items: [
+            { label: "Overview", link: "/domain" },
+            { label: "What is Domain-Driven Design?", link: "/domain/what-is-ddd" },
+            { label: "Project layout", link: "/domain/project-layout" },
+            {
+              label: "Tutorial",
+              collapsed: false,
+              items: [{ autogenerate: { directory: "domain/tutorial" } }],
+            },
+            {
+              label: "Concepts",
+              items: [
+                { label: "Domain Model", link: "/domain/model" },
+                { label: "Command", link: "/domain/command" },
+                { label: "Event", link: "/domain/event" },
+                { label: "Aggregate", link: "/domain/aggregate" },
+                { label: "View", link: "/domain/view" },
+                { label: "Projection", link: "/domain/projection" },
+                { label: "Stream", link: "/domain/stream" },
+                { label: "Policy", link: "/domain/policy" },
+                { label: "Saga", link: "/domain/saga" },
+                { label: "External System", link: "/domain/external-system" },
+                { label: "Api", link: "/domain/api" },
+                { label: "Story", link: "/domain/story" },
+              ],
+            },
+            {
+              label: "Testing",
+              items: [
+                { label: "Testing a model", link: "/domain/testing-models" },
+                { label: "Testing an Api", link: "/domain/testing-apis" },
+              ],
+            },
+            {
+              label: "Frontends",
+              items: [
+                { label: "Integrate with foldkit", link: "/domain/foldkit" },
+                { label: "Optimistic updates", link: "/domain/optimistic-updates" },
+                { label: "Offline and local first", link: "/domain/local-first" },
+              ],
+            },
+            {
+              label: "Security",
+              items: [
+                { label: "Sessions and middleware", link: "/domain/sessions" },
+                { label: "Views as security boundaries", link: "/domain/view-security" },
+              ],
+            },
+            {
+              label: "Consistency patterns",
+              items: [
+                { label: "Unique values", link: "/domain/unique-values" },
+                { label: "Deadlines", link: "/domain/deadlines" },
+              ],
+            },
+            {
+              label: "Hosting",
+              items: [
+                { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
+                { label: "In memory", link: "/domain/in-memory" },
+                { label: "Observability", link: "/domain/observability" },
+              ],
+            },
+            { ...providerResourcesEntry("Domain"), label: "Reference" },
+          ],
+        },
+        {
           label: "Axiom",
           items: [
             { label: "Overview", link: "/axiom" },
             { label: "Setup", link: "/axiom/setup" },
             {
               label: "Data",
-              items: [
-                { label: "Datasets & ingest", link: "/axiom/data/ingest" },
-              ],
+              items: [{ label: "Datasets & ingest", link: "/axiom/data/ingest" }],
             },
             {
               label: "Guides",
@@ -1463,6 +1747,72 @@ export default defineConfig({
           ],
         },
         {
+          label: "Kubernetes",
+          items: [
+            { label: "Overview", link: "/kubernetes" },
+            { label: "Setup", link: "/kubernetes/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "kubernetes/tutorial" } }],
+            },
+            {
+              label: "Clusters",
+              items: [
+                {
+                  label: "Connecting to clusters",
+                  link: "/kubernetes/clusters/connecting",
+                },
+                {
+                  label: "Container registries",
+                  link: "/kubernetes/clusters/registries",
+                },
+                { label: "Local clusters", link: "/kubernetes/clusters/local" },
+                { label: "Amazon EKS", link: "/kubernetes/clusters/eks" },
+                {
+                  label: "Cluster adapters",
+                  link: "/kubernetes/clusters/cluster-adapters",
+                },
+              ],
+            },
+            {
+              label: "Workloads",
+              items: [
+                {
+                  label: "Deployments",
+                  link: "/kubernetes/workloads/deployments",
+                },
+                {
+                  label: "Jobs & CronJobs",
+                  link: "/kubernetes/workloads/jobs",
+                },
+                {
+                  label: "Container images",
+                  link: "/kubernetes/workloads/images",
+                },
+                {
+                  label: "Configuration & bindings",
+                  link: "/kubernetes/workloads/bindings",
+                },
+                {
+                  label: "How objects are managed",
+                  link: "/kubernetes/workloads/object-lifecycle",
+                },
+              ],
+            },
+            {
+              label: "Objects",
+              items: [
+                { label: "Manifests", link: "/kubernetes/objects/manifests" },
+                {
+                  label: "Helm charts",
+                  link: "/kubernetes/objects/helm-charts",
+                },
+              ],
+            },
+            providerApiReferenceEntry("Kubernetes"),
+          ],
+        },
+        {
           label: "SQL",
           items: [
             { label: "Overview", link: "/sql" },
@@ -1473,6 +1823,7 @@ export default defineConfig({
                 { label: "Postgres", link: "/sql/effect-sql/postgres" },
                 { label: "MySQL", link: "/sql/effect-sql/mysql" },
                 { label: "D1", link: "/sql/effect-sql/d1" },
+                { label: "libSQL", link: "/sql/effect-sql/libsql" },
                 { label: "Migrations", link: "/sql/effect-sql/migrations" },
                 {
                   label: "Connection lifecycle",
@@ -1486,6 +1837,7 @@ export default defineConfig({
                 { label: "Postgres", link: "/sql/drizzle/postgres" },
                 { label: "MySQL", link: "/sql/drizzle/mysql" },
                 { label: "D1", link: "/sql/drizzle/d1" },
+                { label: "libSQL", link: "/sql/drizzle/libsql" },
                 { label: "Migrations", link: "/sql/drizzle/migrations" },
               ],
             },
@@ -1534,13 +1886,41 @@ export default defineConfig({
       // starlight-blog feeds this many posts into the sidebar's "Recent"
       // group, which `src/blog-sidebar.ts` re-buckets into Releases/Posts.
       // We want every post listed, so set it effectively unlimited.
-      plugins: [starlightBlog({ recentPostCount: Number.MAX_SAFE_INTEGER })],
-      routeMiddleware: ["./src/blog-sidebar.ts", "./src/docs-tabs-sidebar.ts"],
+      plugins: [
+        // The header blog link renders inside ThemeSelect, which the
+        // dark-only site overrides to nothing.
+        starlightBlog({ recentPostCount: Number.MAX_SAFE_INTEGER, navigation: "none" }),
+        markdownContentOverride(),
+      ],
+      routeMiddleware: ["./src/blog-sidebar.ts", "./src/docs-tabs-sidebar.ts", "./src/favicon.ts"],
     }),
     mdx(),
   ],
   vite: {
-    plugins: [tailwindcss()],
+    plugins: [
+      copyEditor({
+        pages: copyEditablePage,
+        handlers: {
+          jsdoc: jsdocCopyHandler(),
+          md: markdownFiles(markdownCopy),
+        },
+        markdownStyles: { [JSDOC_COPY_STYLE]: jsdocMarkdownStyle },
+      }),
+      tailwindcss(),
+    ],
+    build: {
+      // Astro builds with `target: "esnext"`, which Vite hands to Lightning
+      // CSS as empty browser targets. Lightning CSS then drops every vendor
+      // prefix, including `-webkit-text-size-adjust` — the only form iOS
+      // Safari reads — so phones inflate wide code lines. List the browsers
+      // (iOS included) so the prefixes survive minification.
+      cssTarget: ["chrome111", "edge111", "firefox114", "safari16.4", "ios16.4"],
+    },
+    server: {
+      // Dev-only: allow sharing the dev server through cloudflared quick
+      // tunnels (random *.trycloudflare.com hostnames).
+      allowedHosts: [".trycloudflare.com"],
+    },
     ssr: {
       // Sätteri (Astro 7's markdown processor) loads a platform-native
       // binding via CJS require. Bundling its JS loader into the prerender

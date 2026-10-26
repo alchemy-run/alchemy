@@ -9,9 +9,8 @@ import {
   beforeAll as vitestBeforeAll,
   beforeEach as vitestBeforeEach,
 } from "vitest";
-
 import type { AlchemyContext } from "../AlchemyContext.ts";
-import type { CompiledStack } from "../Stack.ts";
+import type { CompiledStack, StackDefinition } from "../Stack.ts";
 import type { Stage } from "../Stage.ts";
 import * as Core from "./Core.ts";
 
@@ -78,9 +77,7 @@ interface BeforeEachFn {
 
 interface AfterAllFn {
   (eff: TestEffect<any>, options?: TestOptions): void;
-  skipIf: (
-    predicate: boolean,
-  ) => (eff: TestEffect<any>, options?: TestOptions) => void;
+  skipIf: (predicate: boolean) => (eff: TestEffect<any>, options?: TestOptions) => void;
 }
 
 interface AfterEachFn {
@@ -94,8 +91,8 @@ export interface TestApi {
   afterAll: AfterAllFn;
   afterEach: AfterEachFn;
   deploy: Core.Deploy;
-  destroy: (
-    stack: TestEffect<CompiledStack, Stage | AlchemyContext>,
+  destroy: <ROut>(
+    stack: StackDefinition<ROut>,
     options?: { stage?: string; include?: never; exclude?: never },
   ) => ReturnType<typeof Core.destroy>;
 }
@@ -117,10 +114,8 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // which `destroy(Stack)` closes mid-file in self-contained tests — and is
   // closed by the fallback afterAll below.
   const sidecar = Core.makeSidecarHandle(options);
-  const wrap = <A>(eff: TestEffect<A>) =>
-    Core.toEffect(eff, options, sharedScope, sidecar);
-  const runEff = <A>(eff: TestEffect<A>) =>
-    Core.run(eff, options, sharedScope, sidecar);
+  const wrap = <A>(eff: TestEffect<A>) => Core.toEffect(eff, options, sharedScope, sidecar);
+  const runEff = <A>(eff: TestEffect<A>) => Core.run(eff, options, sharedScope, sidecar);
 
   const test = ((name, eff, opts) => {
     it.live(name, () => wrap(eff), timeoutOf(opts));
@@ -137,7 +132,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     }
   };
   test.only = (name, eff, opts) => {
-    it.only(name, () => wrap(eff) as Effect.Effect<any>, timeoutOf(opts));
+    it.live.only(name, () => wrap(eff), timeoutOf(opts));
   };
   test.todo = (name, _eff, _opts) => {
     it.todo(name);
@@ -160,12 +155,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     const body = Core.withProviders(fn(scratch), options, scratch.name).pipe(
       Effect.ensuring(scratch.destroy().pipe(Effect.ignore)),
     );
-    return Core.toEffect(
-      body,
-      { ...options, state: scratch.state },
-      sharedScope,
-      sidecar,
-    );
+    return Core.toEffect(body, { ...options, state: scratch.state }, sharedScope, sidecar);
   };
 
   const provider = ((name, fn, opts) => {
@@ -183,10 +173,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   };
   test.provider = provider;
 
-  const beforeAll: BeforeAllFn = <A>(
-    eff: TestEffect<A>,
-    hookOptions?: TestOptions,
-  ) => {
+  const beforeAll: BeforeAllFn = <A>(eff: TestEffect<A>, hookOptions?: TestOptions) => {
     let result: A;
     vitestBeforeAll(
       () => runEff(eff).then((v) => (result = v)),
@@ -200,17 +187,11 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   };
 
   const afterAll = ((eff, hookOptions) => {
-    vitestAfterAll(
-      () => runEff(eff),
-      timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT,
-    );
+    vitestAfterAll(() => runEff(eff), timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT);
   }) as AfterAllFn;
   afterAll.skipIf = (predicate) => (eff, hookOptions) => {
     if (predicate) return;
-    vitestAfterAll(
-      () => runEff(eff),
-      timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT,
-    );
+    vitestAfterAll(() => runEff(eff), timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT);
   };
 
   const afterEach: AfterEachFn = (eff, hookOptions) => {
@@ -220,23 +201,27 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // `destroy(Stack)` needs the dev sidecar alive so it can call `sidecar.stop`.
   // `Scope.close` on an already-closed scope is a no-op, so the destroy
   // wrapper AND the fallback cleanup hook below can both call it safely.
-  const closeScope = Effect.suspend(() =>
-    Scope.close(sharedScope, Exit.void),
-  ).pipe(Effect.ignore);
+  const closeScope = Effect.suspend(() => Scope.close(sharedScope, Exit.void)).pipe(Effect.ignore);
 
   // Fallback cleanup: if the user never calls `destroy(Stack)` (e.g.
   // `NO_DESTROY=1`), nothing else closes the shared scope and the sidecar
-  // child process leaks past the test process. Register an `afterAll` that
-  // closes it (and the RPC sidecar, which lives in its own scope so that
-  // mid-file `destroy(Stack)` calls can't kill it for later tests). We defer
-  // registration to a microtask so it runs AFTER any user-registered
-  // `afterAll` (including `destroy(Stack)`); vitest runs afterAll hooks in
-  // registration order.
-  const closeAll = sidecar
-    ? Effect.andThen(closeScope, sidecar.close)
-    : closeScope;
+  // child process leaks past the test process. The RPC sidecar lives in its
+  // own scope so that mid-file `destroy(Stack)` calls can't kill it for later
+  // tests.
+  //
+  // The cleanup must run after every user `afterAll` (including
+  // `destroy(Stack)`, which needs the sidecar). Vitest's default
+  // `sequence.hooks: "stack"` runs `afterAll` hooks in reverse registration
+  // order and `"list"` runs them in registration order, so register the
+  // cleanup both before (now) and after (next microtask) the file's
+  // `afterAll` calls, and only close on the second invocation: whichever
+  // order is configured, that one runs last.
+  const closeAll = sidecar ? Effect.andThen(closeScope, sidecar.close) : closeScope;
+  let cleanupCalls = 0;
+  const cleanup = () => (++cleanupCalls === 2 ? Effect.runPromise(closeAll) : undefined);
+  vitestAfterAll(cleanup, DEFAULT_TIMEOUT);
   queueMicrotask(() => {
-    vitestAfterAll(() => Effect.runPromise(closeAll), DEFAULT_TIMEOUT);
+    vitestAfterAll(cleanup, DEFAULT_TIMEOUT);
   });
 
   return {
