@@ -103,7 +103,10 @@ the same way the CLI does.
 
 Default stage for `deploy(Stack)` / `destroy(Stack)`. Defaults to
 `test_$USER` (e.g. `test_sam`) so two people running the same suite
-against one account don't collide. Override per file, or per call:
+against one account don't collide. Inside a linked git worktree the
+worktree's name is appended (`test_sam_feat-x`), so worktrees don't
+collide either. `ALCHEMY_TEST_STAGE` overrides the default. Override
+per file, or per call:
 
 ```typescript
 Test.make({ providers, stage: "ci-pr-42" });
