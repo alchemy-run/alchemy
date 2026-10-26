@@ -1,5 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 import * as vite from "vite";
 import { expect, onTestFinished, test, vi } from "vitest";
 import * as Assets from "../../core/bindings/assets/Assets.ts";
@@ -234,7 +235,7 @@ test("a Worker cannot read files outside the root through ASSETS when publicDir 
   await server.listen();
   const url = server.resolvedUrls!.local[0];
 
-  const response = await fetch(new URL(`/read${secret}`, url), {
+  const response = await fetch(new URL(`/read${pathToFileURL(secret).pathname}`, url), {
     signal: AbortSignal.timeout(5_000),
   });
   expect(response.status).toBe(404);
