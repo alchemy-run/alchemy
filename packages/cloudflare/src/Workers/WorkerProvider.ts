@@ -237,7 +237,7 @@ const toPreviewWire = (value: unknown): unknown => {
 const previewVerbatimFields = new Set(["json", "algorithm", "keyJwk", "props"]);
 
 /** Convert Alchemy's binding array into wrangler's Preview `env` map. */
-export const bindingsToPreviewEnv = (bindings: WorkerBinding[]): Record<string, unknown> => {
+const bindingsToPreviewEnv = (bindings: WorkerBinding[]): Record<string, unknown> => {
   const env: Record<string, unknown> = {};
   for (const binding of bindings) {
     const { name, ...rest } = binding as unknown as { name?: unknown } & Record<string, unknown>;
