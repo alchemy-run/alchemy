@@ -15,6 +15,7 @@ import type * as View from "./View.ts";
  * @internal
  */
 
+// Lists every field of `Aggregate.Envelope`: the codec strips any field it doesn't name.
 export const EnvelopeSchema = Schema.Struct({
   id: Schema.String,
   stream: Schema.String,
@@ -22,7 +23,7 @@ export const EnvelopeSchema = Schema.Struct({
   at: Schema.DateTimeUtc,
   commandId: Schema.String,
   correlationId: Schema.String,
-});
+} satisfies { readonly [K in keyof Aggregate.Envelope]-?: Schema.Top });
 
 /** Something an Api can expose for reading. */
 export type Readable = View.Any | Aggregate.Any | DomainStream.Any;
