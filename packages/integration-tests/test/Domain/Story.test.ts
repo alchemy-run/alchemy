@@ -862,18 +862,6 @@ describe("Domain Story", () => {
     ),
   );
 
-  it.effect("with strict: false, checks only the events then names", () =>
-    Story.make(Counters, {
-      layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
-      stub: [Approval],
-      strict: false,
-    })(
-      Story.when(m1, new MakeMove({ from: "c-1", to: "c-2", amount: 30 })),
-      Story.when(c1, new Increment({ by: 3 })),
-      Story.replied({ total: 3 }),
-    ),
-  );
-
   it.effect("a scheduled command fires when the clock reaches it", () =>
     story(
       Story.clock("2026-01-01T00:00:00Z"),

@@ -586,11 +586,6 @@ interface StoryOptions<Policies, LE, LR, Systems> {
    * each call returned with `returned`, `failed` or `died`.
    */
   readonly stub?: ReadonlyArray<Systems>;
-  /**
-   * Fail the story on any committed event no `then` step asserts. Defaults
-   * to `true`; pass `false` to check only the events `then` steps name.
-   */
-  readonly strict?: boolean;
 }
 
 /**
@@ -1167,20 +1162,17 @@ const make =
             message: `unanswered external system calls at the end of the story: ${show(calls.map((c) => `${c.system}.${c.op}(${show(c.args)})`))}`,
           });
         }
-        if (options.strict === false) return;
         attribute(steps.length);
         // Every committed event past its stream's cursor is one no `then` asserts.
         const unasserted: Array<string> = [];
-        const streams = new Map<string, { readonly aggregate: string; readonly id: string }>();
+        const streams = new Map<string, Aggregate.Ref>();
         for (const { aggregate, id } of platform.control.commits)
-          streams.set(`${aggregate}/${id}`, { aggregate, id });
-        for (const [stream, { aggregate, id }] of streams) {
-          const events = yield* (
-            internals.aggregates.get(aggregate)!.events?.(id) ?? Effect.succeed([])
-          );
+          streams.set(`${aggregate}/${id}`, { aggregate, id } as Aggregate.Ref);
+        for (const [stream, ref] of streams) {
+          const events = yield* committed(ref);
           const from = cursors.get(stream) ?? 0;
           if (events.length <= from) continue;
-          touched.set(stream, { aggregate, id } as Aggregate.Ref);
+          touched.set(stream, ref);
           // Decoded, so redacted fields stay redacted in the message.
           const rest = events.slice(from).map((e) => internals.kernel.decodeEvent(e.event));
           const first = committedAt.get(`${stream}#${from}`);

@@ -46,7 +46,7 @@ The steps:
 
 - `given(ref, ...events)` records history. It reaches views, but never triggers policies.
 - `when(ref, command)` sends a command, then runs every policy, saga and projection until the model settles.
-- `then(ref, ...events)` asserts the next events committed on that stream, since the last `then` or `given` on it. With no events, it asserts that nothing new was committed. Every committed event needs a `then`, on every stream, including those a policy or saga writes: an event no `then` asserts fails the story at the end. `Story.make(Model, { strict: false })` turns that check off.
+- `then(ref, ...events)` asserts the next events committed on that stream, since the last `then` or `given` on it. With no events, it asserts that nothing new was committed. Every committed event needs a `then`, on every stream, including those a policy or saga writes: an event no `then` asserts fails the story at the end.
 - `rejected(rejection)` asserts the last command's rejection. An unasserted rejection fails the story.
 - `replied(value)` asserts the last command's reply.
 - `state(ref, partial | fn)` asserts aggregate state.
