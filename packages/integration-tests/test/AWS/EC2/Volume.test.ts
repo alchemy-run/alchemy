@@ -4,6 +4,7 @@ import { Alias, Key, type AliasName } from "@alchemy.run/aws/KMS";
 import { expect } from "@alchemy.run/test";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as kms from "@distilled.cloud/aws/kms";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State/State";
 import * as Test from "alchemy/Test/Alchemy";
@@ -269,6 +270,38 @@ test.provider(
 
       yield* stack.destroy();
       yield* assertVolumeDeleted(first.volumeId);
+    }).pipe(logLevel),
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
+);
+
+// `read` observes the volume, so drift sees it unchanged after a deploy and
+// missing once it is deleted outside the stack.
+test.provider(
+  "drift reports a volume deleted outside the stack as missing",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const volume = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Volume("DriftVolume", {
+            availabilityZone: AZ,
+            size: 1,
+            volumeType: "gp3",
+          });
+        }),
+      );
+
+      const detect = Drift.detect({ name: stack.name, stage: stack.stage }).pipe(
+        Effect.provide(stack.state),
+      );
+      expect((yield* detect).resources.DriftVolume?.action).toBe("unchanged");
+
+      yield* EC2.deleteVolume({ VolumeId: volume.volumeId, DryRun: false });
+      yield* assertVolumeDeleted(volume.volumeId);
+      expect((yield* detect).resources.DriftVolume?.action).toBe("missing");
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
 );

@@ -261,6 +261,25 @@ export const VolumeProvider = () =>
           .find((volume) => volume.State !== "deleting" && volume.State !== "deleted");
       });
 
+      // Try the cached volume id first, then the ownership-tag lookup. A
+      // volume that is deleting or deleted counts as missing.
+      const observeVolume = Effect.fn(function* (
+        id: string,
+        instanceId: string,
+        volumeId: string | undefined,
+      ) {
+        if (volumeId) {
+          const lookup = yield* ec2
+            .describeVolumes({ VolumeIds: [volumeId] })
+            .pipe(Effect.catchTag("InvalidVolume.NotFound", () => Effect.succeed({ Volumes: [] })));
+          const found = lookup.Volumes?.[0];
+          if (found && found.State !== "deleting" && found.State !== "deleted") {
+            return found;
+          }
+        }
+        return yield* findVolumeByInstanceTags(id, instanceId);
+      });
+
       return {
         stables: [
           "volumeId",
@@ -289,6 +308,12 @@ export const VolumeProvider = () =>
           }
         }),
 
+        read: Effect.fn(function* ({ id, instanceId, output }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const volume = yield* observeVolume(id, instanceId, output?.volumeId);
+          return volume ? toVolumeAttributes(volume, region, accountId) : undefined;
+        }),
+
         reconcile: Effect.fn(function* ({ id, instanceId, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const alchemyTags = yield* createInternalTags(id);
@@ -300,21 +325,7 @@ export const VolumeProvider = () =>
 
           // 1. OBSERVE — cloud state is authoritative; output is only an id
           //    cache. A volume in a terminal state is treated as missing.
-          let volume: ec2.Volume | undefined;
-          if (output?.volumeId) {
-            const lookup = yield* ec2
-              .describeVolumes({ VolumeIds: [output.volumeId] })
-              .pipe(
-                Effect.catchTag("InvalidVolume.NotFound", () => Effect.succeed({ Volumes: [] })),
-              );
-            const found = lookup.Volumes?.[0];
-            if (found && found.State !== "deleting" && found.State !== "deleted") {
-              volume = found;
-            }
-          }
-          if (volume === undefined) {
-            volume = yield* findVolumeByInstanceTags(id, instanceId);
-          }
+          let volume = yield* observeVolume(id, instanceId, output?.volumeId);
 
           // 2. ENSURE — create the volume when missing, then wait until it is
           //    available.
