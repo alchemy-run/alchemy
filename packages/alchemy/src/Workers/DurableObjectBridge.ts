@@ -21,7 +21,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { HttpEffect } from "../Http.ts";
 import { isScopeEjected } from "../Http.ts";
-import { RPC_PATH_PREFIX, serveRpc } from "../Rpc.ts";
+import { rpcMethodOf, serveRpc } from "../Rpc.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import { buildEventTelemetry } from "../TelemetryRuntime.ts";
 import type { DurableObjectExport, DurableObjectShape } from "./DurableObject.ts";
@@ -128,15 +128,6 @@ export interface DurableObjectInstance {
     request: { readonly url: string },
   ) => HttpEffect<any>;
 }
-
-/** The RPC method a request addresses (`…/__rpc__/{method}` path), if any. */
-const rpcMethodOf = (request: { readonly url: string }): string | undefined => {
-  const pathname = new URL(request.url).pathname;
-  const index = pathname.indexOf(RPC_PATH_PREFIX);
-  return index === -1
-    ? undefined
-    : decodeURIComponent(pathname.slice(index + RPC_PATH_PREFIX.length));
-};
 
 export const makeDurableObjectInstance = ({
   build,

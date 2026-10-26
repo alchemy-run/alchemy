@@ -8024,6 +8024,9 @@ importers:
       '@alchemy.run/test':
         specifier: workspace:*
         version: link:../alchemy-test
+      '@cloudflare/workers-types':
+        specifier: 5.20261012.1
+        version: 5.20261012.1
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)
@@ -8265,6 +8268,55 @@ importers:
       pg:
         specifier: 'catalog:'
         version: 8.23.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/celld:
+    dependencies:
+      '@alchemy.run/cloudflare-runtime':
+        specifier: workspace:*
+        version: link:../cloudflare-runtime
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../sql
+      '@distilled.cloud/aws':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/aws
+      '@distilled.cloud/celld':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/celld
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+    devDependencies:
+      '@alchemy.run/aws':
+        specifier: workspace:*
+        version: link:../aws
+      '@cloudflare/workers-types':
+        specifier: 5.20261012.1
+        version: 5.20261012.1
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.0.5(effect@4.0.5)
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.5(effect@4.0.5)(redis@6.2.1)
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.5
+        version: 4.0.5
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -38816,7 +38868,7 @@ snapshots:
 
   '@types/sax@1.2.7':
     dependencies:
-      '@types/node': 24.13.3
+      '@types/node': 26.6.5
 
   '@types/unist@2.0.11': {}
 

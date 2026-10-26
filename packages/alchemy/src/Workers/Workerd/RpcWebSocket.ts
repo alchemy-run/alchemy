@@ -51,8 +51,19 @@ export interface Transport {
  * Binary serializers use waking Ping/Pong messages instead of auto-response.
  * Serializers must emit each response immediately; buffered output fails closed.
  */
+/** The Durable Object state members the transport needs. */
+export type RpcWebSocketState = Pick<
+  WorkerdDurableObjectState,
+  | "abort"
+  | "acceptWebSocket"
+  | "getWebSocketAutoResponse"
+  | "getWebSockets"
+  | "setWebSocketAutoResponse"
+  | "waitUntil"
+>;
+
 export const make = (
-  state: WorkerdDurableObjectState,
+  state: RpcWebSocketState,
 ): Effect.Effect<Transport, never, RuntimeContext | RpcSerialization.RpcSerialization> =>
   Effect.gen(function* () {
     const runtime = yield* RuntimeContext;

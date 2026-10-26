@@ -16,7 +16,6 @@ import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
 import * as Scope from "effect/Scope";
 import { RuntimeContext } from "../../RuntimeContext.ts";
-import type { WorkerdDurableObjectState } from "./DurableObjectState.ts";
 import * as RpcWebSocket from "./RpcWebSocket.ts";
 
 /**
@@ -26,7 +25,7 @@ import * as RpcWebSocket from "./RpcWebSocket.ts";
  * served as the object's `fetch`.
  */
 export const wrapRpcDurableObjectImpl = <I>(
-  State: Context.Key<I, WorkerdDurableObjectState>,
+  State: Context.Key<I, RpcWebSocket.RpcWebSocketState>,
   impl: Effect.Effect<Effect.Effect<any>>,
   schema: RpcGroup.RpcGroup<any>,
 ) =>
@@ -49,7 +48,7 @@ class RpcRequestLifetime extends RpcMiddleware.Service<RpcRequestLifetime>()(
 ) {}
 
 const makeHandlers = Effect.fn(function* <I>(
-  State: Context.Key<I, WorkerdDurableObjectState>,
+  State: Context.Key<I, RpcWebSocket.RpcWebSocketState>,
   schema: RpcGroup.RpcGroup<any>,
   handlers: Layer.Layer<any, never, any>,
 ) {
