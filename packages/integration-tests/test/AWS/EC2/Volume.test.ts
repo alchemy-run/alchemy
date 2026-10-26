@@ -205,92 +205,99 @@ test.provider(
 );
 
 // A create whose reply was lost leaves no saved output, and the tag lookup
-// can miss a volume EC2 has not indexed yet. The `clientToken` makes the
-// retried CreateVolume return the first volume instead of a second one.
+// can miss a volume EC2 has not indexed yet. The ClientToken alchemy derives
+// from the resource's generation makes the retried CreateVolume return the
+// first volume instead of a second one.
 test.provider(
-  "a retried create with the same clientToken returns the same volume",
+  "a create retried after a lost reply returns the same volume",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      // A token lives 24 hours in EC2, so each run needs a fresh one.
-      const program = (clientToken: string) =>
-        Effect.gen(function* () {
-          return yield* Volume("ClientTokenVolume", {
-            availabilityZone: AZ,
-            size: 1,
-            volumeType: "gp3",
-            clientToken,
-          });
+      const program = Effect.gen(function* () {
+        return yield* Volume("ClientTokenVolume", {
+          availabilityZone: AZ,
+          size: 1,
+          volumeType: "gp3",
         });
-      const token = yield* Effect.sync(() => crypto.randomUUID());
-
-      const first = yield* stack.deploy(program(token));
+      });
 
       // Simulate a lost CreateVolume reply: drop the saved output and the
       // generation tag the recovery lookup finds the volume by.
-      const state = yield* yield* State;
-      const key = { stack: stack.name, stage: stack.stage, fqn: "ClientTokenVolume" };
-      const row = yield* state.get(key);
-      if (row?.status !== "created") {
-        return yield* Effect.die(new Error("Expected a created volume row"));
-      }
-      const { attr: _attr, ...rest } = row;
-      yield* state.set({ ...key, value: { ...rest, status: "creating" } });
-      yield* EC2.deleteTags({
-        Resources: [first.volumeId],
-        Tags: [{ Key: "alchemy::instance" }],
-        DryRun: false,
+      const loseReply = Effect.fn(function* (volumeId: string) {
+        const state = yield* yield* State;
+        const key = { stack: stack.name, stage: stack.stage, fqn: "ClientTokenVolume" };
+        const row = yield* state.get(key);
+        if (row?.status !== "created") {
+          return yield* Effect.die(new Error("Expected a created volume row"));
+        }
+        const { attr: _attr, ...rest } = row;
+        yield* state.set({ ...key, value: { ...rest, status: "creating" } });
+        yield* EC2.deleteTags({
+          Resources: [volumeId],
+          Tags: [{ Key: "alchemy::instance" }],
+          DryRun: false,
+        });
+        return row.instanceId;
       });
 
-      const retried = yield* stack.deploy(program(token));
-      expect(retried.volumeId).toBe(first.volumeId);
-
-      // Only one volume carries this resource's ownership tags, and the sync
-      // put the generation tag back.
-      const owned = yield* EC2.describeVolumes({
+      const ownedVolumes = EC2.describeVolumes({
         Filters: [
           { Name: "tag:alchemy::stack", Values: [stack.name] },
           { Name: "tag:alchemy::stage", Values: [stack.stage] },
           { Name: "tag:alchemy::id", Values: ["ClientTokenVolume"] },
         ],
-      });
-      expect(owned.Volumes?.map((v) => v.VolumeId)).toEqual([first.volumeId]);
-      expect(owned.Volumes?.[0]?.Tags?.find((tag) => tag.Key === "alchemy::instance")?.Value).toBe(
-        row.instanceId,
+      }).pipe(Effect.map((owned) => owned.Volumes ?? []));
+
+      const first = yield* stack.deploy(program);
+      const generation = yield* loseReply(first.volumeId);
+
+      const retried = yield* stack.deploy(program);
+      expect(retried.volumeId).toBe(first.volumeId);
+
+      // Only one volume carries this resource's ownership tags, and the sync
+      // put the generation tag back.
+      const volumes = yield* ownedVolumes;
+      expect(volumes.map((v) => v.VolumeId)).toEqual([first.volumeId]);
+      expect(volumes[0]?.Tags?.find((tag) => tag.Key === "alchemy::instance")?.Value).toBe(
+        generation,
       );
 
-      // A new token alone updates the saved props without touching the
-      // volume, so a later create uses it.
-      const next = `${token}-next`;
-      const plan = yield* stack.plan(program(next));
-      expect(plan.resources.ClientTokenVolume?.action).toBe("update");
-      const updated = yield* stack.deploy(program(next));
-      expect(updated.volumeId).toBe(first.volumeId);
+      // Lose the reply again, then delete the volume outside the stack. EC2
+      // refuses the retried token for a deleted volume, so the create must
+      // fall back to a new volume rather than fail.
+      yield* loseReply(first.volumeId);
+      yield* EC2.deleteVolume({ VolumeId: first.volumeId, DryRun: false });
+      yield* assertVolumeDeleted(first.volumeId);
+
+      const recreated = yield* stack.deploy(program);
+      expect(recreated.volumeId).not.toBe(first.volumeId);
+      expect((yield* ownedVolumes).map((v) => v.VolumeId)).toEqual([recreated.volumeId]);
 
       yield* stack.destroy();
-      yield* assertVolumeDeleted(first.volumeId);
+      yield* assertVolumeDeleted(recreated.volumeId);
     }).pipe(logLevel),
-  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 180_000 },
 );
 
 // `read` observes the volume, so drift sees it unchanged after a deploy and
-// missing once it is deleted outside the stack.
+// missing once it is deleted outside the stack. The next deploy creates a
+// replacement under a new ClientToken.
 test.provider(
-  "drift reports a volume deleted outside the stack as missing",
+  "a volume deleted outside the stack drifts as missing and is recreated",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const volume = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Volume("DriftVolume", {
-            availabilityZone: AZ,
-            size: 1,
-            volumeType: "gp3",
-          });
-        }),
-      );
+      const program = Effect.gen(function* () {
+        return yield* Volume("DriftVolume", {
+          availabilityZone: AZ,
+          size: 1,
+          volumeType: "gp3",
+        });
+      });
+
+      const volume = yield* stack.deploy(program);
 
       const detect = Drift.detect({ name: stack.name, stage: stack.stage }).pipe(
         Effect.provide(stack.state),
@@ -301,9 +308,14 @@ test.provider(
       yield* assertVolumeDeleted(volume.volumeId);
       expect((yield* detect).resources.DriftVolume?.action).toBe("missing");
 
+      const recreated = yield* stack.deploy(program);
+      expect(recreated.volumeId).not.toBe(volume.volumeId);
+      expect(recreated.state).toBe("available");
+
       yield* stack.destroy();
+      yield* assertVolumeDeleted(recreated.volumeId);
     }).pipe(logLevel),
-  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 180_000 },
 );
 
 const assertVolumeDeleted = Effect.fn(function* (volumeId: string) {

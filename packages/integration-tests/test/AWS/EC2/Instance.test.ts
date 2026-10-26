@@ -20,6 +20,20 @@ const { test } = Test.make({ providers: AWS.providers() }, 2);
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
+// Terminate an instance outside the stack and wait until EC2 reports it
+// terminated; shutting-down -> terminated can take a minute or two.
+const terminateOutOfBand = Effect.fn(function* (instanceId: string) {
+  yield* ec2.terminateInstances({ InstanceIds: [instanceId] });
+  yield* ec2.describeInstances({ InstanceIds: [instanceId] }).pipe(
+    Effect.map((r) => r.Reservations?.[0]?.Instances?.[0]?.State?.Name),
+    Effect.repeat({
+      schedule: Schedule.spaced("5 seconds"),
+      until: (state) => state === "terminated",
+      times: 36,
+    }),
+  );
+});
+
 describe.sequential("Instance", { tags: ["provider:aws", "provider:aws:ec2", "live"] }, () => {
   // `list()` enumerates every non-terminated instance in the account/region via
   // the paginated `ec2.describeInstances` op (items nested under
@@ -262,131 +276,137 @@ echo ${queue.queueUrl}
   );
 
   // A launch whose reply was lost leaves no saved output, and the tag lookup
-  // can miss an instance EC2 has not indexed yet. The `clientToken` makes the
-  // retried RunInstances return the first instance instead of a second one.
+  // can miss an instance EC2 has not indexed yet. The ClientToken alchemy
+  // derives from the resource's generation makes the retried RunInstances
+  // return the first instance instead of a second one.
   test.provider(
-    "a retried launch with the same clientToken returns the same instance",
+    "a launch retried after a lost reply returns the same instance",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
 
-        // A token lives 24 hours in EC2, so each run needs a fresh one.
-        const program = (clientToken: string) =>
-          Effect.gen(function* () {
-            const vpc = yield* Vpc("ClientTokenVpc", { cidrBlock: "10.0.0.0/16" });
-            const subnet = yield* Subnet("ClientTokenSubnet", {
-              vpcId: vpc.vpcId,
-              cidrBlock: "10.0.1.0/24",
-            });
-            const instance = yield* Instance("ClientTokenInstance", {
-              imageId: amazonLinux2023(),
-              instanceType: "t3.micro",
-              subnetId: subnet.subnetId,
-              clientToken,
-            });
-            return { vpc, instance };
+        const program = Effect.gen(function* () {
+          const vpc = yield* Vpc("ClientTokenVpc", { cidrBlock: "10.0.0.0/16" });
+          const subnet = yield* Subnet("ClientTokenSubnet", {
+            vpcId: vpc.vpcId,
+            cidrBlock: "10.0.1.0/24",
           });
-        const token = yield* Effect.sync(() => crypto.randomUUID());
-
-        const first = yield* stack.deploy(program(token));
-        const launched = yield* ec2.describeInstances({
-          InstanceIds: [first.instance.instanceId],
+          const instance = yield* Instance("ClientTokenInstance", {
+            imageId: amazonLinux2023(),
+            instanceType: "t3.micro",
+            subnetId: subnet.subnetId,
+          });
+          return { vpc, instance };
         });
-        expect(launched.Reservations?.[0]?.Instances?.[0]?.ClientToken).toBe(token);
 
         // Simulate a lost RunInstances reply: drop the saved output and the
         // generation tag the recovery lookup finds the instance by.
-        const state = yield* yield* State;
-        const key = { stack: stack.name, stage: stack.stage, fqn: "ClientTokenInstance" };
-        const row = yield* state.get(key);
-        if (row?.status !== "created") {
-          return yield* Effect.die(new Error("Expected a created instance row"));
-        }
-        const { attr: _attr, ...rest } = row;
-        yield* state.set({ ...key, value: { ...rest, status: "creating" } });
-        yield* ec2.deleteTags({
-          Resources: [first.instance.instanceId],
-          Tags: [{ Key: "alchemy::instance" }],
+        const loseReply = Effect.fn(function* (instanceId: string) {
+          const state = yield* yield* State;
+          const key = { stack: stack.name, stage: stack.stage, fqn: "ClientTokenInstance" };
+          const row = yield* state.get(key);
+          if (row?.status !== "created") {
+            return yield* Effect.die(new Error("Expected a created instance row"));
+          }
+          const { attr: _attr, ...rest } = row;
+          yield* state.set({ ...key, value: { ...rest, status: "creating" } });
+          yield* ec2.deleteTags({
+            Resources: [instanceId],
+            Tags: [{ Key: "alchemy::instance" }],
+          });
+          return row.instanceId;
         });
 
-        const retried = yield* stack.deploy(program(token));
+        const ownedInstances = ec2
+          .describeInstances({
+            Filters: [
+              { Name: "tag:alchemy::stack", Values: [stack.name] },
+              { Name: "tag:alchemy::stage", Values: [stack.stage] },
+              { Name: "tag:alchemy::id", Values: ["ClientTokenInstance"] },
+              { Name: "instance-state-name", Values: ["pending", "running"] },
+            ],
+          })
+          .pipe(
+            Effect.map((owned) => (owned.Reservations ?? []).flatMap((r) => r.Instances ?? [])),
+          );
+
+        const first = yield* stack.deploy(program);
+        const generation = yield* loseReply(first.instance.instanceId);
+
+        const retried = yield* stack.deploy(program);
         expect(retried.instance.instanceId).toBe(first.instance.instanceId);
 
         // Only one live instance carries this resource's ownership tags, and
         // the sync put the generation tag back.
-        const owned = yield* ec2.describeInstances({
-          Filters: [
-            { Name: "tag:alchemy::stack", Values: [stack.name] },
-            { Name: "tag:alchemy::stage", Values: [stack.stage] },
-            { Name: "tag:alchemy::id", Values: ["ClientTokenInstance"] },
-            { Name: "instance-state-name", Values: ["pending", "running"] },
-          ],
-        });
-        const instances = (owned.Reservations ?? []).flatMap((r) => r.Instances ?? []);
+        const instances = yield* ownedInstances;
         expect(instances.map((i) => i.InstanceId)).toEqual([first.instance.instanceId]);
         expect(instances[0]?.Tags?.find((tag) => tag.Key === "alchemy::instance")?.Value).toBe(
-          row.instanceId,
+          generation,
         );
 
-        // A new token alone updates the saved props without touching the
-        // instance, so a later launch uses it.
-        const next = `${token}-next`;
-        const plan = yield* stack.plan(program(next));
-        expect(plan.resources.ClientTokenInstance?.action).toBe("update");
-        const updated = yield* stack.deploy(program(next));
-        expect(updated.instance.instanceId).toBe(first.instance.instanceId);
+        // Lose the reply again, then terminate the instance outside the
+        // stack. The retried token now returns a terminated instance, so the
+        // launch must start a new one rather than fail or adopt the tombstone.
+        yield* loseReply(first.instance.instanceId);
+        yield* terminateOutOfBand(first.instance.instanceId);
+
+        const relaunched = yield* stack.deploy(program);
+        expect(relaunched.instance.instanceId).not.toBe(first.instance.instanceId);
+        expect((yield* ownedInstances).map((i) => i.InstanceId)).toEqual([
+          relaunched.instance.instanceId,
+        ]);
 
         yield* stack.destroy();
-        yield* assertInstanceTerminated(first.instance.instanceId);
+        yield* assertInstanceTerminated(relaunched.instance.instanceId);
         yield* assertVpcGone(first.vpc.vpcId);
       }).pipe(logLevel),
-    { timeout: 300_000 },
+    { timeout: 600_000 },
   );
 
   // EC2 keeps listing a terminated instance for a while. `read` must report
-  // it as missing, so drift sees the instance gone rather than changed.
+  // it as missing, so drift sees the instance gone rather than changed, and
+  // the next deploy launches a replacement under a new ClientToken.
   test.provider(
-    "drift reports an instance terminated outside the stack as missing",
+    "an instance terminated outside the stack drifts as missing and is relaunched",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
 
-        const deployed = yield* stack.deploy(
-          Effect.gen(function* () {
-            const vpc = yield* Vpc("DriftInstanceVpc", { cidrBlock: "10.0.0.0/16" });
-            const subnet = yield* Subnet("DriftInstanceSubnet", {
-              vpcId: vpc.vpcId,
-              cidrBlock: "10.0.1.0/24",
-            });
-            const instance = yield* Instance("DriftInstance", {
-              imageId: amazonLinux2023(),
-              instanceType: "t3.micro",
-              subnetId: subnet.subnetId,
-            });
-            return { vpc, instance };
-          }),
-        );
+        const program = Effect.gen(function* () {
+          const vpc = yield* Vpc("DriftInstanceVpc", { cidrBlock: "10.0.0.0/16" });
+          const subnet = yield* Subnet("DriftInstanceSubnet", {
+            vpcId: vpc.vpcId,
+            cidrBlock: "10.0.1.0/24",
+          });
+          const instance = yield* Instance("DriftInstance", {
+            imageId: amazonLinux2023(),
+            instanceType: "t3.micro",
+            subnetId: subnet.subnetId,
+          });
+          return { vpc, instance };
+        });
 
-        yield* ec2.terminateInstances({ InstanceIds: [deployed.instance.instanceId] });
-        // shutting-down -> terminated can take a minute or two.
-        yield* ec2.describeInstances({ InstanceIds: [deployed.instance.instanceId] }).pipe(
-          Effect.map((r) => r.Reservations?.[0]?.Instances?.[0]?.State?.Name),
-          Effect.repeat({
-            schedule: Schedule.spaced("5 seconds"),
-            until: (state) => state === "terminated",
-            times: 24,
-          }),
-        );
+        const deployed = yield* stack.deploy(program);
+
+        yield* terminateOutOfBand(deployed.instance.instanceId);
 
         const drift = yield* Drift.detect({ name: stack.name, stage: stack.stage }).pipe(
           Effect.provide(stack.state),
         );
         expect(drift.resources.DriftInstance?.action).toBe("missing");
 
+        const relaunched = yield* stack.deploy(program);
+        expect(relaunched.instance.instanceId).not.toBe(deployed.instance.instanceId);
+        const live = yield* ec2.describeInstances({
+          InstanceIds: [relaunched.instance.instanceId],
+        });
+        expect(live.Reservations?.[0]?.Instances?.[0]?.State?.Name).toBe("running");
+
         yield* stack.destroy();
+        yield* assertInstanceTerminated(relaunched.instance.instanceId);
         yield* assertVpcGone(deployed.vpc.vpcId);
       }).pipe(logLevel),
-    { timeout: 300_000 },
+    { timeout: 600_000 },
   );
 
   // A Redacted userData is revealed only for RunInstances and compared by

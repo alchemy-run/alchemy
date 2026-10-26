@@ -113,20 +113,6 @@ export interface InstanceProps extends PlatformProps {
    */
   tags?: Record<string, string>;
   /**
-   * Idempotency token sent as `ClientToken` on `RunInstances`. A retried
-   * launch with the same token (within 24 hours) returns the instance the
-   * first call launched instead of a second one. Up to 64 ASCII characters.
-   *
-   * Only the launch uses it. Changing it alone runs an update that makes no
-   * EC2 call, so a later launch uses the new token. Pass a new token when
-   * another change replaces the instance, or when the instance it launched
-   * was terminated: AWS rejects a reused token with different parameters
-   * with `IdempotentParameterMismatch`, and can return the terminated
-   * instance for the same parameters.
-   * @default a random token per launch
-   */
-  clientToken?: string;
-  /**
    * Module entrypoint for the bundled instance program.
    * When omitted, the instance behaves as a low-level EC2 resource.
    */
@@ -659,6 +645,7 @@ export const InstanceProvider = () =>
           instanceProfileName?: string;
         },
         tags: Record<string, string>,
+        clientToken: string,
       ): ec2.RunInstancesRequest => ({
         ...hosted.buildLaunchTemplateData(
           {
@@ -677,7 +664,7 @@ export const InstanceProvider = () =>
         ),
         MinCount: 1,
         MaxCount: 1,
-        ClientToken: news.clientToken,
+        ClientToken: clientToken,
       });
 
       return {
@@ -868,32 +855,41 @@ export const InstanceProvider = () =>
 
           // Ensure — RunInstances when no live instance was observed. The
           // initial sourceDestCheck is set here because RunInstances itself
-          // doesn't accept it.
+          // doesn't accept it. The ClientToken is this generation plus the
+          // last instance it launched, so a launch retried after a lost reply
+          // returns the first instance, and a relaunch after the instance was
+          // terminated sends a new token.
           if (instance === undefined) {
-            const created = yield* ec2
-              .runInstances(buildRunInstancesRequest(news, runtime, desiredTags))
-              .pipe(
-                Effect.retry({
-                  while: isPendingInstanceProfileError,
-                  schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
-                }),
-              );
-            const newInstanceId = created.Instances?.[0]?.InstanceId as InstanceId | undefined;
-            if (!newInstanceId) {
-              return yield* Effect.fail(
-                new Error(`RunInstances returned no instance ID for '${id}'`),
-              );
+            const launch = (previous: string) =>
+              ec2
+                .runInstances(
+                  buildRunInstancesRequest(news, runtime, desiredTags, `${generation}-${previous}`),
+                )
+                .pipe(
+                  Effect.retry({
+                    while: isPendingInstanceProfileError,
+                    schedule: Schedule.max([
+                      Schedule.exponential("500 millis"),
+                      Schedule.recurs(8),
+                    ]),
+                  }),
+                );
+            let launched = (yield* launch(output?.instanceId ?? "initial")).Instances?.[0];
+            // A used token returns the instance it first launched, even once
+            // that instance is terminated (its reply was lost and it was then
+            // terminated outside the stack). Launch again under a token keyed
+            // on that instance.
+            if (launched?.InstanceId && isTerminating(launched)) {
+              launched = (yield* launch(launched.InstanceId)).Instances?.[0];
             }
-            // A reused `clientToken` can return the instance it first
-            // launched, even after that instance was terminated.
-            const launchedState = created.Instances?.[0]?.State?.Name;
-            if (launchedState === "shutting-down" || launchedState === "terminated") {
-              return yield* Effect.fail(
-                new Error(
-                  `RunInstances returned ${launchedState} instance ${newInstanceId} for '${id}': ` +
-                    `clientToken '${news.clientToken}' already launched it. Pass a new clientToken.`,
-                ),
-              );
+            const newInstanceId = launched?.InstanceId as InstanceId | undefined;
+            if (!newInstanceId || isTerminating(launched!)) {
+              return yield* new InstanceLaunchFailed({
+                id,
+                message: newInstanceId
+                  ? `RunInstances returned ${launched?.State?.Name} instance ${newInstanceId}`
+                  : "RunInstances returned no instance ID",
+              });
             }
             yield* session.note(newInstanceId);
             instance = yield* waitForState({
@@ -1065,6 +1061,14 @@ export const InstanceProvider = () =>
       };
     }),
   );
+
+const isTerminating = (instance: ec2.Instance) =>
+  instance.State?.Name === "shutting-down" || instance.State?.Name === "terminated";
+
+class InstanceLaunchFailed extends Data.TaggedError("InstanceLaunchFailed")<{
+  id: string;
+  message: string;
+}> {}
 
 class InstanceNotFound extends Data.TaggedError("InstanceNotFound")<{
   instanceId: string;

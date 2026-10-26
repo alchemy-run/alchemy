@@ -89,20 +89,6 @@ export interface VolumeProps {
    * (alchemy::stack, alchemy::stage, alchemy::id).
    */
   tags?: Record<string, string>;
-
-  /**
-   * Idempotency token sent as `ClientToken` on `CreateVolume`. A retried
-   * create with the same token (within 24 hours) returns the volume the
-   * first call created instead of a second one. Up to 64 ASCII characters.
-   *
-   * Only the create uses it. Changing it alone runs an update that makes no
-   * EC2 call, so a later create uses the new token. Pass a new token when
-   * another change replaces the volume, or after the volume it created was
-   * deleted: AWS rejects a reused token with different parameters with
-   * `IdempotentParameterMismatch`.
-   * @default a random token per create
-   */
-  clientToken?: string;
 }
 
 export interface Volume extends Resource<
@@ -328,27 +314,37 @@ export const VolumeProvider = () =>
           let volume = yield* observeVolume(id, instanceId, output?.volumeId);
 
           // 2. ENSURE — create the volume when missing, then wait until it is
-          //    available.
+          //    available. The ClientToken is this generation plus the last
+          //    volume it created, so a create retried after a lost reply
+          //    returns the first volume, and a recreate after the volume was
+          //    deleted sends a new token.
           if (volume === undefined) {
-            const created = yield* ec2.createVolume({
-              AvailabilityZone: news.availabilityZone,
-              Size: news.size,
-              VolumeType: news.volumeType ?? "gp3",
-              Iops: news.iops,
-              Throughput: news.throughput,
-              Encrypted: news.encrypted ?? (news.kmsKeyId !== undefined ? true : undefined),
-              KmsKeyId: news.kmsKeyId,
-              SnapshotId: news.snapshotId,
-              MultiAttachEnabled: news.multiAttachEnabled,
-              ClientToken: news.clientToken,
-              TagSpecifications: [
-                {
-                  ResourceType: "volume",
-                  Tags: createTagsList(desiredTags),
-                },
-              ],
-              DryRun: false,
-            });
+            const create = (clientToken: string | undefined) =>
+              ec2.createVolume({
+                AvailabilityZone: news.availabilityZone,
+                Size: news.size,
+                VolumeType: news.volumeType ?? "gp3",
+                Iops: news.iops,
+                Throughput: news.throughput,
+                Encrypted: news.encrypted ?? (news.kmsKeyId !== undefined ? true : undefined),
+                KmsKeyId: news.kmsKeyId,
+                SnapshotId: news.snapshotId,
+                MultiAttachEnabled: news.multiAttachEnabled,
+                ClientToken: clientToken,
+                TagSpecifications: [
+                  {
+                    ResourceType: "volume",
+                    Tags: createTagsList(desiredTags),
+                  },
+                ],
+                DryRun: false,
+              });
+            // EC2 refuses a token whose volume was deleted. That happens only
+            // after a lost reply (no saved volume id) and a delete outside the
+            // stack; nothing is left to collide with, so create untokened.
+            const created = yield* create(`${instanceId}-${output?.volumeId ?? "initial"}`).pipe(
+              Effect.catchTag("IdempotentVolumeDeleted", () => create(undefined)),
+            );
             const volumeId = created.VolumeId! as VolumeId;
             yield* session.note(`Volume created: ${volumeId}`);
             volume = yield* waitForVolumeAvailable(volumeId, session);
@@ -469,6 +465,14 @@ const toVolumeAttributes = (
   };
 };
 
+class VolumeNotFound extends Data.TaggedError("VolumeNotFound")<{
+  volumeId: string;
+}> {}
+
+class VolumeFailed extends Data.TaggedError("VolumeFailed")<{
+  volumeId: string;
+}> {}
+
 class VolumeNotReady extends Data.TaggedError("VolumeNotReady")<{
   volumeId: string;
   state: string;
@@ -488,18 +492,18 @@ const waitForVolumeAvailable = (volumeId: string, session?: ScopedPlanStatusSess
     const result = yield* ec2.describeVolumes({ VolumeIds: [volumeId] });
     const volume = result.Volumes?.[0];
     if (!volume) {
-      return yield* Effect.fail(new Error(`Volume ${volumeId} not found`));
+      return yield* new VolumeNotFound({ volumeId });
     }
     if (volume.State === "available" || volume.State === "in-use") {
       return volume;
     }
     if (volume.State === "error") {
-      return yield* Effect.fail(new Error(`Volume ${volumeId} entered error state`));
+      return yield* new VolumeFailed({ volumeId });
     }
     return yield* new VolumeNotReady({ volumeId, state: volume.State! });
   }).pipe(
     Effect.retry({
-      while: (e) => e instanceof VolumeNotReady,
+      while: (e) => e._tag === "VolumeNotReady",
       schedule: Schedule.max([
         Schedule.fixed(2000),
         Schedule.recurs(30), // max ~60s
@@ -537,7 +541,7 @@ const waitForVolumeDeleted = (volumeId: string, session: ScopedPlanStatusSession
     });
   }).pipe(
     Effect.retry({
-      while: (e) => e instanceof VolumeStillExists,
+      while: (e) => e._tag === "VolumeStillExists",
       schedule: Schedule.max([
         Schedule.fixed(2000),
         // DeleteVolume is accepted immediately but describe can keep
