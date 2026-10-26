@@ -98,6 +98,35 @@ class AlsoBroken extends Domain.Model("AlsoBroken", {
   policies: [Notify, Audit],
 }) {}
 
+// The payload a client sends carries `target` and `commandId` beside the input.
+class Move extends Domain.Command("Move", {
+  target: Schema.String,
+  // @ts-expect-error the payload uses `target` for the aggregate id
+  input: { target: Schema.String, amount: Schema.Number },
+}) {}
+class Pay extends Domain.Command("Pay", {
+  target: Schema.String,
+  // @ts-expect-error the payload uses `commandId` for the idempotency key
+  input: { commandId: Schema.String },
+}) {}
+class Transfer extends Domain.Aggregate("Transfer", {
+  id: Schema.String,
+  state: Schema.Struct({}),
+  initial: {},
+  commands: [Move, Pay],
+  decide: { Move: () => [], Pay: () => [] },
+  evolve: {},
+}) {}
+class Reserved extends Domain.Model("Reserved", { aggregates: [Transfer] }) {}
+
+/** The defect building a model's Layer dies with. */
+const layerDefect = (layer: Layer.Layer<unknown, unknown, never>) => {
+  const exit = Effect.runSyncExit(
+    Layer.build(layer).pipe(Effect.scoped, Effect.provide(InMemory)) as Effect.Effect<unknown>,
+  );
+  return Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+};
+
 describe("Domain verify", () => {
   it("finds no problem in a correct model", () => {
     expect(Domain.verify(Bank)).toEqual([]);
@@ -121,19 +150,26 @@ describe("Domain verify", () => {
 
   it("reports the problem that building the model's Layer fails on", () => {
     const [first] = Domain.verify(Broken);
-    const exit = Effect.runSyncExit(
-      Layer.build(
+    expect(
+      layerDefect(
         Broken.layer(
           Layer.mergeAll(
             WalletCards.toLayer(Effect.succeed(() => Effect.void)),
             AlsoCards.toLayer(Effect.succeed(() => Effect.void)),
           ),
-        ),
-      ).pipe(Effect.scoped, Effect.provide(InMemory)) as Effect.Effect<unknown>,
-    );
-    expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
+        ) as Layer.Layer<unknown, unknown, never>,
+      ),
+    ).toMatchObject({ _tag: "DefinitionError", message: first!.message });
+  });
+
+  it("refuses a command input field the payload uses itself", () => {
+    expect(Domain.verify(Reserved).map((problem) => problem.message)).toEqual([
+      "Move declares the input field 'target', which its payload uses itself",
+      "Pay declares the input field 'commandId', which its payload uses itself",
+    ]);
+    expect(layerDefect(Reserved.layer() as Layer.Layer<unknown, unknown, never>)).toMatchObject({
       _tag: "DefinitionError",
-      message: first!.message,
+      message: "Move declares the input field 'target', which its payload uses itself",
     });
   });
 });

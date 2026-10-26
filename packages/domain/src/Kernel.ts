@@ -1,5 +1,6 @@
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -7,7 +8,6 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
-import { DefinitionError } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
 import type {
   Accepted,
@@ -65,8 +65,17 @@ export interface InputMetaValue {
   appends: number;
 }
 
-/** A problem in the definitions, raised while the kernel is built. */
-export { DefinitionError };
+/**
+ * A domain definition error (duplicate tag, missing `keyOf`, …), raised while
+ * the kernel is built.
+ */
+export class DefinitionError extends Data.TaggedError("DefinitionError")<{
+  readonly message: string;
+}> {
+  constructor(message: string) {
+    super({ message });
+  }
+}
 
 interface JsonCodec {
   readonly encode: (value: unknown) => Json;
@@ -252,6 +261,15 @@ const build = (
     const commands = new Map<string, { cls: Command.Any; codec: JsonCodec; reply?: JsonCodec }>();
     const rejections = new Map<string, JsonCodec>();
     for (const command of def.commands) {
+      // The payload carries the target and the idempotency key beside the
+      // input, so an input field with either name never reaches `decide`.
+      for (const field of ["target", "commandId"] satisfies Array<Command.ReservedField>) {
+        if (field in command.input) {
+          problem(
+            `${command.tag} declares the input field '${field}', which its payload uses itself`,
+          );
+        }
+      }
       commands.set(command.tag, {
         cls: command,
         codec: jsonCodec(command),

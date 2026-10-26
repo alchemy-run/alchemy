@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
-import { DefinitionError } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
 import type { Data, Fields } from "./Event.ts";
 import * as Middleware from "./Middleware.ts";
@@ -25,6 +24,8 @@ export interface Any extends Schema.Top {
   readonly kind: "Command";
   readonly tag: string;
   readonly target: TargetSchema;
+  /** The command's input fields. */
+  readonly input: Fields;
   readonly events: ReadonlyArray<Event.Any>;
   readonly rejects: ReadonlyArray<Rejection.Any>;
   readonly reply: Schema.Top | undefined;
@@ -48,11 +49,6 @@ export type ReplySchema<Reply extends Fields | undefined> = Reply extends Fields
 
 /** The payload fields a command's input may not declare: the payload uses them itself. */
 export type ReservedField = "target" | "commandId";
-
-const reserved: Record<ReservedField, string> = {
-  target: "its target id",
-  commandId: "its idempotency key",
-};
 
 /**
  * An input with no {@link ReservedField}: each reserved field it declares is
@@ -105,6 +101,8 @@ export interface CommandClass<
   readonly kind: "Command";
   readonly tag: Tag;
   readonly target: Target;
+  /** The command's input fields. */
+  readonly input: F;
   readonly events: Events;
   readonly rejects: Rejects;
   readonly reply: Reply;
@@ -136,6 +134,7 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
     static readonly kind = "Command" as const;
     static readonly tag = tag;
     static readonly target = options.target;
+    static readonly input = options.input ?? {};
     static readonly events = options.events ?? [];
     static readonly rejects = options.rejects ?? [];
     static readonly reply = options.reply ? Schema.Struct(options.reply) : undefined;
@@ -252,13 +251,6 @@ export const make = <
   Ms,
   Middleware.Apply<CommandRpc<Tag, Target, F, Rejects, ReplySchema<Reply>>, Ms>
 > => {
-  for (const field of Object.keys(options.input ?? {})) {
-    if (field in reserved) {
-      throw new DefinitionError(
-        `${tag} declares the input field '${field}', which the command's payload uses for ${reserved[field as ReservedField]}`,
-      );
-    }
-  }
   const rejects = options.rejects ?? [];
   const rpc = Rpc.make(tag, {
     payload: {

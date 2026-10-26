@@ -74,7 +74,7 @@ WithdrawMoney: (s, cmd) =>
 
 The schemas also decode the command when it arrives from a client, so `decide` only ever sees well-formed input. A command with no input, like a request to close an account, leaves `input` out.
 
-Two names are taken. A client sends `target` and `commandId` in the same payload as the input, so an input field with either name is a type error, and declaring the command throws a `DefinitionError`.
+Two names are taken. A client sends `target` and `commandId` in the same payload as the input, so an input field with either name is a type error, and `Domain.verify` reports it.
 
 ## Declare every outcome
 
