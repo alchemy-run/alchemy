@@ -24,10 +24,33 @@ const waitUntilDeleted = <R>(get: Effect.Effect<{ state?: string }, { _tag: stri
     }),
   );
 
+// Reads of a just-created pool or provider can return NotFound for a few seconds.
+const retryNotFound = {
+  while: (error: { _tag: string }) => error._tag === "NotFound",
+  schedule: Schedule.exponential("500 millis"),
+  times: 8,
+};
+const getPool = (name: string) =>
+  iam.getProjectsLocationsWorkloadIdentityPools({ name }).pipe(Effect.retry(retryNotFound));
+const getProvider = (name: string) =>
+  iam
+    .getProjectsLocationsWorkloadIdentityPoolsProviders({ name })
+    .pipe(Effect.retry(retryNotFound));
+
 const stateOf = (name: string) =>
   iam.getProjectsLocationsWorkloadIdentityPoolsProviders({ name }).pipe(
     Effect.map((provider) => provider.state),
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
+
+// Provider state reads lag a few seconds behind delete and undelete.
+const waitForState = (name: string, state: "ACTIVE" | "DELETED") =>
+  stateOf(name).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (current) => current === state,
+      times: 10,
+    }),
   );
 
 // Pool ids stay reserved for 30 days after delete, so an explicit id must be
@@ -85,14 +108,10 @@ test.provider(
         "attribute.repository": "assertion.repository",
       });
 
-      const fetchedPool = yield* iam.getProjectsLocationsWorkloadIdentityPools({
-        name: created.pool.name,
-      });
+      const fetchedPool = yield* getPool(created.pool.name);
       expect(fetchedPool.state).toEqual("ACTIVE");
       expect(fetchedPool.description).toMatch(/^\[alchemy .*alchemy-id=\S*ci\]\ntest pool$/);
-      const fetchedProvider = yield* iam.getProjectsLocationsWorkloadIdentityPoolsProviders({
-        name: created.provider.name,
-      });
+      const fetchedProvider = yield* getProvider(created.provider.name);
       expect(fetchedProvider.attributeCondition).toEqual(
         `assertion.repository == "alchemy-run/alchemy"`,
       );
@@ -109,13 +128,9 @@ test.provider(
       expect(updated.provider.name).toEqual(created.provider.name);
       expect(updated.provider.attributeCondition).toMatch(/refs\/heads\/main/);
 
-      const refetchedProvider = yield* iam.getProjectsLocationsWorkloadIdentityPoolsProviders({
-        name: created.provider.name,
-      });
+      const refetchedProvider = yield* getProvider(created.provider.name);
       expect(refetchedProvider.attributeCondition).toMatch(/refs\/heads\/main/);
-      const refetchedPool = yield* iam.getProjectsLocationsWorkloadIdentityPools({
-        name: created.pool.name,
-      });
+      const refetchedPool = yield* getPool(created.pool.name);
       expect(refetchedPool.disabled).toEqual(true);
 
       yield* stack.destroy();
@@ -180,7 +195,7 @@ test.provider(
       const nameA = first.oidc!.name;
       expect(first.oidc!.workloadIdentityPoolProviderId).toEqual("oidc-a");
       expect(first.oidc!.oidc?.allowedAudiences).toEqual(["https://github.com/alchemy-run"]);
-      expect(yield* stateOf(nameA)).toEqual("ACTIVE");
+      expect(yield* waitForState(nameA, "ACTIVE")).toEqual("ACTIVE");
 
       // A new provider id replaces the provider; the old one is soft-deleted.
       const second = yield* deploy({
@@ -189,8 +204,8 @@ test.provider(
       });
       const nameB = second.oidc!.name;
       expect(nameB).not.toEqual(nameA);
-      expect(yield* stateOf(nameB)).toEqual("ACTIVE");
-      expect(yield* stateOf(nameA)).toEqual("DELETED");
+      expect(yield* waitForState(nameB, "ACTIVE")).toEqual("ACTIVE");
+      expect(yield* waitForState(nameA, "DELETED")).toEqual("DELETED");
 
       // Going back to the soft-deleted id restores it and syncs the new
       // condition onto the restored provider.
@@ -202,12 +217,10 @@ test.provider(
       expect(restored.oidc!.attributeCondition).toEqual(
         `assertion.repository == "alchemy-run/alchemy"`,
       );
-      const fetchedA = yield* iam.getProjectsLocationsWorkloadIdentityPoolsProviders({
-        name: nameA,
-      });
+      const fetchedA = yield* getProvider(nameA);
       expect(fetchedA.state).toEqual("ACTIVE");
       expect(fetchedA.attributeCondition).toEqual(`assertion.repository == "alchemy-run/alchemy"`);
-      expect(yield* stateOf(nameB)).toEqual("DELETED");
+      expect(yield* waitForState(nameB, "DELETED")).toEqual("DELETED");
 
       // An AWS issuer alongside it, then removing the OIDC provider from the
       // stack deletes only that provider.
@@ -218,17 +231,19 @@ test.provider(
       });
       expect(withAws.aws!.aws).toEqual({ accountId: "123456789012" });
       expect(withAws.aws!.workloadIdentityPoolProviderId).toMatch(/^alchemy-aws-/);
-      const fetchedAws = yield* iam.getProjectsLocationsWorkloadIdentityPoolsProviders({
-        name: withAws.aws!.name,
-      });
+      const fetchedAws = yield* getProvider(withAws.aws!.name);
       expect(fetchedAws.aws?.accountId).toEqual("123456789012");
 
       yield* deploy({ providerId: "oidc-a", condition: "", withAws: true, withOidc: false });
-      expect(yield* stateOf(nameA)).toEqual("DELETED");
-      expect(yield* stateOf(withAws.aws!.name)).toEqual("ACTIVE");
+      expect(yield* waitForState(nameA, "DELETED")).toEqual("DELETED");
+      expect(yield* waitForState(withAws.aws!.name, "ACTIVE")).toEqual("ACTIVE");
 
       yield* stack.destroy();
-      expect(yield* stateOf(withAws.aws!.name)).not.toEqual("ACTIVE");
+      expect(
+        yield* waitUntilDeleted(
+          iam.getProjectsLocationsWorkloadIdentityPoolsProviders({ name: withAws.aws!.name }),
+        ),
+      ).toEqual("gone");
       expect(
         yield* waitUntilDeleted(
           iam.getProjectsLocationsWorkloadIdentityPools({ name: withAws.pool.name }),
@@ -267,7 +282,7 @@ test.provider(
       const restored = yield* deploy("second");
       expect(restored.name).toEqual(created.name);
       expect(restored.description).toEqual("second");
-      const fetched = yield* iam.getProjectsLocationsWorkloadIdentityPools({ name: created.name });
+      const fetched = yield* getPool(created.name);
       expect(fetched.state).toEqual("ACTIVE");
       expect(fetched.description).toMatch(/\nsecond$/);
 

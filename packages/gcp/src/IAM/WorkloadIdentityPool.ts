@@ -270,8 +270,10 @@ export const WorkloadIdentityPoolProvider = () =>
 
     // Soft delete: the pool is recoverable (and its id reserved) for 30 days.
     delete: Effect.fn(function* ({ output }) {
+      // Reads lag behind create, so a NotFound here is not proof the
+      // resource is gone; only an observed DELETED state skips the call.
       const current = yield* getPool(output.name);
-      if (current === undefined || current.state === "DELETED") return;
+      if (current?.state === "DELETED") return;
       const operation = yield* iam
         .deleteProjectsLocationsWorkloadIdentityPools({ name: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
