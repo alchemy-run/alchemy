@@ -37,6 +37,9 @@ export const bindFlyApiToken = (): Effect.Effect<void, never, Credentials> =>
       : yield* Credentials.pipe(
           Effect.flatMap((resolve) => resolve),
           Effect.map((cfg) => Redacted.value(cfg.apiKey)),
+          // Binding initialization cannot fail; the engine reports this
+          // defect as `CredentialsRequired`.
+          orDieCredentialsUnavailable("Fly"),
         );
     yield* Output.named(Output.asOutput(token), "FLY_API_TOKEN").asEffect().pipe(Effect.asVoid);
   });
