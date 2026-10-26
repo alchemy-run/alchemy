@@ -655,17 +655,25 @@ const toCreateBody = (
 
 const SUBSCRIPTION_TYPE = "GCP.PubSub.Subscription";
 
-/** The service account Alchemy mints for one subscription's BigQuery writes. */
-const bigqueryWriterEmail = (project: string, subscription: string) =>
-  hostServiceAccountEmail(project, hostServiceAccountId(SUBSCRIPTION_TYPE, subscription));
-
 /**
- * Mint the subscription's writer account, grant it write access to the
- * table, and return the BigQuery config Pub/Sub should run with.
+ * The service account Alchemy mints for one subscription's BigQuery
+ * writes. Keyed on the instance id, not just the name: IAM keeps serving a
+ * deleted account's identity for minutes, so a destroy → redeploy that
+ * re-created the same email would be rejected by Pub/Sub.
  */
+const bigqueryWriterKey = (subscription: string, instanceId: string) =>
+  `${subscription}#${instanceId}`;
+
+const bigqueryWriterEmail = (project: string, subscription: string, instanceId: string) =>
+  hostServiceAccountEmail(
+    project,
+    hostServiceAccountId(SUBSCRIPTION_TYPE, bigqueryWriterKey(subscription, instanceId)),
+  );
+
 const ensureBigQueryWriter = Effect.fn(function* (
   project: string,
   subscription: string,
+  instanceId: string,
   config: SubscriptionBigQueryConfig,
 ) {
   const table = parseBigQueryTable(config.table, project);
@@ -675,7 +683,7 @@ const ensureBigQueryWriter = Effect.fn(function* (
   const { email } = yield* ensureHostServiceAccount({
     project,
     hostType: SUBSCRIPTION_TYPE,
-    resourceName: subscription,
+    resourceName: bigqueryWriterKey(subscription, instanceId),
     actAs: false,
   });
   yield* updateIamMembership({
@@ -711,36 +719,29 @@ const retryWriterGrants =
     bigqueryConfig === undefined ? effect : retryActAs(effect);
 
 /**
- * Revoke the writer's grant on a table it no longer writes to, and delete
- * the writer once the subscription stops writing to BigQuery at all.
+ * The writer's grant on a table it no longer writes to: the previous table
+ * when it changed, or any table once BigQuery delivery is turned off.
  */
-const releaseBigQueryWriter = Effect.fn(function* (options: {
-  project: string;
-  subscription: string;
-  previous: pubsub.BigQueryConfig | undefined;
-  next: pubsub.BigQueryConfig | undefined;
-}) {
-  const email = bigqueryWriterEmail(options.project, options.subscription);
-  const previous =
-    options.previous?.table === undefined || options.previous.serviceAccountEmail !== email
+const staleWriterGrants = (
+  project: string,
+  email: string,
+  previous: pubsub.BigQueryConfig | undefined,
+  next: pubsub.BigQueryConfig | undefined,
+) => {
+  const table =
+    previous?.table === undefined || previous.serviceAccountEmail !== email
       ? undefined
-      : parseBigQueryTable(options.previous.table, options.project);
-  const stale =
-    previous !== undefined && bigqueryTableId(previous) !== options.next?.table
-      ? [
-          {
-            kind: "bigquery.table" as const,
-            name: bigqueryTableName(previous),
-            role: BIGQUERY_WRITER_ROLE,
-          },
-        ]
-      : [];
-  if (options.next === undefined) {
-    yield* deleteHostServiceAccount({ project: options.project, email, grants: stale });
-  } else if (stale.length > 0) {
-    yield* revokeHostIam({ serviceAccount: email, grants: stale });
-  }
-});
+      : parseBigQueryTable(previous.table, project);
+  return table !== undefined && bigqueryTableId(table) !== next?.table
+    ? [
+        {
+          kind: "bigquery.table" as const,
+          name: bigqueryTableName(table),
+          role: BIGQUERY_WRITER_ROLE,
+        },
+      ]
+    : [];
+};
 
 export const SubscriptionProvider = () =>
   Provider.succeed(Subscription, {
@@ -806,7 +807,7 @@ export const SubscriptionProvider = () =>
           );
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
       const env = yield* GcpEnvironment.current;
       const subscriptionId = yield* toId(id, news.subscriptionId, output?.subscriptionId);
       const name = resourceName(env.project, subscriptionId);
@@ -818,7 +819,7 @@ export const SubscriptionProvider = () =>
       const bigqueryConfig =
         news.bigqueryConfig === undefined
           ? undefined
-          : yield* ensureBigQueryWriter(env.project, name, news.bigqueryConfig);
+          : yield* ensureBigQueryWriter(env.project, name, instanceId, news.bigqueryConfig);
 
       let current =
         output !== undefined
@@ -933,12 +934,13 @@ export const SubscriptionProvider = () =>
           );
       }
 
+      // The writer itself lives until the subscription is deleted, so
+      // turning BigQuery delivery back on reuses it.
       if (bigqueryConfigChanged) {
-        yield* releaseBigQueryWriter({
-          project: env.project,
-          subscription: name,
-          previous: previousBigQuery,
-          next: bigqueryConfig,
+        const writer = bigqueryWriterEmail(env.project, name, instanceId);
+        yield* revokeHostIam({
+          serviceAccount: writer,
+          grants: staleWriterGrants(env.project, writer, previousBigQuery, bigqueryConfig),
         });
       }
 
@@ -950,7 +952,7 @@ export const SubscriptionProvider = () =>
       return toAttrs(current, env.project);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ instanceId, output }) {
       yield* pubsub
         .deleteProjectsSubscriptions({ subscription: output.name })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
@@ -959,7 +961,7 @@ export const SubscriptionProvider = () =>
       // Then drop the BigQuery writer Alchemy minted for it. Look it up
       // even without a recorded config: a create that failed after minting
       // the writer never recorded one.
-      const writer = bigqueryWriterEmail(output.project, output.name);
+      const writer = bigqueryWriterEmail(output.project, output.name, instanceId);
       const minted = yield* iam
         .getProjectsServiceAccounts({
           name: `projects/${output.project}/serviceAccounts/${writer}`,
@@ -969,11 +971,10 @@ export const SubscriptionProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(false)),
         );
       if (minted) {
-        yield* releaseBigQueryWriter({
+        yield* deleteHostServiceAccount({
           project: output.project,
-          subscription: output.name,
-          previous: output.bigqueryConfig,
-          next: undefined,
+          email: writer,
+          grants: staleWriterGrants(output.project, writer, output.bigqueryConfig, undefined),
         });
       }
     }),

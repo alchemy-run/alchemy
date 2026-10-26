@@ -255,6 +255,16 @@ const serviceAccountExists = (email: string) =>
       Effect.catchTag("NotFound", () => Effect.succeed(false)),
     );
 
+// IAM reads lag deletes: poll until the account stops being served.
+const waitUntilServiceAccountGone = (email: string) =>
+  serviceAccountExists(email).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (exists) => !exists,
+      times: 15,
+    }),
+  );
+
 test.provider(
   "writes messages to a BigQuery table",
   (stack) =>
@@ -342,7 +352,8 @@ test.provider(
       expect(fetchedUpdated.bigqueryConfig?.writeMetadata ?? false).toBe(false);
 
       // Dropping bigqueryConfig turns it back into a pull subscription and
-      // removes the writer and its grant.
+      // revokes the writer's grant; the writer lives as long as the
+      // subscription, so turning BigQuery back on reuses it.
       const pull = yield* stack.deploy(bigqueryStack());
       expect(pull.subscription.name).toEqual(created.subscription.name);
       expect(pull.subscription.bigqueryConfig).toBeUndefined();
@@ -350,17 +361,16 @@ test.provider(
         "",
       );
       expect(yield* tableWriters(pull.table)).not.toContain(`serviceAccount:${writer}`);
-      expect(yield* serviceAccountExists(writer!)).toBe(false);
+      expect(yield* serviceAccountExists(writer!)).toBe(true);
 
-      // Destroying a BigQuery subscription removes its writer too.
+      // Destroying the subscription deletes its writer.
       const again = yield* stack.deploy(bigqueryStack({ writeMetadata: false }));
-      const againWriter = again.subscription.bigqueryConfig?.serviceAccountEmail;
-      expect(againWriter).toEqual(writer);
-      expect(yield* serviceAccountExists(againWriter!)).toBe(true);
+      expect(again.subscription.bigqueryConfig?.serviceAccountEmail).toEqual(writer);
+      expect(yield* tableWriters(again.table)).toContain(`serviceAccount:${writer}`);
 
       yield* stack.destroy();
       expect(yield* waitUntilGone(created.subscription.name)).toEqual("gone");
-      expect(yield* serviceAccountExists(againWriter!)).toBe(false);
+      expect(yield* waitUntilServiceAccountGone(writer!)).toBe(false);
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 360_000 },
 );
