@@ -503,6 +503,7 @@ for (const dev of [true, false]) {
             const reviewer = yield* getJson<ExecResult>(url, "/exec?class=reviewer").pipe(
               within(`${url}/exec?class=reviewer`, "10 seconds"),
               Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 40 }),
+              within(`${url}/exec?class=reviewer`, "120 seconds"),
             );
             expect(reviewer).toEqual({
               stdout: "native",
@@ -513,7 +514,7 @@ for (const dev of [true, false]) {
 
             yield* stack.destroy();
           }),
-        { timeout: 300_000 },
+        { timeout: 180_000, retry: 0 },
       );
 
       for (const scenario of ["execution", "membership"] as const) {
