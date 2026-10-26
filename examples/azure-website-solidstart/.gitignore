@@ -1,4 +1,5 @@
 .output/
 .nitro/
+.solid-start/
 dist/
 .alchemy/
