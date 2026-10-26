@@ -409,7 +409,6 @@ const refName = (ref: Aggregate.Ref) => `${ref.aggregate}/${ref.id}`;
 const callName = (tag: string | undefined, op: ExternalSystem.Op) =>
   `${tag === undefined ? "" : `"${tag}" `}${op.system}.${op.op}`;
 
-/** A one-line summary of a step, before it runs. */
 /** A `clock` step's time in epoch milliseconds; `NaN` for a string that is not a time. */
 const clockMillis = (at: string | number | DateTime.DateTime) =>
   typeof at === "number"
@@ -418,6 +417,7 @@ const clockMillis = (at: string | number | DateTime.DateTime) =>
       ? Date.parse(at)
       : DateTime.toEpochMillis(at);
 
+/** A one-line summary of a step, before it runs. */
 const describeStep = (s: Step): string => {
   switch (s._tag) {
     case "Clock": {
