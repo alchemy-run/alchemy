@@ -1,0 +1,38 @@
+{
+  "name": "azure-website-octane",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/azure-website-octane"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "deploy": "alchemy deploy",
+    "dev": "alchemy dev",
+    "destroy": "alchemy destroy",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@alchemy.run/azure": "workspace:*",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@octanejs/vite-plugin": "catalog:",
+    "alchemy": "workspace:*",
+    "alchemy-test": "workspace:*",
+    "effect": "catalog:",
+    "octane": "catalog:",
+    "vite": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,264 @@
+---
+title: Virtual machines
+description: Run an Effect program on an Azure Linux virtual machine as a systemd service, with its network, SSH key, background loops, and bindings that grant roles to the VM's managed identity.
+---
+
+`Azure.Compute.VirtualMachine` gives you a Linux VM. Give it `main` and it
+runs your Effect program too. Alchemy bundles the program for Node.js 22,
+stages it in a storage account it creates, and installs it as a systemd
+unit with a managed run command. You don't need SSH or an image build. The
+program runs under the VM's system-assigned managed identity.
+
+Reach for a VM when you need the machine itself: an OS you control,
+custom daemons, or GPUs. You own the network, the image, and patching.
+
+:::caution[The program needs outbound internet and a systemd image]
+The install command downloads Node.js 22 from `nodejs.org` and the release
+from the staging storage account with `curl`. The subnet needs outbound
+access, and the image needs `curl`, `tar`, `xz`, and systemd.
+:::
+
+## Create the network
+
+A VM that serves HTTP needs a subnet, a public IP, and a network security
+group that allows the program's port:
+
+```typescript
+// src/Network.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import { LOCATION, PORT } from "./resources.ts";
+
+export const Network = Effect.gen(function* () {
+  const vnet = yield* Azure.Network.VirtualNetwork("Vnet", {
+    location: LOCATION,
+    addressPrefixes: ["10.0.0.0/16"],
+  });
+  const subnet = yield* Azure.Network.Subnet("Subnet", {
+    virtualNetwork: vnet.virtualNetworkName,
+    addressPrefix: "10.0.1.0/24",
+  });
+  const ip = yield* Azure.Network.PublicIpAddress("Ip", {
+    location: LOCATION,
+    sku: "Standard",
+    allocationMethod: "Static",
+  });
+  const nsg = yield* Azure.Network.NetworkSecurityGroup("Nsg", { location: LOCATION });
+  yield* Azure.Network.SecurityRule("AllowHttp", {
+    networkSecurityGroup: nsg.networkSecurityGroupName,
+    priority: 100,
+    direction: "Inbound",
+    access: "Allow",
+    protocol: "Tcp",
+    sourceAddressPrefix: "*",
+    sourcePortRange: "*",
+    destinationAddressPrefix: "*",
+    destinationPortRange: String(PORT),
+  });
+  const nic = yield* Azure.Network.NetworkInterface("Nic", {
+    location: LOCATION,
+    ipConfigurations: [{ subnetId: subnet.subnetId, publicIpAddressId: ip.publicIpAddressId }],
+    networkSecurityGroupId: nsg.networkSecurityGroupId,
+  });
+  return { nic, ip };
+});
+```
+
+A Standard public IP blocks inbound traffic until a security group allows
+it.
+
+## Create an SSH key
+
+Let Azure generate the admin key pair:
+
+```typescript
+// src/resources.ts
+import * as Azure from "@alchemy.run/azure";
+
+export const LOCATION = "eastus";
+export const VM_SIZE = "Standard_F1als_v7";
+export const PORT = 3000;
+
+export const AdminKey = Azure.Compute.SshPublicKey("AdminKey", {
+  location: LOCATION,
+  generateKeyPair: true,
+});
+```
+
+The private key stays in the stack's state as the secret `privateKey`
+attribute. `Standard_F1als_v7` is 1 vCPU and 2 GiB, about $0.04 per hour.
+Pick any Linux size your subscription has quota for.
+
+## Declare the server
+
+```typescript
+// src/Server.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Network } from "./Network.ts";
+import { AdminKey, LOCATION, PORT, VM_SIZE } from "./resources.ts";
+
+export default class Server extends Azure.Compute.VirtualMachine<Server>()(
+  "Server",
+  Effect.gen(function* () {
+    const { nic } = yield* Network;
+    const key = yield* AdminKey;
+    return {
+      main: import.meta.url,
+      location: LOCATION,
+      vmSize: VM_SIZE,
+      port: PORT,
+      networkInterfaceIds: [nic.networkInterfaceId],
+      adminUsername: "azureuser",
+      sshPublicKeys: [key.publicKey.as<string>()],
+    };
+  }),
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello from a VM")),
+    };
+  }),
+) {}
+```
+
+`port` is where the program's HTTP server listens. It defaults to `3000`.
+
+## Add it to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import Server from "./src/Server.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const server = yield* Server;
+    return { url: server.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. A deploy takes 5–10 minutes: Azure creates the VM,
+then the run command installs Node.js 22 and starts the unit.
+`server.url` is `http://<public IP>:3000`.
+
+## Bind resources
+
+Bind resources in the program's init:
+
+```typescript
+Effect.gen(function* () {
+  const jobs = yield* Jobs;
+  const send = yield* Azure.Storage.QueueSend(jobs);
+
+  return {
+    fetch: Effect.gen(function* () {
+      yield* send.send(JSON.stringify({ id: "1", text: "hello" }));
+      return HttpServerResponse.text("queued", { status: 202 });
+    }).pipe(Effect.orDie),
+  };
+}).pipe(Effect.provide(Azure.Storage.QueueSendHttp)),
+```
+
+`QueueSend` grants the VM's identity **Storage Queue Data Message Sender**
+on that queue only. The program gets the identity's tokens from the
+instance metadata service.
+
+## Run a background loop
+
+`ServerHost.run` (`alchemy/Runtime/Process`) runs a loop next to the HTTP
+server. Drain a queue every 2 seconds:
+
+```typescript
+const inbox = yield* Azure.Storage.QueueReceive(jobs);
+const host = yield* ServerHost;
+yield* host.run(
+  Effect.gen(function* () {
+    const messages = yield* inbox.receive({ maxMessages: 16 });
+    for (const message of messages) {
+      yield* Effect.log(message.text);
+      yield* inbox.delete(message);
+    }
+  }).pipe(
+    Effect.catchCause((cause) => Effect.logWarning("round failed", Cause.pretty(cause))),
+    Effect.repeat(Schedule.spaced("2 seconds")),
+    Effect.asVoid,
+  ),
+);
+```
+
+`QueueReceive` grants **Storage Queue Data Message Processor** on the
+queue. A VM has no native triggers, so poll for events this way.
+
+## Choose an image
+
+```typescript
+const vm = yield* Azure.Compute.VirtualMachine("db", {
+  vmSize: "Standard_D2s_v5",
+  image: { publisher: "Debian", offer: "debian-12", sku: "12-gen2" },
+  osDiskStorageAccountType: "Premium_LRS",
+  networkInterfaceIds: [nic.networkInterfaceId],
+  adminUsername: "azureuser",
+  sshPublicKeys: [publicKey],
+});
+```
+
+:::caution
+Changing the image, admin user, SSH keys, NICs, or placement replaces the
+VM. Alchemy deletes it first, because its NICs can't be shared, then
+creates it again.
+:::
+
+## Use a Spot VM
+
+```typescript
+const vm = yield* Azure.Compute.VirtualMachine("batch", {
+  vmSize: "Standard_D2s_v5",
+  networkInterfaceIds: [nic.networkInterfaceId],
+  adminUsername: "azureuser",
+  sshPublicKeys: [publicKey],
+  priority: "Spot",
+  evictionPolicy: "Deallocate",
+  maxPrice: -1,
+});
+```
+
+## Start and stop it from a Function
+
+`StartVirtualMachine` and `DeallocateVirtualMachine` grant a custom role
+with only their one action, on that VM only:
+
+```typescript
+// init
+const start = yield* Azure.Compute.StartVirtualMachine(vm);
+const deallocate = yield* Azure.Compute.DeallocateVirtualMachine(vm);
+
+// runtime
+yield* deallocate();
+// …provided with Azure.Compute.StartVirtualMachineHttp and
+// Azure.Compute.DeallocateVirtualMachineHttp
+```
+
+## Destroy
+
+`alchemy destroy` revokes the identity's role assignments, then deletes
+the VM with its OS disk, the network, and the staging storage account.
+
+## Example
+
+[`examples/azure-vm`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-vm)
+is a job API and a queue worker on one VM.
+
+## Where next
+
+- [Choosing a runtime](/azure/compute/choosing-a-runtime) — when a
+  Container App is enough.
+- [Networking](/azure/networking) — virtual networks, subnets, and
+  security groups.
+- [Compute reference](/providers/azure/compute#virtualmachine) — every
+  prop and attribute.

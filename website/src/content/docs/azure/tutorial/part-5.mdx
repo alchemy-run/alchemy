@@ -1,0 +1,412 @@
+---
+title: "Part 5: CI/CD"
+description: Deploy from GitHub Actions — production on main, a preview stage per pull request — with a deployer service principal and its secret created as code.
+sidebar:
+  order: 5
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+In [Part 4](/azure/tutorial/part-4) you deployed stages by hand. Now
+GitHub Actions does it: pushes to `main` deploy `prod`, pull requests
+get a preview stage, and merged pull requests clean up after
+themselves.
+
+In CI, Alchemy signs in to Azure as a service principal with a client
+secret. You create that service principal in a small stack, and the
+stack writes its credentials into GitHub. Nobody copies a secret by
+hand.
+
+:::note
+Alchemy reads a client secret in CI. Signing in with GitHub's OIDC
+token through a federated credential is not supported yet.
+:::
+
+## Move state to a shared store
+
+CI and your laptop must share state, and `.alchemy/` only lives on
+your machine. Azure has no state store of its own yet, so keep state in
+a Postgres database. Install the Postgres state store:
+
+<PackageManagers add="@alchemy.run/sql pg @effect/sql-pg" />
+
+## Point the Stack at it
+
+Swap `Alchemy.localState()` for `postgresState`:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
++import { postgresState } from "@alchemy.run/sql/PostgresState";
++import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import Api from "./src/Api.ts";
+import { Data, Files } from "./src/Files.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Azure.providers(),
+-    state: Alchemy.localState(),
++    state: postgresState({ url: Config.Redacted("STATE_DATABASE_URL") }),
+  },
+```
+
+Any Postgres works, for example an
+[Azure Database for PostgreSQL](/azure/data/postgres) flexible server.
+Put its connection string in `.env`:
+
+```sh
+STATE_DATABASE_URL=postgres://user:password@host:5432/alchemy
+```
+
+The store locks each stack and stage while a deploy runs, so two
+deploys of the same stage never interleave.
+
+:::caution
+The new store starts empty. Run `bun alchemy destroy` on every stage
+you deployed with local state before you switch, or those resources
+stay in Azure with nothing tracking them.
+:::
+
+## Set up an `admin` profile
+
+The next stack creates a service principal and grants it **Owner** on
+the subscription. That needs more permission than your app does.
+Create a separate profile for it:
+
+```sh
+bun alchemy profile create admin
+bun alchemy profile edit --profile admin --add Azure
+```
+
+Use a service principal with **Owner** on the subscription and the
+Microsoft Graph permission `Application.ReadWrite.OwnedBy`. See
+[Setup → Allow it to create Entra applications](/azure/setup#allow-it-to-create-entra-applications).
+Add a GitHub credential when prompted: `gh-cli` if you have the GitHub
+CLI, otherwise a token with the `repo` scope.
+
+:::danger[Heads up]
+The `admin` profile can grant any role in the subscription. Use it only
+for `stacks/github.ts`, never for everyday deploys.
+:::
+
+## Scaffold the GitHub stack
+
+Create `stacks/github.ts`:
+
+```typescript
+// stacks/github.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as GitHub from "@alchemy.run/github";
+import { postgresState } from "@alchemy.run/sql/PostgresState";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "github",
+  {
+    providers: Layer.mergeAll(Azure.providers(), GitHub.providers()),
+    state: postgresState({ url: Config.Redacted("STATE_DATABASE_URL") }),
+  },
+  Effect.gen(function* () {
+    // deployer, role, secret, and repo settings go here
+  }),
+);
+```
+
+## Create the deployer
+
+Create an Entra application and its service principal:
+
+```diff lang="typescript"
+// stacks/github.ts
+Effect.gen(function* () {
++  const app = yield* Azure.Entra.Application("Deployer", {
++    displayName: "GitHub Actions deployer",
++  });
++  const principal = yield* Azure.Entra.ServicePrincipal("DeployerPrincipal", {
++    appId: app.appId,
++  });
+}),
+```
+
+CI deploys as this service principal.
+
+## Grant it Owner on the subscription
+
+Assign the role a deploy needs:
+
+```diff lang="typescript"
+// stacks/github.ts
+  const principal = yield* Azure.Entra.ServicePrincipal("DeployerPrincipal", {
+    appId: app.appId,
+  });
++
++  yield* Azure.Authorization.RoleAssignment("DeployerOwner", {
++    scope: "/subscriptions/<subscription-id>",
++    roleDefinitionId: Azure.Authorization.BuiltInRole.Owner,
++    principalId: principal.objectId,
++    principalType: "ServicePrincipal",
++  });
+}),
+```
+
+Replace `<subscription-id>`. Your app's bindings create role
+assignments, which is why the deployer needs **Owner** and not
+**Contributor**.
+
+## Create its client secret
+
+Add a client secret to the application:
+
+```diff lang="typescript"
+// stacks/github.ts
+  yield* Azure.Authorization.RoleAssignment("DeployerOwner", {
+    scope: "/subscriptions/<subscription-id>",
+    roleDefinitionId: Azure.Authorization.BuiltInRole.Owner,
+    principalId: principal.objectId,
+    principalType: "ServicePrincipal",
+  });
++
++  const secret = yield* Azure.Entra.ApplicationPassword("DeployerSecret", {
++    applicationObjectId: app.objectId,
++    endDateTime: "2027-12-31T00:00:00Z",
++  });
+}),
+```
+
+`secret.secretText` is a `Redacted<string>`, kept in the shared state.
+The secret stops working at `endDateTime`. Change the date and deploy
+again to rotate it: Alchemy creates the new secret before it removes
+the old one.
+
+## Publish the credentials to GitHub
+
+The workflow needs the four `AZURE_*` values and the state store URL.
+Store the two secret values as repository secrets and the rest as
+variables:
+
+```diff lang="typescript"
+// stacks/github.ts
+  const secret = yield* Azure.Entra.ApplicationPassword("DeployerSecret", {
+    applicationObjectId: app.objectId,
+    endDateTime: "2027-12-31T00:00:00Z",
+  });
++
++  const repo = { owner: "your-org", repository: "your-repo" };
++  const stateUrl = yield* Config.Redacted("STATE_DATABASE_URL");
++
++  yield* GitHub.Secret("AzureClientSecret", {
++    ...repo,
++    name: "AZURE_CLIENT_SECRET",
++    value: secret.secretText,
++  });
++
++  yield* GitHub.Secret("StateDatabaseUrl", {
++    ...repo,
++    name: "STATE_DATABASE_URL",
++    value: stateUrl,
++  });
++
++  yield* GitHub.Variable("AzureClientId", {
++    ...repo,
++    name: "AZURE_CLIENT_ID",
++    value: app.appId,
++  });
++
++  yield* GitHub.Variable("AzureTenantId", {
++    ...repo,
++    name: "AZURE_TENANT_ID",
++    value: app.tenantId,
++  });
++
++  yield* GitHub.Variable("AzureSubscriptionId", {
++    ...repo,
++    name: "AZURE_SUBSCRIPTION_ID",
++    value: "<subscription-id>",
++  });
+}),
+```
+
+Replace `your-org`, `your-repo`, and `<subscription-id>`.
+
+## Deploy the GitHub stack
+
+Run it once from your laptop:
+
+```sh
+bun alchemy deploy --config stacks/github.ts --profile admin
+```
+
+The secrets and variables appear under **Settings → Secrets and
+variables → Actions**.
+
+## Create the workflow
+
+Create `.github/workflows/deploy.yml`:
+
+```yaml
+name: Deploy
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  STAGE: >-
+    ${{ github.event_name == 'pull_request'
+      && format('pr-{0}', github.event.number)
+      || (github.ref == 'refs/heads/main' && 'prod' || github.ref_name) }}
+  AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  STATE_DATABASE_URL: ${{ secrets.STATE_DATABASE_URL }}
+
+jobs:
+  deploy:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Deploy
+        run: bun alchemy deploy --stage ${{ env.STAGE }} --yes
+        env:
+          PULL_REQUEST: ${{ github.event.number }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  cleanup:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - name: Safety check
+        run: |
+          if [ "${{ env.STAGE }}" = "prod" ]; then
+            echo "ERROR: refusing to destroy prod"
+            exit 1
+          fi
+      - name: Destroy preview
+        run: bun alchemy destroy --stage ${{ env.STAGE }} --yes
+        env:
+          PULL_REQUEST: ${{ github.event.number }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+GitHub Actions sets `CI=true`, so Alchemy skips profiles and reads the
+four `AZURE_*` variables from the environment.
+
+:::note[How STAGE is computed]
+Pull requests deploy to `pr-<number>`, pushes to `main` deploy to
+`prod`, and other branches deploy to the branch name. The cleanup job
+refuses to destroy `prod`.
+:::
+
+## Comment the preview URL
+
+Post the preview URL on each pull request:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
++import * as GitHub from "@alchemy.run/github";
+import { postgresState } from "@alchemy.run/sql/PostgresState";
++import * as Output from "alchemy/Output";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+import Api from "./src/Api.ts";
+import { Data, Files } from "./src/Files.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+-    providers: Azure.providers(),
++    providers: Layer.mergeAll(Azure.providers(), GitHub.providers()),
+    state: postgresState({ url: Config.Redacted("STATE_DATABASE_URL") }),
+  },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    const data = yield* Data;
+    const files = yield* Files;
+
++    if (process.env.PULL_REQUEST) {
++      yield* GitHub.Comment("preview-comment", {
++        owner: "your-org",
++        repository: "your-repo",
++        issueNumber: Number(process.env.PULL_REQUEST),
++        body: Output.interpolate`
++          ## Preview deployed
++
++          **URL:** ${api.url}
++
++          Built from ${process.env.GITHUB_SHA?.slice(0, 7)}
++        `,
++      });
++    }
+
+    return {
+      url: api.url,
+      resourceGroup: data.resourceGroup,
+      storageAccount: data.storageAccountName,
+      container: files.containerName,
+    };
+  }),
+);
+```
+
+The logical ID `preview-comment` stays the same across pushes, so
+Alchemy edits the comment instead of adding a new one.
+
+## The full picture
+
+1. You deployed `stacks/github.ts` once with `--profile admin`. It
+   created the deployer, its role, its secret, and the repo settings.
+2. A pull request opens. Actions runs `alchemy deploy --stage pr-42`
+   as the deployer.
+3. Alchemy deploys a separate resource group, `MyApp-pr-42`, with its
+   own storage and Function, and comments the URL.
+4. The pull request merges. The cleanup job destroys `pr-42`.
+5. The push to `main` deploys `prod`.
+
+## Recap
+
+You've finished the tutorial. You can now:
+
+- **Part 1** — create a Stack and deploy a resource
+- **Part 2** — run an Effect on Azure Functions with bindings
+- **Part 3** — test a deployed Stack
+- **Part 4** — deploy separate stages with `--stage`
+- **Part 5** — deploy from GitHub Actions with credentials created as
+  code
+
+## What's next
+
+- Store data in [Cosmos DB](/azure/data/cosmos-db) or
+  [PostgreSQL](/azure/data/postgres)
+- Queue work with [Storage queues](/azure/messaging/storage-queues) or
+  [Service Bus](/azure/messaging/service-bus)
+- Deploy a frontend with [Websites](/azure/frontend/websites)
+- See which role [each binding assigns](/azure/security/identity)
+- Read [CI](/environments/ci) for more workflow patterns

@@ -1,0 +1,311 @@
+---
+title: Service Bus
+description: Send to Service Bus queues and topics from an Azure Function, consume them with native triggers or peek-lock receives, filter subscriptions, and dead-letter failures.
+---
+
+Service Bus is Azure's message broker. A queue hands each message to one
+receiver. A topic copies each message to every subscription, and each
+consumer reads its own subscription.
+
+## Create a namespace and a queue
+
+```typescript
+// src/resources.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export const Bus = Azure.ServiceBus.Namespace("Bus", { sku: "Standard" });
+
+export const Orders = Effect.gen(function* () {
+  const bus = yield* Bus;
+  return yield* Azure.ServiceBus.Queue("Orders", { namespace: bus.namespaceName });
+});
+```
+
+`Basic` has queues only. Topics need `Standard` or higher. A Standard
+namespace costs about $0.0135 per hour.
+
+## Send to a queue
+
+`QueueSend` returns a client with `send`:
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Orders } from "./resources.ts";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const ordersQueue = yield* Orders;
+    const orders = yield* Azure.ServiceBus.QueueSend(ordersQueue);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({})))) as {
+          item?: unknown;
+        };
+        const id = yield* Effect.sync(() => crypto.randomUUID());
+        yield* orders.send({ id, item: body.item }, { messageId: id });
+        return yield* HttpServerResponse.json({ id, status: "pending" }, { status: 202 });
+      }).pipe(
+        Effect.catchCause((cause) =>
+          HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 503 }),
+        ),
+      ),
+    };
+  }).pipe(Effect.provide(Azure.ServiceBus.QueueSendHttp)),
+) {}
+```
+
+An object body is sent as JSON. The binding grants Azure Service Bus
+Data Sender to the Function's managed identity, on this queue only.
+
+## Consume a queue
+
+`consumeQueueMessages` adds a Service Bus trigger to the Function:
+
+```typescript
+// src/Worker.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Orders } from "./resources.ts";
+
+export default class Worker extends Azure.Functions.Function<Worker>()(
+  "Worker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    yield* Azure.ServiceBus.consumeQueueMessages(Orders, (message) =>
+      Effect.log(`order ${message.messageId}: ${JSON.stringify(message.body)}`),
+    );
+
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("ok")),
+    };
+  }).pipe(Effect.provide(Azure.Functions.ServiceBusQueueEventSource)),
+) {}
+```
+
+The trigger completes a message when the handler succeeds and abandons
+it when the handler fails. The event source grants Azure Service Bus
+Data Receiver on this queue only.
+
+## Publish to a topic
+
+Declare a topic and one subscription per consumer:
+
+```typescript
+// src/events.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import { Bus } from "./resources.ts";
+
+export const Events = Effect.gen(function* () {
+  const bus = yield* Bus;
+  return yield* Azure.ServiceBus.Topic("Events", { namespace: bus.namespaceName });
+});
+
+export const Audit = Effect.gen(function* () {
+  const bus = yield* Bus;
+  const events = yield* Events;
+  return yield* Azure.ServiceBus.Subscription("Audit", {
+    namespace: bus.namespaceName,
+    topic: events.topicName,
+  });
+});
+```
+
+`TopicWrite` publishes. The label (subject) is what subscription rules
+usually filter on:
+
+```typescript
+// init
+const eventsTopic = yield* Events;
+const events = yield* Azure.ServiceBus.TopicWrite(eventsTopic);
+
+// runtime
+yield* events.send({ id, type: "order.created" }, { messageId: id, label: "order.created" });
+// …provided with Effect.provide(Azure.ServiceBus.TopicWriteHttp)
+```
+
+## Consume a subscription
+
+```typescript
+yield* Azure.ServiceBus.consumeSubscriptionMessages(Audit, (message) =>
+  Effect.log(`audit ${message.messageId}: ${JSON.stringify(message.body)}`),
+);
+// …provided with Effect.provide(Azure.Functions.ServiceBusSubscriptionEventSource)
+```
+
+Each subscription gets its own copy of every message published to the
+topic.
+
+## Filter a subscription
+
+A message reaches the subscription when one of its rules matches. Add a
+correlation filter on the label and a custom property:
+
+```typescript
+const euOrders = yield* Azure.ServiceBus.Subscription("eu-orders", {
+  namespace: bus.namespaceName,
+  topic: events.topicName,
+});
+yield* Azure.ServiceBus.Rule("eu-only", {
+  namespace: bus.namespaceName,
+  topic: events.topicName,
+  subscription: euOrders.subscriptionName,
+  correlationFilter: { label: "order.created", properties: { region: "eu" } },
+});
+```
+
+For a SQL condition, set `sqlFilter: { sqlExpression: "..." }`.
+
+## Set retries and dead-lettering
+
+A receiver locks a message for `lockDuration`. After `maxDeliveryCount`
+deliveries, the message moves to the dead-letter subqueue:
+
+```typescript
+const orders = yield* Azure.ServiceBus.Queue("orders", {
+  namespace: bus.namespaceName,
+  lockDuration: "PT30S",
+  maxDeliveryCount: 5,
+  defaultMessageTimeToLive: "P1D",
+  deadLetteringOnMessageExpiration: true,
+});
+```
+
+Durations are ISO 8601. The defaults are a 1-minute lock and 10
+deliveries.
+
+## Forward dead letters to a queue
+
+```typescript
+const poison = yield* Azure.ServiceBus.Queue("poison", {
+  namespace: bus.namespaceName,
+});
+const orders = yield* Azure.ServiceBus.Queue("orders", {
+  namespace: bus.namespaceName,
+  forwardDeadLetteredMessagesTo: poison.queueName,
+});
+```
+
+## Receive and settle yourself
+
+`QueueRead` peek-locks a message. Complete it when you're done, or
+abandon it to deliver it again:
+
+```typescript
+// init
+const orders = yield* Azure.ServiceBus.QueueRead(queue);
+
+// runtime
+const message = yield* orders.receive({ timeoutSeconds: 10 });
+if (message !== undefined) {
+  yield* orders.renewLock(message);
+  yield* handle(message.text).pipe(
+    Effect.andThen(orders.complete(message)),
+    Effect.catch(() => orders.abandon(message)),
+  );
+}
+// …provided with Effect.provide(Azure.ServiceBus.QueueReadHttp)
+```
+
+`receive` returns `undefined` when no message arrives in time. `complete`
+fails with `MessageLockLost` once the lock expired. `receiveAndDelete`
+takes a message in one step, at most once. Use `SubscriptionRead` for a
+subscription.
+
+## Send a batch
+
+```typescript
+// init
+const orders = yield* Azure.ServiceBus.QueueWrite(queue);
+
+// runtime
+yield* orders.sendBatch([
+  { body: { orderId: "43" } },
+  { body: "plain text", options: { timeToLiveSeconds: 600 } },
+]);
+// …provided with Effect.provide(Azure.ServiceBus.QueueWriteHttp)
+```
+
+A batch fits in one message size limit: 256 KB on Standard.
+
+## Keep order per customer
+
+A session-enabled queue delivers the messages of one `sessionId` in
+order, to one receiver at a time:
+
+```typescript
+const orders = yield* Azure.ServiceBus.Queue("orders", {
+  namespace: bus.namespaceName,
+  requiresSession: true,
+});
+// runtime, with QueueSend: yield* sender.send(order, { sessionId: order.customerId });
+```
+
+## Drop duplicates
+
+```typescript
+const payments = yield* Azure.ServiceBus.Queue("payments", {
+  namespace: bus.namespaceName,
+  requiresDuplicateDetection: true,
+  duplicateDetectionHistoryTimeWindow: "PT1H",
+});
+```
+
+Service Bus drops a second message with the same `messageId` within the
+window.
+
+:::caution
+Changing `requiresSession`, `requiresDuplicateDetection`,
+`enablePartitioning`, or the queue's `name` replaces it. Alchemy creates
+a new queue and deletes the old one with every message in it.
+:::
+
+## Choose a binding
+
+| Binding | Methods | Role on the entity |
+| --- | --- | --- |
+| `QueueSend` | `send` | Azure Service Bus Data Sender |
+| `QueueWrite`, `TopicWrite` | `send`, `sendBatch` | Azure Service Bus Data Sender |
+| `QueueRead`, `SubscriptionRead` | `receive`, `complete`, `abandon`, `renewLock`, `receiveAndDelete` | Azure Service Bus Data Receiver |
+| `QueueReadWrite` | all queue methods | Data Sender and Data Receiver |
+
+## Consume in a Container App
+
+`consumeQueueMessages` and `consumeSubscriptionMessages` also run in a
+Container App. Provide `Azure.ContainerApps.AppServiceBusQueueEventSource`,
+`AppServiceBusSubscriptionEventSource`, or, for a job,
+`JobServiceBusQueueEventSource`. See
+[Container Apps](/azure/compute/container-apps).
+
+## The first requests after a deploy
+
+Role assignments take a few minutes to apply. Until then, Service Bus
+answers 401. Retry the first call in tests.
+
+## Handle repeats
+
+Service Bus delivers at least once. Make handlers safe to run twice:
+write results under a fixed key, or turn on duplicate detection.
+
+## Example
+
+[`azure-service-bus`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-service-bus)
+has an order queue, an event topic with two subscriptions, and a worker
+that consumes all three.
+
+## Where next
+
+- [Event Hubs](/azure/messaging/event-hubs) — high-volume event streams.
+- [ServiceBus reference](/providers/azure/servicebus#queue) — every prop
+  and attribute.

@@ -1,61 +1,210 @@
 ---
 title: Setup
-description: Connect alchemy to Azure — a subscription, a service principal, and a profile.
+description: Connect Alchemy to Azure — a subscription, a service principal, a profile, and the default location and resource group.
 ---
 
-Alchemy authenticates to Azure as a Microsoft Entra **service
-principal** and deploys into one **subscription**. Use a dedicated
-subscription for development and testing.
+## What you need
+
+- **An Azure subscription** and its ID. Use a dedicated subscription
+  for development and testing.
+- **A Microsoft Entra service principal** with the **Owner** role on
+  that subscription. Bindings create role assignments, and
+  **Contributor** can't. **Contributor** is enough only for stacks
+  that never grant a role.
+- **The [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)**
+  to create the service principal. Alchemy itself doesn't use it.
+- **Docker**, only for [`alchemy dev`](/azure/local-development).
+  Alchemy bundles Functions on your machine and builds container images
+  in Azure Container Registry, so a deploy doesn't need Docker.
 
 ## Create a service principal
 
-With the [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli),
-sign in and create a service principal scoped to your subscription:
+Sign in and pick the subscription:
 
 ```sh
 az login
 az account set --subscription <subscription-id>
+```
+
+Create the service principal with **Owner** on the subscription:
+
+```sh
 az ad sp create-for-rbac \
   --name alchemy-deployer \
   --role Owner \
   --scopes /subscriptions/<subscription-id>
 ```
 
-The command prints `appId` (client ID), `password` (client secret), and
-`tenant` (tenant ID). The `Owner` role is needed to create role
-assignments; `Contributor` is enough if your stacks don't grant roles.
+The command prints `appId` (the client ID), `password` (the client
+secret), and `tenant` (the tenant ID). You need all three next.
+
+## Allow it to create Entra applications
+
+Skip this step unless your stacks declare `Azure.Entra.*` resources or
+bind Azure resources to a host outside Azure (a Cloudflare Worker, an
+AWS Lambda). Both create Microsoft Entra applications, which Azure
+roles such as **Owner** don't cover.
+
+Add the Microsoft Graph application permission
+`Application.ReadWrite.OwnedBy`:
+
+```sh
+az ad app permission add \
+  --id <appId> \
+  --api 00000003-0000-0000-c000-000000000000 \
+  --api-permissions 18a4783c-866b-4cc7-a460-3d5e5662c884=Role
+```
+
+Grant admin consent for it. You must be signed in as an administrator
+who can consent for the tenant:
+
+```sh
+az ad app permission admin-consent --id <appId>
+```
+
+## Credentials
+
+Run `alchemy profile edit --add Azure`. Enter the tenant ID, the client
+ID, the client secret, the subscription ID, and an optional default
+location. Alchemy stores them under `~/.alchemy/credentials/<profile>/`
+and exchanges the client secret for short-lived tokens.
+
+In CI (`CI=true`), Alchemy skips profiles and reads the standard Azure
+SDK variables:
+
+- `AZURE_TENANT_ID` — the tenant (directory) ID.
+- `AZURE_CLIENT_ID` — the service principal's application (client) ID.
+- `AZURE_CLIENT_SECRET` — its client secret.
+- `AZURE_SUBSCRIPTION_ID` — the subscription to deploy into.
+
+If all four are set, Alchemy uses them outside CI too.
+
+See [Profiles](/environments/profiles) for how credentials are stored
+and switched.
 
 ## Register the provider
 
 ```typescript
 // alchemy.run.ts
+import * as Alchemy from "alchemy";
 import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
 
-providers: Azure.providers(),
+export default Alchemy.Stack(
+  "App",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    return {};
+  }),
+);
 ```
 
-Run `alchemy profile edit --add Azure` and enter the tenant ID, client
-ID, client secret, subscription ID, and an optional default location.
-They are saved under `~/.alchemy/credentials/<profile>/`. Alchemy
-exchanges the client secret for a short-lived Azure Resource Manager
-token and refreshes it before it expires.
+`Azure.providers()` merges next to any other cloud's providers, so a
+single stack can span Azure and Cloudflare or AWS.
 
-In CI (`CI=true`), profiles are bypassed. Set the standard Azure SDK
-variables `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
-and `AZURE_SUBSCRIPTION_ID`.
+Azure has no state store of its own yet. `Alchemy.localState()` keeps
+state in `.alchemy/` next to your code. To share state with a team or
+CI, pick a store from [State store](/state-store).
 
-See [Profiles](/environments/profiles) for how credentials are stored
-and switched.
+## Choose a location
+
+Resources created without a `location` prop go to the profile's
+location, else `eastus`. To pin a stack to a location regardless of
+the profile, provide `Azure.location(...)`:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "App",
+  {
+    providers: Azure.providers().pipe(
+      Layer.provideMerge(Azure.location("westeurope")),
+    ),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    return {};
+  }),
+);
+```
+
+A resource that should live elsewhere takes an explicit `location`.
+Changing the default never moves a deployed resource: its recorded
+location wins.
+
+## Resource groups
+
+Every Azure resource lives in a resource group. Alchemy creates one per
+stack and stage, named `<stack>-<stage>` (for example `App-prod`), and
+puts every resource that doesn't set `resourceGroup` into it. Destroy
+deletes the group after its resources, and only when it is empty and
+carries the stack's ownership tags.
+
+To deploy into a group someone else created, name it on the providers.
+Alchemy uses that group and never creates or deletes it:
+
+```diff lang="typescript"
+// alchemy.run.ts
+    providers: Azure.providers().pipe(
+      Layer.provideMerge(Azure.location("westeurope")),
++      Layer.provideMerge(Azure.resourceGroup("rg-app-prod")),
+    ),
+```
+
+Creating the default group needs permission to write resource groups in
+the subscription. Without it, deploy fails with
+`Azure.ResourceGroupCreateForbidden`. Name an existing group with
+`Azure.resourceGroup("<name>")` instead.
+
+To put one resource in another group, such as a shared networking
+group, set its `resourceGroup` prop:
+
+```typescript
+const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
+  resourceGroup: "rg-network",
+  addressPrefixes: ["10.0.0.0/16"],
+});
+```
+
+:::caution
+A resource's ID contains its resource group. Moving a resource to
+another group, or switching the stack from the default group to a named
+one, replaces the resource.
+:::
 
 ## Resource providers
 
-A new subscription only has a handful of Azure resource provider
-namespaces registered. Alchemy registers the namespace a resource needs
-(for example `Microsoft.Storage`) the first time it deploys one, and
-waits up to three minutes for registration to finish. The service
-principal needs permission to register providers — `Contributor` or
-`Owner` on the subscription is enough.
+A new subscription has only a few Azure resource provider namespaces
+registered. Alchemy registers the namespace a resource needs (for
+example `Microsoft.Storage`) the first time it deploys one, and waits
+up to three minutes for the registration to finish. **Owner** or
+**Contributor** on the subscription allows it.
+
+## Cleaning up
+
+`alchemy destroy` removes what a stack created, including the role
+assignments its bindings made and the stack's resource group.
+
+Alchemy marks everything it creates so it can find it again:
+
+- Resources that support tags carry `alchemy::stack`, `alchemy::stage`,
+  and `alchemy::id`.
+- Blob containers keep the same markers in container metadata as
+  `alchemy_stack`, `alchemy_stage`, and `alchemy_id`.
+- Role assignments end their description with
+  `[alchemy <stack>/<stage>/<id>]`.
+
+For a test subscription that has drifted, `alchemy unsafe nuke` deletes
+every Alchemy-marked resource it finds. Run it with `--dry-run` first,
+and do not point it at a subscription you care about.
 
 ## Next steps
 
-- [Azure overview](/azure) — resources and ownership markers.
+- [Tutorial](/azure/tutorial/part-1) — deploy your first Stack.
+- [Azure Functions](/azure/compute/functions) — the runtime the rest of
+  these docs build on.

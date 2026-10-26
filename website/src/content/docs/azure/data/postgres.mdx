@@ -1,0 +1,259 @@
+---
+title: PostgreSQL
+description: Run Azure Database for PostgreSQL flexible server, apply Drizzle migrations at deploy time, and query it from an Azure Function.
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const pkgs = "@alchemy.run/drizzle @alchemy.run/sql @effect/sql-pg drizzle-orm";
+export const devPkgs = "drizzle-kit";
+
+Azure Database for PostgreSQL flexible server runs Postgres for you. An
+Azure Function connects to it over TLS with a Postgres driver. This page
+builds a todo API with Drizzle.
+
+<PackageManagers add={pkgs} dev={devPkgs} />
+
+## Create the server
+
+```typescript
+// src/database.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Drizzle from "@alchemy.run/drizzle";
+import * as Alchemy from "alchemy";
+import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+
+export const APP_ROLE = "app_user";
+
+export const database = Effect.gen(function* () {
+  const adminRandom = yield* Alchemy.Random("AdminPassword", { bytes: 24 });
+  const adminPassword = Output.map(adminRandom.text, (hex) =>
+    Redacted.make(`Aa1-${Redacted.value(hex)}`),
+  );
+
+  const server = yield* Azure.PostgreSQL.FlexibleServer("Postgres", {
+    location: "centralus",
+    version: "17",
+    administratorLoginPassword: adminPassword,
+  });
+```
+
+The default is Burstable `Standard_B1ms` with 32 GiB of storage, the
+cheapest flexible server, at about $0.02 per hour. Creating it takes 5 to
+10 minutes. `Alchemy.Random` generates the password once and keeps it in
+state. The `Aa1-` prefix meets Azure's rule of three character kinds.
+
+Some subscriptions cannot create flexible servers in `eastus`
+(`LocationIsOfferRestricted`). Use `centralus`.
+
+## Let Azure services connect
+
+```typescript
+  yield* Azure.PostgreSQL.FirewallRule("AllowAzureServices", {
+    server: server.serverName,
+    startIpAddress: "0.0.0.0",
+    endIpAddress: "0.0.0.0",
+  });
+```
+
+A new server accepts no client. Flex Consumption Functions have no fixed
+outbound address, so they need the `0.0.0.0` rule. The server still
+requires TLS and a password.
+
+## Add a database and a schema
+
+```typescript
+  const db = yield* Azure.PostgreSQL.Database("App", {
+    server: server.serverName,
+    name: "app",
+  });
+
+  const appPassword = yield* Alchemy.Random("AppPassword", { bytes: 24 });
+
+  const schema = yield* Drizzle.Schema("Schema", {
+    schema: "./src/schema.ts",
+    out: "./migrations",
+  });
+
+  return { server, db, appPassword, schema };
+});
+```
+
+`appPassword` belongs to `app_user`, the role the Function signs in as.
+`Drizzle.Schema` writes a new migration to `./migrations` whenever
+`src/schema.ts` changes.
+
+## Apply migrations at deploy time
+
+The example's `migrate` Action opens a firewall rule for your machine,
+applies the migrations as the administrator, and creates `app_user` with
+`SELECT`, `INSERT`, `UPDATE`, and `DELETE` on the tables. Copy
+[`src/migrate.ts`](https://github.com/alchemy-run/alchemy/blob/main/examples/azure-postgres-drizzle/src/migrate.ts)
+into your project.
+
+## Connect from a Function
+
+Yield each value inside the Function. Alchemy stores it as an app
+setting and hands you an Effect that reads it at runtime:
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Redacted from "effect/Redacted";
+import { APP_ROLE, database } from "./database.ts";
+import { migrate } from "./migrate.ts";
+import { todos } from "./schema.ts";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const schemaVersion = yield* migrate;
+    return {
+      main: import.meta.url,
+      env: { SCHEMA_VERSION: schemaVersion },
+    };
+  }),
+  Effect.gen(function* () {
+    const { server, db: appDb, appPassword } = yield* database;
+    const host = yield* server.fullyQualifiedDomainName;
+    const databaseName = yield* appDb.databaseName;
+    const password = yield* appPassword.text;
+
+    const connectionString = Effect.gen(function* () {
+      const hostName = yield* host;
+      const name = yield* databaseName;
+      const secret = yield* password;
+      return Redacted.make(
+        `postgresql://${APP_ROLE}:${Redacted.value(secret)}@${hostName}:5432/${name}?sslmode=require`,
+      );
+    });
+    const db = yield* Drizzle.Postgres(connectionString);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const rows = yield* db.select().from(todos).orderBy(todos.title);
+        return yield* HttpServerResponse.json(rows);
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+`Drizzle.Postgres` opens one connection per request, on the first query.
+Reading `migrate` in the props makes the Function deploy after the
+schema exists, and redeploy when it changes.
+
+The Function's identity gets no role: Postgres has no Azure data-plane
+binding. The password stays `Redacted` in the app setting.
+
+## Register the providers
+
+Drizzle and `Random` bring their own providers:
+
+```typescript
+// alchemy.run.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Drizzle from "@alchemy.run/drizzle";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./src/Api.ts";
+
+export const providers = () =>
+  Layer.mergeAll(Azure.providers(), Drizzle.providers(), Alchemy.RandomProvider());
+
+export default Alchemy.Stack(
+  "AzurePostgresDrizzleExample",
+  { providers: providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+## Sign in with Microsoft Entra ID
+
+Turn on Entra authentication and make a group the administrator:
+
+```typescript
+const server = yield* Azure.PostgreSQL.FlexibleServer("Postgres", {
+  authConfig: { activeDirectoryAuth: "Enabled", passwordAuth: "Enabled" },
+});
+yield* Azure.PostgreSQL.Administrator("Dbas", {
+  server: server.serverName,
+  objectId: "00000000-0000-0000-0000-000000000000",
+  principalType: "Group",
+  principalName: "db-admins",
+});
+```
+
+## Keep the server off the internet
+
+Put the server in a delegated subnet, or turn off its public endpoint:
+
+```typescript
+const server = yield* Azure.PostgreSQL.FlexibleServer("Postgres", {
+  network: { publicNetworkAccess: "Disabled" },
+});
+```
+
+The [`FlexibleServer` reference](/providers/azure/postgresql#flexibleserver)
+has the full subnet and private DNS setup.
+
+## Size, high availability, and backups
+
+```typescript
+const server = yield* Azure.PostgreSQL.FlexibleServer("Postgres", {
+  version: "17",
+  sku: { name: "Standard_D2ds_v5", tier: "GeneralPurpose" },
+  storage: { storageSizeGB: 128, autoGrow: "Enabled" },
+  highAvailability: { mode: "ZoneRedundant" },
+  backup: { backupRetentionDays: 14 },
+});
+```
+
+:::caution
+Changing `name`, `location`, `administratorLogin`, or
+`availabilityZone` replaces the server, and so do a lower `version` or a
+smaller `storage.storageSizeGB`. Alchemy creates a new, empty server and
+deletes the old one with every database on it.
+:::
+
+## Stop the server at night
+
+`StopServer` and `StartServer` grant a custom role with one action on
+this server only:
+
+```typescript
+// init
+const stopServer = yield* Azure.PostgreSQL.StopServer(server);
+const startServer = yield* Azure.PostgreSQL.StartServer(server);
+
+// runtime
+yield* stopServer();
+yield* startServer();
+// …provided with Effect.provide([Azure.PostgreSQL.StopServerHttp, Azure.PostgreSQL.StartServerHttp])
+```
+
+Compute billing stops while the server is stopped. Azure starts it
+again after 7 days. A deploy starts a stopped server before it changes
+settings.
+
+## Example
+
+[`azure-postgres-drizzle`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-postgres-drizzle)
+is the complete todo API, migrations and the least-privilege role
+included, with a live test.
+
+## Where next
+
+- [Drizzle on Postgres](/sql/drizzle/postgres) — schemas, migrations,
+  and queries.
+- [PostgreSQL reference](/providers/azure/postgresql#flexibleserver) —
+  every server prop.

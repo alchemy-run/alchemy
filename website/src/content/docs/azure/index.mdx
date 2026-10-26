@@ -1,144 +1,129 @@
 ---
 title: Azure
-description: Microsoft Azure resources across ~165 Azure Resource Manager services, declared as Effects and deployed with a service principal.
+description: Build Azure applications with Alchemy — a runtime (usually an Azure Function) plus typed resources, wired together by bindings that assign least-privilege roles.
 ---
 
-The Azure provider deploys resources through Azure Resource Manager (ARM)
-with a Microsoft Entra service principal. Every resource is tagged with
-the stack, stage, and logical ID that own it, so `alchemy unsafe nuke`
-can find and clean up what Alchemy created.
-
-New here? [Set up credentials](/azure/setup) first.
-
-:::caution
-The Azure provider is in preview. It covers about 1,190 resource types
-across roughly 165 services — each service has a reference page under
-**Resources** in the sidebar, e.g. [Azure.Storage](/providers/azure/storage).
-:::
-
-## How it works
-
-- **Authentication** — a Microsoft Entra service principal stored in an
-  Alchemy profile (`alchemy profile edit --add Azure`). Alchemy trades the
-  client secret for a short-lived ARM token. In CI, set
-  `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, and
-  `AZURE_SUBSCRIPTION_ID` instead. See [Setup](/azure/setup).
-- **Resource providers** — new subscriptions only register a few
-  `Microsoft.*` namespaces. Alchemy registers the namespace a resource
-  needs on first deploy, so you never see `MissingRegistration`.
-- **Ownership** — every resource is branded with the stack, stage, and
-  logical ID that own it (see [Ownership markers](#ownership-markers)).
-
-## Providers
+An Alchemy app on Azure is one **runtime**, usually an Azure Function,
+plus the **resources** it uses: storage, databases, queues, secrets.
+You connect them with typed **bindings**. Call
+`Azure.Storage.BlobContainerReadWrite(container)` in your code and
+Alchemy gives the Function's managed identity exactly that role on that
+container. The code is the role assignment.
 
 ```typescript
+// src/Api.ts
 import * as Azure from "@alchemy.run/azure";
-import * as Layer from "effect/Layer";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
-providers: Azure.providers().pipe(
-  // Optional: the default location for resources that don't set one.
-  Layer.provideMerge(Azure.location("westeurope")),
-),
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const account = yield* Azure.Storage.StorageAccount("Data");
+    const container = yield* Azure.Storage.BlobContainer("Files", {
+      storageAccount: account.storageAccountName,
+    });
+    const files = yield* Azure.Storage.BlobContainerReadWrite(container);
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* files.put("hello.txt", "hi");
+        const blob = yield* files.get("hello.txt");
+        return HttpServerResponse.text(blob?.text() ?? "missing");
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp)),
+) {}
 ```
 
-Without an `Azure.location(...)` layer, resources default to the
-profile's location, then `eastus`. A resource's recorded location always
-wins, so changing the default never moves existing resources.
+The binding assigns **Storage Blob Data Contributor** to the Function's
+managed identity on the `Files` container only. No keys or connection
+strings reach the app.
 
-## Resource groups
+New here? [Set up credentials](/azure/setup), then start the
+[tutorial](/azure/tutorial/part-1).
 
-Every Azure resource lives in a resource group. Alchemy creates one per
-stack and stage, named `<stack>-<stage>` (for example `shop-prod`), and
-puts every resource that doesn't set `resourceGroup` into it. Destroy
-deletes the group after its resources, and only when it is empty and
-carries the stack's ownership tags.
+## Pick your runtime
 
-To deploy into a group someone else created, name it on the providers.
-Alchemy references the group and never creates or deletes it:
+- **[Azure Functions](/azure/compute/functions)** — HTTP handlers,
+  timers, and queue triggers on Flex Consumption. The default, and
+  what the tutorial builds on.
+- **[Container Apps](/azure/compute/container-apps)** — long-running
+  services and jobs from your own program or image.
+- **[AKS](/azure/compute/aks)** — Kubernetes Deployments and Jobs on a
+  managed cluster.
+- **[Virtual machines](/azure/compute/vms)** — a long-running Node.js
+  process on a VM you size.
+- **[Effect workflows](/azure/compute/effect-workflows)** — durable
+  workflows on Durable Task Scheduler.
 
-```typescript
-providers: Azure.providers().pipe(
-  Layer.provideMerge(Azure.resourceGroup("rg-shop-prod")),
-),
-```
+Not sure? See [Choosing a runtime](/azure/compute/choosing-a-runtime).
 
-To set the group's name, location, or tags, declare it and provide it to
-the resources that go into it:
+## Data
 
-```typescript
-const group = yield* Azure.Resources.ResourceGroup("app", {
-  name: "shop-prod",
-  location: "westeurope",
-});
+- **[Storage](/azure/data/storage)** — blob containers with read and
+  write clients.
+- **[Cosmos DB](/azure/data/cosmos-db)** — documents in a serverless
+  NoSQL account.
+- **[PostgreSQL](/azure/data/postgres)** — a flexible server queried
+  with Drizzle, migrations applied on deploy.
+- **[SQL Database](/azure/data/sql)** — Azure SQL with
+  `@effect/sql-mssql`.
+- **[Redis](/azure/data/redis)** — Azure Managed Redis with Entra
+  sign-in.
 
-yield* Effect.gen(function* () {
-  yield* Azure.Storage.StorageAccount("files");
-}).pipe(Effect.provide(Azure.resourceGroup(group)));
-```
+## Messaging & events
 
-Set `resourceGroup` on one resource to put it in another group, such as
-a shared networking group:
+- **[Storage queues](/azure/messaging/storage-queues)** — send from one
+  Function, consume in another.
+- **[Service Bus](/azure/messaging/service-bus)** — queues and topics
+  with sessions and dead letters.
+- **[Event Hubs](/azure/messaging/event-hubs)** — high-volume event
+  streams.
+- **[Event Grid](/azure/messaging/event-grid)** — react to blob
+  uploads and other Azure events.
 
-```typescript
-const vnet = yield* Azure.Network.VirtualNetwork("vnet", {
-  resourceGroup: "rg-network",
-  addressPrefixes: ["10.0.0.0/16"],
-});
-```
+## Frontend
 
-:::caution
-A resource's ID contains its resource group. Moving a resource to another
-group, or switching the stack from the default group to a named one,
-replaces the resource.
-:::
+- **[Websites](/azure/frontend/websites)** — static sites and
+  server-rendered frameworks behind Front Door.
 
-Creating the default group needs permission to write resource groups in
-the subscription. Without it, deploy fails with
-`Azure.ResourceGroupCreateForbidden`; use `Azure.resourceGroup("<name>")`
-instead.
+## AI, security, and operations
 
-## Resources
+- **[Azure OpenAI](/azure/ai/openai)** — chat completions with no API
+  key.
+- **[Identity & bindings](/azure/security/identity)** — exactly which
+  role each binding assigns, and how hosts outside Azure sign in.
+- **[Key Vault](/azure/security/key-vault)** — secrets your runtime
+  reads at request time.
+- **[Monitoring](/azure/observability/monitor)** — logs and metrics in
+  the same Stack.
+- **[Networking](/azure/networking)** — virtual networks and private
+  endpoints.
+- **[Local development](/azure/local-development)** — run Functions
+  and Storage on your machine with `alchemy dev`.
 
-A storage account holds Blob, Queue, Table, and File storage. Accounts
-are HTTPS-only, require TLS 1.2, and block anonymous blob access unless
-you opt in:
+## What are you building?
 
-```typescript
-const account = yield* Azure.Storage.StorageAccount("files");
-
-const uploads = yield* Azure.Storage.BlobContainer("uploads", {
-  storageAccount: account.storageAccountName,
-});
-```
-
-Grant access with a managed identity and a role assignment scoped to
-the one resource it needs:
-
-```typescript
-const identity = yield* Azure.ManagedIdentity.UserAssignedIdentity("api");
-
-yield* Azure.Authorization.RoleAssignment("api-reads-files", {
-  scope: account.storageAccountId,
-  roleDefinitionId: Azure.Authorization.BuiltInRole.StorageBlobDataReader,
-  principalId: identity.principalId,
-  principalType: "ServicePrincipal",
-});
-```
-
-## Ownership markers
-
-Resources that support tags carry `alchemy::stack`, `alchemy::stage`, and
-`alchemy::id`. Two resource types have no tags:
-
-- **Blob containers** store the same markers in container metadata as
-  `alchemy_stack`, `alchemy_stage`, and `alchemy_id`.
-- **Role assignments** end their description with
-  `[alchemy <stack>/<stage>/<id>]`.
+| You're building | Reach for |
+| --- | --- |
+| An HTTP API | [Azure Functions](/azure/compute/functions) + [Storage](/azure/data/storage) |
+| A Postgres-backed app | [PostgreSQL](/azure/data/postgres) |
+| A website | [Websites](/azure/frontend/websites) |
+| Background jobs | [Storage queues](/azure/messaging/storage-queues) or [Service Bus](/azure/messaging/service-bus) |
+| An event pipeline | [Event Hubs](/azure/messaging/event-hubs) |
+| Upload processing | [Event Grid](/azure/messaging/event-grid) |
+| Long-running workflows | [Effect workflows](/azure/compute/effect-workflows) |
+| A chat endpoint | [Azure OpenAI](/azure/ai/openai) |
+| Kubernetes workloads | [AKS](/azure/compute/aks) |
 
 ## Out of scope
 
-The Azure SDK covers every Azure Resource Manager resource type. About
-650 of them are deliberately not Alchemy resources:
+The Azure provider covers about 1,190 Azure Resource Manager resource
+types across roughly 165 services. Each service has a reference page,
+for example [Azure.Storage](/providers/azure/storage). About 650 other
+resource types are deliberately not Alchemy resources:
 
 | Reason | Examples |
 | --- | --- |
@@ -150,32 +135,20 @@ The Azure SDK covers every Azure Resource Manager resource type. About
 | Read-only mirrors and system-managed objects | AWS Connector inventory (112 types), vCenter/Arc discovery projections, platform-created hardware inventory, subscription and tenant singletons without delete |
 | Duplicates | Property setters folded into their parent (e.g. VPN connection shared keys, Web App settings), legacy aliases of current types |
 
-## Requires external setup
-
-These are implemented, but their live tests only run with
-`AZURE_TEST_PAID=1` because they need something beyond a subscription:
+These resources are implemented but need something beyond a
+subscription:
 
 - **Microsoft Discovery** — an allow-listed preview.
-- **Confluent** — a signed-in user token, not a service principal.
+- **Confluent** — a signed-in user token. A service principal can't
+  create one.
 - **Azure Stack HCI** — physical hardware.
 - **VMware Solution** — host quota granted through a support ticket.
 - **Power BI and Fabric capacities** — a tenant sign-up.
 
-## Testing
-
-Live tests run against a real subscription:
-
-```sh
-pnpm test test/Azure --profile <profile>
-```
-
-Lifecycles that cost more than about $1 or take longer than ~10 minutes
-only run with `AZURE_TEST_EXPENSIVE=1`. Lifecycles that need a paid
-plan, a partner SaaS, hardware, or a gated preview only run with
-`AZURE_TEST_PAID=1`; without it, a probe test asserts the exact typed
-error Azure returns.
-
-## Next steps
+## Where next
 
 - [Setup](/azure/setup) — create a service principal and a profile.
-- [Azure.Storage reference](/providers/azure/storage) — one page per service.
+- [Tutorial](/azure/tutorial/part-1) — from an empty folder to CI/CD
+  in five parts.
+- [Providers reference](/providers/azure/storage) — generated docs for
+  every Azure resource, well beyond the services covered here.

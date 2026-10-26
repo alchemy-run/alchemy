@@ -30,6 +30,7 @@ import type { Providers } from "../Providers.ts";
 import type { ResourceGroup } from "../Resources/ResourceGroup.ts";
 import { stackResourceGroup } from "../StackResourceGroup.ts";
 import { StorageAccount } from "../Storage/StorageAccount.ts";
+import { serverDirectoryBuild } from "./ServerDirectory.ts";
 import { StaticWebsite } from "./StaticWebsite.ts";
 
 /**
@@ -163,6 +164,19 @@ export interface FrameworkSiteConfig {
    * @default "none"
    */
   htmlHandling?: "none" | "drop-trailing-slash";
+  /**
+   * Ship the server entry's directory in the Function package as-is, next
+   * to the bundled entry. For a server that loads its own files and
+   * `node_modules` at run time (Next.js's standalone server).
+   * @default false
+   */
+  serverDirectory?: boolean;
+  /**
+   * Client directories whose children get their own Front Door patterns, so
+   * the other paths below them reach the server. Next.js passes `["_next"]`:
+   * `/_next/static/*` comes from Blob Storage and `/_next/image` renders.
+   */
+  nestedAssetDirectories?: string[];
   /**
    * @deprecated Azure Functions ignores it: the framework's Azure target
    * bundles the server, and the client directory goes to Blob Storage.
@@ -321,18 +335,26 @@ const MAX_ROUTE_PATTERNS = 100;
  * Front Door path patterns for the top-level entries of a client directory
  * (`/assets/*`, `/favicon.ico`). Directories come first; past the route's
  * limit of 100 the remaining files fall through to the server Function.
+ * A directory in `nested` contributes its children's patterns instead
+ * (`/_next/static/*`), so its other paths reach the Function.
  */
-const assetPatternsOf = Effect.fn(function* (dir: string) {
+const assetPatternsOf = Effect.fn(function* (dir: string, nested: readonly string[] = []) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const root = path.resolve(initialCwd, dir);
-  const entries = yield* fs.readDirectory(root);
-  const names = [...entries].sort();
   const dirs: string[] = [];
   const files: string[] = [];
-  for (const name of names) {
+  const entries = yield* fs.readDirectory(root);
+  for (const name of [...entries].sort()) {
     const stat = yield* fs.stat(path.join(root, name));
-    if (stat.type === "Directory") dirs.push(`/${name}/*`);
+    if (stat.type === "Directory" && nested.includes(name)) {
+      const children = yield* fs.readDirectory(path.join(root, name));
+      for (const child of [...children].sort()) {
+        const childStat = yield* fs.stat(path.join(root, name, child));
+        if (childStat.type === "Directory") dirs.push(`/${name}/${child}/*`);
+        else if (childStat.type === "File") files.push(`/${name}/${child}`);
+      }
+    } else if (stat.type === "Directory") dirs.push(`/${name}/*`);
     else if (stat.type === "File") files.push(`/${name}`);
   }
   return [...dirs, ...files].slice(0, MAX_ROUTE_PATTERNS);
@@ -468,6 +490,8 @@ export const deploySite = Effect.fn(function* (props: {
   readonly assetPatterns: Input<string[]> | undefined;
   readonly spa: boolean;
   readonly errorPage: string | undefined;
+  /** Ship the server entry's directory with the Function (see {@link FrameworkSiteConfig.serverDirectory}). */
+  readonly serverDirectory?: boolean;
 }) {
   const { site } = props;
   if (props.serverEntry !== undefined && site.frontDoor === false) {
@@ -506,6 +530,13 @@ export const deploySite = Effect.fn(function* (props: {
           instanceMemoryMB: site.instanceMemoryMB,
           maximumInstanceCount: site.maximumInstanceCount,
           tags: site.tags,
+          build: !props.serverDirectory
+            ? undefined
+            : typeof props.serverEntry === "string"
+              ? serverDirectoryBuild(props.serverEntry)
+              : Output.isOutput(props.serverEntry)
+                ? Output.map(props.serverEntry, (entry: string) => serverDirectoryBuild(entry))
+                : undefined,
         })
       : undefined;
 
@@ -637,7 +668,7 @@ const runFrameworkSite = Effect.fn("Azure.Website.FrameworkSite")(function* (
   )(build.serverEntry);
 
   const assetPatterns = Output.mapEffect((dir: string) =>
-    assetPatternsOf(dir).pipe(
+    assetPatternsOf(dir, config.nestedAssetDirectories).pipe(
       Effect.provideService(FileSystem.FileSystem, fs),
       Effect.provideService(Path.Path, path),
       Effect.catch((cause) => fail(`Failed to list the ${config.name} client directory.`, cause)),
@@ -657,6 +688,7 @@ const runFrameworkSite = Effect.fn("Azure.Website.FrameworkSite")(function* (
     assetPatterns,
     spa: false,
     errorPage: undefined,
+    serverDirectory: config.serverDirectory,
   });
 });
 

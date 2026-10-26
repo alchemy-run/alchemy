@@ -104,6 +104,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Email: l("mail"),
   AI: l("sparkles"),
   "Security & secrets": l("lock"),
+  "Security & identity": l("lock"),
   Observability: l("activity"),
   Networking: l("globe"),
   Guides: l("map"),

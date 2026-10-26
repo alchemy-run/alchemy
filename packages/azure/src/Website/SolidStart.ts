@@ -4,14 +4,15 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 /** The framework-integration package that drives the SolidStart build. */
 export const SOLIDSTART_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/solidstart";
 
-/** The Node deploy target for the SolidStart build. */
-export const SOLIDSTART_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/solidstart/node";
+/** The Azure Functions deploy target for the SolidStart build. */
+export const SOLIDSTART_AZURE_TARGET_SPECIFIER =
+  "@alchemy.run/frontend-frameworks/solidstart/azure";
 
 export interface SolidStartProps extends FrameworkSiteProps {
   /**
    * Nitro options forwarded into the nitro plugin the integration appends
    * (prerendering, route rules, storage, ...). `preset` is owned by the
-   * Node deploy target and may not be set here. JSON-serializable values
+   * Azure deploy target and may not be set here. JSON-serializable values
    * only — no functions or plugin instances.
    *
    * This is a prop (rather than project config) because the integration
@@ -24,19 +25,30 @@ export interface SolidStartProps extends FrameworkSiteProps {
 }
 
 /**
- * Deploy a [SolidStart](https://start.solidjs.com) application to a
- * Azure App Service: the SSR server on a Linux web app with the Node.js runtime (no Docker),
- * static assets (prerendered pages included) served by the same process.
+ * Deploy a [SolidStart](https://start.solidjs.com) application to Azure
+ * without Docker or an App Service plan. The nitro server (SSR pages, API
+ * routes, server functions) runs on a Flex Consumption
+ * `Azure.Functions.Function` that scales to zero. The client assets and
+ * prerendered pages (`.output/public`) go to the static website endpoint
+ * of an Azure Storage account. Azure Front Door Standard sends the asset
+ * paths (`/_build/*`, `public/` files) to Blob Storage and every other path
+ * to the Function.
  *
- * The build runs through `@alchemy.run/frontend-frameworks/solidstart` with
- * the `@alchemy.run/frontend-frameworks/solidstart/node` deploy target —
- * both must be installed in your project, alongside `@solidjs/start` and
- * `@solidjs/vite-plugin-nitro-2`.
+ * The build runs through `@alchemy.run/frontend-frameworks/solidstart`
+ * with the `@alchemy.run/frontend-frameworks/solidstart/azure` deploy
+ * target. Install the package in your project alongside `@solidjs/start`
+ * and `@solidjs/vite-plugin-nitro-2`. Your `vite.config.ts` needs no
+ * adapter wiring: the integration drives the project's own `vite build`
+ * and appends its own nitro plugin instance. Each file is uploaded with a
+ * `Cache-Control` header (HTML is never cached, hashed assets are
+ * immutable), and a redeploy purges the paths of changed files from Front
+ * Door.
  *
- * Your `vite.config.ts` needs no adapter wiring: the integration drives the
- * project's own `vite build` and appends its own nitro plugin instance
- * carrying nitro's `node` preset.
- *
+ * Front Door Standard costs a monthly base fee per profile: pass
+ * `frontDoor: { profile }` to share one profile across sites. A new Front
+ * Door endpoint takes 10-20 minutes to serve everywhere. During
+ * `alchemy dev` the site is SolidStart's own Vite dev server and no Azure
+ * resources are created.
  *
  * ### Creating SolidStart Sites
  * **Example:** Basic SolidStart App
@@ -44,32 +56,35 @@ export interface SolidStartProps extends FrameworkSiteProps {
  * const site = yield* Azure.Website.SolidStart("Web", {
  *   rootDir: "./app",
  * });
+ * // site.url → "https://{endpoint}.z01.azurefd.net"
  * ```
  *
- * **Example:** Behind Azure Front Door
+ * **Example:** Share one Front Door profile across sites
  * ```typescript
+ * const profile = yield* Azure.Cdn.Profile("Edge");
  * const site = yield* Azure.Website.SolidStart("Web", {
  *   rootDir: "./app",
- *   frontDoor: true,
+ *   frontDoor: { profile },
  * });
  * ```
  *
  * ### Server Configuration
- * **Example:** Process Environment
+ * **Example:** App Settings and Function Size
  * ```typescript
  * const site = yield* Azure.Website.SolidStart("Web", {
  *   rootDir: "./app",
- *   env: {
- *     API_BASE: "https://api.example.com",
- *   },
+ *   env: { API_BASE: "https://api.example.com" },
+ *   instanceMemoryMB: 512,
+ *   maximumInstanceCount: 40,
  * });
  * ```
  *
  * ### Prerendering
  * The integration owns the nitro plugin instance (a `nitroV2Plugin()` in
  * your `vite.config.*` is rejected), so nitro options — prerendering
- * included — go on the `nitro` prop. Prerendered pages ship with the
- * server and are served as static assets.
+ * included — go on the `nitro` prop. Prerendered pages are uploaded with
+ * the client assets. Front Door serves `/about/` from Blob Storage; a
+ * request for `/about` reaches the Function, which renders the same page.
  *
  * **Example:** Prerender Routes
  * ```typescript
@@ -79,6 +94,14 @@ export interface SolidStartProps extends FrameworkSiteProps {
  * });
  * ```
  *
+ * ### Local Development
+ * **Example:** SolidStart Dev Server Under `alchemy dev`
+ * ```typescript
+ * // `alchemy dev` runs SolidStart's Vite dev server: site.url is the
+ * // local server (HMR included); no Azure resources are created.
+ * const site = yield* Azure.Website.SolidStart("Web", { rootDir: "./app" });
+ * ```
+ *
  * @resource
  * @product Website
  */
@@ -86,6 +109,6 @@ export const SolidStart = (id: string, props: SolidStartProps = {}) =>
   makeFrameworkSite(id, props, {
     name: "SolidStart",
     framework: SOLIDSTART_FRAMEWORK_SPECIFIER,
-    target: SOLIDSTART_NODE_TARGET_SPECIFIER,
+    target: SOLIDSTART_AZURE_TARGET_SPECIFIER,
     options: { nitro: props.nitro },
   }).pipe(Namespace.push(id));

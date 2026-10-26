@@ -1,0 +1,100 @@
+---
+title: Octane
+description: "Deploy an OctaneJS app to Azure with Azure.Website.Octane — SSR on a Flex Consumption Function, assets on Blob Storage, both behind Azure Front Door."
+sidebar:
+  order: 20
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Azure.Website.Octane` deploys an [OctaneJS](https://octanejs.dev) app to
+Azure. Octane's fetch handler runs on a Flex Consumption Function, which
+scales to zero. The client assets go to the static website endpoint of an
+Azure Storage account. Azure Front Door sends `/assets/*` and the public
+files to Blob Storage and every other path to the Function. No Docker
+image and no App Service plan are involved.
+
+## Install
+
+The build integration ships separately. It only runs at deploy time, so a
+dev dependency is enough:
+
+<PackageManagers dev={devDeps} />
+
+## Deploy the site
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Azure.Website.Octane("Website", { location: "eastus" });
+    return { url: site.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `site.url` is the Front Door endpoint,
+`https://{endpoint}.z01.azurefd.net`. A new endpoint takes 10-20 minutes to
+serve everywhere. Pick a `location` that offers Flex Consumption.
+
+## Pass environment variables
+
+```diff lang="typescript"
+-const site = yield* Azure.Website.Octane("Website", { location: "eastus" });
++const site = yield* Azure.Website.Octane("Website", {
++  location: "eastus",
++  env: { GREETING: "Hello from Azure!" },
++});
+```
+
+The values become app settings of the Function. A `ServerRoute` handler
+reads them from `process.env.GREETING`.
+
+## Configure Octane
+
+Keep compiler and route settings in `octane.config.ts`. You don't need an
+adapter: the `@alchemy.run/frontend-frameworks/octane/azure` target wraps
+Octane's native Node output in an Azure Functions handler and inlines the
+SSR template into the server bundle.
+
+## Size the Function
+
+```typescript
+const site = yield* Azure.Website.Octane("Website", {
+  instanceMemoryMB: 512,
+  maximumInstanceCount: 40,
+});
+```
+
+## Share a Front Door profile
+
+```typescript
+const profile = yield* Azure.Cdn.Profile("Edge");
+const site = yield* Azure.Website.Octane("Website", { frontDoor: { profile } });
+```
+
+Each profile bills a monthly base fee, so share one across sites. See
+[Websites](/azure/frontend/websites) for caching, purges, and the other
+shared settings.
+
+## Local development
+
+`alchemy dev` runs Octane's Vite dev server with hot reload and creates
+nothing in Azure. Wrap the site in `Alchemy.remote()` to deploy it for real
+during dev.
+
+See the [`azure-website-octane`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-octane)
+example.
+
+## Where next
+
+- [Websites](/azure/frontend/websites) — the settings every site shares.
+- [Website reference](/providers/azure/website#octane) — every prop.

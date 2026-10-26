@@ -1,0 +1,312 @@
+---
+title: "Part 2: Add an Azure Function"
+description: Put an HTTP API on Azure Functions, bind the blob container, and implement GET/PUT routes.
+sidebar:
+  order: 2
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+In [Part 1](/azure/tutorial/part-1) you deployed a storage account and a
+blob container. Now you put an HTTP API on Azure Functions that reads
+and writes files in the container.
+
+## Create the Function file
+
+A Function is a class with an infrastructure definition and a runtime
+implementation. Create `src/Api.ts`:
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {};
+  }),
+) {}
+```
+
+`Azure.Functions.Function` is a function app on the Flex Consumption
+plan: it scales to zero and bills per execution. `main: import.meta.url`
+makes this file the entry point. Alchemy bundles it for Node.js 22 and
+deploys the bundle.
+
+## Serve HTTP with `fetch`
+
+Return a `fetch` handler to answer requests:
+
+```diff lang="typescript"
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
++import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+-    return {};
++    return {
++      fetch: Effect.succeed(HttpServerResponse.text("Hello from Azure Functions!")),
++    };
+  }),
+) {}
+```
+
+Every request to the app's public URL reaches `fetch`.
+
+:::note
+The outer generator is the **Construction phase**. It runs when you
+deploy and again when an instance starts. The inner `fetch` is the
+**Runtime phase**. It runs for each request.
+:::
+
+## Bind the container
+
+Yield `Files` and ask for read and write access to it:
+
+```diff lang="typescript"
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
++import { Files } from "./Files.ts";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
++    const container = yield* Files;
++    const files = yield* Azure.Storage.BlobContainerReadWrite(container);
++
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("Hello from Azure Functions!")),
+    };
+  }),
+) {}
+```
+
+`BlobContainerReadWrite` gives you a client with `get`, `put`, `list`,
+and `delete`. On deploy it assigns the Function's managed identity
+**Storage Blob Data Contributor** on this container and nothing else.
+Use `BlobContainerRead` or `BlobContainerWrite` when you need less.
+
+## Write files with `PUT /files/:key`
+
+Match the path and store the request body under the key:
+
+```diff lang="typescript"
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
++import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Files } from "./Files.ts";
+
++const FILE_ROUTE = /^\/files\/(.+)$/;
++
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const container = yield* Files;
+    const files = yield* Azure.Storage.BlobContainerReadWrite(container);
+
+    return {
+-      fetch: Effect.succeed(HttpServerResponse.text("Hello from Azure Functions!")),
++      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest;
++        const url = new URL(request.url, "http://localhost");
++
++        const match = FILE_ROUTE.exec(url.pathname);
++        if (match === null) {
++          return HttpServerResponse.text("Not Found", { status: 404 });
++        }
++        const key = decodeURIComponent(match[1]!);
++
++        if (request.method === "PUT") {
++          const body = yield* request.text;
++          const contentType = request.headers["content-type"] ?? "text/plain";
++          const { etag } = yield* files.put(key, body, { contentType });
++          return yield* HttpServerResponse.json({ key, etag }, { status: 201 });
++        }
++
++        return HttpServerResponse.text("Method Not Allowed", { status: 405 });
++      }),
+    };
+  }),
+) {}
+```
+
+`put` takes the blob name, a string or bytes, and options like
+`contentType`. It returns the new blob's `etag`.
+
+## Read files with `GET /files/:key`
+
+Add a `GET` branch:
+
+```diff lang="typescript"
+// src/Api.ts
+if (request.method === "PUT") {
+  const body = yield* request.text;
+  const contentType = request.headers["content-type"] ?? "text/plain";
+  const { etag } = yield* files.put(key, body, { contentType });
+  return yield* HttpServerResponse.json({ key, etag }, { status: 201 });
+}
++if (request.method === "GET") {
++  const file = yield* files.get(key);
++  return file === undefined
++    ? HttpServerResponse.text("Not Found", { status: 404 })
++    : HttpServerResponse.text(file.text(), { contentType: file.contentType });
++}
+
+return HttpServerResponse.text("Method Not Allowed", { status: 405 });
+```
+
+`get` returns `undefined` for a missing blob, so a 404 is a plain
+ternary.
+
+## Answer Azure errors with a 502
+
+Every Azure error is a typed tag. Answer any of them with a 502 that
+names it:
+
+```diff lang="typescript"
+// src/Api.ts
+fetch: Effect.gen(function* () {
+  // ... PUT and GET branches ...
+  return HttpServerResponse.text("Method Not Allowed", { status: 405 });
+-}),
++}).pipe(
++  Effect.catch((error) =>
++    Effect.succeed(HttpServerResponse.text(error._tag, { status: 502 })),
++  ),
++),
+```
+
+Right after the first deploy, the role assignment takes up to a few
+minutes to reach Storage. Until then, a request answers 502 with the
+tag of the authorization error.
+
+## Provide the client
+
+Bindings declare what the Function needs. Provide the layer that
+implements the container client at the end of the Function:
+
+```diff lang="typescript"
+// src/Api.ts
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    // ... container, binding, fetch ...
+-  }),
++  }).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp)),
+) {}
+```
+
+Every binding has a matching `Http` layer: `BlobContainerReadWrite` →
+`BlobContainerReadWriteHttp`. Forget one and the type error names it.
+
+## Add the Function to the Stack
+
+Yield `Api` in the Stack and return its URL:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
++import Api from "./src/Api.ts";
+import { Data, Files } from "./src/Files.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Azure.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
++    const api = yield* Api;
+    const data = yield* Data;
+    const files = yield* Files;
+
+    return {
++      url: api.url,
+      resourceGroup: data.resourceGroup,
+      storageAccount: data.storageAccountName,
+      container: files.containerName,
+    };
+  }),
+);
+```
+
+## Deploy
+
+<PackageManagers run="alchemy deploy" />
+
+<Terminal content={`[u]Plan[/u]: [g]4 to create[/g]
+
+[g]+[/g] [b]Api[/b] [d](Azure.Functions.Function)[/d]
+[g]+[/g] [b]Api/Plan[/b] [d](Azure.Web.AppServicePlan)[/d]
+[g]+[/g] [b]Api/Storage[/b] [d](Azure.Storage.StorageAccount)[/d]
+[g]+[/g] [b]Api/Releases[/b] [d](Azure.Storage.BlobContainer)[/d]
+[d]•[/d] [b]DefaultResourceGroup[/b] [d](Azure.Resources.ResourceGroup)[/d]
+[d]•[/d] [b]Data[/b] [d](Azure.Storage.StorageAccount)[/d]
+[d]•[/d] [b]Files[/b] [d](Azure.Storage.BlobContainer)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]Api/Plan[/b] [d](Azure.Web.AppServicePlan)[/d] [g]created[/g]
+[g]✓[/g] [b]Api/Storage[/b] [d](Azure.Storage.StorageAccount)[/d] [g]created[/g]
+[g]✓[/g] [b]Api/Releases[/b] [d](Azure.Storage.BlobContainer)[/d] [g]created[/g]
+[g]✓[/g] [b]Api[/b] [d](Azure.Functions.Function)[/d] [g]created[/g]
+{
+[s2]url: "https://myapp-live-sam-api-a1b2c3.azurewebsites.net",
+[s2]resourceGroup: "MyApp-live_sam",
+[s2]storageAccount: "myapplivesamdataa1b2c3",
+[s2]container: "myapp-live-sam-files-a1b2c3",
+}`} />
+
+Alchemy creates the Flex Consumption plan, a storage account for the
+Functions host, and the function app with a managed identity. It
+assigns the identity its role on `Files` and deploys the bundle. The
+first deploy takes a few minutes. Later deploys only upload code when
+the bundle changes.
+
+## Try it out
+
+```sh
+curl -X PUT "$URL/files/hello.txt" -H "content-type: text/plain" -d 'Hello, world!'
+# → {"key":"hello.txt","etag":"\"0x8DC…\""}
+
+curl "$URL/files/hello.txt"
+# → Hello, world!
+```
+
+If the first request answers 502, the role assignment is still on its
+way. Try again in a minute.
+
+## Recap
+
+You now have:
+
+- An Azure Function with GET and PUT routes on a public URL
+- A blob container bound to the Function, with the role assigned from
+  the binding
+- Stack outputs showing the Function's URL
+
+In [Part 3](/azure/tutorial/part-3), you write tests that deploy the
+Stack and call the Function over HTTP.
+
+:::tip[Want to build something now?]
+Skip ahead to [Storage queues](/azure/messaging/storage-queues) to send
+work from this Function to a second one, or to
+[Cosmos DB](/azure/data/cosmos-db), and come back for testing, stages,
+and CI/CD later.
+:::

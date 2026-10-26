@@ -160,11 +160,27 @@ const site = yield* Azure.Website.StaticSite("Blog", {
 ```
 
 Without `dev`, the site still builds and a local static server serves
-`outdir`. Pipe the site through `Alchemy.remote()` to deploy to Azure
-during dev.
+`outdir`. That server comes from `@alchemy.run/frontend-frameworks`, so
+install it first:
+
+```sh
+bun add -d @alchemy.run/frontend-frameworks
+```
+
+Pipe the site through `Alchemy.remote()` to deploy to Azure during dev:
+
+```typescript
+const site = yield* Azure.Website.StaticSite("Blog", {
+  command: "hugo --minify",
+  outdir: "public",
+}).pipe(Alchemy.remote());
+```
 
 ## Where next
 
+- [`examples/azure-website-static`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-static)
+  — a Vite-built static site with a 404 page, `alchemy dev`, and
+  integration tests
 - [Websites on Azure](/azure/frontend/websites) — the hosting model for
   every framework
 - [Website reference](/providers/azure/website) — every prop and

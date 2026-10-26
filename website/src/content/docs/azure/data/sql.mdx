@@ -1,0 +1,281 @@
+---
+title: Azure SQL
+description: Create an Azure SQL server and database, query it from an Azure Function with @effect/sql-mssql, and apply migrations on the first request.
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const pkgs = "@effect/sql-mssql";
+
+Azure SQL Database is managed SQL Server. A logical server holds the
+endpoint, the sign-in, and the firewall. You pay for the databases on
+it. This page builds a todo API on a Basic database.
+
+<PackageManagers add={pkgs} />
+
+## Create the server and database
+
+```typescript
+// src/resources.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Alchemy from "alchemy";
+import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+
+export const ADMIN_LOGIN = "todoadmin";
+
+export const AdminPassword = Effect.gen(function* () {
+  const random = yield* Alchemy.Random("SqlAdminPassword", { bytes: 24 });
+  return Output.named(
+    Output.map(random.text, (hex) => Redacted.make(`Az!${Redacted.value(hex)}`)),
+    "SQL_ADMIN_PASSWORD",
+  );
+});
+
+export const Sql = Effect.gen(function* () {
+  const password = yield* AdminPassword;
+  return yield* Azure.Sql.Server("Sql", {
+    location: "centralus",
+    administratorLogin: ADMIN_LOGIN,
+    administratorLoginPassword: password,
+  });
+});
+
+export const AllowAzureServices = Effect.gen(function* () {
+  const server = yield* Sql;
+  return yield* Azure.Sql.FirewallRule("AllowAzureServices", {
+    server: server.serverName,
+    startIpAddress: "0.0.0.0",
+    endIpAddress: "0.0.0.0",
+  });
+});
+
+export const Todos = Effect.gen(function* () {
+  const server = yield* Sql;
+  return yield* Azure.Sql.Database("Todos", {
+    server: server.serverName,
+    sku: { name: "Basic" },
+    requestedBackupStorageRedundancy: "Local",
+  });
+});
+```
+
+`Alchemy.Random` generates the password once and keeps it in state. The
+`Az!` prefix meets Azure's rule of three character kinds. `Output.named`
+gives the password a stable app-setting key.
+
+`Basic` (5 DTU, 2 GB) is the cheapest fixed tier. Name a SKU on purpose:
+Azure's default is a provisioned `GP_Gen5_2` database, billed every hour.
+
+:::caution
+Free-trial subscriptions often get `ProvisioningDisabled` for new SQL
+servers in `eastus`. The deploy then ends in a provisioning timeout. Use
+`centralus`.
+:::
+
+## Let the Function connect
+
+A new server accepts no client. The `0.0.0.0` rule lets Azure services
+in, and Flex Consumption Functions need it because they have no fixed
+outbound address. Other clients stay blocked.
+
+## Write the migrations
+
+```typescript
+// src/migrations.ts
+import * as MssqlMigrator from "@effect/sql-mssql/MssqlMigrator";
+import * as Effect from "effect/Effect";
+import * as SqlClient from "effect/sql/SqlClient";
+
+export const migrations = MssqlMigrator.fromRecord({
+  "0001_create_todos": Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`
+      CREATE TABLE todos (
+        id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+        title NVARCHAR(200) NOT NULL,
+        done BIT NOT NULL DEFAULT 0,
+        created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+      )
+    `;
+  }),
+});
+
+export const migrate = MssqlMigrator.run({ loader: migrations });
+```
+
+The migrator records each migration in `effect_sql_migrations` and runs
+only new ones.
+
+## Query from a Function
+
+Yield each value inside the Function. Alchemy stores it as an app
+setting and hands you an Effect that reads it at runtime:
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as MssqlClient from "@effect/sql-mssql/MssqlClient";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
+import * as Semaphore from "effect/Semaphore";
+import * as SqlClient from "effect/sql/SqlClient";
+import { migrate } from "./migrations.ts";
+import { ADMIN_LOGIN, AdminPassword, AllowAzureServices, Sql, Todos } from "./resources.ts";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const server = yield* Sql;
+    const database = yield* Todos;
+    yield* AllowAzureServices;
+
+    const host = yield* server.fullyQualifiedDomainName;
+    const databaseName = yield* database.databaseName;
+    const passwordOutput = yield* AdminPassword;
+    const password = yield* passwordOutput;
+
+    const SqlLive = Layer.unwrap(
+      Effect.gen(function* () {
+        const resolvedHost = yield* host;
+        const resolvedDatabase = yield* databaseName;
+        const resolvedPassword = yield* password;
+        return MssqlClient.layer({
+          server: resolvedHost,
+          database: resolvedDatabase,
+          username: ADMIN_LOGIN,
+          password: resolvedPassword,
+          connectTimeout: "30 seconds",
+        });
+      }),
+    );
+
+    const migrated = yield* Ref.make(false);
+    const lock = yield* Semaphore.make(1);
+    const ensureSchema = lock.withPermit(
+      Effect.gen(function* () {
+        if (yield* Ref.get(migrated)) return;
+        yield* migrate;
+        yield* Ref.set(migrated, true);
+      }),
+    );
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* ensureSchema;
+        const sql = yield* SqlClient.SqlClient;
+        const rows = yield* sql`SELECT TOP 10 title, done FROM todos ORDER BY created_at`;
+        return yield* HttpServerResponse.json(rows);
+      }).pipe(Effect.provide(SqlLive), Effect.orDie),
+    };
+  }),
+) {}
+```
+
+`fetch` provides `SqlLive` per request, so each request opens its own
+pool and closes it after the response. The first request on an instance
+applies pending migrations.
+
+The Function signs in as the SQL administrator. Azure SQL has no Azure
+data-plane binding, so the Function's identity gets no role.
+
+## Register the providers
+
+`Random` brings its own provider:
+
+```typescript
+// alchemy.run.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./src/Api.ts";
+
+export const providers = () => Layer.mergeAll(Azure.providers(), Alchemy.RandomProvider());
+
+export default Alchemy.Stack(
+  "AzureSqlExample",
+  { providers: providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+## Pay only while it runs
+
+A serverless database pauses when idle:
+
+```typescript
+const db = yield* Azure.Sql.Database("Todos", {
+  server: server.serverName,
+  sku: { name: "GP_S_Gen5_2" },
+  minCapacity: 0.5,
+  autoPauseDelay: 60,
+});
+```
+
+`autoPauseDelay` is in minutes. The first query after a pause waits
+while the database resumes. `useFreeLimit: true` puts the database on
+the subscription's free serverless offer.
+
+## Scale a database
+
+Change `sku` and deploy again. Azure scales the database online, and
+connections drop for a few seconds at the switch.
+
+## Sign in with Microsoft Entra ID only
+
+```typescript
+const server = yield* Azure.Sql.Server("Sql", {
+  administrators: {
+    login: "dba-group",
+    sid: "00000000-0000-0000-0000-000000000000",
+    principalType: "Group",
+    azureADOnlyAuthentication: true,
+  },
+});
+```
+
+`sid` is the group's object ID.
+
+## Keep the server off the internet
+
+```typescript
+const server = yield* Azure.Sql.Server("Sql", {
+  administratorLogin: "sqladmin",
+  administratorLoginPassword: password,
+  publicNetworkAccess: "Disabled",
+});
+yield* Azure.Network.PrivateEndpoint("SqlEndpoint", {
+  subnetId: subnet.subnetId,
+  privateLinkServiceConnections: [
+    { privateLinkServiceId: server.serverId, groupIds: ["sqlServer"] },
+  ],
+});
+```
+
+:::caution
+Changing a server's `name`, `location`, or `administratorLogin` replaces
+it. Changing a database's `name`, `collation`, `isLedgerOn`, or
+`useFreeLimit` replaces the database. Alchemy creates a new, empty one
+and deletes the old one with its data.
+:::
+
+## Example
+
+[`azure-sql`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-sql)
+is the complete todo API, with create, update, and delete routes and a
+live test.
+
+## Where next
+
+- [PostgreSQL](/azure/data/postgres) — the same API on Postgres with
+  Drizzle.
+- [Sql reference](/providers/azure/sql#server) — every server and
+  database prop.

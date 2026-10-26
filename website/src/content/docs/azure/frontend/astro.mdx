@@ -1,0 +1,123 @@
+---
+title: Astro
+description: "Deploy an Astro app to Azure with Azure.Website.Astro — on-demand pages on a Flex Consumption Function, assets and prerendered pages on Blob Storage, both behind Azure Front Door."
+sidebar:
+  order: 10
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Azure.Website.Astro` deploys an [Astro](https://astro.build) project to
+Azure. On-demand pages and endpoints run on a Flex Consumption Function,
+which scales to zero. The client directory (`/_astro/*`, `public/` files,
+prerendered pages) goes to the static website endpoint of an Azure Storage
+account. Azure Front Door sends the client directory's paths to Blob
+Storage and every other path to the Function. No Docker image and no App
+Service plan are involved.
+
+## Install
+
+The build integration ships separately. It only runs at deploy time, so a
+dev dependency is enough:
+
+<PackageManagers dev={devDeps} />
+
+## Configure Astro
+
+Your `astro.config.*` loads natively: integrations and Vite plugins work as
+they do outside Alchemy. Do not declare an `adapter`. The
+`@alchemy.run/frontend-frameworks/astro/azure` target injects its own and
+fails the build with an actionable error if your config sets one.
+
+## Deploy the site
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Azure.Website.Astro("Website", { location: "eastus" });
+    return { url: site.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `site.url` is the Front Door endpoint,
+`https://{endpoint}.z01.azurefd.net`. A new endpoint takes 10-20 minutes to
+serve everywhere. Pick a `location` that offers Flex Consumption.
+
+Pages render on demand by default. A page with
+`export const prerender = true` is built into the client directory and
+served from Blob Storage at its directory path (`/about/`).
+
+## Pass environment variables
+
+```diff lang="typescript"
+-const site = yield* Azure.Website.Astro("Website", { location: "eastus" });
++const site = yield* Azure.Website.Astro("Website", {
++  location: "eastus",
++  env: { GREETING: "Hello from Azure!" },
++});
+```
+
+The values are set on `process.env` for the build and become app settings
+of the Function. An on-demand page reads them from `process.env.GREETING`.
+
+## Build a static site
+
+```typescript
+const site = yield* Azure.Website.Astro("Docs", {
+  astro: { output: "static" },
+  assets: { notFoundHandling: "404-page" },
+});
+```
+
+`output: "static"` prerenders every page and uploads the client directory
+only. No Function is created. `frontDoor: false` serves a static build
+straight from the storage endpoint.
+
+## Size the Function
+
+```typescript
+const site = yield* Azure.Website.Astro("Website", {
+  instanceMemoryMB: 4096,
+  maximumInstanceCount: 40,
+});
+```
+
+## Share a Front Door profile
+
+```typescript
+const profile = yield* Azure.Cdn.Profile("Edge");
+const web = yield* Azure.Website.Astro("Website", { frontDoor: { profile } });
+const docs = yield* Azure.Website.Astro("Docs", {
+  rootDir: "./docs",
+  astro: { output: "static" },
+  frontDoor: { profile },
+});
+```
+
+Each profile bills a monthly base fee, so share one across sites. See
+[Websites](/azure/frontend/websites) for caching, purges, and the other
+shared settings.
+
+## Local development
+
+`alchemy dev` runs Astro's own dev server with hot reload and creates
+nothing in Azure. Wrap the site in `Alchemy.remote()` to deploy it for real
+during dev.
+
+See the [`azure-website-astro`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-astro)
+example.
+
+## Where next
+
+- [Websites](/azure/frontend/websites) — the settings every site shares.
+- [Website reference](/providers/azure/website#astro) — every prop.

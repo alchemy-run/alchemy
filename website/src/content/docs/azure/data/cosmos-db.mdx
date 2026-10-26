@@ -1,0 +1,287 @@
+---
+title: Cosmos DB
+description: Create a serverless Cosmos DB for NoSQL account, read and write documents from an Azure Function with Read, Write, and ReadWrite container bindings, and react to the change feed.
+---
+
+Cosmos DB for NoSQL stores JSON documents in containers, partitioned by
+a key you pick. A serverless account bills per request and costs nothing
+while idle. Declare an account, a database, and a container, then bind
+the container to your Function.
+
+## Create a container
+
+```typescript
+// src/resources.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export const Account = Azure.CosmosDB.DatabaseAccount("Account", {
+  location: "centralus",
+  capabilities: ["EnableServerless"],
+});
+
+export const Database = Effect.gen(function* () {
+  const account = yield* Account;
+  return yield* Azure.CosmosDB.SqlDatabase("Database", { account: account.accountName });
+});
+
+export const Todos = Effect.gen(function* () {
+  const account = yield* Account;
+  const database = yield* Database;
+  return yield* Azure.CosmosDB.SqlContainer("Todos", {
+    account: account.accountName,
+    database: database.databaseName,
+    partitionKey: { paths: ["/owner"] },
+  });
+});
+```
+
+Every query and point read names a partition key value, so pick the
+field you look documents up by. A serverless account in `centralus`
+takes about a minute to create. Busy regions have taken 25 minutes or
+more.
+
+:::caution
+Changing `partitionKey` replaces the container. Alchemy creates a new,
+empty container and deletes the old one with its documents.
+:::
+
+## Bind it to a Function
+
+Ask for the access you need:
+
+| Binding | Methods | Cosmos DB data role on the container |
+| --- | --- | --- |
+| `SqlContainerRead` | `get`, `query`, `list` | Cosmos DB Built-in Data Reader |
+| `SqlContainerWrite` | `create`, `upsert`, `replace`, `patch`, `delete` | custom: exactly those actions |
+| `SqlContainerReadWrite` | all of the above | custom: exactly those actions |
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Todos } from "./resources.ts";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const todosContainer = yield* Todos;
+    const todos = yield* Azure.CosmosDB.SqlContainerReadWrite(todosContainer);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://api");
+        const owner = url.pathname.split("/").filter(Boolean)[1] ?? "anonymous";
+
+        if (request.method === "POST") {
+          const id = yield* Effect.sync(() => crypto.randomUUID());
+          const todo = { id, owner, title: "ship it", done: false };
+          const created = yield* todos.create({ document: todo, partitionKey: [owner] });
+          return yield* HttpServerResponse.json({ etag: created.etag }, { status: 201 });
+        }
+
+        const page = yield* todos.query({
+          query: "SELECT * FROM c WHERE c.owner = @owner ORDER BY c._ts",
+          parameters: [{ name: "@owner", value: owner }],
+          partitionKey: [owner],
+        });
+        return yield* HttpServerResponse.json({ todos: page.Documents ?? [] });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Azure.CosmosDB.SqlContainerReadWriteHttp)),
+) {}
+```
+
+Cosmos DB data roles are Cosmos DB role assignments, separate from Azure
+RBAC (role-based access control). The binding assigns one to the
+Function's managed identity, on this container only.
+
+## Create a document
+
+```typescript
+const todo = { id: crypto.randomUUID(), owner: "sam", title: "ship", done: false };
+const created = yield* todos.create({ document: todo, partitionKey: [todo.owner] });
+```
+
+Every document needs an `id`, unique within its partition.
+
+## Read a document
+
+`get` fails with `CosmosNotFound` when the document is missing:
+
+```typescript
+const result = yield* todos.get({ documentId: id, partitionKey: [owner] }).pipe(
+  Effect.catchTag("CosmosNotFound", () => Effect.succeed(undefined)),
+);
+```
+
+The result holds the `document` and its `etag`.
+
+## Query a partition
+
+```typescript
+const page = yield* todos.query({
+  query: "SELECT * FROM c WHERE c.owner = @owner ORDER BY c._ts",
+  parameters: [{ name: "@owner", value: owner }],
+  partitionKey: [owner],
+});
+const documents = page.Documents ?? [];
+```
+
+A query returns one page. Pass the response's `continuation` for the next.
+
+## Update some fields
+
+`patch` changes only the paths you name. With `ifMatch`, the write only
+applies to that version:
+
+```typescript
+yield* todos
+  .patch({
+    documentId: id,
+    partitionKey: [owner],
+    operations: [{ op: "set", path: "/done", value: true }],
+    ifMatch: etag,
+  })
+  .pipe(
+    Effect.catchTag("CosmosPreconditionFailed", () => Effect.log("changed since read")),
+  );
+```
+
+## Upsert, replace, and delete
+
+```typescript
+yield* todos.upsert({ document: todo, partitionKey: [todo.owner] });
+yield* todos.replace({ documentId: todo.id, document: { ...todo, done: true }, partitionKey: [todo.owner] });
+yield* todos.delete({ documentId: todo.id, partitionKey: [todo.owner] });
+```
+
+## List a partition
+
+```typescript
+const first = yield* todos.list({ partitionKey: ["sam"], maxItemCount: 100 });
+const next = first.continuation
+  ? yield* todos.list({ partitionKey: ["sam"], continuation: first.continuation })
+  : undefined;
+```
+
+## React to changes
+
+`consumeChangeFeed` runs a handler on each batch of created or updated
+documents. It keeps its checkpoints in a lease container partitioned by
+`/id`:
+
+```typescript
+// src/Worker.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Account, Database, Todos } from "./resources.ts";
+
+export const Leases = Effect.gen(function* () {
+  const account = yield* Account;
+  const database = yield* Database;
+  return yield* Azure.CosmosDB.SqlContainer("Leases", {
+    account: account.accountName,
+    database: database.databaseName,
+    partitionKey: { paths: ["/id"] },
+  });
+});
+
+export default class Worker extends Azure.Functions.Function<Worker>()(
+  "Worker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const leases = yield* Leases;
+
+    yield* Azure.CosmosDB.consumeChangeFeed(
+      Todos,
+      { leases, startFromBeginning: true },
+      (documents) => Effect.log(`${documents.length} todos changed`),
+    );
+
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("ok")),
+    };
+  }).pipe(Effect.provide(Azure.Functions.CosmosDBChangeFeedEventSource)),
+) {}
+```
+
+The trigger grants Cosmos DB Built-in Data Contributor on the database,
+because it also writes the leases. A batch holds the latest version of
+each changed document. Several updates can arrive as one version, and
+deletes are not in the feed.
+
+## Start from the beginning
+
+The trigger starts once its data role applies, a few minutes after the
+first deploy. `startFromBeginning: true` replays documents written
+before that, so none are skipped.
+
+## Expire documents and trim the index
+
+```typescript
+const sessions = yield* Azure.CosmosDB.SqlContainer("sessions", {
+  account: account.accountName,
+  database: database.databaseName,
+  partitionKey: { paths: ["/userId"] },
+  defaultTtl: 86400,
+  indexingPolicy: {
+    indexingMode: "consistent",
+    includedPaths: [{ path: "/userId/?" }],
+    excludedPaths: [{ path: "/*" }],
+  },
+});
+```
+
+`defaultTtl` is in seconds. Index only the paths you filter on to cut
+write cost.
+
+## Enforce unique values
+
+```typescript
+const users = yield* Azure.CosmosDB.SqlContainer("users", {
+  account: account.accountName,
+  database: database.databaseName,
+  partitionKey: { paths: ["/tenantId"] },
+  uniqueKeys: [{ paths: ["/email"] }],
+});
+```
+
+A unique key applies within each partition. Changing `uniqueKeys`
+replaces the container.
+
+## Turn off account keys
+
+```typescript
+const account = yield* Azure.CosmosDB.DatabaseAccount("db", {
+  capabilities: ["EnableServerless"],
+  disableLocalAuth: true,
+  disableKeyBasedMetadataWriteAccess: true,
+});
+```
+
+The bindings use Microsoft Entra ID, so they keep working.
+
+## The first requests after a deploy
+
+Cosmos DB data roles can take about 6 minutes to apply. Until then,
+calls fail with `CosmosRbacPermissionDenied`. Retry the first call in
+tests.
+
+## Example
+
+[`azure-cosmos`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-cosmos)
+is a todo API with optimistic concurrency, and a worker that records
+each change from the change feed.
+
+## Where next
+
+- [Azure Functions](/azure/compute/functions) — the runtime behind these
+  examples.
+- [CosmosDB reference](/providers/azure/cosmosdb#sqlcontainer) — every
+  prop and attribute.

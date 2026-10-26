@@ -1,0 +1,239 @@
+---
+title: "Part 1: Your First Stack"
+description: Install Alchemy, create a Stack with an Azure storage account and a blob container, and deploy it to your subscription.
+sidebar:
+  order: 1
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const pkgs = `alchemy@latest @alchemy.run/azure effect @effect/platform-bun @effect/platform-node`;
+
+In this part you install Alchemy, create a Stack with a storage account
+and a blob container, and deploy it to your Azure subscription.
+
+## Prerequisites
+
+- [Bun](https://bun.sh) or Node.js 24.11.1+
+- An Azure subscription and a service principal with **Owner** on it.
+  See [Setup](/azure/setup).
+
+## Create a project
+
+Start with an empty directory and a `package.json`:
+
+<PackageManagers init dir="my-app" />
+
+## Install dependencies
+
+Install Alchemy, the Azure provider, and Effect:
+
+<PackageManagers add={pkgs} />
+
+## Create the Stack
+
+Every Alchemy program starts with a `Stack`. Create `alchemy.run.ts`:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Azure.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    // resources go here next
+  }),
+);
+```
+
+The first argument, `"MyApp"`, names the Stack. Alchemy uses it as a
+prefix when it generates names for your resources.
+
+`Azure.providers()` registers every Azure resource.
+
+## Where state lives
+
+`state: Alchemy.localState()` keeps deploy state in `.alchemy/` next to
+your code. Add it to `.gitignore`:
+
+```sh
+echo ".alchemy/" >> .gitignore
+```
+
+Azure has no state store of its own yet. In
+[Part 5](/azure/tutorial/part-5) you move state to a shared store so CI
+can use it.
+
+## Connect your subscription
+
+Point Alchemy at your subscription once:
+
+```sh
+bun alchemy profile edit --add Azure
+```
+
+Enter the tenant ID, client ID, client secret, and subscription ID of
+your service principal, and pick a default location such as `eastus`.
+They are saved to your `default` [profile](/environments/profiles).
+
+## Declare a storage account
+
+A storage account holds blobs, queues, and tables. Create
+`src/Files.ts`:
+
+```typescript
+// src/Files.ts
+import * as Azure from "@alchemy.run/azure";
+
+/** The storage account that holds the uploaded files. */
+export const Data = Azure.Storage.StorageAccount("Data");
+```
+
+`Data` is the logical ID. Alchemy generates a globally unique account
+name from the Stack, stage, and logical ID. The account is HTTPS-only,
+requires TLS 1.2, and blocks anonymous blob access.
+
+## Add a blob container
+
+Declare a container in the account:
+
+```diff lang="typescript"
+// src/Files.ts
+import * as Azure from "@alchemy.run/azure";
++import * as Effect from "effect/Effect";
+
+/** The storage account that holds the uploaded files. */
+export const Data = Azure.Storage.StorageAccount("Data");
++
++/** The blob container the Function reads and writes. */
++export const Files = Effect.gen(function* () {
++  const account = yield* Data;
++  return yield* Azure.Storage.BlobContainer("Files", {
++    storageAccount: account.storageAccountName,
++  });
++});
+```
+
+`Files` yields `Data` for the account name. Yielding `Data` again
+anywhere else gives you the same account.
+
+## Add them to the Stack
+
+Yield both declarations in the Stack:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
++import { Data, Files } from "./src/Files.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Azure.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+-    // resources go here next
++    const data = yield* Data;
++    const files = yield* Files;
+  }),
+);
+```
+
+## Return Stack outputs
+
+Return the values you want to see after a deploy:
+
+```diff lang="typescript"
+// alchemy.run.ts
+Effect.gen(function* () {
+  const data = yield* Data;
+  const files = yield* Files;
++
++  return {
++    resourceGroup: data.resourceGroup,
++    storageAccount: data.storageAccountName,
++    container: files.containerName,
++  };
+}),
+```
+
+Each value is an Output. It resolves during the deploy and prints with
+the rest of the outputs.
+
+## Deploy
+
+<PackageManagers run="alchemy deploy" />
+
+<Terminal content={`[u]Plan[/u]: [g]3 to create[/g]
+[g]+[/g] [b]DefaultResourceGroup[/b] [d](Azure.Resources.ResourceGroup)[/d]
+[g]+[/g] [b]Data[/b] [d](Azure.Storage.StorageAccount)[/d]
+[g]+[/g] [b]Files[/b] [d](Azure.Storage.BlobContainer)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]DefaultResourceGroup[/b] [d](Azure.Resources.ResourceGroup)[/d] [g]created[/g]
+[g]✓[/g] [b]Data[/b] [d](Azure.Storage.StorageAccount)[/d] [g]created[/g]
+[g]✓[/g] [b]Files[/b] [d](Azure.Storage.BlobContainer)[/d] [g]created[/g]
+{
+[s2]resourceGroup: "MyApp-live_sam",
+[s2]storageAccount: "myapplivesamdataa1b2c3",
+[s2]container: "myapp-live-sam-files-a1b2c3",
+}`} />
+
+Alchemy shows the plan, asks for confirmation, creates the resources,
+and prints the outputs.
+
+`DefaultResourceGroup` is the Stack's resource group, `MyApp-live_sam`.
+Every resource that doesn't name a group goes into it.
+
+## Verify it worked
+
+The account shows up under **Storage accounts** in the Azure portal,
+or with:
+
+```sh
+az storage account list --resource-group MyApp-live_sam --query "[].name"
+```
+
+Deploy again. Nothing changed, so there is nothing to do:
+
+<Terminal content={`[u]Plan[/u]: [d]no changes[/d]
+
+{
+[s2]resourceGroup: "MyApp-live_sam",
+[s2]storageAccount: "myapplivesamdataa1b2c3",
+[s2]container: "myapp-live-sam-files-a1b2c3",
+}`} />
+
+## Destroy (optional)
+
+`destroy` deletes everything the Stack created, the resource group
+last:
+
+```sh
+bun alchemy destroy
+```
+
+Deploy again afterwards if you try it. Part 2 builds on the container.
+
+## Recap
+
+You now have:
+
+- An `alchemy.run.ts` with a Stack
+- A storage account and a blob container in `src/Files.ts`
+- A resource group for the Stack, created for you
+- Stack outputs showing the account and container names
+
+In [Part 2](/azure/tutorial/part-2), you add an Azure Function that
+reads and writes files in this container.

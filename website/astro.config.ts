@@ -1627,17 +1627,79 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/azure" },
             { label: "Setup", link: "/azure/setup" },
+            { label: "Local development", link: "/azure/local-development" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "azure/tutorial" } }],
+            },
             {
               label: "Compute",
-              items: [{ label: "Effect workflows", link: "/azure/compute/effect-workflows" }],
+              items: [
+                { label: "Choosing a runtime", link: "/azure/compute/choosing-a-runtime" },
+                { label: "Azure Functions", link: "/azure/compute/functions" },
+                { label: "Container Apps", link: "/azure/compute/container-apps" },
+                { label: "AKS", link: "/azure/compute/aks" },
+                { label: "Virtual machines", link: "/azure/compute/vms" },
+                { label: "Effect workflows", link: "/azure/compute/effect-workflows" },
+              ],
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 { label: "Overview", link: "/azure/frontend/websites" },
+                { label: "Astro", link: "/azure/frontend/astro" },
+                { label: "Foldkit", link: "/azure/frontend/foldkit" },
+                { label: "SolidStart", link: "/azure/frontend/solidstart" },
+                { label: "SvelteKit", link: "/azure/frontend/sveltekit" },
                 { label: "Vite", link: "/azure/frontend/vite" },
                 { label: "Static sites", link: "/azure/frontend/static-site" },
+                { label: "Octane", link: "/azure/frontend/octane" },
+                { label: "React Router", link: "/azure/frontend/react-router" },
+                { label: "Vocs", link: "/azure/frontend/vocs" },
+                { label: "Waku", link: "/azure/frontend/waku" },
+                { label: "Next.js", link: "/azure/frontend/nextjs" },
+                { label: "Nuxt", link: "/azure/frontend/nuxt" },
+                { label: "TanStack Start", link: "/azure/frontend/tanstack-start" },
+                { label: "Vinext", link: "/azure/frontend/vinext" },
+              ]),
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "Storage", link: "/azure/data/storage" },
+                { label: "Cosmos DB", link: "/azure/data/cosmos-db" },
+                { label: "PostgreSQL", link: "/azure/data/postgres" },
+                { label: "SQL Database", link: "/azure/data/sql" },
+                { label: "Redis", link: "/azure/data/redis" },
               ],
+            },
+            {
+              label: "AI",
+              items: [{ label: "Azure OpenAI", link: "/azure/ai/openai" }],
+            },
+            {
+              label: "Messaging & events",
+              items: [
+                { label: "Storage queues", link: "/azure/messaging/storage-queues" },
+                { label: "Service Bus", link: "/azure/messaging/service-bus" },
+                { label: "Event Hubs", link: "/azure/messaging/event-hubs" },
+                { label: "Event Grid", link: "/azure/messaging/event-grid" },
+              ],
+            },
+            {
+              label: "Security & identity",
+              items: [
+                { label: "Identity & bindings", link: "/azure/security/identity" },
+                { label: "Key Vault", link: "/azure/security/key-vault" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [{ label: "Azure Monitor", link: "/azure/observability/monitor" }],
+            },
+            {
+              label: "Networking",
+              items: [{ label: "Virtual networks", link: "/azure/networking" }],
             },
             providerResourcesEntry("Azure"),
           ],

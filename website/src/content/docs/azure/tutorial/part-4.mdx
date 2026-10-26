@@ -1,0 +1,167 @@
+---
+title: "Part 4: Stages"
+description: Deploy isolated dev, staging, and prod copies of your stack with --stage, each in its own resource group, and tune the Function per stage.
+sidebar:
+  order: 4
+---
+
+import Terminal from "../../../../components/Terminal.astro";
+
+In [Part 3](/azure/tutorial/part-3) you tested a deployed Stack. So far
+everything lands in one environment. **Stages** are separate copies of
+the same Stack: one per developer, per environment, and (in
+[Part 5](/azure/tutorial/part-5)) per pull request.
+
+## The default stage
+
+Without `--stage`, Alchemy deploys to `live_$USER`:
+
+```sh
+$ whoami
+sam
+
+$ bun alchemy deploy
+# deploys to stage `live_sam`
+```
+
+Every developer gets a personal copy with no setup. The stage comes
+from, in order:
+
+1. the `--stage <name>` flag
+2. the `ALCHEMY_STAGE` environment variable
+3. `live_${USER}` (or `live_${USERNAME}` on Windows)
+
+## Deploy a second stage
+
+```sh
+bun alchemy deploy --stage staging
+```
+
+<Terminal content={`[u]Plan[/u]: [g]7 to create[/g]
+[g]+[/g] [b]DefaultResourceGroup[/b] [d](Azure.Resources.ResourceGroup)[/d]
+[g]+[/g] [b]Data[/b] [d](Azure.Storage.StorageAccount)[/d]
+[g]+[/g] [b]Files[/b] [d](Azure.Storage.BlobContainer)[/d]
+[g]+[/g] [b]Api[/b] [d](Azure.Functions.Function)[/d]
+[g]+[/g] [b]Api/Plan[/b] [d](Azure.Web.AppServicePlan)[/d]
+[g]+[/g] [b]Api/Storage[/b] [d](Azure.Storage.StorageAccount)[/d]
+[g]+[/g] [b]Api/Releases[/b] [d](Azure.Storage.BlobContainer)[/d]
+
+Proceed?
+◉ Yes ○ No
+[g]✓[/g] [b]DefaultResourceGroup[/b] [d](Azure.Resources.ResourceGroup)[/d] [g]created[/g]
+[g]✓[/g] [b]Data[/b] [d](Azure.Storage.StorageAccount)[/d] [g]created[/g]
+[g]✓[/g] [b]Files[/b] [d](Azure.Storage.BlobContainer)[/d] [g]created[/g]
+[g]✓[/g] [b]Api/Plan[/b] [d](Azure.Web.AppServicePlan)[/d] [g]created[/g]
+[g]✓[/g] [b]Api/Storage[/b] [d](Azure.Storage.StorageAccount)[/d] [g]created[/g]
+[g]✓[/g] [b]Api/Releases[/b] [d](Azure.Storage.BlobContainer)[/d] [g]created[/g]
+[g]✓[/g] [b]Api[/b] [d](Azure.Functions.Function)[/d] [g]created[/g]
+{
+[s2]url: "https://myapp-staging-api-d4e5f6.azurewebsites.net",
+[s2]resourceGroup: "MyApp-staging",
+[s2]storageAccount: "myappstagingdatad4e5f6",
+[s2]container: "myapp-staging-files-d4e5f6",
+}`} />
+
+`staging` gets its own resource group, `MyApp-staging`, with its own
+storage, function app, and URL. `live_sam` is untouched.
+
+## How stages stay apart
+
+Each stage has its own state, its own resource names, and its own
+resource group. List the groups to see them side by side:
+
+```sh
+az group list --query "[?starts_with(name, 'MyApp-')].name"
+# → ["MyApp-live_sam", "MyApp-staging"]
+```
+
+Deploying or destroying one stage never touches another:
+
+```sh
+bun alchemy deploy --stage prod
+bun alchemy deploy --stage pr-42
+bun alchemy destroy --stage pr-42   # only removes pr-42
+```
+
+Stage names must match `[a-z0-9][-_a-z0-9]*`.
+
+## Configure per stage
+
+Give prod bigger instances. `Stack.useSync` gives the props the current
+stage:
+
+```diff lang="typescript"
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
++import { Stack } from "alchemy/Stack";
+import * as Effect from "effect/Effect";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+-  { main: import.meta.url },
++  Stack.useSync((stack) => ({
++    main: import.meta.url,
++    instanceMemoryMB: stack.stage === "prod" ? 4096 : 2048,
++  })),
+  Effect.gen(function* () {
+    // ...
+  }),
+) {}
+```
+
+`alchemy deploy --stage prod` runs each instance with 4,096 MB of
+memory and the CPU that comes with it. Every other stage keeps the
+2,048 MB default. Changing the memory updates the function app in
+place.
+
+## Destroy a stage
+
+```sh
+bun alchemy destroy --stage staging
+```
+
+The plan lists everything in `staging` for deletion, the resource group
+`MyApp-staging` last. The role assignment the binding made goes with
+the function app.
+
+## Stages in tests
+
+Tests default to `test_$USER`. Set the stage per file so parallel CI
+runs don't collide:
+
+```diff lang="typescript"
+// test/integ.test.ts
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Azure.providers(),
+  state: Alchemy.localState(),
++  stage: `pr-${process.env.PR_NUMBER}`,
+});
+```
+
+See [Test harness → stage](/testing/test-harness#stage) for the
+per-call form.
+
+## Stages and subscriptions
+
+Stages separate **what** is deployed. [Profiles](/environments/profiles)
+choose **where**: which subscription and service principal. Pair a
+`prod` stage with a `prod` profile that points at a separate
+subscription:
+
+```sh
+bun alchemy deploy --stage prod --profile prod
+bun alchemy deploy --stage pr-42 --profile default
+```
+
+## Recap
+
+You now have:
+
+- A personal `live_<user>` stage for every plain `alchemy deploy`
+- A `staging` stage in its own resource group, deployed and destroyed
+  with `--stage`
+- Bigger instances in prod only, via `Stack.useSync`
+- Tests pinned to their own stage
+
+In [Part 5](/azure/tutorial/part-5), GitHub Actions deploys `prod` on
+every push to `main` and a `pr-<n>` preview for every pull request.

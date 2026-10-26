@@ -1,89 +1,197 @@
 ---
 title: Websites
-description: Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Vocs, or any static build to Azure — static assets on Blob Storage behind Azure Front Door, server rendering on Azure Functions.
+description: Deploy Vite, Astro, Next.js, Nuxt, SvelteKit, TanStack Start, React Router, SolidStart, Waku, vinext, Octane, Foldkit, Vocs, or any static build to Azure with Azure.Website — assets on Blob Storage, server rendering on Azure Functions, both behind Azure Front Door.
 sidebar:
   label: Overview
   order: 1
 ---
 
-Alchemy deploys frontends to Azure with a family of `Azure.Website`
-resources. Each one builds your project through
-`@alchemy.run/frontend-frameworks/<framework>`, uploads the static assets to
-Blob Storage, and serves the site through Azure Front Door. A
-server-rendered build also runs on an Azure Functions app (Flex
-Consumption), which scales to zero. Your framework's own config file
-(`vite.config.ts`, `astro.config.*`, `nuxt.config.ts`, ...) loads natively.
-No Docker image, App Service plan, or container is involved.
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
-| Build output | Origin behind Front Door | URL |
-| --- | --- | --- |
-| Static assets (Vite, Foldkit SPA or `output: "static"`, Astro `output: "static"`, `StaticSite`) | Storage account static website (`$web` container) | `https://{endpoint}.z01.azurefd.net` |
-| Server (SSR frameworks, Foldkit `output: "server"`) | `/*` → Flex Consumption Function; the client directory's top-level paths → Blob Storage | `https://{endpoint}.z01.azurefd.net` |
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Azure.Website` deploys a frontend to Azure. Each resource runs your
+framework's build, uploads the static assets to Blob Storage, and serves
+the site through Azure Front Door. A server-rendered build also runs on a
+Flex Consumption Function, which scales to zero. There is no Docker image
+and no App Service plan. Your framework's own config file loads as-is.
 
 ```typescript
+// alchemy.run.ts
 import * as Azure from "@alchemy.run/azure";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
 
-const site = yield* Azure.Website.Vite("Web", { location: "eastus" });
+export default Alchemy.Stack(
+  "MySite",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Azure.Website.Astro("Website", { location: "eastus" });
+    return { url: site.url };
+  }),
+);
 ```
 
-## Assets and caching
+Run `alchemy deploy`. `site.url` is the Front Door endpoint,
+`https://{endpoint}.z01.azurefd.net`. A new endpoint takes 10-20 minutes
+to serve everywhere.
 
-Alchemy uploads only new and changed files (by MD5) and deletes removed
-files. It uploads with the deployer's Microsoft Entra token and grants the
-deployer **Storage Blob Data Contributor** on the storage account; no
-account keys or SAS tokens are used. Each file carries a `Cache-Control`
-header:
+## Install
 
-- HTML: `max-age=0,no-cache,no-store,must-revalidate`, so a deploy is
-  visible at once.
-- Every other file: `max-age=31536000,public,immutable`.
+The build integration ships separately. It only runs at deploy time, so
+a dev dependency is enough:
 
-Front Door caches what the headers allow. After an upload, Alchemy purges
-the paths of replaced and deleted files from the endpoint (`/*` when more
-than 100 paths changed). The purge runs on the edge after the deploy
-returns.
+<PackageManagers dev={devDeps} />
 
-## Front Door
+## Pick your framework
 
-Front Door Standard is on by default. It answers a single-page app's deep
-link (for example `/counter/42`) with the app shell and a `200` status. A
-new endpoint takes 10-20 minutes to serve everywhere, and each profile
-bills a monthly base fee.
+| Framework | Resource | Guide |
+| --- | --- | --- |
+| Any Vite app | `Vite` | [Vite](/azure/frontend/vite) |
+| Foldkit | `Foldkit` | [Foldkit](/azure/frontend/foldkit) |
+| Astro | `Astro` | [Astro](/azure/frontend/astro) |
+| Next.js | `Nextjs` | [Next.js](/azure/frontend/nextjs) |
+| vinext | `Vinext` | [Vinext](/azure/frontend/vinext) |
+| Nuxt | `Nuxt` | [Nuxt](/azure/frontend/nuxt) |
+| SvelteKit | `SvelteKit` | [SvelteKit](/azure/frontend/sveltekit) |
+| TanStack Start | `TanStackStart` | [TanStack Start](/azure/frontend/tanstack-start) |
+| React Router | `ReactRouter` | [React Router](/azure/frontend/react-router) |
+| SolidStart | `SolidStart` | [SolidStart](/azure/frontend/solidstart) |
+| Waku | `Waku` | [Waku](/azure/frontend/waku) |
+| Octane | `Octane` | [Octane](/azure/frontend/octane) |
+| Vocs | `Vocs` | [Vocs](/azure/frontend/vocs) |
+| Hugo, Zola, any static generator | `StaticSite` | [Static sites](/azure/frontend/static-site) |
 
-Share one profile across sites:
+Use the resource named after your framework. Use `Vite` for a
+client-only app. Use `StaticSite` for any build command that writes a
+directory of files.
+
+## Where each request goes
+
+| Path | Origin behind Front Door |
+| --- | --- |
+| The client directory's top-level entries (`/assets/*`, `/favicon.ico`, …) | the storage account's static website (`$web` container) |
+| Every other path, for a server build | the Flex Consumption Function |
+| Every other path, for an assets-only build | the static website; a single-page app's deep links get the app shell with `200` |
+
+## Pass environment variables
+
+`env` reaches the build, the local dev server, and a server build's
+Function as app settings. Values can be Outputs of other resources:
+
+```typescript
+const site = yield* Azure.Website.Nuxt("Website", {
+  env: {
+    GREETING: "Hello from Azure!",
+    API_URL: api.url,
+  },
+});
+```
+
+Server code reads them from `process.env`.
+
+## Size the Function
+
+A server build's Function takes the Flex Consumption settings:
+
+```typescript
+const site = yield* Azure.Website.Nextjs("Website", {
+  location: "eastus",
+  instanceMemoryMB: 512,
+  maximumInstanceCount: 40,
+});
+```
+
+`location` must offer Flex Consumption. The defaults are 2048 MB and
+100 instances.
+
+## Share a Front Door profile
+
+Each Front Door profile bills a monthly base fee. Share one across sites:
 
 ```typescript
 const profile = yield* Azure.Cdn.Profile("Edge");
 const web = yield* Azure.Website.Vite("Web", { frontDoor: { profile } });
+const docs = yield* Azure.Website.Vocs("Docs", { frontDoor: { profile } });
 ```
 
-Serve an assets-only build straight from the storage endpoint with
-`frontDoor: false`. Deep links then answer `404` with the app shell. A
-server build needs Front Door.
+## Skip Front Door
+
+Serve an assets-only build straight from the storage endpoint:
 
 ```typescript
 const preview = yield* Azure.Website.Vite("Preview", { frontDoor: false });
 ```
 
-## Shared infrastructure
+Deep links then answer `404` with the app shell. A server build needs
+Front Door.
 
-Omit `storageAccount` and Alchemy creates a `Standard_LRS` account under
-the site's namespace. The site goes into the stack's resource group unless
-you pass `resourceGroup`. A server build's Function is set with
-`location` (a region that offers Flex Consumption), `instanceMemoryMB`, and
-`maximumInstanceCount`.
+## Caching
 
-## Resources
+Alchemy uploads only new and changed files and deletes removed ones.
+HTML files get `max-age=0,no-cache,no-store,must-revalidate`, so a
+deploy shows at once. Every other file gets
+`max-age=31536000,public,immutable`. After an upload, Alchemy purges the
+replaced and deleted paths from Front Door (`/*` when more than 100
+paths changed).
 
-- [`Vite`](/azure/frontend/vite) — client-only Vite apps.
-- [`StaticSite`](/azure/frontend/static-site) — any build command's
-  output directory (Hugo, Zola, Eleventy).
-- `Foldkit`, `Astro`, `Nextjs`, `Vinext`, `Nuxt`, `ReactRouter`,
-  `SolidStart`, `SvelteKit`, `TanStackStart`, `Waku`, `Octane`, `Vocs` —
-  framework sites.
-- `StaticWebsite` — the building block that publishes a directory to a
-  storage account and purges Front Door.
+Uploads use your deployer's Microsoft Entra token. Alchemy grants the
+deployer **Storage Blob Data Contributor** on the storage account. No
+account keys or SAS tokens are used.
 
-During `alchemy dev` every site runs its framework's own dev server and no
-Azure resources are created. `Alchemy.remote()` opts back into the live
-deployment.
+## Bring your own storage account
+
+Omit `storageAccount` and Alchemy creates a `Standard_LRS` account for
+the site. Pass one to reuse it:
+
+```typescript
+const account = yield* Azure.Storage.StorageAccount("Sites");
+const site = yield* Azure.Website.Vite("Web", { storageAccount: account });
+```
+
+Alchemy owns the account's `$web` container.
+
+## Skip unchanged builds
+
+Alchemy hashes your project's files and skips the build and the upload
+when nothing changed. Limit the hash to the files that matter:
+
+```typescript
+const web = yield* Azure.Website.Vite("Web", {
+  location: "eastus",
+  memo: {
+    include: ["index.html", "src/**", "package.json", "vite.config.ts"],
+  },
+});
+```
+
+## Local development
+
+`alchemy dev` runs your framework's own dev server with hot reload and
+creates nothing in Azure. `site.url` is the local address. Wrap the site
+in `Alchemy.remote()` to deploy it for real during dev. See
+[Local development](/azure/local-development).
+
+## Destroying a site
+
+`alchemy destroy` deletes the site's Function, and the storage account
+and Front Door profile it created. A Front Door profile takes 14-30
+minutes to delete.
+
+## Examples
+
+- [`examples/azure-website-vite`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-vite)
+  — a client-only Vite app.
+- [`examples/azure-website-static`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-static)
+  — any build command's output.
+- [`examples/azure-website-react-router`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-react-router)
+  and [`examples/azure-website-octane`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-octane)
+  — server-rendered sites.
+
+## Where next
+
+- [Vite](/azure/frontend/vite) and [Static sites](/azure/frontend/static-site)
+  — the simplest sites to start with.
+- [Azure Functions](/azure/compute/functions) — the runtime behind a
+  server build.
+- [Website reference](/providers/azure/website) — every prop.

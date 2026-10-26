@@ -1,0 +1,249 @@
+---
+title: Event Hubs
+description: Send events to an Azure event hub from an Azure Function, route them with partition keys, and consume them in batches with a native Event Hubs trigger.
+---
+
+Event Hubs ingests high-volume event streams, such as telemetry and
+logs. Events land in partitions and stay for the retention period. Each
+consumer group reads the stream at its own position.
+
+## Create a namespace and an event hub
+
+```typescript
+// src/resources.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export const Hubs = Azure.EventHub.Namespace("Hubs", { sku: "Standard" });
+
+export const Readings = Effect.gen(function* () {
+  const hubs = yield* Hubs;
+  return yield* Azure.EventHub.EventHub("Readings", {
+    namespace: hubs.namespaceName,
+    partitionCount: 2,
+    messageRetentionInDays: 1,
+  });
+});
+```
+
+A Standard namespace with one throughput unit costs about $0.03 per
+hour. `Basic` has only the `$Default` consumer group. Without
+`partitionCount`, Alchemy creates four partitions.
+
+:::caution
+Changing `partitionCount` on a `Basic` or `Standard` namespace replaces
+the event hub, and so do `name` and `retention.cleanupPolicy`. Alchemy
+creates a new event hub and deletes the old one with every retained
+event.
+:::
+
+## Send events
+
+`Send` returns a client with `send` and `sendBatch`:
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Readings } from "./resources.ts";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const readingsHub = yield* Readings;
+    const readings = yield* Azure.EventHub.Send(readingsHub);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://api");
+        const deviceId = url.searchParams.get("device") ?? "unknown";
+        const body = (yield* request.json.pipe(Effect.orElseSucceed(() => ({})))) as {
+          temperature?: unknown;
+        };
+        const id = yield* Effect.sync(() => crypto.randomUUID());
+        yield* readings.send(
+          { id, deviceId, temperature: body.temperature },
+          { partitionKey: deviceId },
+        );
+        return yield* HttpServerResponse.json({ id, status: "pending" }, { status: 202 });
+      }).pipe(
+        Effect.catchCause((cause) =>
+          HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 503 }),
+        ),
+      ),
+    };
+  }).pipe(Effect.provide(Azure.EventHub.SendHttp)),
+) {}
+```
+
+An object is sent as JSON. The binding grants Azure Event Hubs Data
+Sender to the Function's managed identity, on this event hub only.
+
+## Route by partition key
+
+Events with the same `partitionKey` land in the same partition, in send
+order. Key by device, tenant, or user to keep each one's events in
+order.
+
+## Send a batch
+
+```typescript
+yield* readings.sendBatch(events, { partitionKey: deviceId });
+```
+
+Every event in the batch gets the same options. The whole batch counts
+against the maximum event size and fails with `MessageTooLarge` when it
+is over.
+
+## Send to one partition or as a publisher
+
+```typescript
+yield* readings.sendToPartition("0", { kind: "rebalance" });
+yield* readings.sendAsPublisher(deviceId, { kind: "online" });
+```
+
+`sendToPartition` takes one of the hub's `partitionIds`. `sendAsPublisher`
+needs a `Standard` or higher namespace.
+
+## Consume events
+
+`consumeEvents` adds an Event Hubs trigger to the Function. The host
+reads in batches, one partition at a time:
+
+```typescript
+// src/Worker.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Readings } from "./resources.ts";
+
+export default class Worker extends Azure.Functions.Function<Worker>()(
+  "Worker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    yield* Azure.EventHub.consumeEvents(Readings, (batch) =>
+      Effect.forEach(batch.events, (event, i) =>
+        Effect.log(`#${batch.sequenceNumbers[i]}: ${JSON.stringify(event)}`),
+      ).pipe(Effect.asVoid),
+    );
+
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("ok")),
+    };
+  }).pipe(Effect.provide(Azure.Functions.EventHubEventSource)),
+) {}
+```
+
+`batch.events` holds the bodies. `sequenceNumbers` and
+`enqueuedTimesUtc` line up with them by index. The event source grants
+Azure Event Hubs Data Receiver on this event hub only.
+
+## Handle failures in the handler
+
+The trigger checkpoints each partition after the handler returns,
+whether it succeeded or failed. Event Hubs does not deliver a failed
+batch again. Retry your own writes and log what you could not handle:
+
+```typescript
+yield* Azure.EventHub.consumeEvents(Readings, (batch) =>
+  Effect.forEach(batch.events, (event) =>
+    record(event).pipe(
+      Effect.retry({ schedule: Schedule.spaced("10 seconds"), times: 30 }),
+      Effect.catch((error) => Effect.logError("could not record an event", error)),
+    ),
+  ).pipe(Effect.asVoid),
+);
+```
+
+An event can arrive twice after a host restart, before the checkpoint.
+Make the handler safe to run twice.
+
+## Give each consumer its own group
+
+A consumer group keeps its own position in the stream:
+
+```typescript
+const analytics = yield* Azure.EventHub.ConsumerGroup("analytics", {
+  namespace: hubs.namespaceName,
+  eventHub: readings.eventHubName,
+  name: "analytics",
+});
+```
+
+Read with it by name:
+
+```typescript
+yield* Azure.EventHub.consumeEvents(
+  Readings,
+  { consumerGroup: "analytics" },
+  (batch) => Effect.log(batch.sequenceNumbers),
+);
+```
+
+The default is `$Default`.
+
+## Keep events longer
+
+```typescript
+const readings = yield* Azure.EventHub.EventHub("readings", {
+  namespace: hubs.namespaceName,
+  messageRetentionInDays: 7,
+});
+```
+
+The default is one day. Standard keeps events for up to 7 days.
+
+## Archive events to Blob Storage
+
+Capture writes every event to a blob container as Avro files:
+
+```typescript
+const archive = yield* Azure.Storage.StorageAccount("archive");
+const raw = yield* Azure.Storage.BlobContainer("raw", {
+  storageAccount: archive.storageAccountName,
+});
+const readings = yield* Azure.EventHub.EventHub("readings", {
+  namespace: hubs.namespaceName,
+  capture: {
+    enabled: true,
+    intervalInSeconds: 300,
+    skipEmptyArchives: true,
+    destination: {
+      storageAccountResourceId: archive.storageAccountId,
+      blobContainer: raw.containerName,
+      archiveNameFormat:
+        "{Namespace}/{EventHub}/{PartitionId}/{Year}/{Month}/{Day}/{Hour}/{Minute}/{Second}",
+    },
+  },
+});
+```
+
+Capture needs `Standard` or higher, and Azure bills it separately.
+
+## Read events
+
+Event Hubs has no HTTP read API, so there is no read binding. Read
+through `consumeEvents`, or archive with Capture and read the blobs.
+
+## The first requests after a deploy
+
+Role assignments take a few minutes to apply. Until then, `send` fails.
+Retry the first call in tests.
+
+## Example
+
+[`azure-event-hubs`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-event-hubs)
+sends device readings with a partition key and records each one from a
+batch trigger.
+
+## Where next
+
+- [Service Bus](/azure/messaging/service-bus) — queues and topics with
+  per-message settlement.
+- [EventHub reference](/providers/azure/eventhub#eventhub) — every prop
+  and attribute.

@@ -1,0 +1,113 @@
+---
+title: React Router
+description: "Deploy a React Router v7 app in framework mode to Azure with Azure.Website.ReactRouter — loaders on a Flex Consumption Function, assets on Blob Storage, both behind Azure Front Door."
+sidebar:
+  order: 16
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Azure.Website.ReactRouter` deploys a [React Router](https://reactrouter.com)
+v7 app in framework mode to Azure. Alchemy runs your own `vite build`. The
+server build (loaders, actions, page renders) runs on a Flex Consumption
+Function, which scales to zero. The client assets go to the static website
+endpoint of an Azure Storage account. Azure Front Door sends `/assets/*`
+and the public files to Blob Storage and every other path to the Function.
+No Docker image and no App Service plan are involved.
+
+## Install
+
+The build integration ships separately. It only runs at deploy time, so a
+dev dependency is enough:
+
+<PackageManagers dev={devDeps} />
+
+Your project also needs `@react-router/dev`, `react-router`, and `vite`.
+
+## Deploy the site
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Azure.Website.ReactRouter("Website", { location: "eastus" });
+    return { url: site.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `site.url` is the Front Door endpoint,
+`https://{endpoint}.z01.azurefd.net`. A new endpoint takes 10-20 minutes to
+serve everywhere. Pick a `location` that offers Flex Consumption.
+
+Your `vite.config.ts` needs no adapter. The
+`@alchemy.run/frontend-frameworks/react-router/azure` target wraps the
+server build with `createRequestHandler` and turns it into an Azure
+Functions handler.
+
+## Pass environment variables
+
+```diff lang="typescript"
+-const site = yield* Azure.Website.ReactRouter("Website", { location: "eastus" });
++const site = yield* Azure.Website.ReactRouter("Website", {
++  location: "eastus",
++  env: { GREETING: "Hello from Azure!" },
++});
+```
+
+The values become app settings of the Function. A loader reads them:
+
+```typescript
+// app/routes/home.tsx
+export function loader() {
+  return { greeting: process.env.GREETING ?? "Hello!" };
+}
+```
+
+## Size the Function
+
+```typescript
+const site = yield* Azure.Website.ReactRouter("Website", {
+  instanceMemoryMB: 512,
+  maximumInstanceCount: 40,
+});
+```
+
+## Share a Front Door profile
+
+```typescript
+const profile = yield* Azure.Cdn.Profile("Edge");
+const site = yield* Azure.Website.ReactRouter("Website", { frontDoor: { profile } });
+```
+
+Each profile bills a monthly base fee, so share one across sites. See
+[Websites](/azure/frontend/websites) for caching, purges, and the other
+shared settings.
+
+## Limits
+
+React Server Components (React Router's `unstable` RSC plugin) and
+multi-environment builds are not supported yet. The build fails with an
+error when it emits more than one server entry.
+
+## Local development
+
+`alchemy dev` runs React Router's Vite dev server with hot reload and
+creates nothing in Azure. `env` reaches the dev server's `process.env`.
+Wrap the site in `Alchemy.remote()` to deploy it for real during dev.
+
+See the [`azure-website-react-router`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-react-router)
+example.
+
+## Where next
+
+- [Websites](/azure/frontend/websites) — the settings every site shares.
+- [Website reference](/providers/azure/website#reactrouter) — every prop.

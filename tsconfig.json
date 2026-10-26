@@ -494,7 +494,46 @@
       "path": "./examples/azure-vm/tsconfig.json"
     },
     {
+      "path": "./examples/azure-website-astro/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-website-foldkit/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-website-nextjs/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-website-nuxt/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-website-octane/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-website-react-router/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-website-solidstart/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-website-static/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-website-sveltekit/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-website-tanstack-start/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-website-vinext/tsconfig.json"
+    },
+    {
       "path": "./examples/azure-website-vite/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-website-vocs/tsconfig.json"
+    },
+    {
+      "path": "./examples/azure-website-waku/tsconfig.json"
     },
     {
       "path": "./examples/hetzner-server/tsconfig.json"

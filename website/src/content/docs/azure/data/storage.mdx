@@ -1,0 +1,303 @@
+---
+title: Blob and Table storage
+description: Create an Azure Storage account, read and write blobs from an Azure Function with Read, Write, and ReadWrite bindings, and keep key/value entities in Table storage.
+---
+
+An Azure Storage account holds blob containers, queues, tables, and file
+shares. Declare an account and a container, bind the container to your
+Function, and `get`, `put`, `list`, and `delete` blobs.
+
+## Create an account and a container
+
+```typescript
+// src/Files.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export const Data = Azure.Storage.StorageAccount("Data");
+
+export const Files = Effect.gen(function* () {
+  const account = yield* Data;
+  return yield* Azure.Storage.BlobContainer("Files", {
+    storageAccount: account.storageAccountName,
+  });
+});
+```
+
+Alchemy generates a globally unique account name. The account is
+`Standard_LRS`, HTTPS only, TLS 1.2, and blocks anonymous blob access.
+The container is private.
+
+## Bind it to a Function
+
+Ask for the least access you need:
+
+| Binding | Methods | Role on the container |
+| --- | --- | --- |
+| `BlobContainerRead` | `get`, `head`, `list` | Storage Blob Data Reader |
+| `BlobContainerWrite` | `put`, `delete`, block and append writes | Storage Blob Data Contributor |
+| `BlobContainerReadWrite` | all of the above | Storage Blob Data Contributor |
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Files } from "./Files.ts";
+
+const FILE_ROUTE = /^\/files\/(.+)$/;
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const container = yield* Files;
+    const files = yield* Azure.Storage.BlobContainerReadWrite(container);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://localhost");
+        const match = FILE_ROUTE.exec(url.pathname);
+        if (match === null) {
+          return HttpServerResponse.text("Not Found", { status: 404 });
+        }
+        const key = decodeURIComponent(match[1]!);
+
+        if (request.method === "PUT") {
+          const body = yield* request.text;
+          const contentType = request.headers["content-type"] ?? "text/plain";
+          const { etag } = yield* files.put(key, body, { contentType });
+          return yield* HttpServerResponse.json({ key, etag }, { status: 201 });
+        }
+        const file = yield* files.get(key);
+        return file === undefined
+          ? HttpServerResponse.text("Not Found", { status: 404 })
+          : HttpServerResponse.text(file.text(), { contentType: file.contentType });
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.succeed(HttpServerResponse.text(error._tag, { status: 502 })),
+        ),
+      ),
+    };
+  }).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp)),
+) {}
+```
+
+The role goes to the Function's managed identity, on this container
+only. No account key or connection string reaches the Function.
+
+## Read a blob
+
+`get` returns the bytes and their metadata, or `undefined` when the blob
+is missing:
+
+```typescript
+const blob = yield* files.get("reports/latest.json");
+const report = blob ? JSON.parse(blob.text()) : undefined;
+```
+
+`head` returns only `size`, `contentType`, `etag`, and `lastModified`.
+
+## Write a blob
+
+```typescript
+yield* files.put("reports/latest.json", JSON.stringify(report), {
+  contentType: "application/json",
+});
+```
+
+`put` takes a string or bytes and overwrites any existing blob.
+
+## List blobs
+
+```typescript
+const { blobs, nextMarker } = yield* files.list({ prefix: "reports/" });
+```
+
+Pass `nextMarker` back as `marker` for the next page.
+`listByHierarchy` groups names by a `delimiter`, like folders.
+
+## Delete a blob
+
+```typescript
+yield* files.delete("reports/stale.json");
+```
+
+Deleting a missing blob succeeds.
+
+## Upload a large file in blocks
+
+Stage each block, then commit the list:
+
+```typescript
+const id = (n: number) => btoa(`block-${n}`);
+yield* files.stageBlock("big.bin", { blockid: id(0), body: part0 });
+yield* files.stageBlock("big.bin", { blockid: id(1), body: part1 });
+yield* files.commitBlockList("big.bin", { Latest: [id(0), id(1)] });
+```
+
+## Keep entities in Table storage
+
+A Table holds entities keyed by `PartitionKey` and `RowKey`. Declare it
+in the same account:
+
+```typescript
+// src/Records.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import { Data } from "./Files.ts";
+
+export const Records = Effect.gen(function* () {
+  const account = yield* Data;
+  return yield* Azure.Storage.Table("Records", {
+    storageAccount: account.storageAccountName,
+  });
+});
+```
+
+Bind it with `TableRead` (Storage Table Data Reader), `TableWrite`, or
+`TableReadWrite`. The write bindings grant a custom role with only the
+entity actions their client calls, on this table only:
+
+```typescript
+// init
+const table = yield* Records;
+const records = yield* Azure.Storage.TableReadWrite(table);
+
+// runtime
+yield* records.upsert({ PartitionKey: "files", RowKey: name, size, sha256 });
+const record = yield* records.get("files", name); // undefined when missing
+const page = yield* records.query({ filter: "PartitionKey eq 'files'", top: 100 });
+yield* records.delete("files", name);
+// …provided with Effect.provide(Azure.Storage.TableReadWriteHttp)
+```
+
+`update` with an `etag` fails with `TableEntityConditionNotMet` when
+the entity changed since you read it.
+
+## React to uploads
+
+Run code for each new blob with `consumeBlobCreated`:
+
+```typescript
+yield* Azure.Storage.consumeBlobCreated(uploads, { prefix: "uploads/" }, (event) =>
+  Effect.log(`${event.blobName}: ${event.contentLength} bytes`),
+);
+// …provided with Effect.provide(Azure.Functions.BlobCreatedEventSource)
+```
+
+The event carries the name, URL, size, and content type. Read the bytes
+with a `BlobContainerRead` binding. See [Event Grid](/azure/messaging/event-grid#react-to-new-blobs).
+
+## Allow public reads
+
+Turn on public access on the account, then on the container:
+
+```typescript
+const account = yield* Azure.Storage.StorageAccount("assets", {
+  allowBlobPublicAccess: true,
+});
+const images = yield* Azure.Storage.BlobContainer("images", {
+  storageAccount: account.storageAccountName,
+  publicAccess: "Blob",
+});
+```
+
+`"Blob"` lets anyone read a blob by its URL. `"Container"` also lets
+anyone list the container.
+
+## Keep deleted blobs and old versions
+
+Blob service settings live on one `BlobServiceProperties` per account:
+
+```typescript
+yield* Azure.Storage.BlobServiceProperties("files-blob", {
+  storageAccount: account.storageAccountName,
+  isVersioningEnabled: true,
+  deleteRetentionPolicy: { enabled: true, days: 7 },
+  containerDeleteRetentionPolicy: { enabled: true, days: 7 },
+});
+```
+
+Add a `cors` list here to let a browser upload straight to the account.
+
+## Expire old blobs
+
+```typescript
+yield* Azure.Storage.ManagementPolicy("logs-lifecycle", {
+  storageAccount: account.storageAccountName,
+  rules: [
+    {
+      name: "expireLogs",
+      filters: { blobTypes: ["blockBlob"], prefixMatch: ["logs/"] },
+      actions: {
+        baseBlob: { delete: { daysAfterModificationGreaterThan: 30 } },
+      },
+    },
+  ],
+});
+```
+
+## Choose redundancy
+
+`sku` sets how Azure copies your data: `Standard_LRS` (one datacenter),
+`Standard_ZRS` (three zones), `Standard_GRS` (a second region), or
+`Standard_RAGRS` (a second region you can read from):
+
+```typescript
+const account = yield* Azure.Storage.StorageAccount("files", {
+  sku: "Standard_ZRS",
+});
+```
+
+Set `allowSharedKeyAccess: false` to turn off account keys and SAS, so
+only Microsoft Entra ID gets in.
+
+## Bind from outside Azure
+
+The same bindings work in a Cloudflare Worker or an AWS Lambda. Alchemy
+creates an Entra service principal for that host and grants it the role.
+See [Identity and bindings](/azure/security/identity).
+
+## The first requests after a deploy
+
+A new role assignment takes a minute or two to reach Storage. Until
+then, calls fail with `SchemaRegistryStorageAccessDenied`. Retry the
+first call in tests.
+
+## Run it locally
+
+`alchemy dev` runs Storage accounts, containers, and queues on Azurite in
+Docker. See [Local development](/azure/local-development).
+
+## Destroying data
+
+Destroying a container deletes every blob in it. Destroying the account
+deletes every container, queue, and table. Changing an account's `name`,
+`location`, `kind`, or `isHnsEnabled` replaces it and loses the data.
+Keep a resource on destroy with `RemovalPolicy.retain()`:
+
+```typescript
+import * as RemovalPolicy from "alchemy/RemovalPolicy";
+
+const uploads = yield* Azure.Storage.BlobContainer("uploads", {
+  storageAccount: account.storageAccountName,
+}).pipe(RemovalPolicy.retain());
+```
+
+## Examples
+
+- [`azure-function`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-function)
+  — a file API over one blob container.
+- [`azure-storage-uploads`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-storage-uploads)
+  — uploads land in Blob Storage, a second Function indexes them into
+  Table storage.
+
+## Where next
+
+- [Storage queues](/azure/messaging/storage-queues) — the queue service
+  in the same account.
+- [Storage reference](/providers/azure/storage#blobcontainer) — every
+  prop and attribute.

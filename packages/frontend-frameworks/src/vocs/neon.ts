@@ -4,7 +4,6 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import type { Plugin } from "vite";
 import { runBuildChild } from "../core/BuildChild.ts";
 import type { BuildOutput } from "../core/BuildOutput.ts";
 import { DeployTargetError } from "../core/DeployTarget.ts";
@@ -13,39 +12,8 @@ import { FrameworkError, type FrameworkDevOptions } from "../core/Framework.ts";
 import { Framework } from "../core/Framework.ts";
 import { finishNeonOutput, makeNeonTarget } from "../core/NeonServe.ts";
 import { make as makeNode, makeNodeTarget, type VocsNodeFrameworkOptions } from "./node.ts";
+import { vocsRuntimeConfigPlugin } from "./runtime-config.ts";
 import { make as makeVocsLayer } from "./Vocs.ts";
-
-// Preserve config imports and closures; only the dev-only Vite loader is removed.
-const runtimeConfigPlugin = (): Plugin => ({
-  name: "alchemy:vocs-neon-runtime-config",
-  enforce: "post",
-  transform(code, id) {
-    const file = id.replaceAll("\\", "/").split("?")[0];
-    if (file?.endsWith("/vocs/dist/internal/mdx.js")) {
-      const logger =
-        /const logger = createLogger\(undefined, \{ allowClearScreen: false, prefix: '\[vocs\]' \}\);/;
-      if (!logger.test(code) || !code.includes("import { createLogger } from 'vite';"))
-        throw new Error("Vocs MDX logger changed; update the Neon runtime bridge.");
-      return code
-        .replace("import { createLogger } from 'vite';", "")
-        .replace(
-          logger,
-          'const logger = { warn: (message) => console.warn("[vocs]", message), error: (message) => console.error("[vocs]", message) };',
-        );
-    }
-    if (!file?.endsWith("/vocs/dist/internal/config.js")) return;
-    const pattern =
-      /export async function resolve\(options = \{\}\) \{[\s\S]*?\n\}\n(?=export let global;)/;
-    if (!pattern.test(code))
-      throw new Error("Vocs runtime config shape changed; update the Neon config bridge.");
-    return code.replace(
-      pattern,
-      "export async function resolve() {\n" +
-        '  const resolved = (await import("virtual:alchemy-vocs/user-config")).default;\n' +
-        "  return define(resolved);\n}\n",
-    );
-  },
-});
 
 export const buildInChild = (config: { root: string }) =>
   Effect.gen(function* () {
@@ -60,7 +28,7 @@ export const buildInChild = (config: { root: string }) =>
             vitePlugins: (context) =>
               node
                 .vitePlugins(context)
-                .pipe(Effect.map((plugins) => [...plugins, runtimeConfigPlugin()])),
+                .pipe(Effect.map((plugins) => [...plugins, vocsRuntimeConfigPlugin("neon")])),
           },
         }),
       ),

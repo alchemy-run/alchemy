@@ -49,7 +49,9 @@ export interface StaticSiteProps extends Pick<
   /**
    * Local dev configuration. When `alchemy dev` runs, the build command
    * is skipped and `command` is spawned as a long-lived child. Without
-   * `dev`, the site is still built and served locally (no Azure resources).
+   * `dev`, the site is still built and a local static server (from
+   * `@alchemy.run/frontend-frameworks`, which must be installed) serves
+   * {@link outdir}. Neither path creates Azure resources.
    */
   dev?: {
     /**
@@ -113,6 +115,15 @@ export interface StaticSiteProps extends Pick<
  *   command: "npm run build",
  *   outdir: "dist",
  *   spa: true,
+ * });
+ * ```
+ *
+ * **Example:** Multi-page site with a real 404 page
+ * ```typescript
+ * const docs = yield* Azure.Website.StaticSite("Docs", {
+ *   command: "npm run build",
+ *   outdir: "dist",
+ *   errorPage: "404.html",
  * });
  * ```
  *
@@ -222,7 +233,8 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         cwd: path.dirname(servePath),
         env: {
           ...unwrapEnv(props.env),
-          ALCHEMY_BUILD_HASH: build.hash.output as unknown as string,
+          // Restarts the server when the build output changes.
+          ALCHEMY_BUILD_HASH: Output.map(build.hash.output, (hash) => hash ?? ""),
           PORT: "0",
           HOST: "127.0.0.1",
         },
@@ -232,9 +244,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
 
     // The build output is the site: publish it as-is. `build.outdir` orders
     // the upload after the build.
-    const published = Output.map((dir: string) => path.resolve(initialCwd, dir))(
-      build.outdir as unknown as Output.Output<string>,
-    );
+    const published = Output.map(build.outdir, (dir) => path.resolve(initialCwd, dir));
     return yield* deploySite({
       site: props,
       framework: "StaticSite",

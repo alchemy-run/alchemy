@@ -1,0 +1,21 @@
+{
+  "src/entry-server.tsx": {
+    "file": "entry-server.js",
+    "name": "entry-server",
+    "src": "src/entry-server.tsx",
+    "isEntry": true,
+    "dynamicImports": [
+      "src/routes/index.tsx?pick=default&pick=$css&lang.tsx",
+      "src/entry-server.tsx"
+    ],
+    "css": [
+      "_build/assets/entry-server-Cls2lSLj.css"
+    ]
+  },
+  "src/routes/index.tsx?pick=default&pick=$css&lang.tsx": {
+    "file": "_build/assets/index-DdlGFYQh.js",
+    "name": "index",
+    "src": "src/routes/index.tsx?pick=default&pick=$css&lang.tsx",
+    "isDynamicEntry": true
+  }
+}

@@ -1,0 +1,234 @@
+---
+title: AKS
+description: Run Effect programs as Kubernetes Deployments on an Azure Kubernetes Service cluster, with images built without Docker and bindings granted through Microsoft Entra Workload ID.
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const pkgs = "@alchemy.run/kubernetes";
+
+AKS runs your Effect program as a Kubernetes workload. You declare the
+cluster, then a `Kubernetes.Deployment` on it. Alchemy bundles the
+program, pushes the image to an Azure Container Registry it creates, and
+applies the Deployment, Service, and ServiceAccount. You don't need
+Docker, YAML, or `kubectl`.
+
+## Install
+
+<PackageManagers add={pkgs} />
+
+Merge the Kubernetes providers next to Azure's:
+
+```typescript
+// alchemy.run.ts
+providers: Layer.mergeAll(Azure.providers(), Kubernetes.providers()),
+```
+
+## Create a cluster
+
+```typescript
+// src/infra.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export const LOCATION = "westus2";
+
+export const Cluster = Azure.ContainerService.ManagedCluster("Cluster", {
+  location: LOCATION,
+  defaultNodePool: { vmSize: "Standard_D2s_v7", count: 1 },
+  oidcIssuerEnabled: true,
+  workloadIdentityEnabled: true,
+});
+
+export const Data = Azure.Storage.StorageAccount("Data", { location: LOCATION });
+
+export const Notes = Effect.gen(function* () {
+  const account = yield* Data;
+  return yield* Azure.Storage.BlobContainer("Notes", {
+    storageAccount: account.storageAccountName,
+  });
+});
+```
+
+One `Standard_D2s_v7` node (2 vCPUs) on the Free control-plane tier fits
+the default regional vCPU quota. The cluster takes about 6 minutes to
+create. `oidcIssuerEnabled` and `workloadIdentityEnabled` let bindings
+authenticate without keys.
+
+:::caution
+Changing the cluster's name, location, network settings, or system pool
+shape replaces the cluster, with every workload and volume on it. See the
+[ManagedCluster reference](/providers/azure/containerservice#managedcluster)
+for the full list.
+:::
+
+## Deploy an Effect program
+
+A Deployment takes the same `fetch` handler as an Azure Function:
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Kubernetes from "@alchemy.run/kubernetes";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Cluster, Notes } from "./infra.ts";
+
+export class Api extends Kubernetes.Deployment<Api>()("Api") {}
+
+export default Api.make(
+  Effect.gen(function* () {
+    const cluster = yield* Cluster;
+    return {
+      cluster,
+      main: import.meta.url,
+      port: 3000,
+      replicas: 1,
+      serviceType: "LoadBalancer" as const,
+      resources: {
+        requests: { cpu: "100m", memory: "128Mi" },
+        limits: { cpu: "500m", memory: "512Mi" },
+      },
+    };
+  }),
+  Effect.gen(function* () {
+    const notes = yield* Azure.Storage.BlobContainerReadWrite(Notes);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const note = yield* notes.get("notes/hello").pipe(Effect.orDie);
+        return HttpServerResponse.text(note?.text() ?? "none");
+      }),
+    };
+  }).pipe(Effect.provide(Azure.Storage.BlobContainerReadWriteHttp)),
+);
+```
+
+Pass the cluster itself as `cluster`. `serviceType: "LoadBalancer"` gives
+the Deployment a public IP.
+
+## Add it to the Stack
+
+Provide the Deployment's layer and yield the class:
+
+```typescript
+// alchemy.run.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Kubernetes from "@alchemy.run/kubernetes";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import ApiLive, { Api } from "./src/Api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Azure.providers(), Kubernetes.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }).pipe(Effect.provide(ApiLive)),
+);
+```
+
+Run `alchemy deploy`. `api.url` includes the port: `http://<ip>:3000`.
+
+## Bindings use Workload ID
+
+`BlobContainerReadWrite` grants **Storage Blob Data Contributor** on the
+`Notes` container only. The grant goes to a user-assigned managed identity
+that Alchemy creates and federates with the Deployment's ServiceAccount.
+The AKS webhook projects a token into each pod, and the program exchanges
+it for Entra tokens. No key or secret exists.
+
+Removing a binding revokes its role on the next deploy. Destroying the
+workload deletes the identity.
+
+:::caution
+Bindings need `workloadIdentityEnabled: true` on the cluster.
+:::
+
+## Pull images without a secret
+
+Alchemy gives the cluster's kubelet identity **AcrPull** on the workload's
+registry, so nodes pull the image without a pull secret.
+
+## Deploy an existing image
+
+```typescript
+const web = yield* Kubernetes.Deployment("Web", {
+  cluster,
+  image: "nginx:1.27",
+  port: 80,
+  replicas: 2,
+  serviceType: "LoadBalancer",
+});
+```
+
+## Install a Helm chart
+
+```typescript
+const ingress = yield* Kubernetes.HelmChart("IngressNginx", {
+  cluster,
+  chart: "ingress-nginx",
+  repo: "https://kubernetes.github.io/ingress-nginx",
+  version: "4.11.2",
+  namespace: "ingress-nginx",
+  createNamespace: true,
+});
+```
+
+## Add a node pool
+
+Run your apps on a user pool and keep the system pool for add-ons:
+
+```typescript
+yield* Azure.ContainerService.AgentPool("workers", {
+  cluster: cluster.clusterName,
+  vmSize: "Standard_D4s_v5",
+  count: 2,
+  nodeLabels: { workload: "batch" },
+  nodeTaints: ["workload=batch:NoSchedule"],
+});
+```
+
+## Autoscale the system pool
+
+```typescript
+const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+  skuTier: "Standard",
+  defaultNodePool: { enableAutoScaling: true, minCount: 1, maxCount: 3 },
+});
+```
+
+## Upgrade Kubernetes
+
+Raise `kubernetesVersion` to upgrade in place. AKS can't downgrade:
+
+```typescript
+const cluster = yield* Azure.ContainerService.ManagedCluster("aks", {
+  kubernetesVersion: "1.35",
+});
+```
+
+## Destroy
+
+`alchemy destroy` deletes the workloads, their identities and registries,
+and the cluster with its node resource group. The cluster takes about 6
+minutes to delete.
+
+## Example
+
+[`examples/azure-aks`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-aks)
+is a notes API on a one-node cluster with a blob binding over Workload ID.
+
+## Where next
+
+- [Kubernetes](/kubernetes) — Deployments, Jobs, manifests, and Helm
+  charts in depth.
+- [Managed identity and bindings](/azure/security/identity) — how each
+  runtime gets its grants.
+- [ContainerService reference](/providers/azure/containerservice#managedcluster)
+  — every cluster prop.

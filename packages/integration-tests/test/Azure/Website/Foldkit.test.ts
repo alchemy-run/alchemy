@@ -1,20 +1,27 @@
 import * as Azure from "@alchemy.run/azure";
+import * as Alchemy from "alchemy";
 import { describe, expect } from "alchemy-test";
+import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
+import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Test from "alchemy/Test/Alchemy";
+import { assetCacheControl } from "alchemy/Website/assets";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
 import {
   foldkitFixture,
   foldkitMemo,
   verifyFoldkitBrowser,
   verifyFoldkitRendering,
 } from "../../Website/Foldkit.ts";
-import { runExpensive } from "../gates.ts";
 import {
   assertGroupGone,
   fetchPage,
   FRONT_DOOR_TIMEOUT,
   frontDoorUrl,
   frontDoorWait,
+  getEndpoint,
   getProfile,
   LOCATION,
   logLevel,
@@ -23,9 +30,80 @@ import {
   tags,
   viaFrontDoor,
   waitForPage,
+  webBlob,
 } from "./site.ts";
 
-const { test } = Test.make({ providers: Azure.providers() });
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Azure.providers(),
+  state: Alchemy.localState(),
+});
+
+/** Azure credentials and environment for hooks and out-of-band checks. */
+const azure = Layer.mergeAll(Azure.environmentFromAuthProvider(), Azure.fromAuthProvider()).pipe(
+  Layer.provideMerge(Azure.AzureAuth),
+  Layer.provideMerge(ProfileStoreLive),
+  Layer.provideMerge(CredentialsStoreLive),
+  Layer.provideMerge(FetchHttpClient.layer),
+);
+
+/**
+ * One Front Door profile for the whole file (a profile delete takes 14-30
+ * minutes): an SSR build on a Function and a browser-only SPA, each on its
+ * own endpoint.
+ */
+const Stack = Alchemy.Stack(
+  "AzureWebsiteFoldkit",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const ssrRoot = yield* foldkitFixture("ssr").pipe(Effect.orDie);
+    const spaRoot = yield* foldkitFixture("spa").pipe(Effect.orDie);
+    const profile = yield* Azure.Cdn.Profile("Edge");
+    const ssr = yield* Azure.Website.Foldkit("Ssr", {
+      rootDir: ssrRoot,
+      location: LOCATION,
+      output: "server",
+      frontDoor: { profile },
+      memo: foldkitMemo,
+    });
+    // Deliberately no `output` or `assets`: the SPA default is under test.
+    const spa = yield* Azure.Website.Foldkit("Spa", {
+      rootDir: spaRoot,
+      location: LOCATION,
+      frontDoor: { profile },
+      memo: foldkitMemo,
+    });
+    return {
+      profileGroup: profile.resourceGroup,
+      profileName: profile.profileName,
+      group: ssr.resourceGroup?.resourceGroupName,
+      ssrUrl: ssr.url,
+      ssrServer: ssr.server?.functionAppName,
+      ssrAccount: ssr.storageAccount?.storageAccountName,
+      ssrEndpoint: ssr.frontDoor?.endpoint.endpointName,
+      spaUrl: spa.url,
+      spaServer: spa.server?.functionAppName,
+      spaAccount: spa.storageAccount?.storageAccountName,
+    };
+  }),
+);
+
+// ~$0.10/run (Front Door Standard by the hour, a Flex Consumption Function,
+// three Standard_LRS accounts); ~5 min deploy, 10-20 min propagation, then a
+// 14-30 min profile delete.
+const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
+
+const outputs = Effect.map(stack, (out) => ({
+  profileGroup: out.profileGroup as string,
+  profileName: out.profileName as string,
+  group: out.group as string,
+  ssrUrl: out.ssrUrl as string,
+  ssrServer: out.ssrServer as string | undefined,
+  ssrAccount: out.ssrAccount as string,
+  ssrEndpoint: out.ssrEndpoint as string,
+  spaUrl: out.spaUrl as string,
+  spaServer: out.spaServer as string | undefined,
+  spaAccount: out.spaAccount as string,
+}));
 
 describe("Azure.Website.Foldkit", { tags }, () => {
   // ~$0.01/run (one Standard_LRS account); ~5 min. Browser-only and
@@ -81,8 +159,20 @@ describe("Azure.Website.Foldkit", { tags }, () => {
           }),
         );
         expect(prerendered.url).toBe(url);
-        yield* verifyFoldkitRendering(url, "static");
-        yield* verifyFoldkitBrowser(url, "static");
+        expect(prerendered.server).toBeUndefined();
+        // The storage endpoint serves the uncompressed bundle slowly from
+        // outside Azure, so this checks the pages; the Front Door cases run
+        // the full rendering check.
+        const home = yield* waitForPage(`${url}/?count=7`, (page) =>
+          /id="count"[^>]*>0</.test(page.body),
+        );
+        expect(home.status).toBe(200);
+        const about = yield* fetchPage(`${url}/about/?count=9`);
+        expect(about.status).toBe(200);
+        expect(about.body).toMatch(/id="count"[^>]*>0</);
+        expect((yield* fetchPage(`${url}/foldkit-probe.txt`)).body).toBe("FOLDKIT_STATIC_ASSET");
+        // No SPA fallback for a prerendered build.
+        expect((yield* fetchPage(`${url}/not-prerendered`)).status).toBe(404);
 
         const groupName = prerendered.resourceGroup!.resourceGroupName;
         yield* stack.destroy();
@@ -91,86 +181,80 @@ describe("Azure.Website.Foldkit", { tags }, () => {
     { timeout: 900_000 },
   );
 
-  // ~$0.10/run (Front Door Standard by the hour, a Flex Consumption
-  // Function, two Standard_LRS accounts); 35-55 min with the profile delete.
-  // A server build runs Foldkit's fetch handler on the Function; Front Door
-  // sends pages to it and the client assets to Blob Storage.
-  test.provider.skipIf(!runExpensive)(
-    "SSR build on a Function behind Front Door",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* stack.destroy();
+  test(
+    "an SSR build renders pages on the Function behind Front Door",
+    Effect.gen(function* () {
+      const out = yield* outputs;
+      expect(out.ssrUrl).toMatch(frontDoorUrl);
+      expect(out.ssrServer!.length).toBeGreaterThan(0);
 
-        const rootDir = yield* foldkitFixture("ssr");
-        const site = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Azure.Website.Foldkit("Web", {
-              rootDir,
-              location: LOCATION,
-              output: "server",
-              memo: foldkitMemo,
-            });
-          }),
-        );
-        const url = site.url as string;
-        expect(url).toMatch(frontDoorUrl);
-        expect(site.server!.functionAppName.length).toBeGreaterThan(0);
+      // Out of band: the endpoint serves the site's host, and Blob Storage
+      // holds the client directory only.
+      const endpoint = yield* getEndpoint(out.profileGroup, out.profileName, out.ssrEndpoint);
+      expect(endpoint?.properties?.hostName).toBe(new URL(out.ssrUrl).host);
+      const probeBlob = yield* webBlob(out.ssrAccount, "foldkit-probe.txt");
+      expect(probeBlob?.cacheControl).toBe(assetCacheControl);
+      expect(yield* webBlob(out.ssrAccount, "serve-azure.mjs")).toBeUndefined();
 
-        const home = yield* waitForPage(
-          `${url}/`,
-          (page) => page.status === 200 && page.body.includes("Foldkit"),
-          frontDoorWait,
-        );
-        expect(viaFrontDoor(home)).toBe(true);
-        yield* verifyFoldkitRendering(url, "ssr");
-        yield* verifyFoldkitBrowser(url, "ssr");
-
-        const groupName = site.resourceGroup!.resourceGroupName;
-        const profileGroup = site.frontDoor!.profile.resourceGroup;
-        const profileName = site.frontDoor!.profile.profileName;
-        yield* stack.destroy();
-        expect(yield* getProfile(profileGroup, profileName)).toBeUndefined();
-        yield* assertGroupGone(groupName);
-      }).pipe(logLevel),
+      // Both routes propagate: the asset route (Blob) and `/*` (the Function).
+      // `count=7` reaches the page only when Foldkit's handler renders it.
+      const probe = yield* waitForPage(
+        `${out.ssrUrl}/foldkit-probe.txt`,
+        (page) => page.status === 200,
+        frontDoorWait,
+      );
+      expect(viaFrontDoor(probe)).toBe(true);
+      expect(probe.body).toBe("FOLDKIT_STATIC_ASSET");
+      const home = yield* waitForPage(
+        `${out.ssrUrl}/?count=7`,
+        (page) => page.status === 200 && /id="count"[^>]*>7</.test(page.body),
+        frontDoorWait,
+      );
+      expect(viaFrontDoor(home)).toBe(true);
+      yield* verifyFoldkitRendering(out.ssrUrl, "ssr");
+      yield* verifyFoldkitBrowser(out.ssrUrl, "ssr");
+    }).pipe(Effect.provide(azure), logLevel),
     { timeout: FRONT_DOOR_TIMEOUT },
   );
 
-  // ~$0.10/run (Front Door Standard by the hour, one Standard_LRS account);
-  // 35-55 min with the profile delete. Front Door (the default) rewrites
-  // SPA deep links to the shell with a 200. The title stays short: Front
-  // Door rejects resource group names over 80 characters.
-  test.provider.skipIf(!runExpensive)(
-    "Front Door SPA",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* stack.destroy();
+  test(
+    "a browser-only SPA answers deep links with the shell through Front Door",
+    Effect.gen(function* () {
+      const out = yield* outputs;
+      expect(out.spaUrl).toMatch(frontDoorUrl);
+      expect(out.spaServer).toBeUndefined();
+      expect(yield* staticWebsiteEnabled(out.spaAccount)).toBe(true);
 
-        const rootDir = yield* foldkitFixture("spa");
-        const site = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Azure.Website.Foldkit("Web", {
-              rootDir,
-              location: LOCATION,
-              memo: foldkitMemo,
-            });
-          }),
-        );
-        const url = site.url as string;
-        expect(url).toMatch(frontDoorUrl);
-        expect(site.server).toBeUndefined();
-        yield* waitForPage(`${url}/`, (page) => page.body.includes("Foldkit Fixture"), frontDoorWait);
-        const deepLink = yield* fetchPage(`${url}/counter/42`);
-        expect(deepLink.status).toBe(200);
-        expect(deepLink.body).toContain("Foldkit Fixture");
-        yield* verifyFoldkitRendering(url, "spa");
-
-        const groupName = site.resourceGroup!.resourceGroupName;
-        const profileGroup = site.frontDoor!.profile.resourceGroup;
-        const profileName = site.frontDoor!.profile.profileName;
-        yield* stack.destroy();
-        expect(yield* getProfile(profileGroup, profileName)).toBeUndefined();
-        yield* assertGroupGone(groupName);
-      }).pipe(logLevel),
+      const home = yield* waitForPage(
+        `${out.spaUrl}/`,
+        (page) => page.status === 200 && page.body.includes("Foldkit Fixture"),
+        frontDoorWait,
+      );
+      expect(viaFrontDoor(home)).toBe(true);
+      // Front Door rewrites the deep link to the shell with a 200.
+      const deepLink = yield* waitForPage(
+        `${out.spaUrl}/counter/42`,
+        (page) => page.status === 200,
+        frontDoorWait,
+      );
+      expect(deepLink.body).toContain("Foldkit Fixture");
+      yield* verifyFoldkitRendering(out.spaUrl, "spa");
+    }).pipe(Effect.provide(azure), logLevel),
     { timeout: FRONT_DOOR_TIMEOUT },
   );
 });
+
+// Destroy (also after a failed deploy), then prove the shared profile and
+// the stack's group are gone.
+afterAll.skipIf(!!process.env.NO_DESTROY)(
+  Effect.gen(function* () {
+    const deployed = yield* Effect.exit(outputs);
+    yield* destroy(Stack);
+    if (Exit.isSuccess(deployed)) {
+      const out = deployed.value;
+      expect(yield* getProfile(out.profileGroup, out.profileName)).toBeUndefined();
+      yield* assertGroupGone(out.group);
+    }
+  }).pipe(Effect.provide(azure), logLevel),
+  { timeout: 2_400_000 },
+);

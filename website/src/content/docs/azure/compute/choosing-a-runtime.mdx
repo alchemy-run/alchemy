@@ -1,0 +1,93 @@
+---
+title: Choosing a runtime
+description: Pick between Azure Functions, Container Apps, Container Apps jobs, AKS, and virtual machines for your Effect program, by trigger, cost, and deploy time.
+---
+
+Every Alchemy app on Azure needs somewhere for its code to run. Each
+runtime takes the same Effect program: you bundle it with `main`, bind
+resources to it, and Alchemy grants roles to the runtime's managed
+identity.
+
+- **Azure Function** (`Azure.Functions.Function`) — an HTTP handler and
+  event triggers on Flex Consumption. It scales to zero. **Use this by
+  default.**
+- **Container App** (`Azure.ContainerApps.ContainerApp`) — a container
+  that serves HTTP, scales on traffic or events, and can scale to zero.
+- **Container Apps job** (`Azure.ContainerApps.Job`) — a container that
+  runs to completion on demand, on a schedule, or per queue backlog.
+- **AKS** (`Kubernetes.Deployment` on
+  `Azure.ContainerService.ManagedCluster`) — Kubernetes workloads on a
+  cluster you own.
+- **Virtual machine** (`Azure.Compute.VirtualMachine`) — a Linux VM that
+  runs your program as a systemd service.
+- **Workflow function** (`Azure.Functions.WorkflowFunction`) — a Function
+  that runs durable Effect workflows on Durable Functions.
+
+## At a glance
+
+|              | Function                          | Container App                        | Job                                  | AKS                                  | Virtual machine                   |
+| ------------ | --------------------------------- | ------------------------------------ | ------------------------------------ | ------------------------------------ | --------------------------------- |
+| Entry        | `fetch`, triggers                 | `fetch`, background loops            | `run`, `schedule`, queue handlers    | `fetch` or `run`                     | `fetch`, background loops         |
+| Triggered by | HTTP, timers, native triggers     | HTTP, KEDA scale rules               | Manual start, cron, KEDA scale rules | HTTP via a load balancer             | HTTP on the VM's public IP        |
+| Cost shape   | Per execution; zero idle          | Per replica second; zero idle at 0   | Per execution; zero idle             | Nodes (VMs); Free control plane      | Per running VM                    |
+| Packaging    | Bundled zip, deployed with Kudu   | Image built in a registry, no Docker | Image built in a registry, no Docker | Image built in a registry, no Docker | Bundle installed by a run command |
+| Deploy time  | About 2 minutes                   | Environment: 3–9 minutes             | Environment: 3–9 minutes             | Cluster: about 6 minutes             | 5–10 minutes                      |
+| Local dev    | Runs on your machine              | Runs in Azure                        | Runs in Azure                        | Runs in Azure                        | Runs in Azure                     |
+
+## Azure Functions — the default
+
+A Flex Consumption function app runs your `fetch` handler behind a public
+HTTPS URL and scales to zero. Timers and native triggers (Storage queues,
+blobs, Service Bus, Event Hubs, Event Grid, Cosmos DB change feeds) run
+handlers in the same program. It is the only runtime that runs on your
+machine under `alchemy dev`.
+
+→ [Azure Functions](/azure/compute/functions)
+
+## Container Apps — containers without a cluster
+
+A Container App runs your program in a container with HTTPS ingress,
+revisions, and KEDA scaling. Pick it when you need more than a Function
+gives you: long-lived connections, background loops, or a specific base
+image. The app scales to zero by default.
+
+→ [Container Apps](/azure/compute/container-apps)
+
+## Container Apps jobs — batch work
+
+A job runs a container that exits when the work is done. Start it from
+another runtime, run it on a cron schedule, or let a queue's backlog
+start executions. Nothing is billed between executions.
+
+→ [Container Apps jobs](/azure/compute/container-apps#run-a-job)
+
+## AKS — Kubernetes
+
+Reach for AKS when you need Kubernetes itself: Helm charts, custom
+controllers, or workloads you already run on another cluster. Bindings
+work the same way. They assign roles to a managed identity federated with
+the workload's ServiceAccount.
+
+→ [AKS](/azure/compute/aks)
+
+## Virtual machines — the machine itself
+
+A VM gives you an OS you control. Alchemy installs your program as a
+systemd unit and runs it under the VM's managed identity. You own the
+network, the image, and patching.
+
+→ [Virtual machines](/azure/compute/vms)
+
+## Workflow functions — durable processes
+
+A workflow function runs `effect/workflow` workflows on Durable Functions,
+so a run can sleep for days or wait for a signal and resume after a crash.
+
+→ [Effect workflows](/azure/compute/effect-workflows)
+
+## Where next
+
+- [Azure Functions](/azure/compute/functions) — the runtime the rest of
+  these docs build on.
+- [Managed identity and bindings](/azure/security/identity) — what
+  happens when a runtime binds a resource.

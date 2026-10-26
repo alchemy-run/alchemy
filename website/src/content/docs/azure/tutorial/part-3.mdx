@@ -1,0 +1,191 @@
+---
+title: "Part 3: Testing"
+description: Write integration tests that deploy your stack and make HTTP requests against the live Azure Function.
+sidebar:
+  order: 3
+---
+
+In [Part 2](/azure/tutorial/part-2) you deployed an Azure Function bound
+to a blob container. Now you write tests that deploy the Stack, call the
+live Function, and check it works.
+
+## Create the test file
+
+`Test.make` takes the same providers and state as your Stack:
+
+```typescript
+// test/integ.test.ts
+import { expect } from "bun:test";
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Test from "alchemy/Test/Bun";
+import * as Effect from "effect/Effect";
+import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Azure.providers(),
+  state: Alchemy.localState(),
+});
+```
+
+Tests sign in with the profile named in `ALCHEMY_PROFILE`, else your
+`default` profile. Pass `profile: "<name>"` to `Test.make` to pin one.
+
+:::note[Using Vitest?]
+`alchemy/Test/Vitest` has the same API. Take `expect` from
+`@effect/vitest` instead. See
+[Test harness → Bun vs Vitest](/testing/test-harness#bun-vs-vitest).
+:::
+
+## Deploy before the tests
+
+Deploy the Stack once, before any test runs:
+
+```diff lang="typescript"
+// test/integ.test.ts
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Azure.providers(),
+  state: Alchemy.localState(),
+});
+
++const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
+```
+
+`beforeAll` returns a handle. `yield*` it inside a test to get the
+Stack outputs. The first deploy creates the function app, so give it a
+long timeout.
+
+## Read the outputs
+
+```diff lang="typescript"
+// test/integ.test.ts
+const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
+
++test(
++  "stack exposes a function url",
++  Effect.gen(function* () {
++    const { url } = yield* stack;
++
++    expect(url).toStartWith("https://");
++  }),
++);
+```
+
+## Run the tests
+
+```sh
+bun test test/integ.test.ts
+```
+
+The first run deploys. Later runs reuse the deployment and only change
+what you changed.
+
+:::note[Which stage do tests use?]
+Tests deploy to `test_$USER` (e.g. `test_sam`), apart from the
+`live_$USER` stage `alchemy deploy` uses. Each stage has its own
+resource group, so your working deployment is never touched. More on
+stages in [Part 4](/azure/tutorial/part-4).
+:::
+
+## Call the Function
+
+Replace the first test with a round trip through the container:
+
+```diff lang="typescript"
+// test/integ.test.ts
+import { expect } from "bun:test";
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Test from "alchemy/Test/Bun";
+import * as Effect from "effect/Effect";
++import * as HttpBody from "effect/http/HttpBody";
++import * as HttpClient from "effect/http/HttpClient";
++import * as Schedule from "effect/Schedule";
+import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Azure.providers(),
+  state: Alchemy.localState(),
+});
+
+const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
+
+-test(
+-  "stack exposes a function url",
+-  Effect.gen(function* () {
+-    const { url } = yield* stack;
+-
+-    expect(url).toStartWith("https://");
+-  }),
+-);
++test(
++  "PUT and GET round-trip a file",
++  Effect.gen(function* () {
++    const { url } = yield* stack;
++
++    const put = yield* HttpClient.put(`${url}/files/hello.txt`, {
++      body: HttpBody.text("Hello, World!"),
++    }).pipe(
++      Effect.repeat({
++        schedule: Schedule.spaced("5 seconds"),
++        until: (response) => response.status === 201,
++        times: 36,
++      }),
++    );
++    expect(put.status).toBe(201);
++
++    const get = yield* HttpClient.get(`${url}/files/hello.txt`);
++    expect(yield* get.text).toBe("Hello, World!");
++  }),
++  { timeout: 300_000 },
++);
++
++test(
++  "GET a missing key returns 404",
++  Effect.gen(function* () {
++    const { url } = yield* stack;
++    const response = yield* HttpClient.get(`${url}/files/no-such-key`);
++    expect(response.status).toBe(404);
++  }),
++);
+```
+
+`HttpClient` comes with the test harness.
+
+:::tip[Wait for the role assignment]
+After the first deploy, the Function answers 502 until its role on the
+container reaches Storage, which can take a few minutes. The PUT repeats
+every 5 seconds until it gets a 201, up to 36 times.
+:::
+
+## Destroy after tests in CI
+
+Locally, keep the Stack deployed between runs so tests start fast. In
+CI, tear it down:
+
+```diff lang="typescript"
+// test/integ.test.ts
+const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
+
++afterAll.skipIf(!process.env.CI)(destroy(Stack), { timeout: 900_000 });
+```
+
+With `CI=true` the Stack is destroyed after the tests. Without it,
+`skipIf` skips the destroy.
+
+Destroy deletes the container with every file the tests wrote, then the
+storage accounts, then the resource group. You don't need to empty the
+container first.
+
+## Recap
+
+You now have:
+
+- `Test.make({ providers, state })` wiring Azure into the test runner
+- `beforeAll(deploy(Stack))` deploying once before the tests
+- HTTP assertions against the live Function URL, repeated until the
+  role assignment lands
+- `afterAll.skipIf(!process.env.CI)(destroy(Stack))` cleaning up in CI
+
+In [Part 4](/azure/tutorial/part-4), you give every developer,
+environment, and pull request its own copy of the Stack.

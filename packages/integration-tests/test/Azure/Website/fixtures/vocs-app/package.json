@@ -1,0 +1,19 @@
+{
+  "name": "alchemy-vocs-azure-fixture",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "react": "catalog:react-rsc",
+    "react-dom": "catalog:react-rsc",
+    "react-server-dom-webpack": "catalog:",
+    "vocs": "catalog:",
+    "waku": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "@vitejs/plugin-rsc": "catalog:",
+    "vite": "catalog:"
+  }
+}

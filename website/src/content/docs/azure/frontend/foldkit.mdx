@@ -1,0 +1,107 @@
+---
+title: Foldkit
+description: "Deploy a Foldkit app to Azure with Azure.Website.Foldkit — a browser-only SPA or prerendered pages on Blob Storage, SSR on a Flex Consumption Function, all behind Azure Front Door."
+sidebar:
+  order: 11
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Azure.Website.Foldkit` deploys a [Foldkit](https://foldkit.dev) app to
+Azure. The client build goes to the static website endpoint of an Azure
+Storage account behind Azure Front Door. With `output: "server"`, Foldkit's
+request handler runs on a Flex Consumption Function, which scales to zero,
+and Front Door sends every path outside the client directory to it. No
+Docker image and no App Service plan are involved.
+
+## Install
+
+The build integration ships separately. It only runs at deploy time, so a
+dev dependency is enough:
+
+<PackageManagers dev={devDeps} />
+
+## Deploy a browser-only app
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Azure.Website.Foldkit("Website", { location: "eastus" });
+    return { url: site.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `site.url` is the Front Door endpoint,
+`https://{endpoint}.z01.azurefd.net`. A new endpoint takes 10-20 minutes to
+serve everywhere.
+
+A browser-only app routes on the client. Front Door rewrites extensionless
+paths such as `/counter/42` to `/index.html`, so deep links load the app
+shell with a `200` status. Use `assets: { notFoundHandling: "404-page" }`
+when the app ships a real `404.html`.
+
+## Prerender pages
+
+```typescript
+const site = yield* Azure.Website.Foldkit("Docs", { output: "static" });
+```
+
+Enable `ssr.build` with `prerender: true` in your `vite.config.ts`.
+`output: "static"` uploads only the prerendered pages and the client
+assets. No Function is created.
+
+## Render on a Function
+
+```typescript
+const site = yield* Azure.Website.Foldkit("Website", {
+  location: "eastus",
+  output: "server",
+  env: { API_BASE: "https://api.example.com" },
+});
+```
+
+Enable `ssr.build` in your `vite.config.ts`. The
+`@alchemy.run/frontend-frameworks/foldkit/azure` target wraps Foldkit's
+generated fetch handler in an Azure Functions handler. `env` values become
+app settings of the Function. A server build needs Front Door, and
+`location` must offer Flex Consumption.
+
+## Share a Front Door profile
+
+```typescript
+const profile = yield* Azure.Cdn.Profile("Edge");
+const web = yield* Azure.Website.Foldkit("Website", {
+  output: "server",
+  frontDoor: { profile },
+});
+```
+
+Each profile bills a monthly base fee, so share one across sites.
+`frontDoor: false` serves a browser-only or prerendered build straight from
+the storage endpoint, where deep links answer `404` with the app shell. See
+[Websites](/azure/frontend/websites) for caching, purges, and the other
+shared settings.
+
+## Local development
+
+`alchemy dev` runs Foldkit's own Vite dev server (HMR and devtools) and
+creates nothing in Azure. Wrap the site in `Alchemy.remote()` to deploy it
+for real during dev.
+
+See the [`azure-website-foldkit`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-foldkit)
+example.
+
+## Where next
+
+- [Websites](/azure/frontend/websites) — the settings every site shares.
+- [Website reference](/providers/azure/website#foldkit) — every prop.
