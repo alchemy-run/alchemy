@@ -52,19 +52,6 @@ export const recordsEqual = (a: Record<string, string>, b: Record<string, string
 };
 
 /**
- * Set equality for primitive elements: order and repeats do not matter. An
- * omitted list (`undefined` or `null`) is empty, so it equals `[]`.
- */
-export const setEquals = <T>(
-  a: ReadonlyArray<T> | null | undefined,
-  b: ReadonlyArray<T> | null | undefined,
-): boolean => {
-  const members = new Set(a ?? []);
-  const others = new Set(b ?? []);
-  return members.size === others.size && [...members].every((member) => others.has(member));
-};
-
-/**
  * True when any DEFINED leaf of `desired` differs from the corresponding
  * value in `observed`. Keys the caller left undefined are ignored, so the
  * comparison only covers configuration the user actually expressed.

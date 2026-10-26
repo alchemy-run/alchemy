@@ -1,18 +1,18 @@
 import { createHash, createPublicKey } from "node:crypto";
 import * as DO from "@distilled.cloud/digitalocean";
 import type { SshKeys as ApiSshKey } from "@distilled.cloud/digitalocean";
+import { OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
+import { isResolved } from "alchemy/Diff";
+import type { Input } from "alchemy/Input";
+import { createPhysicalName } from "alchemy/PhysicalName";
+import * as Provider from "alchemy/Provider";
+import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import { OwnedBySomeoneElse, Unowned } from "../AdoptPolicy.ts";
-import { isResolved } from "../Diff.ts";
-import type { Input } from "../Input.ts";
-import { createPhysicalName } from "../PhysicalName.ts";
-import * as Provider from "../Provider.ts";
-import { Resource } from "../Resource.ts";
-import { pollUntil, type PollBudget } from "../Util/poll.ts";
-import { ignoreNotFound, noneIfNotFound } from "./notFound.ts";
+import { ignoreNotFound, noneIfNotFound } from "./internal/notFound.ts";
+import { pollUntil, type PollBudget } from "./internal/poll.ts";
 import type { Providers } from "./Providers.ts";
 
 export type SshKeyProps = {

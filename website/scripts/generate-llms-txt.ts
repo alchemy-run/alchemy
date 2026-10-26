@@ -441,6 +441,14 @@ const SECTIONS: Section[] = [
     pages: { directory: "railway/frontend" },
   },
   {
+    heading: "DigitalOcean",
+    intro:
+      "Linux VMs as Stack resources — droplets, SSH keys, and Cloud Firewalls. Only name and tags mutate in place; everything else replaces the host, so provision with cloud-init.",
+    pages: {
+      slugs: ["digitalocean/index", "digitalocean/setup"],
+    },
+  },
+  {
     heading: "PlanetScale",
     intro:
       "Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.",

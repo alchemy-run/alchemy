@@ -8551,6 +8551,31 @@ importers:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
 
+  packages/digitalocean:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/digitalocean':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/digitalocean
+    devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.5(effect@4.0.5)(redis@6.2.1)
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.5
+        version: 4.0.5
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/docker:
     dependencies:
       rolldown:
@@ -9681,6 +9706,9 @@ importers:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
         version: link:../cloudflare-runtime
+      '@alchemy.run/digitalocean':
+        specifier: workspace:*
+        version: link:../digitalocean
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
@@ -9762,6 +9790,9 @@ importers:
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/digitalocean':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/digitalocean
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io

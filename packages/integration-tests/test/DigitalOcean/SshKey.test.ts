@@ -1,11 +1,11 @@
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import { authorizedKey, diffSshKey, fingerprintOf, SshKey } from "@alchemy.run/digitalocean/SshKey";
+import { describe, expect, it } from "@alchemy.run/test";
 import { createSshKey, deleteSshKey, getSshKey } from "@distilled.cloud/digitalocean";
-import { describe, expect, it } from "alchemy-test";
+import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
+import { KeyPair } from "alchemy/KeyPair";
+import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
-import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
-import * as DigitalOcean from "@/DigitalOcean";
-import { authorizedKey, diffSshKey, fingerprintOf, SshKey } from "@/DigitalOcean/SshKey";
-import { KeyPair } from "@/KeyPair";
-import * as Test from "@/Test/Alchemy";
 import { forgetAttributes, isGone, logLevel, skipLive } from "./support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });

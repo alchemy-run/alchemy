@@ -1,10 +1,13 @@
+import { createHash } from "node:crypto";
+import { Stack } from "alchemy/Stack";
+import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
-import { Stack } from "../Stack.ts";
-import { Stage } from "../Stage.ts";
-import { sha256 } from "../Util/sha256.ts";
 
 const OWNERSHIP_TAG_PREFIX = "alchemy:";
 const GENERATION_TAG_PREFIX = `${OWNERSHIP_TAG_PREFIX}generation:`;
+
+const sha256Hex = (input: string) =>
+  Effect.sync(() => createHash("sha256").update(input).digest("hex"));
 
 /**
  * Names the logical resource. Every generation of it carries this tag, so
@@ -12,7 +15,7 @@ const GENERATION_TAG_PREFIX = `${OWNERSHIP_TAG_PREFIX}generation:`;
  * flat strings, so the stack, stage and name are hashed into one.
  */
 export const hashOwnershipTag = (stack: string, stage: string, fqn: string) =>
-  Effect.map(sha256(`${stack}\0${stage}\0${fqn}`), (digest) => OWNERSHIP_TAG_PREFIX + digest);
+  Effect.map(sha256Hex(`${stack}\0${stage}\0${fqn}`), (digest) => OWNERSHIP_TAG_PREFIX + digest);
 
 export const ownershipTagFor = Effect.fn(function* (fqn: string) {
   const stack = yield* Stack;

@@ -1,6 +1,6 @@
-import { describe, expect, it } from "alchemy-test";
+import { generationTagFor, hashOwnershipTag } from "@alchemy.run/digitalocean/internal/ownership";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
-import { generationTagFor, hashOwnershipTag } from "@/DigitalOcean/ownership";
 
 describe("ownership tags", { tags: ["unit", "provider:digitalocean", "local"] }, () => {
   it.effect("is stable and fits DigitalOcean's tag rules", () =>

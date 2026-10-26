@@ -1,3 +1,10 @@
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import {
+  Firewall,
+  haveSameRules,
+  type FirewallInboundRule,
+} from "@alchemy.run/digitalocean/Firewall";
+import { describe, expect, it } from "@alchemy.run/test";
 import {
   createFirewall,
   createTag,
@@ -5,12 +12,9 @@ import {
   deleteTag,
   getFirewall,
 } from "@distilled.cloud/digitalocean";
-import { describe, expect, it } from "alchemy-test";
+import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
+import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
-import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
-import * as DigitalOcean from "@/DigitalOcean";
-import { Firewall, haveSameRules, type FirewallInboundRule } from "@/DigitalOcean/Firewall";
-import * as Test from "@/Test/Alchemy";
 import { forgetAttributes, isGone, logLevel, skipLive } from "./support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });

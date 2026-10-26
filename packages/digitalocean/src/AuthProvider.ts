@@ -1,14 +1,14 @@
 import { DEFAULT_API_BASE_URL } from "@distilled.cloud/digitalocean/Credentials";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import { AuthError } from "../Auth/AuthProvider.ts";
-import { getEnv, getEnvRedacted } from "../Auth/Env.ts";
+import { AuthError } from "alchemy/Auth/AuthProvider";
+import { getEnv, getEnvRedacted } from "alchemy/Auth/Env";
 import {
   makeStoredAuthProvider,
   storedSecret,
   storedValueText,
   type StoredAuthConfig,
-} from "../Auth/StoredAuthProvider.ts";
+} from "alchemy/Auth/StoredAuthProvider";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 
 export const DIGITALOCEAN_AUTH_PROVIDER_NAME = "DigitalOcean";
 

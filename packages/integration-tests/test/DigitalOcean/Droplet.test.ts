@@ -1,18 +1,18 @@
-import { dropletsDestroy, getDroplet, getTag } from "@distilled.cloud/digitalocean";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as TestClock from "effect/testing/TestClock";
-import { OwnedBySomeoneElse } from "@/AdoptPolicy";
-import * as DigitalOcean from "@/DigitalOcean";
+import * as DigitalOcean from "@alchemy.run/digitalocean";
 import {
   diffDroplet,
   propsChangedSinceLastDeploy,
   propsDriftedFromCloud,
-} from "@/DigitalOcean/Droplet";
-import { hashOwnershipTag } from "@/DigitalOcean/ownership";
-import * as Output from "@/Output";
-import { State } from "@/State/State";
-import * as Test from "@/Test/Alchemy";
+} from "@alchemy.run/digitalocean/Droplet";
+import { hashOwnershipTag } from "@alchemy.run/digitalocean/internal/ownership";
+import { describe, expect, it } from "@alchemy.run/test";
+import { dropletsDestroy, getDroplet, getTag } from "@distilled.cloud/digitalocean";
+import { OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
+import * as Output from "alchemy/Output";
+import { State } from "alchemy/State/State";
+import * as Test from "alchemy/Test/Alchemy";
+import * as Effect from "effect/Effect";
+import * as TestClock from "effect/testing/TestClock";
 import { isGone, logLevel, skipSlow } from "./support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });

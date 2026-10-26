@@ -1,9 +1,9 @@
-import { describe, expect, it } from "alchemy-test";
+import { pollUntil } from "@alchemy.run/digitalocean/internal/poll";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as TestClock from "effect/testing/TestClock";
-import { pollUntil } from "@/Util/poll";
 
 class TimedOut extends Data.TaggedError("TimedOut")<{
   readonly last: number;

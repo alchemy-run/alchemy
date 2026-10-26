@@ -8,6 +8,12 @@ import type {
   NetworkV6,
   PostDropletActionRequestBody,
 } from "@distilled.cloud/digitalocean";
+import { Unowned } from "alchemy/AdoptPolicy";
+import { isResolved } from "alchemy/Diff";
+import type { Input } from "alchemy/Input";
+import { createPhysicalName } from "alchemy/PhysicalName";
+import * as Provider from "alchemy/Provider";
+import { Resource } from "alchemy/Resource";
 import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
@@ -16,21 +22,15 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as Stream from "effect/Stream";
-import { Unowned } from "../AdoptPolicy.ts";
-import { isResolved } from "../Diff.ts";
-import type { Input } from "../Input.ts";
-import { createPhysicalName } from "../PhysicalName.ts";
-import * as Provider from "../Provider.ts";
-import { Resource } from "../Resource.ts";
-import { setEquals } from "../Util/equal.ts";
-import { pollUntil, type PollBudget } from "../Util/poll.ts";
-import { ignoreNotFound, noneIfNotFound } from "./notFound.ts";
+import { setEquals } from "./internal/equal.ts";
+import { ignoreNotFound, noneIfNotFound } from "./internal/notFound.ts";
 import {
   generationTagFor,
   isAlchemyTag,
   ownershipTagFor,
   withoutAlchemyTags,
-} from "./ownership.ts";
+} from "./internal/ownership.ts";
+import { pollUntil, type PollBudget } from "./internal/poll.ts";
 import type { Providers } from "./Providers.ts";
 import type { ImageSlug, RegionSlug, SizeSlug } from "./Slugs.ts";
 

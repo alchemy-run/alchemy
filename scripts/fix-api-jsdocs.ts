@@ -15,6 +15,7 @@ const roots = [
   path.join(import.meta.dir, "../packages/neon/src"),
   path.join(import.meta.dir, "../packages/prisma/src"),
   path.join(import.meta.dir, "../packages/hetzner/src"),
+  path.join(import.meta.dir, "../packages/digitalocean/src"),
   path.join(import.meta.dir, "../packages/railway/src"),
   path.join(import.meta.dir, "../packages/fly/src"),
   path.join(import.meta.dir, "../packages/github/src"),

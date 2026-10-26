@@ -105,6 +105,11 @@ const config = {
       sourceDisplayPrefix: "packages/hetzner/src",
     },
     {
+      srcRoot: path.join(import.meta.dir, "../packages/digitalocean/src"),
+      providerPrefix: "DigitalOcean",
+      sourceDisplayPrefix: "packages/digitalocean/src",
+    },
+    {
       srcRoot: path.join(import.meta.dir, "../packages/railway/src"),
       providerPrefix: "Railway",
       sourceDisplayPrefix: "packages/railway/src",

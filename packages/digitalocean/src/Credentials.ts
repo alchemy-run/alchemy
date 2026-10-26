@@ -1,12 +1,12 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials } from "@distilled.cloud/digitalocean/Credentials";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import {
   deferUntilFirstUse,
   orDieCredentialsUnavailable,
   resolveProviderConfig,
-} from "../Auth/Resolve.ts";
+} from "alchemy/Auth/Resolve";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import {
   DIGITALOCEAN_AUTH_PROVIDER_NAME,
   type DigitalOceanAuthConfig,

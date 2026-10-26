@@ -121,6 +121,9 @@
       "path": "./packages/hetzner/tsconfig.json"
     },
     {
+      "path": "./packages/digitalocean/tsconfig.json"
+    },
+    {
       "path": "./packages/railway/tsconfig.json"
     },
     {

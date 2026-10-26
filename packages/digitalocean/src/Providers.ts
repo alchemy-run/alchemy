@@ -1,9 +1,9 @@
+import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
+import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import { KeyPair, KeyPairProvider } from "alchemy/KeyPair";
+import * as Provider from "alchemy/Provider";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
-import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileStoreLive } from "../Auth/Profile.ts";
-import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
-import * as Provider from "../Provider.ts";
 import { DigitalOceanAuth } from "./AuthProvider.ts";
 import * as Credentials from "./Credentials.ts";
 import { Droplet, DropletProvider } from "./Droplet.ts";
@@ -23,7 +23,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * @example
  * ```typescript
  * import * as Alchemy from "alchemy";
- * import * as DigitalOcean from "alchemy/DigitalOcean";
+ * import * as DigitalOcean from "@alchemy.run/digitalocean";
  * import * as Effect from "effect/Effect";
  *
  * export default Alchemy.Stack(
