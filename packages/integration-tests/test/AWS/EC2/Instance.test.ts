@@ -3,12 +3,14 @@ import { amazonLinux2023, Instance, Subnet, Vpc, type InstanceProps } from "@alc
 import { Queue } from "@alchemy.run/aws/SQS";
 import { describe, expect } from "@alchemy.run/test";
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import * as Drift from "alchemy/Drift";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import { assertInstanceTerminated, assertVpcGone } from "./Gone.ts";
 import * as Test from "./VpcTest.ts";
 
@@ -337,6 +339,52 @@ echo ${queue.queueUrl}
         yield* stack.destroy();
         yield* assertInstanceTerminated(first.instance.instanceId);
         yield* assertVpcGone(first.vpc.vpcId);
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
+
+  // EC2 keeps listing a terminated instance for a while. `read` must report
+  // it as missing, so drift sees the instance gone rather than changed.
+  test.provider(
+    "drift reports an instance terminated outside the stack as missing",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const vpc = yield* Vpc("DriftInstanceVpc", { cidrBlock: "10.0.0.0/16" });
+            const subnet = yield* Subnet("DriftInstanceSubnet", {
+              vpcId: vpc.vpcId,
+              cidrBlock: "10.0.1.0/24",
+            });
+            const instance = yield* Instance("DriftInstance", {
+              imageId: amazonLinux2023(),
+              instanceType: "t3.micro",
+              subnetId: subnet.subnetId,
+            });
+            return { vpc, instance };
+          }),
+        );
+
+        yield* ec2.terminateInstances({ InstanceIds: [deployed.instance.instanceId] });
+        // shutting-down -> terminated can take a minute or two.
+        yield* ec2.describeInstances({ InstanceIds: [deployed.instance.instanceId] }).pipe(
+          Effect.map((r) => r.Reservations?.[0]?.Instances?.[0]?.State?.Name),
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            until: (state) => state === "terminated",
+            times: 24,
+          }),
+        );
+
+        const drift = yield* Drift.detect({ name: stack.name, stage: stack.stage }).pipe(
+          Effect.provide(stack.state),
+        );
+        expect(drift.resources.DriftInstance?.action).toBe("missing");
+
+        yield* stack.destroy();
+        yield* assertVpcGone(deployed.vpc.vpcId);
       }).pipe(logLevel),
     { timeout: 300_000 },
   );

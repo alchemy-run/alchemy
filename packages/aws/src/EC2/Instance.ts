@@ -804,7 +804,9 @@ export const InstanceProvider = () =>
                 }),
               )
             : yield* findInstanceByTags(id, instanceId);
-          return instance
+          // A terminated instance is a tombstone EC2 keeps listing for a
+          // while; report it as missing, as reconcile does.
+          return instance && instance.State?.Name !== "terminated"
             ? {
                 ...(yield* toAttributes(instance, portFromUrl(output?.url))),
                 instanceProfileName: output?.instanceProfileName,
