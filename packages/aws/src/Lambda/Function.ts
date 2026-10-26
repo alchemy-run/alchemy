@@ -892,6 +892,36 @@ export const normalizeFunctionUrl = (
  * ) {}
  * ```
  *
+ * ### Sandbox-Scoped Initialization
+ * To do expensive setup once per sandbox, pass `host.listen` an Effect that
+ * returns the handler. The outer Effect runs at cold start; the handler it
+ * returns serves every invocation on that sandbox. Services provided around
+ * `host.listen` reach both, and Lambda supplies `Scope` (per sandbox, then
+ * fresh per invocation) and `HandlerContext` (per invocation) itself.
+ *
+ * **Example:** Build a layer once per sandbox
+ * ```typescript
+ * export default class ApiFunction extends AWS.Lambda.Function<ApiFunction>()(
+ *   "ApiFunction",
+ *   { main: import.meta.url, functionUrl: true },
+ *   Effect.gen(function* () {
+ *     const host = yield* AWS.Lambda.Function;
+ *     yield* host.listen(
+ *       Effect.gen(function* () {
+ *         const services = yield* Layer.build(ConfigLive);
+ *         return AWS.Lambda.makeFunctionHttpHandler(
+ *           Effect.gen(function* () {
+ *             const config = yield* Config;
+ *             const { awsRequestId } = yield* AWS.Lambda.HandlerContext;
+ *             return yield* HttpServerResponse.json({ name: config.name, awsRequestId });
+ *           }).pipe(Effect.provide(services)),
+ *         );
+ *       }),
+ *     );
+ *   }),
+ * ) {}
+ * ```
+ *
  * ### Function URL access
  * Every Function gets a public, unauthenticated Function URL unless you
  * opt out. `functionUrl` has three access choices: `false` (no URL),
