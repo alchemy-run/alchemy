@@ -188,14 +188,12 @@ export const lazyCredentials = <Resolved, E = CredentialsUnavailable>() =>
     toClient: (resolved: Resolved) => A,
     options?: { readonly expiresAt?: (resolved: Resolved) => number | undefined },
   ) {
-    const unavailable =
-      (prefix: string) =>
-      (cause: { readonly message: string }): CredentialsUnavailable =>
-        CredentialsUnavailable.make({
-          provider: providerName,
-          message: `${prefix}${cause.message}`,
-          cause,
-        });
+    const unavailable = (prefix: string) => (cause: { readonly message: string }) =>
+      CredentialsUnavailable.make({
+        provider: providerName,
+        message: `${prefix}${cause.message}`,
+        cause,
+      });
     const resolve = yield* resolveProviderConfig<{ method: string }, Resolved>(providerName).pipe(
       Effect.mapError(unavailable("")),
       Effect.flatMap(({ profileName, resolve }) =>

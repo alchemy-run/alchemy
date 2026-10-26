@@ -57,13 +57,10 @@ const make = (
 ): Effect.Effect<Context.Context<Credentials | Organization>, never, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
-    const credentials: Effect.Effect<TursoClientConfig, ConfigError> = Effect.map(
-      resolve,
-      (creds) => ({
-        apiKey: creds.apiToken,
-        apiBaseUrl: creds.apiBaseUrl,
-      }),
-    );
+    const credentials = Effect.map(resolve, (creds) => ({
+      apiKey: creds.apiToken,
+      apiBaseUrl: creds.apiBaseUrl,
+    }));
     // `Organization` is typed as never failing, so a credentials failure dies
     // here; the engine still reports it as `CredentialsRequired`.
     const organization = yield* Effect.cached(

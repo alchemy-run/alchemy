@@ -105,6 +105,8 @@ export class CredentialsRequired extends Data.TaggedError("CredentialsRequired")
 export const failCredentialsRequired = (fqn: string) =>
   Effect.fn(function* <A, E, R>(self: Effect.Effect<A, E, R>) {
     const isUnavailable = Schema.is(CredentialsUnavailable);
+    // Annotated: the catch handler returns this or a re-fail of E, and a
+    // union of Effects does not unify on its own.
     const required = (
       unavailable: CredentialsUnavailable,
     ): Effect.Effect<never, E | CredentialsRequired> =>
