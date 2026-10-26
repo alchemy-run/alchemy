@@ -5,10 +5,10 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
+import { Interaction } from "../../../Interaction.ts";
 import type { Plan } from "../../../Plan.ts";
 import { type PlanStatusSession, Cli } from "../../../Report.ts";
 import type { ApplyEvent } from "../../../Report.ts";
-import { CliKit } from "../../CliKit/index.ts";
 import { formatElapsed } from "../../Format.ts";
 import { approvePlanScreen } from "./ApprovePlan.tsx";
 import { Plan as PlanComponent, PlanTree } from "./PlanView.tsx";
@@ -25,7 +25,7 @@ interface SessionPreferences {
 export const sigilCli = () =>
   Layer.effect(
     Cli,
-    Effect.map(CliKit, (cli) => {
+    Effect.map(Interaction, (cli) => {
       const preferences: SessionPreferences = { planExpanded: true };
       return Cli.of({
         startPlanningSession: (label, detail, title) =>
@@ -38,19 +38,19 @@ export const sigilCli = () =>
   );
 
 const approvePlan = Effect.fn(function* <P extends Plan>(
-  cli: CliKit["Service"],
+  cli: Interaction["Service"],
   plan: P,
   options?: import("../../../Report.ts").PlanDisplayOptions,
 ) {
   // A dismissed screen means "declined"; NonInteractiveTerminal propagates
   // typed to the command-level handlers (a friendly line, not a raw cause).
   return yield* cli.prompt
-    .custom(approvePlanScreen(plan, options?.detailed))
+    .screen(approvePlanScreen(plan, options?.detailed))
     .pipe(Effect.catchTag("TerminalCancelled", () => Effect.succeed(false)));
 });
 
 const displayPlan = Effect.fn(function* <P extends Plan>(
-  cli: CliKit["Service"],
+  cli: Interaction["Service"],
   plan: P,
   options?: import("../../../Report.ts").PlanDisplayOptions,
 ) {
@@ -64,14 +64,14 @@ const displayPlan = Effect.fn(function* <P extends Plan>(
 });
 
 const startPlanningSession = Effect.fn(function* (
-  cli: CliKit["Service"],
+  cli: Interaction["Service"],
   label: string,
   detail?: string,
   title?: string,
 ) {
   const startedAt = yield* Clock.currentTimeMillis;
   const scope = yield* Scope.make();
-  const progress = yield* cli.live
+  const progress = yield* cli
     .progress({
       label,
       detail,
@@ -109,7 +109,7 @@ const startPlanningSession = Effect.fn(function* (
 });
 
 const startApplySession = Effect.fn(function* <P extends Plan>(
-  cli: CliKit["Service"],
+  cli: Interaction["Service"],
   plan: P,
   options: import("../../../Report.ts").PlanDisplayOptions | undefined,
   preferences: SessionPreferences,
@@ -154,8 +154,8 @@ const startApplySession = Effect.fn(function* <P extends Plan>(
   // generation is interrupted (a reload or Ctrl+C), so a replaced
   // generation never leaves its widget behind.
   const scope = yield* Scope.make();
-  const live = yield* cli.live
-    .open(<PlanComponent tree={progress} collapsible={options?.dev} />, {
+  const live = yield* cli
+    .live(<PlanComponent tree={progress} collapsible={options?.dev} />, {
       persistOnClose: !options?.dev,
     })
     .pipe(Scope.provide(scope));

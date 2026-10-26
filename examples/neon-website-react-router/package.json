@@ -16,6 +16,7 @@
     "build": "react-router build"
   },
   "dependencies": {
+    "@alchemy.run/neon": "workspace:*",
     "@react-router/node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",

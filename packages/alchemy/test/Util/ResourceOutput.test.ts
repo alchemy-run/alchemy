@@ -1,4 +1,4 @@
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { formatResourceTag, stripChildEffectPrefix } from "@/Util/ResourceOutput.ts";
 
 describe("stripChildEffectPrefix", { tags: ["unit", "local"] }, () => {

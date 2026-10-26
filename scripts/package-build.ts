@@ -38,6 +38,13 @@ export interface Step {
 export interface BuildOptions {
   /** Generate `publishConfig.exports` from `exports`. */
   readonly exports?: {
+    /**
+     * Also generate the workspace `exports` from `src/`: the root, one entry
+     * per directory index (`./S3` → `./src/S3/index.ts`), the `sourceOnly`
+     * subpaths, and `./*` for every other file. Published packages block
+     * every `internal/` directory.
+     */
+    readonly generate?: boolean;
     /** Add a `worker` condition on source for Worker bundlers. */
     readonly worker?: boolean;
     /** Subpaths that resolve to source in every condition. */
@@ -88,6 +95,18 @@ export const exec = (command: string, ...args: Array<string>): Step => ({
   }),
 });
 
+/**
+ * Run the TypeScript compiler: tsrs where it ships a native binary, `tsc`
+ * elsewhere (Windows, Intel macOS).
+ */
+export const typescript = (...args: Array<string>): Step =>
+  exec(
+    ["darwin-arm64", "linux-x64", "linux-arm64"].includes(`${process.platform}-${process.arch}`)
+      ? "tsrs"
+      : "tsc",
+    ...args,
+  );
+
 /** Copy a file, paths relative to the package directory. */
 export const copy = (from: string, to: string): Step => ({
   name: `copy ${from} → ${to}`,
@@ -96,6 +115,85 @@ export const copy = (from: string, to: string): Step => ({
     const path = yield* Path.Path;
     yield* fs.copyFile(path.join(packageDirectory, from), path.join(packageDirectory, to));
   }),
+});
+
+/** Directories under `src/`, relative to it, skipping `internal/` trees. */
+const sourceDirectories = Effect.fn(function* (sourceDirectory: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const entries = yield* fs.readDirectory(sourceDirectory, { recursive: true });
+  const directories: Array<string> = [];
+  for (const entry of entries.sort()) {
+    const info = yield* fs.stat(path.join(sourceDirectory, entry));
+    if (info.type === "Directory") directories.push(entry.split(path.sep).join("/"));
+  }
+  return directories;
+});
+
+const isInternal = (directory: string) => directory.split("/").includes("internal");
+
+const generateExports = Effect.fn(function* (
+  packageDirectory: string,
+  options: NonNullable<BuildOptions["exports"]>,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const sourceDirectory = path.join(packageDirectory, "src");
+  const directories = yield* sourceDirectories(sourceDirectory);
+
+  const indexes: Array<string> = [];
+  for (const directory of directories) {
+    if (isInternal(directory)) continue;
+    if (yield* fs.exists(path.join(sourceDirectory, directory, "index.ts"))) {
+      indexes.push(directory);
+    }
+  }
+
+  return {
+    ...((yield* fs.exists(path.join(sourceDirectory, "index.ts")))
+      ? { ".": "./src/index.ts" }
+      : {}),
+    ...Object.fromEntries(
+      (options.sourceOnly ?? []).map((subpath) => [subpath, `./src/${subpath.slice(2)}.ts`]),
+    ),
+    ...Object.fromEntries(
+      indexes
+        .sort((a, b) => a.localeCompare(b))
+        .map((directory) => [`./${directory}`, `./src/${directory}/index.ts`]),
+    ),
+    "./*": "./src/*.ts",
+    "./package.json": "./package.json",
+  } as Record<string, string | null>;
+});
+
+/**
+ * `null` entries blocking everything named `internal` from the published
+ * package: each `internal/` directory, a root `internal.ts` (`./internal`),
+ * and `internal.ts` at any depth below it (one pattern key ending in
+ * `/internal`, which outranks `./*`).
+ */
+const internalBlocks = Effect.fn(function* (packageDirectory: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const sourceDirectory = path.join(packageDirectory, "src");
+  const directories = yield* sourceDirectories(sourceDirectory);
+  const files = (yield* fs.readDirectory(sourceDirectory, { recursive: true })).map((file) =>
+    file.split(path.sep).join("/"),
+  );
+  return {
+    ...Object.fromEntries(
+      directories
+        .filter((directory) => directory.split("/").at(-1) === "internal")
+        .filter((directory) => !isInternal(directory.split("/").slice(0, -1).join("/")))
+        .map((directory) => [`./${directory}/*`, null]),
+    ),
+    ...(files.includes("internal.ts") ? { "./internal": null } : {}),
+    ...(files.some(
+      (file) => file.endsWith("/internal.ts") && !isInternal(file.slice(0, file.lastIndexOf("/"))),
+    )
+      ? { "./*/internal": null }
+      : {}),
+  };
 });
 
 const syncPublishExports = Effect.fn(function* (
@@ -110,6 +208,9 @@ const syncPublishExports = Effect.fn(function* (
     exports: Record<string, string | null>;
     publishConfig?: Record<string, unknown>;
   };
+  if (options.generate) {
+    packageJson.exports = yield* generateExports(packageDirectory, options);
+  }
   const tsconfig = JSON.parse(
     yield* fs.readFileString(path.join(packageDirectory, "tsconfig.json")),
   ) as { compilerOptions: { outDir: string } };
@@ -138,10 +239,18 @@ const syncPublishExports = Effect.fn(function* (
     }),
   );
 
+  // Blocks go just before `./*` so the published map reads top to bottom.
+  const blocks = options.generate ? yield* internalBlocks(packageDirectory) : {};
+  const published = Object.fromEntries(
+    Object.entries(exports).flatMap((entry) =>
+      entry[0] === "./*" ? [...Object.entries(blocks), entry] : [entry],
+    ),
+  );
+
   yield* fs.writeFileString(
     packageJsonPath,
     JSON.stringify(
-      { ...packageJson, publishConfig: { ...packageJson.publishConfig, exports } },
+      { ...packageJson, publishConfig: { ...packageJson.publishConfig, exports: published } },
       null,
       2,
     ) + "\n",
@@ -185,6 +294,12 @@ export const build = (scriptsDirectory: string, options: BuildOptions) =>
     const { name, version } = JSON.parse(
       yield* fs.readFileString(path.join(packageDirectory, "package.json")),
     ) as { name: string; version: string };
+
+    // `scripts/sync-exports.ts` regenerates the export maps without building.
+    if (process.env.PACKAGE_BUILD_EXPORTS_ONLY === "1") {
+      if (options.exports) yield* syncPublishExports(packageDirectory, options.exports);
+      return;
+    }
 
     const phases: Array<Step> = [
       {

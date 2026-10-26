@@ -25,8 +25,9 @@ export interface AstroCloudflareConfig {
   sessionKVBindingName: string;
   compileImageConfig: CompileImageConfig | null;
   /**
-   * True when the user has configured the Cloudflare cache provider. Not
-   * currently supported by this package; always `false`.
+   * True when the Astro config uses the Cloudflare cache provider
+   * (`cacheCloudflare()`). The handler then defaults responses without
+   * cache intent to `Cloudflare-CDN-Cache-Control: no-store`.
    */
   cacheProviderEnabled: boolean;
 }

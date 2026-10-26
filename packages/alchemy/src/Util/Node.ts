@@ -93,6 +93,7 @@ export const nodeLoaderArgs = (entry: string): string[] => [
 export const isRegisterHooksSupported = (version = process.versions.node): boolean => {
   const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number);
   return (
+    (major === 22 && (minor > 22 || (minor === 22 && patch >= 3))) ||
     (major === 24 && (minor > 11 || (minor === 11 && patch >= 1))) ||
     (major === 25 && minor >= 1) ||
     major >= 26

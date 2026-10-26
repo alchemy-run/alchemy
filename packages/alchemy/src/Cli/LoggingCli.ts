@@ -9,7 +9,8 @@ import { Cli, type PlanDisplayOptions } from "../Report.ts";
 import type { ApplyEvent, ApplyStatus } from "../Report.ts";
 import { canPromptOnStdin } from "../Util/interactive.ts";
 import { formatResourceTag } from "../Util/ResourceOutput.ts";
-import { ansiFg, colorsEnabled, theme } from "./CliKit/index.ts";
+import { ansiFg, colorsEnabled } from "../Util/Terminal.ts";
+import { theme } from "../Util/Theme.ts";
 import {
   actionStyle,
   applyStatusColor,

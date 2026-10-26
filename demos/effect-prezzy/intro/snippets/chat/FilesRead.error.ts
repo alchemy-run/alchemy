@@ -1,4 +1,4 @@
-import { R2 } from "alchemy/Cloudflare";
+import { R2 } from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Files, UploadError } from "./Files.ts";

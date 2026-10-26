@@ -9,6 +9,13 @@ import type { OutputSink, WorkerdExit } from "./workerd/Workerd.ts";
 export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly name: string;
   readonly proxySharedSecret?: string;
+  /**
+   * The URL clients reach the Worker at, when a dev server or proxy fronts
+   * the runtime. Bindings that hand out URLs to the Worker's own endpoints
+   * (Stream preview URLs, Images variant URLs) use it, as Miniflare uses its
+   * public URL. Defaults to the runtime's own entry address.
+   */
+  readonly publicUrl?: string;
   readonly compatibilityDate: string;
   readonly compatibilityFlags: Array<string>;
   readonly bindings: B;
@@ -77,6 +84,21 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * to the runtime-wide `Cf` reference (a static placeholder by default).
    */
   readonly cf?: Record<string, unknown>;
+  /**
+   * The zone outbound `fetch()`es report in their `CF-Worker` header, as on
+   * Cloudflare's edge: the host of the Worker's first route or custom
+   * domain. Defaults to Miniflare's `<name>.example.com`.
+   */
+  readonly zone?: string;
+  /**
+   * Simulates a request that passed Cloudflare Access: every request's
+   * `ctx.access` carries `aud`, and `ctx.access.getIdentity()` resolves
+   * `identity`. Mirrors Wrangler's `access.dev` config.
+   */
+  readonly access?: {
+    readonly aud?: string;
+    readonly identity?: Record<string, unknown>;
+  };
   /**
    * Controls how output from the underlying `workerd` process is surfaced.
    *

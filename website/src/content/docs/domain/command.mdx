@@ -1,0 +1,179 @@
+---
+title: Command
+description: How a command names its target, carries its data, declares every outcome, and reaches its aggregate exactly once.
+---
+
+A command asks one aggregate instance for a change. It's a request, so it can be refused, and it's named as an instruction: `OpenAccount`, `DepositMoney`, `WithdrawMoney`.
+
+A command is also a contract. Before you send one, its declaration tells you which instance it goes to, what data it carries, which events it may record, which refusals it may return, and what you get back. This page goes through that declaration one part at a time, then follows a command as it's sent.
+
+## Declare a command
+
+Here is a withdrawal from the bank in the [tutorial](/domain/tutorial/part-1).
+
+```typescript title="src/WithdrawMoney.command.ts"
+export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
+  target: AccountId,
+  input: { amount: Schema.Int },
+  events: [MoneyWithdrawn],
+  rejects: [NotOpen, InsufficientFunds],
+  reply: { balance: Schema.Int },
+}) {}
+```
+
+The first argument is the command's name. It's how the command is identified on the wire and in the aggregate's handlers, so it must be unique within a model.
+
+## Keep it with its events and rejections
+
+A command, the events it records and the rejections it returns are one unit: you read them together, and change them together. Put them in one file named after the command, with a `.command.ts` suffix, like `WithdrawMoney.command.ts`. See [Project layout](/domain/project-layout).
+
+```typescript title="src/WithdrawMoney.command.ts"
+export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
+  amount: Schema.Int,
+  balanceAfter: Schema.Int,
+}) {}
+
+export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
+  balance: Schema.Int,
+  requested: Schema.Int,
+}) {}
+```
+
+When more than one command uses something, it moves to a file of its own. Deposits and withdrawals both refuse an account that isn't open, so `NotOpen` has its own file, `NotOpen.rejection.ts`, and both import it.
+
+```typescript title="src/NotOpen.rejection.ts"
+export class NotOpen extends Domain.Rejection("NotOpen") {}
+```
+
+The aggregate's file then holds only its state and how it decides and evolves, and imports each command from its file. The same goes for ids, like `AccountId`, which the commands and the aggregate share.
+
+## Address one instance
+
+`target` is the schema of the id the command is addressed to. A withdrawal goes to one account, so its target is an `AccountId`.
+
+```typescript title="src/Account.id.ts"
+export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
+```
+
+The brand makes the id its own type. A `CustomerId` is a string too, but passing one where an `AccountId` is expected is a type error, so a command can't be sent to the wrong kind of instance.
+
+The target isn't part of the command's data. You pass it alongside the command when you send it, and the model uses it to route the command to that one instance.
+
+## Carry the request's data
+
+`input` lists the fields the caller provides, each as a schema. You create the command with them, and the aggregate reads them in `decide`.
+
+```typescript title="src/Account.aggregate.ts"
+WithdrawMoney: (s, cmd) =>
+  s._tag !== "Open"
+    ? new NotOpen()
+    : cmd.amount > s.balance
+      ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
+      : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
+```
+
+The schemas also decode the command when it arrives from a client, so `decide` only ever sees well-formed input. A command with no input, like a request to close an account, leaves `input` out.
+
+## Declare every outcome
+
+A command can end in one of two ways: the aggregate records events, or it refuses. `events` lists the events the command may record, and `rejects` lists the refusals it may return.
+
+A refusal is a `Domain.Rejection`, a typed error that can carry data about why.
+
+```typescript title="src/WithdrawMoney.command.ts"
+export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
+  balance: Schema.Int,
+  requested: Schema.Int,
+}) {}
+```
+
+Both lists are enforced by the types. The aggregate's `decide` handler for `WithdrawMoney` can only return `MoneyWithdrawn` events or one of its two rejections. And whoever sends it gets exactly `NotOpen | InsufficientFunds` in the error channel, so they can handle each case by name.
+
+A rejection means nothing happened. No event is recorded and the state is unchanged, so the caller can safely try again with different input.
+
+## Reply to the caller
+
+`reply` is what the caller gets back after the events commit. Here, the balance after the withdrawal.
+
+The aggregate computes it from its state after the events, in a `reply` handler named after the command.
+
+```typescript title="src/Account.aggregate.ts"
+reply: {
+  DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }),
+  WithdrawMoney: (s) => ({ balance: mustBeOpen(s).balance }),
+},
+```
+
+A command without a `reply` still tells the caller where it committed. See [the receipt](#send-it) below.
+
+## Guard it with middleware
+
+Before a command reaches its aggregate, it can pass through middleware. In the full example bank, a withdrawal first authenticates the caller with `Session`, then asks for a second factor with `MfaChallenge`.
+
+```typescript title="packages/domain/src/Account/WithdrawMoney.command.ts"
+export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
+  target: AccountId,
+  middleware: [Session, MfaChallenge],
+  input: { amount: Cents },
+  events: [MoneyWithdrawn],
+  rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds, DailyLimitExceeded],
+  reply: { balance: Cents },
+  // Recorded on every span the withdrawal passes through; nothing else from it is.
+  attributes: (cmd) => ({ "bank.amount": cmd.amount }),
+}) {}
+```
+
+`attributes` chooses what its spans record; see [Observability](/domain/observability).
+
+Middleware runs in order, and any of it can stop the command with its own error, like `Unauthorized`. What it provides, such as who the caller is, travels with the command to the aggregate, where `decide` reads it to authorize the change. See [Sessions and middleware](/domain/sessions).
+
+## Send it
+
+Inside a hosted model, you send a command through the aggregate's client, with the target id first.
+
+```typescript title="src/MainAccountProvisioning.policy.ts"
+yield* accounts
+  .send(AccountId.make(`${source.id}-main`), new OpenAccount({ owner: source.id }))
+  .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
+```
+
+From a client of an [Api](/domain/api), each command is a method that takes the target and the input together: `bank.WithdrawMoney({ target: accountId, amount: 2_000 })`.
+
+Either way, `send` succeeds once the events have committed, with a receipt. It holds the stream and the version the instance committed at, the events it recorded, and the reply.
+
+## Send it exactly once
+
+Networks fail after a command commits but before its receipt arrives. A client that retries could withdraw twice.
+
+Every command has an id to prevent that. The instance stores each receipt under its command's id, and when the same id arrives again, it returns the stored receipt without deciding again. Pass your own `commandId` when you might retry:
+
+```typescript
+// packages/server/test/withdrawOnce.ts
+import * as Effect from "effect/Effect";
+import type { AccountId } from "@bank/domain/Account/Account.id";
+import { type CustomerClient, mfa } from "./flows.ts";
+
+export const withdrawOnce = Effect.fn(function* (
+  bank: CustomerClient,
+  accountId: AccountId,
+  requestId: string,
+) {
+  const first = yield* bank.WithdrawMoney({ target: accountId, amount: 2_000, commandId: requestId }, mfa);
+  const retry = yield* bank.WithdrawMoney({ target: accountId, amount: 2_000, commandId: requestId }, mfa);
+  return first.version === retry.version;
+});
+```
+
+Both calls return the same receipt, and the money leaves the account once. Without a `commandId`, each send gets a fresh one.
+
+Commands sent by a [policy](/domain/policy) get ids derived from the event that caused them, so a policy that runs twice for the same event sends the same commands, and each takes effect once.
+
+## Send it later
+
+A command can also be scheduled to arrive at a later time, which is how deadlines work: "expire this transfer if nobody approves it within a day". Only commands that can't be refused can be scheduled, because there's no caller waiting to handle a rejection. See [Deadlines](/domain/deadlines).
+
+```typescript title="packages/domain/src/Transfer/TransferApprovalDeadline.policy.ts"
+yield* transfers.schedule(source, new ExpireTransfer(), { after: APPROVAL_WINDOW });
+```
+
+Next, [Event](/domain/event) covers what a command records when it succeeds.
