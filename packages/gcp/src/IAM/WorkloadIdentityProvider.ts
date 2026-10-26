@@ -128,6 +128,25 @@ export type WorkloadIdentityProvider = Resource<
  * });
  * ```
  *
+ * ### AWS
+ * **Example:** Trust roles in one AWS account
+ * ```typescript
+ * yield* GCP.IAM.WorkloadIdentityProvider("Aws", {
+ *   workloadIdentityPoolId: pool.workloadIdentityPoolId,
+ *   attributeMapping: {
+ *     "google.subject": "assertion.arn",
+ *     "attribute.aws_role": "assertion.arn.extract('assumed-role/{role}/')",
+ *   },
+ *   aws: { accountId: "123456789012" },
+ * });
+ * ```
+ *
+ * ### Replacing and restoring <!-- api-prose -->
+ * Changing `workloadIdentityPoolId` or `workloadIdentityPoolProviderId`
+ * replaces the provider. GCP keeps a deleted provider for 30 days and
+ * reserves its id; deploying that id again restores it and re-applies the
+ * declared settings.
+ *
  * @resource
  * @category IAM
  */
