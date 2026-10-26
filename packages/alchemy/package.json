@@ -142,6 +142,7 @@
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@alchemy.run/test": "workspace:*",
+    "@cloudflare/workers-types": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",

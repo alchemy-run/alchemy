@@ -9,9 +9,7 @@ import { resolveAccessContext, type WorkerExecutionContextAccess } from "./Worke
 export const WorkerTypeId = "Cloudflare.Worker";
 export type WorkerTypeId = typeof WorkerTypeId;
 
-export class WorkerEnvironment extends Context.Service<WorkerEnvironment, Record<string, any>>()(
-  "Cloudflare.Workers.WorkerEnvironment",
-) {}
+export { WorkerEnvironment } from "alchemy/Workers/WorkerEnvironment";
 
 export class CachePurgeError extends Data.TaggedError("CachePurgeError")<{
   message: string;
