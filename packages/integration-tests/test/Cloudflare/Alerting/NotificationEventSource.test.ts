@@ -2,7 +2,6 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { notificationPath } from "@alchemy.run/cloudflare/Alerting/NotificationEventSource";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import * as GitHub from "@alchemy.run/github";
-import { github } from "@alchemy.run/github/Client";
 import { expect } from "@alchemy.run/test";
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import * as Issues from "@distilled.cloud/github/issues";
@@ -47,9 +46,7 @@ const Stack = Effect.gen(function* () {
 // is stable across runs, so the creation time singles out this run's issues.
 const issuesFor = (workerName: string, since: string) =>
   Effect.gen(function* () {
-    const issues = yield* github(
-      Issues.listForRepo({ owner, repo: repository, state: "open", since }),
-    );
+    const issues = yield* Issues.listForRepo({ owner, repo: repository, state: "open", since });
     return issues.filter(
       (issue) =>
         !issue.pull_request && issue.created_at >= since && issue.title.includes(workerName),
@@ -112,14 +109,12 @@ test.provider(
       yield* Effect.forEach(
         issues,
         (issue) =>
-          github(
-            Issues.update({
-              owner,
-              repo: repository,
-              issue_number: issue.number,
-              state: "closed",
-            }),
-          ),
+          Issues.update({
+            owner,
+            repo: repository,
+            issue_number: issue.number,
+            state: "closed",
+          }),
         { discard: true },
       );
 

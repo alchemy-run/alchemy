@@ -1,6 +1,5 @@
 import * as GitHub from "@alchemy.run/github";
-import { github } from "@alchemy.run/github/Client";
-import { GitHubCredentials } from "@alchemy.run/github/Credentials";
+import { Credentials, config } from "@alchemy.run/github/Credentials";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -14,7 +13,7 @@ import * as Redacted from "effect/Redacted";
  * provider test (out-of-band setup and verification).
  */
 export const gh = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  github(effect).pipe(Effect.provide(GitHub.providers({ baseUrl: "github.com" })));
+  effect.pipe(Effect.provide(GitHub.providers({ baseUrl: "github.com" })));
 
 /**
  * Keep a provider's `list()` inside the test organization. GitHub's `list()`
@@ -77,6 +76,6 @@ export const mockGitHub = (
   fetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response>,
 ) =>
   Layer.mergeAll(
-    Layer.succeed(GitHubCredentials, Effect.succeed({ token: Redacted.make("test-token") })),
+    Layer.succeed(Credentials, Effect.succeed(config(Redacted.make("test-token"), undefined))),
     Layer.succeed(FetchHttpClient.Fetch, fetch as typeof globalThis.fetch),
   );

@@ -1,17 +1,12 @@
 import * as Issues from "@distilled.cloud/github/issues";
+import * as Repos from "@distilled.cloud/github/repos";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { dedent } from "alchemy/Util/dedent";
 import * as Effect from "effect/Effect";
-import {
-  github,
-  gitHubBaseUrlChanged,
-  githubFor,
-  listAll,
-  listRepositories,
-  PER_PAGE,
-} from "./Client.ts";
+import * as Stream from "effect/Stream";
+import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface IssueProps {
@@ -121,7 +116,7 @@ export interface Issue extends Resource<
  * discussion history. Pipe the resource through `destroy()` to close the issue
  * on destruction instead; its discussion remains on GitHub.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied by
+ * Authentication is resolved via the GitHub `Credentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
  * `repo` scope for private repositories or `public_repo` for public ones.
  *
@@ -221,28 +216,25 @@ export const IssueProvider = () =>
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
-      const github = yield* githubFor(news.baseUrl);
-      const body = news.body ? dedent(news.body) : "";
-      const state = news.state ?? "open";
-      const labels = news.labels ?? [];
-      const assignees = news.assignees ?? [];
-      const milestone = news.milestone ?? null;
+    reconcile: Effect.fn(
+      function* ({ news, output }) {
+        const body = news.body ? dedent(news.body) : "";
+        const state = news.state ?? "open";
+        const labels = news.labels ?? [];
+        const assignees = news.assignees ?? [];
+        const milestone = news.milestone ?? null;
 
-      let data =
-        output?.issueNumber !== undefined
-          ? yield* github(
-              Issues.get({
+        let data =
+          output?.issueNumber !== undefined
+            ? yield* Issues.get({
                 owner: news.owner,
                 repo: news.repository,
                 issue_number: output.issueNumber,
-              }),
-            ).pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed(undefined)))
-          : undefined;
+              }).pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed(undefined)))
+            : undefined;
 
-      if (data === undefined) {
-        data = yield* github(
-          Issues.create({
+        if (data === undefined) {
+          data = yield* Issues.create({
             owner: news.owner,
             repo: news.repository,
             title: news.title,
@@ -250,32 +242,30 @@ export const IssueProvider = () =>
             labels,
             assignees,
             milestone: milestone ?? undefined,
-          }),
-        );
-      }
+          });
+        }
 
-      const sameNames = (observed: string[], desired: string[]) =>
-        JSON.stringify(observed.map((name) => name.toLowerCase()).sort()) ===
-        JSON.stringify(desired.map((name) => name.toLowerCase()).sort());
+        const sameNames = (observed: string[], desired: string[]) =>
+          JSON.stringify(observed.map((name) => name.toLowerCase()).sort()) ===
+          JSON.stringify(desired.map((name) => name.toLowerCase()).sort());
 
-      // Creation always opens an issue; sync also applies the desired initial state.
-      if (
-        data.title !== news.title ||
-        (data.body ?? "") !== body ||
-        data.state !== state ||
-        !sameNames(
-          data.labels.map((label) => (typeof label === "string" ? label : (label.name ?? ""))),
-          labels,
-        ) ||
-        !sameNames(
-          (data.assignees ?? []).map((assignee) => assignee.login),
-          assignees,
-        ) ||
-        (data.milestone?.number ?? null) !== milestone
-      ) {
-        const issueNumber = data.number;
-        data = yield* github(
-          Issues.update({
+        // Creation always opens an issue; sync also applies the desired initial state.
+        if (
+          data.title !== news.title ||
+          (data.body ?? "") !== body ||
+          data.state !== state ||
+          !sameNames(
+            data.labels.map((label) => (typeof label === "string" ? label : (label.name ?? ""))),
+            labels,
+          ) ||
+          !sameNames(
+            (data.assignees ?? []).map((assignee) => assignee.login),
+            assignees,
+          ) ||
+          (data.milestone?.number ?? null) !== milestone
+        ) {
+          const issueNumber = data.number;
+          data = yield* Issues.update({
             owner: news.owner,
             repo: news.repository,
             issue_number: issueNumber,
@@ -285,35 +275,35 @@ export const IssueProvider = () =>
             labels,
             assignees,
             milestone,
-          }),
-        );
-      }
-      return {
-        issueNumber: data.number,
-        nodeId: data.node_id,
-        htmlUrl: data.html_url,
-        state: data.state as "open" | "closed",
-        createdAt: data.created_at,
-        updatedAt: data.updated_at,
-      };
-    }),
+          });
+        }
+        return {
+          issueNumber: data.number,
+          nodeId: data.node_id,
+          htmlUrl: data.html_url,
+          state: data.state as "open" | "closed",
+          createdAt: data.created_at,
+          updatedAt: data.updated_at,
+        };
+      },
+      (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
+    ),
 
     // Enumerate every issue across the repositories the token can see.
     list: Effect.fn(function* () {
-      const repos = yield* listRepositories;
+      const repos = yield* Stream.runCollect(
+        Repos.listForAuthenticatedUser.items({ per_page: 100 }),
+      );
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          listAll((page) =>
-            github(
-              Issues.listForRepo({
-                owner: repo.owner.login,
-                repo: repo.name,
-                state: "all",
-                per_page: PER_PAGE,
-                page,
-              }),
-            ),
+          Stream.runCollect(
+            Issues.listForRepo.items({
+              owner: repo.owner.login,
+              repo: repo.name,
+              state: "all",
+              per_page: 100,
+            }),
           ).pipe(
             // Filter out pull requests (they appear in issues API)
             Effect.map((issues) =>
@@ -337,19 +327,18 @@ export const IssueProvider = () =>
       return perRepo.flat();
     }),
 
-    delete: Effect.fn(function* ({ olds, output }) {
-      const github = yield* githubFor(olds.baseUrl);
-
-      // Opted-in destruction closes the issue without deleting its discussion.
-      if (output?.issueNumber !== undefined) {
-        yield* github(
-          Issues.update({
+    delete: Effect.fn(
+      function* ({ olds, output }) {
+        // Opted-in destruction closes the issue without deleting its discussion.
+        if (output?.issueNumber !== undefined) {
+          yield* Issues.update({
             owner: olds.owner,
             repo: olds.repository,
             issue_number: output.issueNumber,
             state: "closed",
-          }),
-        ).pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.void));
-      }
-    }),
+          }).pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.void));
+        }
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
   });

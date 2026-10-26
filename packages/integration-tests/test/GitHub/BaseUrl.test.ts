@@ -1,11 +1,12 @@
 import { readEnvCredentials } from "@alchemy.run/github/AuthProvider";
 import {
+  gitHubBaseUrlChanged,
   githubHostname,
   normalizeGitHubBaseUrl,
   resolveGitHubBaseUrlFromEnv,
+  withBaseUrl,
 } from "@alchemy.run/github/BaseUrl";
-import { configFor, gitHubBaseUrlChanged } from "@alchemy.run/github/Client";
-import { fromToken } from "@alchemy.run/github/Credentials";
+import { Credentials, fromToken } from "@alchemy.run/github/Credentials";
 import { describe, expect, test } from "@alchemy.run/test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -197,11 +198,13 @@ describe("gitHubBaseUrlChanged", { tags: ["unit", "provider:github", "local"] },
   });
 });
 
-describe("configFor", { tags: ["unit", "provider:github", "local"] }, () => {
+describe("withBaseUrl", { tags: ["unit", "provider:github", "local"] }, () => {
   const apiBaseUrlOf = (credsBaseUrl: string | undefined, resourceBaseUrl: string | undefined) =>
     Effect.runSync(
-      configFor(resourceBaseUrl).pipe(
-        Effect.map((config) => config.apiBaseUrl),
+      Effect.gen(function* () {
+        return (yield* yield* Credentials).apiBaseUrl;
+      }).pipe(
+        withBaseUrl(resourceBaseUrl),
         Effect.provide(
           fromToken(
             "test-token",

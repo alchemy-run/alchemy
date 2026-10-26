@@ -1,5 +1,4 @@
 import * as GitHub from "@alchemy.run/github";
-import { listAll } from "@alchemy.run/github/Client";
 import { expect } from "@alchemy.run/test";
 import * as Orgs from "@distilled.cloud/github/orgs";
 import * as Repos from "@distilled.cloud/github/repos";
@@ -11,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { gh, mockGitHub, scopedToOwner } from "./scope.ts";
 
 const requireTestOwner = (owner: string) => {
@@ -34,13 +34,12 @@ const { test } = Test.make({
 const verifiedMember = Effect.gen(function* () {
   const requested = process.env.GITHUB_TEST_COLLABORATOR_USERNAME;
   if (!requested) {
-    const members = yield* listAll((page) =>
-      gh(
-        Orgs.listMembers({
+    const members = yield* gh(
+      Stream.runCollect(
+        Orgs.listMembers.items({
           org: owner,
           role: "member",
           per_page: 100,
-          page,
         }),
       ),
     );
@@ -78,14 +77,13 @@ const repository = (index: number) =>
 
 const directCollaborators = (repo: string) =>
   Effect.gen(function* () {
-    return yield* listAll((page) =>
-      gh(
-        Repos.listCollaborators({
+    return yield* gh(
+      Stream.runCollect(
+        Repos.listCollaborators.items({
           owner,
           repo,
           affiliation: "direct",
           per_page: 100,
-          page,
         }),
       ),
     );
@@ -102,13 +100,12 @@ const assertRemoved = (repo: string, username: string) =>
       }),
     );
     expect(remaining.some((collaborator) => collaborator.login === username)).toBe(false);
-    const invitations = yield* listAll((page) =>
-      gh(
-        Repos.listInvitations({
+    const invitations = yield* gh(
+      Stream.runCollect(
+        Repos.listInvitations.items({
           owner,
           repo,
           per_page: 100,
-          page,
         }),
       ),
     );

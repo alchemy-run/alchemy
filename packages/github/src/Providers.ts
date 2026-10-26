@@ -22,7 +22,7 @@ import { Variable, VariableProvider } from "./Variable.ts";
 import { Webhook, WebhookProvider } from "./Webhook.ts";
 import { WikiPage, WikiPageProvider } from "./WikiPage.ts";
 
-export { GitHubCredentials } from "./Credentials.ts";
+export { Credentials } from "./Credentials.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("GitHub") {}
 

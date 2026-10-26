@@ -3,14 +3,8 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import {
-  github,
-  gitHubBaseUrlChanged,
-  githubFor,
-  listAll,
-  listRepositories,
-  PER_PAGE,
-} from "./Client.ts";
+import * as Stream from "effect/Stream";
+import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface CollaboratorProps {
@@ -81,7 +75,7 @@ export interface Collaborator extends Resource<
  * actual removal by wrapping the resource in {@link destroy}() from
  * `alchemy/RemovalPolicy`.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied by
+ * Authentication is resolved via the GitHub `Credentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
  * `repo` scope (and `admin:repo` for removal when opted in via `destroy()`).
  *
@@ -151,39 +145,37 @@ export const CollaboratorProvider = () =>
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news }) {
-      const github = yield* githubFor(news.baseUrl);
-
-      // Ensure & Sync — PUT is idempotent; creates or updates permission
-      yield* github(
-        Repos.addCollaborator({
+    reconcile: Effect.fn(
+      function* ({ news }) {
+        // Ensure & Sync — PUT is idempotent; creates or updates permission
+        yield* Repos.addCollaborator({
           owner: news.owner,
           repo: news.repository,
           username: news.username,
           permission: news.permission ?? "push",
-        }),
-      );
+        });
 
-      return {
-        username: news.username,
-        permission: news.permission ?? "push",
-      };
-    }),
+        return {
+          username: news.username,
+          permission: news.permission ?? "push",
+        };
+      },
+      (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
+    ),
 
     list: Effect.fn(function* () {
-      const repos = yield* listRepositories;
+      const repos = yield* Stream.runCollect(
+        Repos.listForAuthenticatedUser.items({ per_page: 100 }),
+      );
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          listAll((page) =>
-            github(
-              Repos.listCollaborators({
-                owner: repo.owner.login,
-                repo: repo.name,
-                per_page: PER_PAGE,
-                page,
-              }),
-            ),
+          Stream.runCollect(
+            Repos.listCollaborators.items({
+              owner: repo.owner.login,
+              repo: repo.name,
+              per_page: 100,
+            }),
           ).pipe(
             Effect.map((collaborators) =>
               collaborators.map((collab) => ({
@@ -206,14 +198,14 @@ export const CollaboratorProvider = () =>
       return perRepo.flat();
     }),
 
-    delete: Effect.fn(function* ({ olds }) {
-      const github = yield* githubFor(olds.baseUrl);
-      yield* github(
-        Repos.removeCollaborator({
+    delete: Effect.fn(
+      function* ({ olds }) {
+        yield* Repos.removeCollaborator({
           owner: olds.owner,
           repo: olds.repository,
           username: olds.username,
-        }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
   });

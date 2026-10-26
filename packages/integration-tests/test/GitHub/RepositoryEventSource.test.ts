@@ -1,6 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as GitHub from "@alchemy.run/github";
-import { listAll } from "@alchemy.run/github/Client";
 import { webhookPath } from "@alchemy.run/github/RepositoryEventSource";
 import { expect } from "@alchemy.run/test";
 import * as Repos from "@distilled.cloud/github/repos";
@@ -10,6 +9,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import GitHubEventSourceWorker, { owner, repository } from "./fixtures/event-source-worker.ts";
 import { gh } from "./scope.ts";
 
@@ -27,8 +27,8 @@ const Repository = GitHub.Repository("Repo", {
 });
 
 const listHooks = Effect.gen(function* () {
-  return yield* listAll((page) =>
-    gh(Repos.listWebhooks({ owner, repo: repository, per_page: 100, page })),
+  return yield* gh(
+    Stream.runCollect(Repos.listWebhooks.items({ owner, repo: repository, per_page: 100 })),
   );
 });
 

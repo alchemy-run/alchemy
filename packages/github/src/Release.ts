@@ -6,15 +6,7 @@ import { dedent } from "alchemy/Util/dedent";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import {
-  github,
-  gitHubBaseUrlChanged,
-  githubFor,
-  listAll,
-  listRepositories,
-  paginate,
-  PER_PAGE,
-} from "./Client.ts";
+import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface ReleaseProps {
@@ -155,7 +147,7 @@ export interface Release extends Resource<
  * on subsequent deploys when properties change. Publishing a draft converts it
  * to a public release.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied by
+ * Authentication is resolved via the GitHub `Credentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
  * `repo` scope for private repositories or `public_repo` for public ones.
  * ### Creating Releases
@@ -320,14 +312,13 @@ export const ReleaseProvider = () =>
       return observed === undefined ? undefined : attrsOf(observed);
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
-      const github = yield* githubFor(news.baseUrl);
-      const body = news.body !== undefined ? dedent(news.body) : undefined;
-      let observed = yield* findRelease(news, output?.releaseId);
+    reconcile: Effect.fn(
+      function* ({ news, output }) {
+        const body = news.body !== undefined ? dedent(news.body) : undefined;
+        let observed = yield* findRelease(news, output?.releaseId);
 
-      if (observed === undefined) {
-        observed = yield* github(
-          Repos.createRelease({
+        if (observed === undefined) {
+          observed = yield* Repos.createRelease({
             owner: news.owner,
             repo: news.repository,
             tag_name: news.tagName,
@@ -337,64 +328,62 @@ export const ReleaseProvider = () =>
             prerelease: news.prerelease,
             target_commitish: news.targetCommitish,
             generate_release_notes: news.generateReleaseNotes,
-          }),
-        ).pipe(
-          // A 422 is a create race (the tag already has a release): re-observe.
-          Effect.catchTag("UnprocessableEntity", (error) =>
-            findRelease(news).pipe(
-              Effect.flatMap((release) =>
-                release === undefined ? Effect.fail(error) : Effect.succeed(release),
+          }).pipe(
+            // A 422 is a create race (the tag already has a release): re-observe.
+            Effect.catchTag("UnprocessableEntity", (error) =>
+              findRelease(news).pipe(
+                Effect.flatMap((release) =>
+                  release === undefined ? Effect.fail(error) : Effect.succeed(release),
+                ),
               ),
             ),
-          ),
-        );
-      }
+          );
+        }
 
-      const desired = {
-        name: news.name ?? news.tagName,
-        body: body ?? (news.generateReleaseNotes ? (observed.body ?? "") : ""),
-        draft: news.draft ?? false,
-        prerelease: news.prerelease ?? false,
-      };
-      if (
-        (observed.name ?? observed.tag_name) === desired.name &&
-        (observed.body ?? "") === desired.body &&
-        observed.draft === desired.draft &&
-        observed.prerelease === desired.prerelease
-      ) {
-        return attrsOf(observed);
-      }
+        const desired = {
+          name: news.name ?? news.tagName,
+          body: body ?? (news.generateReleaseNotes ? (observed.body ?? "") : ""),
+          draft: news.draft ?? false,
+          prerelease: news.prerelease ?? false,
+        };
+        if (
+          (observed.name ?? observed.tag_name) === desired.name &&
+          (observed.body ?? "") === desired.body &&
+          observed.draft === desired.draft &&
+          observed.prerelease === desired.prerelease
+        ) {
+          return attrsOf(observed);
+        }
 
-      return attrsOf(
-        yield* github(
-          Repos.updateRelease({
+        return attrsOf(
+          yield* Repos.updateRelease({
             owner: news.owner,
             repo: news.repository,
             release_id: observed.id,
             tag_name: news.tagName,
             ...desired,
           }),
-        ),
-      );
-    }),
+        );
+      },
+      (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
+    ),
 
     // Enumerate every release across the repositories the token can see —
     // releases are keyed by {owner, repository, tagName} with no account-wide
     // list endpoint, so walk the repos like the Variable provider does.
     list: Effect.fn(function* () {
-      const repos = yield* listRepositories;
+      const repos = yield* Stream.runCollect(
+        Repos.listForAuthenticatedUser.items({ per_page: 100 }),
+      );
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          listAll((page) =>
-            github(
-              Repos.listReleases({
-                owner: repo.owner.login,
-                repo: repo.name,
-                per_page: PER_PAGE,
-                page,
-              }),
-            ),
+          Stream.runCollect(
+            Repos.listReleases.items({
+              owner: repo.owner.login,
+              repo: repo.name,
+              per_page: 100,
+            }),
           ).pipe(
             Effect.map((releases) => releases.map(attrsOf)),
             // Repos where the token lacks release access reject with 403/404 —
@@ -406,42 +395,42 @@ export const ReleaseProvider = () =>
       return perRepo.flat();
     }),
 
-    delete: Effect.fn(function* ({ olds, output }) {
-      const github = yield* githubFor(olds.baseUrl);
-      yield* github(
-        Repos.deleteRelease({
+    delete: Effect.fn(
+      function* ({ olds, output }) {
+        yield* Repos.deleteRelease({
           owner: olds.owner,
           repo: olds.repository,
           release_id: output.releaseId,
-        }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
   });
 
-const findRelease = Effect.fn(function* (props: ReleaseProps, releaseId?: number) {
-  const github = yield* githubFor(props.baseUrl);
-  const request = { owner: props.owner, repo: props.repository };
-  if (releaseId !== undefined) {
-    const existing = yield* github(Repos.getRelease({ ...request, release_id: releaseId })).pipe(
+const findRelease = Effect.fn(
+  function* (props: ReleaseProps, releaseId?: number) {
+    const request = { owner: props.owner, repo: props.repository };
+    if (releaseId !== undefined) {
+      const existing = yield* Repos.getRelease({ ...request, release_id: releaseId }).pipe(
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
+      if (existing !== undefined && existing.tag_name === props.tagName) return existing;
+    }
+    const published = yield* Repos.getReleaseByTag({ ...request, tag: props.tagName }).pipe(
       Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
-    if (existing !== undefined && existing.tag_name === props.tagName) return existing;
-  }
-  const published = yield* github(Repos.getReleaseByTag({ ...request, tag: props.tagName })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-  );
-  if (published !== undefined) return published;
+    if (published !== undefined) return published;
 
-  // The tag endpoint excludes drafts, including drafts recovered without state.
-  return yield* paginate((page) =>
-    github(Repos.listReleases({ ...request, per_page: PER_PAGE, page })),
-  ).pipe(
-    Stream.filter((release) => release.tag_name === props.tagName),
-    Stream.runHead,
-    Effect.map(Option.getOrUndefined),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-  );
-});
+    // The tag endpoint excludes drafts, including drafts recovered without state.
+    return yield* Repos.listReleases.items({ ...request, per_page: 100 }).pipe(
+      Stream.filter((release) => release.tag_name === props.tagName),
+      Stream.runHead,
+      Effect.map(Option.getOrUndefined),
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    );
+  },
+  (effect, props: ReleaseProps, _releaseId?: number) => effect.pipe(withBaseUrl(props.baseUrl)),
+);
 
 const attrsOf = (data: {
   id: number;

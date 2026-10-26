@@ -6,7 +6,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 import { normalizeGitHubBaseUrl } from "./BaseUrl.ts";
-import { githubConfig } from "./Client.ts";
+import { config } from "./Credentials.ts";
 import { PersonalAccessToken } from "./PersonalAccessToken.ts";
 import type { Repository } from "./Repository.ts";
 
@@ -69,7 +69,7 @@ export const makeOperationClient = <Request extends ReadonlyArray<any>, Out, E>(
       Layer.succeed(
         Credentials,
         Effect.all([source.token, source.apiUrl]).pipe(
-          Effect.map(([token, apiUrl]) => githubConfig(token, repoBaseUrl ?? apiUrl)),
+          Effect.map(([token, apiUrl]) => config(token, repoBaseUrl ?? apiUrl)),
         ),
       ),
       FetchHttpClient.layer,

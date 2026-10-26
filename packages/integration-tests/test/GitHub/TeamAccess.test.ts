@@ -1,5 +1,4 @@
 import * as GitHub from "@alchemy.run/github";
-import { listAll } from "@alchemy.run/github/Client";
 import { expect } from "@alchemy.run/test";
 import * as Repos from "@distilled.cloud/github/repos";
 import * as Teams from "@distilled.cloud/github/teams";
@@ -11,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
+import * as Stream from "effect/Stream";
 import { gh, mockGitHub, scopedToOwner } from "./scope.ts";
 
 const testOwner = (value: string) => {
@@ -29,13 +29,12 @@ const { test } = Test.make({
 
 const getTeams = (repo: string) =>
   Effect.gen(function* () {
-    return yield* listAll((page) =>
-      gh(
-        Repos.listTeams({
+    return yield* gh(
+      Stream.runCollect(
+        Repos.listTeams.items({
           owner,
           repo,
           per_page: 100,
-          page,
         }),
       ),
     );
@@ -110,12 +109,11 @@ test.provider(
                 team_slug: team.slug,
               }),
             );
-            const remaining = yield* listAll((page) =>
-              gh(
-                Teams.list({
+            const remaining = yield* gh(
+              Stream.runCollect(
+                Teams.list.items({
                   org: owner,
                   per_page: 100,
-                  page,
                 }),
               ),
             );

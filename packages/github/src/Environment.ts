@@ -5,14 +5,8 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import {
-  github,
-  gitHubBaseUrlChanged,
-  githubFor,
-  listAll,
-  listRepositories,
-  PER_PAGE,
-} from "./Client.ts";
+import * as Stream from "effect/Stream";
+import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface EnvironmentProps {
@@ -135,7 +129,7 @@ export interface Environment extends Resource<
  * repositories require GitHub Pro, Team, or Enterprise, and protection
  * rules on private repositories require Team or Enterprise.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied
+ * Authentication is resolved via the GitHub `Credentials` service supplied
  * by `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token
  * needs `repo` scope.
  * ### Creating an Environment
@@ -248,43 +242,42 @@ export const EnvironmentProvider = () =>
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news, olds }) {
-      const github = yield* githubFor(news.baseUrl);
-      const scope = { owner: news.owner, repo: news.repository, environment_name: news.name };
+    reconcile: Effect.fn(
+      function* ({ news, olds }) {
+        const scope = { owner: news.owner, repo: news.repository, environment_name: news.name };
 
-      // Resolve reviewer logins/slugs to the numeric IDs the API expects.
-      const reviewers =
-        news.reviewers === undefined
-          ? null
-          : [
-              ...(yield* Effect.forEach(news.reviewers.users ?? [], (username) =>
-                github(Users.getByUsername({ username })).pipe(
-                  Effect.map((user) => ({ type: "User" as const, id: user.id })),
-                ),
-              )),
-              ...(yield* Effect.forEach(news.reviewers.teams ?? [], (team_slug) =>
-                github(Teams.getByName({ org: news.owner, team_slug })).pipe(
-                  Effect.map((team) => ({ type: "Team" as const, id: team.id })),
-                ),
-              )),
-            ];
+        // Resolve reviewer logins/slugs to the numeric IDs the API expects.
+        const reviewers =
+          news.reviewers === undefined
+            ? null
+            : [
+                ...(yield* Effect.forEach(news.reviewers.users ?? [], (username) =>
+                  Users.getByUsername({ username }).pipe(
+                    Effect.map((user) => ({ type: "User" as const, id: user.id })),
+                  ),
+                )),
+                ...(yield* Effect.forEach(news.reviewers.teams ?? [], (team_slug) =>
+                  Teams.getByName({ org: news.owner, team_slug }).pipe(
+                    Effect.map((team) => ({ type: "Team" as const, id: team.id })),
+                  ),
+                )),
+              ];
 
-      // Ensure & Sync — the PUT is a full upsert of the environment's
-      // protection configuration. Protection rules are only sent when set now
-      // or previously (olds): on private repos without GitHub Enterprise,
-      // sending them at all — even as defaults — is rejected as a billing
-      // error. A prop that was set before and is now removed is sent as its
-      // explicit default so it converges. `prevent_self_review` and
-      // `reviewers` are sent together: GitHub rejects the former when the
-      // latter is omitted (an explicit `null` is accepted).
-      const sendWaitTimer = news.waitTimer !== undefined || olds?.waitTimer !== undefined;
-      const sendReviewers =
-        news.reviewers !== undefined ||
-        news.preventSelfReview !== undefined ||
-        olds?.reviewers !== undefined ||
-        olds?.preventSelfReview !== undefined;
-      const environment = yield* github(
-        Repos.createOrUpdateEnvironment({
+        // Ensure & Sync — the PUT is a full upsert of the environment's
+        // protection configuration. Protection rules are only sent when set now
+        // or previously (olds): on private repos without GitHub Enterprise,
+        // sending them at all — even as defaults — is rejected as a billing
+        // error. A prop that was set before and is now removed is sent as its
+        // explicit default so it converges. `prevent_self_review` and
+        // `reviewers` are sent together: GitHub rejects the former when the
+        // latter is omitted (an explicit `null` is accepted).
+        const sendWaitTimer = news.waitTimer !== undefined || olds?.waitTimer !== undefined;
+        const sendReviewers =
+          news.reviewers !== undefined ||
+          news.preventSelfReview !== undefined ||
+          olds?.reviewers !== undefined ||
+          olds?.preventSelfReview !== undefined;
+        const environment = yield* Repos.createOrUpdateEnvironment({
           ...scope,
           ...(sendWaitTimer ? { wait_timer: news.waitTimer ?? 0 } : {}),
           ...(sendReviewers
@@ -299,69 +292,65 @@ export const EnvironmentProvider = () =>
               : "protectedBranches" in news.deploymentBranchPolicy
                 ? { protected_branches: true, custom_branch_policies: false }
                 : { protected_branches: false, custom_branch_policies: true },
-        }),
-      );
+        });
 
-      // Sync — custom branch policies live behind dedicated endpoints. Diff
-      // the observed patterns against the desired list; create the missing
-      // ones and delete the extras. Skipped entirely unless the policy mode
-      // is custom (GitHub drops the policies itself when the mode changes).
-      if (
-        news.deploymentBranchPolicy !== undefined &&
-        "customBranchPolicies" in news.deploymentBranchPolicy
-      ) {
-        const desired = news.deploymentBranchPolicy.customBranchPolicies;
-        const observed = yield* listAll((page) =>
-          github(Repos.listDeploymentBranchPolicies({ ...scope, per_page: PER_PAGE, page })).pipe(
-            Effect.map((response) => response.branch_policies),
-          ),
-        );
-        const observedNames = new Set(observed.map((policy) => policy.name));
-        for (const name of desired) {
-          if (!observedNames.has(name)) {
-            yield* github(Repos.createDeploymentBranchPolicy({ ...scope, name, type: "branch" }));
+        // Sync — custom branch policies live behind dedicated endpoints. Diff
+        // the observed patterns against the desired list; create the missing
+        // ones and delete the extras. Skipped entirely unless the policy mode
+        // is custom (GitHub drops the policies itself when the mode changes).
+        if (
+          news.deploymentBranchPolicy !== undefined &&
+          "customBranchPolicies" in news.deploymentBranchPolicy
+        ) {
+          const desired = news.deploymentBranchPolicy.customBranchPolicies;
+          const observed = yield* Stream.runCollect(
+            Repos.listDeploymentBranchPolicies.items({ ...scope, per_page: 100 }),
+          );
+          const observedNames = new Set(observed.map((policy) => policy.name));
+          for (const name of desired) {
+            if (!observedNames.has(name)) {
+              yield* Repos.createDeploymentBranchPolicy({ ...scope, name, type: "branch" });
+            }
+          }
+          for (const policy of observed) {
+            if (
+              policy.id !== undefined &&
+              policy.name !== undefined &&
+              !desired.includes(policy.name)
+            ) {
+              yield* Repos.deleteDeploymentBranchPolicy({ ...scope, branch_policy_id: policy.id });
+            }
           }
         }
-        for (const policy of observed) {
-          if (
-            policy.id !== undefined &&
-            policy.name !== undefined &&
-            !desired.includes(policy.name)
-          ) {
-            yield* github(
-              Repos.deleteDeploymentBranchPolicy({ ...scope, branch_policy_id: policy.id }),
-            );
-          }
-        }
-      }
 
-      return {
-        environmentId: environment.id,
-        nodeId: environment.node_id,
-        name: environment.name,
-        htmlUrl: environment.html_url,
-        createdAt: environment.created_at,
-        updatedAt: environment.updated_at,
-      };
-    }),
+        return {
+          environmentId: environment.id,
+          nodeId: environment.node_id,
+          name: environment.name,
+          htmlUrl: environment.html_url,
+          createdAt: environment.created_at,
+          updatedAt: environment.updated_at,
+        };
+      },
+      (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
+    ),
 
     // Enumerate every environment across the repositories the token can see —
     // environments are keyed by {owner, repository, name} with no account-wide
     // list endpoint, so walk the repos like the Variable provider does.
     list: Effect.fn(function* () {
-      const repos = yield* listRepositories;
+      const repos = yield* Stream.runCollect(
+        Repos.listForAuthenticatedUser.items({ per_page: 100 }),
+      );
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          listAll((page) =>
-            github(
-              Repos.getAllEnvironments({
-                owner: repo.owner.login,
-                repo: repo.name,
-                per_page: PER_PAGE,
-                page,
-              }),
-            ).pipe(Effect.map((response) => response.environments ?? [])),
+          Stream.runCollect(
+            Repos.getAllEnvironments.items({
+              owner: repo.owner.login,
+              repo: repo.name,
+              per_page: 100,
+            }),
           ).pipe(
             Effect.map((environments) =>
               environments.map((environment) => ({
@@ -383,14 +372,14 @@ export const EnvironmentProvider = () =>
       return perRepo.flat();
     }),
 
-    delete: Effect.fn(function* ({ olds }) {
-      const github = yield* githubFor(olds.baseUrl);
-      yield* github(
-        Repos.deleteAnEnvironment({
+    delete: Effect.fn(
+      function* ({ olds }) {
+        yield* Repos.deleteAnEnvironment({
           owner: olds.owner,
           repo: olds.repository,
           environment_name: olds.name,
-        }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
   });

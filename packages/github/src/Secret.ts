@@ -4,7 +4,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { gitHubBaseUrlChanged, githubFor } from "./Client.ts";
+import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import { type Environment, resolveEnvironmentName } from "./Environment.ts";
 import type * as GitHub from "./Providers.ts";
 
@@ -68,7 +68,7 @@ export interface Secret extends Resource<
  * key via `libsodium` before being stored. The resource is idempotent —
  * calling it with the same name will update the secret value in place.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied
+ * Authentication is resolved via the GitHub `Credentials` service supplied
  * by `GitHub.providers()` (which uses the Alchemy AuthProvider — env,
  * stored PAT, `gh` CLI, or OAuth). The token needs `repo` scope for
  * private repositories or `public_repo` for public ones.
@@ -213,45 +213,45 @@ export const SecretProvider = () =>
     }),
   });
 
-const upsertSecret = Effect.fn(function* (props: SecretProps) {
-  const github = yield* githubFor(props.baseUrl);
-  const plaintext = Redacted.value(props.value);
-  const environment = resolveEnvironmentName(props.environment);
-  const scope = { owner: props.owner, repo: props.repository };
+const upsertSecret = Effect.fn(
+  function* (props: SecretProps) {
+    const plaintext = Redacted.value(props.value);
+    const environment = resolveEnvironmentName(props.environment);
+    const scope = { owner: props.owner, repo: props.repository };
 
-  const publicKey = yield* environment !== undefined
-    ? github(Actions.getEnvironmentPublicKey({ ...scope, environment_name: environment }))
-    : github(Actions.getRepoPublicKey(scope));
+    const publicKey = yield* environment !== undefined
+      ? Actions.getEnvironmentPublicKey({ ...scope, environment_name: environment })
+      : Actions.getRepoPublicKey(scope);
 
-  const encrypted = yield* Effect.tryPromise(() => encryptValue(plaintext, publicKey.key));
+    const encrypted = yield* Effect.tryPromise(() => encryptValue(plaintext, publicKey.key));
 
-  yield* environment !== undefined
-    ? github(
-        Actions.createOrUpdateEnvironmentSecret({
+    yield* environment !== undefined
+      ? Actions.createOrUpdateEnvironmentSecret({
           ...scope,
           environment_name: environment,
           secret_name: props.name,
           encrypted_value: encrypted,
           key_id: publicKey.key_id,
-        }),
-      )
-    : github(
-        Actions.createOrUpdateRepoSecret({
+        })
+      : Actions.createOrUpdateRepoSecret({
           ...scope,
           secret_name: props.name,
           encrypted_value: encrypted,
           key_id: publicKey.key_id,
-        }),
-      );
-});
+        });
+  },
+  (effect, props) => effect.pipe(withBaseUrl(props.baseUrl)),
+);
 
-const deleteSecret = Effect.fn(function* (props: SecretProps) {
-  const github = yield* githubFor(props.baseUrl);
-  const environment = resolveEnvironmentName(props.environment);
-  const scope = { owner: props.owner, repo: props.repository, secret_name: props.name };
-  yield* (
-    environment !== undefined
-      ? github(Actions.deleteEnvironmentSecret({ ...scope, environment_name: environment }))
-      : github(Actions.deleteRepoSecret(scope))
-  ).pipe(Effect.catchTag("NotFound", () => Effect.void));
-});
+const deleteSecret = Effect.fn(
+  function* (props: SecretProps) {
+    const environment = resolveEnvironmentName(props.environment);
+    const scope = { owner: props.owner, repo: props.repository, secret_name: props.name };
+    yield* (
+      environment !== undefined
+        ? Actions.deleteEnvironmentSecret({ ...scope, environment_name: environment })
+        : Actions.deleteRepoSecret(scope)
+    ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+  },
+  (effect, props) => effect.pipe(withBaseUrl(props.baseUrl)),
+);

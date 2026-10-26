@@ -1,19 +1,14 @@
 import * as Issues from "@distilled.cloud/github/issues";
+import * as Meta from "@distilled.cloud/github/meta";
 import * as Pulls from "@distilled.cloud/github/pulls";
+import * as Repos from "@distilled.cloud/github/repos";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { dedent } from "alchemy/Util/dedent";
 import * as Effect from "effect/Effect";
-import {
-  github,
-  gitHubBaseUrlChanged,
-  githubFor,
-  graphql,
-  listAll,
-  listRepositories,
-  PER_PAGE,
-} from "./Client.ts";
+import * as Stream from "effect/Stream";
+import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface PullRequestProps {
@@ -167,7 +162,7 @@ export interface PullRequest extends Resource<
  * when properties change. By default, pull requests are retained on
  * destruction to preserve history — set `destroy()` to opt in to closure.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied by
+ * Authentication is resolved via the GitHub `Credentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
  * `repo` scope for private repositories or `public_repo` for public ones.
  *
@@ -284,31 +279,28 @@ export const PullRequestProvider = () =>
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
-      const github = yield* githubFor(news.baseUrl);
-      const scope = { owner: news.owner, repo: news.repository };
-      const body = news.body === undefined ? undefined : dedent(news.body);
-      const getPull = (number: number) =>
-        github(Pulls.get({ ...scope, pull_number: number })).pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
-      const findOpen = () =>
-        github(
+    reconcile: Effect.fn(
+      function* ({ news, output }) {
+        const scope = { owner: news.owner, repo: news.repository };
+        const body = news.body === undefined ? undefined : dedent(news.body);
+        const getPull = (number: number) =>
+          Pulls.get({ ...scope, pull_number: number }).pipe(
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          );
+        const findOpen = () =>
           Pulls.list({
             ...scope,
             head: news.head.includes(":") ? news.head : `${news.owner}:${news.head}`,
             base: news.base,
             state: "open",
-            per_page: PER_PAGE,
-          }),
-        ).pipe(Effect.map((pulls) => pulls[0]?.number));
-      let number = output?.prNumber;
-      let observed = number === undefined ? undefined : yield* getPull(number);
-      if (observed === undefined) {
-        number = yield* findOpen();
-        if (number === undefined) {
-          number = yield* github(
-            Pulls.create({
+            per_page: 100,
+          }).pipe(Effect.map((pulls) => pulls[0]?.number));
+        let number = output?.prNumber;
+        let observed = number === undefined ? undefined : yield* getPull(number);
+        if (observed === undefined) {
+          number = yield* findOpen();
+          if (number === undefined) {
+            number = yield* Pulls.create({
               ...scope,
               title: news.title,
               body,
@@ -316,83 +308,80 @@ export const PullRequestProvider = () =>
               base: news.base,
               draft: news.draft,
               maintainer_can_modify: news.maintainerCanModify,
-            }),
-          ).pipe(
-            Effect.map((pull) => pull.number),
-            // A 422 is a create race (an open PR already joins head and base).
-            Effect.catchTag("UnprocessableEntity", (error) =>
-              findOpen().pipe(
-                Effect.flatMap((existing) =>
-                  existing === undefined ? Effect.fail(error) : Effect.succeed(existing),
+            }).pipe(
+              Effect.map((pull) => pull.number),
+              // A 422 is a create race (an open PR already joins head and base).
+              Effect.catchTag("UnprocessableEntity", (error) =>
+                findOpen().pipe(
+                  Effect.flatMap((existing) =>
+                    existing === undefined ? Effect.fail(error) : Effect.succeed(existing),
+                  ),
                 ),
               ),
-            ),
-          );
+            );
+          }
+          observed = yield* getPull(number);
         }
-        observed = yield* getPull(number);
-      }
-      if (observed === undefined) {
-        return yield* Effect.fail(new Error("Pull request disappeared during reconciliation"));
-      }
-      const state = news.state ?? "open";
-      const draft = news.draft ?? false;
-      const draftChanged = draft !== (observed.draft ?? false);
-      const syncState = draftChanged ? "open" : state;
-      if (
-        observed.title !== news.title ||
-        (body !== undefined && (observed.body ?? "") !== body) ||
-        observed.state !== syncState ||
-        (news.maintainerCanModify !== undefined &&
-          observed.maintainer_can_modify !== news.maintainerCanModify)
-      ) {
-        yield* github(
-          Pulls.update({
+        if (observed === undefined) {
+          return yield* Effect.fail(new Error("Pull request disappeared during reconciliation"));
+        }
+        const state = news.state ?? "open";
+        const draft = news.draft ?? false;
+        const draftChanged = draft !== (observed.draft ?? false);
+        const syncState = draftChanged ? "open" : state;
+        if (
+          observed.title !== news.title ||
+          (body !== undefined && (observed.body ?? "") !== body) ||
+          observed.state !== syncState ||
+          (news.maintainerCanModify !== undefined &&
+            observed.maintainer_can_modify !== news.maintainerCanModify)
+        ) {
+          yield* Pulls.update({
             ...scope,
             pull_number: observed.number,
             title: news.title,
             body,
             state: syncState,
             maintainer_can_modify: news.maintainerCanModify,
-          }),
-        );
-      }
-      // GitHub only permits draft transitions while a pull request is open,
-      // and only through GraphQL.
-      if (draftChanged) {
-        const mutation = draft ? "convertPullRequestToDraft" : "markPullRequestReadyForReview";
-        yield* graphql(
-          news.baseUrl,
-          `mutation($id: ID!) { ${mutation}(input: {pullRequestId: $id}) { pullRequest { id } } }`,
-          { id: observed.node_id },
-        );
-      }
-      yield* syncPullRequestMeta(github, news, observed.number);
-      if (draftChanged && state === "closed") {
-        yield* github(Pulls.update({ ...scope, pull_number: observed.number, state: "closed" }));
-      }
-      const final = yield* getPull(observed.number);
-      if (final === undefined) {
-        return yield* Effect.fail(new Error("Pull request disappeared after reconciliation"));
-      }
-      return attributes(final);
-    }),
+          });
+        }
+        // GitHub only permits draft transitions while a pull request is open,
+        // and only through GraphQL.
+        if (draftChanged) {
+          const mutation = draft ? "convertPullRequestToDraft" : "markPullRequestReadyForReview";
+          yield* Meta.graphql({
+            query: `mutation($id: ID!) { ${mutation}(input: {pullRequestId: $id}) { pullRequest { id } } }`,
+            variables: { id: observed.node_id },
+          });
+        }
+        yield* syncPullRequestMeta(news, observed.number);
+        if (draftChanged && state === "closed") {
+          yield* Pulls.update({ ...scope, pull_number: observed.number, state: "closed" });
+        }
+        const final = yield* getPull(observed.number);
+        if (final === undefined) {
+          return yield* Effect.fail(new Error("Pull request disappeared after reconciliation"));
+        }
+        return attributes(final);
+      },
+      (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
+    ),
 
     // Enumerate every pull request across the repositories the token can see.
     list: Effect.fn(function* () {
-      const repos = yield* listRepositories;
+      const repos = yield* Stream.runCollect(
+        Repos.listForAuthenticatedUser.items({ per_page: 100 }),
+      );
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          listAll((page) =>
-            github(
-              Pulls.list({
-                owner: repo.owner.login,
-                repo: repo.name,
-                state: "all",
-                per_page: PER_PAGE,
-                page,
-              }),
-            ),
+          Stream.runCollect(
+            Pulls.list.items({
+              owner: repo.owner.login,
+              repo: repo.name,
+              state: "all",
+              per_page: 100,
+            }),
           ).pipe(
             Effect.map((pulls) =>
               pulls.map((pr) => ({
@@ -413,20 +402,22 @@ export const PullRequestProvider = () =>
       return perRepo.flat();
     }),
 
-    delete: Effect.fn(function* ({ olds, output }) {
-      const github = yield* githubFor(olds.baseUrl);
-      const pull = { owner: olds.owner, repo: olds.repository, pull_number: output.prNumber };
+    delete: Effect.fn(
+      function* ({ olds, output }) {
+        const pull = { owner: olds.owner, repo: olds.repository, pull_number: output.prNumber };
 
-      // GitHub preserves pull request history; destruction closes it.
-      const observed = yield* github(Pulls.get(pull)).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      );
-      if (observed?.state === "open") {
-        yield* github(Pulls.update({ ...pull, state: "closed" })).pipe(
-          Effect.catchTag("NotFound", () => Effect.void),
+        // GitHub preserves pull request history; destruction closes it.
+        const observed = yield* Pulls.get(pull).pipe(
+          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
         );
-      }
-    }),
+        if (observed?.state === "open") {
+          yield* Pulls.update({ ...pull, state: "closed" }).pipe(
+            Effect.catchTag("NotFound", () => Effect.void),
+          );
+        }
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
   });
 
 const attributes = (data: Pulls.PullRequest) => ({
@@ -443,30 +434,26 @@ const attributes = (data: Pulls.PullRequest) => ({
 const sameNames = (left: string[], right: string[]) =>
   JSON.stringify([...new Set(left)].sort()) === JSON.stringify([...new Set(right)].sort());
 
-const syncPullRequestMeta = Effect.fn(function* (
-  github: Effect.Success<ReturnType<typeof githubFor>>,
-  props: PullRequestProps,
-  prNumber: number,
-) {
+const syncPullRequestMeta = Effect.fn(function* (props: PullRequestProps, prNumber: number) {
   const scope = { owner: props.owner, repo: props.repository };
   const issue = { ...scope, issue_number: prNumber };
-  const data = yield* github(Issues.get(issue));
+  const data = yield* Issues.get(issue);
   const labels = data.labels.map((label) =>
     typeof label === "string" ? label : (label.name ?? ""),
   );
   if (props.labels !== undefined && !sameNames(labels, props.labels)) {
-    yield* github(Issues.setLabels({ ...issue, body: { labels: props.labels } }));
+    yield* Issues.setLabels({ ...issue, body: { labels: props.labels } });
   }
   const assignees = data.assignees?.map((user) => user.login) ?? [];
   if (props.assignees !== undefined && !sameNames(assignees, props.assignees)) {
-    yield* github(Issues.update({ ...issue, assignees: props.assignees }));
+    yield* Issues.update({ ...issue, assignees: props.assignees });
   }
   if (props.milestone !== undefined && (data.milestone?.number ?? null) !== props.milestone) {
-    yield* github(Issues.update({ ...issue, milestone: props.milestone }));
+    yield* Issues.update({ ...issue, milestone: props.milestone });
   }
   if (props.reviewers !== undefined || props.teamReviewers !== undefined) {
     const pull = { ...scope, pull_number: prNumber };
-    const current = yield* github(Pulls.listRequestedReviewers(pull));
+    const current = yield* Pulls.listRequestedReviewers(pull);
     const users = current.users.map((user) => user.login);
     const teams = current.teams.map((team) => team.slug);
     const removeUsers =
@@ -476,24 +463,20 @@ const syncPullRequestMeta = Effect.fn(function* (
         ? []
         : teams.filter((team) => !props.teamReviewers!.includes(team));
     if (removeUsers.length || removeTeams.length) {
-      yield* github(
-        Pulls.removeRequestedReviewers({
-          ...pull,
-          reviewers: removeUsers,
-          team_reviewers: removeTeams,
-        }),
-      );
+      yield* Pulls.removeRequestedReviewers({
+        ...pull,
+        reviewers: removeUsers,
+        team_reviewers: removeTeams,
+      });
     }
     const addUsers = (props.reviewers ?? []).filter((user) => !users.includes(user));
     const addTeams = (props.teamReviewers ?? []).filter((team) => !teams.includes(team));
     if (addUsers.length || addTeams.length) {
-      yield* github(
-        Pulls.requestReviewers({
-          ...pull,
-          reviewers: addUsers,
-          team_reviewers: addTeams,
-        }),
-      );
+      yield* Pulls.requestReviewers({
+        ...pull,
+        reviewers: addUsers,
+        team_reviewers: addTeams,
+      });
     }
   }
 });

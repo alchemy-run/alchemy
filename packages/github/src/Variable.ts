@@ -1,16 +1,11 @@
 import * as Actions from "@distilled.cloud/github/actions";
+import * as Repos from "@distilled.cloud/github/repos";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import {
-  github,
-  gitHubBaseUrlChanged,
-  githubFor,
-  listAll,
-  listRepositories,
-  PER_PAGE,
-} from "./Client.ts";
+import * as Stream from "effect/Stream";
+import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import { type Environment, resolveEnvironmentName } from "./Environment.ts";
 import type * as GitHub from "./Providers.ts";
 
@@ -74,7 +69,7 @@ export interface Variable extends Resource<
  * labels, or feature flags. For sensitive values, use `GitHub.Secret`
  * instead.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied
+ * Authentication is resolved via the GitHub `Credentials` service supplied
  * by `GitHub.providers()` (which uses the Alchemy AuthProvider — env,
  * stored PAT, `gh` CLI, or OAuth). The token needs `repo` scope for
  * private repositories or `public_repo` for public ones.
@@ -209,19 +204,18 @@ export const VariableProvider = () =>
     // (unlike secrets), but the resource's `Attributes` only exposes
     // `updatedAt`, so that's all we surface here.
     list: Effect.fn(function* () {
-      const repos = yield* listRepositories;
+      const repos = yield* Stream.runCollect(
+        Repos.listForAuthenticatedUser.items({ per_page: 100 }),
+      );
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          listAll((page) =>
-            github(
-              Actions.listRepoVariables({
-                owner: repo.owner.login,
-                repo: repo.name,
-                per_page: PER_PAGE,
-                page,
-              }),
-            ).pipe(Effect.map((response) => response.variables)),
+          Stream.runCollect(
+            Actions.listRepoVariables.items({
+              owner: repo.owner.login,
+              repo: repo.name,
+              per_page: 100,
+            }),
           ).pipe(
             Effect.map((variables) => variables.map((v) => ({ updatedAt: v.updated_at }))),
             // Repos with Actions disabled, or where the token lacks the
@@ -246,50 +240,54 @@ const locate = (props: VariableProps) => ({
   environment: resolveEnvironmentName(props.environment),
 });
 
-const getVariable = Effect.fn(function* (props: VariableProps) {
-  const github = yield* githubFor(props.baseUrl);
-  const { scope, environment } = locate(props);
-  return yield* (
-    environment !== undefined
-      ? github(Actions.getEnvironmentVariable({ ...scope, environment_name: environment }))
-      : github(Actions.getRepoVariable(scope))
-  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-});
+const getVariable = Effect.fn(
+  function* (props: VariableProps) {
+    const { scope, environment } = locate(props);
+    return yield* (
+      environment !== undefined
+        ? Actions.getEnvironmentVariable({ ...scope, environment_name: environment })
+        : Actions.getRepoVariable(scope)
+    ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  },
+  (effect, props) => effect.pipe(withBaseUrl(props.baseUrl)),
+);
 
-const createVariable = Effect.fn(function* (props: VariableProps) {
-  const github = yield* githubFor(props.baseUrl);
-  const { scope, environment } = locate(props);
-  yield* environment !== undefined
-    ? github(
-        Actions.createEnvironmentVariable({
+const createVariable = Effect.fn(
+  function* (props: VariableProps) {
+    const { scope, environment } = locate(props);
+    yield* environment !== undefined
+      ? Actions.createEnvironmentVariable({
           ...scope,
           environment_name: environment,
           value: props.value,
-        }),
-      )
-    : github(Actions.createRepoVariable({ ...scope, value: props.value }));
-});
+        })
+      : Actions.createRepoVariable({ ...scope, value: props.value });
+  },
+  (effect, props) => effect.pipe(withBaseUrl(props.baseUrl)),
+);
 
-const updateVariable = Effect.fn(function* (props: VariableProps) {
-  const github = yield* githubFor(props.baseUrl);
-  const { scope, environment } = locate(props);
-  yield* environment !== undefined
-    ? github(
-        Actions.updateEnvironmentVariable({
+const updateVariable = Effect.fn(
+  function* (props: VariableProps) {
+    const { scope, environment } = locate(props);
+    yield* environment !== undefined
+      ? Actions.updateEnvironmentVariable({
           ...scope,
           environment_name: environment,
           value: props.value,
-        }),
-      )
-    : github(Actions.updateRepoVariable({ ...scope, value: props.value }));
-});
+        })
+      : Actions.updateRepoVariable({ ...scope, value: props.value });
+  },
+  (effect, props) => effect.pipe(withBaseUrl(props.baseUrl)),
+);
 
-const deleteVariable = Effect.fn(function* (props: VariableProps) {
-  const github = yield* githubFor(props.baseUrl);
-  const { scope, environment } = locate(props);
-  yield* (
-    environment !== undefined
-      ? github(Actions.deleteEnvironmentVariable({ ...scope, environment_name: environment }))
-      : github(Actions.deleteRepoVariable(scope))
-  ).pipe(Effect.catchTag("NotFound", () => Effect.void));
-});
+const deleteVariable = Effect.fn(
+  function* (props: VariableProps) {
+    const { scope, environment } = locate(props);
+    yield* (
+      environment !== undefined
+        ? Actions.deleteEnvironmentVariable({ ...scope, environment_name: environment })
+        : Actions.deleteRepoVariable(scope)
+    ).pipe(Effect.catchTag("NotFound", () => Effect.void));
+  },
+  (effect, props) => effect.pipe(withBaseUrl(props.baseUrl)),
+);

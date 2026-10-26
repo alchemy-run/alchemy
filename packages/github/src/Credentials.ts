@@ -1,10 +1,14 @@
+import {
+  Credentials,
+  DEFAULT_API_BASE_URL,
+  type Config,
+} from "@distilled.cloud/github/Credentials";
 import { AuthError } from "alchemy/Auth/AuthProvider";
 import {
   deferUntilFirstUse,
   orDieCredentialsUnavailable,
   resolveProviderConfig,
 } from "alchemy/Auth/Resolve";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -16,32 +20,29 @@ import {
 } from "./AuthProvider.ts";
 import { normalizeGitHubBaseUrl } from "./BaseUrl.ts";
 
-export interface GitHubCredentialsService {
-  readonly token: Redacted.Redacted<string>;
-  /**
-   * REST API base URL for GitHub Enterprise (e.g.
-   * `https://github.example.com/api/v3` for GitHub Enterprise Server, or
-   * `https://api.acme.ghe.com` for GitHub Enterprise Cloud with data
-   * residency). `undefined` targets github.com.
-   */
-  readonly baseUrl?: string;
-}
+export { Credentials } from "@distilled.cloud/github/Credentials";
 
-export class GitHubCredentials extends Context.Service<
-  GitHubCredentials,
-  Effect.Effect<GitHubCredentialsService>
->()("GitHub::Credentials") {
+declare module "@distilled.cloud/github/Credentials" {
   // Lets stack programs require it, e.g. an Action using a `GitHub.*Local` binding.
-  declare readonly kind: "Credentials";
+  interface Credentials {
+    readonly kind: "Credentials";
+  }
 }
 
-const make = (token: Redacted.Redacted<string>, baseUrl?: string): GitHubCredentialsService => ({
-  token,
-  baseUrl,
-});
+/** The User-Agent alchemy sends; GitHub rejects requests without one. */
+export const USER_AGENT = "alchemy";
 
 /**
- * Build a `GitHubCredentials` layer from a literal token. Useful for
+ * Distilled credentials for a token on a REST API base URL (`undefined`, from
+ * {@link normalizeGitHubBaseUrl}, is github.com).
+ */
+export const config = (
+  token: Redacted.Redacted<string>,
+  apiBaseUrl: string | undefined,
+): Config => ({ token, apiBaseUrl: apiBaseUrl ?? DEFAULT_API_BASE_URL, userAgent: USER_AGENT });
+
+/**
+ * Build a `Credentials` layer from a literal token. Useful for
  * tests or when callers already have a PAT in hand.
  *
  * Pass `baseUrl` to target a GitHub Enterprise instance. It accepts a
@@ -54,16 +55,16 @@ export const fromToken = (
   options?: { readonly baseUrl?: string },
 ) =>
   Layer.succeed(
-    GitHubCredentials,
+    Credentials,
     Effect.gen(function* () {
       const baseUrl =
         options?.baseUrl !== undefined ? yield* normalizeGitHubBaseUrl(options.baseUrl) : undefined;
-      return make(typeof token === "string" ? Redacted.make(token) : token, baseUrl);
+      return config(typeof token === "string" ? Redacted.make(token) : token, baseUrl);
     }).pipe(Effect.orDie),
   );
 
 /**
- * Build a `GitHubCredentials` layer that reads the token from
+ * Build a `Credentials` layer that reads the token from
  * `GITHUB_ACCESS_TOKEN` or `GITHUB_TOKEN` at layer build time.
  *
  * GitHub Enterprise is resolved from the environment too: `GITHUB_BASE_URL`,
@@ -73,15 +74,15 @@ export const fromToken = (
  */
 export const fromEnv = () =>
   Layer.succeed(
-    GitHubCredentials,
+    Credentials,
     readEnvCredentials().pipe(
-      Effect.map((creds) => make(creds.token, creds.baseUrl)),
+      Effect.map((creds) => config(creds.token, creds.baseUrl)),
       Effect.orDie,
     ),
   );
 
 /**
- * Build a `GitHubCredentials` layer that resolves a token via the
+ * Build a `Credentials` layer that resolves a token via the
  * Alchemy AuthProvider for the configured profile (defaults to
  * the current Alchemy profile).
  *
@@ -91,7 +92,7 @@ export const fromEnv = () =>
  */
 export const fromAuthProvider = (options?: { readonly baseUrl?: string }) =>
   Layer.effect(
-    GitHubCredentials,
+    Credentials,
     Effect.gen(function* () {
       const fixedBaseUrl =
         options?.baseUrl !== undefined
@@ -105,7 +106,10 @@ export const fromAuthProvider = (options?: { readonly baseUrl?: string }) =>
         Effect.flatMap(({ profileName, resolve }) =>
           resolve.pipe(
             Effect.map((creds) =>
-              make(creds.token, fixedBaseUrl !== undefined ? fixedBaseUrl.baseUrl : creds.baseUrl),
+              config(
+                creds.token,
+                fixedBaseUrl !== undefined ? fixedBaseUrl.baseUrl : creds.baseUrl,
+              ),
             ),
             Effect.mapError((e) =>
               AuthError.make({

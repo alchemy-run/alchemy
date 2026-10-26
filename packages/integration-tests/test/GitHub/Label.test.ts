@@ -1,11 +1,11 @@
 import * as GitHub from "@alchemy.run/github";
-import { listAll } from "@alchemy.run/github/Client";
 import { expect } from "@alchemy.run/test";
 import * as Issues from "@distilled.cloud/github/issues";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { scopedToOwner } from "./scope.ts";
 import { gh } from "./scope.ts";
 
@@ -91,12 +91,11 @@ test.provider(
       expect(observed.description).toBe("Updated: Critical bug");
 
       yield* stack.destroy();
-      const remaining = yield* listAll((page) =>
-        gh(
-          Issues.listLabelsForRepo({
+      const remaining = yield* gh(
+        Stream.runCollect(
+          Issues.listLabelsForRepo.items({
             owner,
             repo: repoName,
-            page,
           }),
         ),
       );

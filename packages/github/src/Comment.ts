@@ -4,7 +4,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { dedent } from "alchemy/Util/dedent";
 import * as Effect from "effect/Effect";
-import { gitHubBaseUrlChanged, githubFor } from "./Client.ts";
+import { gitHubBaseUrlChanged, withBaseUrl } from "./BaseUrl.ts";
 import * as GitHub from "./Providers.ts";
 
 export interface CommentProps {
@@ -185,47 +185,49 @@ export const CommentProvider = () =>
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
-      const github = yield* githubFor(news.baseUrl);
-      const body = dedent(news.body);
-      const scope = { owner: news.owner, repo: news.repository };
+    reconcile: Effect.fn(
+      function* ({ news, output }) {
+        const body = dedent(news.body);
+        const scope = { owner: news.owner, repo: news.repository };
 
-      // Observe — GitHub assigns `comment_id` server-side. Probe for live
-      // state via the cached id; a 404 (deleted out-of-band, or never
-      // created) collapses to "no observed comment" so we converge by
-      // posting a fresh one.
-      const observed = output?.commentId
-        ? yield* github(Issues.getComment({ ...scope, comment_id: output.commentId })).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          )
-        : undefined;
+        // Observe — GitHub assigns `comment_id` server-side. Probe for live
+        // state via the cached id; a 404 (deleted out-of-band, or never
+        // created) collapses to "no observed comment" so we converge by
+        // posting a fresh one.
+        const observed = output?.commentId
+          ? yield* Issues.getComment({ ...scope, comment_id: output.commentId }).pipe(
+              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            )
+          : undefined;
 
-      // Ensure — when no live comment exists, POST creates one. Sync — PATCH
-      // the existing comment with the desired body. GitHub's updateComment is
-      // idempotent for identical bodies (returns same updatedAt), so we
-      // always issue the call rather than diffing.
-      const data =
-        observed === undefined
-          ? yield* github(Issues.createComment({ ...scope, issue_number: news.issueNumber, body }))
-          : yield* github(Issues.updateComment({ ...scope, comment_id: observed.id, body }));
-      return {
-        commentId: data.id,
-        htmlUrl: data.html_url,
-        updatedAt: data.updated_at,
-      };
-    }),
+        // Ensure — when no live comment exists, POST creates one. Sync — PATCH
+        // the existing comment with the desired body. GitHub's updateComment is
+        // idempotent for identical bodies (returns same updatedAt), so we
+        // always issue the call rather than diffing.
+        const data =
+          observed === undefined
+            ? yield* Issues.createComment({ ...scope, issue_number: news.issueNumber, body })
+            : yield* Issues.updateComment({ ...scope, comment_id: observed.id, body });
+        return {
+          commentId: data.id,
+          htmlUrl: data.html_url,
+          updatedAt: data.updated_at,
+        };
+      },
+      (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
+    ),
 
-    delete: Effect.fn(function* ({ olds, output }) {
-      if (!olds.allowDelete) {
-        return;
-      }
-      const github = yield* githubFor(olds.baseUrl);
-      yield* github(
-        Issues.deleteComment({
+    delete: Effect.fn(
+      function* ({ olds, output }) {
+        if (!olds.allowDelete) {
+          return;
+        }
+        yield* Issues.deleteComment({
           owner: olds.owner,
           repo: olds.repository,
           comment_id: output.commentId,
-        }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
   });

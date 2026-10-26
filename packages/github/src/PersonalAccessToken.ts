@@ -1,12 +1,10 @@
-import { Credentials } from "@distilled.cloud/github/Credentials";
 import * as Users from "@distilled.cloud/github/users";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
-import { githubConfig } from "./Client.ts";
-import { GitHubCredentials } from "./Credentials.ts";
+import { Credentials, config } from "./Credentials.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface PersonalAccessTokenProps {
@@ -64,7 +62,7 @@ export const PersonalAccessToken = Resource<PersonalAccessToken>("GitHub.Persona
 const validate = (token: Redacted.Redacted<string>, apiUrl: string) =>
   Users.getAuthenticated({}).pipe(
     Effect.map((user) => ({ login: user.login })),
-    Effect.provideService(Credentials, Effect.succeed(githubConfig(token, apiUrl))),
+    Effect.provideService(Credentials, Effect.succeed(config(token, apiUrl))),
   );
 
 export const PersonalAccessTokenProvider = () =>
@@ -80,9 +78,9 @@ export const PersonalAccessTokenProvider = () =>
       return Result.isSuccess(probe) ? { ...output, ...probe.success } : undefined;
     }),
     reconcile: Effect.fn(function* ({ news }) {
-      const credentials = yield* yield* GitHubCredentials;
+      const credentials = yield* yield* Credentials;
       const token = news?.token ?? credentials.token;
-      const { apiBaseUrl: apiUrl } = githubConfig(token, credentials.baseUrl);
+      const apiUrl = credentials.apiBaseUrl;
       const { login } = yield* validate(token, apiUrl);
       return { value: token, apiUrl, login };
     }),

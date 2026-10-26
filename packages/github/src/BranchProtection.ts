@@ -3,14 +3,8 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import {
-  github,
-  gitHubBaseUrlChanged,
-  githubFor,
-  listAll,
-  listRepositories,
-  PER_PAGE,
-} from "./Client.ts";
+import * as Stream from "effect/Stream";
+import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface BranchProtectionProps {
@@ -291,7 +285,7 @@ export interface BranchProtection extends Resource<
  * restrictions and dismissal restrictions are only available on
  * organization-owned repositories.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied
+ * Authentication is resolved via the GitHub `Credentials` service supplied
  * by `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token
  * needs `repo` scope and admin access to the repository.
  *
@@ -435,19 +429,18 @@ export const BranchProtectionProvider = () =>
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news }) {
-      const github = yield* githubFor(news.baseUrl);
-      const branch = { owner: news.owner, repo: news.repository, branch: news.branch };
+    reconcile: Effect.fn(
+      function* ({ news }) {
+        const branch = { owner: news.owner, repo: news.repository, branch: news.branch };
 
-      // Ensure & Sync — the PUT is a full upsert of the rule. Send explicit
-      // values (or `null`) for every aspect so removed props converge back
-      // to their defaults rather than being left as-is.
-      const requiredStatusChecks = requiredStatusChecksOf(news.requiredStatusChecks);
-      const reviews = news.requiredPullRequestReviews;
-      const restrictions = news.restrictions;
+        // Ensure & Sync — the PUT is a full upsert of the rule. Send explicit
+        // values (or `null`) for every aspect so removed props converge back
+        // to their defaults rather than being left as-is.
+        const requiredStatusChecks = requiredStatusChecksOf(news.requiredStatusChecks);
+        const reviews = news.requiredPullRequestReviews;
+        const restrictions = news.restrictions;
 
-      yield* github(
-        Repos.updateBranchProtection({
+        yield* Repos.updateBranchProtection({
           ...branch,
           required_status_checks: requiredStatusChecks,
           enforce_admins: news.enforceAdmins ?? false,
@@ -493,60 +486,63 @@ export const BranchProtectionProvider = () =>
           required_conversation_resolution: news.requiredConversationResolution ?? false,
           lock_branch: news.lockBranch ?? false,
           allow_fork_syncing: news.allowForkSyncing ?? false,
-        }),
-      );
+        });
 
-      // Sync — required signatures live behind dedicated endpoints that the
-      // top-level PUT does not touch. Diff the observed flag against the
-      // desired one and only call the API on a real change.
-      const observed: ProtectionPayload = yield* github(Repos.getBranchProtection(branch));
+        // Sync — required signatures live behind dedicated endpoints that the
+        // top-level PUT does not touch. Diff the observed flag against the
+        // desired one and only call the API on a real change.
+        const observed: ProtectionPayload = yield* Repos.getBranchProtection(branch);
 
-      const desiredSignatures = news.requiredSignatures ?? false;
-      const observedSignatures = observed.required_signatures?.enabled ?? false;
-      if (desiredSignatures !== observedSignatures) {
-        yield* desiredSignatures
-          ? github(Repos.createCommitSignatureProtection(branch))
-          : github(Repos.deleteCommitSignatureProtection(branch));
-      }
+        const desiredSignatures = news.requiredSignatures ?? false;
+        const observedSignatures = observed.required_signatures?.enabled ?? false;
+        if (desiredSignatures !== observedSignatures) {
+          yield* desiredSignatures
+            ? Repos.createCommitSignatureProtection(branch)
+            : Repos.deleteCommitSignatureProtection(branch);
+        }
 
-      return attrsOf(news.branch, {
-        ...observed,
-        required_signatures: { enabled: desiredSignatures },
-      });
-    }),
+        return attrsOf(news.branch, {
+          ...observed,
+          required_signatures: { enabled: desiredSignatures },
+        });
+      },
+      (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
+    ),
 
     // Refresh from the live rule. A 404 means either the branch is no longer
     // protected or the branch/repository is gone — both are "missing".
-    read: Effect.fn(function* ({ olds }) {
-      const github = yield* githubFor(olds.baseUrl);
-      return yield* github(
-        Repos.getBranchProtection({
+    read: Effect.fn(
+      function* ({ olds }) {
+        return yield* Repos.getBranchProtection({
           owner: olds.owner,
           repo: olds.repository,
           branch: olds.branch,
-        }),
-      ).pipe(
-        Effect.map((protection) => attrsOf(olds.branch, protection)),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-      );
-    }),
+        }).pipe(
+          Effect.map((protection) => attrsOf(olds.branch, protection)),
+          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        );
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
 
     // Enumerate every protected branch across the repositories the token can
     // see — protection rules are keyed by {owner, repository, branch} with no
     // account-wide list endpoint, so walk the repos like the Environment
     // provider does and fetch the rule for each protected branch.
     list: Effect.fn(function* () {
-      const repos = yield* listRepositories;
+      const repos = yield* Stream.runCollect(
+        Repos.listForAuthenticatedUser.items({ per_page: 100 }),
+      );
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) => {
           const scope = { owner: repo.owner.login, repo: repo.name };
-          return listAll((page) =>
-            github(Repos.listBranches({ ...scope, protected: true, per_page: PER_PAGE, page })),
+          return Stream.runCollect(
+            Repos.listBranches.items({ ...scope, protected: true, per_page: 100 }),
           ).pipe(
             Effect.flatMap((branches) =>
               Effect.forEach(branches, (branch) =>
-                github(Repos.getBranchProtection({ ...scope, branch: branch.name })).pipe(
+                Repos.getBranchProtection({ ...scope, branch: branch.name }).pipe(
                   Effect.map((protection) => [attrsOf(branch.name, protection)]),
                   // Protection may be removed between the list and the get, or
                   // the branch may be governed by a ruleset only.
@@ -566,17 +562,17 @@ export const BranchProtectionProvider = () =>
       return perRepo.flat();
     }),
 
-    delete: Effect.fn(function* ({ olds }) {
-      const github = yield* githubFor(olds.baseUrl);
-      yield* github(
-        Repos.deleteBranchProtection({
+    delete: Effect.fn(
+      function* ({ olds }) {
+        yield* Repos.deleteBranchProtection({
           owner: olds.owner,
           repo: olds.repository,
           branch: olds.branch,
-        }),
-      ).pipe(
-        // Already unprotected, or the branch/repository is gone.
-        Effect.catchTag("NotFound", () => Effect.void),
-      );
-    }),
+        }).pipe(
+          // Already unprotected, or the branch/repository is gone.
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
   });

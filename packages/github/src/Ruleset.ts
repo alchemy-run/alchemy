@@ -4,14 +4,8 @@ import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import {
-  github,
-  gitHubBaseUrlChanged,
-  githubFor,
-  listAll,
-  listRepositories,
-  PER_PAGE,
-} from "./Client.ts";
+import * as Stream from "effect/Stream";
+import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface RulesetProps {
@@ -313,7 +307,7 @@ export interface Ruleset extends Resource<
  * accidental removal. Opt in to actual deletion by wrapping the resource in
  * {@link destroy}() from `alchemy/RemovalPolicy`.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied by
+ * Authentication is resolved via the GitHub `Credentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
  * `repo` scope, or repository Administration write permission for a
  * fine-grained token. Ruleset deletion does not require `delete_repo`.
@@ -466,177 +460,176 @@ export const RulesetProvider = () =>
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
-      const github = yield* githubFor(news.baseUrl);
+    reconcile: Effect.fn(
+      function* ({ news, output }) {
+        let observed = output === undefined ? undefined : yield* getRuleset(news, output.rulesetId);
 
-      let observed = output === undefined ? undefined : yield* getRuleset(news, output.rulesetId);
+        const rules: NonNullable<Repos.CreateRepoRulesetRequest["rules"]> = [];
 
-      const rules: NonNullable<Repos.CreateRepoRulesetRequest["rules"]> = [];
+        if (news.creation) {
+          rules.push({ type: "creation" });
+        }
+        if (news.update) {
+          rules.push({
+            type: "update",
+            parameters: { update_allows_fetch_and_merge: false },
+          });
+        }
+        if (news.deletion) {
+          rules.push({ type: "deletion" });
+        }
+        if (news.nonFastForward) {
+          rules.push({ type: "non_fast_forward" });
+        }
+        if (news.requiredLinearHistory) {
+          rules.push({ type: "required_linear_history" });
+        }
+        if (news.requiredSignatures) {
+          rules.push({ type: "required_signatures" });
+        }
+        if (news.pullRequest) {
+          const pullRequest = news.pullRequest;
+          // `require_extra_approval_for_unattributed_changes` is accepted by the API but missing
+          // from its OpenAPI description, so it is added outside the typed literal.
+          const parameters = {
+            required_approving_review_count: pullRequest.requiredApprovingReviewCount ?? 0,
+            dismiss_stale_reviews_on_push: pullRequest.dismissStaleReviewsOnPush ?? false,
+            require_code_owner_review: pullRequest.requireCodeOwnerReview ?? false,
+            require_last_push_approval: pullRequest.requireLastPushApproval ?? false,
+            required_review_thread_resolution: pullRequest.requiredReviewThreadResolution ?? false,
+            ...(pullRequest.allowedMergeMethods !== undefined && {
+              allowed_merge_methods: pullRequest.allowedMergeMethods,
+            }),
+            ...(pullRequest.requireExtraApprovalForUnattributedChanges !== undefined && {
+              require_extra_approval_for_unattributed_changes:
+                pullRequest.requireExtraApprovalForUnattributedChanges,
+            }),
+          };
+          rules.push({ type: "pull_request", parameters });
+        }
+        if (news.mergeQueue) {
+          const mergeQueue = news.mergeQueue;
+          rules.push({
+            type: "merge_queue",
+            parameters: {
+              merge_method: mergeQueue.mergeMethod ?? "MERGE",
+              grouping_strategy: mergeQueue.groupingStrategy ?? "ALLGREEN",
+              max_entries_to_build: mergeQueue.maxEntriesToBuild ?? 5,
+              min_entries_to_merge: mergeQueue.minEntriesToMerge ?? 1,
+              max_entries_to_merge: mergeQueue.maxEntriesToMerge ?? 5,
+              min_entries_to_merge_wait_minutes: mergeQueue.minEntriesToMergeWaitMinutes ?? 5,
+              check_response_timeout_minutes: mergeQueue.checkResponseTimeoutMinutes ?? 60,
+            },
+          });
+        }
+        if (news.requiredStatusChecks) {
+          rules.push({
+            type: "required_status_checks",
+            parameters: {
+              required_status_checks: news.requiredStatusChecks.checks.map((check) => ({
+                context: check.context,
+                integration_id: check.integrationId,
+              })),
+              strict_required_status_checks_policy:
+                news.requiredStatusChecks.strictRequiredStatusChecksPolicy ?? false,
+            },
+          });
+        }
 
-      if (news.creation) {
-        rules.push({ type: "creation" });
-      }
-      if (news.update) {
-        rules.push({
-          type: "update",
-          parameters: { update_allows_fetch_and_merge: false },
-        });
-      }
-      if (news.deletion) {
-        rules.push({ type: "deletion" });
-      }
-      if (news.nonFastForward) {
-        rules.push({ type: "non_fast_forward" });
-      }
-      if (news.requiredLinearHistory) {
-        rules.push({ type: "required_linear_history" });
-      }
-      if (news.requiredSignatures) {
-        rules.push({ type: "required_signatures" });
-      }
-      if (news.pullRequest) {
-        const pullRequest = news.pullRequest;
-        // `require_extra_approval_for_unattributed_changes` is accepted by the API but missing
-        // from its OpenAPI description, so it is added outside the typed literal.
-        const parameters = {
-          required_approving_review_count: pullRequest.requiredApprovingReviewCount ?? 0,
-          dismiss_stale_reviews_on_push: pullRequest.dismissStaleReviewsOnPush ?? false,
-          require_code_owner_review: pullRequest.requireCodeOwnerReview ?? false,
-          require_last_push_approval: pullRequest.requireLastPushApproval ?? false,
-          required_review_thread_resolution: pullRequest.requiredReviewThreadResolution ?? false,
-          ...(pullRequest.allowedMergeMethods !== undefined && {
-            allowed_merge_methods: pullRequest.allowedMergeMethods,
-          }),
-          ...(pullRequest.requireExtraApprovalForUnattributedChanges !== undefined && {
-            require_extra_approval_for_unattributed_changes:
-              pullRequest.requireExtraApprovalForUnattributedChanges,
-          }),
+        const conditions = {
+          ref_name: {
+            include: news.conditions?.include ?? ["~ALL"],
+            exclude: news.conditions?.exclude ?? [],
+          },
         };
-        rules.push({ type: "pull_request", parameters });
-      }
-      if (news.mergeQueue) {
-        const mergeQueue = news.mergeQueue;
-        rules.push({
-          type: "merge_queue",
-          parameters: {
-            merge_method: mergeQueue.mergeMethod ?? "MERGE",
-            grouping_strategy: mergeQueue.groupingStrategy ?? "ALLGREEN",
-            max_entries_to_build: mergeQueue.maxEntriesToBuild ?? 5,
-            min_entries_to_merge: mergeQueue.minEntriesToMerge ?? 1,
-            max_entries_to_merge: mergeQueue.maxEntriesToMerge ?? 5,
-            min_entries_to_merge_wait_minutes: mergeQueue.minEntriesToMergeWaitMinutes ?? 5,
-            check_response_timeout_minutes: mergeQueue.checkResponseTimeoutMinutes ?? 60,
-          },
-        });
-      }
-      if (news.requiredStatusChecks) {
-        rules.push({
-          type: "required_status_checks",
-          parameters: {
-            required_status_checks: news.requiredStatusChecks.checks.map((check) => ({
-              context: check.context,
-              integration_id: check.integrationId,
-            })),
-            strict_required_status_checks_policy:
-              news.requiredStatusChecks.strictRequiredStatusChecksPolicy ?? false,
-          },
-        });
-      }
 
-      const conditions = {
-        ref_name: {
-          include: news.conditions?.include ?? ["~ALL"],
-          exclude: news.conditions?.exclude ?? [],
-        },
-      };
+        // Build the bypass actors payload
+        const bypassActors = news.bypassActors?.map((actor) => ({
+          actor_type: actor.actorType,
+          actor_id: actor.actorId,
+          bypass_mode: actor.bypassMode ?? "always",
+        }));
 
-      // Build the bypass actors payload
-      const bypassActors = news.bypassActors?.map((actor) => ({
-        actor_type: actor.actorType,
-        actor_id: actor.actorId,
-        bypass_mode: actor.bypassMode ?? "always",
-      }));
+        const desired = {
+          name: news.name,
+          target: news.target ?? "branch",
+          enforcement: news.enforcement ?? "active",
+          bypass_actors: bypassActors ?? [],
+          conditions,
+          rules,
+        } satisfies Omit<Repos.CreateRepoRulesetRequest, "owner" | "repo">;
 
-      const desired = {
-        name: news.name,
-        target: news.target ?? "branch",
-        enforcement: news.enforcement ?? "active",
-        bypass_actors: bypassActors ?? [],
-        conditions,
-        rules,
-      } satisfies Omit<Repos.CreateRepoRulesetRequest, "owner" | "repo">;
+        if (observed === undefined) {
+          observed = yield* Repos.createRepoRuleset({
+            owner: news.owner,
+            repo: news.repository,
+            ...desired,
+          });
+        }
 
-      if (observed === undefined) {
-        observed = yield* github(
-          Repos.createRepoRuleset({ owner: news.owner, repo: news.repository, ...desired }),
-        );
-      }
-
-      if (
-        !deepEqual(
-          {
-            name: observed.name,
-            target: observed.target,
-            enforcement: observed.enforcement,
-            bypass_actors: observed.bypass_actors ?? [],
-            conditions: observed.conditions,
-            rules: observed.rules ?? [],
-          },
-          desired,
-        )
-      ) {
-        const rulesetId = observed.id;
-        observed = yield* github(
-          Repos.updateRepoRuleset({
+        if (
+          !deepEqual(
+            {
+              name: observed.name,
+              target: observed.target,
+              enforcement: observed.enforcement,
+              bypass_actors: observed.bypass_actors ?? [],
+              conditions: observed.conditions,
+              rules: observed.rules ?? [],
+            },
+            desired,
+          )
+        ) {
+          const rulesetId = observed.id;
+          observed = yield* Repos.updateRepoRuleset({
             owner: news.owner,
             repo: news.repository,
             ruleset_id: rulesetId,
             ...desired,
-          }),
-        );
-      }
+          });
+        }
 
-      return attrsOf(observed);
-    }),
+        return attrsOf(observed);
+      },
+      (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
+    ),
 
-    read: Effect.fn(function* ({ olds, output }) {
-      if (output !== undefined) {
-        const observed = yield* getRuleset(olds, output.rulesetId);
-        return observed === undefined ? undefined : attrsOf(observed);
-      }
-      const github = yield* githubFor(olds.baseUrl);
-      const rulesets = yield* listAll((page) =>
-        github(
-          Repos.getRepoRulesets({
+    read: Effect.fn(
+      function* ({ olds, output }) {
+        if (output !== undefined) {
+          const observed = yield* getRuleset(olds, output.rulesetId);
+          return observed === undefined ? undefined : attrsOf(observed);
+        }
+        const rulesets = yield* Stream.runCollect(
+          Repos.getRepoRulesets.items({
             owner: olds.owner,
             repo: olds.repository,
             includes_parents: false,
-            per_page: PER_PAGE,
-            page,
+            per_page: 100,
           }),
-        ),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
-      const match = rulesets.find((ruleset) => ruleset.name === olds.name);
-      if (match === undefined) return undefined;
-      const observed = yield* getRuleset(olds, match.id);
-      return observed === undefined ? undefined : Unowned(attrsOf(observed));
-    }),
+        ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
+        const match = rulesets.find((ruleset) => ruleset.name === olds.name);
+        if (match === undefined) return undefined;
+        const observed = yield* getRuleset(olds, match.id);
+        return observed === undefined ? undefined : Unowned(attrsOf(observed));
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
 
     list: Effect.fn(function* () {
-      const repos = yield* listRepositories;
+      const repos = yield* Stream.runCollect(
+        Repos.listForAuthenticatedUser.items({ per_page: 100 }),
+      );
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          listAll((page) =>
-            github(
-              Repos.getRepoRulesets({
-                owner: repo.owner.login,
-                repo: repo.name,
-                includes_parents: false,
-                per_page: PER_PAGE,
-                page,
-              }),
-            ),
+          Stream.runCollect(
+            Repos.getRepoRulesets.items({
+              owner: repo.owner.login,
+              repo: repo.name,
+              includes_parents: false,
+              per_page: 100,
+            }),
           ).pipe(
             Effect.map((rulesets) => rulesets.map(attrsOf)),
             Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
@@ -646,28 +639,29 @@ export const RulesetProvider = () =>
       return perRepo.flat();
     }),
 
-    delete: Effect.fn(function* ({ olds, output }) {
-      if (output?.rulesetId === undefined) return;
-      const github = yield* githubFor(olds.baseUrl);
-      yield* github(
-        Repos.deleteRepoRuleset({
+    delete: Effect.fn(
+      function* ({ olds, output }) {
+        if (output?.rulesetId === undefined) return;
+        yield* Repos.deleteRepoRuleset({
           owner: olds.owner,
           repo: olds.repository,
           ruleset_id: output.rulesetId,
-        }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
   });
 
-const getRuleset = Effect.fn(function* (
-  props: Pick<RulesetProps, "owner" | "repository" | "baseUrl">,
-  rulesetId: number,
-) {
-  const github = yield* githubFor(props.baseUrl);
-  return yield* github(
-    Repos.getRepoRuleset({ owner: props.owner, repo: props.repository, ruleset_id: rulesetId }),
-  ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-});
+const getRuleset = Effect.fn(
+  function* (props: Pick<RulesetProps, "owner" | "repository" | "baseUrl">, rulesetId: number) {
+    return yield* Repos.getRepoRuleset({
+      owner: props.owner,
+      repo: props.repository,
+      ruleset_id: rulesetId,
+    }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  },
+  (effect, props) => effect.pipe(withBaseUrl(props.baseUrl)),
+);
 
 const attrsOf = (ruleset: {
   id: number;

@@ -1,5 +1,4 @@
 import * as GitHub from "@alchemy.run/github";
-import { listAll } from "@alchemy.run/github/Client";
 import { expect } from "@alchemy.run/test";
 import * as Repos from "@distilled.cloud/github/repos";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
@@ -9,6 +8,7 @@ import { destroy } from "alchemy/RemovalPolicy";
 import { State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { gh, scopedToOwner } from "./scope.ts";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
@@ -43,14 +43,13 @@ const getRuleset = (repo: string, rulesetId: number) =>
 
 const getRulesets = (repo: string) =>
   Effect.gen(function* () {
-    return yield* listAll((page) =>
-      gh(
-        Repos.getRepoRulesets({
+    return yield* gh(
+      Stream.runCollect(
+        Repos.getRepoRulesets.items({
           owner,
           repo,
           includes_parents: false,
           per_page: 100,
-          page,
         }),
       ),
     );

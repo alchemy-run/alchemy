@@ -1,5 +1,4 @@
 import * as GitHub from "@alchemy.run/github";
-import { listAll } from "@alchemy.run/github/Client";
 import { expect } from "@alchemy.run/test";
 import * as Issues from "@distilled.cloud/github/issues";
 import * as Output from "alchemy/Output";
@@ -7,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { scopedToOwner } from "./scope.ts";
 import { gh } from "./scope.ts";
 
@@ -42,14 +42,13 @@ const fixture = (name: string, props: Omit<GitHub.MilestoneProps, "owner" | "rep
 
 const listMilestones = (fixture: string) =>
   Effect.gen(function* () {
-    return yield* listAll((page) =>
-      gh(
-        Issues.listMilestones({
+    return yield* gh(
+      Stream.runCollect(
+        Issues.listMilestones.items({
           owner,
           repo: repositoryName(fixture),
           state: "all",
           per_page: 100,
-          page,
         }),
       ),
     );

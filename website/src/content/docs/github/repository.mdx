@@ -174,26 +174,25 @@ stable `repoId`, so it targets the right repo even after a rename.
 
 For anything the resource model doesn't cover, call the
 [distilled GitHub SDK](https://github.com/alchemy-run/distilled/tree/main/packages/github)
-directly. `github` runs an operation with the provider's credentials,
-the same way every GitHub resource does:
+directly. It uses the same `Credentials` every GitHub resource does:
 
 ```typescript
-import { github } from "@alchemy.run/github/Client";
 import * as Repos from "@distilled.cloud/github/repos";
 import * as Effect from "effect/Effect";
 
 const program = Effect.gen(function* () {
-  const repo = yield* github(Repos.get({ owner: "my-org", repo: "api" }));
+  const repo = yield* Repos.get({ owner: "my-org", repo: "api" });
   return repo.default_branch;
 });
 ```
 
 Failures are typed: catch a missing repository with
-`Effect.catchTag("NotFound", ...)`.
+`Effect.catchTag("NotFound", ...)`. List operations page for you:
+`Repos.listForOrg.items({ org: "my-org" })` streams every repository.
 
-Inside a stack, `GitHub.providers()` already carries
-`GitHubCredentials`, resolved via [the login flow](/github/setup).
-Outside one, build the layer directly:
+Inside a stack, `GitHub.providers()` already provides `Credentials`,
+resolved via [the login flow](/github/setup). Outside one, build the
+layer directly:
 
 - **`GitHub.fromEnv()`** — reads `GITHUB_ACCESS_TOKEN` or
   `GITHUB_TOKEN`.

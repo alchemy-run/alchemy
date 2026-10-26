@@ -5,14 +5,8 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import {
-  github,
-  gitHubBaseUrlChanged,
-  githubFor,
-  listAll,
-  listRepositories,
-  PER_PAGE,
-} from "./Client.ts";
+import * as Stream from "effect/Stream";
+import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import type * as GitHub from "./Providers.ts";
 import type { WebhookEventName } from "./RepositoryEventSource.ts";
 
@@ -119,7 +113,7 @@ export interface Webhook extends Resource<
  * in place on subsequent deploys, and is deleted when the resource is
  * destroyed.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied
+ * Authentication is resolved via the GitHub `Credentials` service supplied
  * by `GitHub.providers()` (env, stored PAT, or `gh` CLI). The token needs
  * `repo` scope (admin access to the repository) to manage webhooks.
  *
@@ -179,63 +173,62 @@ export const WebhookProvider = () =>
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
-      const github = yield* githubFor(news.baseUrl);
-      const scope = { owner: news.owner, repo: news.repository };
+    reconcile: Effect.fn(
+      function* ({ news, output }) {
+        const scope = { owner: news.owner, repo: news.repository };
 
-      const config = {
-        url: news.url as string,
-        content_type: news.contentType ?? "json",
-        // Sensitive on the wire: the SDK unwraps the Redacted when it sends.
-        secret: news.secret,
-        insecure_ssl: news.insecureSsl ? "1" : "0",
-      };
-      const events = news.events ?? ["push"];
-      const active = news.active ?? true;
+        const config = {
+          url: news.url as string,
+          content_type: news.contentType ?? "json",
+          // Sensitive on the wire: the SDK unwraps the Redacted when it sends.
+          secret: news.secret,
+          insecure_ssl: news.insecureSsl ? "1" : "0",
+        };
+        const events = news.events ?? ["push"];
+        const active = news.active ?? true;
 
-      // Observe — GitHub assigns the hook id server-side. Probe for live
-      // state via the cached id; a 404 (deleted out-of-band, or never
-      // created) collapses to "no observed webhook" so we converge by
-      // creating a fresh one.
-      const observed = output?.webhookId
-        ? yield* github(Repos.getWebhook({ ...scope, hook_id: output.webhookId })).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          )
-        : undefined;
+        // Observe — GitHub assigns the hook id server-side. Probe for live
+        // state via the cached id; a 404 (deleted out-of-band, or never
+        // created) collapses to "no observed webhook" so we converge by
+        // creating a fresh one.
+        const observed = output?.webhookId
+          ? yield* Repos.getWebhook({ ...scope, hook_id: output.webhookId }).pipe(
+              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            )
+          : undefined;
 
-      // Ensure — POST creates the webhook.
-      if (observed === undefined) {
+        // Ensure — POST creates the webhook.
+        if (observed === undefined) {
+          return toAttrs(
+            yield* Repos.createWebhook({ ...scope, name: "web", active, events, config }),
+          );
+        }
+
+        // Sync — PATCH the existing webhook with the desired config. The
+        // secret can never be read back, so we always send the full config
+        // to converge rather than diffing.
         return toAttrs(
-          yield* github(Repos.createWebhook({ ...scope, name: "web", active, events, config })),
+          yield* Repos.updateWebhook({ ...scope, hook_id: observed.id, active, events, config }),
         );
-      }
-
-      // Sync — PATCH the existing webhook with the desired config. The
-      // secret can never be read back, so we always send the full config
-      // to converge rather than diffing.
-      return toAttrs(
-        yield* github(
-          Repos.updateWebhook({ ...scope, hook_id: observed.id, active, events, config }),
-        ),
-      );
-    }),
+      },
+      (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
+    ),
 
     // GitHub has no global webhook list — hooks are repo-scoped. Enumerate every
     // repository the authenticated token can see, then list each repo's webhooks.
     list: Effect.fn(function* () {
-      const repos = yield* listRepositories;
+      const repos = yield* Stream.runCollect(
+        Repos.listForAuthenticatedUser.items({ per_page: 100 }),
+      );
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          listAll((page) =>
-            github(
-              Repos.listWebhooks({
-                owner: repo.owner.login,
-                repo: repo.name,
-                per_page: PER_PAGE,
-                page,
-              }),
-            ),
+          Stream.runCollect(
+            Repos.listWebhooks.items({
+              owner: repo.owner.login,
+              repo: repo.name,
+              per_page: 100,
+            }),
           ).pipe(
             Effect.map((hooks) => hooks.map(toAttrs)),
             // Repos where the token lacks admin access reject the webhooks
@@ -248,16 +241,16 @@ export const WebhookProvider = () =>
       return perRepo.flat();
     }),
 
-    delete: Effect.fn(function* ({ olds, output }) {
-      const github = yield* githubFor(olds.baseUrl);
-      yield* github(
-        Repos.deleteWebhook({
+    delete: Effect.fn(
+      function* ({ olds, output }) {
+        yield* Repos.deleteWebhook({
           owner: olds.owner,
           repo: olds.repository,
           hook_id: output.webhookId,
-        }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.void));
-    }),
+        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
   });
 
 const toAttrs = (data: {
