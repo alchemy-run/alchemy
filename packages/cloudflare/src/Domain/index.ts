@@ -38,11 +38,14 @@ import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { WorkflowEngine } from "effect/workflow";
-import { DurableObject as CloudflareDurableObject } from "../Workers/DurableObject.ts";
+import {
+  DurableObject as CloudflareDurableObject,
+  type DurableObjectJurisdiction,
+} from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
 import type { Worker } from "../Workers/Worker.ts";
-import { DurableObjectEngine } from "../Workflows/DurableObjectEngine.ts";
+import { durableObjectEngine } from "../Workflows/DurableObjectEngine.ts";
 
 const pad = (n: number) => n.toString().padStart(12, "0");
 
@@ -101,6 +104,7 @@ interface Namespace {
       request: HttpServerRequest,
     ) => Effect.Effect<HttpServerResponse.HttpServerResponse, unknown>;
   };
+  readonly jurisdiction: (jurisdiction: DurableObjectJurisdiction) => Namespace;
 }
 
 /** What an instance's methods and constructor run with. */
@@ -836,9 +840,14 @@ const pollAfter = <A>(
   });
 
 /** The aggregates, views, policies, projections and streams, each on its own Durable Object class. */
-const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect(
+const durableObjectPlatform = (
+  options: DurableObjectsOptions,
+): Layer.Layer<Platform, never, Worker> =>
+  Layer.effect(
   Platform,
   Effect.gen(function* () {
+      const place = (namespace: Namespace): Namespace =>
+        options.jurisdiction ? namespace.jurisdiction(options.jurisdiction) : namespace;
     // Factories run while the Domain's Layer is built, inside the Worker's
     // init phase; declaring a Durable Object needs that context.
     const init = yield* captureContext<Worker>();
@@ -849,9 +858,8 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       aggregate: (aggregate, kit) =>
         inInit(
           Effect.gen(function* () {
-            const namespace = yield* declare(
-              `${aggregate.aggregateName}Aggregate`,
-              aggregateObject(kit),
+              const namespace = place(
+                yield* declare(`${aggregate.aggregateName}Aggregate`, aggregateObject(kit)),
             );
             return {
               send: (id, command, meta) =>
@@ -914,7 +922,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       view: (view, kit) =>
         inInit(
           Effect.gen(function* () {
-            const namespace = yield* declare(`${view.viewName}View`, viewObject(kit));
+              const namespace = place(yield* declare(`${view.viewName}View`, viewObject(kit)));
             const read = (key: string) =>
               unwrapDefects<ViewSnapshot>(namespace.getByName(key).read());
             const after = (key: string, cursor: number) =>
@@ -953,9 +961,8 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       projection: (projection, kit) =>
         inInit(
           Effect.gen(function* () {
-            const namespace = yield* declare(
-              `${projection.projectionName}Projection`,
-              projectionObject(kit),
+              const namespace = place(
+                yield* declare(`${projection.projectionName}Projection`, projectionObject(kit)),
             );
             return {
               receive: (delivery) =>
@@ -970,7 +977,9 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       stream: (stream, kit) =>
         inInit(
           Effect.gen(function* () {
-            const namespace = yield* declare(`${stream.streamName}Stream`, streamObject(kit));
+              const namespace = place(
+                yield* declare(`${stream.streamName}Stream`, streamObject(kit)),
+              );
             const read = (key: string) =>
               unwrapDefects<StreamMeta>(namespace.getByName(key).read());
             const after = (key: string, cursor: number) =>
@@ -999,7 +1008,9 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       policy: (policy, kit) =>
         inInit(
           Effect.gen(function* () {
-            const namespace = yield* declare(`${policy.policyName}Policy`, policyObject(kit));
+              const namespace = place(
+                yield* declare(`${policy.policyName}Policy`, policyObject(kit)),
+              );
             return {
               receive: (delivery) =>
                 unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),
@@ -1008,7 +1019,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
         ),
     });
   }),
-);
+  );
 
 /**
  * Host a domain model on Cloudflare Durable Objects. Every aggregate, view
@@ -1053,4 +1064,48 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
  * @provides WorkflowEngine
  */
 export const DurableObjects: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker> =
-  Layer.merge(DurableObjectPlatform, DurableObjectEngine);
+  durableObjects();
+
+/** Options for {@link durableObjects}. */
+export interface DurableObjectsOptions {
+  /**
+   * Create and store every Durable Object of the model (aggregates, views,
+   * policies, projections, streams and saga executions) only inside this
+   * jurisdiction, e.g. `"eu"`.
+   *
+   * A Durable Object in a jurisdiction is a different object from the one
+   * with the same name outside it. Setting this on a model that already has
+   * data does not move that data: the model starts empty in the
+   * jurisdiction, and the old objects are left as they were. Choose it before
+   * the first deploy, or migrate deliberately.
+   *
+   * @default undefined (no jurisdiction restriction)
+   */
+  readonly jurisdiction?: DurableObjectJurisdiction;
+}
+
+/**
+ * {@link DurableObjects}, configured. Use it to keep a model's Durable
+ * Objects inside a jurisdiction, for example the EU for personal data.
+ *
+ * ### Restricting a model to a jurisdiction
+ * **Example:** Every Durable Object of the model in the EU
+ * ```typescript
+ * import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+ * import * as Layer from "effect/Layer";
+ * import { Bank, BankPolicies } from "./Bank.ts";
+ *
+ * const BankLive = Bank.layer(BankPolicies).pipe(
+ *   Layer.provide(DomainCloudflare.durableObjects({ jurisdiction: "eu" })),
+ * );
+ * ```
+ *
+ * @layer
+ * @provides Domain.Platform
+ * @provides WorkflowEngine
+ */
+export function durableObjects(
+  options: DurableObjectsOptions = {},
+): Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker> {
+  return Layer.merge(durableObjectPlatform(options), durableObjectEngine(options));
+}

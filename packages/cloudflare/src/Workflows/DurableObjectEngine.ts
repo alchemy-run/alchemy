@@ -22,7 +22,10 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import { Workflow, WorkflowEngine } from "effect/workflow";
-import { DurableObject as CloudflareDurableObject } from "../Workers/DurableObject.ts";
+import {
+  DurableObject as CloudflareDurableObject,
+  type DurableObjectJurisdiction,
+} from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import type { Worker } from "../Workers/Worker.ts";
 
@@ -87,7 +90,32 @@ import type { Worker } from "../Workers/Worker.ts";
  * @product Durable Objects
  */
 export const DurableObjectEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =
-  Layer.effect(
+  durableObjectEngine();
+
+/** Options for {@link durableObjectEngine}. */
+export interface DurableObjectEngineOptions {
+  /**
+   * Create and store every workflow execution object only inside this
+   * jurisdiction, e.g. `"eu"`. An execution in a jurisdiction is a different
+   * object from the one with the same name outside it, so setting this does
+   * not move executions that already exist.
+   *
+   * @default undefined (no jurisdiction restriction)
+   */
+  readonly jurisdiction?: DurableObjectJurisdiction;
+}
+
+/**
+ * {@link DurableObjectEngine}, configured, e.g. with a jurisdiction.
+ *
+ * @layer
+ * @provides WorkflowEngine
+ * @product Durable Objects
+ */
+export function durableObjectEngine(
+  options: DurableObjectEngineOptions = {},
+): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> {
+  return Layer.effect(
     WorkflowEngine.WorkflowEngine,
     Effect.gen(function* () {
       // Workflows register while their Layers build, inside the Worker's init
@@ -113,7 +141,10 @@ export const DurableObjectEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, nev
               `${workflow._tag.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
               executionObject({ workflow: workflow as AnyWorkflow, execute, engine: () => engine }),
             ).pipe(Effect.provide(init));
-            namespaces.set(workflow._tag, namespace);
+            namespaces.set(
+              workflow._tag,
+              options.jurisdiction ? namespace.jurisdiction(options.jurisdiction) : namespace,
+            );
           }),
 
         execute: (workflow, options) =>
@@ -260,6 +291,7 @@ export const DurableObjectEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, nev
       return engine;
     }),
   );
+}
 
 // ---------------------------------------------------------------- the execution object
 
@@ -539,6 +571,7 @@ interface Stub {
 
 interface Namespace {
   readonly getByName: (name: string) => Stub;
+  readonly jurisdiction: (jurisdiction: DurableObjectJurisdiction) => Namespace;
 }
 
 type ObjectImpl = Effect.Effect<
