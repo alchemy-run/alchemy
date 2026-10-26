@@ -15,6 +15,8 @@ export const DESCRIPTION = "Alchemy Dev Center binding tests";
 export const Center = Azure.DevCenter.DevCenter("DcBindingsCenter", {
   location: "eastus",
   projectCatalogItemSyncEnableStatus: "Enabled",
+  // Lets the gated dev box lifecycle's pool use a Microsoft-hosted network.
+  microsoftHostedNetworkEnableStatus: "Enabled",
 });
 
 export const Project = Effect.gen(function* () {
@@ -37,6 +39,19 @@ export const Catalog = Effect.gen(function* () {
       path: "/Environment-Definitions",
     },
     syncType: "Manual",
+  });
+});
+
+/** A dev center catalog of customization tasks (`winget`, `choco`, `powershell`, ...). */
+export const TaskCatalog = Effect.gen(function* () {
+  const center = yield* Center;
+  return yield* Azure.DevCenter.Catalog("DcBindingsTasks", {
+    devCenter: center.devCenterName,
+    gitHub: {
+      uri: "https://github.com/microsoft/devcenter-catalog.git",
+      branch: "main",
+      path: "/Tasks",
+    },
   });
 });
 
@@ -65,6 +80,15 @@ export const ProjectEnvironmentType = Effect.gen(function* () {
 /** Dev boxes and environments the routes ask for; none of them exist. */
 export const MISSING = "alchemy-missing";
 
+/** The dev box the gated lifecycle creates (`/live` routes). */
+export const LIVE_DEV_BOX = "alchemy-live";
+
+/** An operation, snapshot, or log id that does not exist. */
+const ZERO_ID = "00000000-0000-0000-0000-000000000000";
+
+/** A customization task the project's catalogs do not publish. */
+const TASK = `catalog/${MISSING}`;
+
 /** Answer `{ ok, result }`, or `{ ok: false, error }` with a 500 so callers retry. */
 const respond = (effect: Effect.Effect<unknown, unknown, RuntimeContext>) =>
   effect.pipe(
@@ -92,6 +116,10 @@ const failureTag = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E
 
 const names = (page: { value: ReadonlyArray<{ name: string }> }) =>
   page.value.map((item) => item.name).sort();
+
+/** The operation id at the end of an `operationLocation` (`…/operationstatuses/<id>?api-version=…`). */
+const operationIdOf = (location: string | undefined) =>
+  location === undefined ? "" : (new URL(location).pathname.split("/").pop() ?? "");
 
 /**
  * Effect-native Azure Function exercising every Dev Center data-plane
@@ -135,6 +163,147 @@ export default class DcBindingsFunction extends Azure.Functions.Function<DcBindi
     const createEnvironment = yield* Azure.DevCenter.CreateOrReplaceEnvironment(project);
     const deleteEnvironment = yield* Azure.DevCenter.DeleteEnvironment(project);
     const getEnvironmentOutputs = yield* Azure.DevCenter.GetEnvironmentOutputs(project);
+    const listDevBoxActions = yield* Azure.DevCenter.ListDevBoxActions(project);
+    const getDevBoxAction = yield* Azure.DevCenter.GetDevBoxAction(project);
+    const skipDevBoxAction = yield* Azure.DevCenter.SkipDevBoxAction(project);
+    const delayDevBoxAction = yield* Azure.DevCenter.DelayDevBoxAction(project);
+    const delayDevBoxActions = yield* Azure.DevCenter.DelayDevBoxActions(project);
+    const listDevBoxSnapshots = yield* Azure.DevCenter.ListDevBoxSnapshots(project);
+    const getDevBoxSnapshot = yield* Azure.DevCenter.GetDevBoxSnapshot(project);
+    const captureDevBoxSnapshot = yield* Azure.DevCenter.CaptureDevBoxSnapshot(project);
+    const restoreDevBoxSnapshot = yield* Azure.DevCenter.RestoreDevBoxSnapshot(project);
+    const repairDevBox = yield* Azure.DevCenter.RepairDevBox(project);
+    const listCustomizationGroups = yield* Azure.DevCenter.ListCustomizationGroups(project);
+    const getCustomizationGroup = yield* Azure.DevCenter.GetCustomizationGroup(project);
+    const createCustomizationGroup = yield* Azure.DevCenter.CreateCustomizationGroup(project);
+    const getCustomizationTaskLog = yield* Azure.DevCenter.GetCustomizationTaskLog(project);
+    const listDevBoxOperations = yield* Azure.DevCenter.ListDevBoxOperations(project);
+    const getDevBoxOperation = yield* Azure.DevCenter.GetDevBoxOperation(project);
+    const listTaskDefinitions = yield* Azure.DevCenter.ListCustomizationTaskDefinitions(project);
+    const getTaskDefinition = yield* Azure.DevCenter.GetCustomizationTaskDefinition(project);
+    const validateTasks = yield* Azure.DevCenter.ValidateCustomizationTasks(project);
+    const getImagingTaskLog = yield* Azure.DevCenter.GetImagingTaskLog(project);
+    const getOperationStatus = yield* Azure.DevCenter.GetOperationStatus(project);
+    const listSchedulesByPool = yield* Azure.DevCenter.ListSchedulesByPool(project);
+    const getScheduleByPool = yield* Azure.DevCenter.GetScheduleByPool(project);
+    const listDefinitionsByCatalog =
+      yield* Azure.DevCenter.ListEnvironmentDefinitionsByCatalog(project);
+
+    const live = { devBoxName: LIVE_DEV_BOX };
+    const liveStep = (params: URLSearchParams) =>
+      Effect.gen(function* () {
+        const until = yield* Effect.sync(() =>
+          new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+        );
+        switch (params.get("step")) {
+          case "create": {
+            const box = yield* createDevBox({ ...live, poolName: params.get("pool") ?? "" });
+            return { name: box.name };
+          }
+          case "get":
+            return yield* getDevBox(live).pipe(
+              Effect.map((box) => ({
+                provisioningState: box.provisioningState,
+                powerState: box.powerState,
+              })),
+              Effect.catchTag("DevBoxNotFound", () => Effect.succeed({ gone: true })),
+            );
+          case "actions": {
+            const page = yield* listDevBoxActions(live);
+            const first = page.value[0];
+            if (first === undefined) return { actions: [] };
+            const action = { ...live, actionName: first.name };
+            const read = yield* getDevBoxAction(action);
+            const delayed = yield* delayDevBoxAction({ ...action, until });
+            const all = yield* delayDevBoxActions({ ...live, until });
+            yield* skipDevBoxAction(action);
+            return {
+              actions: page.value.map((a) => a.name),
+              read: read.name,
+              suspendedUntil: delayed.suspendedUntil,
+              delayed: all.value.map((r) => `${r.name}:${r.result}`),
+            };
+          }
+          case "operations": {
+            const page = yield* listDevBoxOperations(live);
+            const first = page.value[0];
+            const read =
+              first === undefined
+                ? undefined
+                : yield* getDevBoxOperation({ ...live, operationId: first.operationId });
+            return {
+              operations: page.value.map((o) => `${o.kind}:${o.operationId}`),
+              read: read && `${read.kind}:${read.operationId}`,
+            };
+          }
+          case "customize": {
+            const group = yield* createCustomizationGroup({
+              ...live,
+              customizationGroupName: "alchemy",
+              tasks: [
+                {
+                  name: `${params.get("catalog")}/powershell`,
+                  parameters: { command: "Write-Output alchemy" },
+                },
+              ],
+            });
+            return { name: group.name };
+          }
+          case "group": {
+            const group = yield* getCustomizationGroup({
+              ...live,
+              customizationGroupName: "alchemy",
+            });
+            const page = yield* listCustomizationGroups({ ...live, include: "tasks" });
+            const task = group.tasks?.[0];
+            const log =
+              task?.id === undefined || group.status === "Running" || group.status === "NotStarted"
+                ? undefined
+                : yield* getCustomizationTaskLog({
+                    ...live,
+                    customizationGroupName: "alchemy",
+                    customizationTaskId: task.id,
+                  });
+            return {
+              status: group.status,
+              groups: page.value.map((g) => g.name),
+              log: log === undefined ? undefined : log.length > 0,
+            };
+          }
+          case "capture": {
+            const capture = yield* captureDevBoxSnapshot(live);
+            return { operationId: operationIdOf(capture.operationLocation) };
+          }
+          case "status": {
+            const status = yield* getOperationStatus({ operationId: params.get("id") ?? "" });
+            return { status: status.status };
+          }
+          case "snapshots": {
+            const page = yield* listDevBoxSnapshots(live);
+            const first = page.value[0];
+            const read =
+              first === undefined
+                ? undefined
+                : yield* getDevBoxSnapshot({ ...live, snapshotId: first.snapshotId });
+            return { snapshots: page.value.map((s) => s.snapshotId), read: read?.snapshotId };
+          }
+          case "restore": {
+            const restore = yield* restoreDevBoxSnapshot({
+              ...live,
+              snapshotId: params.get("id") ?? "",
+            });
+            return { operationId: operationIdOf(restore.operationLocation) };
+          }
+          case "repair": {
+            const repair = yield* repairDevBox(live);
+            return { operationId: operationIdOf(repair.operationLocation) };
+          }
+          case "delete":
+            yield* deleteDevBox(live);
+            return { deleted: true };
+        }
+        return { unknownStep: params.get("step") };
+      });
 
     return {
       fetch: Effect.gen(function* () {
@@ -229,6 +398,106 @@ export default class DcBindingsFunction extends Azure.Functions.Function<DcBindi
                 };
               }),
             );
+          case "/devbox-extras":
+            return yield* respond(
+              Effect.gen(function* () {
+                const until = yield* Effect.sync(() =>
+                  new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+                );
+                const action = { ...devBox, actionName: "schedule-default" };
+                const group = { ...devBox, customizationGroupName: MISSING };
+                const actions = yield* listDevBoxActions(devBox);
+                const snapshots = yield* listDevBoxSnapshots(devBox);
+                const operations = yield* listDevBoxOperations(devBox);
+                // Capture and restore are accepted before the dev box is looked up;
+                // the operation they start fails later.
+                const capture = yield* captureDevBoxSnapshot(devBox);
+                const restore = yield* restoreDevBoxSnapshot({ ...devBox, snapshotId: ZERO_ID });
+                return {
+                  actions: actions.value.map((a) => a.name),
+                  snapshots: snapshots.value.map((s) => s.snapshotId),
+                  operations: operations.value.map((o) => o.operationId),
+                  capture: capture.operationLocation ?? "",
+                  restore: restore.operationLocation ?? "",
+                  getAction: yield* failureTag(getDevBoxAction(action)),
+                  skipAction: yield* failureTag(skipDevBoxAction(action)),
+                  delayAction: yield* failureTag(delayDevBoxAction({ ...action, until })),
+                  delayActions: yield* failureTag(delayDevBoxActions({ ...devBox, until })),
+                  getSnapshot: yield* failureTag(
+                    getDevBoxSnapshot({ ...devBox, snapshotId: ZERO_ID }),
+                  ),
+                  repair: yield* failureTag(repairDevBox(devBox)),
+                  listGroups: yield* failureTag(listCustomizationGroups(devBox)),
+                  getGroup: yield* failureTag(getCustomizationGroup(group)),
+                  createGroup: yield* failureTag(
+                    createCustomizationGroup({ ...group, tasks: [{ name: TASK }] }),
+                  ),
+                  taskLog: yield* failureTag(
+                    getCustomizationTaskLog({ ...group, customizationTaskId: ZERO_ID }),
+                  ),
+                  getOperation: yield* failureTag(
+                    getDevBoxOperation({ ...devBox, operationId: ZERO_ID }),
+                  ),
+                };
+              }),
+            );
+          case "/customization-tasks":
+            return yield* respond(
+              Effect.gen(function* () {
+                const page = yield* listTaskDefinitions();
+                // `catalog` here is the task catalog (intrinsic tasks cannot be read by name).
+                const first = page.value.find((t) => t.catalogName === catalog);
+                // A failure here answers its tag, so a wrong task name shows in the result.
+                const read =
+                  first === undefined
+                    ? "none"
+                    : yield* getTaskDefinition({
+                        catalogName: first.catalogName,
+                        taskName: first.name,
+                      }).pipe(
+                        Effect.map((t) => `${t.catalogName}/${t.name}`),
+                        Effect.catch((error) =>
+                          PROPAGATING.has(error._tag)
+                            ? Effect.fail(error)
+                            : Effect.succeed(error._tag),
+                        ),
+                      );
+                const validation = yield* validateTasks({ tasks: [{ name: TASK }] });
+                const operationId = operationIdOf(validation.operationLocation);
+                const status = yield* getOperationStatus({ operationId });
+                return {
+                  tasks: page.value.map((t) => `${t.catalogName}/${t.name}`).sort(),
+                  read,
+                  missing: yield* failureTag(
+                    getTaskDefinition({ catalogName: catalog, taskName: MISSING }),
+                  ),
+                  validation: { operationId, statusName: status.name },
+                  missingStatus: yield* failureTag(getOperationStatus({ operationId: ZERO_ID })),
+                  imagingLog: yield* failureTag(getImagingTaskLog({ imageBuildLogId: ZERO_ID })),
+                };
+              }),
+            );
+          case "/pool-schedules":
+            return yield* respond(
+              Effect.gen(function* () {
+                const page = yield* listSchedulesByPool({ poolName: MISSING });
+                return {
+                  names: names(page),
+                  get: yield* failureTag(
+                    getScheduleByPool({ poolName: MISSING, scheduleName: "default" }),
+                  ),
+                };
+              }),
+            );
+          // The gated dev box lifecycle: one step per call on `LIVE_DEV_BOX`.
+          case "/live":
+            return yield* respond(liveStep(url.searchParams));
+          case "/definitions-by-catalog":
+            return yield* respond(
+              Effect.map(listDefinitionsByCatalog({ catalogName: catalog }), (page) => ({
+                ids: page.value.map((d) => `${d.catalogName}/${d.name}`).sort(),
+              })),
+            );
         }
         return HttpServerResponse.text("not found", { status: 404 });
       }),
@@ -259,6 +528,30 @@ export default class DcBindingsFunction extends Azure.Functions.Function<DcBindi
         Azure.DevCenter.CreateOrReplaceEnvironmentHttp,
         Azure.DevCenter.DeleteEnvironmentHttp,
         Azure.DevCenter.GetEnvironmentOutputsHttp,
+        Azure.DevCenter.ListDevBoxActionsHttp,
+        Azure.DevCenter.GetDevBoxActionHttp,
+        Azure.DevCenter.SkipDevBoxActionHttp,
+        Azure.DevCenter.DelayDevBoxActionHttp,
+        Azure.DevCenter.DelayDevBoxActionsHttp,
+        Azure.DevCenter.ListDevBoxSnapshotsHttp,
+        Azure.DevCenter.GetDevBoxSnapshotHttp,
+        Azure.DevCenter.CaptureDevBoxSnapshotHttp,
+        Azure.DevCenter.RestoreDevBoxSnapshotHttp,
+        Azure.DevCenter.RepairDevBoxHttp,
+        Azure.DevCenter.ListCustomizationGroupsHttp,
+        Azure.DevCenter.GetCustomizationGroupHttp,
+        Azure.DevCenter.CreateCustomizationGroupHttp,
+        Azure.DevCenter.GetCustomizationTaskLogHttp,
+        Azure.DevCenter.ListDevBoxOperationsHttp,
+        Azure.DevCenter.GetDevBoxOperationHttp,
+        Azure.DevCenter.ListCustomizationTaskDefinitionsHttp,
+        Azure.DevCenter.GetCustomizationTaskDefinitionHttp,
+        Azure.DevCenter.ValidateCustomizationTasksHttp,
+        Azure.DevCenter.GetImagingTaskLogHttp,
+        Azure.DevCenter.GetOperationStatusHttp,
+        Azure.DevCenter.ListSchedulesByPoolHttp,
+        Azure.DevCenter.GetScheduleByPoolHttp,
+        Azure.DevCenter.ListEnvironmentDefinitionsByCatalogHttp,
       ),
     ),
   ),

@@ -24,6 +24,7 @@ export const DevCenterAction = {
   readCatalogs: `${PROJECTS}/catalogs/read`,
   readEnvironmentDefinitions: `${PROJECTS}/catalogs/environmentDefinitions/read`,
   readEnvironmentTypes: `${PROJECTS}/environmentTypes/read`,
+  readImageBuilds: `${PROJECTS}/catalogs/imageDefinitions/builds/read`,
 } as const;
 
 /** Dev Center data actions for the caller's own dev boxes and environments. */
@@ -34,6 +35,9 @@ export const DevCenterDataAction = {
   devBoxStart: `${PROJECTS}/users/devboxes/userStart/action`,
   devBoxStop: `${PROJECTS}/users/devboxes/userStop/action`,
   devBoxRemoteConnection: `${PROJECTS}/users/devboxes/userGetRemoteConnection/action`,
+  devBoxActionRead: `${PROJECTS}/users/devboxes/userActionRead/action`,
+  devBoxActionManage: `${PROJECTS}/users/devboxes/userActionManage/action`,
+  devBoxCustomize: `${PROJECTS}/users/devboxes/userCustomize/action`,
   environmentRead: `${PROJECTS}/users/environments/userRead/action`,
   environmentWrite: `${PROJECTS}/users/environments/userWrite/action`,
   environmentDelete: `${PROJECTS}/users/environments/userDelete/action`,
@@ -94,6 +98,25 @@ export const DevCenterRole = {
     actions: [A.readProject],
     dataActions: [D.devBoxRemoteConnection],
   },
+  /** Repair, capture a snapshot of, or restore a snapshot onto an existing dev box. */
+  DevBoxManage: { role: "DevBoxManage", actions: [A.readProject], dataActions: [D.devBoxWrite] },
+  DevBoxActionRead: {
+    role: "DevBoxActionRead",
+    actions: [A.readProject],
+    dataActions: [D.devBoxActionRead],
+  },
+  DevBoxActionManage: {
+    role: "DevBoxActionManage",
+    actions: [A.readProject],
+    dataActions: [D.devBoxActionManage],
+  },
+  /** Apply (or validate) catalog customization tasks; tasks resolve through the project's catalogs. */
+  DevBoxCustomize: {
+    role: "DevBoxCustomize",
+    actions: [A.readProject, A.readCatalogs],
+    dataActions: [D.devBoxCustomize],
+  },
+  ImageBuildRead: { role: "ImageBuildRead", actions: [A.readProject, A.readImageBuilds] },
   EnvironmentRead: {
     role: "EnvironmentRead",
     actions: [A.readProject],

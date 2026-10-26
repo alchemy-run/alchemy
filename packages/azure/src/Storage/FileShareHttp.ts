@@ -30,11 +30,31 @@ import type { WriteFileShareClient } from "./FileShareWrite.ts";
  * - `read`: built-in Storage File Data Privileged Reader (`files/read` +
  *   `readFileBackupSemantics/action`, exactly what reads need);
  * - `write` / `delete`: a custom role per stack, because the built-in
- *   Privileged Contributor also grants read, delete and ACL changes.
+ *   Privileged Contributor also grants read, delete and ACL changes;
+ * - `permissions`: a custom role with `files/modifypermissions/action`
+ *   (Create Permission);
+ * - `shareRead` / `shareWrite` / `shareLease`: a custom role with only
+ *   `fileServices/shares/read`, `shares/write` or `shares/lease/action`, the
+ *   share-level permissions Azure Files checks for share properties,
+ *   metadata, access policies, statistics, snapshots and share leases.
  */
-export type FileShareAccess = "read" | "write" | "delete";
+export type FileShareAccess =
+  | "read"
+  | "write"
+  | "delete"
+  | "permissions"
+  | "shareRead"
+  | "shareWrite"
+  | "shareLease";
 
 const FILE_SERVICES = "Microsoft.Storage/storageAccounts/fileServices";
+
+interface FileShareCustomRole {
+  readonly id: string;
+  readonly description: string;
+  readonly actions?: readonly string[];
+  readonly dataActions?: readonly string[];
+}
 
 /** Custom roles, one per stack, shared by every host and share. */
 const CUSTOM_ROLES = {
@@ -56,7 +76,34 @@ const CUSTOM_ROLES = {
       `${FILE_SERVICES}/writeFileBackupSemantics/action`,
     ],
   },
-} as const;
+  permissions: {
+    id: "AzureStorageFileSharePermissionWriter",
+    description:
+      "Create security descriptors (Create Permission) in Azure file shares over REST (Alchemy FileShare bindings).",
+    dataActions: [
+      `${FILE_SERVICES}/fileshares/files/modifypermissions/action`,
+      `${FILE_SERVICES}/writeFileBackupSemantics/action`,
+    ],
+  },
+  shareRead: {
+    id: "AzureStorageFileSharePropertiesReader",
+    description:
+      "Read Azure file share properties, access policies and statistics over REST (Alchemy FileShare bindings).",
+    actions: [`${FILE_SERVICES}/shares/read`],
+  },
+  shareWrite: {
+    id: "AzureStorageFileSharePropertiesWriter",
+    description:
+      "Set Azure file share properties, metadata and access policies, and snapshot shares over REST (Alchemy FileShare bindings).",
+    actions: [`${FILE_SERVICES}/shares/write`],
+  },
+  shareLease: {
+    id: "AzureStorageFileShareLeaser",
+    description:
+      "Acquire, renew, change, release and break Azure file share leases over REST (Alchemy FileShare bindings).",
+    actions: [`${FILE_SERVICES}/shares/lease/action`],
+  },
+} as const satisfies Record<Exclude<FileShareAccess, "read">, FileShareCustomRole>;
 
 /**
  * Azure Files data roles are assigned on the share's data-plane scope
@@ -82,10 +129,15 @@ const GrantOnShare = Effect.gen(function* () {
           });
           continue;
         }
-        const custom = CUSTOM_ROLES[level];
+        const custom: FileShareCustomRole = CUSTOM_ROLES[level];
         const role = yield* defineRole(custom.id, {
           description: custom.description,
-          permissions: [{ dataActions: [...custom.dataActions] }],
+          permissions: [
+            {
+              ...(custom.actions ? { actions: [...custom.actions] } : {}),
+              ...(custom.dataActions ? { dataActions: [...custom.dataActions] } : {}),
+            },
+          ],
         });
         roleAssignments.push({ roleDefinitionId: role.roleDefinitionId, scope });
       }
@@ -300,16 +352,19 @@ export const makeFileShareOperationBinding = <
   tag: string;
   /** The distilled `storage-file` operation. */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
-  /** What the operation does on the share. */
-  access: FileShareAccess;
+  /** What the operation does on the share; one role per level. */
+  access: FileShareAccess | readonly FileShareAccess[];
 }) =>
   Effect.gen(function* () {
     const grantOnShare = yield* GrantOnShare;
     const op = yield* AzureBindings.withCredentials(options.operation);
+    const access: readonly FileShareAccess[] =
+      typeof options.access === "string" ? [options.access] : options.access;
     return Effect.fn(function* (share: FileShare) {
-      yield* grantOnShare(options.tag, share, [options.access]);
+      yield* grantOnShare(options.tag, share, access);
       const address = yield* addressOf(options.tag, share);
-      return Effect.fn(address.tag)(function* (request: FileShareRequest<I>) {
+      // Share-level requests may have no required members, so the request is optional.
+      return Effect.fn(address.tag)(function* (request?: FileShareRequest<I>) {
         const where = yield* at(address);
         // `FileShareRequest<I>` plus the three omitted members is `I`; TS
         // cannot prove an `Omit` round-trip over a generic.

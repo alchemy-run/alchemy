@@ -11,15 +11,25 @@ import { distilledFromSource } from "../../Functions/fixtures/distilled-source.t
 // Resources the fixture binds. Module-scope so the test stack yields the
 // same declarations.
 
-/** Holds every bound share. */
+/** Holds every bound SMB share. */
 export const FileAccount = Azure.Storage.StorageAccount("FileBindingsData");
 
-const share = (id: string) =>
+/**
+ * Premium `FileStorage` account for the NFS share: hard and symbolic links
+ * exist only on NFS shares.
+ */
+export const NfsAccount = Azure.Storage.StorageAccount("FileBindingsNfs", {
+  kind: "FileStorage",
+  sku: "Premium_LRS",
+});
+
+const share = (id: string, props?: { accessPolicies?: Azure.Storage.StorageAccessPolicy[] }) =>
   Effect.gen(function* () {
     const account = yield* FileAccount;
     return yield* Azure.Storage.FileShare(id, {
       storageAccount: account.storageAccountName,
       shareQuota: 1,
+      ...props,
     });
   });
 
@@ -38,6 +48,27 @@ export const Shares = {
   writeClient: share("FileWriteClient"),
   /** All three: FileShareReadWrite. */
   clients: share("FileClients"),
+  /** Privileged Reader + custom `files/write`: StartCopyFile (it reads the source with the same token). */
+  copies: share("FileCopies"),
+  /** Custom `files/modifypermissions/action`: CreateSharePermission. */
+  permissions: share("FilePermissions"),
+  /** Custom `shares/read`: share properties, access policy, statistics. */
+  shareReads: share("FileShareReads", {
+    accessPolicies: [{ id: "readers", permission: "rl", expiryTime: "2030-01-01T00:00:00Z" }],
+  }),
+  /** Custom `shares/write`: share properties, metadata, access policy, snapshots. */
+  shareWrites: share("FileShareWrites"),
+  /** Custom `shares/lease/action`: share leases. */
+  leases: share("FileShareLeases"),
+  /** NFS share (100 GiB, the premium minimum): custom `files/write` + Privileged Reader for links. */
+  links: Effect.gen(function* () {
+    const account = yield* NfsAccount;
+    return yield* Azure.Storage.FileShare("FileLinks", {
+      storageAccount: account.storageAccountName,
+      shareQuota: 100,
+      enabledProtocols: "NFS",
+    });
+  }),
 };
 
 /** Turn `{ $text }` markers into bytes (a JSON request cannot carry a `Uint8Array`). */
@@ -110,6 +141,12 @@ export default class FileShareBindingsFunction extends Azure.Functions.Function<
     const deletes = yield* Shares.deletes;
     const writeClient = yield* Shares.writeClient;
     const clients = yield* Shares.clients;
+    const copies = yield* Shares.copies;
+    const permissions = yield* Shares.permissions;
+    const shareReads = yield* Shares.shareReads;
+    const shareWrites = yield* Shares.shareWrites;
+    const leases = yield* Shares.leases;
+    const links = yield* Shares.links;
     const S = Azure.Storage;
 
     const ops: Record<string, Callable> = {
@@ -118,6 +155,9 @@ export default class FileShareBindingsFunction extends Azure.Functions.Function<
       ListFilesAndDirectories: yield* S.ListFilesAndDirectories(reads),
       GetDirectoryProperties: yield* S.GetDirectoryProperties(reads),
       GetFileRangeList: yield* S.GetFileRangeList(reads),
+      ListFileHandles: yield* S.ListFileHandles(reads),
+      ListDirectoryHandles: yield* S.ListDirectoryHandles(reads),
+      GetSharePermission: yield* S.GetSharePermission(reads),
 
       CreateFile: yield* S.CreateFile(writes),
       UploadFileRange: yield* S.UploadFileRange(writes),
@@ -125,9 +165,42 @@ export default class FileShareBindingsFunction extends Azure.Functions.Function<
       SetFileMetadata: yield* S.SetFileMetadata(writes),
       SetFileHTTPHeaders: yield* S.SetFileHTTPHeaders(writes),
       SetDirectoryMetadata: yield* S.SetDirectoryMetadata(writes),
+      StartCopyFile: yield* S.StartCopyFile(copies),
+      AbortCopyFile: yield* S.AbortCopyFile(writes),
+      UploadFileRangeFromUrl: yield* S.UploadFileRangeFromUrl(writes),
+      AcquireFileLease: yield* S.AcquireFileLease(writes),
+      ReleaseFileLease: yield* S.ReleaseFileLease(writes),
+      ChangeFileLease: yield* S.ChangeFileLease(writes),
+      BreakFileLease: yield* S.BreakFileLease(writes),
+      ForceCloseFileHandles: yield* S.ForceCloseFileHandles(writes),
+      ForceCloseDirectoryHandles: yield* S.ForceCloseDirectoryHandles(writes),
+      RenameFile: yield* S.RenameFile(writes),
+      RenameDirectory: yield* S.RenameDirectory(writes),
+      SetDirectoryProperties: yield* S.SetDirectoryProperties(writes),
 
       DeleteFile: yield* S.DeleteFile(deletes),
       DeleteDirectory: yield* S.DeleteDirectory(deletes),
+
+      CreateSharePermission: yield* S.CreateSharePermission(permissions),
+
+      GetShareProperties: yield* S.GetShareProperties(shareReads),
+      GetShareAccessPolicy: yield* S.GetShareAccessPolicy(shareReads),
+      GetShareStatistics: yield* S.GetShareStatistics(shareReads),
+
+      SetShareProperties: yield* S.SetShareProperties(shareWrites),
+      SetShareMetadata: yield* S.SetShareMetadata(shareWrites),
+      SetShareAccessPolicy: yield* S.SetShareAccessPolicy(shareWrites),
+      CreateShareSnapshot: yield* S.CreateShareSnapshot(shareWrites),
+
+      AcquireShareLease: yield* S.AcquireShareLease(leases),
+      ReleaseShareLease: yield* S.ReleaseShareLease(leases),
+      ChangeShareLease: yield* S.ChangeShareLease(leases),
+      BreakShareLease: yield* S.BreakShareLease(leases),
+      RenewShareLease: yield* S.RenewShareLease(leases),
+
+      CreateFileHardLink: yield* S.CreateFileHardLink(links),
+      CreateFileSymbolicLink: yield* S.CreateFileSymbolicLink(links),
+      GetFileSymbolicLink: yield* S.GetFileSymbolicLink(links),
     };
 
     const read = yield* S.FileShareRead(reads);
@@ -178,6 +251,37 @@ export default class FileShareBindingsFunction extends Azure.Functions.Function<
         Azure.Storage.SetDirectoryMetadataHttp,
         Azure.Storage.DeleteFileHttp,
         Azure.Storage.DeleteDirectoryHttp,
+        Azure.Storage.ListFileHandlesHttp,
+        Azure.Storage.ListDirectoryHandlesHttp,
+        Azure.Storage.GetSharePermissionHttp,
+        Azure.Storage.StartCopyFileHttp,
+        Azure.Storage.AbortCopyFileHttp,
+        Azure.Storage.UploadFileRangeFromUrlHttp,
+        Azure.Storage.AcquireFileLeaseHttp,
+        Azure.Storage.ReleaseFileLeaseHttp,
+        Azure.Storage.ChangeFileLeaseHttp,
+        Azure.Storage.BreakFileLeaseHttp,
+        Azure.Storage.ForceCloseFileHandlesHttp,
+        Azure.Storage.ForceCloseDirectoryHandlesHttp,
+        Azure.Storage.RenameFileHttp,
+        Azure.Storage.RenameDirectoryHttp,
+        Azure.Storage.SetDirectoryPropertiesHttp,
+        Azure.Storage.CreateSharePermissionHttp,
+        Azure.Storage.GetSharePropertiesHttp,
+        Azure.Storage.GetShareAccessPolicyHttp,
+        Azure.Storage.GetShareStatisticsHttp,
+        Azure.Storage.SetSharePropertiesHttp,
+        Azure.Storage.SetShareMetadataHttp,
+        Azure.Storage.SetShareAccessPolicyHttp,
+        Azure.Storage.CreateShareSnapshotHttp,
+        Azure.Storage.AcquireShareLeaseHttp,
+        Azure.Storage.ReleaseShareLeaseHttp,
+        Azure.Storage.ChangeShareLeaseHttp,
+        Azure.Storage.BreakShareLeaseHttp,
+        Azure.Storage.RenewShareLeaseHttp,
+        Azure.Storage.CreateFileHardLinkHttp,
+        Azure.Storage.CreateFileSymbolicLinkHttp,
+        Azure.Storage.GetFileSymbolicLinkHttp,
         Azure.Storage.FileShareReadHttp,
         Azure.Storage.FileShareWriteHttp,
         Azure.Storage.FileShareReadWriteHttp,

@@ -32,10 +32,12 @@ const Stack = Alchemy.Stack(
     const account = yield* FileAccount;
     const names: Record<string, Output.Output<string, never>> = {};
     const ids: Record<string, Output.Output<string, never>> = {};
+    const accounts: Record<string, Output.Output<string, never>> = {};
     for (const [key, make] of Object.entries(Shares)) {
       const share = yield* make;
       names[key] = share.shareName;
       ids[key] = share.shareId;
+      accounts[key] = share.storageAccount;
     }
     return {
       url: fn.url,
@@ -44,11 +46,13 @@ const Stack = Alchemy.Stack(
       resourceGroup: account.resourceGroup,
       names,
       ids,
+      accounts,
     };
   }),
 );
 
-// ~$0.02/run (Flex Consumption Function, two Standard_LRS accounts, five 1 GiB shares); ~6 min deploy.
+// ~$0.05/run (Flex Consumption Function, two Standard_LRS accounts, nine 1 GiB shares, one
+// Premium_LRS FileStorage account with a 100 GiB NFS share for ~15 min); ~6 min deploy.
 const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
 
 /** Azure credentials and environment for hooks and out-of-band checks. */
@@ -76,6 +80,7 @@ const outputs = Effect.gen(function* () {
     resourceGroup: out.resourceGroup as string,
     names: out.names as Record<ShareKey, string>,
     ids: out.ids as Record<ShareKey, string>,
+    accounts: out.accounts as Record<ShareKey, string>,
   };
 });
 
@@ -127,21 +132,77 @@ const deployerShare = (key: ShareKey) =>
     const out = yield* outputs;
     const { subscriptionId } = yield* Azure.AzureEnvironment.current;
     const shareName = out.names[key];
+    const account = out.accounts[key];
     const signedExpiry = yield* Effect.sync(() => new Date(Date.now() + 3_600_000).toISOString());
     const sas = yield* storage.ListStorageAccountServiceSAS({
       subscriptionId,
       resourceGroupName: out.resourceGroup,
-      accountName: out.account,
-      canonicalizedResource: `/file/${out.account}/${shareName}`,
+      accountName: account,
+      canonicalizedResource: `/file/${account}/${shareName}`,
       signedResource: "s",
       signedPermission: "rcwdl",
       signedProtocol: "https",
       signedExpiry,
     });
     return {
-      url: `https://${out.account}.file.core.windows.net?${sas.serviceSasToken}`,
+      url: `https://${account}.file.core.windows.net?${sas.serviceSasToken}`,
       shareName,
     };
+  });
+
+/** A URL for `path` in the share that carries the deployer's SAS, for copy sources. */
+const sasFileUrl = (key: ShareKey, path: string) =>
+  Effect.map(deployerShare(key), ({ url, shareName }) => {
+    const [endpoint, query] = url.split("?");
+    return `${endpoint}/${shareName}/${path}?${query}`;
+  });
+
+/** The plain (unsigned) URL of `path` in the share. */
+const plainFileUrl = (key: ShareKey, path: string) =>
+  Effect.map(
+    outputs,
+    (out) => `https://${out.accounts[key]}.file.core.windows.net/${out.names[key]}/${path}`,
+  );
+
+/** The ARM identifiers of a share, for out-of-band share-level checks. */
+const armShare = (key: ShareKey) =>
+  Effect.gen(function* () {
+    const out = yield* outputs;
+    const { subscriptionId } = yield* Azure.AzureEnvironment.current;
+    return {
+      subscriptionId,
+      resourceGroupName: out.resourceGroup,
+      accountName: out.accounts[key],
+      shareName: out.names[key],
+    };
+  });
+
+/** A share's ARM view (quota, metadata, access policies, lease state). */
+const shareOf = (key: ShareKey) =>
+  Effect.flatMap(armShare(key), (where) => storage.GetFileShare(where));
+
+/** Lease a share out of band through ARM. */
+const leaseShare = (key: ShareKey, request: Omit<storage.FileSharesLeaseRequest, keyof ArmShare>) =>
+  Effect.flatMap(armShare(key), (where) => storage.FileSharesLease({ ...where, ...request }));
+
+type ArmShare = Effect.Success<ReturnType<typeof armShare>>;
+
+/** Delete `fileName` out of band if it exists. */
+const removeFile = (key: ShareKey, fileName: string) =>
+  Effect.gen(function* () {
+    const where = yield* deployerShare(key);
+    yield* files
+      .DeleteFile({ ...where, fileName })
+      .pipe(Effect.catchTag(["ResourceNotFound", "ParentNotFound"], () => Effect.void));
+  });
+
+/** Delete an empty `directory` out of band if it exists. */
+const removeDirectory = (key: ShareKey, directory: string) =>
+  Effect.gen(function* () {
+    const where = yield* deployerShare(key);
+    yield* files
+      .DeleteDirectory({ ...where, directory })
+      .pipe(Effect.catchTag(["ResourceNotFound", "ParentNotFound"], () => Effect.void));
   });
 
 /** Write `text` to `fileName` out of band. */
@@ -232,12 +293,32 @@ const describeRole = (roleDefinitionId: string) =>
     const marker = /\[alchemy AzureStorageFileShareBindings\/[^/]+\/([^\]]+)\]$/.exec(
       definition?.properties?.description ?? "",
     );
-    const dataActions = (definition?.properties?.permissions ?? [])
-      .flatMap((p) => p.dataActions ?? [])
+    const permissions = (definition?.properties?.permissions ?? [])
+      .flatMap((p) => [...(p.actions ?? []), ...(p.dataActions ?? [])])
       .map((action) => action.replace("Microsoft.Storage/storageAccounts/fileServices/", ""))
       .sort();
-    return `${marker?.[1] ?? roleDefinitionId}(${dataActions.join(",")})`;
+    return `${marker?.[1] ?? roleDefinitionId}(${permissions.join(",")})`;
   });
+
+/**
+ * A security descriptor in SDDL: owner and group SYSTEM, full access for
+ * SYSTEM, in the canonical form Azure Files stores and answers (it appends
+ * the empty SACL `S:NO_ACCESS_CONTROL`).
+ */
+const SDDL = "O:SYG:SYD:(A;;FA;;;SY)S:NO_ACCESS_CONTROL";
+
+/** Fixed lease IDs (the lease tests run one at a time). */
+const LEASE_A = "6a1d3f0e-8c1b-4f43-9d55-1e0a9c2b7f10";
+const LEASE_B = "b4e7c2a9-3f58-4d0e-8a61-7c9d2e1f0b35";
+
+/** Break any lease an interrupted run left on the leases share. */
+const breakLeftoverShareLease = Effect.gen(function* () {
+  const arm = yield* shareOf("leases");
+  // ARM answers the lease state in lower case.
+  if (arm.properties?.leaseState?.toLowerCase() === "leased") {
+    yield* leaseShare("leases", { action: "Break", breakPeriod: 0 });
+  }
+});
 
 const fileShareScope = (shareId: string) =>
   shareId.replace(/\/shares\/([^/]+)$/i, "/fileshares/$1").toLowerCase();
@@ -543,6 +624,601 @@ describe("Azure Files bindings on an Azure Function", { tags: ["provider:azure",
     );
   });
 
+  describe("Storage.ListFileHandles", () => {
+    test(
+      "lists a file's open handles",
+      Effect.gen(function* () {
+        yield* seedFile("reads", "op-handles.txt", "h");
+        const body = yield* op("ListFileHandles", { fileName: "op-handles.txt" });
+        expectOk(body);
+        // REST callers hold no SMB handles.
+        expect(body.result.HandleList ?? []).toEqual([]);
+        const missing = yield* op("ListFileHandles", { fileName: "op-handles-missing.txt" });
+        expect({ ok: missing.ok, tag: missing.tag }).toEqual({ ok: false, tag: "ResourceNotFound" });
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.ListDirectoryHandles", () => {
+    test(
+      "lists a directory's open handles recursively",
+      Effect.gen(function* () {
+        yield* seedDirectory("reads", "op-dir-handles");
+        const body = yield* op("ListDirectoryHandles", {
+          directory: "op-dir-handles",
+          xMsRecursive: true,
+        });
+        expectOk(body);
+        expect(body.result.HandleList ?? []).toEqual([]);
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.GetSharePermission", () => {
+    test(
+      "reads a security descriptor the deployer stored",
+      Effect.gen(function* () {
+        const where = yield* deployerShare("reads");
+        const created = yield* files.CreateSharePermission({
+          ...where,
+          sharePermission: { permission: SDDL, format: "Sddl" },
+        });
+        const body = yield* op("GetSharePermission", {
+          xMsFilePermissionKey: created.xMsFilePermissionKey,
+          xMsFilePermissionFormat: "Sddl",
+        });
+        expectOk(body);
+        expect(body.result.permission).toBe(SDDL);
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.StartCopyFile", () => {
+    test(
+      "copies a file within the share",
+      Effect.gen(function* () {
+        yield* seedFile("copies", "op-copy-src.txt", "copy-body");
+        yield* removeFile("copies", "op-copy-dst.txt");
+        const source = yield* plainFileUrl("copies", "op-copy-src.txt");
+        const body = yield* op("StartCopyFile", {
+          fileName: "op-copy-dst.txt",
+          xMsCopySource: source,
+        });
+        expectOk(body);
+        expect(body.result.xMsCopyStatus).toBe("success");
+        expect(yield* readFile("copies", "op-copy-dst.txt")).toBe("copy-body");
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.AbortCopyFile", () => {
+    test(
+      "reaches the copy of a file and reports no pending copy once it finished",
+      Effect.gen(function* () {
+        yield* seedFile("writes", "op-abort-src.txt", "abort-body");
+        const where = yield* deployerShare("writes");
+        const source = yield* sasFileUrl("writes", "op-abort-src.txt");
+        const copy = yield* files.FileStartCopy({
+          ...where,
+          fileName: "op-abort-dst.txt",
+          xMsCopySource: source,
+        });
+        const body = yield* op("AbortCopyFile", {
+          fileName: "op-abort-dst.txt",
+          copyid: copy.xMsCopyId,
+        });
+        expect({ ok: body.ok, tag: body.tag }).toEqual({
+          ok: false,
+          tag: "StorageNoPendingCopyOperation",
+        });
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.UploadFileRangeFromUrl", () => {
+    test(
+      "writes a range of a file from another file's URL",
+      Effect.gen(function* () {
+        yield* seedFile("writes", "op-range-src.txt", "hello");
+        yield* seedFile("writes", "op-range-dst.txt", "-----");
+        const source = yield* sasFileUrl("writes", "op-range-src.txt");
+        const body = yield* op("UploadFileRangeFromUrl", {
+          fileName: "op-range-dst.txt",
+          xMsRange: "bytes=0-4",
+          xMsSourceRange: "bytes=0-4",
+          xMsCopySource: source,
+        });
+        expectOk(body);
+        expect(yield* readFile("writes", "op-range-dst.txt")).toBe("hello");
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.AcquireFileLease", () => {
+    test(
+      "leases a file",
+      Effect.gen(function* () {
+        yield* seedFile("writes", "op-lease-acquire.txt", "l");
+        const body = yield* op("AcquireFileLease", {
+          fileName: "op-lease-acquire.txt",
+          xMsLeaseDuration: -1,
+        });
+        expectOk(body);
+        const props = yield* fileProperties("writes", "op-lease-acquire.txt");
+        expect(props.xMsLeaseState).toBe("leased");
+        const where = yield* deployerShare("writes");
+        yield* files.FileReleaseLease({
+          ...where,
+          fileName: "op-lease-acquire.txt",
+          xMsLeaseId: body.result.xMsLeaseId,
+        });
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.ChangeFileLease", () => {
+    test(
+      "moves a file lease to a new ID",
+      Effect.gen(function* () {
+        yield* seedFile("writes", "op-lease-change.txt", "l");
+        const where = yield* deployerShare("writes");
+        const lease = yield* files.FileAcquireLease({
+          ...where,
+          fileName: "op-lease-change.txt",
+          xMsLeaseDuration: -1,
+          xMsProposedLeaseId: LEASE_A,
+        });
+        const body = yield* op("ChangeFileLease", {
+          fileName: "op-lease-change.txt",
+          xMsLeaseId: lease.xMsLeaseId,
+          xMsProposedLeaseId: LEASE_B,
+        });
+        expectOk(body);
+        expect(body.result.xMsLeaseId).toBe(LEASE_B);
+        // Releasing with the new ID succeeds only if the change took.
+        yield* files.FileReleaseLease({
+          ...where,
+          fileName: "op-lease-change.txt",
+          xMsLeaseId: LEASE_B,
+        });
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.ReleaseFileLease", () => {
+    test(
+      "releases a file lease",
+      Effect.gen(function* () {
+        yield* seedFile("writes", "op-lease-release.txt", "l");
+        const where = yield* deployerShare("writes");
+        const lease = yield* files.FileAcquireLease({
+          ...where,
+          fileName: "op-lease-release.txt",
+          xMsLeaseDuration: -1,
+        });
+        const body = yield* op("ReleaseFileLease", {
+          fileName: "op-lease-release.txt",
+          xMsLeaseId: lease.xMsLeaseId,
+        });
+        expectOk(body);
+        const props = yield* fileProperties("writes", "op-lease-release.txt");
+        expect(props.xMsLeaseState).toBe("available");
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.BreakFileLease", () => {
+    test(
+      "breaks a file lease without its ID",
+      Effect.gen(function* () {
+        yield* seedFile("writes", "op-lease-break.txt", "l");
+        const where = yield* deployerShare("writes");
+        yield* files.FileAcquireLease({
+          ...where,
+          fileName: "op-lease-break.txt",
+          xMsLeaseDuration: -1,
+        });
+        const body = yield* op("BreakFileLease", { fileName: "op-lease-break.txt" });
+        expectOk(body);
+        const props = yield* fileProperties("writes", "op-lease-break.txt");
+        expect(props.xMsLeaseState).toBe("broken");
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.ForceCloseFileHandles", () => {
+    test(
+      "closes every handle on a file",
+      Effect.gen(function* () {
+        yield* seedFile("writes", "op-close.txt", "c");
+        const body = yield* op("ForceCloseFileHandles", {
+          fileName: "op-close.txt",
+          xMsHandleId: "*",
+        });
+        expectOk(body);
+        expect(body.result.xMsNumberOfHandlesClosed).toBe(0);
+        const missing = yield* op("ForceCloseFileHandles", {
+          fileName: "op-close-missing.txt",
+          xMsHandleId: "*",
+        });
+        expect({ ok: missing.ok, tag: missing.tag }).toEqual({ ok: false, tag: "ResourceNotFound" });
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.ForceCloseDirectoryHandles", () => {
+    test(
+      "closes every handle under a directory",
+      Effect.gen(function* () {
+        yield* seedDirectory("writes", "op-close-dir");
+        const body = yield* op("ForceCloseDirectoryHandles", {
+          directory: "op-close-dir",
+          xMsHandleId: "*",
+          xMsRecursive: true,
+        });
+        expectOk(body);
+        expect(body.result.xMsNumberOfHandlesClosed).toBe(0);
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.RenameFile", () => {
+    test(
+      "moves a file to a new name",
+      Effect.gen(function* () {
+        yield* seedFile("writes", "op-rename-src.txt", "rename-body");
+        const source = yield* plainFileUrl("writes", "op-rename-src.txt");
+        const body = yield* op("RenameFile", {
+          fileName: "op-renamed.txt",
+          xMsFileRenameSource: source,
+          xMsFileRenameReplaceIfExists: true,
+        });
+        expectOk(body);
+        expect(yield* readFile("writes", "op-renamed.txt")).toBe("rename-body");
+        expect(yield* tagOf(fileProperties("writes", "op-rename-src.txt"))).toBe(
+          "ResourceNotFound",
+        );
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.RenameDirectory", () => {
+    test(
+      "moves a directory to a new name",
+      Effect.gen(function* () {
+        // Start clean even when an interrupted run left the target behind.
+        yield* removeDirectory("writes", "op-rendir-dst");
+        yield* seedDirectory("writes", "op-rendir-src");
+        const source = yield* plainFileUrl("writes", "op-rendir-src");
+        const body = yield* op("RenameDirectory", {
+          directory: "op-rendir-dst",
+          xMsFileRenameSource: source,
+        });
+        expectOk(body);
+        expect(yield* tagOf(directoryProperties("writes", "op-rendir-dst"))).toBe("found");
+        expect(yield* tagOf(directoryProperties("writes", "op-rendir-src"))).toBe(
+          "ResourceNotFound",
+        );
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.SetDirectoryProperties", () => {
+    test(
+      "sets a directory's SMB attributes",
+      Effect.gen(function* () {
+        yield* seedDirectory("writes", "op-dirprops");
+        const body = yield* op("SetDirectoryProperties", {
+          directory: "op-dirprops",
+          // A directory's attribute list must name `Directory`.
+          xMsFileAttributes: "Directory|Hidden",
+        });
+        expectOk(body);
+        const props = yield* directoryProperties("writes", "op-dirprops");
+        expect(props.xMsFileAttributes?.split(" | ").sort()).toEqual(["Directory", "Hidden"]);
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.CreateSharePermission", () => {
+    test(
+      "stores a security descriptor and returns its key",
+      Effect.gen(function* () {
+        const body = yield* op("CreateSharePermission", {
+          sharePermission: { permission: SDDL, format: "Sddl" },
+        });
+        expectOk(body);
+        const where = yield* deployerShare("permissions");
+        const stored = yield* files.GetSharePermission({
+          ...where,
+          xMsFilePermissionKey: body.result.xMsFilePermissionKey,
+          xMsFilePermissionFormat: "Sddl",
+        });
+        expect(stored.permission).toBe(SDDL);
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.GetShareProperties", () => {
+    test(
+      "reads the share's quota, protocol and ownership metadata",
+      Effect.gen(function* () {
+        const body = yield* op("GetShareProperties");
+        expectOk(body);
+        const arm = yield* shareOf("shareReads");
+        expect({
+          quota: body.result.xMsShareQuota,
+          protocols: body.result.xMsEnabledProtocols,
+          id: body.result.metadata?.alchemy_id,
+        }).toEqual({ quota: 1, protocols: "SMB", id: arm.properties?.metadata?.alchemy_id });
+        expect(body.result.metadata?.alchemy_id).toBe("FileShareReads");
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.GetShareAccessPolicy", () => {
+    test(
+      "reads the share's stored access policies",
+      Effect.gen(function* () {
+        const body = yield* op("GetShareAccessPolicy");
+        expectOk(body);
+        expect(
+          (body.result as any[]).map((p) => ({ id: p.Id, permission: p.AccessPolicy?.Permission })),
+        ).toEqual([{ id: "readers", permission: "rl" }]);
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.GetShareStatistics", () => {
+    test(
+      "reads the share's usage",
+      Effect.gen(function* () {
+        const body = yield* op("GetShareStatistics");
+        expectOk(body);
+        expect(typeof body.result.ShareUsageBytes).toBe("number");
+        expect(body.result.ShareUsageBytes).toBeGreaterThanOrEqual(0);
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.SetShareProperties", () => {
+    test(
+      "changes the share's quota",
+      Effect.gen(function* () {
+        expectOk(yield* op("SetShareProperties", { xMsShareQuota: 2 }));
+        const arm = yield* shareOf("shareWrites");
+        expect(arm.properties?.shareQuota).toBe(2);
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.SetShareMetadata", () => {
+    test(
+      "replaces the share's metadata",
+      Effect.gen(function* () {
+        // Keep the ownership markers so the stack still owns the share.
+        const before = yield* shareOf("shareWrites");
+        const metadata = { ...before.properties?.metadata, probe: "fn" };
+        expectOk(yield* op("SetShareMetadata", { metadata }));
+        const arm = yield* shareOf("shareWrites");
+        expect(arm.properties?.metadata).toEqual(metadata);
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.SetShareAccessPolicy", () => {
+    test(
+      "replaces the share's stored access policies",
+      Effect.gen(function* () {
+        expectOk(
+          yield* op("SetShareAccessPolicy", {
+            body: [
+              {
+                Id: "writers",
+                AccessPolicy: {
+                  Start: "2026-01-01T00:00:00.0000000Z",
+                  Expiry: "2030-01-01T00:00:00.0000000Z",
+                  Permission: "rw",
+                },
+              },
+            ],
+          }),
+        );
+        const arm = yield* shareOf("shareWrites");
+        expect(
+          (arm.properties?.signedIdentifiers ?? []).map((i) => ({
+            id: i.id,
+            permission: i.accessPolicy?.permission,
+          })),
+        ).toEqual([{ id: "writers", permission: "rw" }]);
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.CreateShareSnapshot", () => {
+    test(
+      "snapshots the share",
+      Effect.gen(function* () {
+        const body = yield* op("CreateShareSnapshot", { metadata: { reason: "probe" } });
+        expectOk(body);
+        expect(body.result.xMsSnapshot).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+        const where = yield* armShare("shareWrites");
+        const listed = yield* storage.ListFileShares.items({
+          subscriptionId: where.subscriptionId,
+          resourceGroupName: where.resourceGroupName,
+          accountName: where.accountName,
+          _expand: "snapshots",
+        }).pipe(Stream.runCollect);
+        const snapshots = Array.from(listed)
+          .filter((s) => s.name === where.shareName && s.properties?.snapshotTime !== undefined)
+          .map((s) => s.properties?.snapshotTime);
+        expect(snapshots).toContain(body.result.xMsSnapshot);
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.AcquireShareLease", () => {
+    test(
+      "leases the share",
+      Effect.gen(function* () {
+        // A timed lease, so a failed run never blocks the share's delete for long.
+        yield* breakLeftoverShareLease;
+        const body = yield* op("AcquireShareLease", { xMsLeaseDuration: 60 });
+        expectOk(body);
+        const arm = yield* shareOf("leases");
+        yield* leaseShare("leases", { action: "Release", leaseId: body.result.xMsLeaseId });
+        expect(arm.properties?.leaseState).toBe("leased");
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.RenewShareLease", () => {
+    test(
+      "renews the share's lease",
+      Effect.gen(function* () {
+        yield* breakLeftoverShareLease;
+        const lease = yield* leaseShare("leases", { action: "Acquire", leaseDuration: 30 });
+        const body = yield* op("RenewShareLease", { xMsLeaseId: lease.leaseId });
+        expectOk(body);
+        expect(body.result.xMsLeaseId).toBe(lease.leaseId);
+        yield* leaseShare("leases", { action: "Release", leaseId: lease.leaseId });
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.ChangeShareLease", () => {
+    test(
+      "moves the share's lease to a new ID",
+      Effect.gen(function* () {
+        yield* breakLeftoverShareLease;
+        const lease = yield* leaseShare("leases", {
+          action: "Acquire",
+          leaseDuration: 30,
+          proposedLeaseId: LEASE_A,
+        });
+        const body = yield* op("ChangeShareLease", {
+          xMsLeaseId: lease.leaseId,
+          xMsProposedLeaseId: LEASE_B,
+        });
+        expectOk(body);
+        expect(body.result.xMsLeaseId).toBe(LEASE_B);
+        // Releasing with the new ID succeeds only if the change took.
+        yield* leaseShare("leases", { action: "Release", leaseId: LEASE_B });
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.ReleaseShareLease", () => {
+    test(
+      "releases the share's lease",
+      Effect.gen(function* () {
+        yield* breakLeftoverShareLease;
+        const lease = yield* leaseShare("leases", { action: "Acquire", leaseDuration: 30 });
+        expectOk(yield* op("ReleaseShareLease", { xMsLeaseId: lease.leaseId }));
+        const arm = yield* shareOf("leases");
+        expect(arm.properties?.leaseState).toBe("available");
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.BreakShareLease", () => {
+    test(
+      "breaks the share's lease without its ID",
+      Effect.gen(function* () {
+        yield* breakLeftoverShareLease;
+        yield* leaseShare("leases", { action: "Acquire", leaseDuration: 30 });
+        expectOk(yield* op("BreakShareLease", { xMsLeaseBreakPeriod: 0 }));
+        const arm = yield* shareOf("leases");
+        expect(arm.properties?.leaseState).toBe("broken");
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.CreateFileHardLink", () => {
+    test(
+      "links a second name to a file on an NFS share",
+      Effect.gen(function* () {
+        yield* removeFile("links", "op-hardlink.bin");
+        yield* seedFile("links", "op-target.bin", "linked-body");
+        const body = yield* op("CreateFileHardLink", {
+          fileName: "op-hardlink.bin",
+          xMsFileTargetFile: "op-target.bin",
+        });
+        expectOk(body);
+        expect(body.result.xMsLinkCount).toBe(2);
+        expect(yield* readFile("links", "op-hardlink.bin")).toBe("linked-body");
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.CreateFileSymbolicLink", () => {
+    test(
+      "creates a symbolic link on an NFS share",
+      Effect.gen(function* () {
+        yield* removeFile("links", "op-symlink");
+        expectOk(
+          yield* op("CreateFileSymbolicLink", {
+            fileName: "op-symlink",
+            xMsLinkText: "op-target.bin",
+          }),
+        );
+        const where = yield* deployerShare("links");
+        const link = yield* files.GetFileSymbolicLink({ ...where, fileName: "op-symlink" });
+        expect(link.xMsLinkText).toBe("op-target.bin");
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
+  describe("Storage.GetFileSymbolicLink", () => {
+    test(
+      "reads a symbolic link the deployer created",
+      Effect.gen(function* () {
+        yield* removeFile("links", "op-symlink-read");
+        const where = yield* deployerShare("links");
+        yield* files.CreateFileSymbolicLink({
+          ...where,
+          fileName: "op-symlink-read",
+          xMsLinkText: "some/target",
+        });
+        const body = yield* op("GetFileSymbolicLink", { fileName: "op-symlink-read" });
+        expectOk(body);
+        // Azure Files answers the link text percent-encoded.
+        expect(decodeURIComponent(body.result.xMsLinkText)).toBe("some/target");
+      }).pipe(Effect.provide(azure)),
+      { timeout: 360_000 },
+    );
+  });
+
   describe("FileShare binding roles", () => {
     test(
       "grants one least-privilege role per access level, scoped to each share",
@@ -553,7 +1229,7 @@ describe("Azure Files bindings on an Azure Function", { tags: ["provider:azure",
           Effect.map((all) => all.filter((a) => a.includes("/fileshares/"))),
           Effect.repeat({
             schedule: Schedule.spaced("5 seconds"),
-            until: (found) => found.length >= 8,
+            until: (found) => found.length >= 16,
             times: 12,
           }),
         );
@@ -568,6 +1244,11 @@ describe("Azure Files bindings on an Azure Function", { tags: ["provider:azure",
           "AzureStorageFileShareWriter(fileshares/files/write,writeFileBackupSemantics/action)";
         const deleter =
           "AzureStorageFileShareDeleter(fileshares/files/delete,writeFileBackupSemantics/action)";
+        const permissionWriter =
+          "AzureStorageFileSharePermissionWriter(fileshares/files/modifypermissions/action,writeFileBackupSemantics/action)";
+        const propertiesReader = "AzureStorageFileSharePropertiesReader(shares/read)";
+        const propertiesWriter = "AzureStorageFileSharePropertiesWriter(shares/write)";
+        const leaser = "AzureStorageFileShareLeaser(shares/lease/action)";
         const scope = (key: ShareKey) => fileShareScope(out.ids[key]);
         expect(described.sort()).toEqual(
           [
@@ -579,6 +1260,14 @@ describe("Azure Files bindings on an Azure Function", { tags: ["provider:azure",
             `${reader} ${scope("clients")}`,
             `${writer} ${scope("clients")}`,
             `${deleter} ${scope("clients")}`,
+            `${reader} ${scope("copies")}`,
+            `${writer} ${scope("copies")}`,
+            `${permissionWriter} ${scope("permissions")}`,
+            `${propertiesReader} ${scope("shareReads")}`,
+            `${propertiesWriter} ${scope("shareWrites")}`,
+            `${leaser} ${scope("leases")}`,
+            `${reader} ${scope("links")}`,
+            `${writer} ${scope("links")}`,
           ].sort(),
         );
       }).pipe(Effect.provide(azure)),
@@ -603,12 +1292,12 @@ const destroyAndVerify = (principalId: string) =>
       ]),
       Effect.repeat({
         schedule: Schedule.spaced("5 seconds"),
-        until: (ids) => ids.length === 2,
+        until: (ids) => ids.length === 6,
         times: 6,
       }),
     );
     yield* destroy(Stack);
-    expect(customRoleIds.length).toBe(2);
+    expect(customRoleIds.length).toBe(6);
     // The list trails deletes too (seen at over a minute).
     const remaining = yield* assignmentsOf(principalId).pipe(
       Effect.repeat({
