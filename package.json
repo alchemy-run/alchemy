@@ -68,6 +68,7 @@
     "lint": "oxlint -c oxlint.config.ts"
   },
   "devDependencies": {
+    "@alchemy.run/pkg": "workspace:*",
     "@effect/tsgo": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
