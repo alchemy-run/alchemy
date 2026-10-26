@@ -17,7 +17,6 @@ import {
   hostServiceAccountEmail,
   hostServiceAccountId,
   projectNumber,
-  retryActAs,
   revokeHostIam,
 } from "../Host.ts";
 import { updateIamMembership } from "../IamPolicy.ts";
@@ -710,13 +709,22 @@ const ensureBigQueryWriter = Effect.fn(function* (
 });
 
 /**
- * Pub/Sub checks the writer's grants when it accepts a BigQuery config and
- * answers `Forbidden` until fresh grants (or a re-created writer) reach it.
+ * Pub/Sub rejects a just-minted writer (`BigQueryServiceAccountNotReady`)
+ * and fresh grants on it (`Forbidden`) until IAM propagates them.
  */
 const retryWriterGrants =
   (bigqueryConfig: pubsub.BigQueryConfig | undefined) =>
   <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
-    bigqueryConfig === undefined ? effect : retryActAs(effect);
+    bigqueryConfig === undefined
+      ? effect
+      : effect.pipe(
+          Effect.retry({
+            while: (error) =>
+              error._tag === "BigQueryServiceAccountNotReady" || error._tag === "Forbidden",
+            times: 10,
+            schedule: Schedule.spaced("2 seconds"),
+          }),
+        );
 
 /**
  * The writer's grant on a table it no longer writes to: the previous table
