@@ -45,10 +45,7 @@ import {
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
 import type { Worker } from "../Workers/Worker.ts";
-import {
-  durableObjectEngine,
-  type DurableObjectEngineOptions,
-} from "../Workflows/DurableObjectEngine.ts";
+import { durableObjectEngine } from "../Workflows/DurableObjectEngine.ts";
 
 const pad = (n: number) => n.toString().padStart(12, "0");
 
@@ -902,7 +899,8 @@ const durableObjectPlatform = (
                         return Effect.fail(new AlreadyExecuted(fields));
                       if (outcome === "AlreadyCancelled")
                         return Effect.fail(new AlreadyCancelled(fields));
-                      if (outcome === "NotScheduled") return Effect.fail(new NotScheduled(fields));
+                        if (outcome === "NotScheduled")
+                          return Effect.fail(new NotScheduled(fields));
                       return Effect.void;
                     },
                   ),
@@ -911,7 +909,9 @@ const durableObjectPlatform = (
               // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
               changes: (id) =>
                 Stream.fromEffectSchedule(
-                  unwrapDefects<{ state: Json; version: number }>(namespace.getByName(id).state()),
+                    unwrapDefects<{ state: Json; version: number }>(
+                      namespace.getByName(id).state(),
+                    ),
                   POLL,
                 ).pipe(Stream.changesWith((a, b) => a.version === b.version)),
               tail: (id, from) =>
@@ -1072,7 +1072,7 @@ export const DurableObjects: Layer.Layer<Platform | WorkflowEngine.WorkflowEngin
   makeDurableObjects(undefined);
 
 /** Options for {@link durableObjects}. */
-export interface DurableObjectsOptions extends DurableObjectEngineOptions {
+export interface DurableObjectsOptions {
   /**
    * Create and store every Durable Object of the model (aggregates, views,
    * policies, projections, streams and saga executions) only inside this
@@ -1101,7 +1101,7 @@ const platforms = new Map<
 /**
  * {@link DurableObjects}, configured. Use it to keep a model's Durable
  * Objects inside a jurisdiction, for example the EU for personal data.
- * Calls with the same options return the same Layer, so models that each
+ * Calls with the same jurisdiction return the same Layer, so models that each
  * provide it share one platform and one workflow engine, as they do with
  * {@link DurableObjects}.
  *

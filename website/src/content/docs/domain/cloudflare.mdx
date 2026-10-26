@@ -168,16 +168,20 @@ Sagas run on `Cloudflare.Workflows.DurableObjectEngine`, the same engine you can
 
 ## Keep the model in a jurisdiction
 
-`DomainCloudflare.durableObjects({ jurisdiction })` creates and stores every Durable Object of the model, saga runs included, only inside a jurisdiction, for example the EU for personal data:
+Swap `DomainCloudflare.DurableObjects` in `BankLive` for `DomainCloudflare.durableObjects({ jurisdiction })` to create and store every Durable Object of the model, saga runs included, only inside a jurisdiction, for example the EU for personal data:
 
 ```typescript
-const BankLive = SessionLive.pipe(
-  Layer.provideMerge(Bank.layer(BankPolicies)),
-  Layer.provide(DomainCloudflare.durableObjects({ jurisdiction: "eu" })),
-);
+  Layer.provide(
+    Layer.mergeAll(
+      DomainCloudflare.durableObjects({ jurisdiction: "eu" }),
+      SiftFraudCheck,
+      StripePayments,
+      Cloudflare.D1.QueryDatabaseBinding,
+    ),
+  ),
 ```
 
-A Durable Object in a jurisdiction is a different object from the one with the same name outside it. A model that already has data starts empty when you add a jurisdiction, and its old objects stay where they were. `alchemy dev` doesn't emulate jurisdictions: local workerd runs the model unrestricted.
+A Durable Object in a jurisdiction is a different object from the one with the same name outside it. A model that already has data starts empty when you add a jurisdiction, and its old objects stay where they were. Other resources the Worker uses, like the ledger's D1 database, take their own `jurisdiction`. `alchemy dev` doesn't emulate jurisdictions: local workerd runs the model unrestricted.
 
 ## Count on these guarantees
 

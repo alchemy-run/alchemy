@@ -128,7 +128,7 @@ const engines = new Map<
 /**
  * {@link DurableObjectEngine}, configured. Use it to keep every workflow
  * execution inside a jurisdiction, for example the EU for personal data.
- * Calls with the same options return the same Layer, so providing it in
+ * Calls with the same jurisdiction return the same Layer, so providing it in
  * several places builds one engine.
  *
  * @layer
