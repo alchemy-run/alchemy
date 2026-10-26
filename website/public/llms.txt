@@ -106,7 +106,7 @@ Tests run against real clouds: the model, the end-to-end walkthrough, provider-l
 - [Testing](https://alchemy.run/testing) — How Alchemy tests work — real clouds by default, local emulators on demand, one Stack deploy per suite, isolated stages, deploy → assert → destroy.
 - [Testing a Stack](https://alchemy.run/testing/testing-a-stack) — Deploy your real Stack once per suite, drive it over HTTP, tear it down.
 - [Testing Providers](https://alchemy.run/testing/testing-providers) — Exercise a provider's create, update, replace, and delete paths with test.provider and a scratch in-memory stack.
-- [Test harness](https://alchemy.run/testing/test-harness) — Reference for alchemy/Test — every helper, hook, and option exposed by Test.make for Bun and Vitest.
+- [Test harness](https://alchemy.run/testing/test-harness) — Reference for alchemy/Test — every helper, hook, and option exposed by Test.make, and how to run it with alchemy-test, bun test, or Vitest.
 - [Observability](https://alchemy.run/testing/observability) — Effect emits OpenTelemetry natively and the exporter is a Layer. Provision the receiving end — datasets, monitors, notifiers, alarms — as resources in the same Stack as the code that emits the signals.
 
 ## Cloudflare — start here

@@ -87,8 +87,12 @@ dev stage here.
 ## Test
 
 `Test.make` deploys to `test_$USER` by default, so tests need a
-worktree stage too. Pass it to the `alchemy-test` runner with
-`--stage`.
+worktree stage too. How you pass it depends on your
+[test runner](/testing/test-harness#runners).
+
+### With @alchemy.run/test
+
+The `alchemy-test` runner takes the stage as a flag.
 
 ```json
 {
@@ -99,8 +103,14 @@ worktree stage too. Pass it to the `alchemy-test` runner with
 ```
 
 `pnpm test` in `feat-x` now deploys every test stack to
-`test_sam_feat-x`. `--stage` sets `ALCHEMY_TEST_STAGE`, so with
-`bun test` or `vitest` set the variable yourself.
+`test_sam_feat-x`. Extra arguments still pass through, so
+`pnpm test test/integ.test.ts -t "serves"` runs one test on the
+same stage.
+
+### With bun test or Vitest
+
+Neither runner has a stage flag. Set `ALCHEMY_TEST_STAGE`, which
+`--stage` sets for you under `alchemy-test`.
 
 ```json
 {
@@ -109,6 +119,8 @@ worktree stage too. Pass it to the `alchemy-test` runner with
   }
 }
 ```
+
+Swap `bun test` for `vitest run` on Vitest.
 
 ## Tell your agents
 
