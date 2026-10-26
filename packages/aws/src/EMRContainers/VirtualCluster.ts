@@ -7,6 +7,7 @@ import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
@@ -249,15 +250,25 @@ export const VirtualClusterProvider = () =>
 
           // 2. ENSURE — create if missing (synchronous; RUNNING immediately)
           if (vc === undefined) {
-            const created = yield* emrc.createVirtualCluster({
-              // deterministic per instance: a retried create after a crashed
-              // reconcile never double-provisions
-              clientToken: instanceId.replaceAll(/[^a-zA-Z0-9]/g, "").slice(0, 64) || "alchemy",
-              name,
-              containerProvider: toContainerProvider(news.containerProvider),
-              securityConfigurationId: news.securityConfigurationId,
-              tags: desiredTags,
-            });
+            const created = yield* emrc
+              .createVirtualCluster({
+                // deterministic per instance: a retried create after a crashed
+                // reconcile never double-provisions
+                clientToken: instanceId.replaceAll(/[^a-zA-Z0-9]/g, "").slice(0, 64) || "alchemy",
+                name,
+                containerProvider: toContainerProvider(news.containerProvider),
+                securityConfigurationId: news.securityConfigurationId,
+                tags: desiredTags,
+              })
+              .pipe(
+                // A just-created EKS cluster rejects attachment while its
+                // connection (access configuration) is still being updated.
+                Effect.retry({
+                  while: (e) => e._tag === "EksClusterConnectionUpdating",
+                  schedule: Schedule.spaced("10 seconds"),
+                  times: 18,
+                }),
+              );
             vc =
               created.id !== undefined
                 ? yield* emrc

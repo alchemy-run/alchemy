@@ -10,7 +10,7 @@ import {
   type ConfigureField,
   type ConfigureMethod,
 } from "alchemy/Auth/AuthProvider";
-import { browserOAuth } from "alchemy/Auth/BrowserOAuth";
+import { deviceOAuth } from "alchemy/Auth/BrowserOAuth";
 import { CredentialsStore, displayRedacted } from "alchemy/Auth/Credentials";
 import { getEnvRedacted, getEnvRequired, mapPromptCancellation } from "alchemy/Auth/Env";
 import { withProfileCredentialsLock } from "alchemy/Auth/Lock";
@@ -57,7 +57,7 @@ const options: Array<{
   {
     value: "oauth",
     label: "OAuth",
-    description: "recommended — browser-based login with automatic token refresh",
+    description: "recommended — browser device login with automatic token refresh",
   },
   {
     value: "stored",
@@ -120,7 +120,6 @@ const listVisibleAccounts: Effect.Effect<
 
 const selectAccount = (accessToken: string) =>
   Effect.gen(function* () {
-    const interaction = Interaction.accessors;
     const accounts = yield* listVisibleAccounts;
     if (accounts.length === 0) {
       return yield* AuthError.make({
@@ -131,16 +130,14 @@ const selectAccount = (accessToken: string) =>
     }
     const [account] = accounts;
     if (accounts.length === 1 && account !== undefined) {
-      yield* interaction.output.info(`Using Cloudflare account ${account.name}.`);
+      yield* Interaction.info(`Using Cloudflare account ${account.name}.`);
       return account.id;
     }
-    return yield* interaction.prompt
-      .select({
-        message: "Select a Cloudflare account",
-        searchable: true,
-        options: accounts.map((a) => ({ value: a.id, label: a.name, description: a.id })),
-      })
-      .pipe(mapPromptCancellation);
+    return yield* Interaction.select({
+      message: "Select a Cloudflare account",
+      searchable: true,
+      options: accounts.map((a) => ({ value: a.id, label: a.name, description: a.id })),
+    }).pipe(mapPromptCancellation);
   }).pipe((e) => withOAuthCredentials(accessToken, e));
 
 const promptAccountId = () =>
@@ -241,46 +238,40 @@ export const CloudflareAuth = AuthProviderLayer<
 >()(
   CLOUDFLARE_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
-    const interaction = Interaction.accessors;
     const store = yield* CredentialsStore;
 
     const oauthLogin = (_profileName: string, scopes: string[]) =>
       Effect.gen(function* () {
-        const authorization = yield* OAuthClient.authorize([...scopes, OFFLINE_ACCESS_SCOPE]);
+        const authorization = yield* OAuthClient.deviceAuthorize([...scopes, OFFLINE_ACCESS_SCOPE]);
 
-        const credentials = yield* browserOAuth({
+        const credentials = yield* deviceOAuth({
           provider: "Cloudflare",
-          url: authorization.url,
-          callback: OAuthClient.callback(authorization),
-          exchange: (input) => OAuthClient.exchangeCallbackInput(input, authorization),
+          authorization,
+          token: OAuthClient.deviceToken(authorization),
         });
-        yield* interaction.output.success("Connected to Cloudflare with OAuth.");
+        yield* Interaction.success("Connected to Cloudflare with OAuth.");
         return credentials;
       });
 
     const loginStored = Effect.fn(function* () {
-      const credentialType = yield* interaction.prompt
-        .select({
-          message: "Cloudflare credential type",
-          options: [
-            { value: "apiToken" as const, label: "API Token", description: "recommended" },
-            { value: "apiKey" as const, label: "API Key + Email" },
-          ],
-        })
-        .pipe(mapPromptCancellation);
+      const credentialType = yield* Interaction.select({
+        message: "Cloudflare credential type",
+        options: [
+          { value: "apiToken" as const, label: "API Token", description: "recommended" },
+          { value: "apiKey" as const, label: "API Key + Email" },
+        ],
+      }).pipe(mapPromptCancellation);
 
       return yield* Match.value(credentialType).pipe(
         Match.when("apiToken", () =>
           Effect.gen(function* () {
-            const apiToken = yield* interaction.prompt
-              .password({
-                message: "Cloudflare API Token",
-                validate: (v) => (v.length === 0 ? "Required" : undefined),
-              })
-              .pipe(mapPromptCancellation, Effect.map(Redacted.make));
+            const apiToken = yield* Interaction.password({
+              message: "Cloudflare API Token",
+              validate: (v) => (v.length === 0 ? "Required" : undefined),
+            }).pipe(mapPromptCancellation, Effect.map(Redacted.make));
             const accountId = yield* promptAccountId();
 
-            yield* interaction.output.success("Cloudflare: credentials saved.");
+            yield* Interaction.success("Cloudflare: credentials saved.");
             return {
               method: "stored" as const,
               credentialType: "apiToken" as const,
@@ -291,22 +282,18 @@ export const CloudflareAuth = AuthProviderLayer<
         ),
         Match.when("apiKey", () =>
           Effect.gen(function* () {
-            const apiKey = yield* interaction.prompt
-              .password({
-                message: "Cloudflare API Key",
-                validate: (v) => (v.length === 0 ? "Required" : undefined),
-              })
-              .pipe(mapPromptCancellation, Effect.map(Redacted.make));
+            const apiKey = yield* Interaction.password({
+              message: "Cloudflare API Key",
+              validate: (v) => (v.length === 0 ? "Required" : undefined),
+            }).pipe(mapPromptCancellation, Effect.map(Redacted.make));
 
-            const email = yield* interaction.prompt
-              .text({
-                message: "Cloudflare Email",
-                validate: (v) => (v.length === 0 ? "Required" : undefined),
-              })
-              .pipe(mapPromptCancellation, Effect.map(Redacted.make));
+            const email = yield* Interaction.text({
+              message: "Cloudflare Email",
+              validate: (v) => (v.length === 0 ? "Required" : undefined),
+            }).pipe(mapPromptCancellation, Effect.map(Redacted.make));
             const accountId = yield* promptAccountId();
 
-            yield* interaction.output.success("Cloudflare: credentials saved.");
+            yield* Interaction.success("Cloudflare: credentials saved.");
             return {
               method: "stored" as const,
               credentialType: "apiKey" as const,
@@ -352,7 +339,7 @@ export const CloudflareAuth = AuthProviderLayer<
     });
 
     const configureInteractive = (profileName: string, currentConfig?: CloudflareAuthConfig) =>
-      interaction.prompt.select({ message: "Cloudflare authentication method", options }).pipe(
+      Interaction.select({ message: "Cloudflare authentication method", options }).pipe(
         Effect.flatMap((method) =>
           Match.value(method).pipe(
             Match.when("oauth", () => configureOAuth(profileName, currentConfig)),
@@ -433,7 +420,10 @@ export const CloudflareAuth = AuthProviderLayer<
                 expires: cfg.expires,
                 scopes: cfg.scopes,
               };
-              if (!OAuthClient.usesCurrentClient(creds)) {
+              // Grants issued to the legacy client keep refreshing against
+              // it; only a manual `profile refresh` migrates them.
+              const client = OAuthClient.clientFor(creds);
+              if (client === undefined) {
                 return yield* NeedsReauth.make({
                   provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
                   profile: profileName,
@@ -447,7 +437,7 @@ export const CloudflareAuth = AuthProviderLayer<
               const fresh =
                 creds.expires > now + 10_000
                   ? creds
-                  : yield* OAuthClient.refresh(creds).pipe(
+                  : yield* client.refresh(creds).pipe(
                       Effect.mapError((e) =>
                         NeedsReauth.make({
                           provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
@@ -523,14 +513,15 @@ export const CloudflareAuth = AuthProviderLayer<
             expires: config.expires,
             scopes: config.scopes,
           };
-          return OAuthClient.usesCurrentClient(credentials)
-            ? OAuthClient.revoke(credentials).pipe(
-                Effect.catchTag("OAuthError", (err) =>
-                  interaction.output.warning(
-                    `Cloudflare: could not revoke OAuth token: ${err.errorDescription}`,
+          const client = OAuthClient.clientFor(credentials);
+          return client !== undefined
+            ? client
+                .revoke(credentials)
+                .pipe(
+                  Effect.catchTag("OAuthNetworkError", (err) =>
+                    Interaction.warning(`Cloudflare: could not revoke OAuth token: ${err.message}`),
                   ),
-                ),
-              )
+                )
             : Effect.void;
         }),
         Match.exhaustive,
@@ -564,7 +555,7 @@ export const CloudflareAuth = AuthProviderLayer<
                 // one unknown scope makes the whole authorize URL invalid — so
                 // sanitize before generating a URL, never after it fails.
                 const fullLogin = Effect.gen(function* () {
-                  const { valid, dropped } = partitionOAuthScopes(c.scopes);
+                  const { valid } = partitionOAuthScopes(c.scopes);
                   if (valid.length === 0) {
                     return yield* AuthError.make({
                       message:
@@ -572,14 +563,7 @@ export const CloudflareAuth = AuthProviderLayer<
                         `Scopes must be picked again. ${reconfigure}`,
                     });
                   }
-                  const refreshed = yield* (
-                    dropped.length === 0
-                      ? Effect.void
-                      : interaction.output.warning(
-                          `Cloudflare: dropping ${dropped.length} stored scope${dropped.length === 1 ? "" : "s"} no longer offered by the current OAuth client (${dropped.join(", ")}). ` +
-                            `Scopes must be picked again. ${reconfigure}`,
-                        )
-                  ).pipe(Effect.andThen(oauthLogin(profileName, valid)));
+                  const refreshed = yield* oauthLogin(profileName, valid);
                   return {
                     ...c,
                     scopes: valid,
@@ -590,14 +574,12 @@ export const CloudflareAuth = AuthProviderLayer<
                   };
                 });
 
-                const fallBackToBrowserLogin = Effect.gen(function* () {
-                  if (creds.type === "oauth") {
-                    yield* interaction.output.warning(
-                      "Cloudflare: removed OAuth credentials issued to the previous client.",
-                    );
-                  }
-                  return { type: "browser" as const };
-                });
+                // Grants from any other client (including the legacy one) are
+                // re-authorized against the current client with the same
+                // scopes rather than refreshed.
+                const migrateToCurrentClient = Interaction.info(
+                  "Cloudflare: re-authorizing OAuth credentials with the new client.",
+                ).pipe(Effect.as({ type: "browser" as const }));
 
                 // The silent refresh rotates a single-use refresh token, so
                 // its read-refresh-persist section runs under the profile
@@ -608,7 +590,7 @@ export const CloudflareAuth = AuthProviderLayer<
                   creds.type === "oauth" && OAuthClient.usesCurrentClient(creds)
                     ? yield* withProfileCredentialsLock(
                         profileName,
-                        interaction.output.info("Cloudflare: refreshing OAuth credentials...").pipe(
+                        Interaction.info("Cloudflare: refreshing OAuth credentials...").pipe(
                           Effect.andThen(OAuthClient.refresh(creds)),
                           Effect.flatMap((credentials) => {
                             const config = {
@@ -624,14 +606,20 @@ export const CloudflareAuth = AuthProviderLayer<
                             );
                           }),
                           Effect.tap(() =>
-                            interaction.output.success("Cloudflare: OAuth credentials refreshed."),
+                            Interaction.success("Cloudflare: OAuth credentials refreshed."),
                           ),
-                          Effect.catchTag("OAuthError", () =>
-                            Effect.succeed({ type: "browser" as const }),
+                          Effect.catchTag(
+                            [
+                              "OAuthError",
+                              "OAuthNetworkError",
+                              "OAuthServerUnavailable",
+                              "OAuthInvalidResponse",
+                            ],
+                            () => Effect.succeed({ type: "browser" as const }),
                           ),
                         ),
                       )
-                    : yield* fallBackToBrowserLogin;
+                    : yield* migrateToCurrentClient;
                 if (outcome.type === "browser") {
                   return yield* fullLogin;
                 }

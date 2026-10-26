@@ -1,4 +1,4 @@
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { newWebSocketRpcSession, type RpcStub } from "capnweb";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

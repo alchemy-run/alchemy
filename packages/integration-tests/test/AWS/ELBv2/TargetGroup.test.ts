@@ -1,7 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { TargetGroup } from "@alchemy.run/aws/ELBv2";
+import { expect } from "@alchemy.run/test";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
-import { expect } from "alchemy-test";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
@@ -69,6 +70,85 @@ test.provider(
           Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(0)),
         );
       expect(after).toBe(0);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:elbv2", "live"],
+    timeout: 240_000,
+  },
+);
+
+const targetGroupAttributes = (targetGroupArn: string) =>
+  elbv2
+    .describeTargetGroupAttributes({ TargetGroupArn: targetGroupArn })
+    .pipe(
+      Effect.map((r) =>
+        Object.fromEntries((r.Attributes ?? []).map((a) => [a.Key ?? "", a.Value ?? ""])),
+      ),
+    );
+
+// #1969: attribute changes made outside alchemy are detected as drift and
+// repaired back to the declared values. Undeclared attributes (AWS defaults)
+// never surface.
+test.provider(
+  "detects and repairs out-of-band attribute drift",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const defaultVpc = yield* getDefaultVpc;
+      const attributes = {
+        "stickiness.enabled": "true",
+        "stickiness.type": "lb_cookie",
+        "deregistration_delay.timeout_seconds": "30",
+      };
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* TargetGroup("DriftTargetGroup", {
+            vpcId: defaultVpc.vpcId,
+            port: 80,
+            protocol: "HTTP",
+            targetType: "ip",
+            attributes,
+          });
+        }),
+      );
+      const arn = deployed.targetGroupArn;
+      expect(deployed.attributes).toEqual(attributes);
+      expect(yield* targetGroupAttributes(arn)).toMatchObject(attributes);
+
+      const target = { name: stack.name, stage: stack.stage };
+      const clean = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
+      expect(clean.resources.DriftTargetGroup?.action).toBe("unchanged");
+
+      // Drift a declared attribute and an undeclared one out of band.
+      yield* elbv2.modifyTargetGroupAttributes({
+        TargetGroupArn: arn,
+        Attributes: [
+          { Key: "stickiness.enabled", Value: "false" },
+          { Key: "slow_start.duration_seconds", Value: "60" },
+        ],
+      });
+
+      const drifted = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
+      expect(drifted.resources.DriftTargetGroup).toMatchObject({
+        action: "drifted",
+        attr: { attributes: { ...attributes, "stickiness.enabled": "false" } },
+      });
+
+      const repaired = yield* Drift.repair(target).pipe(Effect.provide(stack.state));
+      expect(repaired.resources.DriftTargetGroup).toMatchObject({
+        action: "repaired",
+        attr: { attributes },
+      });
+      const live = yield* targetGroupAttributes(arn);
+      expect(live).toMatchObject(attributes);
+      // Undeclared attributes are not alchemy's to reset.
+      expect(live["slow_start.duration_seconds"]).toBe("60");
+
+      const settled = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
+      expect(settled.resources.DriftTargetGroup?.action).toBe("unchanged");
+
+      yield* stack.destroy();
     }),
   {
     tags: ["provider:aws", "provider:aws:ec2", "provider:aws:elbv2", "live"],

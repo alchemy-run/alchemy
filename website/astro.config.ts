@@ -356,6 +356,10 @@ export default defineConfig({
                   link: "/infrastructure-as-code/local-provider",
                 },
                 {
+                  label: "DNS Adapters",
+                  link: "/infrastructure-as-code/dns-adapters",
+                },
+                {
                   label: "Provider Contributions",
                   link: "/infrastructure-as-code/contributions",
                 },

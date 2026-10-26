@@ -16,6 +16,8 @@ export default TestWorkflows.make(
     executionTimeout: Duration.hours(1),
     retentionPeriod: "1 day",
     timeout: Duration.seconds(60),
+    // Runs start on the alias, not `$LATEST`.
+    alias: "live",
   },
   WorkflowsLive,
 );

@@ -1,6 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { assert, describe, expect } from "@alchemy.run/test";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import { assert, describe, expect } from "alchemy-test";
 import { destroy as destroyStack } from "alchemy/Destroy";
 import * as Plan from "alchemy/Plan";
 import { Stage } from "alchemy/Stage";
@@ -24,6 +24,12 @@ import makeExternalStack from "./fixtures/external/stack.ts";
 import makeInferredClassStack from "./fixtures/inferred/stack.ts";
 import { DEMO_PLAIN, DEMO_SECRET } from "./fixtures/remote/object.ts";
 import makeRemoteStack from "./fixtures/remote/stack.ts";
+
+/** Narrows a Containers application to the scheduler-placed shape. */
+const scheduledApplication = (app: Containers.ContainerApplicationItem) => {
+  assert("version" in app, `${app.name} is a Durable Object application`);
+  return app;
+};
 
 describe.concurrent.each([
   {
@@ -840,6 +846,7 @@ describe.sequential(
 
 const readAttachmentApplication = (accountId: string, applicationId: string) =>
   Containers.getContainerApplication({ accountId, applicationId }).pipe(
+    Effect.map(scheduledApplication),
     Effect.retry({
       while: (error) => error._tag === "ContainerApplicationNotFound",
       schedule: Schedule.spaced("1 second"),

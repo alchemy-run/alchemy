@@ -1,5 +1,5 @@
 import * as Fly from "@alchemy.run/fly";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 
 /**
  * Compile-time pins for Fly.Website prop surfaces. Fail the build if

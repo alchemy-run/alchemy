@@ -38,7 +38,6 @@ export default class Api extends Railway.Service<Api>()(
     project: Site,
     main: import.meta.url,
     port: API_PORT,
-    build: { install: ["pg"] },
     healthcheck: "/health",
     env: {
       [SECRET_NAME]: Railway.ref("shared", SECRET_NAME),

@@ -2,7 +2,7 @@ import { makeFunctionBridge } from "@alchemy.run/neon/FunctionBridge";
 import { FunctionRequest } from "@alchemy.run/neon/FunctionEnvironment";
 import { makeFunctionRuntimeContext } from "@alchemy.run/neon/FunctionRuntimeContext";
 import { FunctionUpgradeSockets } from "@alchemy.run/neon/FunctionUpgrade";
-import { expect, test } from "alchemy-test";
+import { expect, test } from "@alchemy.run/test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";

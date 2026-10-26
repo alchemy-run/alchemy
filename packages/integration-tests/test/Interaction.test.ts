@@ -1,7 +1,7 @@
 import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { expect, it } from "alchemy-test";
-import { Interaction, layerNonInteractive, accessors } from "alchemy/Interaction";
+import { expect, it } from "@alchemy.run/test";
+import { Interaction, layerNonInteractive, select, success } from "alchemy/Interaction";
 import { nodeLoaderArgs } from "alchemy/Util/Node";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
@@ -33,11 +33,11 @@ it(
     return Effect.gen(function* () {
       const interaction = yield* Interaction;
       yield* interaction.output.info({ message: "plain info", detail: "extra" });
-      yield* accessors.output.success("plain success");
+      yield* success("plain success");
       const failure = yield* Effect.flip(interaction.prompt.confirm({ message: "proceed?" }));
       expect(failure._tag).toBe("NonInteractiveTerminal");
-      const select = yield* Effect.flip(accessors.prompt.select({ message: "pick", options: [] }));
-      expect(select._tag).toBe("NonInteractiveTerminal");
+      const selection = yield* Effect.flip(select({ message: "pick", options: [] }));
+      expect(selection._tag).toBe("NonInteractiveTerminal");
       const lines = stdout.output.split("\n");
       expect(lines[0]).toContain("plain info");
       expect(lines[0]).toContain("· extra");
@@ -72,7 +72,7 @@ it(
 // The regression this pins: spawned dev children carry NO interaction
 // services at all, so the vite child runner's entire module graph must load
 // under node (the same dev-mode loader `ViteChild.ts` spawns it with) and
-// proceed to config resolution — the original bug was an eager CliKit import
+// proceed to config resolution — the original bug was an eager terminal-renderer import
 // killing every `runtime: "node"` dev child at startup.
 it.live.skipIf(!nodeSupportsDevMode)(
   "the vite child runner's module graph loads under node",

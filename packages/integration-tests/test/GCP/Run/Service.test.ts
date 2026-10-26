@@ -1,13 +1,13 @@
 import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { expect } from "@alchemy.run/test";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";

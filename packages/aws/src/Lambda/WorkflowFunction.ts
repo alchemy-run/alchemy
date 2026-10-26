@@ -36,6 +36,7 @@ import {
   type DurableFunctionProps,
 } from "./DurableFunction.ts";
 import { Function } from "./Function.ts";
+import { qualifierOf } from "./QualifiedArn.ts";
 
 type WorkflowNames<W> = W extends Workflow.Workflow<infer Name, any, any, any> ? Name : never;
 
@@ -238,10 +239,14 @@ export const DurableFunctionEngine = <
             });
           }
           const functionName = yield* fn.functionName;
+          // Runs start on the host's alias when it sets one.
+          const qualifier = yield* qualifierOf(fn).bind(
+            `${fn.LogicalId}.qualifier`,
+          ) as Effect.Effect<Effect.Effect<string>>;
           const calls = makeCalls(
             (effect) => effect.pipe(Effect.provide(context)),
             functionName,
-            "$LATEST",
+            qualifier,
           );
           for (const workflow of host.workflows) routes.set(workflow._tag, calls);
         }
@@ -302,7 +307,7 @@ const makeWorkflowRunner = <ROut, E, RIn>(
       functionName
         ? Effect.succeed(functionName)
         : Effect.die(new Error("AWS_LAMBDA_FUNCTION_NAME is not set")),
-      version,
+      Effect.succeed(version),
     );
     const engine = makeEngine({
       route: (workflowName) =>
@@ -433,17 +438,17 @@ const unwrap = (value: string | Redacted.Redacted<string> | undefined) =>
 const makeCalls = (
   provide: <A, E>(effect: Effect.Effect<A, E, LambdaServices>) => Effect.Effect<A, E>,
   functionName: Effect.Effect<string>,
-  qualifier: string,
+  qualifier: Effect.Effect<string>,
 ): Calls => {
   const run = <A, E>(effect: Effect.Effect<A, E, LambdaServices>) =>
     provide(effect).pipe(Effect.orDie);
   return {
     start: (executionName, invocation) =>
-      Effect.flatMap(functionName, (FunctionName) =>
+      Effect.flatMap(Effect.all([functionName, qualifier]), ([FunctionName, Qualifier]) =>
         run(
           Lambda.invoke({
             FunctionName,
-            Qualifier: qualifier,
+            Qualifier,
             InvocationType: "Event",
             DurableExecutionName: executionName,
             Payload: JSON.stringify(invocation),

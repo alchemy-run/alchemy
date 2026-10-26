@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Profile, ProfileAssociation } from "@alchemy.run/aws/Route53Profiles";
+import { expect } from "@alchemy.run/test";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as profiles from "@distilled.cloud/aws/route53profiles";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

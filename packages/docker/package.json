@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/docker",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.84",
   "description": "Docker images, containers, networks, volumes and registries for Alchemy, and the image builds container platforms share.",
   "keywords": [
     "alchemy",

@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { generateLocalId, isLiveId } from "@alchemy.run/cloudflare/LocalRuntime";
+import { expect } from "@alchemy.run/test";
 import * as queues from "@distilled.cloud/cloudflare/queues";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";
 import type { CreatedResourceState } from "alchemy/State/ResourceState";
@@ -199,6 +199,170 @@ test.provider(
         return yield* state.get({ stack: stack.name, stage: stack.stage, fqn: "Q" });
       });
       expect(persisted).toBeUndefined();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:queue", "live"] },
+);
+
+const getLiveQueue = (accountId: string, queueId: string) =>
+  queues.getQueue({ accountId, queueId }).pipe(
+    // A brand-new or just-patched queue can briefly read stale under load.
+    Effect.retry({
+      while: (e) => e._tag === "QueueNotFound",
+      schedule: Schedule.exponential("500 millis"),
+      times: 8,
+    }),
+  );
+
+const expectQueueGone = (accountId: string, queueId: string) =>
+  queues.getQueue({ accountId, queueId }).pipe(
+    Effect.flatMap(() => Effect.fail({ _tag: "QueueNotDeleted" } as const)),
+    Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.void),
+    Effect.retry({
+      while: (e) => e._tag === "QueueNotDeleted",
+      schedule: Schedule.max([Schedule.fixed("500 millis"), Schedule.recurs(20)]),
+    }),
+  );
+
+const queueNameFor = (stage: string, suffix: string) =>
+  `alchemy-test-${stage.toLowerCase().replace(/[^a-z0-9-]/g, "-")}-${suffix}`;
+
+// #2226 — settings are sent on create and update, and a removed setting
+// goes back to the Cloudflare default.
+test.provider(
+  "creates, updates and resets queue settings",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Queues.Queue("SettingsQueue", {
+            messageRetentionPeriod: 1209600,
+            deliveryDelay: 5,
+          });
+        }),
+      );
+      expect(created).toMatchObject({
+        messageRetentionPeriod: 1209600,
+        deliveryDelay: 5,
+        deliveryPaused: false,
+      });
+      const live = yield* getLiveQueue(accountId, created.queueId);
+      expect(live.settings?.messageRetentionPeriod).toEqual(1209600);
+      expect(live.settings?.deliveryDelay).toEqual(5);
+
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Queues.Queue("SettingsQueue", {
+            deliveryDelay: 10,
+            deliveryPaused: true,
+          });
+        }),
+      );
+      // Settings update in place.
+      expect(updated.queueId).toEqual(created.queueId);
+      expect(updated).toMatchObject({
+        messageRetentionPeriod: 345600,
+        deliveryDelay: 10,
+        deliveryPaused: true,
+      });
+      const after = yield* getLiveQueue(accountId, updated.queueId);
+      expect(after.settings?.messageRetentionPeriod).toEqual(345600);
+      expect(after.settings?.deliveryDelay).toEqual(10);
+      expect(after.settings?.deliveryPaused).toEqual(true);
+
+      yield* stack.destroy();
+      yield* expectQueueGone(accountId, created.queueId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:queue", "live"] },
+);
+
+// #2226 — jurisdiction is create-only. Changing it replaces the queue, and
+// an explicit name (unique per account across jurisdictions) forces the old
+// generation to be deleted first.
+test.provider(
+  "creates a queue in a jurisdiction and replaces it when the jurisdiction changes",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const name = queueNameFor(stack.stage, "jurisdiction");
+
+      yield* stack.destroy();
+
+      const eu = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Queues.Queue("JurisdictionQueue", {
+            name,
+            jurisdiction: "eu",
+            deliveryDelay: 3,
+          });
+        }),
+      );
+      expect(eu.jurisdiction).toEqual("eu");
+      const live = yield* getLiveQueue(accountId, eu.queueId);
+      expect(live.jurisdiction).toEqual("eu");
+      expect(live.settings?.deliveryDelay).toEqual(3);
+
+      const global = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Queues.Queue("JurisdictionQueue", {
+            name,
+            deliveryDelay: 3,
+          });
+        }),
+      );
+      expect(global.queueId).not.toEqual(eu.queueId);
+      expect(global.queueName).toEqual(name);
+      expect(global.jurisdiction).toBeUndefined();
+      const replaced = yield* getLiveQueue(accountId, global.queueId);
+      expect(replaced.jurisdiction ?? undefined).toBeUndefined();
+      yield* expectQueueGone(accountId, eu.queueId);
+
+      yield* stack.destroy();
+      yield* expectQueueGone(accountId, global.queueId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:queue", "live"] },
+);
+
+// #2226 — a queue found by name in another jurisdiction is refused as
+// foreign instead of adopted (and replaced, deleting its owner's queue).
+test.provider(
+  "refuses a queue whose name is taken in another jurisdiction",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const name = queueNameFor(stack.stage, "jurisdiction-taken");
+
+      yield* stack.destroy();
+
+      const global = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Queues.Queue("GlobalQueue", { name });
+        }),
+      );
+
+      const error = yield* Effect.flip(
+        stack.deploy(
+          Effect.gen(function* () {
+            const globalQueue = yield* Cloudflare.Queues.Queue("GlobalQueue", { name });
+            const euQueue = yield* Cloudflare.Queues.Queue("EuQueue", {
+              name,
+              jurisdiction: "eu",
+            });
+            return { globalQueue, euQueue };
+          }),
+        ),
+      );
+      expect(error._tag).toEqual("OwnedBySomeoneElse");
+
+      // The global queue was left alone.
+      const live = yield* getLiveQueue(accountId, global.queueId);
+      expect(live.jurisdiction ?? undefined).toBeUndefined();
+
+      yield* stack.destroy();
+      yield* expectQueueGone(accountId, global.queueId);
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:queue", "live"] },
 );

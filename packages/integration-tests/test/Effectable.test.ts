@@ -3,7 +3,7 @@ import { Browser } from "@alchemy.run/cloudflare/Workers/Browser";
 import { RateLimit } from "@alchemy.run/cloudflare/Workers/RateLimit";
 import { VersionMetadata } from "@alchemy.run/cloudflare/Workers/VersionMetadata";
 import { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
 import { Resource } from "alchemy/Resource";
 import * as Test from "alchemy/Test/Alchemy";
 import { effectClass } from "alchemy/Util/effect";

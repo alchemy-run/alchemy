@@ -4,9 +4,15 @@ import { isResolved, somePropsAreDifferent } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { Resource } from "alchemy/Resource";
-import { createInternalTags, createTagsList, diffTags } from "alchemy/Tags";
+import {
+  createAlchemyTagFilters,
+  createInternalTags,
+  createTagsList,
+  diffTags,
+} from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
@@ -362,6 +368,19 @@ export const VpcProvider = () =>
         };
       });
 
+      // VPC ids are server-assigned and CreateVpc has no idempotency token.
+      // Recover a VPC created before state persistence (e.g. a deploy killed
+      // after CreateVpc returned) via its ownership tags. The instance tag
+      // keeps a replacement from adopting the generation it is replacing.
+      const findVpcByInstanceTags = Effect.fn(function* (id: string, instanceId: string) {
+        const filters = yield* createAlchemyTagFilters(id);
+        return yield* ec2.describeVpcs
+          .items({
+            Filters: [...filters, { Name: "tag:alchemy::instance", Values: [instanceId] }],
+          })
+          .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
+      });
+
       return {
         stables: ["vpcId", "vpcArn", "ownerId", "isDefault"],
         diff: Effect.fn(function* ({ news, olds }) {
@@ -379,9 +398,12 @@ export const VpcProvider = () =>
           }
         }),
 
-        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news = {}, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const desiredTags = yield* createTags(id, news.tags);
+          const desiredTags = {
+            ...(yield* createTags(id, news.tags)),
+            "alchemy::instance": instanceId,
+          };
 
           // Observe — find the VPC if we already have its id, else describe
           // returns empty and we fall through to create. We don't trust
@@ -394,6 +416,14 @@ export const VpcProvider = () =>
               .describeVpcs({ VpcIds: [output.vpcId] })
               .pipe(Effect.catchTag("InvalidVpcID.NotFound", () => Effect.succeed({ Vpcs: [] })));
             vpc = lookup.Vpcs?.[0];
+          }
+
+          if (vpc === undefined) {
+            const recovered = yield* findVpcByInstanceTags(id, instanceId);
+            if (recovered?.VpcId) {
+              yield* session.note(`Recovered VPC: ${recovered.VpcId}`);
+              vpc = yield* waitForVpcAvailable(recovered.VpcId, session);
+            }
           }
 
           if (vpc === undefined) {

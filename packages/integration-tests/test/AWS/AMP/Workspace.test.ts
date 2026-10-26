@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { AlertManagerDefinition, RuleGroupsNamespace, Workspace } from "@alchemy.run/aws/AMP";
+import { expect } from "@alchemy.run/test";
 import * as amp from "@distilled.cloud/aws/amp";
-import { expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

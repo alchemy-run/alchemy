@@ -93,7 +93,27 @@ export interface ConnectionProps {
    * secret.
    */
   kmsKeyIdentifier?: string;
+
+  /**
+   * Invoke a private HTTPS endpoint (in a VPC or on premises) through a VPC
+   * Lattice resource configuration instead of the public internet. Removing
+   * it replaces the connection, since EventBridge cannot turn a private
+   * connection back into a public one.
+   */
+  invocationConnectivityParameters?: {
+    /** ARN of the VPC Lattice resource configuration for the endpoint. */
+    resourceConfigurationArn: string;
+  };
 }
+
+const toConnectivityParameters = (props: ConnectionProps) =>
+  props.invocationConnectivityParameters
+    ? {
+        ResourceParameters: {
+          ResourceConfigurationArn: props.invocationConnectivityParameters.resourceConfigurationArn,
+        },
+      }
+    : undefined;
 
 /**
  * An Amazon EventBridge connection holding the authorization used to invoke
@@ -131,6 +151,23 @@ export interface ConnectionProps {
  *       authorizationEndpoint: "https://auth.example.com/oauth/token",
  *       httpMethod: "POST",
  *     },
+ *   },
+ * });
+ * ```
+ *
+ * ### Connecting to Private APIs
+ * **Example:** Invoke an API Inside a VPC
+ * ```typescript
+ * const connection = yield* AWS.EventBridge.Connection("PrivateApi", {
+ *   authorizationType: "API_KEY",
+ *   authParameters: {
+ *     apiKeyAuthParameters: {
+ *       apiKeyName: "x-api-key",
+ *       apiKeyValue: Redacted.make(process.env.API_KEY!),
+ *     },
+ *   },
+ *   invocationConnectivityParameters: {
+ *     resourceConfigurationArn: "arn:aws:vpc-lattice:us-east-1:123456789012:resourceconfiguration/rcfg-0123456789abcdef0",
  *   },
  * });
  * ```
@@ -230,6 +267,9 @@ export const ConnectionProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
+          if (olds.invocationConnectivityParameters && !news.invocationConnectivityParameters) {
+            return { action: "replace" } as const;
+          }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // Connections don't support tags; the deterministic physical name
@@ -295,6 +335,7 @@ export const ConnectionProvider = () =>
                 AuthorizationType: news.authorizationType,
                 AuthParameters: toCreateAuthParameters(news.authParameters),
                 KmsKeyIdentifier: news.kmsKeyIdentifier,
+                InvocationConnectivityParameters: toConnectivityParameters(news),
               })
               .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
           } else {
@@ -308,6 +349,7 @@ export const ConnectionProvider = () =>
               AuthorizationType: news.authorizationType,
               AuthParameters: toCreateAuthParameters(news.authParameters),
               KmsKeyIdentifier: news.kmsKeyIdentifier,
+              InvocationConnectivityParameters: toConnectivityParameters(news),
             });
           }
 

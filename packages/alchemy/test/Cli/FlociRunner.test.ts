@@ -1,8 +1,9 @@
 import { fileURLToPath } from "node:url";
+import { expect, it } from "@alchemy.run/test";
 import * as BunServices from "@effect/platform-bun/BunServices";
-import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
@@ -20,7 +21,12 @@ const invoke = Effect.fn(function* (args: string[], env: Record<string, string> 
   const script = yield* Effect.sync(() =>
     fileURLToPath(new URL("../../../../scripts/test-aws-floci.ts", import.meta.url)),
   );
-  const executable = yield* Effect.sync(() => process.execPath);
+  // The launcher runs on Node; resolve it here because the child gets an
+  // empty PATH.
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const executable = (yield* spawner.string(
+    ChildProcess.make("node", ["-p", "process.execPath"]),
+  )).trim();
   const child = yield* ChildProcess.make(executable, [script, ...args], {
     env: {
       PATH: "",

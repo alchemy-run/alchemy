@@ -68,21 +68,14 @@ A handler can also return an empty array. The command is accepted, but there's n
 ```typescript title="src/Account.aggregate.ts"
 evolve: {
   AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-  MoneyDeposited: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
-  MoneyWithdrawn: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
+  MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
+  MoneyWithdrawn: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
 },
 ```
 
 Keeping `evolve` separate from `decide` is what lets the state be derived from events. `decide` runs once, when the command arrives, and may refuse. `evolve` must always accept, because it applies events that have already been recorded, and applying the same events must always give the same state.
 
-An event in a state where it can't happen, like a deposit to an unopened account, means `decide` has a bug. `mustBeOpen` throws in that case, and the command that produced the event rolls back instead of committing a broken state.
-
-```typescript title="src/Account.aggregate.ts"
-const mustBeOpen = (s: State) => {
-  if (s._tag !== "Open") throw new Error(`expected an open account, got ${s._tag}`);
-  return s;
-};
-```
+`evolve` never fails either. Refusing is `decide`'s job, and it does it with a typed rejection: every command that records `MoneyDeposited` first returns `NotOpen` when the account isn't open. So each `evolve` handler only has to cover every state, and keeps any state its event can't follow.
 
 ## Reply from the new state
 
@@ -90,8 +83,8 @@ A command that declares a `reply` gets one from a `reply` handler. It runs after
 
 ```typescript title="src/Account.aggregate.ts"
 reply: {
-  DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }),
-  WithdrawMoney: (s) => ({ balance: mustBeOpen(s).balance }),
+  DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
+  WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
 },
 ```
 

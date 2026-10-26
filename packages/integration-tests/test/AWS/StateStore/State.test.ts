@@ -2,11 +2,14 @@ import { createHash } from "node:crypto";
 import * as AWS from "@alchemy.run/aws";
 import { makeS3State } from "@alchemy.run/aws";
 import { createStateBucketName } from "@alchemy.run/aws/StateStore/State";
+import { describe, expect } from "@alchemy.run/test";
 import * as kms from "@distilled.cloud/aws/kms";
 import * as s3 from "@distilled.cloud/aws/s3";
-import { expect } from "alchemy-test";
+import * as sqs from "@distilled.cloud/aws/sqs";
+import * as Alchemy from "alchemy";
 import { StateStoreError, type ResourceState, type StateService } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
+import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as Logger from "effect/Logger";
 import * as Redacted from "effect/Redacted";
@@ -788,5 +791,54 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:s3", "provider:aws:statestore", "live"],
     timeout: 120_000,
+  },
+);
+
+// Each deploy/destroy of a Stack declaring the S3 state store releases its
+// lease when it finishes, so a file can redeploy and destroy that Stack.
+const s3Stack = { providers: AWS.providers(), state: AWS.state() };
+const s3Harness = Test.make(s3Stack);
+
+const S3StateStack = Alchemy.Stack(
+  "S3StateHarness",
+  s3Stack,
+  Effect.gen(function* () {
+    const queue = yield* AWS.SQS.Queue("HarnessQueue");
+    return { queueUrl: queue.queueUrl };
+  }),
+);
+
+describe(
+  "a Stack with the S3 state store",
+  { tags: ["provider:aws", "provider:aws:sqs", "provider:aws:statestore", "live"] },
+  () => {
+    const deployed = s3Harness.beforeAll(s3Harness.deploy(S3StateStack), { timeout: 120_000 });
+
+    s3Harness.afterAll.skipIf(!!process.env.NO_DESTROY)(
+      Effect.gen(function* () {
+        const { queueUrl } = yield* deployed;
+        yield* s3Harness.destroy(S3StateStack);
+        const gone = yield* Core.withProviders(
+          sqs.getQueueAttributes({ QueueUrl: queueUrl, AttributeNames: ["QueueArn"] }).pipe(
+            Effect.as(false),
+            Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),
+          ),
+          s3Stack,
+          "S3StateHarness",
+        );
+        expect(gone).toBe(true);
+      }),
+      { timeout: 120_000 },
+    );
+
+    s3Harness.test(
+      "redeploys after the file's first deploy released its lease",
+      Effect.gen(function* () {
+        const { queueUrl } = yield* deployed;
+        const redeployed = yield* s3Harness.deploy(S3StateStack);
+        expect(redeployed.queueUrl).toBe(queueUrl);
+      }),
+      { timeout: 120_000 },
+    );
   },
 );

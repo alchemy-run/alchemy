@@ -8,14 +8,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Path from "effect/Path";
 import packageJson from "../../package.json" with { type: "json" };
-import {
-  ANSI_RESET,
-  ansiFg,
-  colorsEnabled,
-  glyphsFor,
-  theme,
-  unicodeEnabled,
-} from "./CliKit/index.ts";
+import { ANSI_RESET, ansiFg, colorsEnabled, unicodeEnabled } from "../Util/Terminal.ts";
+import { glyphsFor, theme } from "../Util/Theme.ts";
 
 const NPM_DIST_TAGS_URL = "https://registry.npmjs.org/-/package/alchemy/dist-tags";
 

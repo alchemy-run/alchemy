@@ -160,9 +160,10 @@ export const redactJson = (
 
 /**
  * Redact a text stream without leaking a secret split across chunks. Every
- * form of every secret matches as a substring. The pending suffix is the
- * longest one that could still grow into a form; complete matches are
- * replaced before any text is emitted.
+ * form of every secret matches as a substring; the earliest match wins, and
+ * the longest form wins a tie. A match is only replaced once no form starting
+ * at or before it can still grow in the next chunk, so the output does not
+ * depend on where the chunks split.
  */
 export const redactStream = <E, R>(
   stream: Stream.Stream<string, E, R>,
@@ -173,57 +174,73 @@ export const redactStream = <E, R>(
     (left, right) => right.length - left.length,
   );
   if (forms.length === 0) return stream;
-  const replaceAll = (text: string) =>
-    forms.reduce((safe, form) => safe.split(form).join(marker), text);
+
+  // Split `text` into redacted output and the pending suffix still held back.
+  // At the end of the stream nothing can grow, so nothing is held back.
+  const scan = (text: string, final: boolean): readonly [pending: string, output: string] => {
+    let remaining = text;
+    let output = "";
+
+    while (remaining.length > 0) {
+      let matchIndex = -1;
+      let match: string | undefined;
+      for (const form of forms) {
+        const index = remaining.indexOf(form);
+        if (
+          index >= 0 &&
+          (matchIndex < 0 ||
+            index < matchIndex ||
+            (index === matchIndex && form.length > (match?.length ?? 0)))
+        ) {
+          matchIndex = index;
+          match = form;
+        }
+      }
+
+      // The longest suffix that is a proper prefix of some form.
+      let suffixLength = 0;
+      if (!final) {
+        for (const form of forms) {
+          const candidateLength = Math.min(form.length - 1, remaining.length);
+          for (let length = candidateLength; length > suffixLength; length--) {
+            if (form.startsWith(remaining.slice(-length))) {
+              suffixLength = length;
+              break;
+            }
+          }
+        }
+      }
+      const pendingIndex = remaining.length - suffixLength;
+
+      // A form that may still complete at or before the match would win
+      // over it, so wait for more text before deciding.
+      if (match !== undefined && (suffixLength === 0 || matchIndex < pendingIndex)) {
+        output += remaining.slice(0, matchIndex) + marker;
+        remaining = remaining.slice(matchIndex + match.length);
+        continue;
+      }
+
+      output += remaining.slice(0, pendingIndex);
+      remaining = remaining.slice(pendingIndex);
+      break;
+    }
+
+    return [remaining, output] as const;
+  };
 
   return stream.pipe(
     Stream.mapAccum(
       () => "",
       (pending, chunk) => {
-        let remaining = pending + chunk;
-        let output = "";
-
-        while (remaining.length > 0) {
-          let matchIndex = -1;
-          let match: string | undefined;
-          for (const form of forms) {
-            const index = remaining.indexOf(form);
-            if (
-              index >= 0 &&
-              (matchIndex < 0 ||
-                index < matchIndex ||
-                (index === matchIndex && form.length > (match?.length ?? 0)))
-            ) {
-              matchIndex = index;
-              match = form;
-            }
-          }
-
-          if (match !== undefined) {
-            output += remaining.slice(0, matchIndex) + marker;
-            remaining = remaining.slice(matchIndex + match.length);
-            continue;
-          }
-
-          let suffixLength = 0;
-          for (const form of forms) {
-            const candidateLength = Math.min(form.length - 1, remaining.length);
-            for (let length = candidateLength; length > suffixLength; length--) {
-              if (form.startsWith(remaining.slice(-length))) {
-                suffixLength = length;
-                break;
-              }
-            }
-          }
-
-          output += remaining.slice(0, remaining.length - suffixLength);
-          remaining = remaining.slice(remaining.length - suffixLength);
-          break;
-        }
-
+        const [remaining, output] = scan(pending + chunk, false);
         return [remaining, output.length === 0 ? [] : [output]] as const;
       },
-      { onHalt: (pending) => (pending.length === 0 ? [] : [replaceAll(pending)]) },
+      {
+        onHalt: (pending) => {
+          const [, output] = scan(pending, true);
+          return output.length === 0 ? [] : [output];
+        },
+      },
     ),
   );
 };

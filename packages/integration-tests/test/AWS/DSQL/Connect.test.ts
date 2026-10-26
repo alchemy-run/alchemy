@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
 import * as dsql from "@distilled.cloud/aws/dsql";
-import { describe, expect } from "alchemy-test";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";
@@ -225,7 +225,7 @@ describe(
     );
 
     test.provider(
-      "connects DIRECTLY to the public endpoint (raw pg, no Drizzle, no VPC)",
+      "connects DIRECTLY to the public endpoint (raw @effect/sql-pg, no Drizzle, no VPC)",
       (_stack) =>
         Effect.gen(function* () {
           const roundtrip = (yield* postJson(`${directUrl}/roundtrip`, {})) as {

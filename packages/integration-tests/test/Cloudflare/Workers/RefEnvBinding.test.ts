@@ -61,3 +61,117 @@ test.provider(
     timeout: 240_000,
   },
 );
+
+const targetScript = `import { WorkerEntrypoint } from "cloudflare:workers";
+export class Api extends WorkerEntrypoint {
+  async greet(name) {
+    return "hello " + name + " from ref target";
+  }
+}
+export default {
+  async fetch() {
+    return new Response("ref target up");
+  },
+};`;
+
+const callerScript = `export default {
+  async fetch(request, env) {
+    try {
+      return new Response(await env.API.greet("alice"));
+    } catch (err) {
+      return new Response("caller failed: " + err.message, { status: 500 });
+    }
+  },
+};`;
+
+/**
+ * `Cloudflare.WorkerEntrypoint(Worker.ref(...), "Api")` must target the
+ * referenced Worker. A ref is a callable Output proxy, so it used to fail
+ * the "is this a Worker?" check and silently lower to a self binding on
+ * the caller (#2262) — the caller has no `Api`, so the greeting proves
+ * the binding reached the ref'd target.
+ */
+test.provider(
+  "a Worker ref in WorkerEntrypoint targets the referenced worker",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const target = () =>
+        Cloudflare.Worker("ref-entrypoint-target", {
+          script: targetScript,
+        });
+
+      yield* stack.deploy(target());
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const deployedTarget = yield* target();
+          const caller = yield* Cloudflare.Worker("ref-entrypoint-caller", {
+            script: callerScript,
+            workersDev: true,
+            env: {
+              API: Cloudflare.WorkerEntrypoint(
+                yield* Cloudflare.Worker.ref("ref-entrypoint-target"),
+                "Api",
+              ),
+            },
+          });
+          return { target: deployedTarget, caller };
+        }),
+      );
+
+      yield* expectUrlContains(deployed.caller.url!, "hello alice from ref target", {
+        label: "ref-bound entrypoint caller",
+      });
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 240_000,
+  },
+);
+
+/**
+ * `Cloudflare.Worker.ref(Declaration)` references the Worker by the
+ * declaration's logical id (#2607). The caller stack only refs the target,
+ * so the greeting proves the ref resolved to the deployed target.
+ */
+test.provider(
+  "a Worker ref taken from a declaration targets the declared worker",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const Target = Cloudflare.Worker("ref-declaration-target", {
+        script: targetScript,
+      });
+
+      yield* stack.deploy(Target);
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const target = yield* Target;
+          const caller = yield* Cloudflare.Worker("ref-declaration-caller", {
+            script: callerScript,
+            workersDev: true,
+            env: {
+              API: Cloudflare.WorkerEntrypoint(yield* Cloudflare.Worker.ref(Target), "Api"),
+            },
+          });
+          return { target, caller };
+        }),
+      );
+
+      yield* expectUrlContains(deployed.caller.url!, "hello alice from ref target", {
+        label: "declaration-ref-bound entrypoint caller",
+      });
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 240_000,
+  },
+);

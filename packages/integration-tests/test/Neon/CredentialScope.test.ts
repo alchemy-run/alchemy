@@ -1,6 +1,6 @@
 import * as Neon from "@alchemy.run/neon";
 import { scopeIdentity, usesInjectedCredentials } from "@alchemy.run/neon/CredentialScope";
-import { expect, test } from "alchemy-test";
+import { expect, test } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

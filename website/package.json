@@ -10,7 +10,7 @@
   },
   "type": "module",
   "scripts": {
-    "build:reference": "bun ../scripts/generate-api-reference.ts",
+    "build:reference": "node ../scripts/generate-api-reference.ts",
     "build:llms": "bun scripts/generate-llms-txt.ts",
     "docs:generate": "bun run build:reference && bun run build:llms",
     "docs:build": "bun run build",

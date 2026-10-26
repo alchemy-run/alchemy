@@ -14,7 +14,7 @@ import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { parsePolicyDocument, stringifyPolicyDocument, toTagRecord } from "./common.ts";
-import type { PolicyDocument, PolicyStatement } from "./Policy.ts";
+import { normalizePolicyDocument, type PolicyDocument, type PolicyStatement } from "./Policy.ts";
 
 export type RoleName = string;
 export type RoleArn = `arn:aws:iam::${AccountID}:role/${RoleName}`;
@@ -226,6 +226,25 @@ const mergeBoundAssumeRolePolicy = (
  */
 export const Role = Resource<Role>("AWS.IAM.Role");
 
+// The persisted document when it means the same as the observed one, else
+// the observed one.
+const samePolicyDocument = (
+  persisted: PolicyDocument | undefined,
+  observed: PolicyDocument,
+): PolicyDocument =>
+  persisted !== undefined &&
+  normalizePolicyDocument(persisted) === normalizePolicyDocument(observed)
+    ? persisted
+    : observed;
+
+// The persisted list when it holds the same members as the observed one.
+const sameSet = (persisted: string[] | undefined, observed: string[]): string[] =>
+  persisted !== undefined &&
+  persisted.length === observed.length &&
+  observed.every((value) => persisted.includes(value))
+    ? persisted
+    : observed;
+
 export const RoleProvider = () =>
   Provider.effect(
     Role,
@@ -320,7 +339,11 @@ export const RoleProvider = () =>
         news: Record<string, PolicyDocument>;
       }) {
         for (const [policyName, document] of Object.entries(news)) {
-          if (JSON.stringify(olds[policyName] ?? null) !== JSON.stringify(document)) {
+          const observed = olds[policyName];
+          if (
+            observed === undefined ||
+            normalizePolicyDocument(observed) !== normalizePolicyDocument(document)
+          ) {
             yield* iam.putRolePolicy({
               RoleName: roleName,
               PolicyName: policyName,
@@ -425,21 +448,33 @@ export const RoleProvider = () =>
             readTags(roleName),
           ]);
 
-          const assumeRolePolicyDocument =
+          const observedAssumeRolePolicy =
             parsePolicyDocument(role.Role.AssumeRolePolicyDocument) ??
             output?.assumeRolePolicyDocument;
-          if (!assumeRolePolicyDocument) {
+          if (!observedAssumeRolePolicy) {
             return undefined;
           }
 
+          // IAM stores documents in its own form (single-item arrays become
+          // scalars, keys reorder) and lists managed policies in its own
+          // order. Keep the persisted value wherever it is equivalent to what
+          // IAM returns, so an untouched role does not read as drifted.
           const attrs = {
             roleArn: role.Role.Arn as RoleArn,
             roleName: role.Role.RoleName,
             roleId: role.Role.RoleId,
             path: role.Role.Path,
-            assumeRolePolicyDocument,
-            managedPolicyArns,
-            inlinePolicies,
+            assumeRolePolicyDocument: samePolicyDocument(
+              output?.assumeRolePolicyDocument,
+              observedAssumeRolePolicy,
+            ),
+            managedPolicyArns: sameSet(output?.managedPolicyArns, managedPolicyArns),
+            inlinePolicies: Object.fromEntries(
+              Object.entries(inlinePolicies).map(([name, document]) => [
+                name,
+                samePolicyDocument(output?.inlinePolicies?.[name], document),
+              ]),
+            ),
             description: role.Role.Description,
             maxSessionDuration: role.Role.MaxSessionDuration,
             permissionsBoundary: role.Role.PermissionsBoundary?.PermissionsBoundaryArn,
@@ -505,10 +540,13 @@ export const RoleProvider = () =>
             observedRole.Role?.PermissionsBoundary?.PermissionsBoundaryArn;
 
           // Sync assume-role policy — only call updateAssumeRolePolicy
-          // when the document actually differs.
+          // when the document actually differs. IAM returns the stored
+          // document in its own form (reordered keys, single-item lists as
+          // scalars), so compare normalized documents, not raw JSON text.
           if (
-            JSON.stringify(observedAssumePolicy ?? null) !==
-            JSON.stringify(assumeRolePolicyDocument)
+            observedAssumePolicy === undefined ||
+            normalizePolicyDocument(observedAssumePolicy) !==
+              normalizePolicyDocument(assumeRolePolicyDocument)
           ) {
             yield* iam
               .updateAssumeRolePolicy({

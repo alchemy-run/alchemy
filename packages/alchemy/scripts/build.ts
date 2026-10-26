@@ -1,4 +1,4 @@
-import { build, exec } from "../../../scripts/package-build.ts";
+import { build, typescript } from "../../../scripts/package-build.ts";
 
 build(import.meta.dirname, {
   // The shared bootstrap helpers every provider's `Bootstrap` imports stay source.
@@ -7,5 +7,5 @@ build(import.meta.dirname, {
   },
   thirdPartyLicenses: true,
   readme: true,
-  steps: [exec("tsc", "-b")],
+  steps: [typescript("-b")],
 });

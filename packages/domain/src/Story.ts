@@ -1,10 +1,13 @@
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import type { DurableDeferred, WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
@@ -15,12 +18,46 @@ import type * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
 
+/** How far a story got with one step. */
+export interface StepReport {
+  /** The step's number, from 1. */
+  readonly step: number;
+  /** The step's kind: `Given`, `When`, `Then`, ... */
+  readonly kind: Step["_tag"];
+  readonly status: "passed" | "failed" | "not-run";
+  /** A one-line summary of the step. Redacted values print as `<redacted>`. */
+  readonly summary: string;
+}
+
 /**
- * A failed story expectation.
+ * A failed story expectation. `message` starts with `reason`, then lists every
+ * step (✓ passed, ✗ failed, blank: not run) and the events each touched
+ * aggregate committed so far.
  */
 export class StoryFailure extends Data.TaggedError("StoryFailure")<{
+  /** The step that failed (the last step for a failure at the end of the story). */
   readonly step: number;
   readonly message: string;
+  /** Why the story failed, without the step list. */
+  readonly reason: string;
+  readonly steps: ReadonlyArray<StepReport>;
+  /** The tags of the events committed so far, per touched aggregate (`Aggregate/id`). */
+  readonly events: Readonly<Record<string, ReadonlyArray<string>>>;
+}> {}
+
+/** A failure inside the runner, before it is turned into a {@link StoryFailure}. */
+class StepFailed extends Data.TaggedError("StepFailed")<{
+  readonly step: number;
+  readonly message: string;
+  /** The failure is about the whole story, not one step. */
+  readonly atEnd?: boolean;
+  /** What the step expected and what it got, as short summaries. */
+  readonly expected?: string;
+  readonly actual?: string;
+  /** What the expected / actual pair is about, e.g. `Counter/c-1`. */
+  readonly label?: string;
+  /** A line to print under the failed step. */
+  readonly detail?: string;
 }> {}
 
 /** Marker for "the view key does not exist". */
@@ -68,18 +105,27 @@ export type Step =
       readonly events: ReadonlyArray<{ readonly _tag: string }>;
     }
   | {
-      readonly _tag: "ExpectCall";
+      readonly _tag: "Call";
       readonly tag: string | undefined;
       readonly op: ExternalSystem.Op;
       readonly args: unknown;
     }
   | {
-      readonly _tag: "Resolve";
+      readonly _tag: "Answer";
       readonly tag: string | undefined;
       readonly op: ExternalSystem.Op;
-      readonly value: unknown;
+      readonly exit: Exit.Exit<unknown, unknown>;
     }
-  | { readonly _tag: "Clock"; readonly at: string | number }
+  | {
+      readonly _tag: "Returned";
+      readonly tag: string | undefined;
+      readonly op: ExternalSystem.Op;
+      readonly expected:
+        | { readonly _tag: "Success"; readonly value: unknown }
+        | { readonly _tag: "Failure"; readonly error: unknown }
+        | { readonly _tag: "Died" };
+    }
+  | { readonly _tag: "Clock"; readonly at: string | number | DateTime.DateTime }
   | {
       readonly _tag: "Signal";
       readonly saga: Saga.Any;
@@ -185,33 +231,88 @@ const streamed = <S extends DomainStream.Any>(
 });
 
 /**
- * An external system call matching these (partial) arguments is waiting.
- * With a tag first, the tag names that call, so a later `resolve` can answer
- * exactly it; when several match, it names the earliest one made.
+ * A call to an external system was made with these (partial) arguments:
+ * `Story.call(Payments.refund, { settlementId: "st_1" })`. Every call needs
+ * one: a stubbed call before it's answered, a real call before it's asserted.
+ * Each call is matched once, earliest first. With a tag first, the tag names
+ * that call, so a later step can answer or assert exactly it.
  */
-const expectCall: {
+const callStep: {
   <Args>(op: ExternalSystem.Op<Args, any>, args: Partial<Args>): Step;
   <Args>(tag: string, op: ExternalSystem.Op<Args, any>, args: Partial<Args>): Step;
 } = (...a: ReadonlyArray<any>): Step =>
   typeof a[0] === "string"
-    ? { _tag: "ExpectCall", tag: a[0], op: a[1], args: a[2] }
-    : { _tag: "ExpectCall", tag: undefined, op: a[0], args: a[1] };
+    ? { _tag: "Call", tag: a[0], op: a[1], args: a[2] }
+    : { _tag: "Call", tag: undefined, op: a[0], args: a[1] };
+
+/** Answer a pending call with an exit; the tag, when given, comes first. */
+const answer = (a: ReadonlyArray<any>, exit: (value: any) => Exit.Exit<unknown, unknown>): Step =>
+  typeof a[0] === "string"
+    ? { _tag: "Answer", tag: a[0], op: a[1], exit: exit(a[2]) }
+    : { _tag: "Answer", tag: undefined, op: a[0], exit: exit(a[1]) };
 
 /**
- * Answer an external system call. With a tag first, answers the call
- * `expectCall` tagged; without one, answers the only pending call to the
- * operation, and fails if several are pending.
+ * Answer an external system call a `call` step has checked. With a tag
+ * first, answers the call a `call` step tagged; without one, answers the only
+ * pending call to the operation, and fails if several are pending.
  */
-const resolve: {
+const succeed: {
   <Success>(op: ExternalSystem.Op<any, Success>, value: Success): Step;
   <Success>(tag: string, op: ExternalSystem.Op<any, Success>, value: Success): Step;
+} = (...a: ReadonlyArray<any>): Step => answer(a, Exit.succeed);
+
+/**
+ * Fail an external system call with one of the operation's declared errors,
+ * as when the vendor refuses. Finds the call the same way `succeed` does.
+ */
+const fail: {
+  <Error>(op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
+  <Error>(tag: string, op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
+} = (...a: ReadonlyArray<any>): Step => answer(a, Exit.fail);
+
+/**
+ * Fail an external system call with a defect, as when the transport breaks.
+ * Finds the call the same way `succeed` does.
+ */
+const die: {
+  (op: ExternalSystem.Op, defect: unknown): Step;
+  (tag: string, op: ExternalSystem.Op, defect: unknown): Step;
+} = (...a: ReadonlyArray<any>): Step => answer(a, Exit.die);
+
+/** Assert how a real call to a system that is not stubbed ended; the tag, when given, comes first. */
+const outcome = (a: ReadonlyArray<any>, expected: (value: any) => any): Step =>
+  typeof a[0] === "string"
+    ? { _tag: "Returned", tag: a[0], op: a[1], expected: expected(a[2]) }
+    : { _tag: "Returned", tag: undefined, op: a[0], expected: expected(a[1]) };
+
+/**
+ * A real call to an external system that is not stubbed returned this value.
+ * Finds the call the way `succeed` does: by tag, or the only unasserted call
+ * to the operation. Every real call needs a `call` step, then one of
+ * `returned`, `failed` or `died`.
+ */
+const returned: {
+  <Success>(op: ExternalSystem.Op<any, Success>, value: Success): Step;
+  <Success>(tag: string, op: ExternalSystem.Op<any, Success>, value: Success): Step;
+} = (...a: ReadonlyArray<any>): Step => outcome(a, (value) => ({ _tag: "Success", value }));
+
+/** A real call to an external system that is not stubbed failed with this declared error. */
+const failed: {
+  <Error>(op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
+  <Error>(tag: string, op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
+} = (...a: ReadonlyArray<any>): Step => outcome(a, (error) => ({ _tag: "Failure", error }));
+
+/** A real call to an external system that is not stubbed died with a defect. */
+const died: {
+  (op: ExternalSystem.Op): Step;
+  (tag: string, op: ExternalSystem.Op): Step;
 } = (...a: ReadonlyArray<any>): Step =>
   typeof a[0] === "string"
-    ? { _tag: "Resolve", tag: a[0], op: a[1], value: a[2] }
-    : { _tag: "Resolve", tag: undefined, op: a[0], value: a[1] };
+    ? { _tag: "Returned", tag: a[0], op: a[1], expected: { _tag: "Died" } }
+    : { _tag: "Returned", tag: undefined, op: a[0], expected: { _tag: "Died" } };
 
 /** Move the clock: later commands are stamped with it, and scheduled commands now due fire. */
-const clock = (at: string | number): Step => ({ _tag: "Clock", at });
+const clock = (at: string | number | DateTime.DateTime): Step => ({ _tag: "Clock", at });
 
 type SagaClientOf<S> = S extends Context.Key<any, infer C> ? C : never;
 type SagaKeyOf<S> =
@@ -263,18 +364,141 @@ const provide = <I, S>(service: Context.Key<I, S>, value: S): Step => ({
   value,
 });
 
-const normalize = (value: unknown): unknown => {
+const normalize = (value: unknown, redact = false): unknown => {
+  if (redact && Redacted.isRedacted(value)) return "<redacted>";
   if (DateTime.isDateTime(value)) return DateTime.formatIso(value);
-  if (Array.isArray(value)) return value.map(normalize);
+  if (Array.isArray(value)) return value.map((v) => normalize(v, redact));
   if (value !== null && typeof value === "object") {
     const out: Record<string, unknown> = {};
-    for (const key of Object.keys(value)) out[key] = normalize((value as any)[key]);
+    for (const key of Object.keys(value)) out[key] = normalize((value as any)[key], redact);
     return out;
   }
   return value;
 };
 
-const show = (value: unknown) => JSON.stringify(normalize(value));
+/** JSON for a failure message: redacted values print as `<redacted>`. */
+const show = (value: unknown) => JSON.stringify(normalize(value, true));
+
+const clip = (text: string, max: number) =>
+  text.length > max ? `${text.slice(0, max - 1)}…` : text;
+
+/** A short, one-line form of a value: `Tag { field: value }`, nested values elided. */
+const brief = (value: unknown, depth = 0): string => {
+  if (Redacted.isRedacted(value)) return "<redacted>";
+  if (DateTime.isDateTime(value)) return DateTime.formatIso(value);
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "string") return JSON.stringify(clip(value, 24));
+  if (typeof value === "bigint") return `${value}n`;
+  if (value === null || typeof value !== "object") return String(value);
+  if (Array.isArray(value))
+    return depth > 0 ? `[${value.length}]` : `[${value.map((v) => brief(v, 1)).join(", ")}]`;
+  const tag = typeof (value as any)._tag === "string" ? ((value as any)._tag as string) : undefined;
+  if (depth > 1) return tag ?? "{…}";
+  const fields = Object.keys(value)
+    .filter((key) => key !== "_tag")
+    .map((key) => `${key}: ${brief((value as any)[key], depth + 1)}`);
+  const body = fields.length > 0 ? `{ ${fields.join(", ")} }` : tag ? "" : "{}";
+  return tag && body ? `${tag} ${body}` : (tag ?? body);
+};
+
+const summarize = (value: unknown) => clip(brief(value), 80);
+const summarizeAll = (values: ReadonlyArray<unknown>, none = "nothing new") =>
+  values.length === 0 ? none : clip(values.map((v) => brief(v)).join(", "), 80);
+
+const refName = (ref: Aggregate.Ref) => `${ref.aggregate}/${ref.id}`;
+const callName = (tag: string | undefined, op: ExternalSystem.Op) =>
+  `${tag === undefined ? "" : `"${tag}" `}${op.system}.${op.op}`;
+
+/** A one-line summary of a step, before it runs. */
+const describeStep = (s: Step): string => {
+  switch (s._tag) {
+    case "Clock":
+      return new Date(
+        typeof s.at === "number"
+          ? s.at
+          : typeof s.at === "string"
+            ? Date.parse(s.at)
+            : DateTime.toEpochMillis(s.at),
+      ).toISOString();
+    case "Provide":
+      return `${s.service.key} = ${summarize(s.value)}`;
+    case "Given":
+    case "Then":
+      return `${refName(s.ref)}: ${summarizeAll(s.events)}`;
+    case "When":
+      return `${refName(s.ref)}: ${summarize(s.command)}`;
+    case "Rejected":
+      return summarize(s.rejection);
+    case "Replied":
+      return summarize(s.reply);
+    case "State":
+      return refName(s.ref);
+    case "View":
+      return `${s.view.viewName}(${s.key.id})${s.expected === none ? ": none" : typeof s.expected === "function" ? "" : `: ${summarize(s.expected)}`}`;
+    case "Emitted":
+      return `${s.view.viewName}(${s.key.id})${typeof s.expected === "function" ? "" : `: ${summarizeAll(s.expected as ReadonlyArray<unknown>)}`}`;
+    case "Streamed":
+      return `${s.stream.streamName}/${s.key.id}: ${summarizeAll(s.events)}`;
+    case "Call":
+      return `${callName(s.tag, s.op)} ${summarize(s.args)}`;
+    case "Answer":
+      return `${callName(s.tag, s.op)} → ${
+        Exit.isSuccess(s.exit)
+          ? summarize(s.exit.value)
+          : Option.match(Cause.findErrorOption(s.exit.cause), {
+              onSome: (error) => `fail ${summarize(error)}`,
+              onNone: () => "die",
+            })
+      }`;
+    case "Returned":
+      return `${callName(s.tag, s.op)} → ${
+        s.expected._tag === "Success"
+          ? summarize(s.expected.value)
+          : s.expected._tag === "Failure"
+            ? `failed ${summarize(s.expected.error)}`
+            : "died"
+      }`;
+    case "Signal":
+      return `${s.saga.sagaName} ${summarize(s.key)}: ${summarize(s.value)}`;
+    case "Saga":
+      return `${s.saga.sagaName} ${summarize(s.key)}: ${s.expected._tag}`;
+  }
+};
+
+/** The story, step by step, with the failed step marked: the tail of a failure message. */
+const renderReport = (
+  failure: StepFailed,
+  steps: ReadonlyArray<StepReport>,
+  events: Readonly<Record<string, ReadonlyArray<string>>>,
+): string => {
+  const width = String(steps.length).length;
+  const lines: Array<string> = [];
+  for (const s of steps) {
+    const mark = s.status === "passed" ? "✓" : s.status === "failed" ? "✗" : " ";
+    const head = `  ${mark} ${String(s.step).padStart(width)} ${s.kind.padEnd(10)} `;
+    const indent = " ".repeat(head.length);
+    if (s.status !== "failed") {
+      lines.push(head + s.summary);
+      continue;
+    }
+    if (failure.expected !== undefined && failure.actual !== undefined) {
+      // `Ref: expected X` / `     got      Y`, with the ref (if any) kept in front.
+      const label = failure.label === undefined ? "" : `${failure.label}: `;
+      lines.push(`${head}${label}expected ${failure.expected}`);
+      lines.push(`${indent}${" ".repeat(label.length)}got      ${failure.actual}`);
+    } else {
+      lines.push(head + s.summary);
+    }
+    if (failure.detail !== undefined) lines.push(indent + failure.detail);
+  }
+  if (failure.atEnd) lines.push(`  ✗ ${" ".repeat(width)} end`);
+  lines.push("  events so far");
+  const streams = Object.entries(events);
+  if (streams.length === 0) lines.push("    nothing");
+  for (const [stream, tags] of streams)
+    lines.push(`    ${stream}: ${tags.length === 0 ? "nothing" : clip(tags.join(" → "), 120)}`);
+  return lines.join("\n");
+};
 
 const encodeInstance = (value: { readonly _tag: string }): unknown => {
   const schema = (value as any).constructor as Schema.Top;
@@ -282,6 +506,31 @@ const encodeInstance = (value: { readonly _tag: string }): unknown => {
 };
 
 const equal = (a: unknown, b: unknown) => show(a) === show(b);
+
+/** A tagged error by its encoded fields; anything else as it is. */
+const errorJson = (error: unknown): unknown => {
+  if (error !== null && typeof error === "object" && "_tag" in error) {
+    try {
+      return encodeInstance(error as { readonly _tag: string });
+    } catch {
+      return normalize(error);
+    }
+  }
+  return normalize(error);
+};
+
+const exitJson = (
+  exit: Exit.Exit<unknown, unknown>,
+):
+  | { readonly _tag: "Success"; readonly value: unknown }
+  | { readonly _tag: "Failure"; readonly error: unknown }
+  | { readonly _tag: "Died"; readonly defect: string } => {
+  if (Exit.isSuccess(exit)) return { _tag: "Success", value: normalize(exit.value) };
+  const error = Cause.findErrorOption(exit.cause);
+  return Option.isSome(error)
+    ? { _tag: "Failure", error: errorJson(error.value) }
+    : { _tag: "Died", defect: String(Cause.squash(exit.cause)) };
+};
 
 const partial = (expected: unknown, actual: unknown): boolean => {
   const e = normalize(expected);
@@ -297,29 +546,50 @@ interface PendingCall {
   readonly system: string;
   readonly op: string;
   readonly args: unknown;
-  readonly deferred: Deferred.Deferred<unknown>;
-  /** The name `expectCall` gave it, if any. */
+  readonly deferred: Deferred.Deferred<unknown, unknown>;
+  /** The name its `call` step gave it, if any. */
   tag: string | undefined;
+  /** Whether a `call` step checked its arguments. */
+  expected: boolean;
+}
+
+interface ObservedCall {
+  readonly system: string;
+  readonly op: string;
+  readonly args: unknown;
+  /** How the call ended; undefined while it runs. */
+  exit: Exit.Exit<unknown, unknown> | undefined;
+  readonly done: Deferred.Deferred<void>;
+  /** The name its `call` step gave it, if any. */
+  tag: string | undefined;
+  /** Whether a `call` step matched it. */
+  expected: boolean;
 }
 
 /** Options for {@link make}. */
 interface StoryOptions<Policies, LE, LR, Systems> {
   /** The policies' and projections' Layers. Required when the model has either. */
   readonly layer?: Layer.Layer<Policies, LE, LR>;
-  /** External systems the policies call. Each is replaced by a scripted implementation. */
-  readonly externalSystems?: ReadonlyArray<Systems>;
+  /**
+   * External systems to fake. Each call to one waits until the story answers it
+   * with `succeed`, `fail` or `die`. Systems not listed are called for real,
+   * through the Layers you provide to the story, and the story asserts what
+   * each call returned with `returned`, `failed` or `died`.
+   */
+  readonly stub?: ReadonlyArray<Systems>;
 }
 
 /**
  * Create a story runner for a Domain. A story is a sequence of steps run
- * against an in-memory host: policies run for real, external system calls suspend until
- * `resolve`, and nothing outside the Domain is executed.
+ * against an in-memory host: policies run for real, calls to stubbed external
+ * systems suspend until the story answers them, and calls to the others run
+ * through the Layers you provide while the story records them.
  *
  * **Example:** A story
  * ```typescript
  * const story = Story.make(Bank, {
  *   layer: BankPolicies,
- *   externalSystems: [FraudCheck, Payments],
+ *   stub: [FraudCheck, Payments],
  * });
  *
  * it.effect("withdraw replies with the new balance", () =>
@@ -358,7 +628,32 @@ const make =
       const clockState = { now: Date.parse("2026-01-01T00:00:00.000Z") };
       const platform = InMemory.make({ manual: true, now: () => clockState.now });
       const calls: Array<PendingCall> = [];
-      const systemLayers = (options.externalSystems ?? []).map((system) =>
+      const observed: Array<ObservedCall> = [];
+      const stubbed = new Set((options.stub ?? []).map((system) => system.systemName));
+      const recorder: ExternalSystem.CallRecorder = {
+        record: (system, op, args, call) =>
+          Effect.gen(function* () {
+            const entry: ObservedCall = {
+              system,
+              op,
+              args,
+              exit: undefined,
+              done: yield* Deferred.make<void>(),
+              tag: undefined,
+              expected: false,
+            };
+            observed.push(entry);
+            return yield* call.pipe(
+              Effect.onExit((exit) =>
+                Effect.suspend(() => {
+                  entry.exit = exit;
+                  return Deferred.succeed(entry.done, undefined);
+                }),
+              ),
+            );
+          }),
+      };
+      const systemLayers = (options.stub ?? []).map((system) =>
         Layer.succeed(
           system as Context.Key<unknown, unknown>,
           ExternalSystem.observeOps(
@@ -369,13 +664,14 @@ const make =
                 (args: unknown) =>
                   platform.control.suspended(
                     Effect.gen(function* () {
-                      const deferred = yield* Deferred.make<unknown>();
+                      const deferred = yield* Deferred.make<unknown, unknown>();
                       calls.push({
                         system: system.systemName,
                         op,
                         args,
                         deferred,
                         tag: undefined,
+                        expected: false,
                       });
                       return yield* Deferred.await(deferred);
                     }),
@@ -393,6 +689,9 @@ const make =
         .layer(policies)
         .pipe(Layer.provide(Layer.mergeAll(platform.layer, systems)));
 
+      // The aggregates the story touched, for the report's "events so far".
+      const touched = new Map<string, Aggregate.Ref>();
+
       const run = Effect.gen(function* () {
         const internals = yield* Model.Internals;
         const cursors = new Map<string, number>();
@@ -400,7 +699,9 @@ const make =
           | { readonly _tag: "Accepted"; readonly receipt: Aggregate.Receipt }
           | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } }
           | undefined;
-        let unassertedRejection: { readonly step: number; readonly tag: string } | undefined;
+        let unassertedRejection:
+          | { readonly step: number; readonly rejection: { readonly _tag: string } }
+          | undefined;
         let provided = Context.empty() as Context.Context<unknown>;
         const assertedDeaths = new Set<string>();
 
@@ -411,6 +712,10 @@ const make =
         const settle = (step: number) =>
           Effect.gen(function* () {
             for (let i = 0; i < 10_000; i++) {
+              // Real calls take real time: wait for them instead of spinning.
+              for (const call of observed) {
+                if (call.exit === undefined) yield* Deferred.await(call.done);
+              }
               yield* platform.control.drain;
               yield* Effect.yieldNow;
               if (yield* platform.control.idle) {
@@ -418,7 +723,7 @@ const make =
                 yield* platform.control.drain;
                 if (yield* platform.control.idle) {
                   if (platform.control.failures.length > 0) {
-                    return yield* new StoryFailure({
+                    return yield* new StepFailed({
                       step,
                       message: `a policy or projection failed: ${String(platform.control.failures[0])}`,
                     });
@@ -427,25 +732,41 @@ const make =
                 }
               }
             }
-            return yield* new StoryFailure({
+            return yield* new StepFailed({
               step,
               message: "the domain did not settle (a policy or projection is looping?)",
             });
           });
 
+        const rejectionNotAsserted = (rejected: NonNullable<typeof unassertedRejection>) =>
+          new StepFailed({
+            step: rejected.step,
+            message: `the command was rejected with ${rejected.rejection._tag}, which no step asserts`,
+            detail: `rejected ${summarize(rejected.rejection)}`,
+          });
+
         for (const [index, s] of steps.entries()) {
           const step = index + 1;
-          const fail = (message: string) =>
-            new StoryFailure({ step, message: `${s._tag}: ${message}` });
+          const fail = (
+            message: string,
+            compared?: {
+              readonly expected: string;
+              readonly actual: string;
+              readonly label?: string;
+            },
+          ) => new StepFailed({ step, message: `${s._tag}: ${message}`, ...compared });
           if (unassertedRejection && s._tag !== "Rejected") {
-            return yield* new StoryFailure({
-              step: unassertedRejection.step,
-              message: `the command was rejected with ${unassertedRejection.tag}, which no step asserts`,
-            });
+            return yield* rejectionNotAsserted(unassertedRejection);
           }
+          if ("ref" in s) touched.set(refName(s.ref), s.ref);
           switch (s._tag) {
             case "Clock": {
-              clockState.now = typeof s.at === "number" ? s.at : Date.parse(s.at);
+              clockState.now =
+                typeof s.at === "number"
+                  ? s.at
+                  : typeof s.at === "string"
+                    ? Date.parse(s.at)
+                    : DateTime.toEpochMillis(s.at);
               // Scheduled commands that are now due fire, and their policies run.
               yield* settle(step);
               break;
@@ -477,7 +798,7 @@ const make =
                 last = { _tag: "Accepted", receipt: result.success };
               } else {
                 last = { _tag: "Rejected", rejection: result.failure as { readonly _tag: string } };
-                unassertedRejection = { step, tag: last.rejection._tag };
+                unassertedRejection = { step, rejection: last.rejection };
               }
               yield* settle(step);
               break;
@@ -490,17 +811,26 @@ const make =
                 .slice(from, from + Math.max(s.events.length, 1))
                 .map((e) => e.event);
               const expected = s.events.map(encodeInstance);
+              // Decoded, so redacted fields stay redacted in the message.
+              const got = events.slice(from).map((e) => internals.kernel.decodeEvent(e.event));
+              const compared = {
+                label: stream,
+                expected: summarizeAll(s.events),
+                actual: summarizeAll(got),
+              };
               if (s.events.length === 0) {
                 if (events.length > from) {
                   return yield* fail(
-                    `expected no new events on ${stream}, got ${show(events.slice(from).map((e) => e.event))}`,
+                    `expected no new events on ${stream}, got ${show(got)}`,
+                    compared,
                   );
                 }
                 break;
               }
               if (!equal(actual.slice(0, expected.length), expected)) {
                 return yield* fail(
-                  `on ${stream}\n  expected ${show(expected)}\n  actual   ${show(events.slice(from).map((e) => e.event))}`,
+                  `on ${stream}\n  expected ${show(s.events)}\n  actual   ${show(got)}`,
+                  compared,
                 );
               }
               cursors.set(stream, from + expected.length);
@@ -510,11 +840,18 @@ const make =
               if (last?._tag !== "Rejected")
                 return yield* fail(
                   `expected a rejection, the command was ${last ? "accepted" : "never sent"}`,
+                  {
+                    expected: summarize(s.rejection),
+                    actual: last ? `accepted ${summarize(last.receipt.reply)}` : "never sent",
+                  },
                 );
               const expected = encodeInstance(s.rejection);
               const actual = encodeInstance(last.rejection);
               if (!equal(expected, actual))
-                return yield* fail(`expected ${show(expected)}, got ${show(actual)}`);
+                return yield* fail(`expected ${show(s.rejection)}, got ${show(last.rejection)}`, {
+                  expected: summarize(s.rejection),
+                  actual: summarize(last.rejection),
+                });
               unassertedRejection = undefined;
               break;
             }
@@ -522,7 +859,10 @@ const make =
               if (last?._tag !== "Accepted")
                 return yield* fail("the last command was not accepted");
               if (!equal(last.receipt.reply, s.reply)) {
-                return yield* fail(`expected ${show(s.reply)}, got ${show(last.receipt.reply)}`);
+                return yield* fail(`expected ${show(s.reply)}, got ${show(last.receipt.reply)}`, {
+                  expected: summarize(s.reply),
+                  actual: summarize(last.receipt.reply),
+                });
               }
               break;
             }
@@ -545,11 +885,21 @@ const make =
                 if (Option.isSome(current))
                   return yield* fail(
                     `expected ${s.view.viewName}(${s.key.id}) to not exist, got ${show(current.value)}`,
+                    {
+                      label: `${s.view.viewName}(${s.key.id})`,
+                      expected: "none",
+                      actual: summarize(current.value),
+                    },
                   );
                 break;
               }
+              const viewLabel = `${s.view.viewName}(${s.key.id})`;
               if (Option.isNone(current))
-                return yield* fail(`${s.view.viewName}(${s.key.id}) does not exist`);
+                return yield* fail(`${viewLabel} does not exist`, {
+                  label: viewLabel,
+                  expected: typeof s.expected === "function" ? "a state" : summarize(s.expected),
+                  actual: "none",
+                });
               if (typeof s.expected === "function") {
                 const assert = s.expected as (state: unknown) => void;
                 yield* Effect.try({
@@ -558,7 +908,12 @@ const make =
                 });
               } else if (!partial(s.expected, current.value)) {
                 return yield* fail(
-                  `${s.view.viewName}(${s.key.id})\n  expected ${show(s.expected)}\n  actual   ${show(current.value)}`,
+                  `${viewLabel}\n  expected ${show(s.expected)}\n  actual   ${show(current.value)}`,
+                  {
+                    label: viewLabel,
+                    expected: summarize(s.expected),
+                    actual: summarize(current.value),
+                  },
                 );
               }
               break;
@@ -605,14 +960,30 @@ const make =
               cursors.set(id, from + expected.length);
               break;
             }
-            case "ExpectCall": {
+            case "Call": {
               const name = `${s.op.system}.${s.op.op}`;
+              if (s.tag !== undefined && observed.some((c) => c.tag === s.tag)) {
+                return yield* fail(`"${s.tag}" already names a call`);
+              }
+              if (!stubbed.has(s.op.system)) {
+                const made = observed.filter((c) => c.system === s.op.system && c.op === s.op.op);
+                // Each real call is matched once, in the order calls were made.
+                const match = made.find((c) => !c.expected && partial(s.args, c.args));
+                if (!match) {
+                  return yield* fail(
+                    `no unmatched call to ${name} matches ${show(s.args)}; made: ${show(made.map((c) => c.args))}`,
+                  );
+                }
+                match.expected = true;
+                match.tag = s.tag;
+                break;
+              }
               const pending = calls.filter((c) => c.system === s.op.system && c.op === s.op.op);
-              // Calls are kept in the order they were made: a tag names the earliest match.
-              const match = pending.find((c) => c.tag === undefined && partial(s.args, c.args));
+              // Calls are kept in the order they were made: each is matched once, earliest first.
+              const match = pending.find((c) => !c.expected && partial(s.args, c.args));
               if (!match) {
                 return yield* fail(
-                  `no pending call to ${name} matches ${show(s.args)}; pending: ${show(pending.map((c) => c.args))}`,
+                  `no unmatched pending call to ${name} matches ${show(s.args)}; pending: ${show(pending.map((c) => c.args))}`,
                 );
               }
               if (s.tag !== undefined) {
@@ -621,6 +992,7 @@ const make =
                 }
                 match.tag = s.tag;
               }
+              match.expected = true;
               break;
             }
             case "Signal": {
@@ -653,8 +1025,13 @@ const make =
                 assertedDeaths.add(`${s.saga.sagaName}/${run.executionId}`);
               break;
             }
-            case "Resolve": {
+            case "Answer": {
               const name = `${s.op.system}.${s.op.op}`;
+              if (!stubbed.has(s.op.system)) {
+                return yield* fail(
+                  `${s.op.system} is not stubbed, so its calls run for real; assert how one ended with returned, failed or died`,
+                );
+              }
               let call: PendingCall | undefined;
               if (s.tag !== undefined) {
                 call = calls.find((c) => c.tag === s.tag);
@@ -674,44 +1051,138 @@ const make =
                 if (pending.length === 0) return yield* fail(`no pending call to ${name}`);
                 if (pending.length > 1) {
                   return yield* fail(
-                    `${pending.length} pending calls to ${name}; name each with expectCall("<tag>", ...) and resolve it by tag`,
+                    `${pending.length} pending calls to ${name}; name each with call("<tag>", ...) and answer it by tag`,
                   );
                 }
                 call = pending[0];
               }
+              if (!call!.expected) {
+                return yield* fail(
+                  `${name}(${show(call!.args)}) is answered before a call step checks its arguments`,
+                );
+              }
               calls.splice(calls.indexOf(call!), 1);
-              yield* Deferred.succeed(call!.deferred, s.value);
+              yield* Deferred.done(call!.deferred, s.exit);
               yield* settle(step);
+              break;
+            }
+            case "Returned": {
+              const name = `${s.op.system}.${s.op.op}`;
+              if (stubbed.has(s.op.system)) {
+                return yield* fail(
+                  `${s.op.system} is stubbed; answer its calls with succeed, fail or die`,
+                );
+              }
+              let call: ObservedCall | undefined;
+              if (s.tag !== undefined) {
+                call = observed.find((c) => c.tag === s.tag);
+                if (!call) return yield* fail(`no call is named "${s.tag}"`);
+                if (call.system !== s.op.system || call.op !== s.op.op) {
+                  return yield* fail(
+                    `"${s.tag}" names a call to ${call.system}.${call.op}, not ${name}`,
+                  );
+                }
+              } else {
+                const made = observed.filter((c) => c.system === s.op.system && c.op === s.op.op);
+                if (made.length === 0) return yield* fail(`no unasserted call to ${name}`);
+                if (made.length > 1) {
+                  return yield* fail(
+                    `${made.length} unasserted calls to ${name}; name each with call("<tag>", ...) and assert it by tag`,
+                  );
+                }
+                call = made[0]!;
+              }
+              if (!call.expected) {
+                return yield* fail(
+                  `${name}(${show(call.args)}) is asserted before a call step checks its arguments`,
+                );
+              }
+              const actual = exitJson(call.exit!);
+              const expected =
+                s.expected._tag === "Success"
+                  ? { _tag: "Success", value: normalize(s.expected.value) }
+                  : s.expected._tag === "Failure"
+                    ? { _tag: "Failure", error: errorJson(s.expected.error) }
+                    : { _tag: "Died" };
+              const compared = actual._tag === "Died" ? { _tag: "Died" } : actual;
+              if (!equal(expected, compared)) {
+                return yield* fail(
+                  `${name}(${show(call.args)})\n  expected ${show(expected)}\n  actual   ${show(actual)}`,
+                );
+              }
+              observed.splice(observed.indexOf(call), 1);
               break;
             }
           }
         }
-        if (unassertedRejection) {
-          return yield* new StoryFailure({
-            step: unassertedRejection.step,
-            message: `the command was rejected with ${unassertedRejection.tag}, which no step asserts`,
-          });
-        }
+        if (unassertedRejection) return yield* rejectionNotAsserted(unassertedRejection);
         const death = platform.control.deaths.find(
           ({ saga, executionId }) => !assertedDeaths.has(`${saga}/${executionId}`),
         );
         if (death) {
-          return yield* new StoryFailure({
+          return yield* new StepFailed({
             step: steps.length,
+            atEnd: true,
             message: `saga ${death.saga} run ${death.executionId} died with ${String(death.defect)}, which no step asserts`,
           });
         }
-        if (calls.length > 0) {
-          return yield* new StoryFailure({
+        if (observed.length > 0) {
+          return yield* new StepFailed({
             step: steps.length,
-            message: `unresolved external system calls at the end of the story: ${show(calls.map((c) => `${c.system}.${c.op}(${show(c.args)})`))}`,
+            atEnd: true,
+            message: `real external system calls no step asserts (use returned, failed or died): ${show(observed.map((c) => `${c.system}.${c.op}(${show(c.args)})`))}`,
+          });
+        }
+        if (calls.length > 0) {
+          return yield* new StepFailed({
+            step: steps.length,
+            atEnd: true,
+            message: `unanswered external system calls at the end of the story: ${show(calls.map((c) => `${c.system}.${c.op}(${show(c.args)})`))}`,
           });
         }
       });
 
-      // `hosted` satisfies the Domain, the platform and the scripted Ports; what
+      // Turn a failed step into a failure that shows the whole story.
+      const report = (failure: StepFailed) =>
+        Effect.gen(function* () {
+          const internals = yield* Model.Internals;
+          const events: Record<string, ReadonlyArray<string>> = {};
+          for (const [name, ref] of touched) {
+            const committed =
+              internals.aggregates.get(ref.aggregate)!.events?.(ref.id as string) ??
+              Effect.succeed([]);
+            events[name] = (yield* committed).map(
+              (e) => (e.event as { readonly _tag: string })._tag,
+            );
+          }
+          const reports = steps.map((s, index): StepReport => ({
+            step: index + 1,
+            kind: s._tag,
+            status:
+              index + 1 < failure.step || (failure.atEnd && index + 1 === failure.step)
+                ? "passed"
+                : index + 1 === failure.step
+                  ? "failed"
+                  : "not-run",
+            summary: describeStep(s),
+          }));
+          return yield* new StoryFailure({
+            step: failure.step,
+            reason: failure.message,
+            message: `${failure.message}\n\n${renderReport(failure, reports, events)}`,
+            steps: reports,
+            events,
+          });
+        });
+
+      // `hosted` satisfies the Domain, the platform and the stubbed external systems; what
       // remains is whatever the policy Layers need from outside (`LR`'s rest).
-      return yield* run.pipe(Effect.provide(hosted));
+      return yield* run.pipe(
+        Effect.catchTag("StepFailed", report),
+        Effect.provide(
+          Layer.mergeAll(hosted, Layer.succeed(ExternalSystem.CallRecorder, recorder)),
+        ),
+      );
     }) as Effect.Effect<
       void,
       StoryFailure | LE,
@@ -720,10 +1191,11 @@ const make =
 
 /**
  * Given / when / then specifications of a domain model, run against the real
- * model in memory: policies run for real, external system calls wait until you resolve
- * them, and a clock you control stamps commands and fires scheduled ones. A
- * story fails on any rejection, external system call or saga defect it
- * doesn't account for.
+ * model in memory: policies run for real, calls to stubbed external systems
+ * wait until you answer them, calls to the others run through their adapters
+ * while the story records them, and a clock you control stamps commands and
+ * fires scheduled ones. A story fails on any rejection, external system call
+ * or saga defect it doesn't account for.
  *
  * ### Writing a story
  * **Example:** A withdrawal and an overdraft
@@ -751,17 +1223,36 @@ const make =
  * ### External systems and the clock
  * **Example:** Answer an external system call, then move the clock
  * ```typescript
- * Story.expectCall(FraudCheck.score, { accountId: account.id, amount: 60_000 }),
- * Story.resolve(FraudCheck.score, { risk: 0.95 }),
+ * Story.call(FraudCheck.score, { accountId: account.id, amount: 60_000 }),
+ * Story.succeed(FraudCheck.score, { risk: 0.95 }),
  * Story.clock("2026-01-02T09:00:00Z"),
  * ```
  *
  * **Example:** Name calls when several are waiting
  * ```typescript
- * Story.expectCall("a-1", FraudCheck.score, { accountId: a1.id }),
- * Story.expectCall("a-2", FraudCheck.score, { accountId: a2.id }),
- * Story.resolve("a-2", FraudCheck.score, { risk: 0.1 }),
- * Story.resolve("a-1", FraudCheck.score, { risk: 0.95 }),
+ * Story.call("a-1", FraudCheck.score, { accountId: a1.id }),
+ * Story.call("a-2", FraudCheck.score, { accountId: a2.id }),
+ * Story.succeed("a-2", FraudCheck.score, { risk: 0.1 }),
+ * Story.succeed("a-1", FraudCheck.score, { risk: 0.95 }),
+ * ```
+ *
+ * **Example:** Assert a real call to a system that is not stubbed
+ * ```typescript
+ * const story = Story.make(Bank, { layer: BankHandlers, stub: [FraudCheck] });
+ *
+ * story(
+ *   Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
+ *   Story.call(Payments.refund, { settlementId: "st_1", amount: 500 }),
+ *   Story.returned(Payments.refund, { refundId: "re_st_1" }),
+ * ).pipe(Effect.provide(StripePayments));
+ * ```
+ *
+ * **Example:** Fail a call with the operation's declared error, or a defect
+ * ```typescript
+ * Story.call(LockVendor.deleteCode, { codeId: "pc_1" }),
+ * Story.fail(LockVendor.deleteCode, new LockVendorRefused({ reason: "gateway-lost" })),
+ * Story.call(LockVendor.deleteCode, { codeId: "pc_2" }),
+ * Story.die(LockVendor.deleteCode, new Error("socket closed")),
  * ```
  *
  * ### Sagas
@@ -788,8 +1279,13 @@ export const Story = {
   view,
   emitted,
   streamed,
-  expectCall,
-  resolve,
+  call: callStep,
+  succeed,
+  fail,
+  die,
+  returned,
+  failed,
+  died,
   clock,
   provide,
   signal,

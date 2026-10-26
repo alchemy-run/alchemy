@@ -1,11 +1,11 @@
 import * as Prisma from "@alchemy.run/prisma";
 import { PrismaLogStreamError } from "@alchemy.run/prisma/PrismaLogs";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "alchemy-test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { AuthProviders } from "alchemy/Auth/AuthProvider";
-import * as CliKit from "alchemy/Cli/CliKit";
+import * as Interaction from "alchemy/Interaction";
 import * as Provider from "alchemy/Provider";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -41,7 +41,7 @@ const providePrismaDev = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       ),
     ),
     Effect.provide(devAlchemyContext),
-    Effect.provide(CliKit.layer({ input: false })),
+    Effect.provide(Interaction.layerNonInteractive()),
   );
 
 const reconcileInput = (id: string, news: unknown, output?: unknown) =>
@@ -239,7 +239,7 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
               ),
             ),
             Effect.provide(NodeServices.layer),
-            Effect.provide(CliKit.layer({ input: false })),
+            Effect.provide(Interaction.layerNonInteractive()),
           ),
         ),
       );

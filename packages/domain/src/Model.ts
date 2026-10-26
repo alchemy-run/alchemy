@@ -110,6 +110,32 @@ export interface Any {
   readonly definitions: Kernel.Definitions;
 }
 
+type ProvidedBy<
+  A extends ReadonlyArray<Aggregate.Any>,
+  V extends ReadonlyArray<View.Any>,
+  J extends ReadonlyArray<Projection.Any>,
+  S extends ReadonlyArray<DomainStream.Any>,
+  G extends ReadonlyArray<Saga.Any>,
+> =
+  | Identifier<A[number]>
+  | Identifier<V[number]>
+  | Identifier<S[number]>
+  | Saga.Identifier<G[number]>
+  | Projection.ProgressIdentifier<J[number]>;
+
+/** How a model's `layer` hosts it: tuning that doesn't change what the model means. */
+export interface LayerOptions {
+  /** What the hosted model records in traces. See {@link Telemetry.Options}. */
+  readonly telemetry?: Telemetry.Options;
+}
+
+/** Every implementation a model's `layer` requires: its policies, projections and sagas. */
+type HandledBy<
+  P extends ReadonlyArray<Policy.Any>,
+  J extends ReadonlyArray<Projection.Any>,
+  G extends ReadonlyArray<Saga.Any>,
+> = Identifier<P[number]> | Identifier<J[number]> | Saga.ImplementationIdentifier<G[number]>;
+
 /**
  * The aggregates, views and policies you host together. `layer(policies)`
  * builds them all on the Platform you provide, and provides each aggregate
@@ -138,32 +164,6 @@ export interface Any {
  *
  * @primitive
  */
-type ProvidedBy<
-  A extends ReadonlyArray<Aggregate.Any>,
-  V extends ReadonlyArray<View.Any>,
-  J extends ReadonlyArray<Projection.Any>,
-  S extends ReadonlyArray<DomainStream.Any>,
-  G extends ReadonlyArray<Saga.Any>,
-> =
-  | Identifier<A[number]>
-  | Identifier<V[number]>
-  | Identifier<S[number]>
-  | Saga.Identifier<G[number]>
-  | Projection.ProgressIdentifier<J[number]>;
-
-/** How a model's `layer` hosts it: tuning that doesn't change what the model means. */
-export interface LayerOptions {
-  /** What the hosted model records in traces. See {@link Telemetry.Options}. */
-  readonly telemetry?: Telemetry.Options;
-}
-
-/** Every implementation a model's `layer` requires: its policies, projections and sagas. */
-type HandledBy<
-  P extends ReadonlyArray<Policy.Any>,
-  J extends ReadonlyArray<Projection.Any>,
-  G extends ReadonlyArray<Saga.Any>,
-> = Identifier<P[number]> | Identifier<J[number]> | Saga.ImplementationIdentifier<G[number]>;
-
 export const make = <
   const Name extends string,
   const A extends ReadonlyArray<Aggregate.Any>,
@@ -195,6 +195,30 @@ export const make = <
     }
   } as unknown as ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>>;
 };
+
+/**
+ * Check a Model's definitions without hosting it: every problem that would
+ * otherwise fail its Layer's build, such as a view consuming a source keyed
+ * by another aggregate without `keyOf`, a view with `state` but no
+ * `initial`, a policy listening for an event no source emits, or a stream
+ * with two writers. Returns all of them, in definition order; an empty
+ * array means the Model is valid. Problems that depend on what a handler
+ * returns, such as `decide` returning an event its command does not
+ * declare, still surface when the handler runs.
+ *
+ * **Example:** A unit test for the whole Model
+ * ```typescript
+ * import * as Domain from "@alchemy.run/domain";
+ * import { expect, it } from "vitest";
+ * import { Bank } from "./Bank.model.ts";
+ *
+ * it("the model is well defined", () => {
+ *   expect(Domain.verify(Bank)).toEqual([]);
+ * });
+ * ```
+ */
+export const verify = (model: Any): ReadonlyArray<Kernel.DefinitionError> =>
+  Kernel.verify(model.definitions);
 
 /**
  * Trace one projection batch. A batch merges events from many commits, so it
@@ -250,7 +274,7 @@ const build = <A, E, R>(
 ) =>
   Effect.gen(function* () {
     const platform = yield* Platform;
-    const kernel = Kernel.make(definitions, telemetry);
+    const kernel = yield* Kernel.make(definitions, telemetry);
 
     const aggregateStores = new Map<string, AggregateStore>();
     const viewStores = new Map<string, ViewStore>();

@@ -1,6 +1,5 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 
 // #region show
 export default AWS.Lambda.Function(
@@ -12,8 +11,12 @@ export default AWS.Lambda.Function(
       attributes: { room: "S" },
     });
 
-    yield* AWS.DynamoDB.consumeTableChanges(source, { streamViewType: "NEW_IMAGE" }, (records) =>
-      records.pipe(Stream.runForEach(Effect.log)),
+    yield* AWS.DynamoDB.consumeTableChanges(
+      source,
+      { streamViewType: "NEW_IMAGE" },
+      Effect.fn(function* (event) {
+        yield* Effect.log(event.Records);
+      }),
     );
 
     return {};

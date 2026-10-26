@@ -19,13 +19,13 @@ import {
   optInTagsOf,
   timeoutOf,
   type TestOptions,
-} from "alchemy-test";
+} from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import type { AlchemyContext } from "../AlchemyContext.ts";
-import type { CompiledStack } from "../Stack.ts";
+import type { CompiledStack, StackDefinition } from "../Stack.ts";
 import type { Stage } from "../Stage.ts";
 import * as Core from "./Core.ts";
 
@@ -108,8 +108,8 @@ export interface TestApi {
   afterAll: AfterAllFn;
   afterEach: AfterEachFn;
   deploy: Core.Deploy;
-  destroy: (
-    stack: TestEffect<CompiledStack, Stage | AlchemyContext>,
+  destroy: <ROut>(
+    stack: StackDefinition<ROut>,
     options?: { stage?: string; include?: never; exclude?: never },
   ) => ReturnType<typeof Core.destroy>;
 }

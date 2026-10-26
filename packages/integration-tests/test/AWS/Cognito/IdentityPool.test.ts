@@ -6,8 +6,8 @@ import {
   UserPoolClient,
 } from "@alchemy.run/aws/Cognito";
 import { Role } from "@alchemy.run/aws/IAM";
+import { expect } from "@alchemy.run/test";
 import * as ci from "@distilled.cloud/aws/cognito-identity";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";

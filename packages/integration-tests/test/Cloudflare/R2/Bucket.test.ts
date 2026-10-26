@@ -2,10 +2,10 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import type { CloudflareResolvedCredentials } from "@alchemy.run/cloudflare/Auth/AuthConfig";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { LocalRuntimeState } from "@alchemy.run/cloudflare/LocalRuntime";
+import { describe, expect, it } from "@alchemy.run/test";
 import { apiTokenCredentials, Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { NodeServices } from "@effect/platform-node";
-import { describe, expect, it } from "alchemy-test";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import * as Drift from "alchemy/Drift";
@@ -19,7 +19,8 @@ import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import type * as HttpClient from "effect/http/HttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import type * as HttpClientError from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Redacted from "effect/Redacted";
@@ -28,6 +29,7 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { resourceContext } from "../../Util/ResourceContext.ts";
+import MultipartWorker, { MultipartBucket } from "./fixtures/multipart-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -191,6 +193,62 @@ test.provider(
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"] },
 );
+
+// An incomplete multipart upload holds a bucket but is invisible to the
+// object listing; only R2's S3 API can abort it, with S3 credentials derived
+// from the API token alchemy is authenticated with.
+// See https://github.com/alchemy-run/alchemy/issues/2478.
+test.provider(
+  "forceDestroy aborts incomplete multipart uploads with the API token",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const { bucket, worker } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* MultipartBucket;
+          const worker = yield* MultipartWorker;
+          return { bucket, worker };
+        }),
+      );
+
+      const key = "big/entry.bin";
+      const client = yield* HttpClient.HttpClient;
+      const post = (url: string) =>
+        client.post(url).pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? res.json
+              : Effect.fail<WorkerNotReady | HttpClientError.HttpClientError>(
+                  new WorkerNotReady({ status: res.status }),
+                ),
+          ),
+          Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
+        );
+      yield* post(`${worker.url}/start-upload?key=${encodeURIComponent(key)}`);
+
+      // The upload lists no objects, yet R2 refuses to delete the bucket.
+      expect(yield* listKeysWhenReady(accountId, bucket.bucketName, 0)).toEqual([]);
+      const refused = yield* r2
+        .deleteBucket({ accountId, bucketName: bucket.bucketName })
+        .pipe(Effect.flip);
+      expect(refused._tag).toEqual("BucketNotEmpty");
+
+      // The testing profile authenticates with an API token, so destroy
+      // aborts the upload through R2's S3 API and deletes the bucket.
+      yield* stack.destroy();
+
+      yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:r2", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
+  },
+);
+
+class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{ status: number }> {}
 
 // Without `forceDestroy`, R2's own refusal to delete a non-empty bucket is
 // the last line of defense for the data in it — alchemy must not empty the
@@ -859,6 +917,115 @@ test.provider(
 );
 
 test.provider(
+  "local uploads are enabled and disabled in place",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("LocalUploadsBucket", { forceDestroy: true });
+        }),
+      );
+      expect(initial.localUploads).toBeUndefined();
+
+      const enabled = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("LocalUploadsBucket", {
+            forceDestroy: true,
+            localUploads: true,
+          });
+        }),
+      );
+      expect(enabled.bucketName).toEqual(initial.bucketName);
+      expect(enabled.localUploads).toEqual(true);
+      const observedEnabled = yield* r2.getBucketLocalUploads({
+        accountId,
+        bucketName: initial.bucketName,
+      });
+      expect(observedEnabled.enabled).toEqual(true);
+
+      const disabled = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("LocalUploadsBucket", {
+            forceDestroy: true,
+            localUploads: false,
+          });
+        }),
+      );
+      expect(disabled.bucketName).toEqual(initial.bucketName);
+      expect(disabled.localUploads).toEqual(false);
+      const observedDisabled = yield* r2.getBucketLocalUploads({
+        accountId,
+        bucketName: initial.bucketName,
+      });
+      expect(observedDisabled.enabled).toEqual(false);
+
+      // Re-enable, then drop the prop: a declared-then-removed setting is disabled.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("LocalUploadsBucket", {
+            forceDestroy: true,
+            localUploads: true,
+          });
+        }),
+      );
+      const removed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("LocalUploadsBucket", { forceDestroy: true });
+        }),
+      );
+      expect(removed.bucketName).toEqual(initial.bucketName);
+      const observedRemoved = yield* r2.getBucketLocalUploads({
+        accountId,
+        bucketName: initial.bucketName,
+      });
+      expect(observedRemoved.enabled).toEqual(false);
+
+      yield* stack.destroy();
+      yield* waitForBucketToBeDeleted(initial.bucketName, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"] },
+);
+
+test.provider(
+  "local uploads are refused on a jurisdiction-restricted bucket",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const name = `alchemy-eu-local-uploads-${stack.stage}`
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "-");
+      const refused = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.R2.Bucket("EuLocalUploadsBucket", {
+              name,
+              jurisdiction: "eu",
+              localUploads: true,
+            });
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(refused._tag).toEqual("LocalUploadsUnsupported");
+
+      // Refused before create: no EU bucket was left behind.
+      const missing = yield* r2
+        .getBucket({ accountId, bucketName: name, jurisdiction: "eu" })
+        .pipe(Effect.flip);
+      expect(missing._tag).toEqual("NoSuchBucket");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"] },
+);
+
+test.provider(
   "managed r2.dev domain is enabled and disabled",
   (stack) =>
     Effect.gen(function* () {
@@ -1234,6 +1401,7 @@ const stubbedOutput = {
   lifecycleRules: [],
   cors: [],
   locks: undefined,
+  localUploads: undefined,
   publicDomain: undefined,
 };
 

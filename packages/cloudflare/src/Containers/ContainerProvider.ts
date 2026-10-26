@@ -325,11 +325,12 @@ export const LiveContainerProvider = () =>
           ),
         );
         const response = yield* http.execute(request).pipe(
-          Effect.mapError(() =>
+          Effect.mapError((cause) =>
             ContainerRegistryError.make({
               reason: "ManifestRequestFailed",
               message: "Failed to resolve the container registry digest",
               imageRef,
+              cause,
             }),
           ),
         );
@@ -959,8 +960,8 @@ export const LiveContainerProvider = () =>
           return String(error);
         };
 
-        // Engine has cleared us via `read` (foreign-named applications are
-        // surfaced as `Unowned`). Re-fetch the existing application to fold
+        // Engine has cleared us via `read` or `observe` (foreign-named
+        // applications are surfaced as `Unowned`). Re-fetch the existing application to fold
         // it into the upsert path.
         const existingByName = yield* findApplicationByName(name);
 
@@ -1283,6 +1284,18 @@ export const LiveContainerProvider = () =>
           if (imageHash !== output.hash?.image || !deepEqual(dev, output.dev)) {
             return { action: "update" } as const;
           }
+        }),
+        observe: Effect.fn(function* ({ id, news = {} }) {
+          // Precreate creates — or adopts and updates — the application
+          // named here; ownership follows `read`.
+          if (!isResolved(nameOf(news))) return undefined;
+          const name = yield* createApplicationName(id, nameOf(news));
+          const existing = yield* findApplicationByName(name);
+          if (existing === undefined) return undefined;
+          const observed = toAttributes(existing);
+          // Generated names identify this instance by its random suffix.
+          // Explicit names alone do not establish ownership.
+          return nameOf(news) === undefined ? observed : Unowned(observed);
         }),
         precreate: Effect.fn(function* ({ id, news = {}, session }) {
           yield* validateContainerConfiguration(news);
@@ -1738,23 +1751,31 @@ const toAttributes = (
     | Containers.UpdateContainerApplicationResponse
     | Containers.GetContainerApplicationResponse
     | Containers.ListContainerApplicationsResponse[number],
-): ContainerApplication["Attributes"] => ({
-  applicationId: application.id,
-  applicationName: application.name,
-  accountId: application.accountId,
-  schedulingPolicy: application.schedulingPolicy,
-  instances: application.instances ?? undefined,
-  maxInstances: application.maxInstances ?? undefined,
-  constraints: normalizeNulls(
-    application.constraints as ContainerApplication.Constraints | undefined,
-  ),
-  affinities: normalizeNulls(application.affinities as ContainerApplication.Affinities | undefined),
-  configuration: normalizeNulls(
-    application.configuration,
-  ) as Partial<ContainerApplication.Configuration>,
-  observability: normalizeNulls(application.observability ?? undefined),
-  durableObjects: normalizeNulls(application.durableObjects) as { namespaceId: string } | undefined,
-  createdAt: application.createdAt,
-  version: application.version ?? undefined,
-  dev: undefined,
-});
+): ContainerApplication["Attributes"] => {
+  // Durable Object applications have no scaling, affinities or versions.
+  const scheduled = "version" in application ? application : undefined;
+  return {
+    applicationId: application.id,
+    applicationName: application.name,
+    accountId: application.accountId,
+    schedulingPolicy: application.schedulingPolicy,
+    instances: scheduled?.instances ?? undefined,
+    maxInstances: scheduled?.maxInstances ?? undefined,
+    constraints: normalizeNulls(
+      application.constraints as ContainerApplication.Constraints | undefined,
+    ),
+    affinities: normalizeNulls(
+      scheduled?.affinities as ContainerApplication.Affinities | undefined,
+    ),
+    configuration: normalizeNulls(
+      application.configuration,
+    ) as Partial<ContainerApplication.Configuration>,
+    observability: normalizeNulls(application.observability ?? undefined),
+    durableObjects: normalizeNulls(application.durableObjects) as
+      | { namespaceId: string }
+      | undefined,
+    createdAt: application.createdAt,
+    version: scheduled?.version ?? undefined,
+    dev: undefined,
+  };
+};
