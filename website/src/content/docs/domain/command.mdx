@@ -57,7 +57,7 @@ export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
 
 The brand makes the id its own type. A `CustomerId` is a string too, but passing one where an `AccountId` is expected is a type error, so a command can't be sent to the wrong kind of instance.
 
-The target must be the id of the aggregate that lists the command. If `Account` lists a command whose target is a `CustomerId`, or a plain `Schema.String`, the `Account` declaration is a type error that names the command.
+The target must be the id of the aggregate that lists the command. If `Account` lists a command whose target is a `CustomerId`, or a plain `Schema.String`, that entry in `Account`'s `commands` is a type error that names the command.
 
 The target isn't part of the command's data. You pass it alongside the command when you send it, and the model uses it to route the command to that one instance.
 
