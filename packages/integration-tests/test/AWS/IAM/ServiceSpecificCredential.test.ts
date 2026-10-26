@@ -26,7 +26,8 @@ describe(
             const user = yield* User("SsCredListOwner", {});
             const credential = yield* ServiceSpecificCredential("SsCredListCred", {
               userName: user.userName,
-              serviceName: "codecommit.amazonaws.com",
+              // IAM accepts CredentialAgeDays only for long-term API key services.
+              serviceName: "bedrock.amazonaws.com",
               // Duration.Input prop — converted to whole wire days.
               credentialAge: "30 days",
             });
@@ -37,7 +38,7 @@ describe(
         // The Duration prop round-trips as an expiration ~30 days out, and
         // the creation-only secret is captured as a Redacted output.
         expect(deployed.credential.expirationDate).toBeDefined();
-        expect(deployed.credential.servicePassword).toBeDefined();
+        expect(deployed.credential.serviceCredentialSecret).toBeDefined();
 
         const provider = yield* Provider.findProvider(ServiceSpecificCredential);
         const all = yield* provider.list();
@@ -48,7 +49,7 @@ describe(
         );
         expect(found).toBeDefined();
         expect(found?.userName).toBe(deployed.user.userName);
-        expect(found?.serviceName).toBe("codecommit.amazonaws.com");
+        expect(found?.serviceName).toBe("bedrock.amazonaws.com");
         expect(found?.servicePassword).toBeUndefined();
         expect(found?.serviceCredentialSecret).toBeUndefined();
 
