@@ -1,5 +1,5 @@
 import { expect } from "bun:test";
-import * as Cloud from "alchemy/Fly";
+import * as Cloud from "@alchemy.run/fly";
 import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

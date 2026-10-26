@@ -1,3 +1,4 @@
+import type * as Effect from "effect/Effect";
 import type { HyperdriveOrigin } from "./bindings/hyperdrive/HyperdriveOrigin.shared.ts";
 import type { QueueConsumer } from "./bindings/queue/QueueOptions.shared.ts";
 import type { ContainerImage } from "./Docker.ts";
@@ -8,6 +9,13 @@ import type { OutputSink, WorkerdExit } from "./workerd/Workerd.ts";
 export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly name: string;
   readonly proxySharedSecret?: string;
+  /**
+   * The URL clients reach the Worker at, when a dev server or proxy fronts
+   * the runtime. Bindings that hand out URLs to the Worker's own endpoints
+   * (Stream preview URLs, Images variant URLs) use it, as Miniflare uses its
+   * public URL. Defaults to the runtime's own entry address.
+   */
+  readonly publicUrl?: string;
   readonly compatibilityDate: string;
   readonly compatibilityFlags: Array<string>;
   readonly bindings: B;
@@ -77,6 +85,21 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    */
   readonly cf?: Record<string, unknown>;
   /**
+   * The zone outbound `fetch()`es report in their `CF-Worker` header, as on
+   * Cloudflare's edge: the host of the Worker's first route or custom
+   * domain. Defaults to Miniflare's `<name>.example.com`.
+   */
+  readonly zone?: string;
+  /**
+   * Simulates a request that passed Cloudflare Access: every request's
+   * `ctx.access` carries `aud`, and `ctx.access.getIdentity()` resolves
+   * `identity`. Mirrors Wrangler's `access.dev` config.
+   */
+  readonly access?: {
+    readonly aud?: string;
+    readonly identity?: Record<string, unknown>;
+  };
+  /**
    * Controls how output from the underlying `workerd` process is surfaced.
    *
    * By default, workerd does not log uncaught exceptions thrown by the
@@ -96,6 +119,16 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * with backoff between attempts. A failed replacement stops recovery.
    */
   readonly onRestart?: (exit: WorkerdExit) => void;
+  /**
+   * Runs once, after bindings are prepared and container images are built or
+   * pulled, immediately before the first `workerd` process is spawned. A
+   * caller replacing a previous instance of this worker uses it to tear that
+   * instance down first when the two cannot overlap — e.g. containers, whose
+   * deterministic names make a new process adopt ("recover") the previous
+   * process's still-running container, which that process's teardown then
+   * removes.
+   */
+  readonly beforeServe?: Effect.Effect<void>;
   readonly unsafe?: Partial<WorkerdConfig.Worker>;
 }
 
@@ -153,7 +186,7 @@ export interface DurableObjectNamespace {
    * starts one per DO instance via the worker's `containerEngine` and exposes
    * it as `ctx.container`.
    */
-  container?: ContainerImage;
+  container?: ContainerImage | { images: Record<string, ContainerImage> };
 }
 
 export interface Workflow {

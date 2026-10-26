@@ -14,15 +14,25 @@ import {
   BINDING_EMAIL_DIRECTORY,
   BINDING_EMAIL_DISK,
   PATH_EMAIL,
+  PATH_EMAIL_HANDLER,
   PATH_HANDLER_PREFIX,
 } from "./EmailOptions.shared.ts";
-import { BINDING_USER_WORKER_DIRECT, PATH_MODULE_RUNNER_INIT } from "./EntryOptions.shared.ts";
+import {
+  BINDING_ACCESS_BLOB,
+  BINDING_USER_WORKER_DIRECT,
+  HEADER_ACCESS_BLOB,
+  PATH_MODULE_RUNNER_INIT,
+} from "./EntryOptions.shared.ts";
 import {
   BINDING_PROXY_SHARED_SECRET,
   HEADER_ORIGINAL_URL,
   HEADER_PROXY_SHARED_SECRET,
 } from "./ProxyHeaders.shared.ts";
-import { PATH_SCHEDULED, PATH_SCHEDULED_LEGACY } from "./ScheduledOptions.shared.ts";
+import {
+  PATH_SCHEDULED,
+  PATH_SCHEDULED_HANDLER,
+  PATH_SCHEDULED_LEGACY,
+} from "./ScheduledOptions.shared.ts";
 
 interface Env {
   [BINDING_PROXY_SHARED_SECRET]: string;
@@ -39,6 +49,8 @@ interface Env {
    */
   [BINDING_USER_WORKER_DIRECT]: Fetcher;
   CF_BLOB: Record<string, unknown>;
+  /** Simulated Cloudflare Access state (`{ app_aud, jwt_claims }`). */
+  [BINDING_ACCESS_BLOB]?: Record<string, unknown>;
   // Omitted when the runtime storage isn't disk-backed (never the case with
   // the built-in storage layers) — replies then fail with a clear error.
   [BINDING_EMAIL_DISK]?: Fetcher;
@@ -416,7 +428,7 @@ export default <ExportedHandler<Env>>{
         return Response.json({ ok: true, result });
       } catch (error) {
         return makeErrorResponse(
-          new SystemError({
+          SystemError.make({
             subtag: "UserQueueHandler",
             message: `User worker's queue handler threw: ${
               error instanceof Error ? error.message : String(error)
@@ -427,11 +439,15 @@ export default <ExportedHandler<Env>>{
       }
     }
     // Trigger the user worker's `scheduled()` handler, mirroring Miniflare's
-    // `/cdn-cgi/handler/scheduled` route (`workers/core/scheduled.ts`).
+    // `/cdn-cgi/local/scheduled` route (`workers/core/scheduled.ts`).
     // Like the queue route above, this is always on: the entry socket only
     // binds 127.0.0.1 during local development, so there is no equivalent of
     // Miniflare's `unsafeTriggerHandlers` gate.
-    if (url.pathname === PATH_SCHEDULED || url.pathname === PATH_SCHEDULED_LEGACY) {
+    if (
+      url.pathname === PATH_SCHEDULED ||
+      url.pathname === PATH_SCHEDULED_HANDLER ||
+      url.pathname === PATH_SCHEDULED_LEGACY
+    ) {
       try {
         const time = url.searchParams.get("time");
         const result = await env[BINDING_USER_WORKER_DIRECT].scheduled({
@@ -444,7 +460,7 @@ export default <ExportedHandler<Env>>{
         return new Response(result.outcome, { status: result.outcome === "ok" ? 200 : 500 });
       } catch (error) {
         return makeErrorResponse(
-          new SystemError({
+          SystemError.make({
             subtag: "UserScheduledHandler",
             message: `User worker's scheduled handler threw: ${
               error instanceof Error ? error.message : String(error)
@@ -455,12 +471,12 @@ export default <ExportedHandler<Env>>{
       }
     }
     // Dispatch an inbound email to the user worker's `email()` handler,
-    // mirroring Miniflare's `/cdn-cgi/handler/email` route
+    // mirroring Miniflare's `/cdn-cgi/local/email` route
     // (`workers/core/email.ts`). Like the scheduled route above, this is
     // always on. Errors thrown by the user's handler (including reply
     // validation failures propagated back over JSRPC) surface as a 500 with
     // the error stack, matching Miniflare's entry worker catch-all.
-    if (url.pathname === PATH_EMAIL) {
+    if (url.pathname === PATH_EMAIL || url.pathname === PATH_EMAIL_HANDLER) {
       try {
         return await handleEmail(url.searchParams, request as unknown as WorkersRequest, env);
       } catch (e) {
@@ -495,6 +511,12 @@ export default <ExportedHandler<Env>>{
     headers.delete(HEADER_CF_BLOB);
     headers.delete(HEADER_ORIGINAL_URL);
     headers.delete(HEADER_PROXY_SHARED_SECRET);
+    // workerd populates `ctx.access` from this header, so only the
+    // configured blob may set it (as Miniflare's entry worker does).
+    headers.delete(HEADER_ACCESS_BLOB);
+    if (env[BINDING_ACCESS_BLOB] !== undefined) {
+      headers.set(HEADER_ACCESS_BLOB, JSON.stringify(env[BINDING_ACCESS_BLOB]));
+    }
     if (secret !== null) headers.set("Host", url.host);
     if (clientIp && !headers.get("CF-Connecting-IP")) {
       // `clientIp` includes the port, e.g. `127.0.0.1:52621` or `[::1]:52621`
@@ -515,6 +537,28 @@ export default <ExportedHandler<Env>>{
     if (url.pathname === PATH_MODULE_RUNNER_INIT) {
       return await env[BINDING_USER_WORKER_DIRECT].fetch(userRequest as unknown as typeof request);
     }
-    return await env.USER_WORKER.fetch(userRequest as unknown as typeof request);
+    // The experimental and standard workers-types `Response` disagree too.
+    return combineRepeatedHeaders(
+      (await env.USER_WORKER.fetch(
+        userRequest as unknown as typeof request,
+      )) as unknown as Response,
+    );
   },
+};
+
+/**
+ * Sends each repeated response header (other than `Set-Cookie`) as one
+ * comma-joined line. HTTP treats the two forms as equivalent, but Bun's HTTP
+ * parser (its `node:http` client and `fetch`) keeps only the last of repeated
+ * lines, so a client running on Bun, such as the Vite dev proxy, would drop
+ * `a` and `b` from `x: a`, `x: b`, `x: c`. Iterating `Headers` yields each
+ * name once with its values joined, which `set` stores as a single line.
+ */
+const combineRepeatedHeaders = (response: Response): Response => {
+  if (response.status === 101) return response;
+  const combined = new Response(response.body, response);
+  for (const [name, value] of response.headers) {
+    if (name !== "set-cookie") combined.headers.set(name, value);
+  }
+  return combined;
 };

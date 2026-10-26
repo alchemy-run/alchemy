@@ -79,12 +79,10 @@ export const validateFieldValues = (
     const known = new Set(fields.map((field) => field.name));
     for (const key of Object.keys(values)) {
       if (!known.has(key)) {
-        return yield* Effect.fail(
-          new AuthError({
-            message:
-              `${provider}: unknown field '${key}'. ` + `Valid fields: ${[...known].join(", ")}.`,
-          }),
-        );
+        return yield* AuthError.make({
+          message:
+            `${provider}: unknown field '${key}'. ` + `Valid fields: ${[...known].join(", ")}.`,
+        });
       }
     }
     const collected: StoredValues = {};
@@ -92,19 +90,15 @@ export const validateFieldValues = (
       const raw = values[field.name] ?? field.defaultValue;
       if (raw === undefined || raw.length === 0) {
         if (field.optional) continue;
-        return yield* Effect.fail(
-          new AuthError({
-            message: `${provider}: missing required field '${field.name}' (${field.label}). Pass it with --set ${field.name}=<value>.`,
-          }),
-        );
+        return yield* AuthError.make({
+          message: `${provider}: missing required field '${field.name}' (${field.label}). Pass it with --set ${field.name}=<value>.`,
+        });
       }
       const invalid = field.validate?.(raw);
       if (invalid !== undefined) {
-        return yield* Effect.fail(
-          new AuthError({
-            message: `${provider}: invalid '${field.name}': ${invalid}`,
-          }),
-        );
+        return yield* AuthError.make({
+          message: `${provider}: invalid '${field.name}': ${invalid}`,
+        });
       }
       collected[field.name] = field.secret ? Redacted.make(raw) : raw;
     }
@@ -194,12 +188,11 @@ export const makeStoredAuthProvider = <Resolved>(config: StoredAuthProviderConfi
   const layer = AuthProviderLayer<StoredAuthConfig, Resolved>()(
     provider,
     Effect.gen(function* () {
-      const interaction = Interaction.accessors;
       const persist = (_profileName: string, values: StoredValues) =>
         Effect.gen(function* () {
           const complete = config.complete?.(values) ?? Effect.succeed(values);
           const completed = yield* complete;
-          yield* interaction.output.success(`${provider}: credentials saved.`);
+          yield* Interaction.success(`${provider}: credentials saved.`);
           return {
             method: "stored" as const,
             ...Object.fromEntries(
@@ -220,7 +213,7 @@ export const makeStoredAuthProvider = <Resolved>(config: StoredAuthProviderConfi
               Effect.flatMap((values) => persist(profileName, values)),
             )
           : Effect.fail(
-              new AuthError({
+              AuthError.make({
                 message: `${provider}: unknown method '${input.method}'. Valid methods: stored.`,
               }),
             );

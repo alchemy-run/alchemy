@@ -125,7 +125,7 @@ export const RegistryProxyLive = Layer.effect(
                 Effect.gen(function* () {
                   const debugPort = ports[SOCKET_DEBUG_PORT];
                   if (!debugPort) {
-                    return yield* new SystemError({
+                    return yield* SystemError.make({
                       subtag: "RegistryProxyDebugPort",
                       message: "Debug port not found.",
                       detail: { debugPort },
@@ -134,6 +134,8 @@ export const RegistryProxyLive = Layer.effect(
                   yield* registry.write({
                     scriptName: worker.name,
                     debugPortAddress: `127.0.0.1:${debugPort}`,
+                    // `start` runs again for a replacement process on the same ports.
+                    instanceId: crypto.randomUUID(),
                     services: [
                       {
                         kind: "worker",
@@ -154,7 +156,7 @@ export const RegistryProxyLive = Layer.effect(
                   }
                   const proxyPort = ports[SOCKET_REGISTRY_PROXY];
                   if (!proxyPort) {
-                    return yield* new SystemError({
+                    return yield* SystemError.make({
                       subtag: "RegistryProxyPort",
                       message: "Registry proxy port not found.",
                       detail: { proxyPort },
@@ -169,13 +171,12 @@ export const RegistryProxyLive = Layer.effect(
                         body: HttpBody.jsonUnsafe(targets),
                       })
                       .pipe(
-                        Effect.mapError(
-                          (cause) =>
-                            new SystemError({
-                              subtag: "RegistryProxyUpdate",
-                              message: "Failed to update the registry proxy targets.",
-                              cause,
-                            }),
+                        Effect.mapError((cause) =>
+                          SystemError.make({
+                            subtag: "RegistryProxyUpdate",
+                            message: "Failed to update the registry proxy targets.",
+                            cause,
+                          }),
                         ),
                       );
                   yield* registry.read(subscribed).pipe(Effect.flatMap(update));

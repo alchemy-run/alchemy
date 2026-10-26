@@ -19,7 +19,7 @@ import { ref as makeRef } from "./Ref.ts";
 import { RemovalPolicy } from "./RemovalPolicy.ts";
 import { RenamePolicy } from "./Rename.ts";
 import { Self } from "./Self.ts";
-import { Stack } from "./Stack.ts";
+import { StackContext } from "./StackContext.ts";
 
 export type ResourceConstructor<R extends ResourceLike, Req = never> = {
   Type: R["Type"];
@@ -159,16 +159,15 @@ export interface ResourceLike<
   Providers: Providers;
 }
 
-export const isResource = (value: any): value is ResourceLike => {
-  // Require the full resource identity (Type AND FQN), not just `Type`:
-  // user-authored prop objects legitimately carry a `Type` field (e.g.
-  // Amazon States Language states like `{ Type: "Pass", End: true }` in a
-  // Step Functions definition) and must not be mistaken for resources.
-  // Locally-declared resources always expose both as own keys; refs
-  // (`Resource.ref(...)`) deliberately report neither via `in` so they keep
-  // routing through Output resolution.
-  return typeof value === "object" && value !== null && "Type" in value && "FQN" in value;
-};
+// Require the full resource identity (Type AND FQN), not just `Type`:
+// user-authored prop objects legitimately carry a `Type` field (e.g.
+// Amazon States Language states like `{ Type: "Pass", End: true }` in a
+// Step Functions definition) and must not be mistaken for resources.
+// Locally-declared resources always expose both as own keys; refs
+// (`Resource.ref(...)`) deliberately report neither via `in` so they keep
+// routing through Output resolution.
+export const isResource = (value: any): value is ResourceLike =>
+  typeof value === "object" && value !== null && "Type" in value && "FQN" in value;
 
 /**
  * Does `value` reference an instance of the resource type `type` —
@@ -293,6 +292,25 @@ export class MissingImplementationError extends Data.TaggedError("MissingImpleme
   id: string;
 }> {}
 
+/**
+ * A logical id was declared again as a different resource type.
+ *
+ * A logical id names one resource in the stack. Yielding that id again
+ * returns the resource already registered, so one declaration can be shared
+ * by the stack program and a service init. A different type is a different
+ * resource. Returning the first one would drop the second declaration while
+ * TypeScript still typed the result as the second type.
+ */
+export class DuplicateLogicalIdError extends Data.TaggedError("DuplicateLogicalIdError")<{
+  message: string;
+  /** Fully qualified logical id already present on the stack. */
+  fqn: string;
+  /** Type registered under {@link fqn}. */
+  existingType: string;
+  /** Type of the declaration that collided with {@link fqn}. */
+  conflictingType: string;
+}> {}
+
 export const missingImplementation = (type: string, id: string) =>
   new MissingImplementationError({
     type,
@@ -336,7 +354,7 @@ export function Resource<R extends ResourceLike>(
   const self = Self<R>(type);
   const constructor = (id: string, props: Props | Effect.Effect<Props> | undefined) =>
     Effect.gen(function* () {
-      const stack = yield* Stack;
+      const stack = yield* StackContext;
       const namespace = yield* CurrentNamespace;
       const fqn = toFqn(namespace, id);
 
@@ -349,6 +367,20 @@ export function Resource<R extends ResourceLike>(
 
       const existing = stack.resources[fqn];
       if (existing) {
+        if (existing.Type !== type) {
+          return yield* Effect.die(
+            new DuplicateLogicalIdError({
+              message:
+                `Resource '${fqn}' is already registered as '${existing.Type}' ` +
+                `and cannot be declared as '${type}'. A logical id names one ` +
+                `resource in the stack. Yield the existing resource, or give ` +
+                `this declaration its own id.`,
+              fqn,
+              existingType: existing.Type,
+              conflictingType: type,
+            }),
+          );
+        }
         // A resource may be `yield*`ed from several places (idempotent
         // registration). If a later site carries an *explicit* ambient
         // ProviderModePolicy that disagrees with what the resource was
@@ -373,7 +405,7 @@ export function Resource<R extends ResourceLike>(
             }),
           );
         }
-        // // TODO(sam): check if props are different and die
+        // TODO(sam): check if props are different and die
         return existing;
       }
       const bind = (

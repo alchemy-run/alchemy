@@ -41,6 +41,7 @@ interface Env {
   [binding: string]: unknown;
 }
 
+// oxlint-disable-next-line effecttsgo/extends-native-error -- plain workerd script (no Effect); thrown and caught with try/catch
 class ProxyRequestError extends Error {
   readonly status: number;
   constructor(message: string, status = 400) {

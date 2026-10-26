@@ -64,7 +64,7 @@ const toPem = (base64: string, label: string): string => {
 };
 
 const invalid = (subtag: string, message: string, props: SecretKeyProps, hint?: string) =>
-  new ConfigError({
+  ConfigError.make({
     subtag,
     message,
     ...(hint !== undefined ? { hint } : {}),

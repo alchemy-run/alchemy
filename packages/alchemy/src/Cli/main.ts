@@ -2,6 +2,7 @@ import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import * as Contributions from "alchemy/Contributions";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { moduleExtension } from "alchemy/Util/Node";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
@@ -16,8 +17,8 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import packageJson from "../../package.json" with { type: "json" };
+import * as Interaction from "../Interaction.ts";
 import { checkLatestVersion } from "./checkVersion.ts";
-import * as CliKit from "./CliKit/index.ts";
 import {
   compatibilityCommand,
   compatibilityCommands,
@@ -29,7 +30,6 @@ import { selectCliServices } from "./selectCli.ts";
 
 const commandMetadata = [
   ["provider", "Manage cloud provider prerequisites and utilities"],
-  ["prisma", "Generate Prisma Effect bindings and schemas"],
   ["deploy", "Deploy a stack"],
   ["dev", "Develop a stack with live reload"],
   ["destroy", "Destroy a deployed stack"],
@@ -49,12 +49,21 @@ const placeholderCommand = (name: CommandName, description: string) =>
     name === "unsafe" ? Command.unlisted : (command) => command,
   );
 
+// A broken provider shouldn't take the whole CLI down: warn and run without
+// providers. Commands that need them (auth, `state --backend`) fail with the
+// provider error when they load them again.
+const loadContributions = () =>
+  Effect.runPromise(
+    Contributions.load().pipe(
+      Effect.catch((error) => Effect.as(Effect.logWarning(error.message), [])),
+      Effect.provide(PlatformServices),
+    ),
+  );
+
 const loadCommand = async (name: CommandName) => {
   switch (name) {
-    case "prisma":
-      return (await import("./commands/prisma.ts")).prismaCommand;
     case "provider":
-      return (await import("./commands/provider.ts")).providerCommand;
+      return (await import("./commands/provider.ts")).providerCommand(await loadContributions());
     case "deploy":
       return (await import("./commands/deploy.ts")).deployCommand;
     case "dev":
@@ -118,7 +127,7 @@ const NoInput = GlobalFlag.Setting("no-input")({
 });
 
 const root = Command.make("alchemy", {}, () =>
-  Effect.fail(new CliError.ShowHelp({ commandPath: ["alchemy"], errors: [] })),
+  Effect.fail(CliError.ShowHelp.make({ commandPath: ["alchemy"], errors: [] })),
 ).pipe(
   Command.withDescription(
     "Define, deploy, and operate cloud infrastructure with type-safe Effect programs.",
@@ -172,13 +181,7 @@ const services = Layer.mergeAll(
   Layer.succeed(ArtifactStore, createArtifactStore()),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
-  Layer.provide(
-    Layer.provideMerge(
-      Layer.mergeAll(selectCliServices(), CliKit.CliKitInteraction),
-      CliKit.layer(),
-    ),
-    PlatformServices,
-  ),
+  Layer.provide(Layer.provideMerge(selectCliServices(), Interaction.layer()), PlatformServices),
   // Debug run log under ~/.alchemy/logs — the console noise floor stays at
   // Info, but full causes and auth-flow breadcrumbs land in the file so
   // support can ask users for it.

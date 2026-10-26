@@ -1,5 +1,5 @@
 import { format } from "node:util";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";

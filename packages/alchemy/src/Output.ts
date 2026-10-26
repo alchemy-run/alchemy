@@ -7,7 +7,7 @@ import { SingleShotGen } from "effect/Utils";
 import { getRefMetadata, isRef, type Ref } from "./Ref.ts";
 import { isResource, type Resource, type ResourceLike } from "./Resource.ts";
 import { RuntimeContext, sanitizeKey } from "./RuntimeContext.ts";
-import { Stack } from "./Stack.ts";
+import { StackContext } from "./StackContext.ts";
 import { Stage } from "./Stage.ts";
 import * as State from "./State/State.ts";
 import { isPlainData, isPrimitive, type Primitive } from "./Util/data.ts";
@@ -168,11 +168,12 @@ export const isResourceExpr = <Value = any, Req = any>(
 
 export class ResourceExpr<Value, Req = never> extends BaseExpr<Value, Req> {
   readonly kind = "ResourceExpr";
-  constructor(
-    readonly src: ResourceLike,
-    readonly stables?: Record<string, any>,
-  ) {
+  readonly src: ResourceLike;
+  readonly stables?: Record<string, any>;
+  constructor(src: ResourceLike, stables?: Record<string, any>) {
     super();
+    this.src = src;
+    this.stables = stables;
     return proxy(this);
   }
   [inspect](): string {
@@ -189,11 +190,12 @@ export class PropExpr<A = any, Id extends keyof A = keyof A, Req = any> extends 
   Req
 > {
   readonly kind = "PropExpr";
-  constructor(
-    public readonly expr: Expr<A, Req>,
-    public readonly identifier: Id,
-  ) {
+  readonly expr: Expr<A, Req>;
+  readonly identifier: Id;
+  constructor(expr: Expr<A, Req>, identifier: Id) {
     super();
+    this.expr = expr;
+    this.identifier = identifier;
     return proxy(this);
   }
   [inspect](): string {
@@ -208,8 +210,10 @@ export const isLiteralExpr = <A = any>(node: any): node is LiteralExpr<A> =>
 
 export class LiteralExpr<A> extends BaseExpr<A, never> {
   readonly kind = "LiteralExpr";
-  constructor(public readonly value: A) {
+  readonly value: A;
+  constructor(value: A) {
     super();
+    this.value = value;
     return proxy(this);
   }
   [inspect](): string {
@@ -235,11 +239,12 @@ export const isApplyExpr = <In = any, Out = any, Req = any>(
 
 export class ApplyExpr<A, B, Req = never> extends BaseExpr<B, Req> {
   readonly kind = "ApplyExpr";
-  constructor(
-    public readonly expr: Expr<A, Req>,
-    public readonly f: (value: A) => B,
-  ) {
+  readonly expr: Expr<A, Req>;
+  readonly f: (value: A) => B;
+  constructor(expr: Expr<A, Req>, f: (value: A) => B) {
     super();
+    this.expr = expr;
+    this.f = f;
     return proxy(this);
   }
 
@@ -277,11 +282,12 @@ export const isFlatMapExpr = <In = any, Out = any, Req = any, Req2 = any>(
 
 export class FlatMapExpr<A, B, Req = never, Req2 = never> extends BaseExpr<B, Req | Req2> {
   readonly kind = "FlatMapExpr";
-  constructor(
-    public readonly expr: Expr<A, Req>,
-    public readonly f: (value: A) => Output<B, Req2>,
-  ) {
+  readonly expr: Expr<A, Req>;
+  readonly f: (value: A) => Output<B, Req2>;
+  constructor(expr: Expr<A, Req>, f: (value: A) => Output<B, Req2>) {
     super();
+    this.expr = expr;
+    this.f = f;
     return proxy(this);
   }
   [inspect](): string {
@@ -295,11 +301,12 @@ export const isEffectExpr = <In = any, Out = any, Req = any, Req2 = any>(
 
 export class EffectExpr<A, B, Req = never, Req2 = never> extends BaseExpr<B, Req> {
   readonly kind = "EffectExpr";
-  constructor(
-    public readonly expr: Expr<A, Req>,
-    public readonly f: (value: A) => Effect.Effect<B, never, Req2>,
-  ) {
+  readonly expr: Expr<A, Req>;
+  readonly f: (value: A) => Effect.Effect<B, never, Req2>;
+  constructor(expr: Expr<A, Req>, f: (value: A) => Effect.Effect<B, never, Req2>) {
     super();
+    this.expr = expr;
+    this.f = f;
     return proxy(this);
   }
   [inspect](): string {
@@ -319,11 +326,12 @@ export const isNamedExpr = <A = any, Req = any>(node: any): node is NamedExpr<A,
  */
 export class NamedExpr<A, Req = never> extends BaseExpr<A, Req> {
   readonly kind = "NamedExpr";
-  constructor(
-    public readonly expr: Expr<A, Req>,
-    public readonly bindingName: string,
-  ) {
+  readonly expr: Expr<A, Req>;
+  readonly bindingName: string;
+  constructor(expr: Expr<A, Req>, bindingName: string) {
     super();
+    this.expr = expr;
+    this.bindingName = bindingName;
     return proxy(this);
   }
   [inspect](): string {
@@ -357,8 +365,10 @@ export const isAllExpr = <Outs extends Expr[] = Expr[]>(node: any): node is AllE
 
 export class AllExpr<Outs extends Expr[]> extends BaseExpr<Outs> {
   readonly kind = "AllExpr";
-  constructor(public readonly outs: Outs) {
+  readonly outs: Outs;
+  constructor(outs: Outs) {
     super();
+    this.outs = outs;
     return proxy(this);
   }
   [inspect](): string {
@@ -370,18 +380,26 @@ export const isRefExpr = <A = any>(node: any): node is RefExpr<A> => exprKind(no
 
 export class RefExpr<A> extends BaseExpr<A, never> {
   readonly kind = "RefExpr";
+  readonly stack: string | undefined;
+  readonly stage: string | undefined;
+  readonly resourceId: string;
+  /**
+   * Statically-known properties of the ref's target (currently its
+   * resource `Type`), served as literals by the proxy instead of
+   * `PropExpr`s — mirrors {@link ResourceExpr}'s `stables`.
+   */
+  readonly stables?: Record<string, any>;
   constructor(
-    public readonly stack: string | undefined,
-    public readonly stage: string | undefined,
-    public readonly resourceId: string,
-    /**
-     * Statically-known properties of the ref's target (currently its
-     * resource `Type`), served as literals by the proxy instead of
-     * `PropExpr`s — mirrors {@link ResourceExpr}'s `stables`.
-     */
-    readonly stables?: Record<string, any>,
+    stack: string | undefined,
+    stage: string | undefined,
+    resourceId: string,
+    stables?: Record<string, any>,
   ) {
     super();
+    this.stack = stack;
+    this.stage = stage;
+    this.resourceId = resourceId;
+    this.stables = stables;
     return proxy(this);
   }
   [inspect](): string {
@@ -402,11 +420,12 @@ export const isStackRefExpr = <A = any>(node: any): node is StackRefExpr<A> =>
  */
 export class StackRefExpr<A> extends BaseExpr<A, never> {
   readonly kind = "StackRefExpr";
-  constructor(
-    public readonly stack: string,
-    public readonly stage: string | undefined,
-  ) {
+  readonly stack: string;
+  readonly stage: string | undefined;
+  constructor(stack: string, stage: string | undefined) {
     super();
+    this.stack = stack;
+    this.stage = stage;
     return proxy(this);
   }
   [inspect](): string {
@@ -572,6 +591,7 @@ export const evaluate: <A, Req = never>(
   InvalidReferenceError | MissingSourceError | Config.ConfigError,
   State.State | Req
 > = (expr, upstream, ancestors = new Set()) =>
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the declared signature above carries the real error/requirement types
   Effect.gen(function* () {
     if (isResource(expr)) {
       const srcId = expr.FQN;
@@ -616,7 +636,7 @@ export const evaluate: <A, Req = never>(
         return yield* evaluate(expr.expr, upstream);
       } else if (isRefExpr(expr)) {
         const state = yield* yield* State.State;
-        const stack = expr.stack ?? (yield* Stack).name;
+        const stack = expr.stack ?? (yield* StackContext).name;
         const stage = expr.stage ?? (yield* Stage);
         const resource = yield* state.get({
           stack,
@@ -624,14 +644,12 @@ export const evaluate: <A, Req = never>(
           fqn: expr.resourceId,
         });
         if (!resource) {
-          return yield* Effect.fail(
-            new InvalidReferenceError({
-              message: `Reference to '${expr.resourceId}' in stack '${stack}' and stage '${stage}' not found. Have you deployed '${stage}' or '${stack}'?`,
-              stack,
-              stage,
-              resourceId: expr.resourceId,
-            }),
-          );
+          return yield* new InvalidReferenceError({
+            message: `Reference to '${expr.resourceId}' in stack '${stack}' and stage '${stage}' not found. Have you deployed '${stage}' or '${stack}'?`,
+            stack,
+            stage,
+            resourceId: expr.resourceId,
+          });
         }
         // RefExpr targets persisted resources; tasks aren't cross-stack
         // referenceable. Return the resource's output attrs, otherwise the
@@ -643,14 +661,12 @@ export const evaluate: <A, Req = never>(
         const stage = expr.stage ?? (yield* Stage);
         const output = yield* state.getOutput({ stack, stage });
         if (output == null) {
-          return yield* Effect.fail(
-            new InvalidReferenceError({
-              message: `Reference to stack '${stack}' at stage '${stage}' not found. Have you deployed stage '${stage}' of '${stack}'?`,
-              stack,
-              stage,
-              resourceId: stack,
-            }),
-          );
+          return yield* new InvalidReferenceError({
+            message: `Reference to stack '${stack}' at stage '${stage}' not found. Have you deployed stage '${stage}' of '${stack}'?`,
+            stack,
+            stage,
+            resourceId: stack,
+          });
         }
         return output;
       }

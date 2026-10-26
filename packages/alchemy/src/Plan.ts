@@ -5,11 +5,18 @@ import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import { asEffect } from ".//Util/types.ts";
 import { isAction, type ActionLike } from "./Action.ts";
-import { AdoptPolicy, OwnedBySomeoneElse, stripUnowned, Unowned } from "./AdoptPolicy.ts";
+import {
+  AdoptPolicy,
+  OwnedBySomeoneElse,
+  stripUnowned,
+  Unowned,
+  UnverifiableReplacement,
+} from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
 import {
   Artifacts,
@@ -29,7 +36,7 @@ import {
   type UpdateDiff,
 } from "./Diff.ts";
 import { parseFqn } from "./FQN.ts";
-import { generateInstanceId, InstanceId } from "./InstanceId.ts";
+import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import {
   tryFindProviderRegistrationByType,
@@ -52,6 +59,7 @@ import {
   type ResourceBinding,
   type ResourceLike,
 } from "./Resource.ts";
+import { ResourceContext } from "./ResourceContext.ts";
 import {
   InvalidResourceSelection,
   UnsafeSelectionBoundary,
@@ -189,6 +197,8 @@ export interface Replace<R extends ResourceLike = ResourceLike> extends ApplyNod
   props: any;
   deleteFirst: boolean;
   restart?: boolean;
+  /** Ownership probe of the replacement's physical identity, run before any mutation. */
+  deferredAdoption?: { adopt: boolean };
   state:
     | CreatingResourceState
     | CreatedResourceState
@@ -409,7 +419,7 @@ const makePlan = <A>(
     // already-deployed state), so the check is scoped to platform tags.
     for (const resource of resources) {
       if (resource.RequiresImplementation && resource.Props === undefined) {
-        yield* Effect.die(missingImplementation(resource.Type, resource.LogicalId));
+        return yield* Effect.die(missingImplementation(resource.Type, resource.LogicalId));
       }
     }
 
@@ -801,7 +811,7 @@ const makePlan = <A>(
                     oldBindings,
                     newBindings,
                   })
-                  .pipe(providePlanScope(resource.FQN, oldState.instanceId))
+                  .pipe(providePlanScope(resource, oldState.instanceId))
               : Effect.succeed(undefined);
 
             // A present `diff.stables` is authoritative for this update and
@@ -845,7 +855,11 @@ const makePlan = <A>(
             // keep the stale attrs even though the upstream just
             // re-reconciled. Expose only the stable attributes and let
             // apply re-evaluate the rest against the forced reconcile's
-            // fresh output.
+            // fresh output. A noop diff may carry `stables` for exactly this
+            // case (conditional stables such as a rename-mutable `name`);
+            // without them the forced upstream would only expose
+            // `provider.stables` and identity-sensitive consumers would
+            // falsely plan a replacement (#1832).
             if (options.force) {
               return withStables(oldState?.attr);
             }
@@ -1168,23 +1182,32 @@ const makePlan = <A>(
     //
     // Actions don't have bindings, so for action upstreams we use only
     // prop edges (which collapse to `newUpstreamDependencies` lookups).
-    const computeDownstream = (upFqn: string): string[] => {
-      const downstream: string[] = [];
-      for (const [downFqn, upstreams] of Object.entries(rawUpstreamDependencies)) {
+    //
+    // The edges are inverted in one pass (in `rawUpstreamDependencies` order,
+    // so each downstream list keeps that order) — scanning every node's
+    // upstream list per node was quadratic in resource count (#2400).
+    const directDownstream = new Map<string, string[]>();
+    for (const [downFqn, upstreams] of Object.entries(rawUpstreamDependencies)) {
+      const propDeps = new Set(newUpstreamDependencies[downFqn]);
+      for (const upFqn of upstreams) {
         if (downFqn === upFqn) continue;
-        if (!upstreams.includes(upFqn)) continue;
-        const isPropEdge = (newUpstreamDependencies[downFqn] ?? []).includes(upFqn);
-        if (isPropEdge) {
-          downstream.push(downFqn);
-          continue;
-        }
         // Binding-only edge — exclude when both endpoints sit inside
         // the same SCC of the combined graph.
-        if (combinedCycleMembers.has(upFqn) && combinedCycleMembers.has(downFqn)) {
+        if (
+          !propDeps.has(upFqn) &&
+          combinedCycleMembers.has(upFqn) &&
+          combinedCycleMembers.has(downFqn)
+        ) {
           continue;
         }
+        let downstream = directDownstream.get(upFqn);
+        if (!downstream) directDownstream.set(upFqn, (downstream = []));
         downstream.push(downFqn);
       }
+    }
+
+    const computeDownstream = (upFqn: string): string[] => {
+      const downstream = [...(directDownstream.get(upFqn) ?? [])];
       if (selected) {
         for (const row of historicalRows(persistedRows.get(upFqn))) {
           for (const dep of row.downstream ?? []) {
@@ -1383,7 +1406,7 @@ const makePlan = <A>(
             olds: news,
             output: undefined,
           })
-          .pipe(providePlanScope(fqn, adoptInstanceId));
+          .pipe(providePlanScope(resource, adoptInstanceId));
         if (readResult !== undefined) {
           const isUnowned = Unowned.is(readResult);
           // A resource-scoped `adopt(...)` (captured on the resource at
@@ -1471,11 +1494,14 @@ const makePlan = <A>(
           renamedFrom,
           adoptionBlocked: reusesMigratedFqn ? "migrated-fqn" : undefined,
           deferredAdoption:
-            node.action === "create" &&
             provider.read &&
             !reusesMigratedFqn &&
-            ((oldState === undefined && !isResolved(news)) ||
-              (oldState?.status === "creating" && oldState.attr === undefined))
+            // A replacement targets a new physical identity, which may belong
+            // to someone else — admit it like a fresh create.
+            (node.action === "replace" ||
+              (node.action === "create" &&
+                ((oldState === undefined && !isResolved(news)) ||
+                  (oldState?.status === "creating" && oldState.attr === undefined))))
               ? { adopt: adoptThis }
               : undefined,
         }) as any as T;
@@ -1501,7 +1527,16 @@ const makePlan = <A>(
         // `output` is undefined (as it is here), so handing them
         // unresolved exprs crashes. Skip the probe — same behavior as
         // a read that found nothing — and re-drive the create.
-        if (provider.read && !reusesMigratedFqn && isResolved(oldState.props)) {
+        //
+        // A checkpoint whose unresolved props were stripped (`propsIncomplete`)
+        // can't identify the attempt at all: a lookup could match a different
+        // resource. Skip it too and let the diff below decide.
+        if (
+          provider.read &&
+          !reusesMigratedFqn &&
+          !oldState.propsIncomplete &&
+          isResolved(oldState.props)
+        ) {
           const attr = yield* provider
             .read({
               id,
@@ -1511,7 +1546,7 @@ const makePlan = <A>(
               output: oldState.attr,
             })
             .pipe(
-              providePlanScope(fqn, oldState.instanceId),
+              providePlanScope(resource, oldState.instanceId),
               // `creating` props pass `isResolved` yet can still carry
               // holes where unresolved Outputs were stripped at commit
               // time (see stripUnresolved) — e.g. a parent reference
@@ -1588,7 +1623,7 @@ const makePlan = <A>(
                 oldBindings,
                 newBindings,
               })
-              .pipe(providePlanScope(fqn, oldState.instanceId)),
+              .pipe(providePlanScope(resource, oldState.instanceId)),
           ).pipe(
             Effect.map(
               (diff) =>
@@ -2021,6 +2056,35 @@ const makePlan = <A>(
       }
     }
 
+    // A delete-first replacement in a cycle deletes its previous generation
+    // before precreate, which runs on unresolved props. While its identity is
+    // unresolved, only the provider's `observe` can check ownership before
+    // that delete. Without it, refuse here — before apply touches anything —
+    // unless adoption is allowed.
+    for (const [fqn, node] of Object.entries(resourceGraph)) {
+      if (
+        node.action === "replace" &&
+        node.deleteFirst &&
+        cycleMembers.has(fqn) &&
+        !node.provider.observe &&
+        node.deferredAdoption?.adopt === false &&
+        !isResolved(node.props) &&
+        // A resumed replacement already holds its precreated identity.
+        !(node.state.status === "replacing" && !node.restart && node.state.attr !== undefined)
+      ) {
+        return yield* new UnverifiableReplacement({
+          message:
+            `Cannot replace resource '${fqn}' (${node.resource.Type}): ` +
+            "it must be deleted before its replacement is pre-created, but " +
+            "the replacement's identity depends on outputs that are not " +
+            "resolved yet, so its ownership cannot be checked first. Re-run " +
+            "with `--adopt` (or wrap the effect in `adopt(true)`) to replace it anyway.",
+          resourceType: node.resource.Type,
+          logicalId: node.resource.LogicalId,
+        });
+      }
+    }
+
     // Both orphan passes (task rows below, resource rows further down)
     // examine every persisted row of this stack instance.
     const persistedFqns = selected ? [] : yield* state.list({ stack: stackName, stage });
@@ -2296,15 +2360,22 @@ const capturedEnvChanged = (
 };
 
 const providePlanScope =
-  (fqn: string, instanceId: string) =>
+  (resource: ResourceLike, instanceId: string) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.serviceOption(ArtifactStore).pipe(
       Effect.map(Option.getOrElse(createArtifactStore)),
       Effect.flatMap((store) =>
         effect.pipe(
-          failCredentialsRequired(fqn),
-          Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
-          Effect.provideService(InstanceId, instanceId),
+          failCredentialsRequired(resource.FQN),
+          Effect.provide([
+            Layer.succeed(Artifacts, makeScopedArtifacts(store, resource.FQN)),
+            Layer.succeed(ResourceContext, {
+              logicalId: resource.LogicalId,
+              fqn: resource.FQN,
+              instanceId,
+              type: resource.Type,
+            }),
+          ]),
         ),
       ),
     );

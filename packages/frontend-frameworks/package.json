@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/frontend-frameworks",
-  "version": "2.0.0-beta.81",
+  "version": "2.0.0-beta.84",
   "description": "Framework build and development integrations for Alchemy.",
   "keywords": [
     "alchemy",
@@ -70,6 +70,24 @@
       "worker": "./dist/astro/cloudflare.js",
       "import": "./dist/astro/cloudflare.js"
     },
+    "./astro/cache": {
+      "types": "./dist/astro/cache.d.ts",
+      "bun": "./dist/astro/cache.js",
+      "worker": "./dist/astro/cache.js",
+      "import": "./dist/astro/cache.js"
+    },
+    "./astro/cache/provider": {
+      "types": "./dist/astro/runtime/cache/provider.d.ts",
+      "bun": "./dist/astro/runtime/cache/provider.js",
+      "worker": "./dist/astro/runtime/cache/provider.js",
+      "import": "./dist/astro/runtime/cache/provider.js"
+    },
+    "./astro/config": {
+      "types": "./dist/astro/config.d.ts",
+      "bun": "./dist/astro/config.js",
+      "worker": "./dist/astro/config.js",
+      "import": "./dist/astro/config.js"
+    },
     "./astro/source": {
       "types": "./dist/astro/source.d.ts",
       "bun": "./dist/astro/source.js",
@@ -107,6 +125,24 @@
       "import": "./dist/astro/runtime/entrypoints/image-passthrough-endpoint.js"
     },
     "./astro/types.d.ts": "./src/astro/types.d.ts",
+    "./foldkit": {
+      "types": "./dist/foldkit/index.d.ts",
+      "bun": "./dist/foldkit/index.js",
+      "worker": "./dist/foldkit/index.js",
+      "import": "./dist/foldkit/index.js"
+    },
+    "./foldkit/aws": {
+      "types": "./dist/foldkit/aws.d.ts",
+      "bun": "./dist/foldkit/aws.js",
+      "worker": "./dist/foldkit/aws.js",
+      "import": "./dist/foldkit/aws.js"
+    },
+    "./foldkit/node": {
+      "types": "./dist/foldkit/node.d.ts",
+      "bun": "./dist/foldkit/node.js",
+      "worker": "./dist/foldkit/node.js",
+      "import": "./dist/foldkit/node.js"
+    },
     "./nextjs": {
       "types": "./dist/nextjs/index.d.ts",
       "bun": "./dist/nextjs/index.js",
@@ -124,6 +160,10 @@
       "bun": "./dist/nextjs/node.js",
       "worker": "./dist/nextjs/node.js",
       "import": "./dist/nextjs/node.js"
+    },
+    "./nextjs/cache-handler": {
+      "types": "./dist/nextjs/cache-handler.d.ts",
+      "import": "./dist/nextjs/cache-handler.js"
     },
     "./nextjs/source": {
       "types": "./dist/nextjs/source.d.ts",
@@ -431,7 +471,8 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown && tsc -b --force tsconfig.json && cp src/nextjs/runner.mjs dist/nextjs/runner.mjs && bun ../../scripts/copy-package-files.ts frontend-frameworks",
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:core": "vitest run src/core/test",
@@ -447,10 +488,11 @@
     "test:vinext": "vitest run src/vinext/test",
     "test:waku": "vitest run src/waku/test",
     "test:vocs": "vitest run src/vocs/test",
-    "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.test.json"
+    "typecheck": "tsrs -b tsconfig.json && tsrs --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
+    "@alchemy.run/redis": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@effect/platform-node": "catalog:",

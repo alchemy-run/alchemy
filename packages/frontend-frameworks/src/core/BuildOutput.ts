@@ -44,13 +44,17 @@ export interface BuildOutput {
   nodeServe?: NodeServeEntryOptions | undefined;
 }
 
-/** Create an {@link OutputFile}, hashing the content with sha256. */
+/**
+ * Create an {@link OutputFile}, hashing the content with sha256. The name is
+ * normalized to `/` separators: it becomes a workerd module name or upload
+ * path, where `\` is never valid.
+ */
 export const toOutputFile = (
   name: string,
   content: string | Uint8Array,
 ): Effect.Effect<OutputFile> =>
   Effect.sync(() => ({
-    name,
+    name: name.replaceAll("\\", "/"),
     // Keep one binary representation across framework collectors.
     content: typeof content === "string" ? content : Buffer.from(content),
     hash: NodeCrypto.createHash("sha256").update(content).digest("hex"),
@@ -59,17 +63,20 @@ export const toOutputFile = (
 /**
  * Sort server modules entry-first (the module named `entry` comes first, the
  * rest sorted lexicographically) — the order the `BuildOutput` contract
- * requires.
+ * requires. Module names always use `/`, so a Windows-style `entry` (e.g.
+ * from `path.join`) is normalized before matching.
  */
 export const sortServerModules = (
   modules: Array<OutputFile>,
   entry: string | undefined,
-): Array<OutputFile> =>
-  [...modules].sort((a, b) => {
-    if (a.name === entry) return -1;
-    if (b.name === entry) return 1;
+): Array<OutputFile> => {
+  const entryName = entry?.replaceAll("\\", "/");
+  return [...modules].sort((a, b) => {
+    if (a.name === entryName) return -1;
+    if (b.name === entryName) return 1;
     return a.name.localeCompare(b.name);
   });
+};
 
 /**
  * Serialize a {@link BuildOutput} for persistence (`dist/build.json`).

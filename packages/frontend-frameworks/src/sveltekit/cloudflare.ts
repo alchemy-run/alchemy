@@ -83,6 +83,7 @@ export const makeCloudflareTarget = (config: SvelteKitTargetConfig = {}): Svelte
                 env: context.dev.env,
                 bindings: context.dev.bindings,
                 services: context.dev.services,
+                assetsDirectory: context.dev.assetsDirectory,
                 compatibilityDate: config.compatibilityDate,
                 compatibilityFlags: config.compatibilityFlags,
               },
@@ -95,11 +96,9 @@ export const makeCloudflareTarget = (config: SvelteKitTargetConfig = {}): Svelte
         const path = yield* Path.Path;
         const entry = context.entry;
         if (entry === undefined) {
-          return yield* Effect.fail(
-            fail(
-              "The SvelteKit build produced no on-disk worker entry for the finishing pass " +
-                "(context.entry is missing)",
-            ),
+          return yield* fail(
+            "The SvelteKit build produced no on-disk worker entry for the finishing pass " +
+              "(context.entry is missing)",
           );
         }
         const root = context.root;
@@ -158,10 +157,7 @@ export const makeCloudflareTarget = (config: SvelteKitTargetConfig = {}): Svelte
           directory: serverOutDir,
           prefix: "server",
         }).pipe(Effect.mapError(wrapCollectorError));
-        const serverModules = FrameworkCore.sortServerModules(
-          modules,
-          NodePath.join("server", "index.js"),
-        );
+        const serverModules = FrameworkCore.sortServerModules(modules, "server/index.js");
         const externalWorkspaces = yield* FrameworkCore.collectExternalWorkspaces(
           externalDirectories,
         ).pipe(Effect.mapError(wrapCollectorError));

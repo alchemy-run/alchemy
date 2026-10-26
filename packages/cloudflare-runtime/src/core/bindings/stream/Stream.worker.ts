@@ -35,6 +35,7 @@ import {
   BINDING_STREAM_OBJECT,
   HEADER_STREAM_CONTROL_OP,
   PATH_STREAM_PUBLIC_URL,
+  PATH_STREAM_VIDEO,
   STREAM_OBJECT_NAME,
 } from "./StreamOptions.shared.ts";
 
@@ -49,6 +50,7 @@ interface Env {
 // Errors (`workers/stream/errors.ts`)
 // -----------------------------------------------------------------------------
 
+// oxlint-disable-next-line effecttsgo/extends-native-error -- workerd Stream binding error mirroring the workers-sdk protocol (`name`/`code`/`statusCode`) thrown to user code
 export class StreamBindingError extends Error implements StreamError {
   constructor(
     message: string,
@@ -217,7 +219,7 @@ export interface DownloadRow extends Record<string, SqlStorageValue> {
 
 function rowToStreamVideo(row: VideoRow, entryUrl: URL): StreamVideo {
   const placeholderUrl = `https://customer-placeholder.cloudflarestream.com/${row.id}`;
-  const videoUrl = `${entryUrl.origin}/cdn-cgi/mf/stream/${row.id}/watch`;
+  const videoUrl = `${entryUrl.origin}${PATH_STREAM_VIDEO}/${row.id}/watch`;
   return {
     id: row.id,
     creator: row.creator,
@@ -844,7 +846,9 @@ function rowsToDownloadResponse(
 export class StreamBinding extends WorkerEntrypoint<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const match = url.pathname.match(/^\/cdn-cgi\/mf\/stream\/([^/]+)\/watch$/);
+    const match = url.pathname.match(
+      /^(?:\/__cf_local\/stream|\/cdn-cgi\/mf\/stream)\/([^/]+)\/watch$/,
+    );
     if (!match) {
       return new Response("Not found", { status: 404 });
     }

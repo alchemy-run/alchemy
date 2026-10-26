@@ -1,14 +1,12 @@
 import * as NodeFs from "node:fs";
-import * as NodeHttp from "node:http";
 import * as NodePath from "node:path";
-import { URL as NodeURL } from "node:url";
 import type * as vite from "vite";
 import { parseViteEnvironments } from "../rolldown/options.ts";
 import type { OptionsApi } from "../rolldown/plugins/index.ts";
 import { resolvePluginApi } from "../rolldown/utils.ts";
-import { proxyRequestHeaders } from "./forwarded-host.ts";
 import type { CloudflareVitePluginOptions } from "./plugin.ts";
 import { handleWebSocket } from "./websockets.ts";
+import { forwardWorkerRequest, workerRequestUrl } from "./worker-request.ts";
 
 /**
  * Preview mode: serve the freshly built worker through workerd.
@@ -90,16 +88,8 @@ export function preview(options: CloudflareVitePluginOptions): vite.Plugin {
       // middleware a framework appends afterwards (e.g. waku's Node SSG
       // fallback) — the worker handles every request, like in production.
       server.middlewares.use(function distilledCloudflarePreviewMiddleware(req, res) {
-        const url = new NodeURL(req.url ?? "/", address.toString());
-        const request = NodeHttp.request(url, {
-          method: req.method,
-          headers: proxyRequestHeaders(req, url, handle.proxySharedSecret),
-        });
-        req.pipe(request);
-        request.on("response", (response) => {
-          res.writeHead(response.statusCode ?? 500, response.headers);
-          response.pipe(res);
-        });
+        const url = workerRequestUrl(req.url, address);
+        forwardWorkerRequest(req, res, url, handle.proxySharedSecret, server.config.logger);
       });
     },
   };

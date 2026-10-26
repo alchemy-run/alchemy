@@ -1,6 +1,6 @@
+import * as AWS from "@alchemy.run/aws";
 import type * as rdsdata from "@distilled.cloud/aws/rds-data";
 import type { RuntimeContext } from "alchemy";
-import * as AWS from "alchemy/AWS";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -210,7 +210,7 @@ const transientRetry = <A, E extends { _tag: string }, R>(
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { AuroraDataApi } from "@alchemy.run/better-auth/AuroraDataApi";
- * import * as AWS from "alchemy/AWS";
+ * import * as AWS from "@alchemy.run/aws";
  *
  * export const Db = AWS.RDS.Aurora("AuthDb", { subnetIds, securityGroupIds });
  *
@@ -276,8 +276,11 @@ export const AuroraDataApi = (
           Effect.runPromise(effect.pipe(Effect.provideContext(context)) as Effect.Effect<A, E>);
         const dialect = yield* makeDataApiDialect({
           execute: (request) =>
-            run(transientRetry(executeStatement(request as AWS.RDSData.ExecuteStatementRequest))),
-          begin: () => run(transientRetry(beginTransaction())),
+            executeStatement(request as AWS.RDSData.ExecuteStatementRequest).pipe(
+              transientRetry,
+              run,
+            ),
+          begin: () => beginTransaction().pipe(transientRetry, run),
           commit: (transactionId) => run(commitTransaction({ transactionId })),
           rollback: (transactionId) => run(rollbackTransaction({ transactionId })),
         });
@@ -308,7 +311,7 @@ export const AuroraDataApi = (
               const secretArn = yield* secret.secretArn;
               if (composite !== undefined) {
                 // capture-only: the migration must wait for the writer
-                yield* composite.writer.dbInstanceArn;
+                yield* composite.writer.dbInstanceArn.asEffect().pipe(Effect.asVoid);
               }
               const ambient = yield* Effect.context<never>();
               // Apply half — Data API dialect over distilled.
@@ -329,15 +332,13 @@ export const AuroraDataApi = (
                   );
                 const dialect = yield* makeDataApiDialect({
                   execute: (request) =>
-                    run(
-                      transientRetry(
-                        rdsdata.executeStatement({
-                          ...base,
-                          ...request,
-                        } as never),
-                      ),
-                    ),
-                  begin: () => run(transientRetry(rdsdata.beginTransaction(base))),
+                    rdsdata
+                      .executeStatement({
+                        ...base,
+                        ...request,
+                      } as never)
+                      .pipe(transientRetry, run),
+                  begin: () => rdsdata.beginTransaction(base).pipe(transientRetry, run),
                   commit: (transactionId) =>
                     run(
                       rdsdata.commitTransaction({

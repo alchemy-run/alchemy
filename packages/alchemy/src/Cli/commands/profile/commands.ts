@@ -11,7 +11,7 @@ import { Progress } from "../../../Alchemist/Progress.ts";
 import * as Profiles from "../../../Alchemist/routes/profile.ts";
 import { getEnv } from "../../../Auth/Env.ts";
 import { resolveProfileName } from "../../../Auth/Resolve.ts";
-import * as CliKit from "../../../Cli/CliKit/index.ts";
+import * as Interaction from "../../../Interaction.ts";
 import { loadConfigProvider } from "../../../Util/ConfigProvider.ts";
 import { formatElapsed } from "../../Format.ts";
 import { exitDeclined, failWithHelp, UserInputError } from "../errors.ts";
@@ -65,7 +65,7 @@ const listCommand = Command.make(
   instrumentCommand("profile.list")(
     Effect.fn(function* () {
       const entries = yield* Profiles.list();
-      const cli = yield* CliKit.CliKit;
+      const cli = yield* Interaction.Interaction;
       if (cli.terminal.input) {
         const { profileListNode } = yield* profileTui;
         yield* cli.output.print(profileListNode(entries));
@@ -94,7 +94,7 @@ const createCommand = Command.make(
   }))(
     Effect.fn(function* ({ name }) {
       yield* Profiles.create({ name });
-      yield* CliKit.accessors.output.success(
+      yield* Interaction.success(
         `Created profile '${name}'. Run \`alchemy profile edit --profile ${name}\` to connect accounts.`,
       );
     }),
@@ -114,9 +114,7 @@ const renameCommand = Command.make(
           name,
           newName: newName.value.trim(),
         });
-        yield* CliKit.accessors.output.success(
-          `Renamed profile '${name}' to '${newName.value.trim()}'.`,
-        );
+        yield* Interaction.success(`Renamed profile '${name}' to '${newName.value.trim()}'.`);
         return;
       }
       yield* renameProfileFlow(name, undefined);
@@ -169,31 +167,25 @@ const resolveSetValues = Effect.fn(function* (
   for (const entry of sets) {
     const separator = entry.indexOf("=");
     if (separator <= 0) {
-      return yield* Effect.fail(
-        new UserInputError({
-          message: `Invalid --set '${entry}'. Expected name=value, name=env:VAR, or name=-.`,
-        }),
-      );
+      return yield* new UserInputError({
+        message: `Invalid --set '${entry}'. Expected name=value, name=env:VAR, or name=-.`,
+      });
     }
     const key = entry.slice(0, separator);
     const raw = entry.slice(separator + 1);
     if (key in values) {
-      return yield* Effect.fail(new UserInputError({ message: `Duplicate --set for '${key}'.` }));
+      return yield* new UserInputError({ message: `Duplicate --set for '${key}'.` });
     }
     if (raw === "-") {
       if (stdinUsed) {
-        return yield* Effect.fail(
-          new UserInputError({
-            message: "Only one --set field may read from stdin.",
-          }),
-        );
+        return yield* new UserInputError({
+          message: "Only one --set field may read from stdin.",
+        });
       }
       if (process.stdin.isTTY) {
-        return yield* Effect.fail(
-          new UserInputError({
-            message: `--set ${key}=- reads from stdin, but stdin is a terminal. Pipe the value in.`,
-          }),
-        );
+        return yield* new UserInputError({
+          message: `--set ${key}=- reads from stdin, but stdin is a terminal. Pipe the value in.`,
+        });
       }
       stdinUsed = true;
       // Reading fd 0 to EOF is inherently synchronous whole-input
@@ -212,11 +204,9 @@ const resolveSetValues = Effect.fn(function* (
         Effect.mapError((e) => new UserInputError({ message: e.message })),
       );
       if (value === undefined || value.length === 0) {
-        return yield* Effect.fail(
-          new UserInputError({
-            message: `--set ${key}=env:${variable}: '${variable}' is not set.`,
-          }),
-        );
+        return yield* new UserInputError({
+          message: `--set ${key}=env:${variable}: '${variable}' is not set.`,
+        });
       }
       values[key] = value;
     } else {
@@ -257,12 +247,10 @@ const editCommand = Command.make(
       let configureInput: { method?: string; values: Record<string, string> } | undefined;
       if (method !== undefined || set.length > 0) {
         if (add.length + reconfigure.length !== 1 || remove.length > 0) {
-          return yield* Effect.fail(
-            new UserInputError({
-              message:
-                "--method/--set configure exactly one provider: pass a single --add or --reconfigure (and no --remove).",
-            }),
-          );
+          return yield* new UserInputError({
+            message:
+              "--method/--set configure exactly one provider: pass a single --add or --reconfigure (and no --remove).",
+          });
         }
         configureInput = {
           method,
@@ -285,7 +273,7 @@ const editCommand = Command.make(
             ]),
           ),
         });
-        yield* CliKit.accessors.output.success(
+        yield* Interaction.success(
           `${add.length === 1 ? "Added" : "Updated"} '${provider}' in profile '${selectedProfile}'.`,
         );
         return;
@@ -298,9 +286,7 @@ const editCommand = Command.make(
             entrypoint: main,
             envFile: Option.getOrUndefined(envFile),
           });
-          yield* CliKit.accessors.output.success(
-            `Removed '${provider}' from profile '${selectedProfile}'.`,
-          );
+          yield* Interaction.success(`Removed '${provider}' from profile '${selectedProfile}'.`);
         }
         return;
       }
@@ -345,13 +331,13 @@ const refreshCommand = Command.make(
           event._tag === "provider.refresh.started"
             ? Clock.currentTimeMillis.pipe(
                 Effect.tap((now) => Effect.sync(() => refreshStarted.set(event.provider, now))),
-                Effect.andThen(CliKit.accessors.output.info(`Refreshing ${event.provider}`)),
+                Effect.andThen(Interaction.info(`Refreshing ${event.provider}`)),
               )
             : event._tag === "provider.refresh.completed"
               ? Clock.currentTimeMillis.pipe(
                   Effect.flatMap((now) => {
                     const from = refreshStarted.get(event.provider);
-                    return CliKit.accessors.output.success(
+                    return Interaction.success(
                       `Refreshed ${event.provider}${from === undefined ? "" : ` (${formatElapsed(now - from)})`}`,
                     );
                   }),
@@ -359,7 +345,7 @@ const refreshCommand = Command.make(
               : Effect.void,
         ),
       );
-      yield* CliKit.accessors.output.success(`Refreshed profile '${selectedProfile}'.`);
+      yield* Interaction.success(`Refreshed profile '${selectedProfile}'.`);
     }),
   ),
 ).pipe(
@@ -378,7 +364,7 @@ const currentCommand = Command.make(
           : selected.source === "default"
             ? "built-in default"
             : "command line";
-      const cli = yield* CliKit.CliKit;
+      const cli = yield* Interaction.Interaction;
       if (cli.terminal.input) {
         const { currentProfileNode } = yield* profileTui;
         yield* cli.output.print(currentProfileNode(selected.name, source));
@@ -411,7 +397,7 @@ export const profileCommand = Command.make(
   { envFile, main: config },
   instrumentCommand("profile")(
     Effect.fn(function* ({ envFile, main }) {
-      if (!(yield* CliKit.CliKit).terminal.input) {
+      if (!(yield* Interaction.Interaction).terminal.input) {
         // No terminal to drive the hub — show the subcommand help instead,
         // which documents the flag-driven equivalents of every hub action.
         return yield* failWithHelp(["alchemy", "profile"]);

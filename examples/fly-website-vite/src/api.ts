@@ -1,5 +1,5 @@
-import * as Drizzle from "alchemy/Drizzle/Postgres";
-import * as Fly from "alchemy/Fly";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
+import * as Fly from "@alchemy.run/fly";
 import { desc, sql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -26,7 +26,6 @@ export default class Api extends Fly.Service<Api>()(
     main: import.meta.url,
     port: API_PORT,
     guest: { cpuKind: "shared", cpus: 1, memoryMb: 256 },
-    build: { install: ["pg"] },
   },
   Effect.gen(function* () {
     const conn = yield* Fly.ConnectPostgres(Db);

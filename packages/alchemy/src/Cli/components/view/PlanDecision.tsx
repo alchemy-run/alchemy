@@ -1,8 +1,9 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import { useMemo, useState } from "@alchemy.run/sigil/react";
 import type { JSX } from "react";
+import { Screen, type ScreenController } from "../../../Interaction.ts";
 import type { Plan } from "../../../Plan.ts";
-import { Screen, type ScreenController } from "../../CliKit/index.ts";
 import { PromptFrame, ChoiceGroup, useKeyGlyphs, useTerminalInput } from "../ui/index.ts";
 import type { PlanTreeData } from "./PlanTree.ts";
 import { Plan as PlanComponent, PlanTree } from "./PlanView.tsx";

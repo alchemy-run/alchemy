@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/cloudflare-runtime",
-  "version": "2.0.0-beta.81",
+  "version": "2.0.0-beta.84",
   "description": "Cloudflare Workers local runtime and build plugins for Alchemy.",
   "keywords": [
     "alchemy",
@@ -716,7 +716,8 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown && bun ../../scripts/copy-package-files.ts cloudflare-runtime",
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:rolldown": "vitest run --project rolldown",
@@ -724,7 +725,7 @@
     "test:vite": "vitest run --project vite",
     "test:workers-shared": "vitest run --project 'workers-shared-*'",
     "test:workflows-shared": "vitest run --project workflows-shared",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsrs --noEmit"
   },
   "dependencies": {
     "@alchemy.run/node-utils": "workspace:*",
@@ -739,6 +740,7 @@
     "yauzl": "catalog:"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "catalog:",
     "@cloudflare/vitest-plugin": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "@effect/platform-bun": "catalog:",
