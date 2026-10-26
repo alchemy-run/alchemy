@@ -172,75 +172,64 @@ export interface ProvideStep<I = unknown> extends StepOf<"Provide"> {
   readonly "~provides"?: I;
 }
 
-/** Marks a `when` whose command reads a service that no earlier `provide` step gives. */
-export interface MissingProvide<I> {
-  readonly "Story.provide is missing for": I;
-}
-
 type CommandClassOf<A extends Aggregate.Any, Cmd> = Extract<
   A["definition"]["commands"][number],
   { readonly tag: Cmd extends { readonly _tag: infer T } ? T : never }
 >;
 type RejectionOf<C extends Command.Any> = Aggregate.Inst<C["rejects"][number]>;
 type ReplyOf<C extends Command.Any> = C["reply"] extends Schema.Top ? C["reply"]["Type"] : void;
+type NameOf<X, Key extends string, Fallback extends string> = X extends {
+  readonly [K in Key]: infer N extends string;
+}
+  ? N
+  : Fallback;
+
+/** What a `when` step must be: an error message when a service it needs is not provided yet. */
+type CheckWhen<H, K extends Command.Any, P> = [Exclude<Command.ContextOf<K>, P>] extends [never]
+  ? H
+  : `${K["tag"]} needs Story.provide(${NameOf<Exclude<Command.ContextOf<K>, P>, "key", "its service">}) before it`;
+
+/** What a `rejected` step must be: an error message when the last command does not declare it. */
+type CheckRejected<H, R, C> = C extends Command.Any
+  ? [R] extends [RejectionOf<C>]
+    ? H
+    : `${C["tag"]} does not reject with ${NameOf<R, "_tag", "this rejection">}`
+  : H;
+
+/** What a `replied` step must be: the last command's reply, or an error message when it declares none. */
+type CheckReplied<H, A, C> = C extends Command.Any
+  ? [A] extends [ReplyOf<C>]
+    ? H
+    : C["reply"] extends Schema.Top
+      ? RepliedStep<ReplyOf<C>>
+      : `${C["tag"]} declares no reply`
+  : H;
 
 /**
  * The steps of a story, checked in order: a `rejected` step takes only a
  * rejection the last `when` command declares, a `replied` step only its reply
  * type, and a `when` needs a `provide` step before it for every service its
- * command's middleware provides. A step typed as plain {@link Step} turns the
- * checks off until the next `when`, since it may be any step.
+ * command's middleware provides. A failing step is replaced by a message
+ * saying what is wrong, so the type error names it. A step typed as plain
+ * {@link Step} turns the checks off until the next `when`, since it may be any
+ * step.
  */
 export type Checked<
   S extends ReadonlyArray<Step>,
   C = unknown,
   P = never,
-  Out extends ReadonlyArray<Step> = [],
+  Out extends ReadonlyArray<unknown> = [],
 > = S extends readonly [infer H extends Step, ...infer T extends ReadonlyArray<Step>]
   ? [H] extends [WhenStep<infer K>]
     ? K extends Command.Any
-      ? Checked<
-          T,
-          K,
-          P,
-          [
-            ...Out,
-            [Exclude<Command.ContextOf<K>, P>] extends [never]
-              ? H
-              : H & MissingProvide<Exclude<Command.ContextOf<K>, P>>,
-          ]
-        >
+      ? Checked<T, K, P, [...Out, CheckWhen<H, K, P>]>
       : Checked<T, unknown, P, [...Out, H]>
     : [H] extends [ProvideStep<infer I>]
       ? Checked<T, C, P | I, [...Out, H]>
       : [H] extends [RejectedStep<infer R>]
-        ? Checked<
-            T,
-            C,
-            P,
-            [
-              ...Out,
-              C extends Command.Any
-                ? [R] extends [RejectionOf<C>]
-                  ? H
-                  : RejectedStep<RejectionOf<C>>
-                : H,
-            ]
-          >
+        ? Checked<T, C, P, [...Out, CheckRejected<H, R, C>]>
         : [H] extends [RepliedStep<infer A>]
-          ? Checked<
-              T,
-              C,
-              P,
-              [
-                ...Out,
-                C extends Command.Any
-                  ? [A] extends [ReplyOf<C>]
-                    ? H
-                    : RepliedStep<ReplyOf<C>>
-                  : H,
-              ]
-            >
+          ? Checked<T, C, P, [...Out, CheckReplied<H, A, C>]>
           : [Step] extends [H]
             ? Checked<T, unknown, any, [...Out, H]>
             : Checked<T, C, P, [...Out, H]>

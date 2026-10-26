@@ -1,6 +1,14 @@
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
-import { type Step, Story } from "@alchemy.run/domain/Story";
+import {
+  type Checked,
+  type ProvideStep,
+  type RejectedStep,
+  type RepliedStep,
+  type Step,
+  Story,
+  type WhenStep,
+} from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -281,6 +289,19 @@ export const typed = () => [
   story(Story.when(c1, new ResetCounter())),
   // A step typed as a plain Step may be a `provide`, so it turns the checks off.
   story(Story.provide(Operator, "sam") as Step, Story.when(c1, new ResetCounter())),
+];
+
+// The type error names the mistake on the step that makes it.
+export const messages: [
+  Checked<[WhenStep<typeof Increment>, RejectedStep<NotAnOperator>]>[1],
+  Checked<[WhenStep<typeof Cap>, RepliedStep<{ total: number }>]>[1],
+  Checked<[WhenStep<typeof ResetCounter>]>[0],
+  Checked<[ProvideStep<Operator>, WhenStep<typeof ResetCounter>]>[1],
+] = [
+  "Increment does not reject with NotAnOperator",
+  "Cap declares no reply",
+  "ResetCounter needs Story.provide(Test/Operator) before it",
+  Story.when(Counter.ref("c-1"), new ResetCounter()),
 ];
 
 const c1 = Counter.ref("c-1");
