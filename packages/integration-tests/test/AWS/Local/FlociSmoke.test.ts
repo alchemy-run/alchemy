@@ -34,7 +34,7 @@ import { Table } from "@alchemy.run/aws/DynamoDB";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { Queue } from "@alchemy.run/aws/SQS";
 import { expect } from "@alchemy.run/test";
-import * as Test from "alchemy/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";

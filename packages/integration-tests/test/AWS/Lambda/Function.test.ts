@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
@@ -8,7 +9,6 @@ import { adopt } from "alchemy/AdoptPolicy";
 import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

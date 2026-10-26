@@ -1,4 +1,5 @@
 import { assert, describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Data, Layer } from "effect";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -34,7 +35,6 @@ import {
   State,
   StateStoreError,
 } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import {
   AliasedWidget,
   aliasedWidgetDeletes,

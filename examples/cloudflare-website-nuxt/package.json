@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:node24",
     "nitropack": "catalog:",

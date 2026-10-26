@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test";
 import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
+import * as Test from "@alchemy.run/test/Bun";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Bun";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

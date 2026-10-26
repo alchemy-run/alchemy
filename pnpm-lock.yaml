@@ -799,6 +799,9 @@ importers:
       '@alchemy.run/pkg':
         specifier: workspace:*
         version: link:packages/pkg
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:packages/alchemy-test
       '@effect/tsgo':
         specifier: 'catalog:'
         version: 0.57.0
@@ -857,6 +860,9 @@ importers:
         specifier: 4.0.5
         version: 4.0.5
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@cloudflare/containers':
         specifier: 'catalog:'
         version: 0.3.7
@@ -966,6 +972,9 @@ importers:
       '@alchemy.run/sql':
         specifier: workspace:*
         version: link:../../packages/sql
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -1023,6 +1032,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/aws-bedrock-ai:
     dependencies:
@@ -1041,6 +1054,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/aws-dev:
     dependencies:
@@ -1087,6 +1104,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/aws-ec2:
     dependencies:
@@ -1386,6 +1407,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -1530,6 +1554,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -1582,6 +1609,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -1677,6 +1707,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -1787,6 +1820,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -2004,6 +2040,9 @@ importers:
         specifier: 4.0.5
         version: 4.0.5
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       drizzle-kit:
         specifier: 1.0.0-rc.5
         version: 1.0.0-rc.5(drizzle-orm@1.0.0-rc.5(@cloudflare/workers-types@5.20261012.1)(@effect/sql-d1@4.0.5(effect@4.0.5))(@effect/sql-libsql@4.0.5(effect@4.0.5))(@effect/sql-mysql2@4.0.5(@types/node@26.6.5)(effect@4.0.5))(@effect/sql-pg@4.0.5(effect@4.0.5))(@effect/sql-sqlite-do@4.0.5(effect@4.0.5))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.0.5)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(postgres@3.4.7)(typebox@1.3.27)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4))
@@ -2078,6 +2117,9 @@ importers:
         specifier: 4.0.5
         version: 4.0.5
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -2219,6 +2261,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/cloudflare-effect-sql-d1:
     dependencies:
@@ -2240,6 +2286,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/cloudflare-email:
     dependencies:
@@ -2261,6 +2311,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/cloudflare-federated-api:
     dependencies:
@@ -2333,6 +2387,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
         version: 0.27.1(effect@4.0.5)(foldkit@0.167.0(@effect/platform-browser@4.0.5(effect@4.0.5))(effect@4.0.5))(redis@6.2.1)(vite@8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -2370,6 +2427,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
         version: 0.27.1(effect@4.0.5)(foldkit@0.167.0(@effect/platform-browser@4.0.5(effect@4.0.5))(effect@4.0.5))(redis@6.2.1)(vite@8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -2404,6 +2464,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
         version: 0.27.1(effect@4.0.5)(foldkit@0.167.0(@effect/platform-browser@4.0.5(effect@4.0.5))(effect@4.0.5))(redis@6.2.1)(vite@8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -2441,6 +2504,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
         version: 0.27.1(effect@4.0.5)(foldkit@0.167.0(@effect/platform-browser@4.0.5(effect@4.0.5))(effect@4.0.5))(redis@6.2.1)(vite@8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -2480,6 +2546,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/cloudflare-git-service:
     dependencies:
@@ -2523,6 +2593,9 @@ importers:
         specifier: ^19.2.4
         version: 19.3.0(react@19.3.0)
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -2628,6 +2701,9 @@ importers:
         specifier: 4.0.5
         version: 4.0.5
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       drizzle-kit:
         specifier: 1.0.0-rc.5
         version: 1.0.0-rc.5(drizzle-orm@1.0.0-rc.5(@cloudflare/workers-types@5.20261012.1)(@effect/sql-d1@4.0.5(effect@4.0.5))(@effect/sql-libsql@4.0.5(effect@4.0.5))(@effect/sql-mysql2@4.0.5(@types/node@26.6.5)(effect@4.0.5))(@effect/sql-pg@4.0.5(effect@4.0.5))(@effect/sql-sqlite-do@4.0.5(effect@4.0.5))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.0.5)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(postgres@3.4.7)(typebox@1.3.27)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4))
@@ -2665,6 +2741,9 @@ importers:
         specifier: 4.0.5
         version: 4.0.5
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       prisma:
         specifier: 'catalog:'
         version: 8.0.0-rc.15(34bd5a257cc9e3f41606d7f4efebf9cb)
@@ -2702,6 +2781,9 @@ importers:
         specifier: 4.0.5
         version: 4.0.5
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       prisma:
         specifier: 'catalog:'
         version: 8.0.0-rc.15(265536e84e21ec650e5590064edd3976)
@@ -2736,6 +2818,9 @@ importers:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -2776,6 +2861,9 @@ importers:
         specifier: 4.0.5
         version: 4.0.5
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       drizzle-kit:
         specifier: 1.0.0-rc.5
         version: 1.0.0-rc.5(drizzle-orm@1.0.0-rc.5(@cloudflare/workers-types@5.20261012.1)(@effect/sql-d1@4.0.5(effect@4.0.5))(@effect/sql-libsql@4.0.5(effect@4.0.5))(@effect/sql-mysql2@4.0.5(@types/node@26.6.5)(effect@4.0.5))(@effect/sql-pg@4.0.5(effect@4.0.5))(@effect/sql-sqlite-do@4.0.5(effect@4.0.5))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.0.5)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(postgres@3.4.7)(typebox@1.3.27)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4))
@@ -2813,6 +2901,9 @@ importers:
         specifier: 4.0.5
         version: 4.0.5
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       drizzle-kit:
         specifier: 1.0.0-rc.5
         version: 1.0.0-rc.5(drizzle-orm@1.0.0-rc.5(@cloudflare/workers-types@5.20261012.1)(@effect/sql-d1@4.0.5(effect@4.0.5))(@effect/sql-libsql@4.0.5(effect@4.0.5))(@effect/sql-mysql2@4.0.5(@types/node@26.6.5)(effect@4.0.5))(@effect/sql-pg@4.0.5(effect@4.0.5))(@effect/sql-sqlite-do@4.0.5(effect@4.0.5))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.0.5)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(postgres@3.4.7)(typebox@1.3.27)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4))
@@ -2834,6 +2925,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/cloudflare-secrets-store:
     dependencies:
@@ -2960,6 +3055,9 @@ importers:
         specifier: 'catalog:'
         version: 19.3.0(react@19.3.0)
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -3003,6 +3101,9 @@ importers:
         specifier: 'catalog:'
         version: 1.9.17
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -3049,6 +3150,9 @@ importers:
         specifier: 4.0.5
         version: 4.0.5
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       drizzle-kit:
         specifier: 1.0.0-rc.5
         version: 1.0.0-rc.5(drizzle-orm@1.0.0-rc.5(@cloudflare/workers-types@5.20261012.1)(@effect/sql-d1@4.0.5(effect@4.0.5))(@effect/sql-libsql@4.0.5(effect@4.0.5))(@effect/sql-mysql2@4.0.5(@types/node@26.6.5)(effect@4.0.5))(@effect/sql-pg@4.0.5(effect@4.0.5))(@effect/sql-sqlite-do@4.0.5(effect@4.0.5))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.0.5)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(postgres@3.4.7)(typebox@1.3.27)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4))
@@ -3065,6 +3169,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -3120,6 +3227,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -3154,6 +3264,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@opennextjs/cloudflare':
         specifier: 'catalog:'
         version: 1.20.1(next@16.2.10(@babel/core@7.29.7(supports-color@10.2.2))(@playwright/test@1.64.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(supports-color@10.2.2)(wrangler@4.151.3(@cloudflare/workers-types@5.20261012.1)(@types/node@26.6.5))
@@ -3194,6 +3307,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -3228,6 +3344,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -3268,6 +3387,9 @@ importers:
         specifier: 4.0.5
         version: 4.0.5
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
@@ -3554,6 +3676,9 @@ importers:
         specifier: catalog:solid-v1
         version: 7.3.7(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@7.3.7(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -3576,6 +3701,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@sveltejs/kit':
         specifier: 'catalog:'
         version: 3.0.1(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2)(vite@8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))(svelte@5.57.2)(typescript@6.0.3)(vite@8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -3625,6 +3753,9 @@ importers:
         specifier: 'catalog:'
         version: 19.3.0(react@19.3.0)
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -3677,6 +3808,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@cloudflare/workers-types':
         specifier: 5.20261012.1
         version: 5.20261012.1
@@ -3717,6 +3851,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../../packages/cloudflare
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -3775,6 +3912,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@cloudflare/unenv-preset':
         specifier: 'catalog:'
         version: 2.16.2(unenv@2.0.0-rc.24)(workerd@1.20261012.1)
@@ -3833,6 +3973,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -3878,6 +4021,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/cloudflare-worker-async:
     dependencies:
@@ -3905,6 +4052,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/dev-stress:
     dependencies:
@@ -3956,6 +4107,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/fly-bucket:
     dependencies:
@@ -3974,6 +4129,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/fly-microservices:
     dependencies:
@@ -3989,6 +4148,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/fly-postgres:
     dependencies:
@@ -4017,6 +4180,9 @@ importers:
         specifier: 4.0.5
         version: 4.0.5
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       drizzle-kit:
         specifier: 1.0.0-rc.5
         version: 1.0.0-rc.5(drizzle-orm@1.0.0-rc.5(@cloudflare/workers-types@5.20261012.1)(@effect/sql-d1@4.0.5(effect@4.0.5))(@effect/sql-libsql@4.0.5(effect@4.0.5))(@effect/sql-mysql2@4.0.5(@types/node@26.6.5)(effect@4.0.5))(@effect/sql-pg@4.0.5(effect@4.0.5))(@effect/sql-sqlite-do@4.0.5(effect@4.0.5))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.0.5)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(postgres@3.4.7)(typebox@1.3.27)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4))
@@ -4038,6 +4204,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/fly-service:
     dependencies:
@@ -4056,6 +4226,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/fly-sprite:
     dependencies:
@@ -4074,6 +4248,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/fly-website-astro:
     dependencies:
@@ -4087,6 +4265,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
@@ -4124,6 +4305,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
@@ -4167,6 +4351,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
@@ -4210,6 +4397,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
@@ -4265,6 +4455,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
@@ -4317,6 +4510,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
@@ -4351,6 +4547,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
@@ -4409,6 +4608,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
@@ -4464,6 +4666,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
@@ -4531,6 +4736,9 @@ importers:
         specifier: 'catalog:'
         version: 19.3.0(react@19.3.0)
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -4583,6 +4791,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
@@ -4641,6 +4852,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
@@ -4686,6 +4900,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/gcp-cloud-run-api:
     dependencies:
@@ -4704,6 +4922,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/gcp-cloud-sql-drizzle:
     dependencies:
@@ -4735,6 +4957,9 @@ importers:
         specifier: 4.0.5
         version: 4.0.5
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       drizzle-kit:
         specifier: 1.0.0-rc.5
         version: 1.0.0-rc.5(drizzle-orm@1.0.0-rc.5(@cloudflare/workers-types@5.20261012.1)(@effect/sql-d1@4.0.5(effect@4.0.5))(@effect/sql-libsql@4.0.5(effect@4.0.5))(@effect/sql-mysql2@4.0.5(@types/node@26.6.5)(effect@4.0.5))(@effect/sql-pg@4.0.5(effect@4.0.5))(@effect/sql-sqlite-do@4.0.5(effect@4.0.5))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.4)(arktype@2.2.8)(bun-types@1.4.3)(effect@4.0.5)(mysql2@3.24.5(@types/node@26.6.5))(pg@8.23.1)(postgres@3.4.7)(typebox@1.3.27)(valibot@1.2.0(typescript@7.0.2))(zod@4.5.4))
@@ -4756,6 +4981,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/gcp-event-pipeline:
     dependencies:
@@ -4774,6 +5003,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/gcp-eventarc-firestore:
     dependencies:
@@ -4792,6 +5025,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/gcp-gke:
     dependencies:
@@ -4813,6 +5050,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/gcp-memorystore-redis:
     dependencies:
@@ -4831,6 +5072,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/gcp-pubsub-fanout:
     dependencies:
@@ -4849,6 +5094,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/gcp-pubsub-worker:
     dependencies:
@@ -4867,6 +5116,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/gcp-scheduled-job:
     dependencies:
@@ -4885,6 +5138,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/gcp-secrets-kms:
     dependencies:
@@ -4903,6 +5160,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/gcp-service-to-service:
     dependencies:
@@ -4921,6 +5182,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/gcp-static-site:
     dependencies:
@@ -4939,6 +5204,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/gcp-storage-uploads:
     dependencies:
@@ -4957,6 +5226,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/gcp-vertex-ai:
     dependencies:
@@ -4975,6 +5248,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/gcp-website-astro:
     dependencies:
@@ -5110,6 +5387,9 @@ importers:
       '@alchemy.run/hetzner':
         specifier: workspace:*
         version: link:../../packages/hetzner
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/hetzner
@@ -5147,6 +5427,9 @@ importers:
       '@alchemy.run/hetzner':
         specifier: workspace:*
         version: link:../../packages/hetzner
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/hetzner
@@ -5190,6 +5473,9 @@ importers:
       '@alchemy.run/hetzner':
         specifier: workspace:*
         version: link:../../packages/hetzner
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/hetzner
@@ -5233,6 +5519,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/hetzner
@@ -5282,6 +5571,9 @@ importers:
       '@alchemy.run/hetzner':
         specifier: workspace:*
         version: link:../../packages/hetzner
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/hetzner
@@ -5334,6 +5626,9 @@ importers:
       '@alchemy.run/hetzner':
         specifier: workspace:*
         version: link:../../packages/hetzner
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/hetzner
@@ -5374,6 +5669,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/hetzner
@@ -5426,6 +5724,9 @@ importers:
       '@alchemy.run/hetzner':
         specifier: workspace:*
         version: link:../../packages/hetzner
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/hetzner
@@ -5487,6 +5788,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/hetzner
@@ -5557,6 +5861,9 @@ importers:
         specifier: 'catalog:'
         version: 19.3.0(react@19.3.0)
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -5609,6 +5916,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/hetzner
@@ -5667,6 +5977,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/hetzner
@@ -5713,6 +6026,9 @@ importers:
         specifier: 4.0.5
         version: 4.0.5
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
@@ -5873,6 +6189,9 @@ importers:
         specifier: 4.5.4
         version: 4.5.4
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/neon':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/neon
@@ -5910,6 +6229,9 @@ importers:
       '@alchemy.run/neon':
         specifier: workspace:*
         version: link:../../packages/neon
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -5947,6 +6269,9 @@ importers:
       '@alchemy.run/neon':
         specifier: workspace:*
         version: link:../../packages/neon
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -5990,6 +6315,9 @@ importers:
       '@alchemy.run/neon':
         specifier: workspace:*
         version: link:../../packages/neon
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6033,6 +6361,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6082,6 +6413,9 @@ importers:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6128,6 +6462,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6180,6 +6517,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6207,6 +6547,9 @@ importers:
       '@alchemy.run/neon':
         specifier: workspace:*
         version: link:../../packages/neon
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6241,6 +6584,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6299,6 +6645,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6351,6 +6700,9 @@ importers:
         specifier: 'catalog:'
         version: 19.3.0(react@19.3.0)
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -6406,6 +6758,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6464,6 +6819,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6608,6 +6966,9 @@ importers:
         specifier: 4.0.5
         version: 4.0.5
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@vercel/nft':
         specifier: 'catalog:'
         version: 1.11.0(rollup@4.62.4)(supports-color@10.2.2)
@@ -6630,6 +6991,9 @@ importers:
       '@alchemy.run/prisma':
         specifier: workspace:*
         version: link:../../packages/prisma
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6667,6 +7031,9 @@ importers:
       '@alchemy.run/prisma':
         specifier: workspace:*
         version: link:../../packages/prisma
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6710,6 +7077,9 @@ importers:
       '@alchemy.run/prisma':
         specifier: workspace:*
         version: link:../../packages/prisma
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6753,6 +7123,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6802,6 +7175,9 @@ importers:
         specifier: 'catalog:'
         version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6848,6 +7224,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6900,6 +7279,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6927,6 +7309,9 @@ importers:
       '@alchemy.run/prisma':
         specifier: workspace:*
         version: link:../../packages/prisma
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -6961,6 +7346,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -7019,6 +7407,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -7132,6 +7523,9 @@ importers:
         specifier: 'catalog:'
         version: 19.3.0(react@19.3.0)
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -7187,6 +7581,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -7245,6 +7642,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
@@ -7290,6 +7690,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/railway-service:
     dependencies:
@@ -7317,6 +7721,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/railway-website-astro:
     dependencies:
@@ -7330,6 +7738,9 @@ importers:
       '@alchemy.run/railway':
         specifier: workspace:*
         version: link:../../packages/railway
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/railway':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/railway
@@ -7367,6 +7778,9 @@ importers:
       '@alchemy.run/railway':
         specifier: workspace:*
         version: link:../../packages/railway
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/railway':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/railway
@@ -7410,6 +7824,9 @@ importers:
       '@alchemy.run/railway':
         specifier: workspace:*
         version: link:../../packages/railway
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/railway':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/railway
@@ -7453,6 +7870,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/railway':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/railway
@@ -7508,6 +7928,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/railway':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/railway
@@ -7560,6 +7983,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/railway':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/railway
@@ -7594,6 +8020,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/railway':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/railway
@@ -7652,6 +8081,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/railway':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/railway
@@ -7707,6 +8139,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/railway':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/railway
@@ -7774,6 +8209,9 @@ importers:
         specifier: 'catalog:'
         version: 19.3.0(react@19.3.0)
     devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -7826,6 +8264,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/railway':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/railway
@@ -7884,6 +8325,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../../packages/frontend-frameworks
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
       '@distilled.cloud/railway':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/railway
@@ -7938,6 +8382,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/stripe-connect:
     dependencies:
@@ -7965,6 +8413,10 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   packages/acme:
     dependencies:
@@ -8021,18 +8473,12 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../frontend-frameworks
-      '@alchemy.run/test':
-        specifier: workspace:*
-        version: link:../alchemy-test
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(redis@6.2.1)
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
       '@oxc-project/types':
         specifier: 'catalog:'
         version: 0.153.0
@@ -8090,9 +8536,6 @@ importers:
       uuid:
         specifier: 'catalog:'
         version: 14.0.3
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       wrangler:
         specifier: 'catalog:'
         version: 4.151.3(@cloudflare/workers-types@5.20261012.1)(@types/node@26.6.5)
@@ -8105,19 +8548,28 @@ importers:
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.5(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
       '@opentui/core':
         specifier: 'catalog:'
         version: 0.6.6(typescript@7.0.2)(web-tree-sitter@0.25.10)
-    devDependencies:
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
       effect:
         specifier: 4.0.5
         version: 4.0.5
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/aws:
     dependencies:

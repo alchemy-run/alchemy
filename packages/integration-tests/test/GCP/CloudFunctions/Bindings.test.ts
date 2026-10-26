@@ -1,9 +1,9 @@
 import * as GCP from "@alchemy.run/gcp";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as cloudfunctions from "@distilled.cloud/gcp/cloudfunctions_v2";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";

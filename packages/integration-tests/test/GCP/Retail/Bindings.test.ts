@@ -1,9 +1,9 @@
 import * as GCP from "@alchemy.run/gcp";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import type * as retail from "@distilled.cloud/gcp/retail_v2";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import RetailBindingsHost, { retailEnabled, Serving, Shirt } from "./fixtures/bindings-host.ts";

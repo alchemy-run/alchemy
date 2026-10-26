@@ -2,10 +2,10 @@ import * as GitHub from "@alchemy.run/github";
 import { GitHubCredentials } from "@alchemy.run/github/Credentials";
 import { Octokit } from "@alchemy.run/github/Octokit";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";

@@ -15,9 +15,9 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import * as Prisma from "@alchemy.run/prisma";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import { getDomain, getProject } from "@distilled.cloud/prisma/management";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

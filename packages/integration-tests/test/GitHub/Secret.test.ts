@@ -1,9 +1,9 @@
 import * as GitHub from "@alchemy.run/github";
 import { Octokit } from "@alchemy.run/github/Octokit";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

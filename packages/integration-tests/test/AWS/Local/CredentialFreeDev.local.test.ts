@@ -7,6 +7,8 @@ import * as Region from "@alchemy.run/aws/Region";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { Queue } from "@alchemy.run/aws/SQS";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import type { RegionName } from "@distilled.cloud/aws/Region";
@@ -43,8 +45,6 @@ import * as Alchemy from "alchemy";
  */
 import { CredentialsRequired } from "alchemy/Auth/Demand";
 import { ProfileStore, type ProfileStoreService } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/http/HttpBody";

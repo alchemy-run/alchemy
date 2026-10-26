@@ -9,13 +9,13 @@ import {
 import * as WorkerRuntime from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import * as WorkflowRuntime from "@alchemy.run/cloudflare/Workflows/WorkflowRuntime";
 import { describe, expect, layer } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { virtualEntryPlugin } from "alchemy/Bundle/Bundle";
 import { Stack } from "alchemy/Stack";
 import { StackContext } from "alchemy/StackContext";
 import * as Telemetry from "alchemy/Telemetry";
 import * as TelemetryRuntime from "alchemy/TelemetryRuntime";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Path from "effect/Path";

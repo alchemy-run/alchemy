@@ -1,5 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 /**
  * The same probe as ZlibProbe.local.test.ts, against REAL Cloudflare: which
  * synchronous exact-span inflate paths exist in production workerd, and
@@ -7,7 +8,6 @@ import { expect } from "@alchemy.run/test";
  * DESIGN §22.4: this is what decides the push-ingest CPU story.
  */
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";

@@ -3,7 +3,7 @@ import * as GitHub from "@alchemy.run/github";
 import { Octokit } from "@alchemy.run/github/Octokit";
 import { webhookPath } from "@alchemy.run/github/RepositoryEventSource";
 import { expect } from "@alchemy.run/test";
-import * as Test from "alchemy/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";

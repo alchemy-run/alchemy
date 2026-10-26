@@ -1,9 +1,9 @@
 import * as GCP from "@alchemy.run/gcp";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";

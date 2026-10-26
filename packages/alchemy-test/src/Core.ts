@@ -1,3 +1,36 @@
+import { AdoptPolicy } from "alchemy/AdoptPolicy";
+import { AlchemyContext, AlchemyContextLive } from "alchemy/AlchemyContext";
+import { apply } from "alchemy/Apply";
+import { ArtifactStore, provideFreshArtifactStore } from "alchemy/Artifacts";
+import { AuthProviders } from "alchemy/Auth/AuthProvider";
+import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
+import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import { withProfileOverride } from "alchemy/Auth/Resolve";
+import { userStage } from "alchemy/Cli/commands/flags";
+import { LoggingCli } from "alchemy/Cli/LoggingCli";
+import * as Contributions from "alchemy/Contributions";
+import { deploy as _deploy } from "alchemy/Deploy";
+import { destroy as _destroy } from "alchemy/Destroy";
+import type { Input } from "alchemy/Input";
+import * as Interaction from "alchemy/Interaction";
+import * as RpcProviderProxy from "alchemy/Local/RpcProviderProxy";
+import * as RpcSpawner from "alchemy/Local/RpcSpawner";
+import { ALCHEMY_DEV } from "alchemy/Phase";
+import * as Plan from "alchemy/Plan";
+import type { ResourceSelection, SelectionOutput } from "alchemy/ResourceSelection";
+import {
+  type CompiledStack,
+  make as makeStack,
+  Stack,
+  type StackDefinition,
+  type StackEffect,
+  type StackServices,
+} from "alchemy/Stack";
+import { Stage } from "alchemy/Stage";
+import * as State from "alchemy/State";
+import { TelemetryLive } from "alchemy/Telemetry/Layer";
+import { loadConfigProvider, StackConfigOverrides } from "alchemy/Util/ConfigProvider";
+import { PlatformServices } from "alchemy/Util/PlatformServices";
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 import * as Config from "effect/Config";
 import { ConfigProvider } from "effect/ConfigProvider";
@@ -9,39 +42,6 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
-import { AdoptPolicy } from "../AdoptPolicy.ts";
-import { AlchemyContext, AlchemyContextLive } from "../AlchemyContext.ts";
-import { apply } from "../Apply.ts";
-import { ArtifactStore, provideFreshArtifactStore } from "../Artifacts.ts";
-import { AuthProviders } from "../Auth/AuthProvider.ts";
-import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileStoreLive } from "../Auth/Profile.ts";
-import { withProfileOverride } from "../Auth/Resolve.ts";
-import { userStage } from "../Cli/commands/flags.ts";
-import { LoggingCli } from "../Cli/LoggingCli.ts";
-import * as Contributions from "../Contributions.ts";
-import { deploy as _deploy } from "../Deploy.ts";
-import { destroy as _destroy } from "../Destroy.ts";
-import type { Input } from "../Input.ts";
-import * as Interaction from "../Interaction.ts";
-import * as RpcProviderProxy from "../Local/RpcProviderProxy.ts";
-import * as RpcSpawner from "../Local/RpcSpawner.ts";
-import { ALCHEMY_DEV } from "../Phase.ts";
-import * as Plan from "../Plan.ts";
-import type { ResourceSelection, SelectionOutput } from "../ResourceSelection.ts";
-import {
-  type CompiledStack,
-  make as makeStack,
-  Stack,
-  type StackDefinition,
-  type StackEffect,
-  type StackServices,
-} from "../Stack.ts";
-import { Stage } from "../Stage.ts";
-import * as State from "../State/index.ts";
-import { TelemetryLive } from "../Telemetry/Layer.ts";
-import { loadConfigProvider, StackConfigOverrides } from "../Util/ConfigProvider.ts";
-import { PlatformServices } from "../Util/PlatformServices.ts";
 
 /**
  * Configuration shared by every test in a file. Pass to `Test.make(...)`.

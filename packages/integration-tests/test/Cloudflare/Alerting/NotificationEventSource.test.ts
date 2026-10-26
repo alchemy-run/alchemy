@@ -4,8 +4,8 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import * as GitHub from "@alchemy.run/github";
 import { Octokit as AmbientOctokit } from "@alchemy.run/github/Octokit";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";

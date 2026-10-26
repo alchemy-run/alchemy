@@ -1,9 +1,9 @@
 import * as GCP from "@alchemy.run/gcp";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import type * as memcache from "@distilled.cloud/gcp/memcache_v1";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import { dockerAvailable, expectProbe } from "../bindingHost.ts";
 import MemcacheBindingsHost, { Cache, memcacheEnabled } from "./fixtures/bindings-host.ts";

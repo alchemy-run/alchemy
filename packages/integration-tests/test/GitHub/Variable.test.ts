@@ -1,8 +1,8 @@
 import * as GitHub from "@alchemy.run/github";
 import { GitHubCredentials } from "@alchemy.run/github/Credentials";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 

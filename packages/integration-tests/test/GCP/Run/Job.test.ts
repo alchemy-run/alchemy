@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

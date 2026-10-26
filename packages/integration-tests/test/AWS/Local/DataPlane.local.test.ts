@@ -24,11 +24,11 @@
  */
 import * as AWS from "@alchemy.run/aws";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as SSM from "@distilled.cloud/aws/ssm";
 import * as Alchemy from "alchemy";
 import { Stack } from "alchemy/Stack";
 import { State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { liveContext } from "./fixtures/live.ts";

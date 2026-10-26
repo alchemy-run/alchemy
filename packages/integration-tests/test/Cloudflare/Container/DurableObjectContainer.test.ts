@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Workers from "@distilled.cloud/cloudflare/workers";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";

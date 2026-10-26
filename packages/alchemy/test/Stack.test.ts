@@ -1,4 +1,8 @@
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import type { TestApi as BunTestApi } from "@alchemy.run/test/Bun";
+import * as TestCore from "@alchemy.run/test/Core";
+import type { TestApi as VitestTestApi } from "@alchemy.run/test/Vitest";
 import * as Cause from "effect/Cause";
 import type { ConfigError } from "effect/Config";
 import * as Config from "effect/Config";
@@ -11,10 +15,6 @@ import * as Alchemy from "@/index.ts";
 import * as Plan from "@/Plan.ts";
 import { Stage } from "@/Stage.ts";
 import * as State from "@/State/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
-import type { TestApi as BunTestApi } from "@/Test/Bun.ts";
-import * as TestCore from "@/Test/Core.ts";
-import type { TestApi as VitestTestApi } from "@/Test/Vitest.ts";
 import { TestLayers, TestResource } from "./test.resources.ts";
 
 // These tests are compile-time assertions: they verify that the

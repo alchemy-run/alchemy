@@ -2,7 +2,7 @@ import * as NodeNet from "node:net";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { describe, expect } from "@alchemy.run/test";
-import * as Test from "alchemy/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Redacted from "effect/Redacted";

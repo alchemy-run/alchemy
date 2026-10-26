@@ -7,13 +7,13 @@ import type { IdentityState, RegistryState } from "@alchemy.run/kubernetes/Clust
 import type { Connection } from "@alchemy.run/kubernetes/Connection";
 import type { KubernetesObjectRef } from "@alchemy.run/kubernetes/Objects";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as container from "@distilled.cloud/gcp/container_v1";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

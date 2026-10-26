@@ -1,13 +1,13 @@
 import { describe, expect } from "bun:test";
 import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
+import * as Test from "@alchemy.run/test/Bun";
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as scheduler from "@distilled.cloud/gcp/cloudscheduler_v1";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as run from "@distilled.cloud/gcp/run_v2";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
