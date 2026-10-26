@@ -118,24 +118,31 @@ interface HeldLease {
 /**
  * A passing check is trusted for `ttlMs`, so a burst of operations does
  * one round-trip. A failing check is never cached.
+ *
+ * Checks run one at a time. A caller that waited re-reads the result
+ * before it checks again. Without that, every caller in a burst that
+ * arrives after `ttlMs` runs its own check, and the queue of checks can
+ * hold the lease refresh back until the lease expires.
  */
 const amortizeCheck = (
   checkLive: Effect.Effect<void, StateStoreError>,
   ttlMs: number,
 ): Effect.Effect<void, StateStoreError> => {
   let lastOkAt: number | undefined;
-  return Effect.suspend(() => {
-    if (lastOkAt !== undefined && Date.now() - lastOkAt < ttlMs) {
-      return Effect.void;
-    }
-    return checkLive.pipe(
-      Effect.tap(() =>
-        Effect.sync(() => {
-          lastOkAt = Date.now();
-        }),
-      ),
-    );
-  });
+  const checking = Semaphore.makeUnsafe(1);
+  const fresh = () => lastOkAt !== undefined && Date.now() - lastOkAt < ttlMs;
+  const check = checkLive.pipe(
+    Effect.tap(() =>
+      Effect.sync(() => {
+        lastOkAt = Date.now();
+      }),
+    ),
+  );
+  return Effect.suspend(() =>
+    fresh()
+      ? Effect.void
+      : Semaphore.withPermits(checking, 1)(Effect.suspend(() => (fresh() ? Effect.void : check))),
+  );
 };
 
 const parseLease = (text: string): LeaseRecord => {
