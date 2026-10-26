@@ -259,6 +259,88 @@ echo ${queue.queueUrl}
     { timeout: 600_000 },
   );
 
+  // A launch whose reply was lost leaves no saved output, and the tag lookup
+  // can miss an instance EC2 has not indexed yet. The `clientToken` makes the
+  // retried RunInstances return the first instance instead of a second one.
+  test.provider(
+    "a retried launch with the same clientToken returns the same instance",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        // A token lives 24 hours in EC2, so each run needs a fresh one.
+        const program = (clientToken: string) =>
+          Effect.gen(function* () {
+            const vpc = yield* Vpc("ClientTokenVpc", { cidrBlock: "10.0.0.0/16" });
+            const subnet = yield* Subnet("ClientTokenSubnet", {
+              vpcId: vpc.vpcId,
+              cidrBlock: "10.0.1.0/24",
+            });
+            const instance = yield* Instance("ClientTokenInstance", {
+              imageId: amazonLinux2023(),
+              instanceType: "t3.micro",
+              subnetId: subnet.subnetId,
+              clientToken,
+            });
+            return { vpc, instance };
+          });
+        const token = yield* Effect.sync(() => crypto.randomUUID());
+
+        const first = yield* stack.deploy(program(token));
+        const launched = yield* ec2.describeInstances({
+          InstanceIds: [first.instance.instanceId],
+        });
+        expect(launched.Reservations?.[0]?.Instances?.[0]?.ClientToken).toBe(token);
+
+        // Simulate a lost RunInstances reply: drop the saved output and the
+        // generation tag the recovery lookup finds the instance by.
+        const state = yield* yield* State;
+        const key = { stack: stack.name, stage: stack.stage, fqn: "ClientTokenInstance" };
+        const row = yield* state.get(key);
+        if (row?.status !== "created") {
+          return yield* Effect.die(new Error("Expected a created instance row"));
+        }
+        const { attr: _attr, ...rest } = row;
+        yield* state.set({ ...key, value: { ...rest, status: "creating" } });
+        yield* ec2.deleteTags({
+          Resources: [first.instance.instanceId],
+          Tags: [{ Key: "alchemy::instance" }],
+        });
+
+        const retried = yield* stack.deploy(program(token));
+        expect(retried.instance.instanceId).toBe(first.instance.instanceId);
+
+        // Only one live instance carries this resource's ownership tags, and
+        // the sync put the generation tag back.
+        const owned = yield* ec2.describeInstances({
+          Filters: [
+            { Name: "tag:alchemy::stack", Values: [stack.name] },
+            { Name: "tag:alchemy::stage", Values: [stack.stage] },
+            { Name: "tag:alchemy::id", Values: ["ClientTokenInstance"] },
+            { Name: "instance-state-name", Values: ["pending", "running"] },
+          ],
+        });
+        const instances = (owned.Reservations ?? []).flatMap((r) => r.Instances ?? []);
+        expect(instances.map((i) => i.InstanceId)).toEqual([first.instance.instanceId]);
+        expect(instances[0]?.Tags?.find((tag) => tag.Key === "alchemy::instance")?.Value).toBe(
+          row.instanceId,
+        );
+
+        // A new token alone updates the saved props without touching the
+        // instance, so a later launch uses it.
+        const next = `${token}-next`;
+        const plan = yield* stack.plan(program(next));
+        expect(plan.resources.ClientTokenInstance?.action).toBe("update");
+        const updated = yield* stack.deploy(program(next));
+        expect(updated.instance.instanceId).toBe(first.instance.instanceId);
+
+        yield* stack.destroy();
+        yield* assertInstanceTerminated(first.instance.instanceId);
+        yield* assertVpcGone(first.vpc.vpcId);
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
+
   // A Redacted userData is revealed only for RunInstances and compared by
   // value: the copy decoded from state is a new object, which must not
   // replace the instance on every deploy.

@@ -113,6 +113,20 @@ export interface InstanceProps extends PlatformProps {
    */
   tags?: Record<string, string>;
   /**
+   * Idempotency token sent as `ClientToken` on `RunInstances`. A retried
+   * launch with the same token (within 24 hours) returns the instance the
+   * first call launched instead of a second one. Up to 64 ASCII characters.
+   *
+   * Only the launch uses it. Changing it alone runs an update that makes no
+   * EC2 call, so a later launch uses the new token. Pass a new token when
+   * another change replaces the instance, or when the instance it launched
+   * was terminated: AWS rejects a reused token with different parameters
+   * with `IdempotentParameterMismatch`, and can return the terminated
+   * instance for the same parameters.
+   * @default a random token per launch
+   */
+  clientToken?: string;
+  /**
    * Module entrypoint for the bundled instance program.
    * When omitted, the instance behaves as a low-level EC2 resource.
    */
@@ -663,6 +677,7 @@ export const InstanceProvider = () =>
         ),
         MinCount: 1,
         MaxCount: 1,
+        ClientToken: news.clientToken,
       });
 
       return {
@@ -865,6 +880,17 @@ export const InstanceProvider = () =>
             if (!newInstanceId) {
               return yield* Effect.fail(
                 new Error(`RunInstances returned no instance ID for '${id}'`),
+              );
+            }
+            // A reused `clientToken` can return the instance it first
+            // launched, even after that instance was terminated.
+            const launchedState = created.Instances?.[0]?.State?.Name;
+            if (launchedState === "shutting-down" || launchedState === "terminated") {
+              return yield* Effect.fail(
+                new Error(
+                  `RunInstances returned ${launchedState} instance ${newInstanceId} for '${id}': ` +
+                    `clientToken '${news.clientToken}' already launched it. Pass a new clientToken.`,
+                ),
               );
             }
             yield* session.note(newInstanceId);

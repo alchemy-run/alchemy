@@ -5,6 +5,7 @@ import { expect } from "@alchemy.run/test";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as kms from "@distilled.cloud/aws/kms";
 import * as Provider from "alchemy/Provider";
+import { State } from "alchemy/State/State";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -200,6 +201,76 @@ test.provider(
     tags: ["provider:aws", "provider:aws:ec2", "provider:aws:kms", "live"],
     timeout: 120_000,
   },
+);
+
+// A create whose reply was lost leaves no saved output, and the tag lookup
+// can miss a volume EC2 has not indexed yet. The `clientToken` makes the
+// retried CreateVolume return the first volume instead of a second one.
+test.provider(
+  "a retried create with the same clientToken returns the same volume",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // A token lives 24 hours in EC2, so each run needs a fresh one.
+      const program = (clientToken: string) =>
+        Effect.gen(function* () {
+          return yield* Volume("ClientTokenVolume", {
+            availabilityZone: AZ,
+            size: 1,
+            volumeType: "gp3",
+            clientToken,
+          });
+        });
+      const token = yield* Effect.sync(() => crypto.randomUUID());
+
+      const first = yield* stack.deploy(program(token));
+
+      // Simulate a lost CreateVolume reply: drop the saved output and the
+      // generation tag the recovery lookup finds the volume by.
+      const state = yield* yield* State;
+      const key = { stack: stack.name, stage: stack.stage, fqn: "ClientTokenVolume" };
+      const row = yield* state.get(key);
+      if (row?.status !== "created") {
+        return yield* Effect.die(new Error("Expected a created volume row"));
+      }
+      const { attr: _attr, ...rest } = row;
+      yield* state.set({ ...key, value: { ...rest, status: "creating" } });
+      yield* EC2.deleteTags({
+        Resources: [first.volumeId],
+        Tags: [{ Key: "alchemy::instance" }],
+        DryRun: false,
+      });
+
+      const retried = yield* stack.deploy(program(token));
+      expect(retried.volumeId).toBe(first.volumeId);
+
+      // Only one volume carries this resource's ownership tags, and the sync
+      // put the generation tag back.
+      const owned = yield* EC2.describeVolumes({
+        Filters: [
+          { Name: "tag:alchemy::stack", Values: [stack.name] },
+          { Name: "tag:alchemy::stage", Values: [stack.stage] },
+          { Name: "tag:alchemy::id", Values: ["ClientTokenVolume"] },
+        ],
+      });
+      expect(owned.Volumes?.map((v) => v.VolumeId)).toEqual([first.volumeId]);
+      expect(owned.Volumes?.[0]?.Tags?.find((tag) => tag.Key === "alchemy::instance")?.Value).toBe(
+        row.instanceId,
+      );
+
+      // A new token alone updates the saved props without touching the
+      // volume, so a later create uses it.
+      const next = `${token}-next`;
+      const plan = yield* stack.plan(program(next));
+      expect(plan.resources.ClientTokenVolume?.action).toBe("update");
+      const updated = yield* stack.deploy(program(next));
+      expect(updated.volumeId).toBe(first.volumeId);
+
+      yield* stack.destroy();
+      yield* assertVolumeDeleted(first.volumeId);
+    }).pipe(logLevel),
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 120_000 },
 );
 
 const assertVolumeDeleted = Effect.fn(function* (volumeId: string) {

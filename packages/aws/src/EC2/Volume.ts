@@ -89,6 +89,20 @@ export interface VolumeProps {
    * (alchemy::stack, alchemy::stage, alchemy::id).
    */
   tags?: Record<string, string>;
+
+  /**
+   * Idempotency token sent as `ClientToken` on `CreateVolume`. A retried
+   * create with the same token (within 24 hours) returns the volume the
+   * first call created instead of a second one. Up to 64 ASCII characters.
+   *
+   * Only the create uses it. Changing it alone runs an update that makes no
+   * EC2 call, so a later create uses the new token. Pass a new token when
+   * another change replaces the volume, or after the volume it created was
+   * deleted: AWS rejects a reused token with different parameters with
+   * `IdempotentParameterMismatch`.
+   * @default a random token per create
+   */
+  clientToken?: string;
 }
 
 export interface Volume extends Resource<
@@ -315,6 +329,7 @@ export const VolumeProvider = () =>
               KmsKeyId: news.kmsKeyId,
               SnapshotId: news.snapshotId,
               MultiAttachEnabled: news.multiAttachEnabled,
+              ClientToken: news.clientToken,
               TagSpecifications: [
                 {
                   ResourceType: "volume",
