@@ -1,4 +1,5 @@
 import * as DateTime from "effect/DateTime";
+import * as Schema from "effect/Schema";
 
 /**
  * Comparison operators for ordered values (numbers, dates, strings).
@@ -132,6 +133,55 @@ const isOperatorObject = (value: unknown): value is Record<string, unknown> =>
   !DateTime.isDateTime(value) &&
   Object.keys(value).length > 0 &&
   Object.keys(value).every((k) => OPERATORS.has(k));
+
+const isObject = (value: unknown): value is object =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  !DateTime.isDateTime(value);
+
+/** An operand on the wire: a `DateTime` travels as its ISO string, which {@link matches} compares with a date field. */
+const Operand = Schema.Union([Schema.String, Schema.DateTimeUtc, Schema.Unknown]);
+
+/** One field's filter on the wire: a value to equal, operators, or a nested filter. */
+const FieldJson: Schema.Codec<unknown> = Schema.Union([
+  Operand.check(Schema.makeFilter((value) => !isObject(value))),
+  Schema.suspend(() => OperatorsJson),
+  Schema.suspend(() => FilterJson.check(Schema.makeFilter((value) => !isOperatorObject(value)))),
+]);
+
+const OperatorsJson = Schema.Struct({
+  equals: Schema.optionalKey(Operand),
+  not: Schema.optionalKey(Operand),
+  in: Schema.optionalKey(Schema.Array(Operand)),
+  notIn: Schema.optionalKey(Schema.Array(Operand)),
+  lt: Schema.optionalKey(Operand),
+  lte: Schema.optionalKey(Operand),
+  gt: Schema.optionalKey(Operand),
+  gte: Schema.optionalKey(Operand),
+  contains: Schema.optionalKey(Schema.String),
+  startsWith: Schema.optionalKey(Schema.String),
+  endsWith: Schema.optionalKey(Schema.String),
+  some: Schema.optionalKey(FieldJson),
+  every: Schema.optionalKey(FieldJson),
+  none: Schema.optionalKey(FieldJson),
+  has: Schema.optionalKey(Operand),
+  isEmpty: Schema.optionalKey(Schema.Boolean),
+  length: Schema.optionalKey(FieldJson),
+}).check(Schema.makeFilter(isOperatorObject));
+
+/**
+ * A {@link Filter} as it crosses the wire. A read decodes `where` with it, so
+ * a malformed filter is refused before {@link matches} evaluates it.
+ */
+export const FilterJson: Schema.Codec<unknown> = Schema.StructWithRest(
+  Schema.Struct({
+    AND: Schema.optionalKey(Schema.Array(Schema.suspend(() => FilterJson))),
+    OR: Schema.optionalKey(Schema.Array(Schema.suspend(() => FilterJson))),
+    NOT: Schema.optionalKey(Schema.suspend(() => FilterJson)),
+  }),
+  [Schema.Record(Schema.String, FieldJson)],
+);
 
 const compare = (field: unknown, operand: unknown): number => {
   const a = normalize(field) as any;

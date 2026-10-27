@@ -690,16 +690,25 @@ const LIVE_PARAM = "read";
  * a URL ends up in logs, so a live read authenticates with what its upgrade
  * request carries (in a browser, its cookies).
  */
-interface LiveRequest {
-  readonly id: string | number;
-  readonly tag: string;
-  readonly payload: unknown;
-  readonly cursor?: number;
+const LiveRequest = Schema.Struct({
+  id: Schema.Union([Schema.String, Schema.Number]),
+  tag: Schema.String,
+  payload: Schema.Unknown,
+  cursor: Schema.optional(Schema.Number),
   /** The client's span, as the RPC protocol carries it, so the read joins the caller's trace. */
-  readonly traceId?: string;
-  readonly spanId?: string;
-  readonly sampled?: boolean;
-}
+  traceId: Schema.optional(Schema.String),
+  spanId: Schema.optional(Schema.String),
+  sampled: Schema.optional(Schema.Boolean),
+});
+type LiveRequest = typeof LiveRequest.Type;
+
+const decodeLiveRequest = Schema.decodeUnknownOption(Schema.fromJsonString(LiveRequest));
+
+/** The live read the current request asks for, if its query parameter decodes. */
+const liveRequestOf = (request: { readonly url: string }): LiveRequest | undefined => {
+  const raw = new URL(request.url, "http://localhost").searchParams.get(LIVE_PARAM);
+  return raw === null ? undefined : Option.getOrUndefined(decodeLiveRequest(raw));
+};
 
 /**
  * Serve live reads (`watch` and `events`) as WebSockets. The read's
@@ -737,8 +746,7 @@ const liveReads = (
   }
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest;
-    const raw = new URL(request.url, "http://localhost").searchParams.get(LIVE_PARAM);
-    const live = raw === null ? undefined : (JSON.parse(raw) as LiveRequest);
+    const live = liveRequestOf(request);
     const read = live && reads.get(live.tag);
     if (!live || !read) return HttpServerResponse.text("Unknown live read", { status: 400 });
     if (!read.store?.connect) {
@@ -789,8 +797,7 @@ const liveReads = (
     // A live read continues the trace of the client that opened it, like an RPC call.
     (effect) =>
       Effect.flatMap(HttpServerRequest, (request) => {
-        const raw = new URL(request.url, "http://localhost").searchParams.get(LIVE_PARAM);
-        const live = raw === null ? undefined : (JSON.parse(raw) as LiveRequest);
+        const live = liveRequestOf(request);
         return effect.pipe(
           Effect.withSpan(`Domain.read ${live?.tag ?? "unknown"}`, {
             kind: "server",
@@ -1095,7 +1102,11 @@ export const protocolInProcess = <Name extends string, Entries extends ReadonlyA
   makeProtocolInProcess(api.entries, api.group);
 
 /** A frame of a live read: an Effect RPC message, plus the cursor to resume from. */
-type LiveFrame = RpcMessage.FromServerEncoded & { readonly cursor?: number };
+const LiveFrame = Schema.StructWithRest(
+  Schema.Struct({ _tag: Schema.String, cursor: Schema.optional(Schema.Number) }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+);
+const decodeLiveFrame = Schema.decodeUnknownEffect(Schema.fromJsonString(LiveFrame));
 
 /** The RPCs served as live reads. */
 const isLiveRead = (tag: string) => tag.endsWith(".watch") || tag.endsWith(".events");
@@ -1169,7 +1180,7 @@ export const protocolWebSocket = (
             const pull = yield* Socket.readerString(socket);
             while (!ended) {
               for (const text of yield* pull) {
-                const { cursor: next, ...message } = JSON.parse(text) as LiveFrame;
+                const { cursor: next, ...message } = yield* decodeLiveFrame(text);
                 failures = 0;
                 if (next !== undefined) cursor = next;
                 if (message._tag === "Exit") ended = true;

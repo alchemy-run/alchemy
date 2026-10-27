@@ -1,4 +1,5 @@
 import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Rejection from "./Rejection.ts";
@@ -21,11 +22,11 @@ export interface Snapshot<S> {
  * to `cursor` was delivered (or filtered out), and what follows is live. A
  * read that reconnects sends it again after the events it missed.
  */
-export interface CaughtUp {
-  readonly _tag: "CaughtUp";
+export const CaughtUp = Schema.TaggedStruct("CaughtUp", {
   /** The `seq` of the last event of the history (`0` for none); resume `events` after it. */
-  readonly cursor: number;
-}
+  cursor: Schema.Number,
+});
+export type CaughtUp = typeof CaughtUp.Type;
 
 /** Is a frame of `events` the {@link CaughtUp} marker? */
 export const isCaughtUp = <A extends object>(frame: A | CaughtUp): frame is CaughtUp =>
