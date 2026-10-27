@@ -129,6 +129,11 @@ export interface GcpBindingVariant {
    * `["@", "revisionId"]` targets `…/schemas/s@<revisionId>`.
    */
   readonly suffix?: readonly [separator: string, field: string];
+  /**
+   * A fixed path after the bound resource's name, for targets that aren't a
+   * child resource: Firestore queries run on `…/databases/d/documents`.
+   */
+  readonly append?: string;
 }
 
 /**
@@ -167,6 +172,7 @@ export const makeGcpBinding = <Shape>(options: {
       ) {
         const input: Record<string, unknown> = { ...request };
         let target = yield* name;
+        if (variant.append) target = `${target}/${variant.append}`;
         for (const [collection, field] of variant.children ?? []) {
           target = `${target}/${collection}/${input[field]}`;
           delete input[field];

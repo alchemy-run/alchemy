@@ -6,9 +6,12 @@ import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { expectProbe } from "../bindingHost.ts";
 import FirestoreBindingsHost, {
+  EnterpriseDatabase,
   DocsDatabase,
+  GenDatabase,
   PATCHED,
   ReadOnlyDatabase,
   ReadWriteOnlyDatabase,
@@ -29,6 +32,8 @@ let databases: {
   readOnly: string;
   writeOnly: string;
   readWrite: string;
+  gen: string;
+  enterprise: string;
 };
 
 /** Write a document out of band, as the deployer. */
@@ -48,7 +53,7 @@ const readOutOfBand = (database: string, path: string) =>
 /**
  * Roles the host holds on the project under the IAM Condition naming only
  * `database` (Firestore has no per-database IAM policy). Also asserts the
- * host holds no unconditioned project role.
+ * host's only unconditioned project roles are the user-credential ones.
  */
 const scopedRoles = (database: string) =>
   Effect.gen(function* () {
@@ -59,7 +64,14 @@ const scopedRoles = (database: string) =>
     const hostBindings = (policy.bindings ?? []).filter((binding) =>
       (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
     );
-    expect(hostBindings.filter((binding) => binding.condition === undefined)).toEqual([]);
+    // Only the user-credential bindings grant on the whole project: IAM
+    // Conditions don't match individual credentials.
+    expect(
+      hostBindings
+        .filter((binding) => binding.condition === undefined)
+        .map((binding) => binding.role)
+        .sort(),
+    ).toEqual(["roles/datastore.userCredsAdmin", "roles/datastore.userCredsViewer"]);
     const condition = `resource.name == "${database}" || resource.name.startsWith("${database}/")`;
     return hostBindings
       .filter((binding) => binding.condition?.expression === condition)
@@ -88,6 +100,8 @@ describe.skipIf(!!process.env.FAST)(
               readOnly: (yield* ReadOnlyDatabase).name,
               writeOnly: (yield* WriteOnlyDatabase).name,
               readWrite: (yield* ReadWriteOnlyDatabase).name,
+              gen: (yield* GenDatabase).name,
+              enterprise: (yield* EnterpriseDatabase).name,
             };
           }),
         );
@@ -99,12 +113,19 @@ describe.skipIf(!!process.env.FAST)(
           readOnly: out.readOnly,
           writeOnly: out.writeOnly,
           readWrite: out.readWrite,
+          gen: out.gen,
+          enterprise: out.enterprise,
         };
       }),
       { timeout: 900_000 },
     );
 
     afterAll(sharedStack.destroy(), { timeout: 600_000 });
+
+    const live = {
+      tags: ["provider:gcp", "provider:gcp:firestore", "live"],
+      timeout: 600_000,
+    };
 
     const expectDocsGrants = Effect.suspend(() => scopedRoles(databases.docs)).pipe(
       Effect.map((roles) =>
@@ -242,6 +263,181 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:firestore", "live"],
           timeout: 600_000,
         },
+      );
+    });
+
+    describe("GetDatabase / Commit / BatchGetDocuments / BatchWriteDocuments / BeginTransaction / Rollback / ListDocuments / ListCollectionIds / RunAggregationQuery / PartitionQuery / ExecutePipeline", () => {
+      test.provider(
+        "writes, reads and queries documents as the host, under the database condition",
+        (_stack) =>
+          Effect.gen(function* () {
+            const database = yield* expectProbe<{ name?: string; type?: string }>(
+              baseUrl,
+              "getDatabase",
+            );
+            expect(database).toMatchObject({ name: databases.gen, type: "FIRESTORE_NATIVE" });
+
+            const committed = yield* expectProbe<{ writeResults?: unknown[] }>(baseUrl, "commit");
+            expect(committed.writeResults).toHaveLength(2);
+            const got = yield* expectProbe<{ found?: { name?: string } }[]>(baseUrl, "batchGet");
+            expect(got.map((r) => r.found?.name).sort()).toEqual(
+              ["a", "b"].map((id) => `${databases.gen}/documents/gen/${id}`),
+            );
+            const written = yield* expectProbe<{ status?: unknown[] }>(baseUrl, "batchWrite");
+            expect(written.status).toHaveLength(1);
+            expect(yield* readOutOfBand(databases.gen, "gen/c")).toEqual({ n: 3 });
+            expect(yield* expectProbe(baseUrl, "transaction")).toEqual({ transaction: true });
+
+            const listed = yield* expectProbe<{ documents?: { name?: string }[] }>(
+              baseUrl,
+              "listDocuments",
+            );
+            expect(listed.documents).toHaveLength(3);
+            expect(
+              yield* expectProbe<{ collectionIds?: string[] }>(baseUrl, "listCollectionIds"),
+            ).toEqual({ collectionIds: ["gen"] });
+            const counted = yield* expectProbe<
+              { result?: { aggregateFields?: Record<string, { integerValue?: string }> } }[]
+            >(baseUrl, "count");
+            expect(counted[0]?.result?.aggregateFields?.total?.integerValue).toEqual("3");
+            yield* expectProbe(baseUrl, "partitionQuery");
+            expect(yield* expectProbe<string>(baseUrl, "executePipeline")).not.toEqual("Forbidden");
+
+            expect(yield* scopedRoles(databases.gen)).toEqual(
+              expect.arrayContaining(["roles/datastore.user"]),
+            );
+          }),
+        live,
+      );
+    });
+
+    describe("BulkDeleteDocuments / ExportDocuments / ImportDocuments", () => {
+      test.provider(
+        "starts admin operations as the host, under the database condition",
+        (_stack) =>
+          Effect.gen(function* () {
+            const bulk = yield* expectProbe<{ name?: string }>(baseUrl, "bulkDelete");
+            expect(bulk.name).toContain("/operations/");
+            // The bucket doesn't exist: both calls are authorized and fail on it.
+            const out = yield* expectProbe<{ export: string; import: string }>(
+              baseUrl,
+              "exportImport",
+            );
+            expect(out.export).not.toEqual("Forbidden");
+            expect(out.import).not.toEqual("Forbidden");
+          }),
+        live,
+      );
+    });
+
+    describe("CreateDatabaseCollectionGroupIndex / ListDatabaseCollectionGroupIndexes / GetDatabaseCollectionGroupIndex / DeleteDatabaseCollectionGroupIndex / GetDatabaseCollectionGroupField / ListDatabaseCollectionGroupFields / PatchDatabaseCollectionGroupField", () => {
+      test.provider(
+        "manages a composite index and a TTL field as the host, under the database condition",
+        (_stack) =>
+          Effect.gen(function* () {
+            expect(yield* expectProbe<string>(baseUrl, "createIndex")).not.toEqual("Forbidden");
+            const listed = yield* expectProbe<{ indexes?: { name?: string }[] }>(
+              baseUrl,
+              "listIndexes",
+            );
+            const name = listed.indexes?.[0]?.name;
+            expect(name).toContain(`${databases.gen}/collectionGroups/gen/indexes/`);
+            const index = name!.split("/").at(-1)!;
+            const ready = yield* expectProbe<{ state?: string }>(
+              baseUrl,
+              `getIndex?index=${index}`,
+            ).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("5 seconds"),
+                until: (out) => out.state === "READY",
+                times: 18,
+              }),
+            );
+            expect(ready.state).toEqual("READY");
+            yield* expectProbe(baseUrl, `deleteIndex?index=${index}`);
+
+            const fields = yield* expectProbe<{ default: { name?: string } }>(baseUrl, "fields");
+            expect(fields.default.name).toEqual(
+              `${databases.gen}/collectionGroups/__default__/fields/*`,
+            );
+            const ttl = yield* expectProbe<{ name?: string }>(baseUrl, "patchField");
+            expect(ttl.name).toContain("/operations/");
+          }),
+        { ...live, timeout: 300_000 },
+      );
+    });
+
+    describe("CreateDatabaseBackupSchedule / ListDatabaseBackupSchedules / GetDatabaseBackupSchedule / PatchDatabaseBackupSchedule / DeleteDatabaseBackupSchedule", () => {
+      test.provider(
+        "manages a daily backup schedule as the host, under the database condition",
+        (_stack) =>
+          Effect.gen(function* () {
+            const created = yield* expectProbe<{ name?: string; retention?: string }>(
+              baseUrl,
+              "createSchedule",
+            );
+            expect(created.retention).toEqual("604800s");
+            const schedule = created.name!.split("/").at(-1)!;
+            const listed = yield* expectProbe<{ backupSchedules?: { name?: string }[] }>(
+              baseUrl,
+              "listSchedules",
+            );
+            expect(listed.backupSchedules?.map((b) => b.name)).toEqual([created.name]);
+            expect(
+              (yield* expectProbe<{ name?: string }>(baseUrl, `getSchedule?schedule=${schedule}`))
+                .name,
+            ).toEqual(created.name);
+            expect(
+              (yield* expectProbe<{ retention?: string }>(
+                baseUrl,
+                `patchSchedule?schedule=${schedule}`,
+              )).retention,
+            ).toEqual("1209600s");
+            yield* expectProbe(baseUrl, `deleteSchedule?schedule=${schedule}`);
+          }),
+        live,
+      );
+    });
+
+    describe("CreateDatabaseUserCred / ListDatabaseUserCreds / GetDatabaseUserCred / EnableDatabaseUserCred / DisableDatabaseUserCred / ResetUserCredPassword / DeleteDatabaseUserCred", () => {
+      test.provider(
+        "manages a credential on an Enterprise database as the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            // A fresh id per attempt, so a retried test never collides with its own credential.
+            const id = `binding-${yield* Effect.sync(() => crypto.randomUUID().slice(0, 8))}`;
+            const name = `${databases.enterprise}/userCreds/${id}`;
+            // One probe per call: a probe retried while IAM propagates must not re-create.
+            const call = <A>(probe: string) => expectProbe<A>(baseUrl, `${probe}?id=${id}`);
+            expect(yield* call<{ name?: string; state?: string }>("createUserCred")).toMatchObject({
+              name,
+              state: "ENABLED",
+            });
+            const listed = yield* call<{ userCreds?: { name?: string }[] }>("listUserCreds");
+            expect(listed.userCreds?.map((c) => c.name)).toContain(name);
+            expect((yield* call<{ name?: string }>("getUserCred")).name).toEqual(name);
+            expect((yield* call<{ state?: string }>("disableUserCred")).state).toEqual("DISABLED");
+            expect((yield* call<{ state?: string }>("enableUserCred")).state).toEqual("ENABLED");
+            expect(
+              (yield* call<{ securePassword?: string }>("resetUserCred")).securePassword,
+            ).toBeDefined();
+            yield* call("deleteUserCred");
+            // Create and list are checked on the database; the rest on the project.
+            expect(yield* scopedRoles(databases.enterprise)).toEqual([
+              "roles/datastore.userCredsAdmin",
+              "roles/datastore.userCredsViewer",
+            ]);
+
+            expect(yield* scopedRoles(databases.gen)).toEqual([
+              "roles/datastore.backupSchedulesAdmin",
+              "roles/datastore.backupSchedulesViewer",
+              "roles/datastore.bulkAdmin",
+              "roles/datastore.importExportAdmin",
+              "roles/datastore.indexAdmin",
+              "roles/datastore.user",
+            ]);
+          }),
+        live,
       );
     });
   },

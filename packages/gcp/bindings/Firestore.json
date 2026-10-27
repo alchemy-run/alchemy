@@ -1,0 +1,78 @@
+{
+  "discovery": "firestore-v1",
+  "module": "firestore_v1",
+  "permissionService": "datastore",
+  "resources": {
+    "Database": {
+      "pattern": "projects/*/databases/*",
+      "scopeByCondition": true
+    }
+  },
+  "permissions": {
+    "firestore.projects.databases.bulkDeleteDocuments": "datastore.databases.bulkDelete",
+    "firestore.projects.databases.importDocuments": "datastore.databases.import",
+    "firestore.projects.databases.exportDocuments": "datastore.databases.export",
+    "firestore.projects.databases.documents.commit": "datastore.entities.update",
+    "firestore.projects.databases.documents.batchWrite": "datastore.entities.update",
+    "firestore.projects.databases.documents.beginTransaction": "datastore.databases.get",
+    "firestore.projects.databases.documents.rollback": "datastore.databases.get",
+    "firestore.projects.databases.documents.batchGet": "datastore.entities.get",
+    "firestore.projects.databases.documents.executePipeline": "datastore.entities.list",
+    "firestore.projects.databases.documents.partitionQuery": "datastore.entities.list",
+    "firestore.projects.databases.documents.runAggregationQuery": "datastore.entities.list",
+    "firestore.projects.databases.documents.listCollectionIds": "datastore.entities.list",
+    "firestore.projects.databases.documents.listDocuments": "datastore.entities.list",
+    "firestore.projects.databases.collectionGroups.indexes.create": "datastore.indexes.create",
+    "firestore.projects.databases.collectionGroups.indexes.get": "datastore.indexes.get",
+    "firestore.projects.databases.collectionGroups.indexes.list": "datastore.indexes.list",
+    "firestore.projects.databases.collectionGroups.indexes.delete": "datastore.indexes.delete",
+    "firestore.projects.databases.collectionGroups.fields.get": "datastore.indexes.get",
+    "firestore.projects.databases.collectionGroups.fields.list": "datastore.indexes.list",
+    "firestore.projects.databases.collectionGroups.fields.patch": "datastore.indexes.update",
+    "firestore.projects.databases.userCreds.enable": "datastore.userCreds.update",
+    "firestore.projects.databases.userCreds.disable": "datastore.userCreds.update",
+    "firestore.projects.databases.userCreds.resetPassword": "datastore.userCreds.update"
+  },
+  "roles": {
+    "datastore.indexes.create": "roles/datastore.indexAdmin",
+    "datastore.indexes.get": "roles/datastore.indexAdmin",
+    "datastore.indexes.list": "roles/datastore.indexAdmin",
+    "datastore.indexes.delete": "roles/datastore.indexAdmin",
+    "datastore.indexes.update": "roles/datastore.indexAdmin"
+  },
+  "names": {
+    "BatchDocumentGet": "BatchGetDocuments",
+    "BatchDocumentWrite": "BatchWriteDocuments",
+    "BeginDocumentTransaction": "BeginTransaction",
+    "BulkDatabaseDeleteDocuments": "BulkDeleteDocuments",
+    "CommitDatabaseDocument": "Commit",
+    "RollbackDatabaseDocument": "Rollback",
+    "ExecuteDocumentPipeline": "ExecutePipeline",
+    "PartitionDocumentQuery": "PartitionQuery",
+    "RunDocumentAggregationQuery": "RunAggregationQuery",
+    "ListDocumentCollectionIds": "ListCollectionIds",
+    "ExportDatabaseDocuments": "ExportDocuments",
+    "ImportDatabaseDocuments": "ImportDocuments"
+  },
+  "append": {
+    "firestore.projects.databases.documents.partitionQuery": "documents",
+    "firestore.projects.databases.documents.runAggregationQuery": "documents",
+    "firestore.projects.databases.documents.listCollectionIds": "documents",
+    "firestore.projects.databases.documents.listDocuments": "documents"
+  },
+  "skip": {
+    "firestore.projects.databases.documents.listen": "a streaming (WebChannel) RPC, not a request/response call",
+    "firestore.projects.databases.documents.write": "a streaming (WebChannel) RPC, not a request/response call",
+    "firestore.projects.databases.changeStreams.create": "checks a permission no predefined Firestore role grants (preview)",
+    "firestore.projects.databases.changeStreams.delete": "checks a permission no predefined Firestore role grants (preview)",
+    "firestore.projects.databases.changeStreams.list": "checks a permission no predefined Firestore role grants (preview)",
+    "firestore.projects.databases.changeStreams.get": "checks a permission no predefined Firestore role grants (preview)"
+  },
+  "projectGrant": {
+    "firestore.projects.databases.userCreds.get": "IAM Conditions on `resource.name` don't match individual user credentials",
+    "firestore.projects.databases.userCreds.enable": "IAM Conditions on `resource.name` don't match individual user credentials",
+    "firestore.projects.databases.userCreds.disable": "IAM Conditions on `resource.name` don't match individual user credentials",
+    "firestore.projects.databases.userCreds.resetPassword": "IAM Conditions on `resource.name` don't match individual user credentials",
+    "firestore.projects.databases.userCreds.delete": "IAM Conditions on `resource.name` don't match individual user credentials"
+  }
+}
