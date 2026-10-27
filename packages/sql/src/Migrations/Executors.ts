@@ -36,28 +36,64 @@ export const migrationError =
  * Prefer {@link withPgExecutor}; use this when the provider runs its own
  * executor over the client (DSQL) or plain SQL (`importFiles`).
  */
+export interface ConnectOptions {
+  /**
+   * Retry the connect — never `use` — while this holds for the driver's
+   * error, e.g. DNS that hasn't propagated for a just-created host.
+   */
+  readonly retryConnect?: {
+    readonly while: (cause: unknown) => boolean;
+    readonly times: number;
+    readonly interval: Duration.Input;
+  };
+  /** Rewrite a connect failure that survived the retry, e.g. to add a hint. */
+  readonly onConnectFailure?: (error: MigrationError) => MigrationError;
+}
+
+const retryingConnect = <A>(
+  connect: Effect.Effect<A, MigrationError>,
+  options: ConnectOptions | undefined,
+): Effect.Effect<A, MigrationError> => {
+  const retry = options?.retryConnect;
+  const retried = retry
+    ? connect.pipe(
+        Effect.retry({
+          while: (error) => retry.while(error.cause),
+          schedule: Schedule.spaced(retry.interval),
+          times: retry.times,
+        }),
+      )
+    : connect;
+  const rewrite = options?.onConnectFailure;
+  return rewrite ? retried.pipe(Effect.mapError(rewrite)) : retried;
+};
+
 export const withPgClient = <A, E, R>(
   config: ClientConfig,
   use: (client: Client) => Effect.Effect<A, E, R>,
+  options?: ConnectOptions,
 ): Effect.Effect<A, MigrationError | E, R> =>
   Effect.acquireUseRelease(
-    Effect.tryPromise({
-      try: async () => {
-        const { Client } = await importPg();
-        const client = new Client(config);
-        // pg reports idle socket failures as events; the next query fails
-        // through the error channel instead of crashing the process.
-        client.on("error", () => {});
-        try {
-          await client.connect();
-        } catch (error) {
-          await client.end().catch(() => {});
-          throw error;
-        }
-        return client;
-      },
-      catch: migrationError(`Connecting to postgres${config.host ? ` at ${config.host}` : ""}`),
-    }),
+    retryingConnect(
+      Effect.tryPromise({
+        try: async () => {
+          const { Client } = await importPg();
+          const client = new Client(config);
+          // pg reports idle socket failures as events; the next query fails
+          // through the error channel instead of crashing the process.
+          client.on("error", () => {});
+          try {
+            await client.connect();
+          } catch (error) {
+            await client.end().catch(() => {});
+            throw error;
+          }
+          return client;
+        },
+        catch: migrationError(`Connecting to postgres${config.host ? ` at ${config.host}` : ""}`),
+      }),
+      options,
+    ),
     use,
     (client) => Effect.promise(() => client.end().catch(() => {})),
   );
@@ -66,8 +102,9 @@ export const withPgClient = <A, E, R>(
 export const withPgExecutor = <A, E, R>(
   config: ClientConfig,
   use: (executor: SqlExecutor) => Effect.Effect<A, E, R>,
+  options?: ConnectOptions,
 ): Effect.Effect<A, MigrationError | E, R> =>
-  withPgClient(config, (client) => use(makePgMigrationExecutor(client)));
+  withPgClient(config, (client) => use(makePgMigrationExecutor(client)), options);
 
 /**
  * Open a `mysql2` connection for the scope of `use`; it always closes
@@ -77,15 +114,19 @@ export const withPgExecutor = <A, E, R>(
 export const withMySqlConnection = <A, E, R>(
   config: ConnectionOptions,
   use: (connection: Connection) => Effect.Effect<A, E, R>,
+  options?: ConnectOptions,
 ): Effect.Effect<A, MigrationError | E, R> =>
   Effect.acquireUseRelease(
-    Effect.tryPromise({
-      try: async () => {
-        const { createConnection } = await importMySql();
-        return createConnection(config);
-      },
-      catch: migrationError(`Connecting to mysql${config.host ? ` at ${config.host}` : ""}`),
-    }),
+    retryingConnect(
+      Effect.tryPromise({
+        try: async () => {
+          const { createConnection } = await importMySql();
+          return createConnection(config);
+        },
+        catch: migrationError(`Connecting to mysql${config.host ? ` at ${config.host}` : ""}`),
+      }),
+      options,
+    ),
     use,
     (connection) => Effect.promise(() => connection.end().catch(() => {})),
   );
@@ -94,8 +135,9 @@ export const withMySqlConnection = <A, E, R>(
 export const withMySqlExecutor = <A, E, R>(
   config: ConnectionOptions,
   use: (executor: SqlExecutor) => Effect.Effect<A, E, R>,
+  options?: ConnectOptions,
 ): Effect.Effect<A, MigrationError | E, R> =>
-  withMySqlConnection(config, (connection) => use(makeMySQLMigrationExecutor(connection)));
+  withMySqlConnection(config, (connection) => use(makeMySQLMigrationExecutor(connection)), options);
 
 export type Rows = Array<Record<string, unknown>>;
 

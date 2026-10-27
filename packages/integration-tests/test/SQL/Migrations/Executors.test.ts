@@ -1,4 +1,10 @@
-import { makeStatementExecutor, migrationError, rowsFromCells } from "@alchemy.run/sql/Migrations";
+import {
+  makeStatementExecutor,
+  MigrationError,
+  migrationError,
+  rowsFromCells,
+  withPgClient,
+} from "@alchemy.run/sql/Migrations";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 
@@ -77,6 +83,40 @@ describe("migrationError", () => {
         expect(error.message).toEqual("executeSql on app failed: permission denied");
         expect(error.cause).toBe(tagged);
         expect(migrationError("x")({ _tag: "Timeout" }).message).toEqual("x failed: Timeout");
+      }),
+    tags,
+  );
+});
+
+describe("withPgClient", () => {
+  // Real sockets and real retry spacing: the live clock.
+  it.live(
+    "retries only the connect while asked, then rewrites the final failure",
+    () =>
+      Effect.gen(function* () {
+        let attempts = 0;
+        let used = false;
+        const error = yield* withPgClient(
+          // Nothing listens on port 1: the connect is refused at once.
+          { host: "127.0.0.1", port: 1, user: "u", database: "d", connectionTimeoutMillis: 2_000 },
+          () => Effect.sync(() => void (used = true)),
+          {
+            retryConnect: {
+              while: (cause) => {
+                attempts++;
+                return (cause as { code?: unknown }).code === "ECONNREFUSED";
+              },
+              times: 2,
+              interval: "10 millis",
+            },
+            onConnectFailure: (failure) =>
+              new MigrationError({ message: `hinted: ${failure.message}`, cause: failure.cause }),
+          },
+        ).pipe(Effect.flip);
+        // The first attempt plus `times: 2` retries.
+        expect(attempts).toEqual(3);
+        expect(used).toEqual(false);
+        expect(error.message).toContain("hinted: Connecting to postgres at 127.0.0.1 failed");
       }),
     tags,
   );
