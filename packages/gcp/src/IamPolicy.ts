@@ -86,6 +86,7 @@ export type GcpIamResourceKind =
   | "ml.model"
   | "privateca.caPool"
   | "pubsub.schema"
+  | "pubsub.snapshot"
   | "pubsub.subscription"
   | "pubsub.topic"
   | "run.job"
@@ -317,6 +318,10 @@ const TARGETS: Record<GcpIamResourceKind, (name: string) => IamPolicyTarget> = {
   "pubsub.schema": queryStyle(
     pubsub.getIamPolicyProjectsSchemas,
     pubsub.setIamPolicyProjectsSchemas,
+  ),
+  "pubsub.snapshot": queryStyle(
+    pubsub.getIamPolicyProjectsSnapshots,
+    pubsub.setIamPolicyProjectsSnapshots,
   ),
   "pubsub.subscription": queryStyle(
     pubsub.getIamPolicyProjectsSubscriptions,

@@ -1,0 +1,594 @@
+/**
+ * Generate GCP bindings: one `Binding.Service` + `<Op>Http.ts` layer per
+ * discovery method that runs against a resource Alchemy manages.
+ *
+ *   node scripts/generate-gcp-bindings.ts                 # every configured service
+ *   node scripts/generate-gcp-bindings.ts PubSub          # one service
+ *   node scripts/generate-gcp-bindings.ts --report PubSub # classify only, write nothing
+ *
+ * Inputs, per service, in `packages/gcp/bindings/`:
+ *
+ * - `<Service>.json`: the discovery doc and distilled module, the service's
+ *   resources (full-name pattern and IAM kind), and overrides for what can't
+ *   be derived (permissions, names, skips with a reason).
+ * - `roles.json`: permission → smallest predefined role holding it,
+ *   preferring the permission's own service. Refresh with
+ *   `node scripts/generate-gcp-bindings.ts --refresh-roles` (needs gcloud).
+ *
+ * Each discovery method is classified:
+ *
+ * - `internal`: long-running operation polling, IAM policy methods, and
+ *   location metadata;
+ * - `lifecycle`: create/delete/patch/update of a configured resource itself,
+ *   which its provider owns;
+ * - `covered`: already implemented by a hand-written binding in the service;
+ * - `project`: targets the project or a location, not a resource Alchemy
+ *   manages (reported; not generated yet);
+ * - `needs-permission`: no permission could be derived or found in
+ *   `roles.json` (add a `permissions` override);
+ * - `binding`: generated.
+ *
+ * Methods that differ only by a `locations` segment (`projects.secrets.get`
+ * and `projects.locations.secrets.get`) become one binding with a variant
+ * per resource type.
+ */
+
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { Argument, Command, Flag } from "effect/cli";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { ChildProcess } from "effect/process";
+import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
+
+// ============ Config ============
+
+interface ResourceConfig {
+  /** Full-name pattern, e.g. `projects/*\/topics/*`. */
+  pattern: string;
+  /** `GcpIamResourceKind` of the resource's own IAM policy; omit for project-level grants. */
+  iamKind?: string;
+  /** Resource type when it isn't `GCP.<Service>.<key>`. */
+  type?: string;
+}
+
+interface ServiceConfig {
+  discovery: string;
+  module: string;
+  /** Distilled import path segment; `unstable/` for unstable services. */
+  unstable?: boolean;
+  resources: Record<string, ResourceConfig>;
+  /** Method id → IAM permission. */
+  permissions?: Record<string, string>;
+  /** Derived binding name → name to use. */
+  names?: Record<string, string>;
+  /** Method id → reason it is not a binding. */
+  skip?: Record<string, string>;
+  /**
+   * Method id → `[separator, field]` appended to the target name, for
+   * targets like `projects/p/schemas/s@<revisionId>`.
+   */
+  suffix?: Record<string, [string, string]>;
+}
+
+// ============ Discovery ============
+
+interface DiscoveryMethod {
+  id: string;
+  path: string;
+  description?: string;
+  parameters?: Record<string, { pattern?: string; location?: string }>;
+}
+
+interface DiscoveryResource {
+  methods?: Record<string, DiscoveryMethod>;
+  resources?: Record<string, DiscoveryResource>;
+}
+
+const collectMethods = (
+  resource: DiscoveryResource,
+  path: string[],
+  out: { method: DiscoveryMethod; name: string; path: string[] }[],
+) => {
+  for (const [name, method] of Object.entries(resource.methods ?? {})) {
+    out.push({ method, name, path });
+  }
+  for (const [name, child] of Object.entries(resource.resources ?? {})) {
+    collectMethods(child, [...path, name], out);
+  }
+  return out;
+};
+
+const capitalize = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
+const safeIdentifier = (s: string) => s.replace(/[^a-zA-Z0-9_$]/g, "_");
+
+/** Distilled's operation name: `<method><Resource…>` (see distilled's convert.ts). */
+const functionName = (name: string, path: string[]) =>
+  safeIdentifier(name) + path.map((r) => capitalize(safeIdentifier(r))).join("");
+
+/** `^projects/[^/]+/topics/[^/]+$` → `["projects", "*", "topics", "*"]`. */
+const patternSegments = (pattern: string): string[] | undefined => {
+  const body = pattern.replace(/^\^/, "").replace(/\$$/, "").replaceAll("[^/]+", "*");
+  const segments = body.split("/");
+  return segments.every((s) => s === "*" || /^[a-zA-Z][a-zA-Z0-9]*$/.test(s))
+    ? segments
+    : undefined;
+};
+
+const singular = (word: string) =>
+  word.endsWith("ies")
+    ? `${word.slice(0, -3)}y`
+    : word.endsWith("sses") || word.endsWith("xes") || word.endsWith("ches")
+      ? word.slice(0, -2)
+      : word.endsWith("s") && !word.endsWith("ss")
+        ? word.slice(0, -1)
+        : word;
+
+const SCOPE_COLLECTIONS = new Set(["projects", "locations", "organizations", "folders"]);
+const LIFECYCLE_VERBS = new Set(["create", "delete", "patch", "update"]);
+const IAM_VERBS = new Set(["getIamPolicy", "setIamPolicy", "testIamPermissions"]);
+
+// ============ Distilled module ============
+
+interface OperationTypes {
+  request: string;
+  response: string;
+  error: string;
+}
+
+const parseOperation = (source: string, fn: string): OperationTypes | undefined => {
+  const match = new RegExp(
+    `export const ${fn}: API\\.(?:Paginated)?OperationMethod<\\s*(\\w+),\\s*(\\w+),\\s*(\\w+),`,
+  ).exec(source);
+  return match ? { request: match[1]!, response: match[2]!, error: match[3]! } : undefined;
+};
+
+/** Required member names of an interface in the distilled module. */
+const requiredMembers = (source: string, name: string): string[] => {
+  const start = source.indexOf(`export interface ${name} {`);
+  if (start === -1) return [];
+  const end = source.indexOf("\n}", start);
+  return [...source.slice(start, end).matchAll(/^ {2}"?([\w.$]+)"?: /gm)].map((m) => m[1]!);
+};
+
+// ============ Classification ============
+
+interface Variant {
+  resource: string; // config key
+  methodId: string;
+  fn: string;
+  param: string;
+  children: [string, string][];
+  suffix?: [string, string];
+  permission: string;
+  role: string;
+  types: OperationTypes;
+}
+
+interface Binding {
+  name: string;
+  verb: string;
+  description: string;
+  variants: Variant[];
+}
+
+interface Classified {
+  id: string;
+  kind: "internal" | "lifecycle" | "covered" | "project" | "needs-permission" | "skip" | "binding";
+  reason?: string;
+}
+
+const classify = (options: {
+  service: string;
+  config: ServiceConfig;
+  doc: DiscoveryResource & { name: string };
+  moduleSource: string;
+  covered: Set<string>;
+  roles: Record<string, string>;
+}) => {
+  const { config, doc, moduleSource, covered, roles } = options;
+  const resources = Object.entries(config.resources).map(([key, value]) => ({
+    key,
+    ...value,
+    segments: value.pattern.split("/"),
+  }));
+  const results: Classified[] = [];
+  const bindings = new Map<string, Binding>();
+  const methods = collectMethods(doc, [], []);
+  // A method and its `locations` twin are one binding: if a hand-written
+  // binding calls either, both are covered.
+  const twinKey = (id: string) =>
+    id
+      .split(".")
+      .filter((p) => p !== "locations")
+      .join(".");
+  const coveredKeys = new Set(
+    methods
+      .filter((m) => covered.has(functionName(m.name, m.path)))
+      .map((m) => twinKey(m.method.id)),
+  );
+
+  for (const { method, name: verb, path } of methods) {
+    const id = method.id;
+    const parts = id.split(".");
+    const cols = parts.slice(1, -1);
+    if (config.skip?.[id]) {
+      results.push({ id, kind: "skip", reason: config.skip[id] });
+      continue;
+    }
+    if (cols.includes("operations") || IAM_VERBS.has(verb) || cols.at(-1) === "locations") {
+      results.push({ id, kind: "internal" });
+      continue;
+    }
+    const fn = functionName(verb, path);
+    if (coveredKeys.has(twinKey(id))) {
+      results.push({ id, kind: "covered" });
+      continue;
+    }
+    // The path parameter that names the target (`{+name}`, `{+parent}`, `{+topic}`).
+    const vars = [...method.path.matchAll(/\{\+?(\w+)\}/g)].map((m) => m[1]!);
+    const targets = vars
+      .map((v) => ({ param: v, segments: patternSegments(method.parameters?.[v]?.pattern ?? "") }))
+      .filter((t): t is { param: string; segments: string[] } => t.segments !== undefined);
+    const target = targets.sort((a, b) => b.segments.length - a.segments.length)[0];
+    if (target === undefined) {
+      results.push({ id, kind: "project", reason: "no resource-name path parameter" });
+      continue;
+    }
+    const resource = resources
+      .filter(
+        (r) =>
+          r.segments.length <= target.segments.length &&
+          r.segments.every((s, i) => s === target.segments[i]) &&
+          (target.segments.length - r.segments.length) % 2 === 0,
+      )
+      .sort((a, b) => b.segments.length - a.segments.length)[0];
+    if (resource === undefined) {
+      const created = verb === "create" && resources.some((r) => r.segments.at(-2) === cols.at(-1));
+      results.push(
+        created
+          ? { id, kind: "lifecycle" }
+          : { id, kind: "project", reason: target.segments.join("/") },
+      );
+      continue;
+    }
+    const extra = target.segments.slice(resource.segments.length);
+    const children: [string, string][] = [];
+    for (let i = 0; i < extra.length; i += 2) {
+      children.push([extra[i]!, singular(extra[i]!)]);
+    }
+    const ownCollection = resource.segments.at(-2);
+    if (LIFECYCLE_VERBS.has(verb) && children.length === 0 && cols.at(-1) === ownCollection) {
+      results.push({ id, kind: "lifecycle" });
+      continue;
+    }
+    const scoped = cols.filter((c) => !SCOPE_COLLECTIONS.has(c));
+    const permission =
+      config.permissions?.[id] ??
+      [verb === "patch" ? "update" : verb, verb]
+        .flatMap((v) => [...scoped].reverse().map((c) => `${doc.name}.${c}.${v}`))
+        .find((p) => roles[p] !== undefined);
+    if (permission === undefined || roles[permission] === undefined) {
+      results.push({ id, kind: "needs-permission", reason: permission });
+      continue;
+    }
+    const types = parseOperation(moduleSource, fn);
+    if (types === undefined) {
+      results.push({ id, kind: "project", reason: `no distilled operation ${fn}` });
+      continue;
+    }
+    // `get` on [secrets, versions] → GetSecretVersion; `list` keeps the
+    // plural. A multi-word verb gets the resource noun after its first word
+    // unless it already names it: deleteRevision → DeleteSchemaRevision,
+    // rotateSecret → RotateSecret.
+    const words = verb.split(/(?=[A-Z])/);
+    const nouns = scoped.map((c, i) =>
+      verb === "list" && i === scoped.length - 1 ? capitalize(c) : capitalize(singular(c)),
+    );
+    const resourceNoun = capitalize(singular(scoped.at(-1) ?? ""));
+    const derived =
+      words.length === 1
+        ? capitalize(verb) + nouns.join("")
+        : verb.toLowerCase().includes(resourceNoun.toLowerCase())
+          ? capitalize(verb)
+          : capitalize(words[0]!) + resourceNoun + words.slice(1).join("");
+    const name = config.names?.[derived] ?? derived;
+    const binding = bindings.get(name) ?? {
+      name,
+      verb,
+      description: (method.description ?? "").split(/(?<=\.)\s/)[0] ?? "",
+      variants: [],
+    };
+    if (binding.variants.some((v) => v.resource === resource.key)) {
+      results.push({ id, kind: "project", reason: `name collision on ${name}` });
+      continue;
+    }
+    binding.variants.push({
+      resource: resource.key,
+      methodId: id,
+      fn,
+      param: target.param,
+      children,
+      suffix: config.suffix?.[id],
+      permission,
+      role: roles[permission]!,
+      types,
+    });
+    bindings.set(name, binding);
+    results.push({ id, kind: "binding" });
+  }
+  // The global variant first: it is the common case and the JSDoc example.
+  for (const binding of bindings.values()) {
+    binding.variants.sort(
+      (a, b) =>
+        Number(a.methodId.includes(".locations.")) - Number(b.methodId.includes(".locations.")),
+    );
+  }
+  return { results, bindings: [...bindings.values()].sort((a, b) => a.name.localeCompare(b.name)) };
+};
+
+// ============ Emit ============
+
+const HEADER = (service: string) =>
+  `// @generated by scripts/generate-gcp-bindings.ts from packages/gcp/bindings/${service}.json. Do not edit.\n`;
+
+const emitContract = (
+  service: string,
+  config: ServiceConfig,
+  binding: Binding,
+  moduleSource: string,
+) => {
+  const ns = config.module.replace(/_v.*$/, "");
+  const importPath = `@distilled.cloud/gcp/${config.unstable ? "unstable/" : ""}${config.module}`;
+  const first = binding.variants[0]!;
+  const resourceTypes = [...new Set(binding.variants.map((v) => v.resource))];
+  const childFields = [
+    ...first.children.map(([, field]) => field),
+    ...(first.suffix ? [first.suffix[1]] : []),
+  ];
+  const omitted = [first.param];
+  const required = requiredMembers(moduleSource, first.types.request).filter(
+    (m) => !omitted.includes(m),
+  );
+  const optional = required.length === 0 && childFields.length === 0;
+  const fieldDocs = [
+    ...first.children.map(([collection, field]) => [
+      field,
+      `Id of the ${field} under the bound resource (\`${collection}/{${field}}\`).`,
+    ]),
+    ...(first.suffix
+      ? [[first.suffix[1], `Appended to the bound resource's name after \`${first.suffix[0]}\`.`]]
+      : []),
+  ];
+  const childType = fieldDocs.length
+    ? ` {\n${fieldDocs.map(([f, doc]) => `  /** ${doc} */\n  ${f}: string;`).join("\n")}\n}`
+    : " {}";
+  const responses = [...new Set(binding.variants.map((v) => `${ns}.${v.types.response}`))];
+  const errors = [...new Set(binding.variants.map((v) => `${ns}.${v.types.error}`))];
+  const resourceDocs = resourceTypes.map((r) => `{@link ${r}}`).join(" or ");
+  const variable = binding.name[0]!.toLowerCase() + binding.name.slice(1);
+  const grants = [...new Set(binding.variants.map((v) => `\`${v.role}\``))].join(", ");
+  return `${HEADER(service)}import type * as ${ns} from "${importPath}";
+import * as Binding from "alchemy/Binding";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
+import type * as Effect from "effect/Effect";
+${resourceTypes.map((r) => `import type { ${r} } from "./${r}.ts";`).join("\n")}
+
+export interface ${binding.name}Request
+  extends Omit<${ns}.${first.types.request}, ${omitted.map((o) => `"${o}"`).join(" | ")}>${childType}
+
+export type ${binding.name}Shape = (
+  resource: ${resourceTypes.join(" | ")},
+) => Effect.Effect<
+  (
+    request${optional ? "?" : ""}: ${binding.name}Request,
+  ) => Effect.Effect<${responses.join(" | ")}, ${errors.join(" | ")}, RuntimeContext>
+>;
+
+/**
+ * ${binding.description.replace(/\*\//g, "*\\/") || `Runtime binding for \`${first.methodId}\`.`}
+ *
+ * Bind it to a ${resourceDocs} and provide {@link ${binding.name}Http}. The
+ * host gets ${grants} on the bound resource.
+ *
+ * ### Usage
+ * **Example:** Call \`${first.methodId.split(".").slice(-2).join(".")}\`
+ * \`\`\`typescript
+ * const ${variable} = yield* GCP.${service}.${binding.name}(${resourceTypes[0]![0]!.toLowerCase() + resourceTypes[0]!.slice(1)});
+ * const response = yield* ${variable}(${optional ? "" : childFields.length ? `{ ${childFields.map((f) => `${f}: "..."`).join(", ")} }` : "{ /* request */ }"});
+ * \`\`\`
+ *
+ * @binding
+ * @category ${service}
+ */
+export interface ${binding.name}
+  extends Binding.Service<${binding.name}, "GCP.${service}.${binding.name}", ${binding.name}Shape> {}
+
+export const ${binding.name} = Binding.Service<${binding.name}>("GCP.${service}.${binding.name}");
+`;
+};
+
+const emitHttp = (service: string, config: ServiceConfig, binding: Binding) => {
+  const ns = config.module.replace(/_v.*$/, "");
+  const importPath = `@distilled.cloud/gcp/${config.unstable ? "unstable/" : ""}${config.module}`;
+  const variants = binding.variants.map((v) => {
+    const resource = config.resources[v.resource]!;
+    const type = resource.type ?? `GCP.${service}.${v.resource}`;
+    const iam = resource.iamKind
+      ? `{ role: "${v.role}", on: "${resource.iamKind}" }`
+      : `{ role: "${v.role}" }`;
+    const children =
+      (v.children.length
+        ? `\n      children: [${v.children.map(([c, f]) => `["${c}", "${f}"]`).join(", ")}],`
+        : "") + (v.suffix ? `\n      suffix: ["${v.suffix[0]}", "${v.suffix[1]}"],` : "");
+    return `    {
+      resource: "${type}",
+      operation: ${ns}.${v.fn},
+      param: "${v.param}",${children}
+      iam: ${iam},
+    },`;
+  });
+  return `${HEADER(service)}import * as ${ns} from "${importPath}";
+import * as Layer from "effect/Layer";
+import { makeGcpBinding } from "../HttpBinding.ts";
+import { ${binding.name}, type ${binding.name}Shape } from "./${binding.name}.ts";
+
+/**
+ * HTTP implementation of {@link ${binding.name}}.
+ *
+ * @layer
+ * @provides GCP.${service}.${binding.name}
+ */
+export const ${binding.name}Http = Layer.effect(
+  ${binding.name},
+  makeGcpBinding<${binding.name}Shape>({
+    tag: "GCP.${service}.${binding.name}",
+    variants: [
+${variants.join("\n")}
+    ],
+  }),
+);
+`;
+};
+
+// ============ Program ============
+
+const generateService = Effect.fn(function* (root: string, service: string, report: boolean) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const bindingsDir = path.join(root, "packages/gcp/bindings");
+  const serviceDir = path.join(root, "packages/gcp/src", service);
+  const distilled = path.join(root, "submodules/distilled/packages/gcp");
+  const config = JSON.parse(
+    yield* fs.readFileString(path.join(bindingsDir, `${service}.json`)),
+  ) as ServiceConfig;
+  const roles = JSON.parse(yield* fs.readFileString(path.join(bindingsDir, "roles.json")));
+  const doc = JSON.parse(
+    yield* fs.readFileString(
+      path.join(distilled, "specs/spec-mirror-gcp/specs", `${config.discovery}.json`),
+    ),
+  );
+  const moduleSource = yield* fs.readFileString(
+    path.join(
+      distilled,
+      "src",
+      config.unstable ? "unstable-services" : "services",
+      `${config.module}.ts`,
+    ),
+  );
+
+  // Operations a hand-written binding already calls, and the files they live in.
+  const files = yield* fs.readDirectory(serviceDir);
+  const generated = new Set<string>();
+  const covered = new Set<string>();
+  const ns = config.module.replace(/_v.*$/, "");
+  for (const file of files.filter((f) => f.endsWith(".ts"))) {
+    const source = yield* fs.readFileString(path.join(serviceDir, file));
+    if (source.startsWith("// @generated by scripts/generate-gcp-bindings.ts")) {
+      generated.add(file);
+      continue;
+    }
+    // Only binding implementations count; resource providers call lifecycle ops.
+    if (!file.endsWith("Http.ts")) continue;
+    for (const m of source.matchAll(new RegExp(`\\b${ns}\\.(\\w+)\\b`, "g"))) covered.add(m[1]!);
+  }
+
+  const { results, bindings } = classify({ service, config, doc, moduleSource, covered, roles });
+  const counts: Record<string, number> = {};
+  for (const r of results) counts[r.kind] = (counts[r.kind] ?? 0) + 1;
+  yield* Console.log(
+    `${service}: ${Object.entries(counts)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(" ")} → ${bindings.length} bindings`,
+  );
+  if (report) {
+    for (const b of bindings) {
+      yield* Console.log(
+        `  binding          ${b.name}  ${b.variants.map((v) => `${v.resource}:${v.fn}→${v.role}`).join(" ")}`,
+      );
+    }
+    for (const r of results.filter((r) => r.kind !== "binding" && r.kind !== "internal")) {
+      yield* Console.log(`  ${r.kind.padEnd(16)} ${r.id}${r.reason ? `  (${r.reason})` : ""}`);
+    }
+    return;
+  }
+
+  const handWritten = new Set(files.filter((f) => !generated.has(f)));
+  const written = new Set<string>();
+  for (const binding of bindings) {
+    for (const file of [`${binding.name}.ts`, `${binding.name}Http.ts`]) {
+      if (handWritten.has(file)) {
+        return yield* Effect.die(
+          new Error(
+            `${service}/${file} is hand-written; set a "names" override for ${binding.name}`,
+          ),
+        );
+      }
+    }
+    yield* fs.writeFileString(
+      path.join(serviceDir, `${binding.name}.ts`),
+      emitContract(service, config, binding, moduleSource),
+    );
+    yield* fs.writeFileString(
+      path.join(serviceDir, `${binding.name}Http.ts`),
+      emitHttp(service, config, binding),
+    );
+    written.add(`${binding.name}.ts`).add(`${binding.name}Http.ts`);
+  }
+  // Drop generated files whose method no longer generates.
+  for (const file of generated) {
+    if (!written.has(file) && file !== "generated.ts") {
+      yield* fs.remove(path.join(serviceDir, file));
+    }
+  }
+  yield* fs.writeFileString(
+    path.join(serviceDir, "generated.ts"),
+    `${HEADER(service)}${bindings
+      .flatMap((b) => [`export * from "./${b.name}.ts";`, `export * from "./${b.name}Http.ts";`])
+      .join("\n")}\n`,
+  );
+  const indexPath = path.join(serviceDir, "index.ts");
+  const index = yield* fs.readFileString(indexPath);
+  if (!index.includes(`"./generated.ts"`)) {
+    yield* fs.writeFileString(indexPath, `${index.trimEnd()}\nexport * from "./generated.ts";\n`);
+  }
+  // Format what was written, so regenerating is a no-op diff.
+  const spawner = yield* ChildProcessSpawner;
+  yield* spawner.string(
+    ChildProcess.make(
+      "pnpm",
+      [
+        "exec",
+        "oxfmt",
+        ...[...written, "generated.ts", "index.ts"].map((f) => path.join(serviceDir, f)),
+      ],
+      { cwd: root, stdin: "ignore", stderr: "ignore" },
+    ),
+  );
+});
+
+const services = Argument.String("service").pipe(Argument.variadic());
+
+const command = Command.make(
+  "generate-gcp-bindings",
+  { services, report: Flag.Boolean("report").pipe(Flag.withDefault(false)) },
+  Effect.fn(function* ({ services, report }) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = path.resolve(import.meta.dirname, "..");
+    const all = (yield* fs.readDirectory(path.join(root, "packages/gcp/bindings")))
+      .filter((f) => f.endsWith(".json") && f !== "roles.json")
+      .map((f) => f.slice(0, -5))
+      .sort();
+    for (const service of services.length > 0 ? services : all) {
+      yield* generateService(root, service, report);
+    }
+  }),
+);
+
+Command.run(command, { version: "0.0.0" }).pipe(
+  Effect.provide(NodeServices.layer),
+  NodeRuntime.runMain,
+);

@@ -6,6 +6,8 @@ import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as Effect from "effect/Effect";
 import { expectProbe } from "../bindingHost.ts";
 import SecretManagerBindingsHost, {
+  GenRegionalSecret,
+  GenSecret,
   OpsSecret,
   ReadOnlySecret,
   ReadWriteOnlySecret,
@@ -26,6 +28,8 @@ let secrets: {
   readOnly: string;
   writeOnly: string;
   readWrite: string;
+  gen: string;
+  genRegional: string;
 };
 
 const hostRoles = (policy: secretmanager.Policy) =>
@@ -82,6 +86,8 @@ describe(
               readOnly: (yield* ReadOnlySecret).name,
               writeOnly: (yield* WriteOnlySecret).name,
               readWrite: (yield* ReadWriteOnlySecret).name,
+              gen: (yield* GenSecret).name,
+              genRegional: (yield* GenRegionalSecret).name,
             };
           }),
         );
@@ -93,6 +99,8 @@ describe(
           readOnly: out.readOnly,
           writeOnly: out.writeOnly,
           readWrite: out.readWrite,
+          gen: out.gen,
+          genRegional: out.genRegional,
         };
       }),
       { timeout: 900_000 },
@@ -248,6 +256,80 @@ describe(
           tags: ["provider:gcp", "provider:gcp:secretmanager", "live"],
           timeout: 600_000,
         },
+      );
+    });
+    const live = {
+      tags: ["provider:gcp", "provider:gcp:secretmanager", "live"],
+      timeout: 600_000,
+    };
+
+    describe("GetSecret / ListSecretVersions / GetSecretVersion / EnableSecretVersion", () => {
+      test.provider(
+        "reads secrets and versions and re-enables a version, granted on each secret only",
+        (_stack) =>
+          Effect.gen(function* () {
+            // Seed one version per secret and disable the global one, out of band.
+            const version = yield* secretmanager.addVersionProjectsSecrets({
+              parent: secrets.gen,
+              body: { payload: { data: btoa("generated") } },
+            });
+            yield* secretmanager.addVersionProjectsLocationsSecrets({
+              parent: secrets.genRegional,
+              body: { payload: { data: btoa("generated") } },
+            });
+            yield* secretmanager.disableProjectsSecretsVersions({ name: version.name! });
+
+            const got = yield* expectProbe<{
+              global: { name?: string };
+              regional: { name?: string };
+            }>(baseUrl, "getSecret");
+            expect(got.global.name).toEqual(secrets.gen);
+            expect(got.regional.name).toEqual(secrets.genRegional);
+
+            const listed = yield* expectProbe<{
+              global: { versions?: { name?: string }[] };
+              regional: { versions?: { name?: string }[] };
+            }>(baseUrl, "listSecretVersions");
+            expect(listed.global.versions?.map((v) => v.name)).toEqual([version.name]);
+            expect(listed.regional.versions).toHaveLength(1);
+
+            const one = yield* expectProbe<{ name?: string; state?: string }>(
+              baseUrl,
+              "getSecretVersion",
+            );
+            expect(one).toMatchObject({ name: version.name, state: "DISABLED" });
+
+            const enabled = yield* expectProbe<{ state?: string }>(baseUrl, "enableSecretVersion");
+            expect(enabled.state).toEqual("ENABLED");
+            expect((yield* versionStates(secrets.gen))[version.name!]).toEqual("ENABLED");
+
+            expect(yield* secretRoles(secrets.gen)).toEqual([
+              "roles/secretmanager.editor",
+              "roles/secretmanager.secretVersionAdder",
+              "roles/secretmanager.secretVersionManager",
+              "roles/secretmanager.viewer",
+            ]);
+            expect(yield* regionalSecretRoles(secrets.genRegional)).toEqual([
+              "roles/secretmanager.secretVersionManager",
+              "roles/secretmanager.viewer",
+            ]);
+          }),
+        live,
+      );
+    });
+
+    describe("RotateSecret / EnableSecretManagedRotation", () => {
+      test.provider(
+        "reach the API as the host and are refused on a secret without managed rotation",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{ rotate: string; enable: string }>(
+              baseUrl,
+              "managedRotation",
+            );
+            expect(out).toEqual({ rotate: "BadRequest", enable: "BadRequest" });
+          }),
+        live,
       );
     });
   },

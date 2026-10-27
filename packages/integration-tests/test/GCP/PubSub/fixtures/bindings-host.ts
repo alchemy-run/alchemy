@@ -1,5 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { serveProbes } from "../../bindingHost.ts";
 
@@ -47,6 +48,30 @@ export const EventSchema = GCP.PubSub.Schema("EventSchema", {
   }),
 });
 
+/** Topic, subscriptions, snapshot and schema the generated bindings bind. */
+export const GenTopic = GCP.PubSub.Topic("GenTopic", {});
+export const GenInbox = Effect.gen(function* () {
+  const topic = yield* GenTopic;
+  return yield* GCP.PubSub.Subscription("GenInbox", { topic: topic.name });
+});
+export const DetachInbox = Effect.gen(function* () {
+  const topic = yield* GenTopic;
+  return yield* GCP.PubSub.Subscription("DetachInbox", { topic: topic.name });
+});
+export const GenSnapshot = Effect.gen(function* () {
+  const inbox = yield* GenInbox;
+  return yield* GCP.PubSub.Snapshot("GenSnapshot", { subscription: inbox.name });
+});
+const avro = (fields: string[]) =>
+  JSON.stringify({
+    type: "record",
+    name: "Event",
+    fields: fields.map((name) => ({ name, type: "string" })),
+  });
+export const GenSchema = GCP.PubSub.Schema("GenSchema", { type: "AVRO", definition: avro(["id"]) });
+/** The revision `CommitSchema` adds to {@link GenSchema}. */
+export const COMMITTED_DEFINITION = avro(["id", "kind"]);
+
 export const PUBLISH_PAYLOAD = "publish-binding";
 export const WRITE_PAYLOAD = "write-topic-binding";
 export const WRITE_BATCH_TEXT = "batch-text";
@@ -70,6 +95,18 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
     const readSubscription = yield* GCP.PubSub.ReadSubscription(ReadInbox);
     const getSchema = yield* GCP.PubSub.GetSchema(EventSchema);
     const validate = yield* GCP.PubSub.ValidateMessage(EventSchema);
+    const getTopic = yield* GCP.PubSub.GetTopic(GenTopic);
+    const listTopicSubscriptions = yield* GCP.PubSub.ListTopicSubscriptions(GenTopic);
+    const listTopicSnapshots = yield* GCP.PubSub.ListTopicSnapshots(GenTopic);
+    const getSubscription = yield* GCP.PubSub.GetSubscription(GenInbox);
+    const seekSubscription = yield* GCP.PubSub.SeekSubscription(GenInbox);
+    const modifyPushConfig = yield* GCP.PubSub.ModifySubscriptionPushConfig(GenInbox);
+    const detachSubscription = yield* GCP.PubSub.DetachSubscription(DetachInbox);
+    const getSnapshot = yield* GCP.PubSub.GetSnapshot(GenSnapshot);
+    const commitSchema = yield* GCP.PubSub.CommitSchema(GenSchema);
+    const listSchemaRevisions = yield* GCP.PubSub.ListSchemaRevisions(GenSchema);
+    const rollbackSchema = yield* GCP.PubSub.RollbackSchema(GenSchema);
+    const deleteSchemaRevision = yield* GCP.PubSub.DeleteSchemaRevision(GenSchema);
 
     return {
       fetch: serveProbes({
@@ -135,6 +172,31 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
           encoding: "JSON",
           message: Buffer.from(JSON.stringify({ id: "abc" })).toString("base64"),
         }),
+        getTopic: getTopic(),
+        listTopicSubscriptions: listTopicSubscriptions(),
+        listTopicSnapshots: listTopicSnapshots(),
+        getSubscription: getSubscription(),
+        seekSubscription: seekSubscription({ body: { time: new Date().toISOString() } }),
+        modifySubscriptionPushConfig: modifyPushConfig({ body: { pushConfig: {} } }),
+        detachSubscription: detachSubscription(),
+        getSnapshot: getSnapshot(),
+        schemaRevisions: Effect.gen(function* () {
+          const before = yield* listSchemaRevisions();
+          const original = before.schemas?.[0]?.revisionId ?? "";
+          const committed = yield* commitSchema({
+            body: { schema: { type: "AVRO", definition: COMMITTED_DEFINITION } },
+          });
+          const rolledBack = yield* rollbackSchema({ body: { revisionId: original } });
+          const deleted = yield* deleteSchemaRevision({ revisionId: committed.revisionId ?? "" });
+          const after = yield* listSchemaRevisions();
+          return {
+            original,
+            committed: committed.revisionId,
+            rolledBackDefinition: rolledBack.definition,
+            deleted: deleted.revisionId,
+            remaining: (after.schemas ?? []).map((schema) => schema.revisionId),
+          };
+        }),
         validateInvalid: validate({
           encoding: "JSON",
           message: Buffer.from(JSON.stringify({ wrong: 1 })).toString("base64"),
@@ -149,5 +211,21 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
     Effect.provide(GCP.PubSub.ReadSubscriptionHttp),
     Effect.provide(GCP.PubSub.GetSchemaHttp),
     Effect.provide(GCP.PubSub.ValidateMessageHttp),
+    Effect.provide(
+      Layer.mergeAll(
+        GCP.PubSub.GetTopicHttp,
+        GCP.PubSub.ListTopicSubscriptionsHttp,
+        GCP.PubSub.ListTopicSnapshotsHttp,
+        GCP.PubSub.GetSubscriptionHttp,
+        GCP.PubSub.SeekSubscriptionHttp,
+        GCP.PubSub.ModifySubscriptionPushConfigHttp,
+        GCP.PubSub.DetachSubscriptionHttp,
+        GCP.PubSub.GetSnapshotHttp,
+        GCP.PubSub.CommitSchemaHttp,
+        GCP.PubSub.ListSchemaRevisionsHttp,
+        GCP.PubSub.RollbackSchemaHttp,
+        GCP.PubSub.DeleteSchemaRevisionHttp,
+      ),
+    ),
   ),
 ) {}

@@ -9,7 +9,13 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { callProbe, expectProbe } from "../bindingHost.ts";
 import PubSubBindingsHost, {
+  COMMITTED_DEFINITION,
+  DetachInbox,
   EventSchema,
+  GenInbox,
+  GenSchema,
+  GenSnapshot,
+  GenTopic,
   PUBLISH_PAYLOAD,
   PublishTap,
   PublishTopic,
@@ -40,6 +46,11 @@ let names: {
   readTopic: string;
   readInbox: string;
   schema: string;
+  genTopic: string;
+  genInbox: string;
+  detachInbox: string;
+  genSnapshot: string;
+  genSchema: string;
 };
 
 const decode = (data: string | undefined) => Buffer.from(data ?? "", "base64").toString("utf8");
@@ -122,6 +133,11 @@ describe(
               readTopic: (yield* ReadTopic).name,
               readInbox: (yield* ReadInbox).name,
               schema: (yield* EventSchema).name,
+              genTopic: (yield* GenTopic).name,
+              genInbox: (yield* GenInbox).name,
+              detachInbox: (yield* DetachInbox).name,
+              genSnapshot: (yield* GenSnapshot).name,
+              genSchema: (yield* GenSchema).name,
             };
           }),
         );
@@ -293,6 +309,120 @@ describe(
           tags: ["provider:gcp", "provider:gcp:pubsub", "live"],
           timeout: 600_000,
         },
+      );
+    });
+    const live = { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 600_000 };
+    const topicRoles = (resource: string) =>
+      pubsub.getIamPolicyProjectsTopics({ resource }).pipe(Effect.map((p) => rolesOf(p, member)));
+    const subscriptionRoles = (resource: string) =>
+      pubsub
+        .getIamPolicyProjectsSubscriptions({ resource })
+        .pipe(Effect.map((p) => rolesOf(p, member)));
+
+    describe("GetTopic / ListTopicSubscriptions / ListTopicSnapshots", () => {
+      test.provider(
+        "read the topic and what hangs off it, granted viewer on the topic only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const topic = yield* expectProbe<{ name?: string }>(baseUrl, "getTopic");
+            expect(topic.name).toEqual(names.genTopic);
+            const subscriptions = yield* expectProbe<{ subscriptions?: string[] }>(
+              baseUrl,
+              "listTopicSubscriptions",
+            );
+            expect(subscriptions.subscriptions).toContain(names.genInbox);
+            const snapshots = yield* expectProbe<{ snapshots?: string[] }>(
+              baseUrl,
+              "listTopicSnapshots",
+            );
+            expect(snapshots.snapshots).toContain(names.genSnapshot);
+            expect(yield* topicRoles(names.genTopic)).toEqual(["roles/pubsub.viewer"]);
+          }),
+        live,
+      );
+    });
+
+    describe("GetSubscription / SeekSubscription / ModifySubscriptionPushConfig", () => {
+      test.provider(
+        "read, seek and reconfigure the subscription, granted on the subscription only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const subscription = yield* expectProbe<{ name?: string; topic?: string }>(
+              baseUrl,
+              "getSubscription",
+            );
+            expect(subscription).toMatchObject({ name: names.genInbox, topic: names.genTopic });
+            yield* expectProbe(baseUrl, "seekSubscription");
+            yield* expectProbe(baseUrl, "modifySubscriptionPushConfig");
+            const live = yield* pubsub.getProjectsSubscriptions({ subscription: names.genInbox });
+            expect(live.pushConfig?.pushEndpoint).toBeUndefined();
+            expect(yield* subscriptionRoles(names.genInbox)).toEqual([
+              "roles/pubsub.editor",
+              "roles/pubsub.subscriber",
+              "roles/pubsub.viewer",
+            ]);
+          }),
+        live,
+      );
+    });
+
+    describe("DetachSubscription", () => {
+      test.provider(
+        "detaches the subscription from its topic",
+        (_stack) =>
+          Effect.gen(function* () {
+            yield* expectProbe(baseUrl, "detachSubscription");
+            const live = yield* pubsub.getProjectsSubscriptions({
+              subscription: names.detachInbox,
+            });
+            expect(live.detached).toBe(true);
+          }),
+        live,
+      );
+    });
+
+    describe("GetSnapshot", () => {
+      test.provider(
+        "reads the snapshot, granted viewer on the snapshot only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const snapshot = yield* expectProbe<{ name?: string; topic?: string }>(
+              baseUrl,
+              "getSnapshot",
+            );
+            expect(snapshot).toMatchObject({ name: names.genSnapshot, topic: names.genTopic });
+            const policy = yield* pubsub.getIamPolicyProjectsSnapshots({
+              resource: names.genSnapshot,
+            });
+            expect(rolesOf(policy, member)).toEqual(["roles/pubsub.viewer"]);
+          }),
+        live,
+      );
+    });
+
+    describe("CommitSchema / ListSchemaRevisions / RollbackSchema / DeleteSchemaRevision", () => {
+      test.provider(
+        "commit, roll back and delete a revision, granted on the schema only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{
+              original: string;
+              committed: string;
+              rolledBackDefinition: string;
+              deleted: string;
+              remaining: string[];
+            }>(baseUrl, "schemaRevisions");
+            expect(out.committed).not.toEqual(out.original);
+            expect(out.rolledBackDefinition).not.toEqual(COMMITTED_DEFINITION);
+            expect(out.deleted).toEqual(out.committed);
+            expect(out.remaining).not.toContain(out.committed);
+            expect(out.remaining).toContain(out.original);
+            const policy = yield* pubsub.getIamPolicyProjectsSchemas({
+              resource: names.genSchema,
+            });
+            expect(rolesOf(policy, member)).toEqual(["roles/pubsub.editor", "roles/pubsub.viewer"]);
+          }),
+        live,
       );
     });
   },

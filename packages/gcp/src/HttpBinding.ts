@@ -99,3 +99,81 @@ export const makeNamedHttpBinding = <
       });
     });
   });
+
+/**
+ * One way a generated binding reaches its operation: the resource type it
+ * binds, the distilled operation, the request field the bound resource's
+ * full name goes in, and the child segments appended from request fields.
+ */
+export interface GcpBindingVariant {
+  /** Resource type this variant binds, e.g. `GCP.SecretManager.Secret`. */
+  readonly resource: string;
+  readonly operation: GcpHttpOp<any, any, any>;
+  /** Request field that carries the target's full name, e.g. `name`. */
+  readonly param: string;
+  /** IAM the host gets on the bound resource. */
+  readonly iam: BindingIam;
+  /**
+   * Child segments under the bound resource, as `[collection, field]`:
+   * `[["versions", "version"]]` turns a bound secret and
+   * `{ version: "3" }` into `…/secrets/s/versions/3`.
+   */
+  readonly children?: ReadonlyArray<readonly [collection: string, field: string]>;
+  /**
+   * Appended to the target after the children, from a request field:
+   * `["@", "revisionId"]` targets `…/schemas/s@<revisionId>`.
+   */
+  readonly suffix?: readonly [separator: string, field: string];
+}
+
+/**
+ * Shared scaffolding for generated GCP bindings (see
+ * `scripts/generate-gcp-bindings.ts`). Picks the variant for the bound
+ * resource's type, grants its `iam` on the resource at deploy time, and
+ * injects the resource's full name (plus child segments) into each request
+ * at runtime.
+ */
+export const makeGcpBinding = <Shape>(options: {
+  tag: string;
+  variants: ReadonlyArray<GcpBindingVariant>;
+}): Effect.Effect<Shape> =>
+  Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
+    const runs = yield* Effect.forEach(options.variants, (variant) =>
+      GCPBindings.withCredentials(variant.operation as Effect.Effect<any, never, any>),
+    );
+    const bindResource = Effect.fn(function* (resource: { Type: string; LogicalId: string }) {
+      const index = Math.max(
+        0,
+        options.variants.findIndex((variant) => variant.resource === resource.Type),
+      );
+      const variant = options.variants[index]!;
+      const run = runs[index] as (input: unknown) => Effect.Effect<unknown, unknown>;
+      const resourceName = (resource as unknown as { name: Output.Output<string, never> }).name;
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`${options.tag}(${resource})`({
+          iam: [grantFor(variant.iam, resourceName)],
+        });
+      }
+      const name = yield* resourceName;
+      return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
+        request?: Record<string, unknown>,
+      ) {
+        const input: Record<string, unknown> = { ...request };
+        let target = yield* name;
+        for (const [collection, field] of variant.children ?? []) {
+          target = `${target}/${collection}/${input[field]}`;
+          delete input[field];
+        }
+        if (variant.suffix) {
+          const [separator, field] = variant.suffix;
+          target = `${target}${separator}${input[field]}`;
+          delete input[field];
+        }
+        input[variant.param] = target;
+        return yield* run(input);
+      });
+    });
+    // The generated contract declares the precise request/response types.
+    return bindResource as unknown as Shape;
+  });

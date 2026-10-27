@@ -1,5 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import { serveProbes } from "../../bindingHost.ts";
 
@@ -20,6 +21,12 @@ export const WriteOnlySecret = GCP.SecretManager.Secret("WriteOnlySecret", {});
 /** Secret only {@link GCP.SecretManager.ReadWriteSecret} binds. */
 export const ReadWriteOnlySecret = GCP.SecretManager.Secret("ReadWriteOnlySecret", {});
 
+/** Secrets the generated bindings bind (versions seeded by the test). */
+export const GenSecret = GCP.SecretManager.Secret("GenSecret", {});
+export const GenRegionalSecret = GCP.SecretManager.LocationsSecret("GenRegionalSecret", {
+  location: "us-central1",
+});
+
 /** Payload the test seeds into {@link ReadOnlySecret}. */
 export const SEEDED = "seeded-value";
 
@@ -38,6 +45,20 @@ export default class SecretManagerBindingsHost extends GCP.Function<SecretManage
     const reader = yield* GCP.SecretManager.ReadSecret(ReadOnlySecret);
     const writer = yield* GCP.SecretManager.WriteSecret(WriteOnlySecret);
     const both = yield* GCP.SecretManager.ReadWriteSecret(ReadWriteOnlySecret);
+    const getSecret = yield* GCP.SecretManager.GetSecret(GenSecret);
+    const getRegional = yield* GCP.SecretManager.GetSecret(GenRegionalSecret);
+    const listVersions = yield* GCP.SecretManager.ListSecretVersions(GenSecret);
+    const listRegionalVersions = yield* GCP.SecretManager.ListSecretVersions(GenRegionalSecret);
+    const getVersion = yield* GCP.SecretManager.GetSecretVersion(GenSecret);
+    const enableVersion = yield* GCP.SecretManager.EnableSecretVersion(GenSecret);
+    const rotate = yield* GCP.SecretManager.RotateSecret(GenSecret);
+    const enableRotation = yield* GCP.SecretManager.EnableSecretManagedRotation(GenSecret);
+
+    /** A typed failure as `{ _tag }`, so a probe can report it as a value. */
+    const failureTag = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
+      Effect.result(effect).pipe(
+        Effect.map((result) => (Result.isFailure(result) ? result.failure._tag : "succeeded")),
+      );
 
     const roundTrip = (add: typeof addVersion, read: typeof access, value: string) =>
       Effect.gen(function* () {
@@ -58,6 +79,19 @@ export default class SecretManagerBindingsHost extends GCP.Function<SecretManage
       fetch: serveProbes({
         ops: roundTrip(addVersion, access, "per-op-global"),
         opsRegional: roundTrip(addRegional, accessRegional, "per-op-regional"),
+        getSecret: Effect.all({ global: getSecret(), regional: getRegional() }),
+        listSecretVersions: Effect.all({
+          global: listVersions(),
+          regional: listRegionalVersions(),
+        }),
+        getSecretVersion: getVersion({ version: "1" }),
+        enableSecretVersion: enableVersion({ version: "1" }),
+        // Managed rotation needs a Cloud SQL secret; on a plain secret the
+        // call is authorized and rejected as a bad request.
+        managedRotation: Effect.all({
+          rotate: failureTag(rotate()),
+          enable: failureTag(enableRotation()),
+        }),
         read: Effect.gen(function* () {
           const latest = yield* reader.access();
           const bytes = yield* reader.accessBytes("latest");
@@ -102,5 +136,15 @@ export default class SecretManagerBindingsHost extends GCP.Function<SecretManage
     Effect.provide(GCP.SecretManager.ReadSecretHttp),
     Effect.provide(GCP.SecretManager.WriteSecretHttp),
     Effect.provide(GCP.SecretManager.ReadWriteSecretHttp),
+    Effect.provide(
+      Layer.mergeAll(
+        GCP.SecretManager.GetSecretHttp,
+        GCP.SecretManager.ListSecretVersionsHttp,
+        GCP.SecretManager.GetSecretVersionHttp,
+        GCP.SecretManager.EnableSecretVersionHttp,
+        GCP.SecretManager.RotateSecretHttp,
+        GCP.SecretManager.EnableSecretManagedRotationHttp,
+      ),
+    ),
   ),
 ) {}

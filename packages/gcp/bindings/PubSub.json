@@ -1,0 +1,37 @@
+{
+  "discovery": "pubsub-v1",
+  "module": "pubsub_v1",
+  "resources": {
+    "Topic": {
+      "pattern": "projects/*/topics/*",
+      "iamKind": "pubsub.topic"
+    },
+    "Subscription": {
+      "pattern": "projects/*/subscriptions/*",
+      "iamKind": "pubsub.subscription"
+    },
+    "Schema": {
+      "pattern": "projects/*/schemas/*",
+      "iamKind": "pubsub.schema"
+    },
+    "Snapshot": {
+      "pattern": "projects/*/snapshots/*",
+      "iamKind": "pubsub.snapshot"
+    }
+  },
+  "permissions": {
+    "pubsub.projects.subscriptions.pull": "pubsub.subscriptions.consume",
+    "pubsub.projects.subscriptions.acknowledge": "pubsub.subscriptions.consume",
+    "pubsub.projects.subscriptions.modifyAckDeadline": "pubsub.subscriptions.consume",
+    "pubsub.projects.subscriptions.seek": "pubsub.subscriptions.consume",
+    "pubsub.projects.subscriptions.modifyPushConfig": "pubsub.subscriptions.update",
+    "pubsub.projects.subscriptions.detach": "pubsub.topics.detachSubscription",
+    "pubsub.projects.schemas.validateMessage": "pubsub.schemas.validate",
+    "pubsub.projects.schemas.deleteRevision": "pubsub.schemas.delete"
+  },
+  "names": {},
+  "skip": {},
+  "suffix": {
+    "pubsub.projects.schemas.deleteRevision": ["@", "revisionId"]
+  }
+}
