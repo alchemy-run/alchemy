@@ -675,7 +675,7 @@ export const make = <
   const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 >(
   name: Name,
-  definition: Definition<Id, S, C, Ms, Rejects>,
+  definition: Definition<Id, S, C, Ms, Rejects> & TargetsMatch<Id, C>,
 ): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>> => {
   const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects>>>()(
     `alchemy/Domain/Aggregate/${name}`,
@@ -704,6 +704,27 @@ export const make = <
       return predict(this, state, command, options);
     }
   } as unknown as AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>>;
+};
+
+/**
+ * A command whose `target` is the aggregate's `id`, both ways; any other
+ * command becomes a message naming it.
+ */
+type CheckTarget<Id extends IdSchema, Cmd> = Cmd extends Command.Any
+  ? [Id["Type"]] extends [Cmd["target"]["Type"]]
+    ? [Cmd["target"]["Type"]] extends [Id["Type"]]
+      ? Cmd
+      : `${Cmd["tag"]}'s target must be this aggregate's id schema`
+    : `${Cmd["tag"]}'s target must be this aggregate's id schema`
+  : Cmd;
+
+/**
+ * Every command's `target` must be the aggregate's `id`: an Api decodes the
+ * target with the command's schema and the aggregate decodes it with its own.
+ * A mismatched command is a type error on its entry in `commands`.
+ */
+export type TargetsMatch<Id extends IdSchema, C extends ReadonlyArray<Command.Any>> = {
+  readonly commands: { readonly [K in keyof C]: CheckTarget<Id, C[K]> };
 };
 
 /** A definition with its events collected from its commands. */
