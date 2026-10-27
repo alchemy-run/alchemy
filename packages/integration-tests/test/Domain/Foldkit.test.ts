@@ -316,7 +316,7 @@ it.live("turns watch and event defects into Messages", () =>
       key: () => target,
       toMessage: () => "snapshot",
       onFailure: () => "failure",
-      onDefect: () => "defect",
+      onDefect: (cause) => (Cause.pretty(cause).includes("watch failed") ? "defect" : "other"),
     });
     expect(
       yield* read

@@ -13,6 +13,7 @@ import type * as Api from "./Api.ts";
 import type * as DomainCommand from "./Command.ts";
 import * as Key from "./Key.ts";
 import * as Read from "./Read.ts";
+import { nameOf } from "./ReadRpcs.ts";
 import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
 
@@ -233,12 +234,7 @@ export function client<A extends Api.Any>(
 export function client(api: Api.Any): unknown {
   if (
     api.commands.some((command) => command.tag === "Message") ||
-    api.entries.some(
-      (entry) =>
-        (entry.kind === "View" && entry.viewName === "Message") ||
-        (entry.kind === "Aggregate" && entry.aggregateName === "Message") ||
-        (entry.kind === "Stream" && entry.streamName === "Message"),
-    )
+    api.entries.some((entry) => entry.kind !== "Command" && nameOf(entry) === "Message")
   ) {
     throw new Error("Foldkit client reserves the Api entry name Message");
   }
@@ -247,39 +243,30 @@ export function client(api: Api.Any): unknown {
     if (entry.kind !== "View" && entry.kind !== "Aggregate" && entry.kind !== "Stream") {
       continue;
     }
-    const name = readName(entry);
+    const name = nameOf(entry);
+    const flags =
+      entry.kind === "View"
+        ? snapshotFlags(
+            (entry.definition.state ?? Schema.Never) as Schema.Schema<unknown> & {
+              readonly DecodingServices: never;
+            },
+          )
+        : undefined;
     definitions[name] = {
       watch: (options: WatchOptions<unknown, unknown, ReadEntry>) =>
         watchRead(api, entry, name, options),
       events: (options: EventsOptions<unknown, unknown, ReadEntry>) =>
         readEvents(api, entry, name, options),
-      ...(entry.kind === "View"
-        ? {
-            SnapshotFlags: snapshotFlags(entry.definition.state ?? Schema.Never),
-            decodeSnapshotFlags: (flags: unknown) =>
-              Schema.decodeUnknownOption(
-                snapshotFlags(
-                  (entry.definition.state ?? Schema.Never) as Schema.Schema<unknown> & {
-                    readonly DecodingServices: never;
-                  },
-                ),
-              )(flags),
-          }
-        : {}),
+      ...(flags === undefined
+        ? {}
+        : {
+            SnapshotFlags: flags,
+            decodeSnapshotFlags: Schema.decodeUnknownOption(flags),
+          }),
     };
   }
   return definitions;
 }
-
-const readName = (entry: ReadEntry): string => {
-  if (entry.kind === "View") {
-    return entry.viewName;
-  } else if (entry.kind === "Aggregate") {
-    return entry.aggregateName;
-  } else {
-    return entry.streamName;
-  }
-};
 
 const keySchemaOf = (entry: ReadEntry) =>
   Schema.toType(
