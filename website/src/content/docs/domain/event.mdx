@@ -1,0 +1,124 @@
+---
+title: Event
+description: What an event records, what to put in it, how it's stored, and how the rest of the model consumes it.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+An event records something that happened: `AccountOpened`, `MoneyDeposited`, `MoneyWithdrawn`. It's named in the past tense because, by the time anyone sees it, it's a fact.
+
+Events are the only thing an aggregate stores as its history. Its state, every view, and every policy's reaction are all derived from them. This page covers how to declare an event, what to put in it, and what happens to it after it's recorded.
+
+## Declare an event
+
+An event has a name and, usually, some data.
+
+```typescript title="src/WithdrawMoney.command.ts"
+export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
+  amount: Schema.Int,
+  balanceAfter: Schema.Int,
+}) {}
+```
+
+Each field is a schema, so events are encoded the same way wherever they're stored or sent. An event that needs no data has no fields: `Domain.Event("AccountClosed")`.
+
+## Only decide creates events
+
+Events are created in exactly one place: an aggregate's `decide` handler, as its answer to a command.
+
+```typescript title="src/Account.aggregate.ts"
+: [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
+```
+
+The command declares which events it may record, so `decide` can't return anything else. Once they're committed, they're never changed or removed. A mistake is corrected the way a bank corrects one, with a new event that reverses it, so the history still shows both.
+
+## Record what readers will need
+
+Put in the event what someone reading it later needs to understand it on its own, without asking the aggregate what its state was at the time.
+
+`MoneyWithdrawn` carries `balanceAfter` for that reason. The aggregate knows the balance when it decides, so it's free to record. A view that shows the balance, a statement that prints it on each line, and a policy that flags low balances can all read it straight from the event. Without it, each would have to keep its own running total and hope it never drifts.
+
+The same goes for who did something and why. When a support agent freezes an account, the event records the agent and the reason, so the history explains itself.
+
+```typescript title="packages/domain/src/Account/FreezeAccount.command.ts"
+export class AccountFrozen extends Domain.Event("AccountFrozen", {
+  reason: Schema.String,
+  by: Actor,
+}) {}
+```
+
+## Fold events into state
+
+The aggregate turns each event into its next state with `evolve`. This is where an event's data takes effect.
+
+```typescript title="src/Account.aggregate.ts"
+evolve: {
+  AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
+  MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
+  MoneyWithdrawn: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
+},
+```
+
+`evolve` can't refuse an event. It already happened, and only `decide` gets to say no. `decide` returns a typed rejection such as `NotOpen` before it records a deposit to an account that isn't open, so `evolve` only has to cover every state. See [Aggregate](/domain/aggregate#apply-events-with-evolve).
+
+## The envelope
+
+When an event commits, it's stored inside an envelope that says where and when it happened. `id` is the aggregate instance and `stream` names its history, like `Account/a-1`. `seq` is the event's position in that stream, starting at 1. `at` is the commit time, and `commandId` is the id of the command that caused it.
+
+`evolve` receives the envelope as its third argument, for state that depends on when something happened.
+
+```typescript title="src/Account.aggregate.ts"
+MoneyWithdrawn: (_, e, { at }) => ({
+  balance: e.balanceAfter,
+  lastWithdrawal: DateTime.formatIsoDateUtc(at),
+}),
+```
+
+The `commandId` lets a client recognize the events its own commands caused, which is how an app confirms an [optimistic update](/domain/optimistic-updates).
+
+## Delivered to views and policies
+
+In the same commit that stores an event, the instance records a delivery for every [view](/domain/view) and [policy](/domain/policy) that consumes it. After the commit, each delivery is sent. Every consumer receives every event it consumes at least once, and in the order the instance recorded them.
+
+<DAG
+  nodes={[
+    { id: "event", label: "MoneyWithdrawn", type: "Account a-1", kind: "event" },
+    { id: "summary", label: "AccountSummary", type: "view", kind: "view" },
+    { id: "statement", label: "Statement", type: "view", kind: "view" },
+    { id: "outflow", label: "DailyOutflow", type: "view", kind: "view" },
+  ]}
+  edges={[
+    { from: "event", to: "summary", dashed: true },
+    { from: "event", to: "statement", dashed: true },
+    { from: "event", to: "outflow", dashed: true },
+  ]}
+  caption="One event, delivered to every view that reads it."
+/>
+
+A view can record events of its own as it folds, such as one `StatementLine` per deposit or withdrawal. Those are delivered the same way, so another view or policy can build on them.
+
+## Follow an instance's events
+
+A client can read an instance's history directly, then keep receiving new events as they're recorded.
+
+```typescript
+// packages/server/test/followAccount.ts
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import type { AccountId } from "@bank/domain/Account/Account.id";
+import type { CustomerClient } from "./flows.ts";
+
+export const followAccount = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
+  yield* bank.Account.events(accountId).pipe(
+    Stream.filter(Domain.Read.isEvent),
+    Stream.runForEach(({ event, envelope }) =>
+      Effect.log(`#${envelope.seq} ${event._tag} (command ${envelope.commandId})`),
+    ),
+  );
+});
+```
+
+`events` replays from the beginning, sends a `CaughtUp` frame, then continues live. `Domain.Read.isEvent` keeps only the events. Pass `after` with a `seq` to resume from a position you've already seen.
+
+Next, [Aggregate](/domain/aggregate) puts commands and events together.

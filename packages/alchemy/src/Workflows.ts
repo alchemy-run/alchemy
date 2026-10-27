@@ -38,38 +38,75 @@ export const implemented = <Name extends string>(
 
 type Requirements<L> = L extends Layer.Layer<any, any, infer R> ? R : never;
 
+/** A workflow's handler: runs it for a payload, inside a run. */
+export type Execute<
+  Payload extends Workflow.AnyStructSchema,
+  Success extends Schema.Top,
+  Error extends Schema.Top,
+  R,
+> = (
+  payload: Payload["Type"],
+  executionId: string,
+) => Effect.Effect<Success["Type"], Error["Type"], R>;
+
 /**
  * Implement a workflow. Like `workflow.toLayer(execute)`, it registers the
  * handler with the engine, and it marks the workflow as implemented, so
  * `RunWorkflow` can run it.
  *
- * Handlers can call runtime-only APIs, like another Durable Object's methods.
- * `toLayer` puts everything a handler requires on the Layer it returns. A
- * runtime-only API requires `RuntimeContext`, which a Worker's or Lambda
- * function's init doesn't have. A handler only runs inside a run, and every
- * run has one, so this Layer doesn't ask for it.
+ * Pass the handler, or an Effect that builds it. The Effect runs once, when
+ * the Layer is built, so resolve bindings and services there and use them in
+ * the handler it returns.
+ *
+ * Handlers can call runtime-only APIs, like a bucket's `put` or another
+ * Durable Object's methods. A runtime-only API requires `RuntimeContext`,
+ * which a Worker's or Lambda function's init doesn't have. A handler only
+ * runs inside a run, and every run has one, so this Layer doesn't ask for it.
  *
  * ### Implementing a workflow
- * **Example:** A step that calls a Durable Object
+ * **Example:** A handler
  * ```typescript
  * import * as Workflows from "alchemy/Workflows";
  * import * as Effect from "effect/Effect";
- * import * as Layer from "effect/Layer";
  * import { Activity } from "effect/workflow";
  *
- * export const GreetLive = Layer.unwrap(
+ * export const GreetLive = Workflows.layer(
+ *   Greet,
+ *   Effect.fn(function* ({ name }) {
+ *     return yield* Activity.make({
+ *       name: "greet",
+ *       success: Schema.String,
+ *       execute: Effect.succeed(`hello ${name}`),
+ *     });
+ *   }),
+ * );
+ * ```
+ *
+ * **Example:** A handler that uses a binding
+ * ```typescript
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
+ * import * as Workflows from "alchemy/Workflows";
+ * import * as Effect from "effect/Effect";
+ * import { Activity } from "effect/workflow";
+ * import { Receipts } from "./Receipts.ts";
+ *
+ * export const CheckoutLive = Workflows.layer(
+ *   Checkout,
  *   Effect.gen(function* () {
- *     const journals = yield* Journal;
- *     return Workflows.layer(Greet, ({ name }) =>
- *       Activity.make({ name: "greet", execute: journals.getByName(name).append(name) }),
- *     );
+ *     const receipts = yield* Cloudflare.R2.WriteBucket(Receipts);
+ *     return Effect.fn(function* ({ orderId }) {
+ *       yield* Activity.make({
+ *         name: "receipt",
+ *         execute: receipts.put(`${orderId}.json`, JSON.stringify({ orderId })).pipe(Effect.orDie),
+ *       });
+ *     });
  *   }),
  * );
  * ```
  *
  * @primitive
  */
-export const layer = <
+export function layer<
   Name extends string,
   Payload extends Workflow.AnyStructSchema,
   Success extends Schema.Top,
@@ -77,23 +114,45 @@ export const layer = <
   R,
 >(
   workflow: Workflow.Workflow<Name, Payload, Success, Error>,
-  execute: (
-    payload: Payload["Type"],
-    executionId: string,
-  ) => Effect.Effect<Success["Type"], Error["Type"], R>,
+  execute: Execute<Payload, Success, Error, R>,
 ): Layer.Layer<
   Implemented<Name>,
   never,
   Exclude<Requirements<ReturnType<typeof workflow.toLayer<R>>>, RuntimeContext>
-> =>
-  Layer.merge(
-    workflow.toLayer(execute) as Layer.Layer<
-      never,
-      never,
-      Exclude<Requirements<ReturnType<typeof workflow.toLayer<R>>>, RuntimeContext>
-    >,
-    implemented([workflow._tag]),
-  );
+>;
+export function layer<
+  Name extends string,
+  Payload extends Workflow.AnyStructSchema,
+  Success extends Schema.Top,
+  Error extends Schema.Top,
+  R,
+  InitE,
+  InitR,
+>(
+  workflow: Workflow.Workflow<Name, Payload, Success, Error>,
+  make: Effect.Effect<Execute<Payload, Success, Error, R>, InitE, InitR>,
+): Layer.Layer<
+  Implemented<Name>,
+  InitE,
+  InitR | Exclude<Requirements<ReturnType<typeof workflow.toLayer<R>>>, RuntimeContext>
+>;
+export function layer(
+  workflow: Workflow.Workflow<string, Workflow.AnyStructSchema, Schema.Top, Schema.Top>,
+  execute:
+    | Execute<Workflow.AnyStructSchema, Schema.Top, Schema.Top, unknown>
+    | Effect.Effect<
+        Execute<Workflow.AnyStructSchema, Schema.Top, Schema.Top, unknown>,
+        unknown,
+        unknown
+      >,
+): Layer.Layer<any, any, any> {
+  return Effect.isEffect(execute)
+    ? Layer.unwrap(Effect.map(execute, (handler) => layer(workflow, handler)))
+    : Layer.merge(
+        workflow.toLayer(execute as any) as Layer.Layer<never, never, any>,
+        implemented([workflow._tag]),
+      );
+}
 
 type NameOf<W> = W extends Workflow.Workflow<infer Name, any, any, any> ? Name : never;
 type SuccessOf<W> = W extends Workflow.Workflow<any, any, infer S, any> ? S["Type"] : never;
@@ -186,42 +245,8 @@ export const RunWorkflow = <W extends Workflow.Any>(
   Effect.gen(function* () {
     const engine = yield* WorkflowEngine.WorkflowEngine;
     const typed = workflow as unknown as Workflow.Workflow<string, any, any, any>;
-    const run = (executionId: string): Run<SuccessOf<W>, ErrorOf<W>> => {
-      const poll = engine.poll(typed, executionId);
-      return {
-        executionId,
-        status: Effect.map(poll, (result): Status<SuccessOf<W>, ErrorOf<W>> => {
-          if (Option.isNone(result)) return { _tag: "NotStarted" };
-          if (result.value._tag === "Suspended") return { _tag: "Running" };
-          const exit = result.value.exit;
-          if (Exit.isSuccess(exit)) return { _tag: "Completed", result: exit.value };
-          const failure = exit.cause.reasons.find((reason) => reason._tag === "Fail");
-          if (failure?._tag === "Fail") return { _tag: "Failed", error: failure.error };
-          const defect = exit.cause.reasons.find((reason) => reason._tag === "Die");
-          return defect?._tag === "Die"
-            ? { _tag: "Died", defect: defect.defect }
-            : { _tag: "Interrupted" };
-        }) as Effect.Effect<Status<SuccessOf<W>, ErrorOf<W>>>,
-        result: poll.pipe(
-          Effect.flatMap((result) =>
-            Option.isSome(result) && result.value._tag === "Complete"
-              ? Effect.succeed(result.value.exit)
-              : Effect.fail("running" as const),
-          ),
-          Effect.retry({ schedule: POLL }),
-          Effect.orDie,
-          Effect.flatten,
-        ) as Effect.Effect<SuccessOf<W>, ErrorOf<W>>,
-        signal: (deferred, value) =>
-          engine.deferredDone(deferred, {
-            workflowName: typed._tag,
-            executionId,
-            deferredName: deferred.name,
-            exit: Exit.succeed(value),
-          }) as Effect.Effect<void>,
-        interrupt: engine.interrupt(typed, executionId),
-      };
-    };
+    const run = (executionId: string) =>
+      makeRun(engine, typed, executionId) as Run<SuccessOf<W>, ErrorOf<W>>;
     return {
       start: (payload) =>
         typed
@@ -233,3 +258,49 @@ export const RunWorkflow = <W extends Workflow.Any>(
       get: run,
     } satisfies WorkflowClient<W>;
   });
+
+/**
+ * A handle to one run of a workflow on an engine.
+ *
+ * @internal
+ */
+export const makeRun = (
+  engine: WorkflowEngine.WorkflowEngine["Service"],
+  workflow: Workflow.Workflow<string, any, any, any>,
+  executionId: string,
+): Run<unknown, unknown> => {
+  const poll = engine.poll(workflow, executionId);
+  return {
+    executionId,
+    status: Effect.map(poll, (result): Status<unknown, unknown> => {
+      if (Option.isNone(result)) return { _tag: "NotStarted" };
+      if (result.value._tag === "Suspended") return { _tag: "Running" };
+      const exit = result.value.exit;
+      if (Exit.isSuccess(exit)) return { _tag: "Completed", result: exit.value };
+      const failure = exit.cause.reasons.find((reason) => reason._tag === "Fail");
+      if (failure?._tag === "Fail") return { _tag: "Failed", error: failure.error };
+      const defect = exit.cause.reasons.find((reason) => reason._tag === "Die");
+      return defect?._tag === "Die"
+        ? { _tag: "Died", defect: defect.defect }
+        : { _tag: "Interrupted" };
+    }) as Effect.Effect<Status<unknown, unknown>>,
+    result: poll.pipe(
+      Effect.flatMap((result) =>
+        Option.isSome(result) && result.value._tag === "Complete"
+          ? Effect.succeed(result.value.exit)
+          : Effect.fail("running" as const),
+      ),
+      Effect.retry({ schedule: POLL }),
+      Effect.orDie,
+      Effect.flatten,
+    ) as Effect.Effect<unknown, unknown>,
+    signal: (deferred, value) =>
+      engine.deferredDone(deferred, {
+        workflowName: workflow._tag,
+        executionId,
+        deferredName: deferred.name,
+        exit: Exit.succeed(value),
+      }) as Effect.Effect<void>,
+    interrupt: engine.interrupt(workflow, executionId),
+  };
+};

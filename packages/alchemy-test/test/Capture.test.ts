@@ -1,4 +1,4 @@
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 import { makeCapture } from "../src/Capture.ts";
 
 it("bounds previews while persisting every complete original message", () => {

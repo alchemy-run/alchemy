@@ -1,4 +1,3 @@
-import { useEffect, useState } from "@alchemy.run/sigil/react";
 /** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 /**
@@ -17,11 +16,13 @@ import { useEffect, useState } from "@alchemy.run/sigil/react";
  * configuration, credential refresh) resolve the session. The built-in
  * `default` profile is pinned first and can be neither renamed nor deleted.
  */
+import { useEffect, useState } from "@alchemy.run/sigil/react";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Scheduler from "effect/Scheduler";
 import type { JSX } from "react";
-import { CliKit, theme, type NonInteractiveTerminal } from "../../CliKit/index.ts";
+import { Interaction, type NonInteractiveTerminal } from "../../../Interaction.ts";
+import { theme } from "../../../Util/Theme.ts";
 import {
   Alert,
   Box,
@@ -701,16 +702,16 @@ export interface DashboardSessionOptions<R> {
 }
 
 /**
- * Runs the dashboard inside CliKit's application renderer. Pure actions and
- * edit/refresh flows share the same frame, and the application clears it on
+ * Runs the dashboard inside one Interaction session. Pure actions and
+ * edit/refresh flows share the same frame, and the session clears it on
  * exit.
  */
 export const runProfileDashboardSession = <R,>(
   options: DashboardSessionOptions<R>,
-): Effect.Effect<void, NonInteractiveTerminal, R | CliKit> =>
-  Effect.flatMap(CliKit, (cli) =>
-    cli.application(
-      // live.open is Scope-bound; the session scope is its release backstop
+): Effect.Effect<void, NonInteractiveTerminal, R | Interaction> =>
+  Effect.flatMap(Interaction, (cli) =>
+    cli.session(
+      // live is Scope-bound; the session scope is its release backstop
       // (the ensuring(live.close) below settles it on the normal path).
       Effect.scoped(
         Effect.gen(function* () {
@@ -760,7 +761,7 @@ export const runProfileDashboardSession = <R,>(
             options.entries.findIndex((entry) => entry.name === options.selected),
           );
 
-          const live = yield* cli.live.open(
+          const live = yield* cli.live(
             <Dashboard store={store} initialSelected={initialSelected} />,
             { placement: "beforeTranscript" },
           );
@@ -812,10 +813,10 @@ export const runProfileDashboardSession = <R,>(
                       info: () => Effect.void,
                       success: () => Effect.void,
                     },
-                  } satisfies CliKit["Service"];
-                  const result = yield* cli.wizard(
+                  } satisfies Interaction["Service"];
+                  const result = yield* cli.session(
                     action.kind === "refresh"
-                      ? flowEffect.pipe(Effect.provideService(CliKit, quietRefreshCli))
+                      ? flowEffect.pipe(Effect.provideService(Interaction, quietRefreshCli))
                       : flowEffect,
                   );
                   const entries = yield* options.reloadEntries;

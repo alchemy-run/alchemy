@@ -13,6 +13,7 @@ import { ResourceContext } from "../ResourceContext.ts";
 import { StackContext } from "../StackContext.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import { bundleAnalyzerPlugin, type BundleAnalyzerPluginOptions } from "./BundleAnalyzerPlugin.ts";
+import { namespaceImportPlugin } from "./NamespaceImportPlugin.ts";
 import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
 import { rawPlugin } from "./RawPlugin.ts";
 import { unreachableChunksPlugin } from "./UnreachableChunksPlugin.ts";
@@ -185,9 +186,18 @@ const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> = 
  * framework flags win over any caller-provided keys) and
  * {@link ALCHEMY_MODULE_TYPES} into the caller's `moduleTypes` (caller
  * keys win, so an extension can be remapped or disabled per bundle).
+ *
+ * Also enables `experimental.lazyBarrel` unless the caller sets it, so a
+ * runtime importing one service from `@alchemy.run/aws` (a barrel of every
+ * AWS service) compiles that service, not all of them. See
+ * {@link namespaceImportPlugin} for `import * as AWS`.
  */
 const withAlchemyDefine = (inputOptions: rolldown.InputOptions): rolldown.InputOptions => ({
   ...inputOptions,
+  experimental: {
+    lazyBarrel: true,
+    ...inputOptions.experimental,
+  },
   transform: {
     ...inputOptions.transform,
     define: {
@@ -495,7 +505,7 @@ export const virtualEntryPlugin = Effect.gen(function* () {
           // an unresolved import and leaves it external, which for a
           // generated entry means the deployed process dies at boot with
           // `Cannot find module` — the class of bug the shim design
-          // (alchemy/Runtime/Bootstrap/*) exists to prevent. Make it a build
+          // (`{Provider}/Bootstrap/*`) exists to prevent. Make it a build
           // error with the cause spelled out instead. Externals resolve to
           // `{ external: true }`, not null, so they pass through.
           if (importer === undefined || !ENTRY_REGEX.test(importer)) {
@@ -509,8 +519,8 @@ export const virtualEntryPlugin = Effect.gen(function* () {
             this.error(
               new Error(
                 `The generated entry for ${entry} imports "${id}", which cannot be resolved from the project. ` +
-                  "A generated entry may only import `alchemy/*` (resolvable from any project that depends on alchemy) and the entry itself; " +
-                  "check that `alchemy` is installed in the project containing the entry.",
+                  "A generated entry may only import its bootstrap module (from `alchemy` or the provider package that generated it) and the entry itself; " +
+                  "check that the package is installed in the project containing the entry.",
               ),
             );
           }
@@ -563,6 +573,7 @@ async function builtInPlugins(extra?: BundleExtraOptions): Promise<rolldown.Roll
     extra?.bundleAnalyzer
       ? await bundleAnalyzerPlugin(extra.bundleAnalyzer === true ? {} : extra.bundleAnalyzer)
       : undefined,
+    namespaceImportPlugin(),
     extra?.pure !== false ? purePlugin(extra?.pure ?? {}) : undefined,
     rawPlugin(),
     unreachableChunksPlugin(),

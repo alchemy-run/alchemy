@@ -9,7 +9,9 @@ the client as you produce them, and every function gets an HTTPS endpoint.
 It scales to zero when idle.
 
 Use it for anything that answers HTTP: APIs, server-rendered apps, AI
-responses streamed token by token. For queues, streams, schedules, and
+responses streamed token by token. The [AWS websites](/aws/frontend/websites)
+(Nuxt, SvelteKit, Astro, and the rest) run their server on one by
+default. For queues, streams, schedules, and
 other event sources, use a [Lambda Function](/aws/compute/lambda).
 
 :::caution
@@ -26,7 +28,7 @@ Create `src/api.ts` and return a `fetch` handler:
 
 ```typescript
 // src/api.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
@@ -53,7 +55,7 @@ Yield the class in your Stack and return its `url`:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 import Api from "./src/api.ts";
 
@@ -84,7 +86,7 @@ produce it:
 
 ```diff lang="typescript"
 // src/api.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 +import * as Stream from "effect/Stream";
@@ -116,7 +118,7 @@ grants the function's role exactly that permission:
 
 ```diff lang="typescript"
 // src/api.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
@@ -159,7 +161,7 @@ serve({ fetch: app.fetch, hostname, port: Number(port) });
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
@@ -371,7 +373,7 @@ itself:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 import Api from "./src/api.ts";
 
