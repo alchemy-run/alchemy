@@ -1,5 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 
@@ -48,6 +49,15 @@ export default class QueueWorker extends GCP.Function<QueueWorker>()(
       }),
     );
 
-    return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+    // Anything the queue listener didn't claim is a misrouted dispatch: fail it,
+    // so the task stays queued with the path it was sent to.
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        return HttpServerResponse.text(`unclaimed ${request.method} ${request.url}`, {
+          status: 404,
+        });
+      }),
+    };
   }).pipe(Effect.provide(Layer.mergeAll(GCP.Run.QueueEventSource, GCP.Storage.PutObjectHttp))),
 ) {}
