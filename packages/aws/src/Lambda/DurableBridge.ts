@@ -279,7 +279,7 @@ type WrappedDurableHandler = (event: any, context: lambda.Context) => Promise<an
 export const makeDurableListener = (options: {
   name: string;
   run: (input: unknown) => Effect.Effect<unknown>;
-}): Effect.Effect<FunctionListener> =>
+}): Effect.Effect<FunctionListener<any, HandlerContext>> =>
   // `Effect.sync`, NOT `Effect.gen` yielding `loadDurableSdk`: the listener is
   // CONSTRUCTED when the host resolves `runtimeContext.exports`, which happens
   // at PLAN/DEPLOY time (`Platform.ts` does `yield* runtimeContext.exports`).
@@ -337,12 +337,7 @@ export const makeDurableListener = (options: {
           ),
     );
 
-    // `HandlerContext` is a runtime-only requirement satisfied unconditionally
-    // by the Lambda dispatcher, which provides it (and `Scope`) to every
-    // listener's returned effect. Cast the listener down to the `Req = never`
-    // `FunctionListener` so the requirement never leaks into the host's init
-    // effect — the exact contract `serve`/`makeFunctionHttpHandler` rely on.
-    return ((event: any) => {
+    return (event: any) => {
       if (!isDurableExecutionEvent(event)) return;
       const payload = readDurableInputPayload(event);
       const envelope = asDurableEnvelope(payload);
@@ -361,5 +356,5 @@ export const makeDurableListener = (options: {
         // let it surface as an invocation error.
         return yield* Effect.promise(() => run(event, context));
       });
-    }) as unknown as FunctionListener;
+    };
   });

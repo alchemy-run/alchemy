@@ -7,6 +7,7 @@
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import * as Region from "@distilled.cloud/aws/Region";
+import { getCallerIdentity } from "@distilled.cloud/aws/sts";
 import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
 import { reifyBoundConfigProvider } from "alchemy/Runtime";
 import { entrypointLayer, entrypointTag, stackFromEnv } from "alchemy/Runtime/Bootstrap";
@@ -14,10 +15,12 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { layer as fetchHttpClientLayer } from "effect/http/FetchHttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
+import { AWSEnvironment } from "../Environment.ts";
 import { registerLambdaExtension } from "../Lambda/RuntimeExtension.ts";
 
 /**
@@ -44,8 +47,28 @@ export const bootstrap = async (entrypoint: unknown): Promise<unknown> => {
     Logger.layer([Logger.consolePretty()]),
   );
 
+  // `AWSEnvironment` is a Function service, so the runtime must supply it
+  // too. The account id costs an STS call, so it resolves on first use and
+  // is cached for the sandbox.
+  const awsEnvironment = Layer.effect(
+    AWSEnvironment,
+    Effect.gen(function* () {
+      const context = yield* Effect.context<
+        Credentials.Credentials | Region.Region | Endpoint.Endpoint | HttpClient.HttpClient
+      >();
+      const credentials = yield* Credentials.Credentials;
+      return yield* Effect.gen(function* () {
+        const region = yield* yield* Region.Region;
+        const endpoint = yield* yield* Endpoint.Endpoint;
+        const { Account } = yield* getCallerIdentity({});
+        return { accountId: Account!, region, credentials, endpoint };
+      }).pipe(Effect.provideContext(context), Effect.orDie, Effect.cached);
+    }),
+  );
+
   const entryLayer = entrypointLayer(entrypoint).pipe(
     Layer.provideMerge(stackFromEnv),
+    Layer.provideMerge(awsEnvironment),
     Layer.provideMerge(Credentials.fromEnv()),
     Layer.provideMerge(Region.fromEnv()),
     // AWS_ENDPOINT_URL is the LocalStack-standard override injected by local

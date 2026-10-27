@@ -9,6 +9,7 @@ import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -16,9 +17,11 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { aliasFunction, AliasFunction } from "./fixtures/alias-handler.ts";
+import ListenerProbe from "./fixtures/listener-probe.ts";
 import { TestFunction, TestFunctionLive } from "./handler.ts";
 import StreamingFunctionLive, { StreamingFunction } from "./streaming-handler.ts";
 
@@ -32,6 +35,28 @@ const lockfilePinnedHandlerPath = (format: "npm" | "bun" | "pnpm" | "yarn") =>
   fileURLToPath(new URL(`./fixtures/lockfile-pinning/${format}/handler.ts`, import.meta.url));
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+class FunctionNotReady extends Data.TaggedError("FunctionNotReady")<{
+  status: number;
+}> {}
+
+const ListenerProbeResponse = Schema.Struct({
+  sandbox: Schema.String,
+  initialized: Schema.Number,
+  finalized: Schema.Number,
+  instanceFinalized: Schema.Boolean,
+  request: Schema.Number,
+  requestBuild: Schema.Number,
+  freshScope: Schema.Boolean,
+  distinctInitScope: Schema.Boolean,
+  requestId: Schema.String,
+  config: Schema.String,
+  initConfig: Schema.optionalKey(Schema.String),
+  stage: Schema.optionalKey(Schema.String),
+  accountId: Schema.optionalKey(Schema.String),
+  region: Schema.optionalKey(Schema.String),
+  initHasHandlerContext: Schema.optionalKey(Schema.Boolean),
+});
 
 test.provider(
   "create, update, delete function",
@@ -162,6 +187,81 @@ test.provider.skipIf(process.env.ALCHEMY_TEST_DEV === "1")(
   {
     tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
     timeout: 120_000,
+  },
+);
+
+test.provider(
+  "services provided around host.listen and host.serve reach the deferred initializer and every invocation",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const environment = yield* AWS.AWSEnvironment.current;
+      const fn = yield* stack.deploy(ListenerProbe);
+      const url = fn.functionUrl!.replace(/\/$/, "");
+      const client = yield* HttpClient.HttpClient;
+      const get = (route: string) =>
+        client.get(`${url}/${route}`).pipe(
+          Effect.flatMap((response) =>
+            response.status === 200
+              ? Effect.succeed(response)
+              : Effect.fail(new FunctionNotReady({ status: response.status })),
+          ),
+          Effect.retry({
+            while: (error) => error._tag === "FunctionNotReady",
+            schedule: Schedule.spaced("2 seconds"),
+            times: 10,
+          }),
+          Effect.flatMap((response) => response.json),
+          Effect.flatMap(Schema.decodeUnknownEffect(ListenerProbeResponse)),
+        );
+      const previous = new Map<string, typeof ListenerProbeResponse.Type>();
+      const requestIds = new Set<string>();
+      let reusedSandbox = false;
+
+      for (const route of ["deferred", "direct", "serve", "deferred", "direct", "serve"]) {
+        const body = yield* get(route);
+        // The service provided around this route's `listen`/`serve`.
+        expect(body.config).toBe(route);
+        // Deferred initialization runs once per sandbox, not per request.
+        expect(body.initialized).toBe(1);
+        expect(body.instanceFinalized).toBe(false);
+        // Each invocation gets its own Scope and HandlerContext.
+        expect(body.freshScope).toBe(true);
+        expect(body.distinctInitScope).toBe(true);
+        expect(requestIds.has(body.requestId)).toBe(false);
+        requestIds.add(body.requestId);
+        expect(body.requestBuild).toBe(body.request);
+        expect(body.finalized).toBe(body.request - 1);
+        const prior = previous.get(body.sandbox);
+        if (prior) {
+          reusedSandbox = true;
+          expect(body.request).toBe(prior.request + 1);
+        }
+        previous.set(body.sandbox, body);
+        if (route === "deferred") {
+          expect(body.initConfig).toBe("deferred");
+          expect(body.stage).toBe(stack.stage);
+          expect(body.accountId).toBe(environment.accountId);
+          expect(body.region).toBe(environment.region);
+          expect(body.initHasHandlerContext).toBe(false);
+        }
+      }
+      expect(reusedSandbox).toBe(true);
+
+      // A failing invocation still settles its scope and leaves the sandbox usable.
+      const failure = yield* client.get(`${url}/fail`);
+      expect(failure.status).toBeGreaterThanOrEqual(500);
+      const recovered = yield* get("deferred");
+      expect(recovered.finalized).toBe(recovered.request - 1);
+      expect(recovered.instanceFinalized).toBe(false);
+      expect(recovered.config).toBe("deferred");
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+    timeout: 180_000,
   },
 );
 
