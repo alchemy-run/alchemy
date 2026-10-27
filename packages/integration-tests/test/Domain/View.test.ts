@@ -35,7 +35,7 @@ class Counters extends Domain.Model("Counters", { aggregates: [Counter], views: 
 class CounterApi extends Domain.Api("CounterApi", Increment, Totals) {}
 
 const Hosted = Counters.layer(Layer.empty).pipe(Layer.provide(InMemory));
-const InProcess = Layer.effect(CounterApi.Client, CounterApi.testClient).pipe(
+const InProcess = Layer.effect(CounterApi.Client, CounterApi.clientInProcess).pipe(
   Layer.provideMerge(Hosted),
 );
 // The Api's `fetch` on a real HTTP server, and a client over the wire protocol.
