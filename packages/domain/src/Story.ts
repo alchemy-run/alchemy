@@ -85,7 +85,7 @@ export type Step =
     }
   | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } }
   | { readonly _tag: "Replied"; readonly reply: unknown }
-  | { readonly _tag: "State"; readonly ref: Aggregate.Ref; readonly assert: (state: any) => void }
+  | { readonly _tag: "State"; readonly ref: Aggregate.Ref; readonly expected: unknown }
   | {
       readonly _tag: "View";
       readonly view: View.Any;
@@ -186,15 +186,11 @@ const rejected = (rejection: { readonly _tag: string }): Step => ({
 /** The last command's reply. */
 const replied = (reply: unknown): Step => ({ _tag: "Replied", reply });
 
-/** Assert on an aggregate instance's current state. */
+/** Assert on an aggregate instance's current state: an expected (partial) state, or a function. */
 const state = <A extends Aggregate.Any>(
   ref: Aggregate.Ref<A>,
-  assert: (state: Aggregate.StateOf<A>) => void,
-): Step => ({
-  _tag: "State",
-  ref,
-  assert,
-});
+  expected: Partial<Aggregate.StateOf<A>> | ((state: Aggregate.StateOf<A>) => void),
+): Step => ({ _tag: "State", ref, expected });
 
 /** Assert on a view key: an expected (partial) state, a function, or {@link none}. */
 const view = <V extends View.Any>(
@@ -409,17 +405,21 @@ const refName = (ref: Aggregate.Ref) => `${ref.aggregate}/${ref.id}`;
 const callName = (tag: string | undefined, op: ExternalSystem.Op) =>
   `${tag === undefined ? "" : `"${tag}" `}${op.system}.${op.op}`;
 
+/** A `clock` step's time in epoch milliseconds; `NaN` for a string that is not a time. */
+const clockMillis = (at: string | number | DateTime.DateTime) =>
+  typeof at === "number"
+    ? at
+    : typeof at === "string"
+      ? Date.parse(at)
+      : DateTime.toEpochMillis(at);
+
 /** A one-line summary of a step, before it runs. */
 const describeStep = (s: Step): string => {
   switch (s._tag) {
-    case "Clock":
-      return new Date(
-        typeof s.at === "number"
-          ? s.at
-          : typeof s.at === "string"
-            ? Date.parse(s.at)
-            : DateTime.toEpochMillis(s.at),
-      ).toISOString();
+    case "Clock": {
+      const at = clockMillis(s.at);
+      return Number.isNaN(at) ? String(s.at) : new Date(at).toISOString();
+    }
     case "Provide":
       return `${s.service.key} = ${summarize(s.value)}`;
     case "Given":
@@ -432,7 +432,7 @@ const describeStep = (s: Step): string => {
     case "Replied":
       return summarize(s.reply);
     case "State":
-      return refName(s.ref);
+      return `${refName(s.ref)}${typeof s.expected === "function" ? "" : `: ${summarize(s.expected)}`}`;
     case "View":
       return `${s.view.viewName}(${s.key.id})${s.expected === none ? ": none" : typeof s.expected === "function" ? "" : `: ${summarize(s.expected)}`}`;
     case "Emitted":
@@ -761,12 +761,18 @@ const make =
           if ("ref" in s) touched.set(refName(s.ref), s.ref);
           switch (s._tag) {
             case "Clock": {
-              clockState.now =
-                typeof s.at === "number"
-                  ? s.at
-                  : typeof s.at === "string"
-                    ? Date.parse(s.at)
-                    : DateTime.toEpochMillis(s.at);
+              const at = clockMillis(s.at);
+              if (Number.isNaN(at)) return yield* fail(`${String(s.at)} is not a time`);
+              // Once a step has run at the current time, the clock only moves forward.
+              const started = steps.slice(0, index).some((earlier) => earlier._tag !== "Provide");
+              if (started && at < clockState.now) {
+                const now = new Date(clockState.now).toISOString();
+                return yield* fail(
+                  `the clock cannot move back, from ${now} to ${new Date(at).toISOString()}`,
+                  { expected: `${now} or later`, actual: new Date(at).toISOString() },
+                );
+              }
+              clockState.now = at;
               // Scheduled commands that are now due fire, and their policies run.
               yield* settle(step);
               break;
@@ -872,7 +878,16 @@ const make =
                 Aggregate.ClientImpl
               >;
               const current = yield* client.state(s.ref);
-              yield* Effect.try({ try: () => s.assert(current), catch: (e) => fail(String(e)) });
+              if (typeof s.expected === "function") {
+                const assert = s.expected as (state: unknown) => void;
+                yield* Effect.try({ try: () => assert(current), catch: (e) => fail(String(e)) });
+              } else if (!partial(s.expected, current)) {
+                const label = refName(s.ref);
+                return yield* fail(
+                  `${label}\n  expected ${show(s.expected)}\n  actual   ${show(current)}`,
+                  { label, expected: summarize(s.expected), actual: summarize(current) },
+                );
+              }
               break;
             }
             case "View": {

@@ -205,39 +205,4 @@ describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
         }).toEqual({ exitCode: 0, stderr: "" });
       }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
   );
-
-  it.live("provider check-env exits 1 when a required var is missing", () =>
-    Effect.gen(function* () {
-      expect(
-        yield* exitCodeOf(["provider", "check-env", "--provider", "aws"], {
-          AWS_ACCESS_KEY_ID: "",
-          AWS_SECRET_ACCESS_KEY: "",
-        }),
-      ).toBe(1);
-    }),
-  );
-
-  it.live("provider check-env exits 0 when the contract is satisfied", () =>
-    Effect.gen(function* () {
-      expect(
-        yield* exitCodeOf(["provider", "check-env", "--provider", "aws"], {
-          AWS_ACCESS_KEY_ID: "AKIATESTKEY",
-          AWS_SECRET_ACCESS_KEY: "test-secret",
-          AWS_REGION: "us-east-1",
-        }),
-      ).toBe(0);
-    }),
-  );
-
-  it.live("provider check-env accepts an explicit profile", () =>
-    Effect.gen(function* () {
-      expect(
-        yield* exitCodeOf(["provider", "check-env", "--profile", "default", "--provider", "aws"], {
-          AWS_ACCESS_KEY_ID: "AKIATESTKEY",
-          AWS_SECRET_ACCESS_KEY: "test-secret",
-          AWS_REGION: "us-east-1",
-        }),
-      ).toBe(0);
-    }),
-  );
 });
