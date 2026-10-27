@@ -323,12 +323,19 @@ gets written durably (a queue, a table) inside the handler itself.
 When an invocation runs past its `timeout`, the runtime interrupts the
 handler, the same way `runMain` handles `SIGTERM`. Its `acquireRelease`,
 `ensuring` and scope finalizers run, and every open span ends, so the
-trace shows the call that hung. The invocation fails with an
-`AWS.Lambda.InvocationTimeoutError`, and an HTTP request gets a `504`.
+trace shows the call that hung. The root span ends with an
+`AWS.Lambda.InvocationTimeoutError`.
 
 Lambda itself is configured with `timeout + timeoutMargin`, so the
 finalizers and the telemetry flush run in that margin. A handler that
-finishes inside its `timeout` is never cut short. If cleanup is still
+finishes inside its `timeout` is never cut short.
+
+Once cleanup is done, the runtime holds the invocation until Lambda's own
+timeout ends it. Lambda still logs `Task timed out`, counts a timeout and
+retries it like any other, and it resets the sandbox, so work that ignored
+the interruption, like a promise without an `AbortSignal`, can never resume
+in the next invocation. The unused rest of the margin is billed, but only
+on invocations that time out. If cleanup is still
 running 500 ms before Lambda's own timeout, the runtime ends the root
 span, marks it `aws.lambda.timeout.imminent`, and drains the exporters
 before Lambda kills the process.

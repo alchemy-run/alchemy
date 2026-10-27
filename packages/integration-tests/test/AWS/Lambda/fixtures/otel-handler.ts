@@ -22,8 +22,10 @@ import * as Layer from "effect/Layer";
  *
  * `GET /slow` outlives the timeout inside a child span. At 3 s the runtime
  * interrupts it: the finalizer runs and logs, the child span ends with the
- * interruption, the root span ends with `AWS.Lambda.InvocationTimeoutError`,
- * and the request is answered with a 504.
+ * interruption, and the root span ends with
+ * `AWS.Lambda.InvocationTimeoutError`. The invocation is then held until
+ * Lambda's 5 s timeout, which Lambda reports as a timeout and which shuts
+ * the sandbox down.
  *
  * `GET /late` finishes just inside the timeout. It is never interrupted.
  *

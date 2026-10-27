@@ -2,6 +2,7 @@ import { makeFunctionHttpHandler } from "@alchemy.run/aws/Lambda/HttpServer";
 import {
   DEFAULT_TIMEOUT_MARGIN_MS,
   HandlerContext,
+  InvocationDeadlineState,
   lambdaTimeoutOf,
   readTimeoutGrace,
   TIMEOUT_GRACE_ENV,
@@ -121,17 +122,20 @@ const makeContext = (remainingMs: number): lambda.Context =>
   }) as lambda.Context;
 
 // Runs `self` under the deadline guard with Lambda's timeout `remainingMs`
-// away and `graceMs` of it reserved past the Function's timeout.
+// away and `graceMs` of it reserved past the Function's timeout. `state` is
+// the dispatcher's per-invocation deadline state.
 const guarded = <A, E>(
   self: Effect.Effect<A, E>,
   { remainingMs, graceMs }: { remainingMs: number; graceMs: number },
   options?: { interrupt?: boolean },
+  state: { fired: boolean } = { fired: false },
 ) =>
   Effect.gen(function* () {
     process.env[TIMEOUT_GRACE_ENV] = String(graceMs);
     return yield* self.pipe(
       withInvocationDeadline(options),
       Effect.provideService(HandlerContext, makeContext(remainingMs)),
+      Effect.provideService(InvocationDeadlineState, state),
       Effect.ensuring(Effect.sync(() => delete process.env[TIMEOUT_GRACE_ENV])),
       Effect.exit,
       Effect.forkChild,
@@ -147,12 +151,16 @@ describe(
       "leaves a handler that finishes inside its timeout untouched",
       () =>
         Effect.gen(function* () {
-          const fiber = yield* guarded(Effect.sleep("2 seconds").pipe(Effect.as("done")), {
-            remainingMs: 4000,
-            graceMs: 1000,
-          });
+          const state = { fired: false };
+          const fiber = yield* guarded(
+            Effect.sleep("2 seconds").pipe(Effect.as("done")),
+            { remainingMs: 4000, graceMs: 1000 },
+            undefined,
+            state,
+          );
           yield* TestClock.adjust("2 seconds");
           expect(yield* Fiber.join(fiber)).toEqual(Exit.succeed("done"));
+          expect(state.fired).toBe(false);
         }),
       { exclusive: true },
     );
@@ -162,18 +170,23 @@ describe(
       () =>
         Effect.gen(function* () {
           const events: string[] = [];
+          const state = { fired: false };
           const fiber = yield* guarded(
             Effect.never.pipe(
               Effect.ensuring(Effect.sync(() => events.push("finalizer"))),
               Effect.onInterrupt(() => Effect.sync(() => events.push("interrupted"))),
             ),
             { remainingMs: 4000, graceMs: 1000 },
+            undefined,
+            state,
           );
           yield* TestClock.adjust("2999 millis");
           expect(events).toEqual([]);
           yield* TestClock.adjust("1 millis");
           const exit = yield* Fiber.join(fiber);
           expect(events).toEqual(["finalizer", "interrupted"]);
+          // The dispatcher holds a fired invocation until Lambda's timeout.
+          expect(state.fired).toBe(true);
           expect(exit).toMatchObject({
             _tag: "Failure",
             cause: {
@@ -236,7 +249,7 @@ describe(
     );
 
     it.effect(
-      "answers an HTTP request that runs past its timeout with a 504",
+      "fails an HTTP request that runs past its timeout after its finalizers",
       () =>
         Effect.gen(function* () {
           const events: string[] = [];
@@ -254,11 +267,18 @@ describe(
           if (!Effect.isEffect(out)) {
             return yield* Effect.die("Expected Effect from Function URL handler");
           }
-          const fiber = yield* guarded(out, { remainingMs: 4000, graceMs: 1000 });
+          const state = { fired: false };
+          const fiber = yield* guarded(out, { remainingMs: 4000, graceMs: 1000 }, undefined, state);
           yield* TestClock.adjust("3 seconds");
           const exit = yield* Fiber.join(fiber);
           expect(events).toEqual(["finalizer"]);
-          expect(exit).toMatchObject({ _tag: "Success", value: { statusCode: 504 } });
+          expect(state.fired).toBe(true);
+          expect(exit).toMatchObject({
+            _tag: "Failure",
+            cause: {
+              reasons: [{ _tag: "Fail", error: { _tag: "AWS.Lambda.InvocationTimeoutError" } }],
+            },
+          });
         }),
       { exclusive: true },
     );

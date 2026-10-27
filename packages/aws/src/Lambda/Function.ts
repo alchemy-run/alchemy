@@ -64,6 +64,7 @@ import {
 } from "./HttpServer.ts";
 import {
   HandlerContext,
+  InvocationDeadlineState,
   lambdaTimeoutOf,
   TIMEOUT_GRACE_ENV,
   toDurationMillis,
@@ -309,11 +310,13 @@ export interface FunctionCommonProps extends PlatformProps {
    *
    * At the timeout the runtime interrupts the handler, like `runMain` does on
    * SIGTERM: `acquireRelease`, `ensuring` and scope finalizers run, every
-   * open span ends, and the invocation fails with an
-   * `AWS.Lambda.InvocationTimeoutError` (an HTTP request gets a `504`). Lambda
+   * open span ends with an `AWS.Lambda.InvocationTimeoutError`. Lambda
    * itself is configured with `timeout + timeoutMargin`, rounded up to whole
    * seconds, so the cleanup and the telemetry flush run in that margin
-   * instead of being cut off.
+   * instead of being cut off. The invocation is then held until Lambda's own
+   * timeout ends it, so Lambda still logs, counts and retries a timeout and
+   * resets the sandbox, and work that ignored the interruption cannot leak
+   * into the next invocation.
    *
    * Functions alchemy's runtime does not run (`image`, `isExternal`,
    * `bundle: false`) and durable functions are never interrupted: Lambda is
@@ -1420,11 +1423,13 @@ export const Function: Platform<
                 // end inside Lambda's `timeoutMargin`, before this scope
                 // flushes the telemetry.
                 const scope = Scope.makeUnsafe();
+                const deadline = { fired: false };
                 const exit = await eff.pipe(
                   withInvocationDeadline(),
                   Effect.provide(
                     Layer.mergeAll(
                       Layer.succeed(HandlerContext, context),
+                      Layer.succeed(InvocationDeadlineState, deadline),
                       Layer.succeed(Scope.Scope, scope),
                       // Runtime readers (e.g. bindings that read their
                       // values through `RuntimeContext.get`) run in the
@@ -1455,6 +1460,15 @@ export const Function: Platform<
                     }),
                     Effect.runPromise,
                   );
+                }
+                if (deadline.fired) {
+                  // The handler ran past its `timeout`: it was interrupted,
+                  // its finalizers ran and its telemetry flushed. Hold the
+                  // invocation until Lambda's own timeout ends it, so Lambda
+                  // reports and retries a real timeout and resets the
+                  // sandbox — work that ignored the interruption can never
+                  // resume in the next invocation.
+                  await new Promise<never>(() => {});
                 }
                 if (Exit.isSuccess(exit)) {
                   return exit.value;

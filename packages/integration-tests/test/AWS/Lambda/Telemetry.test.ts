@@ -2,6 +2,8 @@ import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
+import * as Clock from "effect/Clock";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -142,12 +144,42 @@ describe(
           yield* expectUrlContains(collected, "lambda-work-log");
 
           // An invocation that runs past its 3 s timeout is interrupted:
-          // its finalizer runs, the span of the call that hung ends, the
-          // root span ends with the timeout, and the request gets a 504.
-          // Lambda's own timeout is 5 s, so all of it is exported.
+          // its finalizer runs, the span of the call that hung ends, and the
+          // root span ends with the timeout — all exported. The invocation
+          // is then held until Lambda's own 5 s timeout ends it, so the
+          // caller sees Lambda's timeout error, not a response from the
+          // handler.
           const client = yield* HttpClient.HttpClient;
+          const slowStart = yield* Clock.currentTimeMillis;
           const slow = yield* client.get(`${fnUrl}/slow`);
-          expect(slow.status).toBe(504);
+          const slowElapsed = (yield* Clock.currentTimeMillis) - slowStart;
+          expect(slow.status).not.toBe(200);
+          expect(slowElapsed).toBeGreaterThanOrEqual(4500);
+
+          // Lambda counts it as a real timeout and shuts the sandbox down
+          // (our shutdown extension logs the SIGTERM inside the invocation),
+          // so work that ignored the interruption cannot resume later.
+          const logGroupName = `/aws/lambda/${fn.functionName}`;
+          const slowRequestLines = yield* logs.filterLogEvents({ logGroupName }).pipe(
+            Effect.map((result) => (result.events ?? []).map((event) => event.message ?? "")),
+            Effect.map((lines) => {
+              const requestId = lines
+                .map((line) => /Lambda invocation (\S+) of .* timed out after/.exec(line)?.[1])
+                .find((id) => id !== undefined);
+              return requestId === undefined
+                ? []
+                : lines.filter((line) => line.includes(requestId));
+            }),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (lines) => lines.some((line) => line.startsWith("REPORT")),
+              times: 30,
+            }),
+          );
+          expect(slowRequestLines.find((line) => line.startsWith("REPORT"))).toContain(
+            "Status: timeout",
+          );
+          expect(slowRequestLines.some((line) => line.includes("SIGTERM"))).toBe(true);
           yield* expectUrlContains(collected, "lambda-slow-finalizer", {
             timeout: "120 seconds",
             label: "interrupted invocation's finalizer log",

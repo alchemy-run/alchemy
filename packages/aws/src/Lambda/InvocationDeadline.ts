@@ -51,9 +51,9 @@ export const TIMEOUT_IMMINENT_ATTRIBUTE = "aws.lambda.timeout.imminent";
 /**
  * The invocation ran past the Function's `timeout`. The runtime interrupts
  * the handler — so `acquireRelease`, `ensuring` and scope finalizers run, and
- * every open span ends — and fails the invocation with this error. Lambda
- * reports it like a timeout: async and event-source invocations retry, and an
- * HTTP request gets a `504`.
+ * every open span ends — and fails the invocation with this error, which
+ * becomes the status of the root span. The invocation is then held until
+ * Lambda's own timeout ends it, so Lambda reports a real timeout.
  *
  * Also the status of a root span the backstop flush ends just before Lambda's
  * hard timeout.
@@ -68,6 +68,18 @@ export class InvocationTimeoutError extends Data.TaggedError("AWS.Lambda.Invocat
     return `Lambda invocation ${this.requestId} of ${this.functionName} timed out after ${this.budgetMs}ms`;
   }
 }
+
+/**
+ * Set by the deadline guard when it interrupts an invocation at the
+ * Function's `timeout`. The dispatcher provides a fresh one per invocation
+ * and, once finalizers have run and telemetry has flushed, holds a fired
+ * invocation open until Lambda's own timeout ends it (see
+ * {@link withInvocationDeadline}).
+ */
+export class InvocationDeadlineState extends Context.Service<
+  InvocationDeadlineState,
+  { fired: boolean }
+>()("AWS.Lambda.InvocationDeadlineState") {}
 
 interface Deadline {
   /** Tell the enclosing guard an inner guard now owns the deadline. */
@@ -189,9 +201,18 @@ export const lambdaTimeoutOf = (props: {
  * 1. At `remaining - grace` — the Function's `timeout` — the handler is
  *    interrupted. `acquireRelease`, `ensuring` and scope finalizers run;
  *    every open span ends with the interruption, so the trace shows the
- *    call that hung. The invocation fails with {@link InvocationTimeoutError}.
- *    A handler that finishes before its `timeout` is never touched.
- * 2. At {@link BACKSTOP_FLUSH_MS} before Lambda's hard timeout, if the
+ *    call that hung. The invocation fails with {@link InvocationTimeoutError}
+ *    and {@link InvocationDeadlineState} is marked fired. A handler that
+ *    finishes before its `timeout` is never touched.
+ * 2. The dispatcher closes the request scope (request finalizers, the
+ *    telemetry flush) and then holds the invocation open instead of
+ *    returning. Lambda's own timeout ends it: Lambda logs `Task timed out`,
+ *    counts a timeout, retries as it would for any timeout, and resets the
+ *    sandbox, so work that ignored the interruption (a promise without an
+ *    `AbortSignal`, a connection left mid-query) can never resume in the
+ *    next invocation. The cost is the unused rest of the margin, billed only
+ *    on invocations that time out.
+ * 3. At {@link BACKSTOP_FLUSH_MS} before Lambda's hard timeout, if the
  *    invocation is *still* running (a slow finalizer, an uninterruptible
  *    region, or interruption is off), the current root span is ended with
  *    {@link InvocationTimeoutError} and marked
@@ -200,7 +221,7 @@ export const lambdaTimeoutOf = (props: {
  *    exported even if Lambda kills the process. This step never changes the
  *    invocation's outcome.
  *
- * `interrupt: false` keeps only step 2. Durable functions use it: their
+ * `interrupt: false` keeps only step 3. Durable functions use it: their
  * invocations are replayed from checkpoints, and interrupting one would
  * leave the durable SDK's promise running.
  *
@@ -311,6 +332,12 @@ export const withInvocationDeadline: {
                     requestId: timeoutError.requestId,
                     budgetMs: timeoutError.budgetMs,
                   }),
+                  Effect.andThen(Effect.serviceOption(InvocationDeadlineState)),
+                  Effect.tap((state) =>
+                    Effect.sync(() => {
+                      if (Option.isSome(state)) state.value.fired = true;
+                    }),
+                  ),
                   Effect.andThen(Effect.fail(timeoutError)),
                 ),
           ),
