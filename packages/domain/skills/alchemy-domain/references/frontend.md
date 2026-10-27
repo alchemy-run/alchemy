@@ -37,7 +37,7 @@ Runtime.run(
 );
 ```
 
-More: [Integrate with foldkit: Give the app its client](https://alchemy.run/domain/foldkit#give-the-app-its-client).
+More: [Integrate with foldkit: Give the app its client](https://alchemy.run/domain/foldkit#provide-the-client-and-headers).
 
 ## Commands call domain commands
 
@@ -59,7 +59,7 @@ Every typed rejection arrives as a tagged error, so `update` can show exactly wh
 
 To keep a rejection in a Message or the Model, use `CustomerApi.rejections`: one Schema for every rejection the Api's commands declare, decoding to the rejection classes. A helper for every Api takes `A extends Domain.Api.Any` and reads `api.commands`.
 
-More: [Integrate with foldkit: Send domain commands from foldkit commands](https://alchemy.run/domain/foldkit#send-domain-commands-from-foldkit-commands).
+More: [Integrate with foldkit: Send domain commands from foldkit commands](https://alchemy.run/domain/foldkit#derive-the-commands).
 
 ## Subscriptions watch views
 
@@ -90,7 +90,7 @@ Watch state with `View.watch(key)`, and watch emitted events with `View.events(k
 
 To show data at first paint, read `View.snapshot(key)` (on the server, or in `init`): it gives `{ state, cursor }` from one read. Start the feed with `View.events(key, { after: cursor })`, so a write between the two reads arrives once and none is missed.
 
-More: [Integrate with foldkit: Watch views with subscriptions](https://alchemy.run/domain/foldkit#watch-views-with-subscriptions).
+More: [Integrate with foldkit: Watch views with subscriptions](https://alchemy.run/domain/foldkit#follow-a-views-state).
 
 ## Tracing from the browser
 
@@ -141,10 +141,10 @@ export default {
 };
 ```
 
-More: [Integrate with foldkit: Build and host it](https://alchemy.run/domain/foldkit#build-and-host-it).
+More: [Integrate with foldkit: Build and host it](https://alchemy.run/domain/foldkit#test-and-host-the-app).
 
 ## Testing the app
 
 Test `update` and the Commands with foldkit stories (`foldkit/story`) in `packages/web/test`. They need no server.
 
-More: [Integrate with foldkit: Test the app's update](https://alchemy.run/domain/foldkit#test-the-apps-update).
+More: [Integrate with foldkit: Test the app's update](https://alchemy.run/domain/foldkit#test-and-host-the-app).
