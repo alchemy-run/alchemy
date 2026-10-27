@@ -155,3 +155,34 @@ describe("scanSqlScript", () => {
     tags,
   );
 });
+
+describe("scanSqlScript alignment", () => {
+  it.effect(
+    "keeps `code` aligned with `sql` across leading whitespace and comments",
+    () =>
+      Effect.sync(() => {
+        const statements = scanSqlScript(
+          "SELECT 1;\n  -- next\n  CREATE INDEX i ON t (a)",
+          "postgres",
+        );
+        const second = statements[1]!;
+        expect(second.code.length).toEqual(second.sql.length);
+        const at = second.code.indexOf("CREATE");
+        expect(second.sql.slice(at, at + 6)).toEqual("CREATE");
+        expect(second.text).toEqual("CREATE INDEX i ON t (a)");
+      }),
+    tags,
+  );
+
+  it.effect(
+    "flags a quote or comment that never closes",
+    () =>
+      Effect.sync(() => {
+        expect(scanSqlScript("SELECT 'oops", "postgres")[0]!.unterminated).toEqual("quote");
+        expect(scanSqlScript("SELECT $$oops", "postgres")[0]!.unterminated).toEqual("quote");
+        expect(scanSqlScript("SELECT 1 /* oops", "googlesql")[0]!.unterminated).toEqual("comment");
+        expect(scanSqlScript("SELECT 'ok'", "postgres")[0]!.unterminated).toBeUndefined();
+      }),
+    tags,
+  );
+});
