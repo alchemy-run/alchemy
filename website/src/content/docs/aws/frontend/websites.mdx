@@ -21,8 +21,7 @@ integration on top.
 - [`Vite`](/aws/frontend/vite) — any client-only Vite project (React,
   Vue, Solid, or a plain SPA): assets-only, no Lambda; your
   `vite.config.*` loads natively.
-- [`Foldkit`](/aws/frontend/foldkit) — Foldkit apps; `Vite` with SPA
-  deep links on by default.
+- [`Foldkit`](/aws/frontend/foldkit) — Foldkit SPA, SSR, and prerendered apps.
 - [`Astro`](/aws/frontend/astro) — Astro sites, server-rendered or
   fully static; your `astro.config.*` loads natively.
 - [`Nextjs`](/aws/frontend/nextjs) — Next.js apps on Next's own
@@ -51,7 +50,8 @@ integration on top.
   sites (or a site plus an API), routed at the edge.
 
 Every resource shares the same surface: `domain` (ACM certificate +
-Route 53 records), server configuration (`timeout`, `env`,
+Route 53 records, or records on another
+[DNS host](/infrastructure-as-code/dns-adapters)), server configuration (`timeout`, `env`,
 `maxConcurrencyPerEnvironment`, `maxEnvironments`), `assets`, `edge`
 customizations, and `invalidation`.
 All builds are memoized by content-hashing the input files — an

@@ -208,6 +208,7 @@ import type { CustomerClient } from "./flows.ts";
 
 export const followTransfer = Effect.fn(function* (bank: CustomerClient, transferId: string) {
   yield* bank.TransferStatus.watch(TransferId.make(transferId)).pipe(
+    Stream.map(({ state }) => state),
     Stream.takeUntil((status) => status?.completedAt !== null || status?.failedReason !== null),
     Stream.runForEach((status) =>
       Effect.log(status === null ? "pending" : TransferStatus.computed.status(status)),
@@ -242,6 +243,6 @@ Story.saga(ExecuteTransfer, transfer, { _tag: "Running" }),
 Story.signal(ExecuteTransfer, transfer, Decision, "approved"),
 ```
 
-A step that calls an external system waits until the story resolves the call, as a policy does. A run that dies fails the story, unless a step expects it with `Story.saga(ExecuteTransfer, transfer, { _tag: "Died" })`.
+A step that calls an external system waits until the story answers the call, as a policy does. A run that dies fails the story, unless a step expects it with `Story.saga(ExecuteTransfer, transfer, { _tag: "Died" })`.
 
 On Cloudflare, each run is a Durable Object named by its key, with its steps stored in its SQLite. `DomainCloudflare.DurableObjects` hosts sagas with the rest of the model, and `Domain.InMemory` runs them in memory.

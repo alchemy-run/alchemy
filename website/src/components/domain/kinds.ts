@@ -1,5 +1,5 @@
 /**
- * The building blocks of an `alchemy/Domain` model, as drawn in diagrams.
+ * The building blocks of an `@alchemy.run/domain` model, as drawn in diagrams.
  * Each kind has one colour, one icon and one shape, used everywhere.
  */
 

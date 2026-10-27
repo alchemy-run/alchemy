@@ -11,8 +11,8 @@ Put the bank on Cloudflare. Every account, customer, view and policy becomes a D
 
 ```typescript
 // src/BankWorker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Bank, BankHandlers } from "./Bank.model.ts";
@@ -41,13 +41,13 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import BankWorker from "./src/BankWorker.ts";
 
 export default Alchemy.Stack(
   "Bank",
-  { providers: Cloudflare.providers(), state: Alchemy.localState() },
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const bank = yield* BankWorker;
     return { url: bank.url.as<string>() };
@@ -69,7 +69,7 @@ bun alchemy dev
 
 ```typescript
 // scripts/try.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -89,6 +89,7 @@ const program = Effect.gen(function* () {
   );
   // Print the balance now and after every change, in the background.
   yield* bank.AccountSummary.watch(accountId).pipe(
+    Stream.map(({ state }) => state),
     Stream.filter((summary) => summary !== null && summary.owner !== null),
     Stream.runForEach((summary) => Effect.log(`balance: ${summary?.balance}`)),
     Effect.forkChild,

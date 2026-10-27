@@ -34,7 +34,9 @@ export const additionalModulesPlugin = createPlugin("additional-modules", () => 
     },
     shared: {
       resolveId: {
-        filter: { id: MODULE_RULES.map((rule) => rule.pattern) },
+        // Subpath imports (`#html`) resolve to a module type only once
+        // resolved, as in `@cloudflare/vite-plugin`.
+        filter: { id: [...MODULE_RULES.map((rule) => rule.pattern), /^#/] },
         async handler(source, importer, options) {
           const resolved = await this.resolve(source, importer, options);
           if (!resolved) {

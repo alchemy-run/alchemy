@@ -7,13 +7,13 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
  * suite, exported as the env vars the suites read, and removed after the run.
  *
  * Every call uses the credentials and Region of
- * `packages/alchemy/src/AWS/Local/FlociServices.ts` (access key `test`,
+ * `packages/aws/src/Local/FlociServices.ts` (access key `test`,
  * us-east-1): Floci scopes state by access key and Region, and that is what
  * the local providers and the test-body SDK clients use under
  * `ALCHEMY_TEST_DEV=1`. The OAM sink lives in a second emulator account,
  * selected by a 12-digit access key (Floci core/common/AccountResolver.java).
  */
-import * as Floci from "@alchemy.run/floci";
+import * as Floci from "@alchemy.run/aws/Local/Floci";
 import * as acm from "@distilled.cloud/aws/acm";
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as controltower from "@distilled.cloud/aws/controltower";
@@ -32,8 +32,8 @@ import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as ses from "@distilled.cloud/aws/ses";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as ssm from "@distilled.cloud/aws/ssm";
-import * as BunServices from "@effect/platform-bun/BunServices";
 import * as Cause from "effect/Cause";
+import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -50,14 +50,13 @@ import * as Stream from "effect/Stream";
 
 export interface FlociStandingFixtures {
   readonly env: Record<string, string>;
-  readonly teardown: () => Promise<void>;
+  /** Removes every provisioned fixture, newest first. */
+  readonly teardown: Effect.Effect<void, FixtureError, PlatformServices>;
 }
 
 export interface FlociStandingFixtureOptions {
   /** Selected test files (relative or absolute). Omit to provision every group. */
   readonly files?: ReadonlyArray<string>;
-  /** Aborting interrupts provisioning and removes what was already created. */
-  readonly signal?: AbortSignal;
 }
 
 const NAME = "alchemy-floci-standing";
@@ -65,7 +64,7 @@ const FIXTURE_TAG_KEY = "alchemy-floci-fixture";
 const FIXTURE_TAG_VALUE = "standing";
 const VPC_CIDR = "10.250.0.0/16";
 // Must match FLOCI_REGION / FLOCI_ACCOUNT_ID in
-// packages/alchemy/src/AWS/Local/FlociServices.ts.
+// packages/aws/src/Local/FlociServices.ts.
 const REGION = "us-east-1" as RegionName;
 const ACCOUNT_ID = "000000000000";
 // Second emulator account for the cross-account OAM sink.
@@ -158,7 +157,7 @@ const groupVars: Record<Group, ReadonlyArray<string>> = {
   ],
 };
 
-// Suites (under packages/alchemy/test/AWS) gated on each group's vars.
+// Suites (under packages/integration-tests/test/AWS) gated on each group's vars.
 const groupSuites: Record<Group, ReadonlyArray<string>> = {
   eksRole: ["EKS/Cluster.test.ts", "EKS/ClusterBindings.test.ts"],
   eksCluster: [
@@ -196,7 +195,7 @@ const groupSuites: Record<Group, ReadonlyArray<string>> = {
   controlTower: ["ControlTower/ControlTower.test.ts"],
 };
 
-class FixtureError extends Data.TaggedError("FlociFixtureError")<{
+export class FixtureError extends Data.TaggedError("FlociFixtureError")<{
   readonly message: string;
 }> {}
 
@@ -218,10 +217,12 @@ const fixtureLayer = Layer.mergeAll(
   Layer.succeed(Region, Effect.succeed(REGION)),
   Endpoint.of(`http://localhost:${Floci.DEFAULT_FLOCI_PORT}`),
   FetchHttpClient.layer,
-  BunServices.layer,
 );
 
-type Services = Layer.Success<typeof fixtureLayer>;
+/** Platform services the caller provides (e.g. `NodeServices.layer`). */
+type PlatformServices = Path.Path | ChildProcessSpawner.ChildProcessSpawner;
+
+type Services = Layer.Success<typeof fixtureLayer> | PlatformServices;
 
 interface Cleanup {
   readonly label: string;
@@ -253,16 +254,6 @@ const runCleanups = (ledger: Array<Cleanup>) =>
       return yield* fixtureError(`could not remove standing fixtures:\n${failures.join("\n")}`);
     }
   });
-
-const toPromise = <A>(
-  effect: Effect.Effect<A, unknown, Services>,
-  signal?: AbortSignal,
-): Promise<A> =>
-  Effect.runPromiseExit(effect.pipe(Effect.provide(fixtureLayer)), {
-    signal,
-  }).then((exit) =>
-    Exit.isSuccess(exit) ? exit.value : Promise.reject(new Error(Cause.pretty(exit.cause))),
-  );
 
 // ─── EC2 ─────────────────────────────────────────────────────────────────────
 
@@ -1430,7 +1421,10 @@ const ensureLandingZone = (ledger: Array<Cleanup>) =>
 const matchesSuite = (file: string, suite: string) =>
   file.replaceAll("\\", "/").endsWith(`AWS/${suite}`);
 
-const allVarsSet = (group: Group) => groupVars[group].every((name) => !!process.env[name]);
+const allVarsSet = (group: Group) =>
+  Effect.forEach(groupVars[group], (name) => Config.String(name).pipe(Config.withDefault(""))).pipe(
+    Effect.map((values) => values.every((value) => value !== "")),
+  );
 
 const selectGroups = (files: ReadonlyArray<string> | undefined) =>
   Effect.gen(function* () {
@@ -1440,7 +1434,7 @@ const selectGroups = (files: ReadonlyArray<string> | undefined) =>
         files === undefined ||
         files.some((file) => groupSuites[group].some((suite) => matchesSuite(file, suite)));
       if (!wanted) continue;
-      if (allVarsSet(group)) {
+      if (yield* allVarsSet(group)) {
         yield* log(`fixtures: ${group} uses the caller's env vars`);
         continue;
       }
@@ -1604,23 +1598,23 @@ const provision = (external: boolean, groups: ReadonlySet<Group>, ledger: Array<
 
 /**
  * Provisions the standing fixtures the selected suites need. On failure or
- * abort, everything already created is removed before the promise rejects.
+ * interruption, everything already created is removed before the effect fails.
  */
-export const provisionFlociStandingFixtures = async (
+export const provisionFlociStandingFixtures = Effect.fn(function* (
   external: boolean,
   options: FlociStandingFixtureOptions = {},
-): Promise<FlociStandingFixtures> => {
+) {
   const ledger: Array<Cleanup> = [];
-  const groups = await toPromise(selectGroups(options.files));
-  const teardown = () => (ledger.length === 0 ? Promise.resolve() : toPromise(runCleanups(ledger)));
-  if (groups.size === 0) return { env: {}, teardown };
-  const env = await toPromise(
-    provision(external, groups, ledger).pipe(
-      Effect.onError(() =>
-        runCleanups(ledger).pipe(Effect.catch((error) => Console.error(String(error.message)))),
-      ),
+  const groups = yield* selectGroups(options.files);
+  const teardown: FlociStandingFixtures["teardown"] = Effect.suspend(() =>
+    ledger.length === 0 ? Effect.void : runCleanups(ledger),
+  ).pipe(Effect.provide(fixtureLayer));
+  if (groups.size === 0) return { env: {}, teardown } satisfies FlociStandingFixtures;
+  const env = yield* provision(external, groups, ledger).pipe(
+    Effect.onError(() =>
+      runCleanups(ledger).pipe(Effect.catch((error) => Console.error(String(error.message)))),
     ),
-    options.signal,
+    Effect.provide(fixtureLayer),
   );
-  return { env, teardown };
-};
+  return { env, teardown } satisfies FlociStandingFixtures;
+});

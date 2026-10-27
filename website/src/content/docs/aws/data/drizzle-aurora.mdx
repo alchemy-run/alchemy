@@ -14,7 +14,7 @@ pnpm install
 cd examples/aws-aurora-drizzle
 ```
 
-The example uses `us-west-2`, Aurora PostgreSQL 17.5, and Node.js 22. Change both subnet availability zones if you change region. Application queries use Effect-native Drizzle over `pg`, not the RDS Data API driver; [SQL databases](/sql/databases) compares the integrations.
+The example uses `us-west-2`, Aurora PostgreSQL 17.5, and Node.js 22. Change both subnet availability zones if you change region. Application queries use Effect-native Drizzle over `@effect/sql-pg`, not the RDS Data API driver; [SQL databases](/sql/databases) compares the integrations.
 
 :::caution
 Aurora is billable until destroyed. This example is disposable: destroy deletes its database data.
@@ -76,7 +76,7 @@ env: { NODE_EXTRA_CA_CERTS: "/var/runtime/ca-cert.pem" }
 The RDS binding currently emits `sslmode=no-verify`. Override it to require certificate and hostname verification:
 
 ```typescript
-import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
@@ -93,19 +93,14 @@ const db = yield* Drizzle.Postgres(
 
 The CA path is specific to [managed Lambda Node.js runtimes](https://docs.aws.amazon.com/lambda/latest/dg/lambda-nodejs.html#nodejs-certificate-loading). The connection stays lazy: the first query resolves the redacted URL and opens a pool scoped to that invocation, which closes when its scope ends.
 
-## Package the driver
+## Install the driver
 
 ```sh
-pnpm add alchemy effect @effect/sql-pg \
-  drizzle-orm@1.0.0-rc.5-ab785fc pg
-pnpm add -D @types/pg
+pnpm add alchemy @alchemy.run/aws @alchemy.run/drizzle effect @effect/sql-pg \
+  drizzle-orm@1.0.0-rc.5
 ```
 
-```typescript
-build: { install: ["pg"] }
-```
-
-`build.install` keeps the CommonJS `pg` package intact in the Lambda artifact.
+`@effect/sql-pg` speaks the Postgres wire protocol itself, so the Lambda bundle needs no native or CommonJS driver.
 
 ## Query with Drizzle
 
@@ -134,7 +129,7 @@ The example's bootstrap does not alter existing tables or maintain Drizzle migra
 ### Configure SQL generation
 
 ```sh
-pnpm add -D drizzle-kit@1.0.0-rc.5-ab785fc
+pnpm add -D drizzle-kit@1.0.0-rc.5
 ```
 
 ```typescript

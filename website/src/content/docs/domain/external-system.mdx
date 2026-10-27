@@ -32,7 +32,7 @@ A `Domain.ExternalSystem` lists the calls you make to one outside system, with t
 
 ```typescript
 // packages/domain/src/Settlement/Payments.external.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 import { Cents } from "../Money.ts";
 
@@ -44,6 +44,38 @@ export class Payments extends Domain.ExternalSystem("Payments", {
   },
 }) {}
 ```
+
+## Declare its errors
+
+When the vendor can refuse, declare the error with `error:`. The call's Effect then fails with that type, so a policy handles it like any typed error.
+
+```typescript
+class RefundDeclined extends Domain.Rejection("RefundDeclined", { reason: Schema.String }) {}
+
+export class Payments extends Domain.ExternalSystem("Payments", {
+  refund: {
+    args: { settlementId: Schema.String, amount: Cents },
+    success: { refundId: Schema.String },
+    error: RefundDeclined,
+  },
+}) {}
+```
+
+When the vendor can refuse in several ways, list each error. The call fails with any of them, and a policy handles each one by its tag:
+
+```typescript
+class CardFrozen extends Domain.Rejection("CardFrozen") {}
+
+export class Payments extends Domain.ExternalSystem("Payments", {
+  refund: {
+    args: { settlementId: Schema.String, amount: Cents },
+    success: { refundId: Schema.String },
+    error: [RefundDeclined, CardFrozen],
+  },
+}) {}
+```
+
+A `Schema.Union([RefundDeclined, CardFrozen])` declares the same errors.
 
 ## Implement it with a Layer
 
@@ -71,7 +103,7 @@ A policy uses it like any other service. This one refunds money that settled on 
 
 ```typescript
 // packages/domain/src/Settlement/SettlementRefund.policy.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import { Account } from "../Account/Account.aggregate.ts";
 import { SettlementOnClosedAccount } from "../Account/RecordSettlement.command.ts";
@@ -101,7 +133,7 @@ Money arrives from Stripe as webhook events. Each successful payment becomes a `
 
 ```typescript
 // packages/domain/src/Account/RecordSettlement.command.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 import { Cents } from "../Money.ts";
 import { AccountId } from "./Account.id.ts";
@@ -133,7 +165,7 @@ export class RecordSettlement extends Domain.Command("RecordSettlement", {
 import { Account } from "@bank/domain/Account/Account.aggregate";
 import { AccountId } from "@bank/domain/Account/Account.id";
 import { RecordSettlement } from "@bank/domain/Account/RecordSettlement.command";
-import * as Stripe from "alchemy/Stripe";
+import * as Stripe from "@alchemy.run/stripe";
 import * as Effect from "effect/Effect";
 
 /**
@@ -167,12 +199,12 @@ export const StripeSettlements = Effect.gen(function* () {
 
 ## Test external system calls
 
-In a story, an external system call waits until you resolve it. `expectCall` checks what was asked, and `resolve` answers it. With several calls waiting, name each one; see [Answer several calls](/domain/testing-models#answer-several-calls).
+In a story, an external system call waits until you answer it. `Story.call` checks what was asked, and must come first; `succeed` answers it. `fail` answers with the operation's declared error instead; see [Fail a call](/domain/testing-models#fail-a-call). With several calls waiting, name each one; see [Answer several calls](/domain/testing-models#answer-several-calls).
 
 ```typescript
 // packages/domain/test/settlements.test.ts
 import { it } from "@effect/vitest";
-import { Story } from "alchemy/Domain/Story";
+import { Story } from "@alchemy.run/domain/Story";
 import { Account } from "../src/Account/Account.aggregate.ts";
 import { AccountClosed } from "../src/Account/CloseAccount.command.ts";
 import { AccountOpened } from "../src/Account/OpenAccount.command.ts";
@@ -186,7 +218,7 @@ import { Payments } from "../src/Settlement/Payments.external.ts";
 
 const story = Story.make(Bank, {
   layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
-  externalSystems: [FraudCheck, Payments],
+  stub: [FraudCheck, Payments],
 });
 const account = Account.ref("a-1");
 
@@ -199,13 +231,13 @@ it.effect("money that settles on a closed account is refunded", () =>
     ),
     Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
     Story.then(account, new SettlementOnClosedAccount({ settlementId: "st_1", amount: 500 })),
-    Story.expectCall(Payments.refund, { settlementId: "st_1", amount: 500 }),
-    Story.resolve(Payments.refund, { refundId: "re_1" }),
+    Story.call(Payments.refund, { settlementId: "st_1", amount: 500 }),
+    Story.succeed(Payments.refund, { refundId: "re_1" }),
   ),
 );
 ```
 
-`Story.make` replaces every external system you list with one you control. A story fails if a call is left unresolved, so every outside call is accounted for.
+`stub` lists the external systems the story fakes: it answers each of their calls itself. A system you leave out is called for real through the Layer you provide, and the story asserts what each call was sent and returned; see [Assert real calls](/domain/testing-models#assert-real-calls). A story fails if any call is left unanswered or unasserted, so every outside call is accounted for.
 
 :::note
 See how a policy uses one in [Policy](/domain/policy#call-an-external-system).

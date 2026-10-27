@@ -70,10 +70,7 @@ import * as Effect from "effect/Effect";
 +import * as Cookies from "effect/http/Cookies";
 import * as Headers from "effect/http/Headers";
 import * as Layer from "effect/Layer";
-```
-
-```diff lang="typescript"
-// src/Session.middleware.ts
+// ...
 ) {}
 
 -// Demo only: trusts `Authorization: Bearer <customer id>`. Verify a real session in production.
@@ -120,10 +117,7 @@ import * as Headers from "effect/http/Headers";
 +import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-```
-
-```diff lang="typescript"
-// src/Session.middleware.ts
+// ...
 );
 
 +// POST /api/session signs a customer in. Demo only: anyone may sign in as anyone.
@@ -154,7 +148,7 @@ export const sessionClient = (customerId: string) =>
 
 ```diff lang="typescript"
 // src/BankWorker.ts
-import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
+import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
 import * as Effect from "effect/Effect";
 +import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as Layer from "effect/Layer";
@@ -164,10 +158,7 @@ import { BankApi } from "./BankApi.api.ts";
 +import { SessionLive, sessionRoute } from "./Session.middleware.ts";
 
 const BankLive = SessionLive.pipe(
-```
-
-```diff lang="typescript"
-// src/BankWorker.ts
+  // ...
   Effect.gen(function* () {
     const api = yield* BankApi;
 -    return { fetch: api.fetch };
@@ -188,7 +179,7 @@ const BankLive = SessionLive.pipe(
 
 ```typescript
 // src/web/Bank.ts
-import type * as Domain from "alchemy/Domain";
+import type * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
 import { defineMessageUnion } from "foldkit/message";
 import { AccountId } from "../Account.id.ts";
@@ -225,7 +216,7 @@ export type Message = typeof Message.Type;
 
 ```diff lang="typescript"
 // src/web/Bank.ts
-import type * as Domain from "alchemy/Domain";
+import type * as Domain from "@alchemy.run/domain";
 +import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 +import { Command } from "foldkit";
@@ -233,11 +224,7 @@ import { defineMessageUnion } from "foldkit/message";
 import { AccountId } from "../Account.id.ts";
 +import { BankApi } from "../BankApi.api.ts";
 import { CustomerId } from "../Customer.id.ts";
-
-```
-
-```diff lang="typescript"
-// src/web/Bank.ts
+// ...
 });
 export type Message = typeof Message.Type;
 +
@@ -276,10 +263,7 @@ import * as Schema from "effect/Schema";
 +import { Command, type Update } from "foldkit";
 import { defineMessageUnion } from "foldkit/message";
 import { AccountId } from "../Account.id.ts";
-```
-
-```diff lang="typescript"
-// src/web/Bank.ts
+      // ...
       yield* bank.DepositMoney({ target: accountId, amount });
       return Message.Succeeded();
     }).pipe(Effect.catch((error) => Effect.succeed(Message.Failed({ reason: error._tag })))),
@@ -321,10 +305,7 @@ import * as Schema from "effect/Schema";
 +import { Command, Subscription, type Update } from "foldkit";
 import { defineMessageUnion } from "foldkit/message";
 import { AccountId } from "../Account.id.ts";
-```
-
-```diff lang="typescript"
-// src/web/Bank.ts
+  // ...
   },
 });
 +
@@ -340,7 +321,7 @@ import { AccountId } from "../Account.id.ts";
 +            return bank.AccountSummary.watch(accountId);
 +          }),
 +        ).pipe(
-+          Stream.map((summary) =>
++          Stream.map(({ state: summary }) =>
 +            Message.GotBalance({ balance: summary?.owner ? summary.balance : null }),
 +          ),
 +          Stream.catch((error) => Stream.succeed(Message.Failed({ reason: error._tag }))),
@@ -361,10 +342,7 @@ import { Command, Subscription, type Update } from "foldkit";
 +import type { Document, HtmlBuilder } from "foldkit/html";
 import { defineMessageUnion } from "foldkit/message";
 import { AccountId } from "../Account.id.ts";
-```
-
-```diff lang="typescript"
-// src/web/Bank.ts
+  // ...
   ),
 }));
 +
@@ -397,7 +375,7 @@ Before the account opens, the page offers to open it. After, it shows the balanc
 
 ```typescript
 // src/web/entry.ts
-import * as Domain from "alchemy/Domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -502,5 +480,5 @@ bun alchemy deploy
 You've built a bank: an account that keeps its own rules, views that answer questions, a policy that reacts, an Api that checks who's asking, and an app that watches it live.
 
 :::note
-Show changes before the server confirms them with [optimistic updates](/domain/optimistic-updates), and keep working offline with [local first](/domain/local-first). The [bank example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain) adds transfers, fraud checks and support agents.
+Next, [trace a click through the whole bank](/domain/tutorial/part-7). Show changes before the server confirms them with [optimistic updates](/domain/optimistic-updates), and keep working offline with [local first](/domain/local-first). The [bank example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain) adds transfers, fraud checks and support agents.
 :::

@@ -109,7 +109,7 @@ async function runUnderNode() {
   if (!supportsModuleHooks()) {
     process.stderr.write(
       `alchemy: node ${process.versions.node} is not supported. ` +
-        "Upgrade to node 24.11.1 or newer.\n",
+        "Upgrade to node 22.22.3, 24.11.1 or newer.\n",
     );
     process.exit(1);
   }
@@ -129,6 +129,7 @@ async function runUnderNode() {
 function supportsModuleHooks() {
   const [major = 0, minor = 0, patch = 0] = process.versions.node.split(".").map(Number);
   return (
+    (major === 22 && (minor > 22 || (minor === 22 && patch >= 3))) ||
     (major === 24 && (minor > 11 || (minor === 11 && patch >= 1))) ||
     (major === 25 && minor >= 1) ||
     major >= 26

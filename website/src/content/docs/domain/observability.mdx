@@ -1,9 +1,11 @@
 ---
 title: Observability
-description: Trace how commands, events and reactions flow through an alchemy/Domain model, across Durable Objects and over hours. Automatic spans, correlation ids and metrics, plus the attributes you choose to record.
+description: Trace how commands, events and reactions flow through an @alchemy.run/domain model, across Durable Objects and over hours. Automatic spans, correlation ids and metrics, plus the attributes you choose to record.
 ---
 
 A model records what it does as it does it. Every command, every event it commits, and every policy, view, projection and saga that reacts to it gets a span, named after the building block. The spans connect into traces that follow a flow from a click to everything it caused.
+
+[Part 7 of the tutorial](/domain/tutorial/part-7) sets this up step by step for the bank.
 
 ## Export the traces
 
@@ -48,13 +50,11 @@ const Tracing = OtlpTracer.layer({
 
 ## Collect it through your Worker
 
-`Telemetry.relay` receives the browser's spans in your own Worker and forwards them to wherever the Worker's telemetry goes, with the Worker's credentials. No ingest token reaches a browser, and only signed-in users may send:
+`Telemetry.relay` receives the browser's spans in your own Worker and forwards them to wherever the Worker's telemetry goes, with the Worker's credentials. No ingest token reaches a browser, and only signed-in users may send. `signedIn` is the Worker's check of the request's session (see [Sessions and middleware](/domain/sessions#sign-the-session)):
 
 ```typescript title="packages/server/src/BankWorker.ts"
 const telemetry = Telemetry.relay({
-  authorize: Effect.map(HttpServerRequest, (request) =>
-    Option.isSome(actorOf(request.headers)),
-  ),
+  authorize: HttpServerRequest.pipe(Effect.flatMap(signedIn), Effect.map(Option.isSome)),
 });
 ```
 

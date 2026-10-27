@@ -5,11 +5,11 @@ description: Run SQL on a libSQL database, such as Turso, with Effect SQL.
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const deps = `@effect/sql-libsql`;
+export const deps = `@alchemy.run/sql @effect/sql-libsql`;
 
 `SQL.LibSQL` runs SQL on a libSQL database, such as [Turso](/turso). Queries are Effects, and failures are `SqlError`s.
 
-Install the driver:
+Install `@alchemy.run/sql` and the driver:
 
 <PackageManagers add={deps} />
 
@@ -19,9 +19,9 @@ Connect a Turso database with `Turso.Connect` and pass it to `SQL.LibSQL`:
 
 ```typescript
 // src/api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as SQL from "alchemy/SQL/LibSQL";
-import * as Turso from "alchemy/Turso";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as SQL from "@alchemy.run/sql/SQLite";
+import * as Turso from "@alchemy.run/turso";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Db } from "./db.ts";

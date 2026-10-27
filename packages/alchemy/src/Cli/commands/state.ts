@@ -3,27 +3,35 @@ import * as Argument from "effect/cli/Argument";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import * as AlchemistState from "../../Alchemist/routes/state.ts";
-import type { StateSource } from "../../Alchemist/routes/state.ts";
-import * as CliKit from "../../Cli/CliKit/index.ts";
+import type { ProviderSource, StateSource } from "../../Alchemist/routes/state.ts";
+import type { StateStoreLogEntry } from "../../Contributions.ts";
+import * as Interaction from "../../Interaction.ts";
 import * as State from "../../State/index.ts";
 import {
   stateExplorerScreen,
   type StateExplorerSource,
 } from "../components/view/StateExplorer.tsx";
+import { formatLocalTimestamp } from "../Format.ts";
 import { confirmOrDecline } from "./confirm.ts";
 import { failWithHelp, UserInputError } from "./errors.ts";
-import { envFile, profile, yes } from "./flags.ts";
+import { envFile, parseSince, profile, yes } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 
-const backend = Flag.Literals("backend", [
-  "configured",
-  "local",
-  "cloudflare",
-  "aws",
-] as const).pipe(
-  Flag.withDescription("State backend (default: configured)"),
-  Flag.withDefault("configured" as const),
+const backend = Flag.String("backend").pipe(
+  Flag.withDescription(
+    "State backend: configured (default), local, or a provider's state store (e.g. aws, cloudflare)",
+  ),
+  Flag.withDefault("configured"),
+);
+/** A provider's store other than the account's default, e.g. an S3 bucket. */
+const storeName = Flag.String("name").pipe(
+  Flag.withDescription(
+    "State store to address instead of the account's default (e.g. an S3 bucket; with --backend)",
+  ),
+  Flag.optional,
+  Flag.map(Option.getOrUndefined),
 );
 const config = Flag.File("config").pipe(
   Flag.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
@@ -47,24 +55,42 @@ type StateArgs = {
   readonly main: string;
   readonly envFile: Option.Option<string>;
   readonly profile: string | undefined;
-  readonly backend: "configured" | "local" | "cloudflare" | "aws";
+  readonly backend: string;
+  readonly name: string | undefined;
 };
 
 const source = (args: StateArgs): StateSource =>
   args.backend === "local"
-    ? { backend: "local" }
-    : args.backend === "cloudflare" || args.backend === "aws"
+    ? { _tag: "Local" }
+    : args.backend === "configured"
       ? {
-          backend: args.backend,
+          _tag: "Configured",
+          entrypoint: args.main,
           profile: args.profile,
           envFile: Option.getOrUndefined(args.envFile),
         }
       : {
-          backend: "configured",
-          entrypoint: args.main,
+          _tag: "Provider",
+          backend: args.backend,
+          name: args.name,
           profile: args.profile,
           envFile: Option.getOrUndefined(args.envFile),
         };
+
+/** Lifecycle commands act on a provider's state store. */
+const lifecycleBackend = Flag.String("backend").pipe(
+  Flag.withDescription("Provider state store to act on (e.g. aws, cloudflare)"),
+);
+
+const lifecycleSource = (
+  args: Pick<StateArgs, "envFile" | "profile" | "backend" | "name">,
+): ProviderSource => ({
+  _tag: "Provider",
+  backend: args.backend,
+  name: args.name,
+  profile: args.profile,
+  envFile: Option.getOrUndefined(args.envFile),
+});
 
 const normalizedPath = (path: string | undefined) => {
   const parts = (path ?? "").split("/").filter((part) => part !== "" && part !== ".");
@@ -91,7 +117,7 @@ const usingStore =
 
 const listCommand = Command.make(
   "list",
-  { path: pathArgument, recursive, main: config, envFile, profile, backend },
+  { path: pathArgument, recursive, main: config, envFile, profile, backend, name: storeName },
   instrumentCommand("state.list")(
     Effect.fn(function* ({ path, recursive, ...args }) {
       const store = yield* AlchemistState.store(source(args));
@@ -108,7 +134,7 @@ const listCommand = Command.make(
 
 const readCommand = Command.make(
   "read",
-  { path: pathArgument, recursive, main: config, envFile, profile, backend },
+  { path: pathArgument, recursive, main: config, envFile, profile, backend, name: storeName },
   instrumentCommand("state.read")(
     Effect.fn(function* ({ path, recursive, ...args }) {
       const store = yield* AlchemistState.store(source(args));
@@ -136,6 +162,7 @@ const deleteCommand = Command.make(
     envFile,
     profile,
     backend,
+    name: storeName,
   },
   instrumentCommand("state.delete")(
     Effect.fn(function* ({ path, recursive, ...args }) {
@@ -145,7 +172,7 @@ const deleteCommand = Command.make(
       }
       const store = yield* AlchemistState.store(source(args));
       yield* usingStore(store)(State.deleteState({ path: requested, recursive }));
-      yield* CliKit.accessors.output.success(`Deleted state at ${requested}`);
+      yield* Interaction.success(`Deleted state at ${requested}`);
     }),
   ),
 ).pipe(
@@ -155,7 +182,7 @@ const deleteCommand = Command.make(
 
 const stateExplorer = (args: StateArgs) =>
   Effect.gen(function* () {
-    const cli = yield* CliKit.CliKit;
+    const cli = yield* Interaction.Interaction;
     const store = yield* AlchemistState.store(source(args));
     const on = provideStore(store);
     const explorer: StateExplorerSource = {
@@ -202,21 +229,20 @@ const stateExplorer = (args: StateArgs) =>
     // Captured here so the explorer's forked fibers run with the command's
     // ambient services (tracing, terminal) rather than the default runtime.
     const services = yield* Effect.context<never>();
-    yield* cli.application(cli.prompt.custom(stateExplorerScreen(explorer, services))).pipe(
-      CliKit.Application.alternate,
-      Effect.catchTag("TerminalCancelled", () => Effect.void),
-    );
+    yield* cli
+      .session(cli.prompt.screen(stateExplorerScreen(explorer, services)), { alternate: true })
+      .pipe(Effect.catchTag("TerminalCancelled", () => Effect.void));
   });
 
 const nukeCommand = Command.make(
   "nuke",
-  { main: config, envFile, profile, backend, yes },
+  { main: config, envFile, profile, backend, name: storeName, yes },
   instrumentCommand("state.unsafe.nuke")(
     Effect.fn(function* ({ yes, ...args }) {
       const store = yield* AlchemistState.store(source(args));
       const stacks = [...(yield* store.listStacks())].sort();
       if (stacks.length === 0) {
-        yield* CliKit.accessors.output.info("Nothing to clear.");
+        yield* Interaction.info("Nothing to clear.");
         return;
       }
       yield* Console.log(stacks.map((stack) => `• ${stack}`).join("\n"));
@@ -229,7 +255,7 @@ const nukeCommand = Command.make(
         (stack) =>
           store
             .deleteStack({ stack })
-            .pipe(Effect.andThen(CliKit.accessors.output.success(`Cleared ${stack}`))),
+            .pipe(Effect.andThen(Interaction.success(`Cleared ${stack}`))),
         { concurrency: 32, discard: true },
       );
     }),
@@ -239,6 +265,95 @@ const nukeCommand = Command.make(
   Command.unlisted,
 );
 
+const bootstrapCommand = Command.make(
+  "bootstrap",
+  {
+    envFile,
+    profile,
+    backend: lifecycleBackend,
+    name: storeName,
+    force: Flag.Boolean("force").pipe(
+      Flag.withDescription("Redeploy an existing state store instead of adopting it"),
+      Flag.withDefault(false),
+    ),
+  },
+  instrumentCommand("state.bootstrap")(
+    Effect.fn(function* ({ force, ...args }) {
+      const result = yield* AlchemistState.bootstrap({ ...lifecycleSource(args), force });
+      yield* Interaction.success(
+        `State store '${result.store}' ${result.status} (${Object.values(result.location).join(", ")})`,
+      );
+    }),
+  ),
+).pipe(Command.withDescription("Provision (or adopt) a state store"));
+
+const teardownCommand = Command.make(
+  "teardown",
+  { envFile, profile, backend: lifecycleBackend, name: storeName, yes },
+  instrumentCommand("state.teardown")(
+    Effect.fn(function* ({ yes: approved, ...args }) {
+      yield* confirmOrDecline({
+        yes: approved,
+        message: `Tear down the ${args.backend} state store and its backing resources?`,
+        confirmLabel: "Destroy",
+        cancelLabel: "Cancel",
+      });
+      const result = yield* AlchemistState.teardown(lifecycleSource(args));
+      yield* Interaction.success(
+        result.deleted.length === 0 ? "Nothing to delete" : `Deleted ${result.deleted.join(", ")}`,
+      );
+    }),
+  ),
+).pipe(Command.withDescription("Delete a state store and its backing resources"), Command.unlisted);
+
+const logsCommand = Command.make(
+  "logs",
+  {
+    envFile,
+    profile,
+    backend: lifecycleBackend,
+    name: storeName,
+    tail: Flag.Boolean("tail").pipe(
+      Flag.withAlias("t"),
+      Flag.withDescription("Stream logs as they happen instead of fetching past entries"),
+      Flag.withDefault(false),
+    ),
+    limit: Flag.Int("limit").pipe(
+      Flag.withDescription("Number of log entries to fetch (ignored with --tail)"),
+      Flag.withDefault(100),
+    ),
+    since: Flag.String("since").pipe(
+      Flag.withDescription("Fetch logs since this time (e.g. '1h', '30m', '2024-01-01T00:00:00Z')"),
+      Flag.optional,
+      Flag.map(Option.getOrUndefined),
+    ),
+  },
+  instrumentCommand("state.logs")(
+    Effect.fn(function* ({ tail, limit, since, ...args }) {
+      const target = lifecycleSource(args);
+      const format = (entry: StateStoreLogEntry) =>
+        `${formatLocalTimestamp(entry.timestamp)} ${entry.message}`;
+      if (tail) {
+        yield* Interaction.info(`Tailing the ${args.backend} state store...`);
+        yield* AlchemistState.tailLogs(target).pipe(
+          Stream.runForEach((entry) => Console.log(format(entry))),
+        );
+        return;
+      }
+      const entries = yield* AlchemistState.logs({
+        ...target,
+        limit,
+        since: since ? yield* parseSince(since) : undefined,
+      });
+      if (entries.length === 0) {
+        yield* Console.log(`(no log entries for the ${args.backend} state store)`);
+        return;
+      }
+      for (const entry of entries) yield* Console.log(format(entry));
+    }),
+  ),
+).pipe(Command.withDescription("Fetch or stream a state store's own logs"));
+
 const unsafeCommand = Command.make("unsafe", {}).pipe(
   Command.withDescription("Destructive state operations"),
   Command.withSubcommands([nukeCommand]),
@@ -247,10 +362,10 @@ const unsafeCommand = Command.make("unsafe", {}).pipe(
 
 export const stateCommand = Command.make(
   "state",
-  { main: config, envFile, profile, backend },
+  { main: config, envFile, profile, backend, name: storeName },
   instrumentCommand("state")(
     Effect.fn(function* (args) {
-      if (!(yield* CliKit.CliKit).terminal.input) {
+      if (!(yield* Interaction.Interaction).terminal.input) {
         return yield* failWithHelp(["alchemy", "state"]);
       }
       yield* stateExplorer(args);
@@ -258,5 +373,13 @@ export const stateCommand = Command.make(
   ),
 ).pipe(
   Command.withDescription("Inspect and manage deployment state"),
-  Command.withSubcommands([listCommand, readCommand, deleteCommand, unsafeCommand]),
+  Command.withSubcommands([
+    listCommand,
+    readCommand,
+    deleteCommand,
+    bootstrapCommand,
+    teardownCommand,
+    logsCommand,
+    unsafeCommand,
+  ]),
 );

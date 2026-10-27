@@ -125,6 +125,17 @@ export class Welcome extends Domain.Policy("Welcome", {
   caption="Two sources, one partition per customer. Within it, events from different sources have no order between them."
 />
 
+`key` can also be a string Schema, such as an org id. `keyOf` then returns the value, and the handler gets it as `key`.
+
+```typescript
+export class OrgLimits extends Domain.Policy("OrgLimits", {
+  from: Account,
+  key: OrgId,
+  keyOf: { MoneyWithdrawn: ({ event }) => event.orgId },
+  on: [MoneyWithdrawn],
+}) {}
+```
+
 The key is also the policy's unit of concurrency. Pick the narrowest thing whose events must be handled in sequence: everything for one key runs one at a time, and more keys mean more parallelism.
 
 ## Tune it on its Layer
@@ -191,7 +202,7 @@ return Effect.fn(function* ({ source, event }) {
   const { risk } = yield* fraud.score({ accountId: source.id, amount: event.total });
 ```
 
-An external system is implemented by a Layer, so production can use the vendor's HTTP API while a test uses something else. In a [story](/domain/story), each call waits until the test resolves it, so you can check what the policy does with every possible answer. See [External System](/domain/external-system).
+An external system is implemented by a Layer, so production can use the vendor's HTTP API while a test uses something else. In a [story](/domain/story), each call waits until the test answers it, so you can check what the policy does with every possible answer. See [External System](/domain/external-system).
 
 ## Act as the system
 

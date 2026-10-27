@@ -1,12 +1,12 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as Stripe from "@alchemy.run/stripe";
 import { Account } from "@bank/domain/Account/Account.aggregate";
 import { AccountSummary } from "@bank/domain/Account/AccountSummary.view";
 import { Bank, BankHandlers } from "@bank/domain/Bank.model";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import { LedgerStore } from "@bank/domain/Ledger/LedgerStore";
 import { SupportApi } from "@bank/domain/SupportApi.api";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as DomainCloudflare from "alchemy/Domain/Cloudflare";
-import * as Stripe from "alchemy/Stripe";
 import * as Telemetry from "alchemy/Telemetry";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -17,7 +17,7 @@ import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
 import { D1LedgerStore } from "./Ledger/D1LedgerStore.ts";
 import { MfaChallengeLive } from "./MfaChallenge.ts";
 import { Observability } from "./Observability.ts";
-import { actorOf, SessionLive, sessionRoute } from "./Session.ts";
+import { actorOf, SessionKey, SessionKeyLive, SessionLive, sessionRoute } from "./Session.ts";
 import { StripePayments } from "./Settlement/StripePayments.ts";
 import { StripeSettlements } from "./Settlement/StripeSettlements.ts";
 
@@ -32,6 +32,7 @@ const BankLive = Layer.mergeAll(
   Stripe.ConsumeEventsLive,
   Observability,
 ).pipe(
+  Layer.provideMerge(SessionKeyLive),
   Layer.provideMerge(Bank.layer(BankHandlers)),
   Layer.provideMerge(D1LedgerStore),
   Layer.provide(
@@ -55,10 +56,13 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
     const supportApi = yield* SupportApi;
     const ledger = yield* LedgerStore;
     const summaries = yield* AccountSummary;
+    const sessionKey = yield* SessionKey;
+    const signedIn = (request: HttpServerRequest) =>
+      actorOf(request.headers).pipe(Effect.provideService(SessionKey, sessionKey));
     const ledgerRoute = (accountId: string) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const actor = actorOf(request.headers);
+        const actor = yield* signedIn(request);
         if (Option.isNone(actor)) return HttpServerResponse.empty({ status: 401 });
         const summary = yield* summaries.query(Account.ref(accountId)).pipe(Effect.orDie);
         const owner = Option.getOrNull(summary)?.customerId;
@@ -70,9 +74,7 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
     // The app's own telemetry, collected here and forwarded with the bank's
     // credentials, so no ingest token reaches a browser. Signed-in users only.
     const telemetry = Telemetry.relay({
-      authorize: Effect.map(HttpServerRequest, (request) =>
-        Option.isSome(actorOf(request.headers)),
-      ),
+      authorize: HttpServerRequest.pipe(Effect.flatMap(signedIn), Effect.map(Option.isSome)),
     });
     // Claims POST /webhooks/stripe and provisions the Stripe webhook endpoint.
     yield* StripeSettlements;
@@ -82,7 +84,9 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const path = new URL(request.url, "http://localhost").pathname;
-        if (path === "/api/session") return yield* sessionRoute;
+        if (path === "/api/session") {
+          return yield* sessionRoute.pipe(Effect.provideService(SessionKey, sessionKey));
+        }
         const ledgerPath = LEDGER.exec(path);
         if (ledgerPath) return yield* ledgerRoute(decodeURIComponent(ledgerPath[1]!));
         if (path.startsWith("/api/telemetry/")) return yield* telemetry;

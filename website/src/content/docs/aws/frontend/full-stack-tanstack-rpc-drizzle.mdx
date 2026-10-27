@@ -7,7 +7,7 @@ sidebar:
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const deps = `@distilled.cloud/aws @effect/atom-react @effect/sql-pg drizzle-orm effect pg`;
+export const deps = `@distilled.cloud/aws @effect/atom-react @effect/sql-pg drizzle-orm effect`;
 export const devDeps = `@alchemy.run/frontend-frameworks`;
 
 [TanStack Start](/aws/frontend/tanstack-start) · [Effect RPC](/aws/apis/effect-rpc) · [Drizzle + DSQL](/aws/data/drizzle-dsql)
@@ -93,7 +93,7 @@ The Action in step 5 bootstraps the database without an HTTP `/setup` route; it 
 
 ```typescript
 // src/backend/api.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -107,7 +107,6 @@ export default class Backend extends AWS.Lambda.Function<Backend>()(
   {
     main: import.meta.url,
     functionUrl: true,
-    build: { install: ["pg"] },
   },
   Effect.gen(function* () {
     const db = yield* connectDatabase;
@@ -184,7 +183,7 @@ export default class Backend extends AWS.Lambda.Function<Backend>()(
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 import Backend from "./src/backend/api.ts";
 import { BootstrapDatabase } from "./src/backend/bootstrap.ts";

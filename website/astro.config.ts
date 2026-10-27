@@ -1,12 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  copyEditor,
-  markdownBlocks,
-  markdownFiles,
-  type MarkdownFilesOptions,
-} from "@alchemy.run/vite-plugin-copy-editor";
 import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
@@ -19,6 +13,12 @@ import starlightBlog from "starlight-blog";
 import { JSDOC_COPY_STYLE } from "../scripts/jsdoc-blocks.ts";
 import { buildOutputChecks, noindexPaths } from "./plugins/build-output.ts";
 import { jsdocCopyHandler, jsdocMarkdownStyle } from "./plugins/jsdoc-copy.ts";
+import {
+  copyEditor,
+  markdownBlocks,
+  markdownFiles,
+  type MarkdownFilesOptions,
+} from "./src/copy-editor/index.ts";
 import providersSidebar from "./src/generated/providers-sidebar.json" with { type: "json" };
 import { rewriteReferenceLinks } from "./src/reference-links.ts";
 
@@ -355,6 +355,14 @@ export default defineConfig({
                   label: "Local Provider",
                   link: "/infrastructure-as-code/local-provider",
                 },
+                {
+                  label: "DNS Adapters",
+                  link: "/infrastructure-as-code/dns-adapters",
+                },
+                {
+                  label: "Provider Contributions",
+                  link: "/infrastructure-as-code/contributions",
+                },
               ],
             },
             {
@@ -437,6 +445,7 @@ export default defineConfig({
                   label: "Local development",
                   link: "/environments/local-development",
                 },
+                { label: "Worktrees", link: "/environments/worktrees" },
                 { label: "CI", link: "/environments/ci" },
               ],
             },
@@ -719,10 +728,6 @@ export default defineConfig({
                 },
                 { label: "Effect AI", link: "/cloudflare/ai/effect-ai" },
                 { label: "Vectorize", link: "/cloudflare/ai/vectorize" },
-                {
-                  label: "Release agent",
-                  link: "/cloudflare/ai/release-agent",
-                },
               ],
             },
             {
@@ -933,24 +938,91 @@ export default defineConfig({
             { label: "Overview", link: "/gcp" },
             { label: "Setup", link: "/gcp/setup" },
             {
-              label: "Guides",
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "gcp/tutorial" } }],
+            },
+            {
+              label: "Compute",
               items: [
                 {
-                  label: "Serve an API on Cloud Run",
-                  link: "/gcp/guides/cloud-run-api",
+                  label: "Choosing a runtime",
+                  link: "/gcp/compute/choosing-a-runtime",
                 },
-                {
-                  label: "Ingest events into BigQuery",
-                  link: "/gcp/guides/event-pipeline",
-                },
-                {
-                  label: "Cache with Memorystore",
-                  link: "/gcp/guides/memorystore",
-                },
-                {
-                  label: "How bindings grant IAM",
-                  link: "/gcp/guides/bindings",
-                },
+                { label: "Cloud Run", link: "/gcp/compute/cloud-run" },
+                { label: "Cloud Run jobs", link: "/gcp/compute/jobs" },
+                { label: "Worker pools", link: "/gcp/compute/worker-pools" },
+                { label: "Cloud Functions", link: "/gcp/compute/cloud-functions" },
+                { label: "GKE", link: "/gcp/compute/gke" },
+              ],
+            },
+            {
+              label: "Frontend",
+              items: sortFrontendItems([
+                { label: "Overview", link: "/gcp/frontend/websites" },
+                { label: "Astro", link: "/gcp/frontend/astro" },
+                { label: "Foldkit", link: "/gcp/frontend/foldkit" },
+                { label: "Next.js", link: "/gcp/frontend/nextjs" },
+                { label: "Nuxt", link: "/gcp/frontend/nuxt" },
+                { label: "Octane", link: "/gcp/frontend/octane" },
+                { label: "React Router", link: "/gcp/frontend/react-router" },
+                { label: "React SPA", link: "/gcp/frontend/vite-spa" },
+                { label: "SolidStart", link: "/gcp/frontend/solidstart" },
+                { label: "Static sites", link: "/gcp/frontend/static-site" },
+                { label: "SvelteKit", link: "/gcp/frontend/sveltekit" },
+                { label: "TanStack Start", link: "/gcp/frontend/tanstack-start" },
+                { label: "Vinext", link: "/gcp/frontend/vinext" },
+                { label: "Vite", link: "/gcp/frontend/vite" },
+                { label: "Vocs", link: "/gcp/frontend/vocs" },
+                { label: "Vue", link: "/gcp/frontend/vue" },
+                { label: "Waku", link: "/gcp/frontend/waku" },
+              ]),
+            },
+            {
+              label: "APIs",
+              items: [
+                { label: "Effect HTTP", link: "/gcp/apis/effect-http-api" },
+                { label: "Effect RPC", link: "/gcp/apis/effect-rpc" },
+              ],
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "Firestore", link: "/gcp/data/firestore" },
+                { label: "Cloud Storage", link: "/gcp/data/storage" },
+                { label: "Cloud SQL", link: "/gcp/data/cloud-sql" },
+                { label: "BigQuery", link: "/gcp/data/bigquery" },
+                { label: "Memorystore", link: "/gcp/data/memorystore" },
+              ],
+            },
+            {
+              label: "AI",
+              items: [{ label: "Vertex AI", link: "/gcp/ai/vertex-ai" }],
+            },
+            {
+              label: "Messaging & events",
+              items: [
+                { label: "Pub/Sub", link: "/gcp/messaging/pubsub" },
+                { label: "Cloud Scheduler", link: "/gcp/messaging/scheduler" },
+                { label: "Storage events", link: "/gcp/messaging/storage-events" },
+                { label: "Eventarc", link: "/gcp/messaging/eventarc" },
+              ],
+            },
+            {
+              label: "Security & secrets",
+              items: [
+                { label: "IAM & bindings", link: "/gcp/security/iam" },
+                { label: "Secret Manager & KMS", link: "/gcp/security/secrets-kms" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [{ label: "Logging & Monitoring", link: "/gcp/observability/monitoring" }],
+            },
+            {
+              label: "Networking",
+              items: [
+                { label: "VPC & private networking", link: "/gcp/networking/vpc" },
+                { label: "Private services", link: "/gcp/networking/private-services" },
               ],
             },
             providerResourcesEntry("GCP"),
@@ -1533,6 +1605,7 @@ export default defineConfig({
               label: "Security",
               items: [
                 { label: "Sessions and middleware", link: "/domain/sessions" },
+                { label: "Sign in with better-auth", link: "/domain/better-auth" },
                 { label: "Views as security boundaries", link: "/domain/view-security" },
               ],
             },

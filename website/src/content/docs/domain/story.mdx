@@ -47,14 +47,14 @@ it.effect("an overdraft is rejected with the evidence", () =>
 ```typescript title="packages/domain/test/withdrawals.test.ts"
 const story = Story.make(Bank, {
   layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
-  externalSystems: [FraudCheck, Payments],
+  stub: [FraudCheck, Payments],
 });
 ```
 
-Two things stay under your control. The clock only moves when the story moves it, so deadlines and daily limits are testable. And every call to an [external system](/domain/external-system) waits until the story answers it, so you decide what the outside world says.
+Two things stay under your control. The clock only moves when the story moves it, so deadlines and daily limits are testable. And every call to an [external system](/domain/external-system) is accounted for: a stubbed system's calls wait until the story answers them, so you decide what the outside world says, and the others run for real while the story checks what they sent and returned.
 
 ## A passing story accounts for everything
 
-A story fails if a command is rejected and no step checks the rejection, or if an external system call is still waiting at the end. So a story that passes has accounted for every outcome, not just the ones it mentions.
+A story fails if a command records an event and no `then` checks it, if a command is rejected and no step checks the rejection, or if an external system call is still waiting at the end. This includes the events a policy or saga records on other instances. So a story that passes has accounted for every outcome, not just the ones it mentions.
 
 See [Testing a model](/domain/testing-models) for the full set of checks, the clock, and answering outside systems.
