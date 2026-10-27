@@ -89,7 +89,9 @@ const AuditDebitsLive = AuditDebits.toLayer(
     const ledgers = yield* Ledger;
     return Effect.fn(function* ({ source }) {
       yield* ledgers.send("main", new Audit({ wallet: source.id }));
-      yield* ledgers.schedule("main", new Remind(), { after: "1 hour" });
+      yield* ledgers
+        .schedule("main", new Remind(), { after: "1 hour" })
+        .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
     });
   }),
 );

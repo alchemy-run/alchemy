@@ -50,9 +50,12 @@ const AccountState = Schema.Union([
 ]);
 type AccountState = typeof AccountState.Type;
 
-// Lenses on the narrowed Open state: they cannot miss, so nothing is hidden.
-const balance = Optic.id<Open>().key("balance");
-const frozen = Optic.id<Open>().key("frozen");
+// Optics that focus on the Open account. decide refuses every command on an
+// account that is not open, so these events only follow an Open state; on any
+// other state an optic leaves it unchanged, which keeps evolve total.
+const open = Optic.id<AccountState>().tag("Open");
+const balance = open.key("balance");
+const frozen = open.key("frozen");
 
 // Authorization: customers may act on their own accounts; agents and the system on any.
 const openFor = (s: AccountState, actor: Actor): Open | NotOpen | NotOwner =>
@@ -68,12 +71,6 @@ const authorized = Effect.fn(function* (s: AccountState) {
   if (o._tag !== "Open") return yield* o;
   return o;
 });
-
-// evolve guard: an event in the wrong state is a bug, so the command rolls back.
-const mustBeOpen = (s: AccountState, what: string): Open => {
-  if (s._tag !== "Open") throw new Error(`${what} in state ${s._tag}`);
-  return s;
-};
 
 const dayOf = (t: DateTime.Utc) => DateTime.formatIsoDate(t);
 
@@ -198,28 +195,27 @@ export class Account extends Domain.Aggregate("Account", {
       frozen: null,
       today: { day: "", withdrawn: 0 },
     }),
-    OwnerChanged: (s, e) => ({ ...mustBeOpen(s, "OwnerChanged"), customerId: e.customerId }),
-    MoneyDeposited: (s, e) => balance.replace(e.balanceAfter, mustBeOpen(s, "MoneyDeposited")),
-    TransferDebited: (s, e) => balance.replace(e.balanceAfter, mustBeOpen(s, "TransferDebited")),
-    TransferCredited: (s, e) => balance.replace(e.balanceAfter, mustBeOpen(s, "TransferCredited")),
-    TransferRefunded: (s, e) => balance.replace(e.balanceAfter, mustBeOpen(s, "TransferRefunded")),
-    SettlementReceived: (s, e) =>
-      balance.replace(e.balanceAfter, mustBeOpen(s, "SettlementReceived")),
-    MoneyWithdrawn: (s, e, { at }) => {
-      const o = mustBeOpen(s, "MoneyWithdrawn");
-      const day = dayOf(at);
-      const withdrawn = (o.today.day === day ? o.today.withdrawn : 0) + e.amount;
-      return { ...balance.replace(e.balanceAfter, o), today: { day, withdrawn } };
-    },
-    AccountFrozen: (s, e) => frozen.replace(e.reason, mustBeOpen(s, "AccountFrozen")),
+    OwnerChanged: (s, e) => open.modify((o) => ({ ...o, customerId: e.customerId }))(s),
+    MoneyDeposited: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    TransferDebited: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    TransferCredited: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    TransferRefunded: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    SettlementReceived: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    MoneyWithdrawn: (s, e, { at }) =>
+      open.modify((o) => {
+        const day = dayOf(at);
+        const withdrawn = (o.today.day === day ? o.today.withdrawn : 0) + e.amount;
+        return { ...o, balance: e.balanceAfter, today: { day, withdrawn } };
+      })(s),
+    AccountFrozen: (s, e) => Optic.replace(s, frozen, e.reason),
     AccountClosed: () => ({ _tag: "Closed" as const }),
     RefundStranded: (s) => s,
     SettlementOnClosedAccount: (s) => s,
   },
 
   reply: {
-    DepositMoney: (s) => ({ balance: balance.get(mustBeOpen(s, "DepositMoney reply")) }),
-    WithdrawMoney: (s) => ({ balance: balance.get(mustBeOpen(s, "WithdrawMoney reply")) }),
+    DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
+    WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
   },
   // Clients may read and watch the account itself (its state and committed
   // events) through an Api, judged like a view against its current state.

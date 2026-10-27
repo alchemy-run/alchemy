@@ -766,6 +766,7 @@ Choose the deployment-based pattern that fits the behavior under test:
 
 Keep regression cases in the relevant existing resource or binding suite. A Worker lifecycle feature belongs in `test/Cloudflare/Workers/Worker.test.ts`; binding fixtures belong beside their owning suite in `fixtures/`.
 
+- Assume Docker is installed. Never `skipIf`-gate a test on Docker availability; a missing daemon fails the test.
 - Start and end `test.provider` cases with `stack.destroy()`. Fixture suites deploy in `beforeAll` and destroy in `afterAll`. Use deterministic resource identities and verify deletion through the cloud API.
 - Exercise create, update, redeploy, and removal through the stack. **Do not mock HTTP or SDK responses, invoke provider lifecycle methods directly, or call extracted reconciliation helpers as a substitute for a deployment.**
 - Verify the resulting cloud state through distilled and exercise the deployed runtime when relevant. Use real SDK calls on test-owned resources to establish out-of-band state or verify API update semantics. Keep provider behavior assertions driven by `stack.deploy`.
@@ -1141,6 +1142,7 @@ Additional flags beyond vitest:
 | ----------------- | ------- | ------------------------------------------------------------- |
 | `-t <regex>`      | —       | Test-name pattern (regex, like bun/vitest) tested against the full nested title (`file > describes > name`), so any fragment matches regardless of nesting. An invalid regex degrades to a literal substring instead of erroring. Remember to escape regex metacharacters when filtering literally: `-t "create \(default\)"` |
 | `--profile <name>` | —      | Sets `ALCHEMY_PROFILE` before any test module is imported. Use `--profile testing` for live-cloud suites instead of an `ALCHEMY_PROFILE=testing` env prefix |
+| `--stage <name>`  | —       | Sets `ALCHEMY_TEST_STAGE` before any test module is imported, replacing `Test.make`'s default `test_$USER` stage for the run (e.g. one stage per git worktree) |
 | `--fast`          | off     | Sets `FAST=1` before imports — suites `skipIf(process.env.FAST)` their slow tests (long-provisioning resources, smoke tests). Replaces the `FAST=1` env prefix |
 | `--timeout <ms>`  | 120000  | Default per-test timeout                                      |
 | `--retry <n>`     | 2       | Re-runs of a failing test body (use `--retry 0` when debugging) |

@@ -446,6 +446,7 @@ export default defineConfig({
                   label: "Local development",
                   link: "/environments/local-development",
                 },
+                { label: "Worktrees", link: "/environments/worktrees" },
                 { label: "CI", link: "/environments/ci" },
               ],
             },

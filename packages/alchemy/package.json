@@ -171,6 +171,7 @@
   },
   "peerDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
@@ -180,6 +181,9 @@
   },
   "peerDependenciesMeta": {
     "@alchemy.run/frontend-frameworks": {
+      "optional": true
+    },
+    "@alchemy.run/test": {
       "optional": true
     },
     "@effect/platform-bun": {

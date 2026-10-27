@@ -30,13 +30,13 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
   "BankWorker",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const customerApi = yield* CustomerApi.httpEffect;   // resolve once, at init
+    const customerApi = yield* CustomerApi;   // resolve once, at init
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const path = new URL(request.url, "http://localhost").pathname;
         if (path === "/api/session") return yield* sessionRoute;
-        if (path.startsWith("/api")) return yield* customerApi;
+        if (path.startsWith("/api")) return yield* customerApi.fetch;
         return HttpServerResponse.text("Not Found", { status: 404 });
       }),
     };
@@ -48,6 +48,21 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 - Resources the adapters need, like a D1 database, are declared in the server package and bound through alchemy bindings (`Cloudflare.D1.QueryDatabase(db)` inside the adapter's Layer).
 - Webhooks and event sources, like a Stripe webhook, are yielded in the Worker's init and send commands into the model.
 - `alchemy dev` runs everything locally in workerd: Durable Objects, sagas and the foldkit app.
+
+## Calling the Api in process
+
+Code in the Worker that is not a client of the Api (a webhook route, a scheduled job) calls it with `CustomerApi.clientInProcess`: the same typed client, wired to the handlers in process, with every entry's middleware. When that code has already checked its caller (a webhook signature), it provides a middleware Layer that trusts the caller, to that client only:
+
+```ts
+const asSystem = Layer.succeed(Session, (effect) =>
+  Effect.provideService(effect, CurrentActor, system("payments-webhook")),
+);
+const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem));   // per request, in Effect.scoped
+yield* bank.DepositMoney({ target: accountId, amount });
+```
+
+- Build `clientInProcess` per request in a Worker. `layerClientInProcess` provides `CustomerApi.Client` in process, for long-lived processes and scripts.
+- Do not send a request to the Worker's own URL, and do not pass a verified secret through a header to `clientInProcess` to be checked again.
 
 ## Live reads
 
