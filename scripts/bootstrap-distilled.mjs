@@ -9,7 +9,7 @@ import {
   realpathSync,
   rmSync,
 } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 
 // Git hooks export repository-specific variables. Do not pass those through to
 // commands operating on distilled or a different Alchemy worktree.
@@ -170,18 +170,46 @@ function cloneUnchanged(mainCheckout, checkout, pin) {
       indexed.set(path, oid);
     }
   }
+  const sources = new Map();
   for (const entry of git(["ls-tree", "-r", "-z", "--full-tree", pin], checkout).split("\0")) {
     const [meta, path] = entry.split("\t");
     const oid = (meta ?? "").split(" ")[2];
     if (!path || indexed.get(path) !== oid) continue;
     const target = resolve(checkout, path);
-    mkdirSync(dirname(target), { recursive: true });
-    try {
-      copyFileSync(resolve(mainCheckout, path), target, constants.COPYFILE_FICLONE_FORCE);
-    } catch (error) {
-      rmSync(target, { force: true });
-      if (NO_CLONE.has(error.code)) return;
-      throw error;
+    const dir = dirname(target);
+    if (!sources.has(dir)) sources.set(dir, []);
+    sources.get(dir).push(resolve(mainCheckout, path));
+  }
+  if (process.platform === "darwin") cloneWithCp(sources);
+  else cloneWithNode(sources);
+}
+
+// Node's copyFileSync never clones on macOS: COPYFILE_FICLONE_FORCE fails with
+// ENOSYS and COPYFILE_FICLONE silently writes a full copy. `cp -c` calls
+// clonefile(2), so pass it each directory's files in a few large batches.
+function cloneWithCp(sources) {
+  for (const [dir, files] of sources) {
+    mkdirSync(dir, { recursive: true });
+    for (let i = 0; i < files.length; i += 500) {
+      // A failed batch leaves files missing, which populate() rewrites.
+      const result = spawnSync("cp", ["-c", ...files.slice(i, i + 500), dir], { stdio: "ignore" });
+      if (result.status !== 0) return;
+    }
+  }
+}
+
+function cloneWithNode(sources) {
+  for (const [dir, files] of sources) {
+    mkdirSync(dir, { recursive: true });
+    for (const source of files) {
+      const target = resolve(dir, basename(source));
+      try {
+        copyFileSync(source, target, constants.COPYFILE_FICLONE_FORCE);
+      } catch (error) {
+        rmSync(target, { force: true });
+        if (NO_CLONE.has(error.code)) return;
+        throw error;
+      }
     }
   }
 }
