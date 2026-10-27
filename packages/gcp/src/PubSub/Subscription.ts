@@ -368,6 +368,19 @@ export type Subscription = Resource<
  * });
  * ```
  *
+ * **Example:** Write as a service account you provide
+ * ```typescript
+ * const writer = yield* GCP.IAM.ServiceAccount("impressions-writer", {});
+ * const subscription = yield* GCP.PubSub.Subscription("impressions-bigquery", {
+ *   topic: topic.name,
+ *   bigqueryConfig: {
+ *     table: table.name,
+ *     // also a referenced account's email, or a literal one
+ *     serviceAccountEmail: writer.email,
+ *   },
+ * });
+ * ```
+ *
  * @resource
  * @category PubSub
  */

@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
+import * as Output from "alchemy/Output";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -371,6 +372,112 @@ test.provider(
       yield* stack.destroy();
       expect(yield* waitUntilGone(created.subscription.name)).toEqual("gone");
       expect(yield* waitUntilServiceAccountGone(writer!)).toBe(false);
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 360_000 },
+);
+
+const accountTokenCreators = (account: { project: string; email: string }) =>
+  iam
+    .getIamPolicyProjectsServiceAccounts({
+      resource: `projects/${account.project}/serviceAccounts/${account.email}`,
+    })
+    .pipe(
+      Effect.map(
+        (policy) =>
+          policy.bindings?.find(
+            (binding) => binding.role === "roles/iam.serviceAccountTokenCreator",
+          )?.members ?? [],
+      ),
+    );
+
+test.provider(
+  "writes to BigQuery as a service account the stack provides",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const writerStack = (subscribe?: { asAccount: boolean }) =>
+        Effect.gen(function* () {
+          const topic = yield* GCP.PubSub.Topic("Clicks", {});
+          const dataset = yield* GCP.BigQuery.Dataset("ClicksRaw", {
+            location: "US-CENTRAL1",
+            forceDestroy: true,
+          });
+          const table = yield* GCP.BigQuery.Table("ClickEvent", {
+            datasetId: dataset.datasetId,
+            schema: [{ name: "data", type: "STRING" }],
+          });
+          const account = yield* GCP.IAM.ServiceAccount("ClicksWriter", {});
+          // The account already writes to the table for its own reasons:
+          // the subscription uses that grant and must never revoke it.
+          yield* GCP.IAM.Member("ClicksWriterTable", {
+            kind: "bigquery.table",
+            name: table.name,
+            role: "roles/bigquery.dataEditor",
+            member: Output.interpolate`serviceAccount:${account.email}`,
+          });
+          const subscription =
+            subscribe === undefined
+              ? undefined
+              : yield* GCP.PubSub.Subscription("ClicksBigQuery", {
+                  topic: topic.name,
+                  bigqueryConfig: {
+                    table: table.name,
+                    serviceAccountEmail: subscribe.asAccount ? account.email : undefined,
+                  },
+                });
+          return { topic, table, account, subscription };
+        });
+
+      yield* stack.deploy(writerStack());
+
+      const given = yield* stack.deploy(writerStack({ asAccount: true }));
+      const account = given.account;
+      const agentMember = (members: readonly string[]) =>
+        members.find((member) => member.includes("@gcp-sa-pubsub."));
+      expect(given.subscription?.bigqueryConfig?.serviceAccountEmail).toEqual(account.email);
+      expect(agentMember(yield* accountTokenCreators(account))).toBeDefined();
+      // Only the token-creator grant is the subscription's; the table grant
+      // was already there.
+      expect(given.subscription?.iamGrants?.map((grant) => grant.role)).toEqual([
+        "roles/iam.serviceAccountTokenCreator",
+      ]);
+
+      const published = yield* pubsub.publishProjectsTopics({
+        topic: given.topic.name,
+        body: { messages: [{ data: btoa("click-1") }] },
+      });
+      const rows = yield* bigquery
+        .queryJobs({
+          projectId: given.table.project,
+          body: {
+            query: `SELECT DISTINCT data FROM ${given.table.datasetId}.${given.table.tableId}`,
+            useLegacySql: false,
+            location: given.table.location,
+          },
+        })
+        .pipe(
+          Effect.map(({ rows = [] }) => rows.map((row) => row.f?.map((cell) => cell.v))),
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (rows) => rows.length > 0,
+            times: 30,
+          }),
+        );
+      expect(published.messageIds?.length).toEqual(1);
+      expect(rows).toEqual([["click-1"]]);
+
+      // Switching to a minted writer revokes what the subscription granted
+      // on the account and keeps what the account already held.
+      const minted = yield* stack.deploy(writerStack({ asAccount: false }));
+      expect(minted.subscription?.name).toEqual(given.subscription?.name);
+      expect(minted.subscription?.bigqueryConfig?.serviceAccountEmail).not.toEqual(account.email);
+      expect(agentMember(yield* accountTokenCreators(account))).toBeUndefined();
+      expect(yield* tableWriters(minted.table)).toContain(`serviceAccount:${account.email}`);
+      expect(yield* serviceAccountExists(account.email)).toBe(true);
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(given.subscription!.name)).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 360_000 },
 );
