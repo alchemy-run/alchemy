@@ -19,6 +19,9 @@ const main = path.resolve(import.meta.dirname, "durable-handler.ts");
  * self-binds the checkpoint-protocol IAM, and vendors
  * `@aws/durable-execution-sdk-js` into the artifact automatically.
  */
+/** Invocations this sandbox started, and how many of their scopes closed. */
+const scopes = { opened: 0, closed: 0 };
+
 export class DurableFlow extends Lambda.DurableFunction<DurableFlow>()("DurableFlow") {}
 
 export default DurableFlow.make(
@@ -31,6 +34,9 @@ export default DurableFlow.make(
   },
   Effect.gen(function* () {
     return Effect.fn(function* (input: { orderId: string }) {
+      // Every invocation's scope closes, including one the sleep suspends.
+      yield* Effect.sync(() => void scopes.opened++);
+      yield* Effect.addFinalizer(() => Effect.sync(() => void scopes.closed++));
       const reserved = yield* Lambda.Durable.step(
         "reserve",
         Effect.succeed({ orderId: input.orderId, reserved: true }),
@@ -50,7 +56,14 @@ export default DurableFlow.make(
           return (yield* RuntimeContext).Type;
         }),
       );
-      return { orderId: reserved.orderId, reserved: reserved.reserved, total, runtime };
+      return {
+        orderId: reserved.orderId,
+        reserved: reserved.reserved,
+        total,
+        runtime,
+        // Earlier invocations on this sandbox whose scope never closed.
+        unclosed: scopes.opened - 1 - scopes.closed,
+      };
     });
   }),
 );

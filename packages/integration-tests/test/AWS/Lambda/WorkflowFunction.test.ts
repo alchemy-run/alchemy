@@ -274,7 +274,7 @@ describe(
     );
 
     test.provider(
-      "interrupting a sleeping workflow finishes it",
+      "interrupting a sleeping workflow runs its compensations",
       (_stack) =>
         Effect.gen(function* () {
           const id = yield* freshId("interrupt-nap");
@@ -288,7 +288,7 @@ describe(
           );
           yield* request(`${url}/interrupt/Nap/${id}?executionId=${run.executionId}`, "POST");
           expect(yield* awaitResult(run.status)).toEqual({ _tag: "Interrupted" });
-          expect(yield* stepsOf("Nap", run.executionId)).toEqual(["before"]);
+          expect(yield* stepsOf("Nap", run.executionId)).toEqual(["before", "undo"]);
         }),
       { timeout: 180_000 },
     );

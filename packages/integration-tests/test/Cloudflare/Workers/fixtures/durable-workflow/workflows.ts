@@ -17,7 +17,7 @@ export const Greet = Workflow.make("Greet", {
   idempotencyKey: ({ id }) => id,
 });
 
-/** Sleeps durably between two activities. */
+/** Sleeps durably between two activities; an interrupt undoes the first. */
 export const Nap = Workflow.make("Nap", {
   payload: { id: Schema.String, seconds: Schema.Number },
   success: Schema.String,
@@ -87,7 +87,9 @@ export const NapLive = Workflows.layer(
   Effect.gen(function* () {
     const record = yield* Recorder;
     return Effect.fn(function* ({ id, seconds }) {
-      yield* Activity.make({ name: "before", execute: record(id, "before") });
+      yield* Activity.make({ name: "before", execute: record(id, "before") }).pipe(
+        Nap.withCompensation(() => Activity.make({ name: "undo", execute: record(id, "undo") })),
+      );
       yield* DurableClock.sleep({
         name: "nap",
         duration: `${seconds} seconds`,

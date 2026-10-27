@@ -220,7 +220,7 @@ describe.concurrent.each([
   );
 
   test(
-    "interrupting a sleeping workflow finishes it",
+    "interrupting a sleeping workflow runs its compensations",
     Effect.gen(function* () {
       const { url } = yield* stack;
       const id = yield* freshId("interrupt-nap");
@@ -234,7 +234,7 @@ describe.concurrent.each([
       );
       yield* request(`${url}/interrupt/Nap/${id}?executionId=${run.executionId}`, "POST");
       expect(yield* awaitResult(run.status)).toEqual({ _tag: "Interrupted" });
-      expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["before"]);
+      expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["before", "undo"]);
     }),
     { timeout: 90_000 },
   );

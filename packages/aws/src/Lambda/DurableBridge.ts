@@ -31,6 +31,7 @@ import type * as lambda from "aws-lambda";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import {
@@ -290,6 +291,8 @@ export const makeDurableListener = (options: {
   Effect.sync(() => {
     // Bind the SDK-wrapped handler once, on first invocation, and reuse it.
     let wrapped: WrappedDurableHandler | undefined;
+    // Each invocation's run, by the Lambda context the SDK hands it.
+    const runs = new WeakMap<object, Fiber.Fiber<unknown>>();
     const ensureWrapped: Effect.Effect<WrappedDurableHandler> = Effect.suspend(() =>
       wrapped !== undefined
         ? Effect.succeed(wrapped)
@@ -304,7 +307,7 @@ export const makeDurableListener = (options: {
                 // Fresh request scope per durable invocation, matching the
                 // Lambda dispatcher / Worker / Workflow bridges.
                 const scope = Scope.makeUnsafe();
-                const exit = await Effect.runPromiseExit(
+                const fiber = Effect.runFork(
                   options.run(params).pipe(
                     Effect.provide(
                       Layer.mergeAll(
@@ -316,20 +319,26 @@ export const makeDurableListener = (options: {
                         Layer.succeed(Scope.Scope, scope),
                       ),
                     ),
+                    Effect.onExit((exit) =>
+                      isScopeEjected(scope)
+                        ? Effect.void
+                        : Scope.close(scope, exit).pipe(
+                            Effect.ignoreCause({
+                              log: "Warn",
+                              message: "Durable invocation scope close failed",
+                            }),
+                          ),
+                    ),
                   ),
                 );
-                if (!isScopeEjected(scope)) {
-                  await Scope.close(scope, exit).pipe(
-                    Effect.ignoreCause({
-                      log: "Warn",
-                      message: "Durable invocation scope close failed",
-                    }),
-                    Effect.runPromise,
-                  );
-                }
+                runs.set(dctx.lambdaContext, fiber);
+                const exit = await Effect.runPromise(Fiber.await(fiber));
+                runs.delete(dctx.lambdaContext);
                 if (Exit.isSuccess(exit)) {
                   return exit.value;
                 }
+                // Suspended: the SDK already answered PENDING.
+                if (Cause.hasInterruptsOnly(exit.cause)) return undefined;
                 throw Cause.squash(exit.cause);
               });
               return wrapped;
@@ -359,7 +368,15 @@ export const makeDurableListener = (options: {
         // runs new work, and returns the SUCCEEDED/FAILED/PENDING envelope
         // Lambda interprets. A rejection here is a protocol-level failure —
         // let it surface as an invocation error.
-        return yield* Effect.promise(() => run(event, context));
+        const response = yield* Effect.promise(() => run(event, context));
+        // A suspended run waits on an operation that never settles: stop it,
+        // so the invocation's scope closes before Lambda freezes the sandbox.
+        const suspended = runs.get(context);
+        if (suspended) {
+          runs.delete(context);
+          yield* Fiber.interrupt(suspended);
+        }
+        return response;
       });
     }) as unknown as FunctionListener;
   });
