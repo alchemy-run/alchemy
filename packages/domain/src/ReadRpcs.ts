@@ -23,12 +23,11 @@ export const EnvelopeSchema = Schema.Struct({
   commandId: Schema.String,
 });
 
-/** The marker after a live read's backlog (`events` with `caughtUp`). */
+/** The frame `events` sends after its history. */
 export const CaughtUpSchema = Schema.TaggedStruct("CaughtUp", { cursor: Schema.String });
 
-/** A view state with its cursor, as `watch` with `withCursor` sends it. */
-export const withCursorSchema = (state: Schema.Top) =>
-  Schema.TaggedStruct("WithCursor", { state, cursor: Schema.String });
+/** What `watch` sends: a state with its cursor. */
+const snapshotSchema = (state: Schema.Top) => Schema.Struct({ state, cursor: Schema.String });
 
 /** Something an Api can expose for reading. */
 export type Readable = View.Any | Aggregate.Any | DomainStream.Any;
@@ -108,16 +107,21 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
         }),
       ),
       watch: guard(
-        Rpc.make(`${name}.watch`, { payload: { key }, success: latest, error, stream: true }),
+        Rpc.make(`${name}.watch`, {
+          payload: { key },
+          success: snapshotSchema(latest),
+          error,
+          stream: true,
+        }),
       ),
       events: guard(
         Rpc.make(`${name}.events`, {
           payload: {
             key,
-            after: Schema.optional(Schema.Number),
+            after: Schema.optional(Schema.String),
             where: Schema.optional(Schema.Unknown),
           },
-          success: recorded,
+          success: Schema.Union([CaughtUpSchema, recorded]),
           error,
           stream: true,
         }),
@@ -164,12 +168,8 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
       ),
       watch: guard(
         Rpc.make(`${name}.watch`, {
-          payload: {
-            key,
-            where: Schema.optional(Schema.Unknown),
-            withCursor: Schema.optional(Schema.Boolean),
-          },
-          success: Schema.Union([withCursorSchema(state), state]),
+          payload: { key, where: Schema.optional(Schema.Unknown) },
+          success: snapshotSchema(state),
           error,
           stream: true,
         }),
@@ -180,7 +180,6 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
             key,
             after: Schema.optional(Schema.String),
             where: Schema.optional(Schema.Unknown),
-            caughtUp: Schema.optional(Schema.Boolean),
           },
           success: Schema.Union([CaughtUpSchema, recorded]),
           error,
@@ -212,15 +211,15 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
       watch: guard(
         Rpc.make(`${name}.watch`, {
           payload: { key: def.id },
-          success: def.state,
+          success: snapshotSchema(def.state),
           error,
           stream: true,
         }),
       ),
       events: guard(
         Rpc.make(`${name}.events`, {
-          payload: { key: def.id, after: Schema.optional(Schema.Number) },
-          success: recorded,
+          payload: { key: def.id, after: Schema.optional(Schema.String) },
+          success: Schema.Union([CaughtUpSchema, recorded]),
           error,
           stream: true,
         }),

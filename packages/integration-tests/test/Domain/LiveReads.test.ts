@@ -22,6 +22,7 @@ class Counter extends Domain.Aggregate("Counter", {
   commands: [Increment],
   decide: { Increment: (_, { by }) => [new Incremented({ by })] },
   evolve: { Incremented: (s, e) => ({ total: s.total + e.by }) },
+  read: {},
 }) {}
 
 class Totals extends Domain.View("Totals", {
@@ -32,10 +33,32 @@ class Totals extends Domain.View("Totals", {
   evolve: { Incremented: (s, e) => ({ total: s.total + e.by }) },
 }) {}
 
-class Counters extends Domain.Model("Counters", { aggregates: [Counter], views: [Totals] }) {}
-class CounterApi extends Domain.Api("CounterApi", Increment, Totals) {}
+class Bumped extends Domain.Event("Bumped", { by: Schema.Number }) {}
+class Bumps extends Domain.Stream("Bumps", { key: Counter, entries: [Bumped] }) {}
+class BumpWriter extends Domain.Projection("BumpWriter", {
+  from: [Counter],
+  key: Counter,
+  on: [Incremented],
+  writes: [Bumps],
+}) {}
+const BumpWriterLive = BumpWriter.toLayer(
+  Effect.gen(function* () {
+    const bumps = yield* Bumps;
+    return Effect.fn(function* (batch) {
+      for (const input of batch) yield* bumps.append(input, new Bumped({ by: input.event.by }));
+    });
+  }),
+);
 
-const Hosted = Counters.layer(Layer.empty).pipe(Layer.provideMerge(InMemory));
+class Counters extends Domain.Model("Counters", {
+  aggregates: [Counter],
+  views: [Totals],
+  projections: [BumpWriter],
+  streams: [Bumps],
+}) {}
+class CounterApi extends Domain.Api("CounterApi", Increment, Counter, Totals, Bumps) {}
+
+const Hosted = Counters.layer(BumpWriterLive).pipe(Layer.provideMerge(InMemory));
 const InProcess = Layer.effect(CounterApi.Client, CounterApi.testClient).pipe(
   Layer.provideMerge(Hosted),
 );
@@ -49,109 +72,121 @@ const Wire = CounterApi.layerClient.pipe(
   Layer.provideMerge(Hosted),
 );
 
-/** Three increments of c-1, folded by the view. */
+type Client = Effect.Success<typeof CounterApi.client>;
+type Frame = { readonly envelope: { readonly seq: number } } | Domain.Read.CaughtUp;
+
+/** A key's live reads, the same for an aggregate, a view and a stream. */
+interface LiveReads {
+  readonly watch: (key: string) => Stream.Stream<{ readonly cursor: string }, unknown>;
+  readonly events: (key: string, after?: string) => Stream.Stream<Frame, unknown>;
+}
+
+const readsOf = (api: Client): Record<"aggregate" | "view" | "stream", LiveReads> => ({
+  aggregate: {
+    watch: (key: string) => api.Counter.watch(key),
+    events: (key: string, after?: string) => api.Counter.events(key, { after }),
+  },
+  view: {
+    watch: (key: string) => api.Totals.watch(key),
+    events: (key: string, after?: string) => api.Totals.events(key, { after }),
+  },
+  stream: {
+    watch: (key: string) => api.Bumps.watch(key),
+    events: (key: string, after?: string) => api.Bumps.events(key, { after }),
+  },
+});
+
+/** Wait until the view and the stream have caught up to `version` commits of c-1. */
+const settled = (api: Client, version: number) =>
+  Effect.all([
+    api.Totals.get("c-1", { atLeast: { stream: "Counter/c-1", version } }),
+    api.Bumps.peek("c-1", { atLeast: { stream: "Counter/c-1", version } }),
+  ]);
+
+/** Three increments of c-1, folded by the view and appended to the stream. */
 const seed = Effect.gen(function* () {
   const api = yield* CounterApi.Client;
   for (const by of [1, 2, 3]) yield* api.Increment({ target: "c-1", by });
-  const last = yield* api.Increment({ target: "c-2", by: 0 });
-  yield* api.Totals.get("c-1", { atLeast: { stream: "Counter/c-1", version: 3 } });
-  yield* api.Totals.get("c-2", { atLeast: last });
+  yield* settled(api, 3);
   return api;
 });
 
 /** What a feed shows: entries by seq, and each CaughtUp by its cursor. */
-const frames = (
-  items: ReadonlyArray<{ readonly envelope: { readonly seq: number } } | Domain.View.CaughtUp>,
-) =>
+const frames = (items: ReadonlyArray<Frame>) =>
   items.map((item) =>
-    Domain.View.isCaughtUp(item) ? `caught up at ${item.cursor}` : item.envelope.seq,
+    Domain.Read.isCaughtUp(item) ? `caught up at ${item.cursor}` : item.envelope.seq,
   );
 
-const caughtUpFeed = Effect.gen(function* () {
-  const api = yield* seed;
-  const feed = yield* api.Totals.events("c-1", { caughtUp: true }).pipe(
-    Stream.take(5),
-    Stream.runCollect,
-    Effect.forkChild,
-  );
-  yield* Effect.sleep("30 millis");
-  yield* api.Increment({ target: "c-1", by: 4 });
-  yield* api.Totals.get("c-1", { atLeast: { stream: "Counter/c-1", version: 4 } });
-  const resumed = yield* api.Totals.events("c-1", { after: "2", caughtUp: true }).pipe(
-    Stream.take(3),
-    Stream.runCollect,
-  );
-  const empty = yield* api.Totals.events("c-0", { caughtUp: true }).pipe(
-    Stream.take(1),
-    Stream.runCollect,
-  );
-  return { live: frames(yield* Fiber.join(feed)), resumed: frames(resumed), empty: frames(empty) };
-});
+for (const [transport, layer] of [
+  ["in process", InProcess],
+  ["over the wire", Wire],
+] as const) {
+  describe(`Domain live reads ${transport}`, () => {
+    for (const kind of ["aggregate", "view", "stream"] as const) {
+      it.live(`${kind} events mark the end of their history`, () =>
+        Effect.gen(function* () {
+          const api = yield* seed;
+          const read = readsOf(api)[kind];
+          const feed = yield* read
+            .events("c-1")
+            .pipe(Stream.take(5), Stream.runCollect, Effect.forkChild);
+          yield* Effect.sleep("30 millis");
+          yield* api.Increment({ target: "c-1", by: 4 });
+          yield* settled(api, 4);
+          expect(frames(yield* Fiber.join(feed))).toEqual([1, 2, 3, "caught up at 3", 4]);
 
-describe("Domain live reads", () => {
-  it.live("events with caughtUp marks the end of the backlog", () =>
-    Effect.gen(function* () {
-      const { live, resumed, empty } = yield* caughtUpFeed;
-      expect(live).toEqual([1, 2, 3, "caught up at 3", 4]);
-      // Resuming after a cursor: the rest of the backlog, nothing twice, no gap.
-      expect(resumed).toEqual([3, 4, "caught up at 4"]);
-      expect(empty).toEqual(["caught up at 0"]);
-    }).pipe(Effect.provide(InProcess)),
-  );
+          // Resuming after a cursor: the rest of the history, nothing twice, no gap.
+          const resumed = yield* read.events("c-1", "2").pipe(Stream.take(3), Stream.runCollect);
+          expect(frames(resumed)).toEqual([3, 4, "caught up at 4"]);
 
-  it.live("caughtUp lands after the backlog even when a filter drops its last entries", () =>
-    Effect.gen(function* () {
-      const api = yield* seed;
-      const feed = yield* api.Totals.events("c-1", {
-        caughtUp: true,
-        where: { by: { lt: 3 } },
-      }).pipe(Stream.take(3), Stream.runCollect);
-      expect(frames(feed)).toEqual([1, 2, "caught up at 3"]);
-    }).pipe(Effect.provide(InProcess)),
-  );
-
-  it.live("events without caughtUp is unchanged", () =>
-    Effect.gen(function* () {
-      const api = yield* seed;
-      const feed = yield* api.Totals.events("c-1").pipe(Stream.take(3), Stream.runCollect);
-      expect(feed.map((entry) => entry.envelope.seq)).toEqual([1, 2, 3]);
-    }).pipe(Effect.provide(InProcess)),
-  );
-
-  it.live("watch with withCursor gives each state with its cursor", () =>
-    Effect.gen(function* () {
-      const api = yield* seed;
-      const watched = yield* api.Totals.watch("c-1", { withCursor: true }).pipe(
-        Stream.take(2),
-        Stream.runCollect,
-        Effect.forkChild,
+          const empty = yield* read.events("c-0").pipe(Stream.take(1), Stream.runCollect);
+          expect(frames(empty)).toEqual(["caught up at 0"]);
+        }).pipe(Effect.scoped, Effect.provide(layer)),
       );
-      yield* Effect.sleep("30 millis");
-      yield* api.Increment({ target: "c-1", by: 4 });
-      const [first, second] = yield* Fiber.join(watched);
-      expect(first).toEqual({ state: { total: 6 }, cursor: "3" });
-      expect(second).toEqual({ state: { total: 10 }, cursor: "4" });
-      // The cursor resumes a feed with nothing missed and nothing twice.
-      const after = yield* api.Totals.events("c-1", { after: first!.cursor }).pipe(
-        Stream.take(1),
-        Stream.runCollect,
-      );
-      expect(after.map((entry) => entry.envelope.seq)).toEqual([4]);
-    }).pipe(Effect.provide(InProcess)),
-  );
 
-  it.live("both work over the wire", () =>
-    Effect.gen(function* () {
-      const { live, resumed, empty } = yield* caughtUpFeed;
-      expect(live).toEqual([1, 2, 3, "caught up at 3", 4]);
-      expect(resumed).toEqual([3, 4, "caught up at 4"]);
-      expect(empty).toEqual(["caught up at 0"]);
-      const api = yield* CounterApi.Client;
-      const [state] = yield* api.Totals.watch("c-1", { withCursor: true }).pipe(
-        Stream.take(1),
-        Stream.runCollect,
+      it.live(`${kind} watch gives a cursor that hands off to events`, () =>
+        Effect.gen(function* () {
+          const api = yield* seed;
+          const read = readsOf(api)[kind];
+          const watched = yield* read
+            .watch("c-1")
+            .pipe(Stream.take(2), Stream.runCollect, Effect.forkChild);
+          yield* Effect.sleep("30 millis");
+          yield* api.Increment({ target: "c-1", by: 4 });
+          const [first, second] = yield* Fiber.join(watched);
+          expect([first!.cursor, second!.cursor]).toEqual(["3", "4"]);
+
+          // From the first state's cursor, events sends only what came after it.
+          const after = yield* read
+            .events("c-1", first!.cursor)
+            .pipe(Stream.take(2), Stream.runCollect);
+          expect(frames(after)).toEqual([4, "caught up at 4"]);
+        }).pipe(Effect.scoped, Effect.provide(layer)),
       );
-      expect(state).toEqual({ state: { total: 10 }, cursor: "4" });
-    }).pipe(Effect.scoped, Effect.provide(Wire)),
-  );
-});
+    }
+
+    it.live("a filter that drops the last entries of the history still ends it", () =>
+      Effect.gen(function* () {
+        const api = yield* seed;
+        const feed = yield* api.Totals.events("c-1", { where: { by: { lt: 3 } } }).pipe(
+          Stream.take(3),
+          Stream.runCollect,
+        );
+        expect(frames(feed)).toEqual([1, 2, "caught up at 3"]);
+      }).pipe(Effect.scoped, Effect.provide(layer)),
+    );
+
+    it.live("watch sends the state with its cursor", () =>
+      Effect.gen(function* () {
+        const api = yield* seed;
+        const [aggregate] = yield* api.Counter.watch("c-1").pipe(Stream.take(1), Stream.runCollect);
+        const [view] = yield* api.Totals.watch("c-1").pipe(Stream.take(1), Stream.runCollect);
+        const [stream] = yield* api.Bumps.watch("c-1").pipe(Stream.take(1), Stream.runCollect);
+        expect(aggregate).toEqual({ state: { total: 6 }, cursor: "3" });
+        expect(view).toEqual({ state: { total: 6 }, cursor: "3" });
+        expect(stream!.state?.event).toEqual(new Bumped({ by: 3 }));
+        expect(stream!.cursor).toBe("3");
+      }).pipe(Effect.scoped, Effect.provide(layer)),
+    );
+  });
+}

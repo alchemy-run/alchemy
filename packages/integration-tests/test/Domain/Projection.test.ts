@@ -315,6 +315,7 @@ describe("Domain Projection", () => {
       expect(refused._tag).toBe("NotYours");
       yield* wallets.send(sam, new Deposit({ amount: 2 }));
       const all = yield* api.WalletCard.events("sam-1", asSam).pipe(
+        Stream.filter(Domain.Read.isEvent),
         Stream.take(2),
         Stream.runCollect,
       );

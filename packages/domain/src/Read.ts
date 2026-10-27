@@ -7,6 +7,39 @@ import type * as Rejection from "./Rejection.ts";
 export type Mode = "get" | "watch" | "events" | "list";
 
 /**
+ * What `watch` sends: the key's state and the cursor it is valid at, the
+ * `seq` of the last event the key had when the state was read (`"0"` before
+ * any).
+ */
+export interface Snapshot<S> {
+  readonly state: S;
+  /** Pass as `after` to `events` to receive every later event, once. */
+  readonly cursor: string;
+}
+
+/**
+ * The frame `events` sends once it has sent the key's history: every event up
+ * to `cursor` was delivered (or filtered out), and what follows is live. A
+ * read that reconnects sends it again after the events it missed.
+ */
+export interface CaughtUp {
+  readonly _tag: "CaughtUp";
+  /** The `seq` of the last event of the history (`"0"` for none); resume `events` after it. */
+  readonly cursor: string;
+}
+
+/** Is a frame of `events` the {@link CaughtUp} marker? */
+export const isCaughtUp = <A extends object>(frame: A | CaughtUp): frame is CaughtUp =>
+  "_tag" in frame && frame._tag === "CaughtUp";
+
+/**
+ * Is a frame of `events` an event, not the {@link CaughtUp} marker? Drops the
+ * marker from a feed: `Stream.filter(Domain.Read.isEvent)`.
+ */
+export const isEvent = <A extends object>(frame: A | CaughtUp): frame is Exclude<A, CaughtUp> =>
+  !isCaughtUp(frame);
+
+/**
  * A client's read, as `validate` sees it: what is being read and how. The
  * client's own filters are not part of it: they only narrow what a permitted
  * read returns, so access never depends on analyzing them.

@@ -83,12 +83,8 @@ export interface Subscription {
   readonly cursor: number;
   /** Set when the read was refused before reaching the key: the encoded `Exit` to send. */
   readonly refused?: Json;
-  /** `events` only: send a `CaughtUp` frame after the backlog the read starts with. */
-  readonly caughtUp?: boolean;
-  /** Set once the `CaughtUp` frame was sent. */
+  /** `events` only: set once the `CaughtUp` frame after the read's history was sent. */
   readonly caughtUpSent?: boolean;
-  /** `watch` only: send each state with its cursor (`{ _tag: "WithCursor", state, cursor }`). */
-  readonly withCursor?: boolean;
 }
 
 /**

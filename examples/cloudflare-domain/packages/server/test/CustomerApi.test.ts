@@ -49,6 +49,7 @@ it.live("register, then the live dashboard shows the main account", () =>
         version: 2,
       });
       const dashboard = yield* sam.CustomerDashboard.watch(CustomerId.make("c-1")).pipe(
+        Stream.map(({ state }) => state),
         Stream.filter((d) => d !== null && CustomerDashboard.computed.totalBalance(d) === 250),
         Stream.runHead,
       );
@@ -111,7 +112,11 @@ it.live("a customer watches their account's own events; others are rejected", ()
       const accountId = yield* register(sam, "c-1", "sam");
       yield* sam.DepositMoney({ target: accountId, amount: 70 });
 
-      const events = yield* sam.Account.events(accountId).pipe(Stream.take(2), Stream.runCollect);
+      const events = yield* sam.Account.events(accountId).pipe(
+        Stream.filter(Domain.Read.isEvent),
+        Stream.take(2),
+        Stream.runCollect,
+      );
       expect(events.map((e) => e.event._tag)).toEqual(["AccountOpened", "MoneyDeposited"]);
       expect((yield* sam.Account.get(accountId))._tag).toBe("Open");
       expect((yield* alex.Account.get(accountId).pipe(Effect.flip))._tag).toBe("NotOwner");

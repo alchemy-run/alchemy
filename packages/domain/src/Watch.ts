@@ -130,6 +130,25 @@ const encode = (
     };
   }).pipe(Effect.orDie);
 
+/**
+ * The first push of an `events` read is its history: mark its end once, with
+ * a `CaughtUp` item after the history's items.
+ */
+const markCaughtUp = (subscription: Subscription, items: ReadonlyArray<Item>, cursor: number) =>
+  subscription.caughtUpSent
+    ? { subscription, items }
+    : {
+        subscription: { ...subscription, caughtUpSent: true },
+        items: [
+          ...items,
+          {
+            state: null,
+            value: Option.some({ _tag: "CaughtUp", cursor: String(cursor) }),
+            marker: true,
+          } satisfies Item,
+        ],
+      };
+
 const where = (subscription: Subscription) => subscription.where as Filter<unknown> | undefined;
 
 /** What a view key's subscriber receives after a commit (or when it connects). */
@@ -149,14 +168,11 @@ export const viewPush =
         }
         const state = snapshot.state === null ? null : kernel.decodeViewState(view, snapshot.state);
         const visible = state !== null && matches(where(subscription), state) ? state : null;
-        const value = subscription.withCursor
-          ? { _tag: "WithCursor", state: visible, cursor: String(snapshot.seq) }
-          : visible;
         return encode(
           view,
           subscription,
           ref,
-          [{ state, value: Option.some(value) }],
+          [{ state, value: Option.some({ state: visible, cursor: String(snapshot.seq) }) }],
           snapshot.version,
         );
       }
@@ -169,16 +185,8 @@ export const viewPush =
         };
       });
       const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.seq : subscription.cursor;
-      // The first push of a read is its backlog: mark its end once, if the client asked.
-      if (subscription.caughtUp && !subscription.caughtUpSent) {
-        items.push({
-          state: null,
-          value: Option.some({ _tag: "CaughtUp", cursor: String(cursor) }),
-          marker: true,
-        });
-        return encode(view, { ...subscription, caughtUpSent: true }, ref, items, cursor);
-      }
-      return encode(view, subscription, ref, items, cursor);
+      const marked = markCaughtUp(subscription, items, cursor);
+      return encode(view, marked.subscription, ref, marked.items, cursor);
     });
 
 /** What an aggregate instance's subscriber receives after a commit (or when it connects). */
@@ -201,7 +209,7 @@ export const aggregatePush =
           aggregate,
           subscription,
           ref,
-          [{ state, value: Option.some(state) }],
+          [{ state, value: Option.some({ state, cursor: String(current.version) }) }],
           current.version,
         );
       }
@@ -215,7 +223,8 @@ export const aggregatePush =
         }),
       }));
       const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.envelope.seq : subscription.cursor;
-      return encode(aggregate, subscription, ref, items, cursor);
+      const marked = markCaughtUp(subscription, items, cursor);
+      return encode(aggregate, marked.subscription, ref, marked.items, cursor);
     });
 
 /** What a stream key's subscriber receives after an append (or when it connects). */
@@ -239,7 +248,7 @@ export const streamPush =
           stream,
           subscription,
           ref,
-          [{ state: decoded, value: Option.some(decoded) }],
+          [{ state: decoded, value: Option.some({ state: decoded, cursor: String(meta.seq) }) }],
           meta.seq,
         );
       }
@@ -253,5 +262,6 @@ export const streamPush =
         };
       });
       const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.seq : subscription.cursor;
-      return encode(stream, subscription, ref, items, cursor);
+      const marked = markCaughtUp(subscription, items, cursor);
+      return encode(stream, marked.subscription, ref, marked.items, cursor);
     });
