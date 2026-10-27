@@ -1,3 +1,4 @@
+import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
@@ -461,14 +462,19 @@ const privateIp = (instance: sqladmin.DatabaseInstance) =>
 
 /**
  * Normalize a network name, path, or self-link to
- * `projects/{project}/global/networks/{network}`.
+ * `projects/{projectId}/global/networks/{network}`. Cloud SQL rejects a
+ * project number, which Service Networking paths carry, so a numeric
+ * project is resolved to its id.
  */
-const networkPathOf = (value: string | undefined, project: string) => {
+const resolveNetworkPath = Effect.fn(function* (value: string | undefined, project: string) {
   if (value === undefined || value.length === 0) return undefined;
   const match = /projects\/([^/]+)\/global\/networks\/([^/]+)/.exec(value);
-  if (match) return `projects/${match[1]}/global/networks/${match[2]}`;
-  return `projects/${project}/global/networks/${lastSegment(value)}`;
-};
+  if (!match) return `projects/${project}/global/networks/${lastSegment(value)}`;
+  const [, owner, network] = match;
+  if (!/^\d+$/.test(owner)) return `projects/${owner}/global/networks/${network}`;
+  const resolved = yield* resourcemanager.getProjects({ name: `projects/${owner}` });
+  return `projects/${resolved.projectId ?? project}/global/networks/${network}`;
+});
 
 /** `requireSsl` must pair with `sslMode` (only certificate-required, or SQL Server encrypted-only, is true). */
 const requireSslOf = (sslMode: string, version: string) =>
@@ -600,11 +606,11 @@ const backupConfiguration = (
 
 const ipConfigurationOf = (
   ip: IpConfiguration | undefined,
-  project: string,
+  privateNetwork: string | undefined,
   version: string,
 ): sqladmin.IpConfiguration => ({
   ipv4Enabled: ip?.ipv4Enabled !== false,
-  privateNetwork: networkPathOf(ip?.privateNetwork, project),
+  privateNetwork,
   allocatedIpRange: ip?.allocatedIpRange,
   sslMode: ip?.sslMode,
   requireSsl: ip?.sslMode !== undefined ? requireSslOf(ip.sslMode, version) : undefined,
@@ -618,7 +624,7 @@ const dataApiAccessOf = (enabled: boolean | undefined) => {
 
 const insertBody = (
   news: InstanceProps,
-  project: string,
+  privateNetwork: string | undefined,
   instanceName: string,
   region: string,
   version: string,
@@ -640,7 +646,7 @@ const insertBody = (
       deletionProtectionEnabled: news.deletionProtectionEnabled === true,
       userLabels: desiredLabels,
       storageAutoResize: news.storageAutoResize === true,
-      ipConfiguration: ipConfigurationOf(news.ipConfiguration, project, version),
+      ipConfiguration: ipConfigurationOf(news.ipConfiguration, privateNetwork, version),
       backupConfiguration: backupConfiguration(backupEnabled, version, news.backup),
       locationPreference: news.zone ? { zone: news.zone } : undefined,
       databaseFlags: news.databaseFlags,
@@ -757,13 +763,25 @@ export const InstanceProvider = () =>
         ...(yield* createInternalLabels(id)),
       };
 
+      const desiredPrivateNetwork = yield* resolveNetworkPath(
+        news.ipConfiguration?.privateNetwork,
+        env.project,
+      );
+
       let current = yield* getByName(env.project, output?.instanceName ?? instanceName);
 
       if (current === undefined) {
         const created = yield* sqladmin
           .insertInstances({
             project: env.project,
-            body: insertBody(news, env.project, instanceName, region, version, desiredLabels),
+            body: insertBody(
+              news,
+              desiredPrivateNetwork,
+              instanceName,
+              region,
+              version,
+              desiredLabels,
+            ),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (created !== undefined) {
@@ -828,7 +846,6 @@ export const InstanceProvider = () =>
 
       const ip = news.ipConfiguration;
       const observedIp = settings?.ipConfiguration;
-      const desiredPrivateNetwork = networkPathOf(ip?.privateNetwork, env.project);
       const desiredSslMode = ip?.sslMode?.toUpperCase();
       const ipConfiguration: sqladmin.IpConfiguration = {
         ipv4Enabled:
@@ -837,8 +854,8 @@ export const InstanceProvider = () =>
             : undefined,
         privateNetwork:
           desiredPrivateNetwork !== undefined &&
-          // Service Networking paths carry the project number, Cloud SQL the id.
-          lastSegment(observedIp?.privateNetwork) !== lastSegment(desiredPrivateNetwork)
+          /projects\/[^/]+\/global\/networks\/[^/]+/.exec(observedIp?.privateNetwork ?? "")?.[0] !==
+            desiredPrivateNetwork
             ? desiredPrivateNetwork
             : undefined,
         allocatedIpRange:
