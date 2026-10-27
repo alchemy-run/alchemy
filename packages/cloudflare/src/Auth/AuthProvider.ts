@@ -622,8 +622,14 @@ export const CloudflareAuth = AuthProviderLayer<
                                 expires: credentials.expires,
                                 scopes: credentials.scopes,
                               };
-                              return (updateConfig?.(config) ?? Effect.void).pipe(
-                                Effect.as({ type: "refreshed" as const, config }),
+                              // Saved here, under the lock, when the caller can
+                              // take it; otherwise handed back for the caller to save.
+                              const unsaved: Effect.Effect<typeof config | undefined, AuthError> =
+                                updateConfig === undefined
+                                  ? Effect.succeed(config)
+                                  : Effect.as(updateConfig(config), undefined);
+                              return unsaved.pipe(
+                                Effect.map((config) => ({ type: "refreshed" as const, config })),
                               );
                             }),
                             Effect.tap(() =>

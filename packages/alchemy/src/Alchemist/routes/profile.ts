@@ -357,9 +357,6 @@ export const refresh = Effect.fn("Alchemist.profile.refresh")(function* (
       });
     }
     yield* report({ _tag: "provider.refresh.started", provider: name });
-    // A refresh the provider persisted itself must not be written again here:
-    // outside its credentials lock, another process may have rotated it since.
-    let persisted = false;
     const refreshed = yield* provider.login(
       input.profile,
       yield* provider.decodeConfig(input.profile, config),
@@ -371,15 +368,10 @@ export const refresh = Effect.fn("Alchemist.profile.refresh")(function* (
               cause,
             }),
           ),
-          Effect.tap(() =>
-            Effect.sync(() => {
-              persisted = true;
-            }),
-          ),
         ),
       reloadProviderConfig(profiles, provider, input.profile),
     );
-    if (refreshed !== undefined && !persisted) {
+    if (refreshed !== undefined) {
       yield* profiles.setProviderConfig(input.profile, name, refreshed);
     }
     yield* report({ _tag: "provider.refresh.completed", provider: name });

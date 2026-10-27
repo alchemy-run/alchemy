@@ -247,6 +247,14 @@ export interface AuthProviderImpl<
    */
   readonly configureMethods?: ReadonlyArray<ConfigureMethod>;
 
+  /**
+   * Re-authenticate, silently refreshing when the stored credentials allow.
+   * Returns the new config for the caller to save, or nothing when the
+   * provider already saved it through `updateConfig` (a silent refresh saves
+   * under the credentials lock, so the caller must not write it again).
+   * `reload` reads the stored config; run it under the lock before
+   * refreshing, since refresh tokens can be single-use.
+   */
   login(
     profileName: string,
     config: Config,

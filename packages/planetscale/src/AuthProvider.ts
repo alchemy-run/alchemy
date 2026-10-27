@@ -425,11 +425,11 @@ export const PlanetscaleAuth = AuthProviderLayer<
             }
             // Refresh tokens are single-use: refresh with the token stored
             // now, read under the lock, not the one `config` was read with.
-            const refreshed = yield* withProfileCredentialsLock(
+            const outcome = yield* withProfileCredentialsLock(
               profileName,
               Effect.gen(function* () {
                 const current = yield* reload ?? Effect.succeed(oauth);
-                if (current.method !== "oauth") return undefined;
+                if (current.method !== "oauth") return { type: "browser" as const };
                 const currentCredentials: OAuthClient.OAuthCredentials = {
                   type: "oauth",
                   clientId: current.clientId,
@@ -438,7 +438,9 @@ export const PlanetscaleAuth = AuthProviderLayer<
                   expires: current.expires,
                   scopes: current.scopes,
                 };
-                if (!OAuthClient.usesCurrentClient(currentCredentials)) return undefined;
+                if (!OAuthClient.usesCurrentClient(currentCredentials)) {
+                  return { type: "browser" as const };
+                }
                 return yield* Interaction.info("Planetscale: refreshing OAuth credentials...").pipe(
                   Effect.andThen(OAuthClient.refresh(currentCredentials)),
                   Effect.flatMap((credentials) => {
@@ -450,7 +452,15 @@ export const PlanetscaleAuth = AuthProviderLayer<
                       expires: credentials.expires,
                       scopes: credentials.scopes,
                     };
-                    return (updateConfig?.(config) ?? Effect.void).pipe(Effect.as(config));
+                    // Saved here, under the lock, when the caller can take it;
+                    // otherwise handed back for the caller to save.
+                    const unsaved: Effect.Effect<typeof config | undefined, AuthError> =
+                      updateConfig === undefined
+                        ? Effect.succeed(config)
+                        : Effect.as(updateConfig(config), undefined);
+                    return unsaved.pipe(
+                      Effect.map((config) => ({ type: "refreshed" as const, config })),
+                    );
                   }),
                   Effect.tap(() =>
                     Interaction.success("Planetscale: OAuth credentials refreshed."),
@@ -465,10 +475,13 @@ export const PlanetscaleAuth = AuthProviderLayer<
                   "OAuthServerUnavailable",
                   "OAuthInvalidResponse",
                 ],
-                () => configureOAuth(profileName),
+                () => Effect.succeed({ type: "browser" as const }),
               ),
             );
-            return refreshed ?? (yield* configureOAuth(profileName));
+            if (outcome.type === "browser") {
+              return yield* configureOAuth(profileName);
+            }
+            return outcome.config;
           }),
         ),
         Match.exhaustive,
