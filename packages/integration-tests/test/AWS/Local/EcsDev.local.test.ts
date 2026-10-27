@@ -759,7 +759,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
    * watcher fires once right after the apply with no content change. That
    * trigger must not register another revision or roll the service's tasks.
    */
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "keeps the recorded task definition revision when the watcher's first emission changes nothing",
     (stack) =>
       Effect.gen(function* () {
