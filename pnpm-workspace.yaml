@@ -61,7 +61,7 @@ catalog:
   "@cloudflare/puppeteer": "^1.4.0"
   "@cloudflare/unenv-preset": "^2.16.2"
   "@cloudflare/vitest-plugin": "^1.4.0"
-  "@cloudflare/workers-types": "5.20261012.1"
+  "@cloudflare/workers-types": "5.20261026.1"
   "@effect/atom-react": "^4.0.5"
   "@effect/platform-bun": "^4.0.5"
   "@effect/platform-node": "^4.0.5"
@@ -96,7 +96,7 @@ catalog:
   partyserver: "^0.5.10"
   cross-fetch: "^4.0.0"
   # Kept in the C3 React Router template's Vite config, which alchemy neutralizes.
-  "@cloudflare/vite-plugin": "^1.64.0"
+  "@cloudflare/vite-plugin": "^1.65.0"
   "@flue/runtime": "^2.3.0"
   "@flue/sdk": "^2.3.0"
   "@flue/vite": "^2.3.0"
@@ -245,7 +245,7 @@ catalog:
   vue-router: "^5.4.0"
   vue-tsc: "^3.3.13"
   waku: "1.0.0-beta.7"
-  workerd: "1.20261012.1"
+  workerd: "1.20261026.1"
   wrangler: "^4.149.0"
   ws: "^8.21.0"
   yaml: "^2.9.1"
@@ -284,8 +284,8 @@ catalogs:
     "@vitejs/plugin-react": "^5.1.4"
 
 overrides:
-  "@cloudflare/workers-types": 5.20261012.1
-  workerd: 1.20261012.1
+  "@cloudflare/workers-types": 5.20261026.1
+  workerd: 1.20261026.1
   effect: 4.0.5
   "@effect/platform-browser": 4.0.5
   "@effect/sql-d1": 4.0.5
@@ -303,6 +303,7 @@ overrides:
 
 patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
+  miniflare@4.20260730.0: patches/miniflare@4.20260730.0.patch
   starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
 
 minimumReleaseAgeExclude:
@@ -311,13 +312,13 @@ minimumReleaseAgeExclude:
   - "@foldkit/vite-plugin@0.27.0"
   - foldkit@0.167.0
   - "@solidjs/start@2.0.6"
-  - "@cloudflare/workers-types@5.20261012.1"
-  - "@cloudflare/workerd-darwin-64@1.20261012.1"
-  - "@cloudflare/workerd-darwin-arm64@1.20261012.1"
-  - "@cloudflare/workerd-linux-64@1.20261012.1"
-  - "@cloudflare/workerd-linux-arm64@1.20261012.1"
-  - "@cloudflare/workerd-windows-64@1.20261012.1"
-  - workerd@1.20261012.1
+  - "@cloudflare/workers-types@5.20261026.1"
+  - "@cloudflare/workerd-darwin-64@1.20261026.1"
+  - "@cloudflare/workerd-darwin-arm64@1.20261026.1"
+  - "@cloudflare/workerd-linux-64@1.20261026.1"
+  - "@cloudflare/workerd-linux-arm64@1.20261026.1"
+  - "@cloudflare/workerd-windows-64@1.20261026.1"
+  - workerd@1.20261026.1
   - "@typescript/typescript-darwin-arm64@7.1.0-dev.20260923.1"
   - "@typescript/typescript-darwin-x64@7.1.0-dev.20260923.1"
   - "@typescript/typescript-linux-arm64@7.1.0-dev.20260923.1"

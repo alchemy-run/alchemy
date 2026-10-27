@@ -376,12 +376,12 @@ export async function imagesLocalFetcher(request: Request): Promise<Response> {
     );
   }
 
-  const transformer = sharp(await body.arrayBuffer(), {});
+  const source = await body.arrayBuffer();
 
   const url = new URL(request.url);
 
   if (url.pathname === "/info") {
-    return runInfo(transformer);
+    return runInfo(sharp(source, {}));
   } else {
     const badTransformsResponse = errorResponse(
       400,
@@ -411,7 +411,10 @@ export async function imagesLocalFetcher(request: Request): Promise<Response> {
         );
       }
 
-      return await runTransform(transformer, transforms, outputFormat);
+      // Production applies EXIF orientation before any transforms.
+      // autoOrient bakes the rotation into the pixels at decode so
+      // EXIF-rotated photos (e.g. phone portraits) come out upright.
+      return await runTransform(sharp(source, { autoOrient: true }), transforms, outputFormat);
     } catch {
       return badTransformsResponse;
     }
