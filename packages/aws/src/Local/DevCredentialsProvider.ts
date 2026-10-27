@@ -1,6 +1,4 @@
-import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import * as ssm from "@distilled.cloud/aws/ssm";
-import * as sts from "@distilled.cloud/aws/sts";
 import type { AuthProviders } from "alchemy/Auth/AuthProvider";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import type { ProfileStore } from "alchemy/Auth/Profile";
@@ -9,7 +7,6 @@ import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import type { FileSystem } from "effect/FileSystem";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import type { Path } from "effect/Path";
@@ -17,65 +14,30 @@ import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { AwsAuth } from "../AuthProvider.ts";
-import * as Credentials from "../Credentials.ts";
 import { AWSEnvironment, Default as DefaultEnvironment } from "../Environment.ts";
-import * as Region from "../Region.ts";
 import { DevCredentials, type DevCredentialsValue } from "./DevCredentials.ts";
 import { flociProvidersUrl } from "./DevWatchProvider.ts";
 import { flociServices } from "./FlociServices.ts";
 
-/** Rewrite the parameter this often, well inside any credential lifetime. */
-const REFRESH_INTERVAL = "10 minutes";
-
-/** Session-token lifetime for a profile holding a long-lived key. */
-const SESSION_TOKEN_SECONDS = 3600;
-
 /**
- * The developer's live AWS environment (profile, SSO session), built from
- * config rather than the run's ambient: in `alchemy dev` the ambient AWS
- * environment is the emulator.
+ * The developer's credentials from their profile. Built from config, not
+ * the run's ambient AWS environment, which in `alchemy dev` is the emulator.
  */
-const liveEnvironment = Layer.mergeAll(
-  Region.fromEnvironment,
-  Credentials.fromEnvironment,
-  Layer.succeed(Endpoint.Endpoint, Effect.succeed(undefined)),
-  FetchHttpClient.layer,
-).pipe(
-  Layer.provideMerge(DefaultEnvironment),
-  Layer.provideMerge(AwsAuth),
-  Layer.provideMerge(CredentialsStoreLive),
-);
-
-/**
- * The developer's current credentials, always temporary: a long-lived key
- * (no session token) is exchanged for a session token, so the emulator never
- * holds a key that outlives the session.
- */
-const resolveTemporaryCredentials = Effect.gen(function* () {
+const developerCredentials = Effect.gen(function* () {
   const environment = yield* yield* AWSEnvironment;
   const credentials = yield* environment.credentials;
-  if (credentials.sessionToken !== undefined) {
-    return {
-      accessKeyId: Redacted.value(credentials.accessKeyId),
-      secretAccessKey: Redacted.value(credentials.secretAccessKey),
-      sessionToken: Redacted.value(credentials.sessionToken),
-      region: environment.region,
-      expiration: credentials.expiration,
-    } satisfies DevCredentialsValue;
-  }
-  const { Credentials: session } = yield* sts.getSessionToken({
-    DurationSeconds: SESSION_TOKEN_SECONDS,
-  });
   return {
-    accessKeyId: session!.AccessKeyId,
-    secretAccessKey: Redacted.isRedacted(session!.SecretAccessKey)
-      ? Redacted.value(session!.SecretAccessKey)
-      : session!.SecretAccessKey,
-    sessionToken: session!.SessionToken,
+    accessKeyId: Redacted.value(credentials.accessKeyId),
+    secretAccessKey: Redacted.value(credentials.secretAccessKey),
+    sessionToken: credentials.sessionToken && Redacted.value(credentials.sessionToken),
     region: environment.region,
-    expiration: session!.Expiration.getTime(),
+    expiration: credentials.expiration,
   } satisfies DevCredentialsValue;
-}).pipe(Effect.provide(liveEnvironment));
+}).pipe(
+  Effect.provide(
+    DefaultEnvironment.pipe(Layer.provideMerge(AwsAuth), Layer.provideMerge(CredentialsStoreLive)),
+  ),
+);
 
 /** Outside `alchemy dev` there is no emulator to relay into. */
 export const DevCredentialsProviderLive = () =>
@@ -88,26 +50,22 @@ export const DevCredentialsProviderLive = () =>
 
 /**
  * Runs in the dev sidecar: writes the developer's credentials to the
- * emulator parameter at readiness, then rewrites them every
- * {@link REFRESH_INTERVAL} until the instance stops. Delete removes the
- * parameter.
+ * emulator parameter, then rewrites it every 10 minutes (well inside an SSO
+ * session's lifetime) until `alchemy dev` stops.
  */
 export const DevCredentialsProviderLocal = () =>
   LocalProvider.make(
     DevCredentials,
     flociProvidersUrl(),
     Effect.gen(function* () {
-      // What the live profile chain needs (profiles, auth, the SSO cache),
-      // from the process hosting this provider.
+      // The profile chain's services, from the process hosting this provider.
       const services = yield* Effect.context<
         AuthProviders | ProfileStore | FileSystem | Path | ChildProcessSpawner | HttpClient
       >();
-      // Parameters written by this sidecar, for `stop` (which only gets the FQN).
-      const written = new Map<string, string>();
       return {
-        start: Effect.fn(function* ({ fqn, news: { parameterName } }) {
+        start: Effect.fn(function* ({ news: { parameterName } }) {
           const write = Effect.gen(function* () {
-            const value = yield* resolveTemporaryCredentials.pipe(Effect.provide(services));
+            const value = yield* developerCredentials.pipe(Effect.provide(services));
             yield* ssm
               .putParameter({
                 Name: parameterName,
@@ -118,28 +76,18 @@ export const DevCredentialsProviderLocal = () =>
               .pipe(Effect.provide(flociServices()));
           });
           yield* write;
-          written.set(fqn, parameterName);
           yield* write.pipe(
             Effect.catchCause((cause) =>
               Effect.logWarning(
-                `[alchemy dev] failed to refresh AWS credentials for ${fqn}`,
+                "[alchemy dev] failed to refresh the relayed AWS credentials",
                 cause,
               ),
             ),
-            Effect.repeat(Schedule.spaced(REFRESH_INTERVAL)),
-            Effect.delay(REFRESH_INTERVAL),
+            Effect.repeat(Schedule.spaced("10 minutes")),
+            Effect.delay("10 minutes"),
             Effect.forkScoped,
           );
           return { parameterName };
-        }),
-        stop: Effect.fn(function* ({ fqn }) {
-          const parameterName = written.get(fqn);
-          if (parameterName === undefined) return;
-          written.delete(fqn);
-          yield* ssm.deleteParameter({ Name: parameterName }).pipe(
-            Effect.catchTag("ParameterNotFound", () => Effect.void),
-            Effect.provide(flociServices()),
-          );
         }),
       } satisfies LocalProvider.LocalProviderSpec<DevCredentials>;
     }),

@@ -22,10 +22,9 @@ export interface DevCredentials extends Resource<
  * `alchemy dev`, so a locally emulated Lambda or ECS task can reach a resource
  * in the real cloud (`Alchemy.remote()`).
  *
- * The dev sidecar resolves the live credentials (the profile's SSO session,
- * exchanged for a session token when the profile holds a long-lived key),
- * writes them to an SSM parameter on the emulator, and rewrites it before
- * they expire. The bindings' runtime clients read the parameter over the
+ * The dev sidecar reads the credentials from the developer's profile, writes
+ * them to an SSM parameter on the emulator, and rewrites it while `alchemy
+ * dev` runs. The bindings' runtime clients read the parameter over the
  * emulator endpoint the host already reaches. Nothing is created in the real
  * account. Created by `AWSBindings.Bind`; a no-op outside `alchemy dev`.
  */
