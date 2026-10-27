@@ -1,5 +1,4 @@
 import { describe, expect } from "bun:test";
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
@@ -30,12 +29,8 @@ const currentProject = GCP.GcpEnvironment.current.pipe(
   Effect.provide(GCP.fromCredentials().pipe(Layer.provide(GcpHttp))),
 );
 
-// The service is built from `main`, which needs a local image build.
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-
 // Deploy, tests and destroy all sit behind the same Docker guard.
-describe.skipIf(!dockerAvailable)("gcp-vertex-ai", () => {
+describe("gcp-vertex-ai", () => {
   const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
 
   const serviceState = (name: string) =>

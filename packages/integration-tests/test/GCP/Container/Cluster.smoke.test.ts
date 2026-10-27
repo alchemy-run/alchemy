@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as Kubernetes from "@alchemy.run/kubernetes";
@@ -47,15 +46,7 @@ import {
  * locally, so it also needs a Docker daemon.
  */
 
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
-
-const skip = !process.env.GCP_TEST_SLOW || !!process.env.FAST || !dockerAvailable;
+const skip = !process.env.GCP_TEST_SLOW || !!process.env.FAST;
 
 const testOptions = {
   providers: Layer.mergeAll(GCP.providers(), Kubernetes.providers()),

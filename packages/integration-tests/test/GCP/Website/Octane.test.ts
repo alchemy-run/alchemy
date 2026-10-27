@@ -4,7 +4,6 @@ import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
-import { dockerAvailable } from "../bindingHost.ts";
 import {
   assertSiteGone,
   awsFixture,
@@ -28,7 +27,7 @@ const fixtureEntries = [
   "public",
 ];
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "Octane: deploy, GET page and API route, destroy, gone",
   (stack) =>
     Effect.gen(function* () {

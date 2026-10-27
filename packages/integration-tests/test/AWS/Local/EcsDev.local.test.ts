@@ -40,7 +40,7 @@ import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import EcsDevMainTask from "./fixtures/ecs-dev/main-task.ts";
-import { dockerAvailable, rawAwsJson } from "./fixtures/raw.ts";
+import { rawAwsJson } from "./fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -274,7 +274,7 @@ const assertTornDown = Effect.fn(function* (options: {
 // concurrent access (the same helper-race class documented on
 // `Docker.image.push`). One build at a time keeps this file off that path.
 describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "local"] }, () => {
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "dev mode runs a context-Dockerfile ECS task as a real local container",
     (stack) =>
       Effect.gen(function* () {
@@ -349,7 +349,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "dev mode applies logging.retention to the task's log group",
     (stack) =>
       Effect.gen(function* () {
@@ -401,7 +401,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "dev mode bundles a main-program ECS task and pushes through the local ECR registry",
     (stack) =>
       Effect.gen(function* () {
@@ -443,7 +443,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "hot reloads a context-Dockerfile task without a deploy",
     (stack) =>
       Effect.gen(function* () {
@@ -502,7 +502,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "keeps the recorded task definition revision when a Build rewrites the image context during an apply",
     (stack) =>
       Effect.gen(function* () {
@@ -594,7 +594,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "hot reloads a bundled-main task without a deploy",
     (stack) =>
       Effect.gen(function* () {
@@ -672,7 +672,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
     { timeout: 300_000 },
   );
 
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "dev mode runs an image-owning ECS Service with hot reload",
     (stack) =>
       Effect.gen(function* () {
@@ -762,7 +762,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
    * `updateService`d onto it while the container kept serving the old one
    * until the next source edit (`onReconciled` in DevWatchProvider).
    */
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "rolls a service task on a prop-only env update",
     (stack) =>
       Effect.gen(function* () {
@@ -819,7 +819,7 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
    * exercised by any test), and an edit to the Dockerfile itself must
    * rebuild + roll with no deploy.
    */
-  test.provider.skipIf(!dockerAvailable)(
+  test.provider(
     "hot reloads a service whose Dockerfile lives outside the build context",
     (stack) =>
       Effect.gen(function* () {
