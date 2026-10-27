@@ -199,7 +199,8 @@ describe.sequential("state store operations", { tags }, () => {
             "dynamodb",
             makeDynamoDBState({
               tableName: storage.tableName,
-              bucketName: storage.overflowBucket,
+              overflowBucketName: storage.overflowBucket,
+              migrateFrom: false,
             }),
           );
         }
@@ -232,8 +233,8 @@ const queueStack = <S extends Layer.Layer<State, never, StackServices>>(name: st
 };
 
 const stacks = [
-  { backend: "s3", ...queueStack("StateBenchS3", AWS.state()) },
-  { backend: "dynamodb", ...queueStack("StateBenchDynamoDB", AWS.dynamoDBState()) },
+  { backend: "s3", ...queueStack("StateBenchS3", AWS.state({ backend: "s3" })) },
+  { backend: "dynamodb", ...queueStack("StateBenchDynamoDB", AWS.state()) },
   { backend: "local", ...queueStack("StateBenchLocal", Alchemy.localState()) },
 ];
 
@@ -292,10 +293,10 @@ const randomStack = <S extends Layer.Layer<State, never, StackServices>>(
 describe.sequential("large Stacks", { tags }, () => {
   for (const size of SIZES) {
     const large = [
-      { backend: "s3", ...randomStack(`StateBenchS3x${size}`, AWS.state(), size) },
+      { backend: "s3", ...randomStack(`StateBenchS3x${size}`, AWS.state({ backend: "s3" }), size) },
       {
         backend: "dynamodb",
-        ...randomStack(`StateBenchDynamoDBx${size}`, AWS.dynamoDBState(), size),
+        ...randomStack(`StateBenchDynamoDBx${size}`, AWS.state(), size),
       },
       { backend: "local", ...randomStack(`StateBenchLocalx${size}`, Alchemy.localState(), size) },
     ];
@@ -310,7 +311,8 @@ describe.sequential("large Stacks", { tags }, () => {
           yield* time(suite, backend, "unchanged redeploy", harness.deploy(stack));
           yield* time(suite, backend, "destroy", harness.destroy(stack));
         }),
-        { timeout: 3_600_000 },
+        // S3 takes about half a second per resource per step.
+        { timeout: size * 2_000 },
       );
     }
   }

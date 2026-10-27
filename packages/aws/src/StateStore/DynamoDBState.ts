@@ -26,6 +26,16 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import {
+  hasLegacyStage,
+  type LegacyLocation,
+  listLegacyStacks,
+  listLegacyStages,
+  normalizePrefix,
+  readLegacyOutput,
+  type StageContents,
+} from "./LegacyLayout.ts";
+import {
+  createStateBucketName,
   provisionStateBucket,
   stateBucketExists,
   stateEnvironment,
@@ -38,7 +48,7 @@ export interface DynamoDBStateOptions {
    * `alchemy-state-<name>` and its overflow bucket
    * `alchemy-state-overflow-<name>-<accountId>-<region>-an`. The table is
    * created on first use, except in CI, where `alchemy state bootstrap
-   * --backend aws-dynamodb --name <name>` provisions it ahead.
+   * --backend aws --name <name>` provisions it ahead.
    *
    * @default the account's default store, table `alchemy-state`
    */
@@ -57,7 +67,15 @@ export interface DynamoDBStateOptions {
    *
    * @default `alchemy-state-overflow-<accountId>-<region>-an`
    */
-  bucketName?: string;
+  overflowBucketName?: string;
+  /**
+   * The S3 state store whose stages this store takes over. A stage that is
+   * still there and not yet in DynamoDB is refused until `alchemy state
+   * migrate --backend aws` moves it; `false` skips the check.
+   *
+   * @default the S3 store of the same name, `alchemy-state-<name>-<accountId>-<region>-an`
+   */
+  migrateFrom?: { readonly bucketName?: string; readonly prefix?: string } | false;
   /**
    * Size in bytes of a record's encoded state above which it is stored in
    * the overflow bucket, with the DynamoDB item holding a reference to it.
@@ -69,7 +87,12 @@ export interface DynamoDBStateOptions {
 }
 
 /** The backend name `alchemy state ... --backend` addresses this store by. */
-export const DYNAMODB_STATE_BACKEND = "aws-dynamodb";
+export const DYNAMODB_STATE_BACKEND = "aws";
+
+const HELD_PREFIX = "another deploy holds";
+
+/** Whether the store failed because another deploy holds the stage. */
+export const isLeaseHeld = (error: StateStoreError) => error.message.startsWith(HELD_PREFIX);
 
 /** Context required by the distilled DynamoDB and S3 operations. */
 type AwsDeps = Credentials | HttpClient | Region;
@@ -167,7 +190,7 @@ const toError = (cause: unknown) =>
  * is created the first time a record needs it.
  *
  * ### Using the DynamoDB State Store
- * Pass `AWS.dynamoDBState()` as the `state` option of a Stack.
+ * Pass `AWS.state()` as the `state` option of a Stack.
  *
  * **Example:** Default table
  * ```typescript
@@ -176,7 +199,7 @@ const toError = (cause: unknown) =>
  *
  * const Stack = Alchemy.Stack(
  *   "my-stack",
- *   { providers: AWS.providers(), state: AWS.dynamoDBState() },
+ *   { providers: AWS.providers(), state: AWS.state() },
  *   Effect.gen(function* () {
  *     // ...
  *   }),
@@ -189,7 +212,7 @@ const toError = (cause: unknown) =>
  *   "my-stack",
  *   {
  *     providers: AWS.providers(),
- *     state: AWS.dynamoDBState({ name: "team-a" }), // table alchemy-state-team-a
+ *     state: AWS.state({ name: "team-a" }), // table alchemy-state-team-a
  *   },
  *   Effect.gen(function* () {
  *     // ...
@@ -202,10 +225,9 @@ const toError = (cause: unknown) =>
  * once ahead of time:
  *
  * ```sh
- * alchemy state bootstrap --backend aws-dynamodb --profile <your-ci-profile>
+ * alchemy state bootstrap --backend aws --profile <your-ci-profile>
  * ```
  *
- * @resource
  */
 export const dynamoDBState = (options: DynamoDBStateOptions = {}) =>
   Layer.effect(
@@ -321,7 +343,16 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
       if (options.name !== undefined) yield* Provisioning.storeName(options.name);
       const table = options.tableName ?? createStateTableName(options.name);
       const bucket =
-        options.bucketName ?? createOverflowBucketName(accountId, region, options.name);
+        options.overflowBucketName ?? createOverflowBucketName(accountId, region, options.name);
+      const legacy: LegacyLocation | undefined =
+        options.migrateFrom === false
+          ? undefined
+          : {
+              bucket:
+                options.migrateFrom?.bucketName ??
+                createStateBucketName(accountId, region, options.name),
+              prefix: normalizePrefix(options.migrateFrom?.prefix),
+            };
       const observed = yield* describeStateTable(table);
       if (observed === undefined) {
         yield* Provisioning.deployMissing(
@@ -336,12 +367,17 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
         yield* validateKeySchema(observed);
         if (observed.TableStatus !== "ACTIVE") yield* waitForTableActive(table);
       }
-      return { table, bucket, region };
+      return { table, bucket, region, legacy };
     }).pipe(Effect.provideContext(context), Effect.mapError(toError)),
   );
 
   const use = <A, E>(
-    f: (target: { table: string; bucket: string; region: string }) => Effect.Effect<A, E, AwsDeps>,
+    f: (target: {
+      table: string;
+      bucket: string;
+      region: string;
+      legacy: LegacyLocation | undefined;
+    }) => Effect.Effect<A, E, AwsDeps>,
   ): Effect.Effect<A, StateStoreError> => target.pipe(Effect.flatMap((t) => run(f(t))));
 
   // The overflow bucket is created the first time a record needs it.
@@ -512,7 +548,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
 
   const heldError = (stack: string, stage: string) =>
     new StateStoreError({
-      message: `another deploy holds the ${label} state lock '${stack}/${stage}'`,
+      message: `${HELD_PREFIX} the ${label} state lock '${stack}/${stage}'`,
     });
 
   const lostError = (stack: string, stage: string) =>
@@ -664,9 +700,60 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
     } satisfies HeldLease;
   });
 
+  const migrateCommand = `alchemy state migrate --backend ${DYNAMODB_STATE_BACKEND}${options.name === undefined ? "" : ` --name ${options.name}`}`;
+
+  /** The stage's catalog entry, or `undefined` when DynamoDB doesn't know it. */
+  const catalogEntry = (stack: string, stage: string) =>
+    use(({ table }) =>
+      dynamodb.getItem({
+        TableName: table,
+        Key: { PK: S(CATALOG), SK: S(catalogSk(stack, stage)) },
+        ConsistentRead: true,
+      }),
+    ).pipe(Effect.map((result) => result.Item));
+
+  /**
+   * Refuse a stage the S3 store still has and DynamoDB doesn't know: its
+   * state has not moved, and serving an empty stage would redeploy it.
+   */
+  const refuseUnmigrated = Effect.fn(function* (stack: string, stage: string) {
+    const legacy = yield* use(({ legacy }) => Effect.succeed(legacy));
+    if (legacy === undefined) return;
+    if ((yield* catalogEntry(stack, stage)) !== undefined) return;
+    if (!(yield* use(() => hasLegacyStage(legacy, stack, stage)))) return;
+    return yield* new StateStoreError({
+      message: `Stage '${stack}/${stage}' is still in the S3 state store (s3://${legacy.bucket}/${legacy.prefix}). Run '${migrateCommand}' to move it to DynamoDB.`,
+      requires: { action: "upgrade", command: migrateCommand },
+    });
+  });
+
+  /** Every item of a stage as contents, without the migration check. */
+  const readStage = Effect.fn(function* (stack: string, stage: string) {
+    const items = yield* queryPartition(stagePk(stack, stage));
+    const records = new Map<string, string>();
+    let output: string | undefined;
+    yield* Effect.forEach(
+      items,
+      (item) =>
+        Effect.gen(function* () {
+          const sk = str(item, "SK");
+          if (sk === OUTPUT) output = yield* itemText(item);
+          else if (sk?.startsWith(RECORD)) {
+            const fqn = str(item, "fqn");
+            if (fqn !== undefined) records.set(fqn, yield* itemText(item));
+          }
+        }),
+      { concurrency: 16, discard: true },
+    );
+    return { records, output } satisfies StageContents;
+  });
+
   /** Load every record of a stage into a snapshot keyed by FQN. */
   const loadStage = Effect.fn(function* (stack: string, stage: string) {
-    const items = yield* queryPartition(stagePk(stack, stage), RECORD);
+    const [items] = yield* Effect.all(
+      [queryPartition(stagePk(stack, stage), RECORD), refuseUnmigrated(stack, stage)],
+      { concurrency: 2 },
+    );
     const records = yield* Effect.forEach(
       items,
       (item) =>
@@ -720,15 +807,19 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
     registered.get(
       `${stack}/${stage}`,
       use(({ table }) =>
-        dynamodb.putItem({
-          TableName: table,
-          Item: {
-            PK: S(CATALOG),
-            SK: S(catalogSk(stack, stage)),
-            stack: S(stack),
-            stage: S(stage),
-          },
-        }),
+        dynamodb
+          .putItem({
+            TableName: table,
+            Item: {
+              PK: S(CATALOG),
+              SK: S(catalogSk(stack, stage)),
+              stack: S(stack),
+              stage: S(stage),
+            },
+            // Keep an existing entry, and the migration record it may hold.
+            ConditionExpression: "attribute_not_exists(PK)",
+          })
+          .pipe(Effect.catchTag("ConditionalCheckFailedException", () => Effect.void)),
       ).pipe(Effect.asVoid),
     );
 
@@ -744,8 +835,17 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
       ),
     );
 
+  /** Stages of a stack, in DynamoDB or still in the S3 store. */
   const listStages = (stack: string) =>
-    catalog(stack).pipe(Effect.map((entries) => entries.map((entry) => entry.stage)));
+    Effect.all(
+      [
+        catalog(stack).pipe(Effect.map((entries) => entries.map((entry) => entry.stage))),
+        use(({ legacy }) =>
+          legacy === undefined ? Effect.succeed([]) : listLegacyStages(legacy, stack),
+        ),
+      ],
+      { concurrency: 2 },
+    ).pipe(Effect.map(([own, legacy]) => Array.from(new Set([...own, ...legacy]))));
 
   /** Delete a stage's records, output, overflow objects and catalog entry. */
   const deleteStage = (stack: string, stage: string) =>
@@ -794,11 +894,24 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
   const state: StateService = {
     id: "dynamodb",
     getVersion: () => Effect.succeed(STATE_STORE_VERSION),
-    // A stack is listed while it has a cataloged stage.
+    // A stack is listed while it has a cataloged stage, or a stage the S3
+    // store still has.
     listStacks: () =>
       verifyHeldLeases.pipe(
-        Effect.andThen(catalog()),
-        Effect.map((entries) => Array.from(new Set(entries.map((entry) => entry.stack)))),
+        Effect.andThen(
+          Effect.all(
+            [
+              catalog(),
+              use(({ legacy }) =>
+                legacy === undefined ? Effect.succeed([]) : listLegacyStacks(legacy),
+              ),
+            ],
+            { concurrency: 2 },
+          ),
+        ),
+        Effect.map(([entries, legacy]) =>
+          Array.from(new Set([...entries.map((entry) => entry.stack), ...legacy])),
+        ),
       ),
     listStages: (stack) => verifyHeldLeases.pipe(Effect.andThen(listStages(stack))),
     get: (request) =>
@@ -871,8 +984,15 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
           ConsistentRead: true,
         }),
       );
-      if (result.Item === undefined) return undefined;
-      return yield* parse<unknown>(yield* itemText(result.Item), "stack output");
+      if (result.Item !== undefined) {
+        return yield* parse<unknown>(yield* itemText(result.Item), "stack output");
+      }
+      // A stage that hasn't moved yet keeps its output in the S3 store.
+      // Reading it takes no lease, so a reference to it still resolves.
+      const legacy = yield* use(({ legacy }) => Effect.succeed(legacy));
+      if (legacy === undefined) return undefined;
+      if ((yield* catalogEntry(request.stack, request.stage)) !== undefined) return undefined;
+      return yield* use(() => readLegacyOutput(legacy, request.stack, request.stage));
     }),
     setOutput: (request) =>
       guarded(request, () =>
@@ -903,8 +1023,141 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
         }),
       ),
   };
-  return state;
+
+  /**
+   * Hold the stage's lease without the migration check, for the migration
+   * itself.
+   */
+  const hold = (stack: string, stage: string) =>
+    leases
+      .get(`${stack}/${stage}`, acquireLease(stack, stage))
+      .pipe(Effect.flatMap((lease) => lease.checkLive));
+
+  /**
+   * Make the stage hold exactly `contents`, check it does, and enter it in
+   * the catalog: the commit that makes DynamoDB the stage's store.
+   */
+  const commitStage = Effect.fn(function* (
+    stack: string,
+    stage: string,
+    contents: StageContents,
+    migratedFrom: string,
+    beforeCommit: Effect.Effect<void, StateStoreError> = Effect.void,
+  ) {
+    yield* hold(stack, stage);
+    const pk = stagePk(stack, stage);
+    const wanted = new Set(yield* Effect.forEach(Array.from(contents.records.keys()), recordSk));
+    if (contents.output !== undefined) wanted.add(OUTPUT);
+    // Items an earlier, interrupted copy left that the source no longer has.
+    const stale = (yield* queryPartition(pk, undefined, "PK, SK, #ref")).filter((item) => {
+      const sk = str(item, "SK");
+      return sk !== LEASE && sk !== undefined && !wanted.has(sk);
+    });
+    yield* deleteItems(stale.map((item) => ({ PK: str(item, "PK")!, SK: str(item, "SK")! })));
+    yield* Effect.forEach(stale, (item) => deleteOverflow(str(item, "ref")), { discard: true });
+    yield* Effect.forEach(
+      Array.from(contents.records),
+      ([fqn, text]) =>
+        Effect.flatMap(recordSk(fqn), (sk) =>
+          putPayload({ PK: pk, SK: sk, stack, stage }, text, { fqn: S(fqn) }),
+        ),
+      { concurrency: 16, discard: true },
+    );
+    if (contents.output !== undefined) {
+      yield* putPayload({ PK: pk, SK: OUTPUT, stack, stage }, contents.output, {});
+    }
+    // Read back what landed before it becomes the stage's state.
+    const copied = yield* readStage(stack, stage);
+    const mismatched = [
+      ...Array.from(contents.records).filter(([fqn, text]) => copied.records.get(fqn) !== text),
+      ...Array.from(copied.records.keys()).filter((fqn) => !contents.records.has(fqn)),
+    ];
+    if (mismatched.length > 0 || copied.output !== contents.output) {
+      return yield* new StateStoreError({
+        message: `DynamoDB copy of '${stack}/${stage}' does not match its source (${mismatched.length} records differ${copied.output !== contents.output ? ", output differs" : ""})`,
+      });
+    }
+    yield* beforeCommit;
+    const migratedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
+    yield* use(({ table }) =>
+      dynamodb.putItem({
+        TableName: table,
+        Item: {
+          PK: S(CATALOG),
+          SK: S(catalogSk(stack, stage)),
+          stack: S(stack),
+          stage: S(stage),
+          migratedFrom: S(migratedFrom),
+          migratedAt: S(migratedAt),
+        },
+      }),
+    );
+    snapshots.entries.delete(`${stack}/${stage}`);
+  });
+
+  /**
+   * Take the stage out of DynamoDB: delete its items and catalog entry, so
+   * the S3 store is its store again.
+   */
+  const releaseStage = Effect.fn(function* (stack: string, stage: string) {
+    yield* hold(stack, stage);
+    const items = (yield* queryPartition(stagePk(stack, stage), undefined, "PK, SK, #ref")).filter(
+      (item) => str(item, "SK") !== LEASE,
+    );
+    // The catalog entry goes first: once it is gone the stage is the S3
+    // store's, whatever of its items a crash leaves behind.
+    yield* deleteItems([{ PK: CATALOG, SK: catalogSk(stack, stage) }]);
+    yield* deleteItems(items.map((item) => ({ PK: str(item, "PK")!, SK: str(item, "SK")! })));
+    yield* Effect.forEach(items, (item) => deleteOverflow(str(item, "ref")), { discard: true });
+    registered.entries.delete(`${stack}/${stage}`);
+    snapshots.entries.delete(`${stack}/${stage}`);
+  });
+
+  return {
+    ...state,
+    migration: {
+      target: use((target) => Effect.succeed(target)),
+      catalog: () => catalog(),
+      cataloged: (stack: string, stage: string) =>
+        catalogEntry(stack, stage).pipe(Effect.map((entry) => entry !== undefined)),
+      hold,
+      readStage,
+      commitStage,
+      releaseStage,
+    },
+  } satisfies DynamoDBStateService;
 });
+
+/**
+ * The DynamoDB store, with the operations `alchemy state migrate` moves
+ * stages with.
+ */
+export interface DynamoDBStateService extends StateService {
+  readonly migration: {
+    readonly target: Effect.Effect<
+      { table: string; bucket: string; region: string; legacy: LegacyLocation | undefined },
+      StateStoreError
+    >;
+    readonly catalog: () => Effect.Effect<
+      ReadonlyArray<{ stack: string; stage: string }>,
+      StateStoreError
+    >;
+    readonly cataloged: (stack: string, stage: string) => Effect.Effect<boolean, StateStoreError>;
+    readonly hold: (stack: string, stage: string) => Effect.Effect<void, StateStoreError>;
+    readonly readStage: (
+      stack: string,
+      stage: string,
+    ) => Effect.Effect<StageContents, StateStoreError>;
+    readonly commitStage: (
+      stack: string,
+      stage: string,
+      contents: StageContents,
+      migratedFrom: string,
+      beforeCommit?: Effect.Effect<void, StateStoreError>,
+    ) => Effect.Effect<void, StateStoreError>;
+    readonly releaseStage: (stack: string, stage: string) => Effect.Effect<void, StateStoreError>;
+  };
+}
 
 /** The table's description, or `undefined` when it doesn't exist. */
 const describeStateTable = (table: string) =>

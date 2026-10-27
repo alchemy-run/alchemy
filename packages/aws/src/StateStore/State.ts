@@ -110,8 +110,8 @@ export const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLev
  *
  *
  * ### Using the S3 State Store
- * Pass `AWS.state()` as the `state` option of a Stack. By default the
- * state is stored in an account-regional bucket named
+ * Pass `AWS.state({ backend: "s3" })` as the `state` option of a Stack. By
+ * default the state is stored in an account-regional bucket named
  * `alchemy-state-{accountId}-{region}-an`.
  *
  * **Example:** Default bucket
@@ -121,7 +121,7 @@ export const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLev
  *
  * const Stack = Alchemy.Stack(
  *   "my-stack",
- *   { providers: AWS.providers(), state: AWS.state() },
+ *   { providers: AWS.providers(), state: AWS.state({ backend: "s3" }) },
  *   Effect.gen(function* () {
  *     // ...
  *   }),
@@ -185,10 +185,8 @@ export const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLev
  * an explicit block clears it. Omitting `encryption` restores AES256, no KMS
  * key, disabled bucket keys, and no encryption restrictions. Existing objects
  * are not rewritten.
- *
- * @resource
  */
-export const state = (options: S3StateOptions = {}) =>
+export const s3State = (options: S3StateOptions = {}) =>
   Layer.effect(
     State,
     Effect.gen(function* () {
@@ -245,7 +243,7 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       yield* (yield* stateBucketExists(bucketName))
         ? ensure
         : Provisioning.deployMissing(
-            { backend: "aws", name: options.name, label: `S3 state bucket '${bucketName}'` },
+            { backend: "aws-s3", name: options.name, label: `S3 state bucket '${bucketName}'` },
             ensure,
           );
       return s3Objects(bucketName, run);

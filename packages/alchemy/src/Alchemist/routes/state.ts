@@ -166,6 +166,23 @@ export const teardown = Effect.fn("Alchemist.state.teardown")(function* (source:
   return yield* run({ name: source.name }).pipe(Effect.provide(context), isolated);
 });
 
+/** Move stages into a state store from the one it replaces, or back. */
+export const migrate = Effect.fn("Alchemist.state.migrate")(function* (
+  source: ProviderSource & {
+    readonly stack?: string;
+    readonly stage?: string;
+    readonly rollback?: boolean;
+  },
+) {
+  const { run, context } = yield* lifecycleOperation(source, "migrate");
+  return yield* run({
+    name: source.name,
+    stack: source.stack,
+    stage: source.stage,
+    rollback: source.rollback,
+  }).pipe(Effect.provide(context), isolated);
+});
+
 /** Past log entries from a state store, oldest first. */
 export const logs = Effect.fn("Alchemist.state.logs")(function* (
   source: ProviderSource & { readonly limit?: number; readonly since?: Date },

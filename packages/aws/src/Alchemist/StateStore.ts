@@ -9,8 +9,8 @@ import { AWSEnvironment } from "../Environment.ts";
 import {
   createStateBucketName,
   provisionStateBucket,
+  s3State,
   stateBucketExists,
-  state,
   stateEnvironment,
 } from "../StateStore/State.ts";
 
@@ -31,7 +31,7 @@ const bootstrapStateBucket = Effect.fn("AWS.state.bootstrap")(function* (name?: 
  * Empty and delete a state bucket (by default the account's in this region),
  * every object version included. A missing bucket is not an error.
  */
-const teardownStateBucket = Effect.fn("AWS.state.teardown")(function* (name?: string) {
+export const teardownStateBucket = Effect.fn("AWS.state.teardown")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
   if (name !== undefined) yield* Provisioning.storeName(name);
   const bucketName = createStateBucketName(accountId, region, name);
@@ -74,5 +74,8 @@ export const lifecycle: StateStoreLifecycle = {
     ),
 };
 
-/** The state store AWS contributes. */
-export const stateStore: StateStoreImpl = { layer: state, lifecycle };
+/** The S3 state store AWS contributes, as `--backend aws-s3`. */
+export const s3StateStore: StateStoreImpl = {
+  layer: (options) => s3State(options),
+  lifecycle,
+};

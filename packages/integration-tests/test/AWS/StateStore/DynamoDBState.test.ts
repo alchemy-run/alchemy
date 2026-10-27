@@ -31,7 +31,12 @@ const StateStorage = Effect.gen(function* () {
     attributes: { PK: "S", SK: "S" },
   });
   const bucket = yield* AWS.S3.Bucket("OverflowBucket", { forceDestroy: true });
-  return { tableName: table.tableName, bucketName: bucket.bucketName };
+  return {
+    tableName: table.tableName,
+    overflowBucketName: bucket.bucketName,
+    // These cases exercise the store alone; Migration.test.ts covers the S3 handover.
+    migrateFrom: false as const,
+  };
 });
 
 const resource = (fqn: string, attr: Record<string, unknown>): ResourceState =>
@@ -179,7 +184,7 @@ test.provider(
           expect(record?.data).toBeUndefined();
           expect(record?.ref?.S).toBeDefined();
           expect(items.find((item) => item.SK?.S === "OUTPUT")?.ref?.S).toBeDefined();
-          expect(yield* objectKeys(storage.bucketName)).toHaveLength(2);
+          expect(yield* objectKeys(storage.overflowBucketName)).toHaveLength(2);
 
           expect(yield* state.get({ stack: STACK, stage, fqn: large.fqn })).toEqual(large);
           expect(yield* state.getOutput({ stack: STACK, stage })).toEqual(output);
@@ -199,12 +204,12 @@ test.provider(
           );
           expect(record?.ref).toBeUndefined();
           expect(record?.data?.S).toBeDefined();
-          expect(yield* objectKeys(storage.bucketName)).toHaveLength(1);
+          expect(yield* objectKeys(storage.overflowBucketName)).toHaveLength(1);
           expect(yield* state.get({ stack: STACK, stage, fqn: small.fqn })).toEqual(small);
 
           // Deleting the stage deletes the output's body too.
           yield* state.deleteStack({ stack: STACK, stage });
-          expect(yield* objectKeys(storage.bucketName)).toEqual([]);
+          expect(yield* objectKeys(storage.overflowBucketName)).toEqual([]);
           expect(yield* state.getOutput({ stack: STACK, stage })).toBeUndefined();
         }),
       );
@@ -229,8 +234,8 @@ test.provider(
           yield* state.set({ stack: STACK, stage, fqn: large.fqn, value: large });
         }),
       );
-      for (const key of yield* objectKeys(storage.bucketName)) {
-        yield* s3.deleteObject({ Bucket: storage.bucketName, Key: key! });
+      for (const key of yield* objectKeys(storage.overflowBucketName)) {
+        yield* s3.deleteObject({ Bucket: storage.overflowBucketName, Key: key! });
       }
 
       yield* Effect.scoped(
@@ -498,7 +503,7 @@ test.provider(
       )}`;
       const table = `alchemy-state-${name}`;
       const bucket = `alchemy-state-overflow-${name}-${accountId}-${region}-an`;
-      const target = { _tag: "Provider", backend: "aws-dynamodb", name } as const;
+      const target = { _tag: "Provider", backend: "aws", name } as const;
       const alchemist = Alchemist.layer();
 
       yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
@@ -539,7 +544,7 @@ test.provider(
       expect(Exit.isFailure(inCi)).toBe(true);
       if (Exit.isFailure(inCi)) {
         expect(Cause.pretty(inCi.cause)).toContain(
-          `Run 'alchemy state bootstrap --backend aws-dynamodb --name ${name}`,
+          `Run 'alchemy state bootstrap --backend aws --name ${name}`,
         );
       }
       expect(yield* tableExists(table)).toBe(false);
@@ -550,7 +555,7 @@ test.provider(
 
 // Each deploy/destroy of a Stack declaring the DynamoDB state store releases
 // its lease when it finishes, so a file can redeploy and destroy that Stack.
-const ddbStack = { providers: AWS.providers(), state: AWS.dynamoDBState() };
+const ddbStack = { providers: AWS.providers(), state: AWS.state() };
 const ddbHarness = Test.make(ddbStack);
 
 const DynamoDBStateStack = Alchemy.Stack(

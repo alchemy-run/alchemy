@@ -11,16 +11,19 @@ import {
   createOverflowBucketName,
   createStateTableName,
   dynamoDBState,
+  makeDynamoDBState,
   provisionStateTable,
   stateTableExists,
 } from "../StateStore/DynamoDBState.ts";
+import { migrateToDynamoDB, rollbackToS3 } from "../StateStore/Migration.ts";
 import { provisionStateBucket, stateBucketExists, stateEnvironment } from "../StateStore/State.ts";
+import { teardownStateBucket } from "./StateStore.ts";
 
 /**
  * Ensure a state table and its overflow bucket (by default the account's in
  * this region), with the settings first use would give them.
  */
-const bootstrapStateTable = Effect.fn("AWS.dynamoDBState.bootstrap")(function* (name?: string) {
+const bootstrapStateTable = Effect.fn("AWS.state.bootstrap")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
   if (name !== undefined) yield* Provisioning.storeName(name);
   const tableName = createStateTableName(name);
@@ -34,10 +37,11 @@ const bootstrapStateTable = Effect.fn("AWS.dynamoDBState.bootstrap")(function* (
 });
 
 /**
- * Delete a state table and empty and delete its overflow bucket, every
- * object version included. A missing table or bucket is not an error.
+ * Delete a state table, and empty and delete its overflow bucket and the S3
+ * store it replaced, every object version included. A missing table or
+ * bucket is not an error.
  */
-const teardownStateTable = Effect.fn("AWS.dynamoDBState.teardown")(function* (name?: string) {
+const teardownStateTable = Effect.fn("AWS.state.teardownTable")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
   if (name !== undefined) yield* Provisioning.storeName(name);
   const tableName = createStateTableName(name);
@@ -87,7 +91,36 @@ const teardownStateTable = Effect.fn("AWS.dynamoDBState.teardown")(function* (na
     );
     deleted.push(bucketName);
   }
+  const legacy = yield* teardownStateBucket(name);
+  if (legacy.deleted) deleted.push(legacy.bucketName);
   return { deleted };
+});
+
+/**
+ * Move the S3 store's stages to the table, or back with `rollback`. Running
+ * the command is consent to create the table, in CI too.
+ */
+const migrateStateStore = Effect.fn("AWS.state.migrate")(function* (input: {
+  readonly name?: string;
+  readonly stack?: string;
+  readonly stage?: string;
+  readonly rollback?: boolean;
+}) {
+  if (input.name !== undefined) yield* Provisioning.storeName(input.name);
+  const tableName = createStateTableName(input.name);
+  if (!input.rollback && !(yield* stateTableExists(tableName))) {
+    yield* provisionStateTable(tableName);
+  }
+  const stages = yield* Effect.scoped(
+    Effect.gen(function* () {
+      const store = yield* makeDynamoDBState({ name: input.name });
+      const selection = { stack: input.stack, stage: input.stage };
+      return input.rollback
+        ? yield* rollbackToS3(store, selection)
+        : yield* migrateToDynamoDB(store, selection);
+    }),
+  );
+  return { stages };
 });
 
 /** The AWS environment of the profile core runs the operation under. */
@@ -109,7 +142,11 @@ export const lifecycle: StateStoreLifecycle = {
       Effect.provide(environment),
     ),
   teardown: ({ name }) => teardownStateTable(name).pipe(Effect.provide(environment)),
+  migrate: (input) => migrateStateStore(input).pipe(Effect.provide(environment)),
 };
 
-/** The DynamoDB state store AWS contributes. */
-export const stateStore: StateStoreImpl = { layer: dynamoDBState, lifecycle };
+/** The state store AWS contributes, as `--backend aws`. */
+export const stateStore: StateStoreImpl = {
+  layer: (options) => dynamoDBState(options),
+  lifecycle,
+};

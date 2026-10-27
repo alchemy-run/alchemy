@@ -306,6 +306,60 @@ const teardownCommand = Command.make(
   ),
 ).pipe(Command.withDescription("Delete a state store and its backing resources"), Command.unlisted);
 
+const migrateCommand = Command.make(
+  "migrate",
+  {
+    envFile,
+    profile,
+    backend: lifecycleBackend,
+    name: storeName,
+    stack: Flag.String("stack").pipe(
+      Flag.withDescription("Only migrate this stack's stages"),
+      Flag.optional,
+      Flag.map(Option.getOrUndefined),
+    ),
+    stage: Flag.String("stage").pipe(
+      Flag.withDescription("Only migrate stages of this name"),
+      Flag.optional,
+      Flag.map(Option.getOrUndefined),
+    ),
+    rollback: Flag.Boolean("rollback").pipe(
+      Flag.withDescription("Move stages back to the state store this one replaces"),
+      Flag.withDefault(false),
+    ),
+  },
+  instrumentCommand("state.migrate")(
+    Effect.fn(function* ({ stack, stage, rollback, ...args }) {
+      const result = yield* AlchemistState.migrate({
+        ...lifecycleSource(args),
+        stack,
+        stage,
+        rollback,
+      });
+      if (result.stages.length === 0) {
+        yield* Interaction.info("No stages to migrate.");
+        return;
+      }
+      for (const entry of result.stages) {
+        const detail =
+          entry.reason ?? (entry.records === undefined ? "" : `${entry.records} records`);
+        yield* Console.log(
+          `${entry.stack}/${entry.stage}: ${entry.status}${detail === "" ? "" : ` (${detail})`}`,
+        );
+      }
+      const blocked = result.stages.filter((entry) => entry.status === "blocked");
+      if (blocked.length > 0) {
+        return yield* new UserInputError({
+          message: `${blocked.length} stage(s) are held by another deploy. Run the command again once they finish.`,
+        });
+      }
+      yield* Interaction.success(
+        `${rollback ? "Rolled back" : "Migrated"} the ${args.backend} state store`,
+      );
+    }),
+  ),
+).pipe(Command.withDescription("Move stages into a state store from the one it replaces"));
+
 const logsCommand = Command.make(
   "logs",
   {
@@ -379,6 +433,7 @@ export const stateCommand = Command.make(
     deleteCommand,
     bootstrapCommand,
     teardownCommand,
+    migrateCommand,
     logsCommand,
     unsafeCommand,
   ]),
