@@ -220,6 +220,24 @@ export const withdraw = Effect.fn(function* (bank: CustomerClient, accountId: Ac
 });
 ```
 
+## Read an Api's commands and rejections
+
+`CustomerApi.commands` lists the Api's command classes, in order. `CustomerApi.rejections` is one Schema for every rejection they declare, so a UI message can hold a refusal as data:
+
+```typescript
+const Refused = Schema.TaggedStruct("Refused", {
+  commandId: Schema.String,
+  rejection: CustomerApi.rejections, // InsufficientFunds | NotOwner | ...
+});
+```
+
+`Domain.Api.Any` is the type every Api fits. Use it for helpers you write once for all your Apis:
+
+```typescript
+const actionsOf = <A extends Domain.Api.Any>(api: A) =>
+  api.commands.map((command) => ({ tag: command.tag, rejects: command.rejects }));
+```
+
 ## Provide the client to an app
 
 An app usually wants one client for its whole lifetime. `CustomerApi.Client` is the client as a service, and `CustomerApi.layerClient` provides it. The app's entry point provides it once, with the protocol to use:

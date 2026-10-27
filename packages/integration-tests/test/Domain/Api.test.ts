@@ -8,6 +8,132 @@ import * as Option from "effect/Option";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 
+class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
+class Withdrawn extends Domain.Event("Withdrawn", { amount: Schema.Number }) {}
+class Closed extends Domain.Event("Closed") {}
+
+class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
+  balance: Schema.Number,
+  requested: Schema.Number,
+}) {}
+class AccountClosed extends Domain.Rejection("AccountClosed") {}
+
+class Deposit extends Domain.Command("Deposit", {
+  target: Schema.String,
+  input: { amount: Schema.Number },
+  events: [Deposited],
+  rejects: [AccountClosed],
+}) {}
+class Withdraw extends Domain.Command("Withdraw", {
+  target: Schema.String,
+  input: { amount: Schema.Number },
+  events: [Withdrawn],
+  rejects: [InsufficientFunds, AccountClosed],
+}) {}
+class Close extends Domain.Command("Close", { target: Schema.String, events: [Closed] }) {}
+
+class Account extends Domain.Aggregate("Account", {
+  id: Schema.String,
+  state: Schema.Struct({ balance: Schema.Number, closed: Schema.Boolean }),
+  initial: { balance: 0, closed: false },
+  commands: [Deposit, Withdraw, Close],
+  decide: {
+    Deposit: (s, { amount }) => (s.closed ? new AccountClosed() : [new Deposited({ amount })]),
+    Withdraw: (s, { amount }) =>
+      s.closed
+        ? new AccountClosed()
+        : amount > s.balance
+          ? new InsufficientFunds({ balance: s.balance, requested: amount })
+          : [new Withdrawn({ amount })],
+    Close: (s) => (s.closed ? [] : [new Closed()]),
+  },
+  evolve: {
+    Deposited: (s, e) => ({ ...s, balance: s.balance + e.amount }),
+    Withdrawn: (s, e) => ({ ...s, balance: s.balance - e.amount }),
+    Closed: (s) => ({ ...s, closed: true }),
+  },
+  read: {},
+}) {}
+
+class Bank extends Domain.Model("Bank", { aggregates: [Account] }) {}
+
+class BankApi extends Domain.Api("BankApi", Deposit, Account, Withdraw) {}
+class CloseApi extends Domain.Api("CloseApi", Close, Account) {}
+
+/** A helper written once for every Api: the tags of its commands. */
+const tagsOf = <A extends Domain.Api.Any>(api: A): ReadonlyArray<Domain.Api.CommandsOf<A>["tag"]> =>
+  api.commands.map((command) => command.tag);
+
+describe("Domain Api", () => {
+  it.effect("a concrete Api is an Api.Any", () =>
+    Effect.sync(() => {
+      const any: Domain.Api.Any = BankApi;
+      const tags: ReadonlyArray<"Deposit" | "Withdraw"> = tagsOf(BankApi);
+      expect(any.apiName).toBe("BankApi");
+      expect(tags).toEqual(["Deposit", "Withdraw"]);
+    }),
+  );
+
+  it.effect("commands are the command classes, in the order the Api lists them", () =>
+    Effect.sync(() => {
+      expect(BankApi.commands).toEqual([Deposit, Withdraw]);
+      expect(CloseApi.commands).toEqual([Close]);
+    }),
+  );
+
+  it.effect("rejections decodes every declared rejection to its class", () =>
+    Effect.sync(() => {
+      const Rejection = BankApi.rejections;
+      const decoded = Schema.decodeUnknownSync(Rejection)({
+        _tag: "InsufficientFunds",
+        balance: 1,
+        requested: 5,
+      });
+      const typed: InsufficientFunds | AccountClosed = decoded;
+      // @ts-expect-error a union member is not one rejection
+      const narrow: InsufficientFunds = decoded;
+      expect(narrow).toBe(typed);
+      expect(decoded).toBeInstanceOf(InsufficientFunds);
+      expect(decoded).toMatchObject({ balance: 1, requested: 5 });
+      expect(Schema.decodeUnknownSync(Rejection)({ _tag: "AccountClosed" })).toBeInstanceOf(
+        AccountClosed,
+      );
+      // AccountClosed is declared by two commands, and is in the union once.
+      expect((Rejection as unknown as Schema.Union<ReadonlyArray<Schema.Top>>).members).toEqual([
+        AccountClosed,
+        InsufficientFunds,
+      ]);
+      expect(() => Schema.decodeUnknownSync(Rejection)({ _tag: "Closed" })).toThrow();
+    }),
+  );
+
+  it.effect("an Api whose commands never reject has Schema.Never rejections", () =>
+    Effect.sync(() => {
+      const Rejection: typeof Schema.Never = CloseApi.rejections;
+      expect(Rejection).toBe(Schema.Never);
+    }),
+  );
+
+  it.live("a rejection from the client is a member of the schema", () =>
+    Effect.gen(function* () {
+      const bank: Domain.Api.ClientOf<typeof BankApi> = yield* BankApi.Client;
+      const isRejection = Schema.is(BankApi.rejections);
+      const refused = yield* bank.Withdraw({ target: "a-1", amount: 5 }).pipe(Effect.flip);
+      expect(isRejection(refused)).toBe(true);
+      expect(refused).toBeInstanceOf(InsufficientFunds);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        BankApi.layerClientInProcess.pipe(
+          Layer.provide(Bank.layer(Layer.empty).pipe(Layer.provide(InMemory))),
+        ),
+      ),
+    ),
+  );
+});
+
+// ---------------------------------------------------------------- calling in process
+
 // ---------------------------------------------------------------- a notes domain
 
 /** Who sent the request. The middleware provides it; `decide` and `validate` read it. */
@@ -64,7 +190,7 @@ class NotesApi extends Domain.Api("NotesApi", Write, Note) {}
 
 const World = Notes.layer(Layer.empty).pipe(Layer.provideMerge(InMemory));
 
-describe("Domain Api", () => {
+describe("Domain Api in process", () => {
   it.live("clientInProcess calls an Api in process, through every entry's middleware", () =>
     Effect.gen(function* () {
       const notes = yield* NotesApi.clientInProcess;

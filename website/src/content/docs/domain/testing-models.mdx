@@ -66,7 +66,7 @@ Run stories with Vitest and `@effect/vitest`: each story is an Effect, so `it.ef
 
 ## Check every outcome
 
-The test above uses most of the checks. `then` checks the next events recorded on an instance; with no events, it checks that nothing new was recorded. `replied` checks the last command's reply, and `rejected` checks that it was refused with exactly this rejection. `state` checks an instance's current state directly.
+The test above uses most of the checks. `then` checks the next events recorded on an instance; with no events, it checks that nothing new was recorded. `replied` checks the last command's reply, and `rejected` checks that it was refused with exactly this rejection. `state` checks an instance's current state directly, or part of it.
 
 Views and streams are checked as a client would read them. `view` checks a view key's state, or part of it, and `emitted` checks every event a view key has emitted. `streamed` checks the next entries a projection appended to a stream key.
 
@@ -138,6 +138,8 @@ An operation can declare the error its vendor answers with when it refuses ([Dec
 Story.call(Payments.refund, { settlementId: "st_1" }),
 Story.fail(Payments.refund, new RefundDeclined({ reason: "card-closed" })),
 ```
+
+When the operation declares several errors, `fail` takes any one of them, so a story can test each branch.
 
 `Story.die` fails a call with a defect instead, as when the connection to the vendor breaks:
 

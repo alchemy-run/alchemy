@@ -30,13 +30,13 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
   "BankWorker",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const customerApi = yield* CustomerApi.httpEffect;   // resolve once, at init
+    const customerApi = yield* CustomerApi;   // resolve once, at init
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const path = new URL(request.url, "http://localhost").pathname;
         if (path === "/api/session") return yield* sessionRoute;
-        if (path.startsWith("/api")) return yield* customerApi;
+        if (path.startsWith("/api")) return yield* customerApi.fetch;
         return HttpServerResponse.text("Not Found", { status: 404 });
       }),
     };

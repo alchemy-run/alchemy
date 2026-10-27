@@ -55,6 +55,8 @@ export const Register = Command.define("Register", {
 
 Every typed rejection arrives as a tagged error, so `update` can show exactly why something was refused.
 
+To keep a rejection in a Message or the Model, use `CustomerApi.rejections`: one Schema for every rejection the Api's commands declare, decoding to the rejection classes. A helper for every Api takes `A extends Domain.Api.Any` and reads `api.commands`.
+
 ## Subscriptions watch views
 
 ```ts
