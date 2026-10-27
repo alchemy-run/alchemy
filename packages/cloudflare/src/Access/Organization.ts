@@ -1,47 +1,11 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import { stripNullFields } from "alchemy/Util/data";
+import { stripNullFields, stripUndefinedFields } from "alchemy/Util/data";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-
-/**
- * Settings sent back unchanged on every update. Cloudflare's update is a full
- * PUT: a field missing from the body is reset (Cloudflare asks for the full
- * MFA configuration on every update), so settings the stack doesn't declare
- * would otherwise be lost. Declared props override them.
- * `serviceTokenInactivity` is left out: Cloudflare rejects the
- * `{ enabled: false }` shape it returns (12062 invalid_org_config).
- */
-const PRESERVED = [
-  "allowAuthenticateViaWarp",
-  "autoRedirectToIdentity",
-  "customPages",
-  "denyUnmatchedRequests",
-  "denyUnmatchedRequestsExemptedZoneNames",
-  "disableEndUserAppCreation",
-  "isUiReadOnly",
-  "loginDesign",
-  "mfaConfig",
-  "mfaPivKeyRequirements",
-  "mfaRequiredForAllApps",
-  "sessionDuration",
-  "strictServiceTokenAuth",
-  "uiReadOnlyToggleReason",
-  "userSeatExpirationInactiveTime",
-  "warp_auth_non_browser_401",
-  "warpAuthSessionDuration",
-] as const satisfies ReadonlyArray<
-  keyof zeroTrust.ListOrganizationsResponse & keyof zeroTrust.UpdateOrganizationForAccountRequest
->;
-
-const preservedSettings = (observed: zeroTrust.ListOrganizationsResponse) =>
-  stripNullFields(
-    Object.fromEntries(
-      PRESERVED.filter((key) => observed[key] != null).map((key) => [key, observed[key]]),
-    ),
-  ) as Pick<zeroTrust.UpdateOrganizationForAccountRequest, (typeof PRESERVED)[number]>;
 
 export type OrganizationProps = {
   /**
@@ -118,6 +82,62 @@ export type OrganizationProps = {
    * @see https://developers.cloudflare.com/cloudflare-one/policies/access/custom-pages/
    */
   customPages?: Organization.CustomPages;
+  /**
+   * When `true`, Access denies requests to hostnames on the account's zones
+   * that no Access application matches.
+   *
+   * @default false
+   * @see https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/require-access-protection/
+   */
+  denyUnmatchedRequests?: boolean;
+  /**
+   * Zones exempted from `denyUnmatchedRequests`, by zone name (e.g.
+   * `example.com`).
+   */
+  denyUnmatchedRequestsExemptedZoneNames?: string[];
+  /**
+   * When `true`, users can't create their own Access applications from the
+   * App Launcher.
+   *
+   * @default false
+   */
+  disableEndUserAppCreation?: boolean;
+  /**
+   * Organization-wide multi-factor authentication settings, applied to
+   * applications that require Access MFA.
+   *
+   * @see https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/independent-mfa/
+   */
+  mfaConfig?: Organization.MfaConfig;
+  /**
+   * Requirements for PIV keys and FIDO2 SSH keys used as MFA for
+   * infrastructure applications.
+   */
+  mfaPivKeyRequirements?: Organization.MfaPivKeyRequirements;
+  /**
+   * When `true`, every Access application requires MFA unless it opts out.
+   *
+   * @default false
+   */
+  mfaRequiredForAllApps?: boolean;
+  /**
+   * What happens to service tokens that go unused for a number of days.
+   */
+  serviceTokenInactivity?: Organization.ServiceTokenInactivity;
+  /**
+   * When `true`, a request that presents a service token is evaluated only
+   * against service-token policies.
+   *
+   * @default false
+   */
+  strictServiceTokenAuth?: boolean;
+  /**
+   * When `true`, WARP authentication answers non-browser requests that lack
+   * a session with `401` instead of redirecting to login.
+   *
+   * @default false
+   */
+  warpAuthNonBrowser401?: boolean;
 };
 
 export declare namespace Organization {
@@ -153,6 +173,58 @@ export declare namespace Organization {
      */
     identityDenied?: string;
   }
+  /**
+   * Organization-wide MFA settings.
+   */
+  export interface MfaConfig {
+    /**
+     * MFA methods users can authenticate with. `piv_key` and
+     * `ssh_fido2_key` apply only to infrastructure applications.
+     */
+    allowedAuthenticators?: (
+      | "totp"
+      | "biometrics"
+      | "security_key"
+      | "piv_key"
+      | "ssh_fido2_key"
+    )[];
+    /**
+     * How long a user may skip Access MFA when their identity provider
+     * already reports MFA in the `amr` claim, e.g. `12h`. Minutes or hours,
+     * `0m` to `720h`.
+     */
+    amrMatchingSessionDuration?: string;
+    /** ID of a Cloudflare List of allowed FIDO2 authenticator AAGUIDs. */
+    requiredAaguids?: string;
+    /** Lifetime of an MFA session, e.g. `24h`. Minutes or hours, `0m` to `720h`. */
+    sessionDuration?: string;
+  }
+  /**
+   * Requirements for PIV and SSH keys used as MFA.
+   */
+  export interface MfaPivKeyRequirements {
+    /** When a PIN is required to use the key. */
+    pinPolicy?: "never" | "once" | "always";
+    /** Require a FIPS 140-2 Level 1 (or higher) validated device. */
+    requireFipsDevice?: boolean;
+    /** Allowed SSH key sizes in bits. Ed25519 keys have a fixed size. */
+    sshKeySize?: (256 | 384 | 521 | 2048 | 3072 | 4096)[];
+    /** Allowed SSH key types. */
+    sshKeyType?: ("ecdsa" | "ed25519" | "rsa")[];
+    /** When a physical touch is required (`cached` lasts 15 seconds). */
+    touchPolicy?: "never" | "always" | "cached";
+  }
+  /**
+   * Automatic handling of inactive service tokens.
+   */
+  export interface ServiceTokenInactivity {
+    /** Whether inactive service tokens are acted on. */
+    enabled: boolean;
+    /** What to do with an inactive token. */
+    action: "disable" | "delete";
+    /** Days without use before a token counts as inactive. */
+    inactivityThresholdDays: number;
+  }
 }
 
 export type Organization = Resource<
@@ -183,6 +255,24 @@ export type Organization = Resource<
     loginDesign: Organization.LoginDesign | undefined;
     /** Custom-pages pointers observed on Cloudflare. */
     customPages: Organization.CustomPages | undefined;
+    /** Whether unmatched requests are denied. */
+    denyUnmatchedRequests: boolean | undefined;
+    /** Zones exempted from `denyUnmatchedRequests`. */
+    denyUnmatchedRequestsExemptedZoneNames: string[] | undefined;
+    /** Whether end users are blocked from creating applications. */
+    disableEndUserAppCreation: boolean | undefined;
+    /** Organization-wide MFA settings observed on Cloudflare. */
+    mfaConfig: Organization.MfaConfig | undefined;
+    /** PIV and SSH key requirements observed on Cloudflare. */
+    mfaPivKeyRequirements: Organization.MfaPivKeyRequirements | undefined;
+    /** Whether every application requires MFA. */
+    mfaRequiredForAllApps: boolean | undefined;
+    /** Inactive service token handling observed on Cloudflare. */
+    serviceTokenInactivity: Organization.ServiceTokenInactivity | undefined;
+    /** Whether service-token requests are evaluated only against service-token policies. */
+    strictServiceTokenAuth: boolean | undefined;
+    /** Whether WARP authentication answers non-browser requests with `401`. */
+    warpAuthNonBrowser401: boolean | undefined;
   },
   never,
   Providers
@@ -190,7 +280,7 @@ export type Organization = Resource<
 
 /**
  * Account-level Cloudflare Zero Trust organization settings — the team
- * domain, login branding, session lifetimes, WARP authentication toggle, etc.
+ * domain, login branding, session lifetimes, MFA, WARP authentication, etc.
  *
  * Wraps `PUT /accounts/{account_id}/access/organizations`.
  * @remarks
@@ -203,8 +293,10 @@ export type Organization = Resource<
  *   first deploy rather than failing on conflict.
  * - The `delete` lifecycle is a **no-op** that logs a warning. Removing the
  *   resource from your stack leaves the Cloudflare-side settings untouched.
- * - Settings you don't declare keep their current values (MFA, deny
- *   unmatched requests, login branding, …); only declared props change.
+ * - Every deploy converges the whole organization on the declared props. A
+ *   setting you don't declare goes back to Cloudflare's default, including
+ *   one changed in the dashboard — declare MFA, `denyUnmatchedRequests` and
+ *   the rest here to keep them.
  *
  * ### Configuring the organization
  * **Example:** Adopt and brand the organization
@@ -222,6 +314,27 @@ export type Organization = Resource<
  * });
  * ```
  *
+ * ### Securing the organization
+ * **Example:** Require MFA and deny unmatched requests
+ * ```typescript
+ * const org = yield* Cloudflare.Access.Organization("Org", {
+ *   authDomain: "acme.cloudflareaccess.com",
+ *   mfaRequiredForAllApps: true,
+ *   mfaConfig: {
+ *     allowedAuthenticators: ["totp", "security_key"],
+ *     sessionDuration: "12h",
+ *   },
+ *   denyUnmatchedRequests: true,
+ *   denyUnmatchedRequestsExemptedZoneNames: ["public.example.com"],
+ *   strictServiceTokenAuth: true,
+ *   serviceTokenInactivity: {
+ *     enabled: true,
+ *     action: "disable",
+ *     inactivityThresholdDays: 90,
+ *   },
+ * });
+ * ```
+ *
  * @resource
  * @product Access
  * @category Cloudflare One (Zero Trust)
@@ -229,6 +342,14 @@ export type Organization = Resource<
 export const Organization = Resource<Organization>("Cloudflare.Access.Organization", {
   aliases: ["Cloudflare.AccessOrganization"],
 });
+
+/**
+ * Cloudflare returned `OrganizationAlreadyExists` on create, but the
+ * organization could not be read back afterwards.
+ */
+export class OrganizationNotObserved extends Data.TaggedError("OrganizationNotObserved")<{
+  readonly accountId: string;
+}> {}
 
 export const OrganizationProvider = () =>
   Provider.succeed(Organization, {
@@ -238,100 +359,33 @@ export const OrganizationProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       const desiredName = news.name ?? news.authDomain;
-      const loginDesign = buildLoginDesign(news.loginDesign);
-      const customPages = news.customPages
-        ? {
-            ...(news.customPages.forbidden !== undefined
-              ? { forbidden: news.customPages.forbidden }
-              : {}),
-            ...(news.customPages.identityDenied !== undefined
-              ? { identityDenied: news.customPages.identityDenied }
-              : {}),
-          }
-        : undefined;
-
+      // The body is the complete desired state: every setting the props
+      // don't declare converges to its default.
       // Observe — singleton lookup. The org always exists for any
       // account that has enabled Zero Trust; only a brand-new account
       // returns "missing".
-      let observed = yield* observe();
+      const observed = yield* observe();
+      const settings = settingsBody(news, desiredName, observed);
 
       // Ensure — create on a fresh account. If a race or out-of-band
       // setup created it between the observe and create call, fall
       // back to update.
       if (!observed) {
-        observed = yield* zeroTrust
-          .createOrganizationForAccount({
-            accountId,
-            authDomain: news.authDomain,
-            name: desiredName,
-            ...(news.sessionDuration !== undefined
-              ? { sessionDuration: news.sessionDuration }
-              : {}),
-            ...(news.allowAuthenticateViaWarp !== undefined
-              ? { allowAuthenticateViaWarp: news.allowAuthenticateViaWarp }
-              : {}),
-            ...(news.isUiReadOnly !== undefined ? { isUiReadOnly: news.isUiReadOnly } : {}),
-            ...(news.autoRedirectToIdentity !== undefined
-              ? { autoRedirectToIdentity: news.autoRedirectToIdentity }
-              : {}),
-            ...(news.uiReadOnlyToggleReason !== undefined
-              ? { uiReadOnlyToggleReason: news.uiReadOnlyToggleReason }
-              : {}),
-            ...(news.userSeatExpirationInactiveTime !== undefined
-              ? {
-                  userSeatExpirationInactiveTime: news.userSeatExpirationInactiveTime,
-                }
-              : {}),
-            ...(news.warpAuthSessionDuration !== undefined
-              ? { warpAuthSessionDuration: news.warpAuthSessionDuration }
-              : {}),
-            ...(loginDesign ? { loginDesign } : {}),
-          })
-          .pipe(
-            Effect.catchTag("OrganizationAlreadyExists", () =>
-              Effect.gen(function* () {
-                const existing = yield* observe();
-                if (existing) return existing;
-                return yield* Effect.fail(
-                  new Error(
-                    "Cloudflare returned OrganizationAlreadyExists on createOrganizationForAccount but the org could not be observed afterwards",
-                  ),
-                );
-              }),
-            ),
-          );
+        const { customPages: _, ...createSettings } = settings;
+        yield* zeroTrust.createOrganizationForAccount({ accountId, ...createSettings }).pipe(
+          Effect.catchTag("OrganizationAlreadyExists", () =>
+            Effect.gen(function* () {
+              const existing = yield* observe();
+              if (existing) return existing;
+              return yield* new OrganizationNotObserved({ accountId });
+            }),
+          ),
+        );
       }
 
-      // Sync — Cloudflare's PUT is a true upsert. Always push so any
-      // drift in observed vs desired converges in one call. Cheap and
-      // idempotent.
-      const updated = yield* zeroTrust.updateOrganizationForAccount({
-        accountId,
-        ...preservedSettings(observed),
-        authDomain: news.authDomain,
-        name: desiredName,
-        ...(news.sessionDuration !== undefined ? { sessionDuration: news.sessionDuration } : {}),
-        ...(news.allowAuthenticateViaWarp !== undefined
-          ? { allowAuthenticateViaWarp: news.allowAuthenticateViaWarp }
-          : {}),
-        ...(news.isUiReadOnly !== undefined ? { isUiReadOnly: news.isUiReadOnly } : {}),
-        ...(news.autoRedirectToIdentity !== undefined
-          ? { autoRedirectToIdentity: news.autoRedirectToIdentity }
-          : {}),
-        ...(news.uiReadOnlyToggleReason !== undefined
-          ? { uiReadOnlyToggleReason: news.uiReadOnlyToggleReason }
-          : {}),
-        ...(news.userSeatExpirationInactiveTime !== undefined
-          ? {
-              userSeatExpirationInactiveTime: news.userSeatExpirationInactiveTime,
-            }
-          : {}),
-        ...(news.warpAuthSessionDuration !== undefined
-          ? { warpAuthSessionDuration: news.warpAuthSessionDuration }
-          : {}),
-        ...(loginDesign ? { loginDesign } : {}),
-        ...(customPages ? { customPages } : {}),
-      });
+      // Sync — always push the full desired state so any drift converges
+      // in one call. Cheap and idempotent.
+      const updated = yield* zeroTrust.updateOrganizationForAccount({ accountId, ...settings });
 
       return toAttrs(accountId, updated, news.authDomain, desiredName);
     }),
@@ -391,30 +445,68 @@ const observe = Effect.fn(function* () {
   );
 });
 
+/**
+ * The complete desired organization as an update body. Cloudflare resets
+ * most omitted settings but keeps some (`disableEndUserAppCreation`,
+ * `serviceTokenInactivity`), so undeclared toggles are sent as their
+ * defaults rather than left out.
+ */
+const settingsBody = (
+  news: OrganizationProps,
+  name: string,
+  observed: zeroTrust.ListOrganizationsResponse | undefined,
+) =>
+  stripUndefinedFields({
+    authDomain: news.authDomain,
+    name,
+    sessionDuration: news.sessionDuration,
+    allowAuthenticateViaWarp: news.allowAuthenticateViaWarp ?? false,
+    isUiReadOnly: news.isUiReadOnly ?? false,
+    autoRedirectToIdentity: news.autoRedirectToIdentity ?? false,
+    uiReadOnlyToggleReason: news.uiReadOnlyToggleReason,
+    userSeatExpirationInactiveTime: news.userSeatExpirationInactiveTime,
+    warpAuthSessionDuration: news.warpAuthSessionDuration,
+    loginDesign: news.loginDesign,
+    customPages: news.customPages,
+    denyUnmatchedRequests: news.denyUnmatchedRequests ?? false,
+    denyUnmatchedRequestsExemptedZoneNames: news.denyUnmatchedRequestsExemptedZoneNames ?? [],
+    disableEndUserAppCreation: news.disableEndUserAppCreation ?? false,
+    mfaConfig: news.mfaConfig,
+    mfaPivKeyRequirements: news.mfaPivKeyRequirements,
+    mfaRequiredForAllApps: news.mfaRequiredForAllApps ?? false,
+    serviceTokenInactivity:
+      news.serviceTokenInactivity ??
+      disabledServiceTokenInactivity(observed?.serviceTokenInactivity),
+    strictServiceTokenAuth: news.strictServiceTokenAuth ?? false,
+    warp_auth_non_browser_401: news.warpAuthNonBrowser401 ?? false,
+  });
+
+/**
+ * Turns off an enabled service-token inactivity policy the props don't
+ * declare. Cloudflare only accepts the full shape, so the observed action and
+ * threshold are sent back with `enabled: false`.
+ */
+const disabledServiceTokenInactivity = (
+  observed: zeroTrust.ListOrganizationsResponse["serviceTokenInactivity"],
+): Organization.ServiceTokenInactivity | undefined =>
+  observed?.enabled && observed.action && observed.inactivityThresholdDays != null
+    ? {
+        enabled: false,
+        action: observed.action as Organization.ServiceTokenInactivity["action"],
+        inactivityThresholdDays: observed.inactivityThresholdDays,
+      }
+    : undefined;
+
+/**
+ * Drops `null` fields from an observed nested setting, so the attribute has
+ * the same shape as the prop.
+ */
+const observedSetting = <T>(value: object | null | undefined): T | undefined =>
+  value == null ? undefined : (stripNullFields(value) as T);
+
 const toAttrs = (
   accountId: string,
-  org: {
-    authDomain?: string | null;
-    name?: string | null;
-    sessionDuration?: string | null;
-    allowAuthenticateViaWarp?: boolean | null;
-    isUiReadOnly?: boolean | null;
-    autoRedirectToIdentity?: boolean | null;
-    uiReadOnlyToggleReason?: string | null;
-    userSeatExpirationInactiveTime?: string | null;
-    warpAuthSessionDuration?: string | null;
-    loginDesign?: {
-      backgroundColor?: string | null;
-      footerText?: string | null;
-      headerText?: string | null;
-      logoPath?: string | null;
-      textColor?: string | null;
-    } | null;
-    customPages?: {
-      forbidden?: string | null;
-      identityDenied?: string | null;
-    } | null;
-  },
+  org: zeroTrust.ListOrganizationsResponse,
   fallbackAuthDomain: string,
   fallbackName: string,
 ) => ({
@@ -428,65 +520,21 @@ const toAttrs = (
   uiReadOnlyToggleReason: org.uiReadOnlyToggleReason ?? undefined,
   userSeatExpirationInactiveTime: org.userSeatExpirationInactiveTime ?? undefined,
   warpAuthSessionDuration: org.warpAuthSessionDuration ?? undefined,
-  loginDesign: observedLoginDesign(org.loginDesign),
-  customPages: observedCustomPages(org.customPages),
+  loginDesign: observedSetting<Organization.LoginDesign>(org.loginDesign),
+  customPages: observedSetting<Organization.CustomPages>(org.customPages),
+  denyUnmatchedRequests: org.denyUnmatchedRequests ?? undefined,
+  denyUnmatchedRequestsExemptedZoneNames: org.denyUnmatchedRequestsExemptedZoneNames
+    ? [...org.denyUnmatchedRequestsExemptedZoneNames]
+    : undefined,
+  disableEndUserAppCreation: org.disableEndUserAppCreation ?? undefined,
+  mfaConfig: observedSetting<Organization.MfaConfig>(org.mfaConfig),
+  mfaPivKeyRequirements: observedSetting<Organization.MfaPivKeyRequirements>(
+    org.mfaPivKeyRequirements,
+  ),
+  mfaRequiredForAllApps: org.mfaRequiredForAllApps ?? undefined,
+  serviceTokenInactivity: observedSetting<Organization.ServiceTokenInactivity>(
+    org.serviceTokenInactivity,
+  ),
+  strictServiceTokenAuth: org.strictServiceTokenAuth ?? undefined,
+  warpAuthNonBrowser401: org.warp_auth_non_browser_401 ?? undefined,
 });
-
-const buildLoginDesign = (
-  design: Organization.LoginDesign | undefined,
-):
-  | {
-      backgroundColor?: string;
-      footerText?: string;
-      headerText?: string;
-      logoPath?: string;
-      textColor?: string;
-    }
-  | undefined => {
-  if (!design) return undefined;
-  const out: {
-    backgroundColor?: string;
-    footerText?: string;
-    headerText?: string;
-    logoPath?: string;
-    textColor?: string;
-  } = {};
-  if (design.backgroundColor !== undefined) out.backgroundColor = design.backgroundColor;
-  if (design.footerText !== undefined) out.footerText = design.footerText;
-  if (design.headerText !== undefined) out.headerText = design.headerText;
-  if (design.logoPath !== undefined) out.logoPath = design.logoPath;
-  if (design.textColor !== undefined) out.textColor = design.textColor;
-  return out;
-};
-
-const observedLoginDesign = (
-  design:
-    | {
-        backgroundColor?: string | null;
-        footerText?: string | null;
-        headerText?: string | null;
-        logoPath?: string | null;
-        textColor?: string | null;
-      }
-    | null
-    | undefined,
-): Organization.LoginDesign | undefined => {
-  if (!design) return undefined;
-  return {
-    backgroundColor: design.backgroundColor ?? undefined,
-    footerText: design.footerText ?? undefined,
-    headerText: design.headerText ?? undefined,
-    logoPath: design.logoPath ?? undefined,
-    textColor: design.textColor ?? undefined,
-  };
-};
-
-const observedCustomPages = (
-  pages: { forbidden?: string | null; identityDenied?: string | null } | null | undefined,
-): Organization.CustomPages | undefined => {
-  if (!pages) return undefined;
-  return {
-    forbidden: pages.forbidden ?? undefined,
-    identityDenied: pages.identityDenied ?? undefined,
-  };
-};

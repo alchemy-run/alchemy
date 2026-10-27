@@ -28,8 +28,8 @@ const resolveAuthDomain = (accountId: string) =>
         }),
       );
 // The organization's settings as an update body, to restore it after a test.
-// `serviceTokenInactivity` is left out: Cloudflare rejects the observed
-// `{ enabled: false }` shape it returns.
+// A `serviceTokenInactivity` without an `action` is left out: Cloudflare
+// rejects the bare `{ enabled: false }` shape it returns.
 const restorable = (accountId: string, org: zeroTrust.ListOrganizationsResponse) => ({
   accountId,
   authDomain: org.authDomain ?? undefined,
@@ -42,11 +42,20 @@ const restorable = (accountId: string, org: zeroTrust.ListOrganizationsResponse)
   userSeatExpirationInactiveTime: org.userSeatExpirationInactiveTime ?? undefined,
   uiReadOnlyToggleReason: org.uiReadOnlyToggleReason ?? undefined,
   denyUnmatchedRequests: org.denyUnmatchedRequests ?? undefined,
+  denyUnmatchedRequestsExemptedZoneNames: org.denyUnmatchedRequestsExemptedZoneNames
+    ? [...org.denyUnmatchedRequestsExemptedZoneNames]
+    : undefined,
+  disableEndUserAppCreation: org.disableEndUserAppCreation ?? undefined,
   strictServiceTokenAuth: org.strictServiceTokenAuth ?? undefined,
   mfaRequiredForAllApps: org.mfaRequiredForAllApps ?? undefined,
+  warp_auth_non_browser_401: org.warp_auth_non_browser_401 ?? undefined,
   loginDesign: withoutNulls(org.loginDesign),
   customPages: withoutNulls(org.customPages),
   mfaConfig: withoutNulls(org.mfaConfig),
+  mfaPivKeyRequirements: withoutNulls(org.mfaPivKeyRequirements),
+  serviceTokenInactivity: org.serviceTokenInactivity?.action
+    ? withoutNulls(org.serviceTokenInactivity)
+    : undefined,
 });
 
 const withoutNulls = <T extends object>(value: T | null | undefined) =>
@@ -55,6 +64,19 @@ const withoutNulls = <T extends object>(value: T | null | undefined) =>
         [K in keyof T]: Exclude<T[K], null>;
       })
     : undefined;
+
+// Every deploy converges the whole organization, so a test that deploys it
+// puts the account's organization back the way it found it.
+const restoringOrganization = <A, E, R>(test: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const original = yield* zeroTrust.listOrganizationsForAccount({ accountId });
+    return yield* test.pipe(
+      Effect.ensuring(
+        zeroTrust.updateOrganizationForAccount(restorable(accountId, original)).pipe(Effect.ignore),
+      ),
+    );
+  });
 
 // Both cases mutate the same account-wide Access organization singleton; run
 // them serially so they don't corrupt each other under the global concurrent
@@ -87,7 +109,7 @@ describe.sequential(
         yield* stack.destroy();
         const stillThere = yield* zeroTrust.listOrganizationsForAccount({ accountId });
         expect(stillThere.authDomain).toEqual(authDomain);
-      }).pipe(logLevel),
+      }).pipe(restoringOrganization, logLevel),
     );
 
     // Same gate as above: toggling allow_authenticate_via_warp mutates the
@@ -142,58 +164,74 @@ describe.sequential(
         );
 
         yield* stack.destroy();
-      }).pipe(logLevel),
+      }).pipe(restoringOrganization, logLevel),
     );
 
-    // Cloudflare's org update is a full PUT: a field missing from the body is
-    // reset. Settings the stack does not declare must survive a deploy.
-    test.provider.skipIf(skip)("keeps undeclared settings when updating", (stack) =>
+    // Every setting is declarable, and a deploy converges the whole
+    // organization: a setting dropped from the props goes back to its default.
+    test.provider.skipIf(skip)("converges declared and undeclared settings", (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
         const authDomain = yield* resolveAuthDomain(accountId);
         const original = yield* zeroTrust.listOrganizationsForAccount({ accountId });
         const name = original.name ?? authDomain;
-        const warp = !(original.allowAuthenticateViaWarp ?? false);
 
-        yield* Effect.gen(function* () {
-          // Non-default neighboring settings, set out of band.
-          yield* zeroTrust.updateOrganizationForAccount({
-            ...restorable(accountId, original),
-            sessionDuration: "13h",
-            warpAuthSessionDuration: "7h",
-            loginDesign: { footerText: "alchemy neighbor footer" },
-            mfaConfig: { allowedAuthenticators: ["totp"], sessionDuration: "5h" },
-          });
-
-          const org = yield* stack.deploy(
-            Effect.gen(function* () {
-              return yield* Cloudflare.Access.Organization("Org", {
-                authDomain,
-                name,
-                allowAuthenticateViaWarp: warp,
-              });
-            }),
-          );
-          expect(org.allowAuthenticateViaWarp).toEqual(warp);
-
-          const live = yield* zeroTrust.listOrganizationsForAccount({ accountId });
-          expect(live.allowAuthenticateViaWarp).toEqual(warp);
-          expect(live.sessionDuration).toEqual("13h");
-          expect(live.warpAuthSessionDuration).toEqual("7h");
-          expect(live.loginDesign?.footerText).toEqual("alchemy neighbor footer");
-          expect(live.mfaConfig?.allowedAuthenticators).toEqual(["totp"]);
-          expect(live.mfaConfig?.sessionDuration).toEqual("5h");
-
-          yield* stack.destroy();
-        }).pipe(
-          // Put the account's organization back the way the test found it.
-          Effect.ensuring(
-            zeroTrust
-              .updateOrganizationForAccount(restorable(accountId, original))
-              .pipe(Effect.ignore),
-          ),
+        const org = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Access.Organization("Org", {
+              authDomain,
+              name,
+              sessionDuration: "13h",
+              loginDesign: { footerText: "alchemy footer" },
+              disableEndUserAppCreation: true,
+              warpAuthNonBrowser401: true,
+              mfaConfig: { allowedAuthenticators: ["totp"], sessionDuration: "5h" },
+              mfaPivKeyRequirements: { pinPolicy: "always", touchPolicy: "always" },
+              serviceTokenInactivity: {
+                enabled: true,
+                action: "disable",
+                inactivityThresholdDays: 365,
+              },
+            });
+          }),
         );
-      }).pipe(logLevel),
+        expect(org.mfaConfig?.allowedAuthenticators).toEqual(["totp"]);
+        expect(org.disableEndUserAppCreation).toEqual(true);
+
+        const live = yield* zeroTrust.listOrganizationsForAccount({ accountId });
+        expect(live.sessionDuration).toEqual("13h");
+        expect(live.loginDesign?.footerText).toEqual("alchemy footer");
+        expect(live.disableEndUserAppCreation).toEqual(true);
+        expect(live.warp_auth_non_browser_401).toEqual(true);
+        expect(live.mfaConfig?.allowedAuthenticators).toEqual(["totp"]);
+        expect(live.mfaConfig?.sessionDuration).toEqual("5h");
+        expect(live.mfaPivKeyRequirements?.pinPolicy).toEqual("always");
+        expect(live.serviceTokenInactivity?.enabled).toEqual(true);
+        expect(live.serviceTokenInactivity?.inactivityThresholdDays).toEqual(365);
+
+        // Change MFA, drop everything else.
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Access.Organization("Org", {
+              authDomain,
+              name,
+              mfaConfig: { allowedAuthenticators: ["totp", "security_key"], sessionDuration: "8h" },
+            });
+          }),
+        );
+
+        const converged = yield* zeroTrust.listOrganizationsForAccount({ accountId });
+        expect(converged.mfaConfig?.allowedAuthenticators).toEqual(["totp", "security_key"]);
+        expect(converged.mfaConfig?.sessionDuration).toEqual("8h");
+        expect(converged.sessionDuration ?? undefined).not.toEqual("13h");
+        expect(converged.loginDesign?.footerText ?? undefined).toBeUndefined();
+        expect(converged.disableEndUserAppCreation ?? false).toEqual(false);
+        expect(converged.warp_auth_non_browser_401 ?? false).toEqual(false);
+        expect(converged.mfaPivKeyRequirements ?? undefined).toBeUndefined();
+        expect(converged.serviceTokenInactivity?.enabled ?? false).toEqual(false);
+
+        yield* stack.destroy();
+      }).pipe(restoringOrganization, logLevel),
     );
 
     // Canonical `list()` test (account singleton): there is no enumeration API
