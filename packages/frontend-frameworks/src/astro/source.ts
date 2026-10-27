@@ -30,6 +30,8 @@ import { createRequire } from "node:module";
  * project sources are unchanged.
  */
 import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
+import { compileGlob, type Glob } from "@alchemy.run/node-utils/glob";
+import createGitIgnore, { type IgnoreInstance } from "@alchemy.run/node-utils/ignore";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -299,125 +301,33 @@ const sha256Object = (input: unknown): Effect.Effect<string> =>
   );
 
 // ─────────────────────────────────────────────────────────────────────
-// Glob / gitignore matching (self-contained approximation of the
-// glob + gitignore semantics alchemy's `hashDirectory` uses)
+// Glob / gitignore matching (the same matchers alchemy's `hashDirectory`
+// uses, from @alchemy.run/node-utils)
 // ─────────────────────────────────────────────────────────────────────
 
-const escapeRegex = (char: string): string => (/[\\^$.|+()[\]{}]/.test(char) ? `\\${char}` : char);
+/** Compile gitignore-format lines with the same matcher alchemy uses. */
+const compileIgnoreRules = (rules: ReadonlyArray<string>): IgnoreInstance =>
+  createGitIgnore().add(rules.join("\n"));
+
+/** Whether the last rule matching `path` excludes it. */
+const isIgnored = (rules: IgnoreInstance, path: string, isDirectory: boolean): boolean =>
+  rules.matches(isDirectory ? `${path}/` : path).ignored;
 
 /**
- * Convert a glob body (no negation/anchoring — handled by callers) to a
- * regex source. Supports `**`, `*`, `?`; everything else is literal.
+ * Compile positive glob patterns (memo include/exclude), anchored to the
+ * root. `**` matches across directories; `*` and `?` stay within one.
  */
-const globToRegexSource = (glob: string): string => {
-  let out = "";
-  let i = 0;
-  while (i < glob.length) {
-    const c = glob[i]!;
-    if (c === "*" && glob[i + 1] === "*") {
-      const prevBoundary = i === 0 || glob[i - 1] === "/";
-      let j = i + 2;
-      if (prevBoundary && glob[j] === "/") {
-        // `**/` segment — zero or more whole path segments.
-        out += "(?:[^/]+/)*";
-        i = j + 1;
-        continue;
-      }
-      out += ".*";
-      i = j;
-      continue;
-    }
-    if (c === "*") {
-      out += "[^/]*";
-      i++;
-      continue;
-    }
-    if (c === "?") {
-      out += "[^/]";
-      i++;
-      continue;
-    }
-    out += escapeRegex(c);
-    i++;
-  }
-  return out;
-};
+const compileGlobs = (globs: ReadonlyArray<string>): Array<Glob> =>
+  globs.flatMap(
+    (glob) =>
+      compileGlob(glob.replace(/^\.\//, ""), {
+        innerGlobstar: "globstar",
+        unclosedBracket: "literal",
+      }) ?? [],
+  );
 
-interface IgnoreRule {
-  readonly regex: RegExp;
-  readonly dirOnly: boolean;
-  readonly negated: boolean;
-}
-
-/** Compile one gitignore-style rule line. Returns `undefined` for blanks/comments. */
-const compileIgnoreRule = (raw: string): IgnoreRule | undefined => {
-  let line = raw.trim();
-  if (line.length === 0 || line.startsWith("#")) {
-    return undefined;
-  }
-  let negated = false;
-  if (line.startsWith("!")) {
-    negated = true;
-    line = line.slice(1).trim();
-    if (line.length === 0) return undefined;
-  }
-  let dirOnly = false;
-  if (line.endsWith("/")) {
-    dirOnly = true;
-    line = line.slice(0, -1);
-  }
-  line = line.replaceAll("\\", "/");
-  // A slash anywhere (after stripping the trailing one) anchors the
-  // pattern to the ignore root; otherwise it matches at any depth.
-  const anchored = line.startsWith("/") || line.includes("/");
-  if (line.startsWith("/")) {
-    line = line.slice(1);
-  }
-  if (line.length === 0) return undefined;
-  const body = globToRegexSource(line);
-  const source = anchored ? `^${body}$` : `(?:^|/)${body}$`;
-  try {
-    return { regex: new RegExp(source), dirOnly, negated };
-  } catch {
-    return undefined;
-  }
-};
-
-const compileIgnoreRules = (rules: ReadonlyArray<string>): Array<IgnoreRule> =>
-  rules.map(compileIgnoreRule).filter((rule): rule is IgnoreRule => rule !== undefined);
-
-/**
- * Gitignore matching: the LAST matching rule wins; `dirOnly` rules only
- * match directories. Paths are `/`-separated and relative (no leading
- * slash).
- */
-const isIgnored = (
-  rules: ReadonlyArray<IgnoreRule>,
-  path: string,
-  isDirectory: boolean,
-): boolean => {
-  let ignored = false;
-  for (const rule of rules) {
-    if (rule.dirOnly && !isDirectory) continue;
-    if (rule.regex.test(path)) {
-      ignored = !rule.negated;
-    }
-  }
-  return ignored;
-};
-
-/** Compile positive glob patterns (memo include/exclude), anchored to the root. */
-const compileGlobs = (globs: ReadonlyArray<string>): Array<RegExp> =>
-  globs.flatMap((glob) => {
-    try {
-      return [new RegExp(`^${globToRegexSource(glob.replace(/^\.\//, ""))}$`)];
-    } catch {
-      return [];
-    }
-  });
-
-const matchesAny = (regexes: ReadonlyArray<RegExp>, path: string): boolean =>
-  regexes.some((regex) => regex.test(path));
+const matchesAny = (globs: ReadonlyArray<Glob>, path: string): boolean =>
+  globs.some((glob) => glob.test(path));
 
 // ─────────────────────────────────────────────────────────────────────
 // Directory walking + input hashing (mirror of alchemy's hashDirectory
@@ -472,9 +382,9 @@ const findUp = (
 const listFiles = (
   cwd: string,
   options: {
-    readonly include: ReadonlyArray<RegExp> | undefined;
-    readonly ignoreRules: ReadonlyArray<IgnoreRule>;
-    readonly exclude: ReadonlyArray<RegExp>;
+    readonly include: ReadonlyArray<Glob> | undefined;
+    readonly ignoreRules: IgnoreInstance;
+    readonly exclude: ReadonlyArray<Glob>;
   },
 ): Effect.Effect<Array<string>, PlatformError, SourceServices> =>
   Effect.gen(function* () {
@@ -531,7 +441,7 @@ const hashDirectory = (
     // Gitignore-based exclusion applies whenever no explicit exclude
     // globs are given (matching alchemy's resolveMemoOptions).
     const ignoreRules = memo?.exclude
-      ? []
+      ? compileIgnoreRules([])
       : compileIgnoreRules([".git/", ...(yield* readGitIgnoreRules(cwd))]);
     const useLockfile = memo?.lockfile ?? !(memo?.include || memo?.exclude);
     const files = yield* listFiles(cwd, { include, ignoreRules, exclude });

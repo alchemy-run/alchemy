@@ -3,6 +3,8 @@
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 //
+import { compileGlob, type Glob } from "./glob.ts";
+
 // TypeScript port of `ignore` (https://github.com/kaelzhang/node-ignore) v7.0.5.
 // Copyright (c) 2013 Kael Zhang <i@kael.me>, contributors. MIT License.
 
@@ -31,6 +33,10 @@ const REGEX_SPLITALL_CRLF = /\r?\n/g;
 const REGEX_TEST_INVALID_PATH = /^\.{0,2}\/|^\.{1,2}$/;
 
 const REGEX_TEST_TRAILING_SLASH = /\/$/;
+const MODE_IGNORE = "regex";
+const MODE_CHECK_IGNORE = "checkRegex";
+
+type MatcherMode = typeof MODE_IGNORE | typeof MODE_CHECK_IGNORE;
 
 const SLASH = "/";
 
@@ -47,312 +53,7 @@ const define = <T>(object: object, key: PropertyKey, value: T): T => {
   return value;
 };
 
-const REGEX_REGEXP_RANGE = /([0-z])-([0-z])/g;
-
 const RETURN_FALSE = () => false;
-
-// Sanitize the range of a regular expression
-// The cases are complicated, see test cases for details
-const sanitizeRange = (range: string): string =>
-  range.replace(REGEX_REGEXP_RANGE, (match, from, to) =>
-    from.charCodeAt(0) <= to.charCodeAt(0)
-      ? match
-      : // Invalid range (out of order) which is ok for gitignore rules but
-        //   fatal for JavaScript regular expression, so eliminate it.
-        EMPTY,
-  );
-
-// > An optional `!` or `^` at the start of a class negates it, so that it
-// >   matches any character not in the set. (gitignore(5), fnmatch(3))
-// The leading `^` has already been escaped to `\^` by the metacharacter
-//   escaper, so we strip the literal `!` or escaped `^` and emit a single
-//   regex `^` which is the JavaScript negation token.
-const negateRange = (range: string): string =>
-  range.startsWith("!") || range.startsWith("\\^")
-    ? `^${range.slice(range[0] === "!" ? 1 : 2)}`
-    : range;
-
-// See fixtures #59
-const cleanRangeBackSlash = (slashes: string): string => {
-  const { length } = slashes;
-  return slashes.slice(0, length - (length % 2));
-};
-
-// > If the pattern ends with a slash,
-// > it is removed for the purpose of the following description,
-// > but it would only find a match with a directory.
-// > In other words, foo/ will match a directory foo and paths underneath it,
-// > but will not match a regular file or a symbolic link foo
-// >  (this is consistent with the way how pathspec works in general in Git).
-// '`foo/`' will not match regular file '`foo`' or symbolic link '`foo`'
-// -> ignore-rules will not deal with it, because it costs extra `fs.stat` call
-//      you could use option `mark: true` with `glob`
-
-// '`foo/`' should not continue with the '`..`'
-type Replacer = (this: string, ...args: any[]) => string;
-
-const REPLACERS: Array<readonly [RegExp, Replacer]> = [
-  [
-    // Remove BOM
-    // TODO:
-    // Other similar zero-width characters?
-    /^\uFEFF/,
-    () => EMPTY,
-  ],
-
-  // > Trailing spaces are ignored unless they are quoted with backslash ("\")
-  [
-    // (a\ ) -> (a )
-    // (a  ) -> (a)
-    // (a ) -> (a)
-    // (a \ ) -> (a  )
-    /((?:\\\\)*?)(\\?\s+)$/,
-    (_, m1, m2) => m1 + (m2.indexOf("\\") === 0 ? SPACE : EMPTY),
-  ],
-
-  // Replace (\ ) with ' '
-  // (\ ) -> ' '
-  // (\\ ) -> '\\ '
-  // (\\\ ) -> '\\ '
-  [
-    /(\\+?)\s/g,
-    (_, m1) => {
-      const { length } = m1;
-      return m1.slice(0, length - (length % 2)) + SPACE;
-    },
-  ],
-
-  // Escape metacharacters
-  // which is written down by users but means special for regular expressions.
-
-  // > There are 12 characters with special meanings:
-  // > - the backslash \,
-  // > - the caret ^,
-  // > - the dollar sign $,
-  // > - the period or dot .,
-  // > - the vertical bar or pipe symbol |,
-  // > - the question mark ?,
-  // > - the asterisk or star *,
-  // > - the plus sign +,
-  // > - the opening parenthesis (,
-  // > - the closing parenthesis ),
-  // > - and the opening square bracket [,
-  // > - the opening curly brace {,
-  // > These special characters are often called "metacharacters".
-  [/[\\$.|*+(){^]/g, (match) => `\\${match}`],
-
-  [
-    // > a question mark (?) matches a single character
-    /(?!\\)\?/g,
-    () => "[^/]",
-  ],
-
-  // leading slash
-  [
-    // > A leading slash matches the beginning of the pathname.
-    // > For example, "/*.c" matches "cat-file.c" but not "mozilla-sha1/sha1.c".
-    // A leading slash matches the beginning of the pathname
-    /^\//,
-    () => "^",
-  ],
-
-  // replace special metacharacter slash after the leading slash
-  [/\//g, () => "\\/"],
-
-  [
-    // > A leading "**" followed by a slash means match in all directories.
-    // > For example, "**/foo" matches file or directory "foo" anywhere,
-    // > the same as pattern "foo".
-    // > "**/foo/bar" matches file or directory "bar" anywhere that is directly
-    // >   under directory "foo".
-    // Notice that the '*'s have been replaced as '\\*'
-    /^\^*(?:\\\*\\\*\\\/)+/,
-
-    // '**/foo' <-> 'foo'
-    () => "^(?:.*\\/)?",
-  ],
-
-  // starting
-  [
-    // there will be no leading '/'
-    //   (which has been replaced by section "leading slash")
-    // If starts with '**', adding a '^' to the regular expression also works
-    /^(?=[^^])/,
-    function startingReplacer(this: string) {
-      // If has a slash `/` at the beginning or middle
-      return !/\/(?!$)/.test(this)
-        ? // > Prior to 2.22.1
-          // > If the pattern does not contain a slash /,
-          // >   Git treats it as a shell glob pattern
-          // Actually, if there is only a trailing slash,
-          //   git also treats it as a shell glob pattern
-
-          // After 2.22.1 (compatible but clearer)
-          // > If there is a separator at the beginning or middle (or both)
-          // > of the pattern, then the pattern is relative to the directory
-          // > level of the particular .gitignore file itself.
-          // > Otherwise the pattern may also match at any level below
-          // > the .gitignore level.
-          "(?:^|\\/)"
-        : // > Otherwise, Git treats the pattern as a shell glob suitable for
-          // >   consumption by fnmatch(3)
-          "^";
-    },
-  ],
-
-  // two globstars
-  [
-    // Use lookahead assertions so that we could match more than one `'/**'`
-    /\\\/\\\*\\\*(?=\\\/|$)/g,
-
-    // Zero, one or several directories
-    // should not use '*', or it will be replaced by the next replacer
-
-    // Check if it is not the last `'/**'`
-    (_, index, str) =>
-      index + 6 < str.length
-        ? // case: /**/
-          // > A slash followed by two consecutive asterisks then a slash matches
-          // >   zero or more directories.
-          // > For example, "a/**/b" matches "a/b", "a/x/b", "a/x/y/b" and so on.
-          // '/**/'
-          "(?:\\/[^\\/]+)*"
-        : // case: /**
-          // > A trailing `"/**"` matches everything inside.
-
-          // #21: everything inside but it should not include the current folder
-          "\\/.+",
-  ],
-
-  // normal intermediate wildcards
-  [
-    // Never replace escaped '*'
-    // ignore rule '\*' will match the path '*'
-
-    // 'abc.*/' -> go
-    // 'abc.*'  -> skip this rule,
-    //    coz trailing single wildcard will be handed by [trailing wildcard]
-    /(^|[^\\]+)(\\\*)+(?=.+)/g,
-
-    // '*.js' matches '.js'
-    // '*.js' doesn't match 'abc'
-    (_, p1, p2) => {
-      // 1.
-      // > An asterisk "*" matches anything except a slash.
-      // 2.
-      // > Other consecutive asterisks are considered regular asterisks
-      // > and will match according to the previous rules.
-      const unescaped = p2.replace(/\\\*/g, "[^\\/]*");
-      return p1 + unescaped;
-    },
-  ],
-
-  [
-    // unescape, revert step 3 except for back slash
-    // For example, if a user escape a '\\*',
-    // after step 3, the result will be '\\\\\\*'
-    /\\\\\\(?=[$.|*+(){^])/g,
-    () => ESCAPE,
-  ],
-
-  [
-    // '\\\\' -> '\\'
-    /\\\\/g,
-    () => ESCAPE,
-  ],
-
-  [
-    // > The range notation, e.g. [a-zA-Z],
-    // > can be used to match one of the characters in a range.
-
-    // `\` is escaped by step 3
-    /(\\)?\[([^\]/]*?)(\\*)($|\])/g,
-    (match, leadEscape, range, endEscape, close) =>
-      leadEscape === ESCAPE
-        ? // '\\[bar]' -> '\\\\[bar\\]'
-          `\\[${range}${cleanRangeBackSlash(endEscape)}${close}`
-        : close === "]"
-          ? endEscape.length % 2 === 0
-            ? // A normal case, and it is a range notation
-              // '[bar]'
-              // '[bar\\\\]'
-              `[${negateRange(sanitizeRange(range))}${endEscape}]`
-            : // Invalid range notaton
-              // '[bar\\]' -> '[bar\\\\]'
-              "[]"
-          : "[]",
-  ],
-
-  // ending
-  [
-    // 'js' will not match 'js.'
-    // 'ab' will not match 'abc'
-    /(?:[^*])$/,
-
-    // WTF!
-    // https://git-scm.com/docs/gitignore
-    // changes in [2.22.1](https://git-scm.com/docs/gitignore/2.22.1)
-    // which re-fixes #24, #38
-
-    // > If there is a separator at the end of the pattern then the pattern
-    // > will only match directories, otherwise the pattern can match both
-    // > files and directories.
-
-    // 'js*' will not match 'a.js'
-    // 'js/' will not match 'a.js'
-    // 'js' will match 'a.js' and 'a.js/'
-    (match) =>
-      /\/$/.test(match)
-        ? // foo/ will not match 'foo'
-          `${match}$`
-        : // foo matches 'foo' and 'foo/'
-          `${match}(?=$|\\/$)`,
-  ],
-];
-
-const REGEX_REPLACE_TRAILING_WILDCARD = /(^|\\\/)?\\\*$/;
-const MODE_IGNORE = "regex";
-const MODE_CHECK_IGNORE = "checkRegex";
-
-type MatcherMode = typeof MODE_IGNORE | typeof MODE_CHECK_IGNORE;
-
-const TRAILING_WILD_CARD_REPLACERS: Record<MatcherMode, Replacer> = {
-  [MODE_IGNORE](_, p1: string | undefined) {
-    const prefix = p1
-      ? // '\^':
-        // '/*' does not match EMPTY
-        // '/*' does not match everything
-
-        // '\\\/':
-        // 'abc/*' does not match 'abc/'
-        `${p1}[^/]+`
-      : // 'a*' matches 'a'
-        // 'a*' matches 'aa'
-        "[^/]*";
-
-    return `${prefix}(?=$|\\/$)`;
-  },
-
-  [MODE_CHECK_IGNORE](_, p1: string | undefined) {
-    // When doing `git check-ignore`
-    const prefix = p1
-      ? // '\\\/':
-        // 'abc/*' DOES match 'abc/' !
-        `${p1}[^/]*`
-      : // 'a*' matches 'a'
-        // 'a*' matches 'aa'
-        "[^/]*";
-
-    return `${prefix}(?=$|\\/$)`;
-  },
-};
-
-// @param {pattern}
-const makeRegexPrefix = (pattern: string): string =>
-  REPLACERS.reduce(
-    (prev, [matcher, replacer]) => prev.replace(matcher, replacer.bind(pattern)),
-    pattern,
-  );
 
 const isString = (subject: unknown): subject is string => typeof subject === "string";
 
@@ -369,15 +70,22 @@ const checkPattern = (pattern: string): boolean =>
 const splitPattern = (pattern: string): string[] =>
   pattern.split(REGEX_SPLITALL_CRLF).filter(Boolean);
 
+// Alchemy modification: rules match with the linear-time engine in
+// `glob.ts` instead of upstream's compiled regular expressions, which
+// backtrack exponentially on patterns like `a**a**a**a**a**a**a**a`. The
+// engine also implements POSIX bracket classes (`[[:digit:]]`), which the
+// regex compiler silently failed to match.
+
+// > Trailing spaces are ignored unless they are quoted with backslash ("\")
+const REGEX_TRAILING_SPACES = /((?:\\\\)*?)(\\?\s+)$/;
+
 class IgnoreRule {
   readonly pattern: string;
   readonly mark: string | undefined;
   readonly negative: boolean;
   readonly body!: string;
   readonly ignoreCase!: boolean;
-  readonly regexPrefix!: string;
-  private _regex?: RegExp;
-  private _checkRegex?: RegExp;
+  private _matcher?: RuleMatcher | null;
 
   constructor(
     pattern: string,
@@ -385,7 +93,6 @@ class IgnoreRule {
     body: string,
     ignoreCase: boolean,
     negative: boolean,
-    prefix: string,
   ) {
     this.pattern = pattern;
     this.mark = mark;
@@ -393,42 +100,70 @@ class IgnoreRule {
 
     define(this, "body", body);
     define(this, "ignoreCase", ignoreCase);
-    define(this, "regexPrefix", prefix);
   }
 
-  get regex() {
-    const key = `_${MODE_IGNORE}` as const;
-
-    if (this[key]) {
-      return this[key];
+  // `path` is relative; a trailing `/` marks a directory.
+  test(path: string, mode: MatcherMode): boolean {
+    if (this._matcher === undefined) {
+      this._matcher = compileRule(this.body, this.ignoreCase) ?? null;
     }
-
-    return this._make(MODE_IGNORE, key);
-  }
-
-  get checkRegex() {
-    const key = `_${MODE_CHECK_IGNORE}` as const;
-
-    if (this[key]) {
-      return this[key];
-    }
-
-    return this._make(MODE_CHECK_IGNORE, key);
-  }
-
-  _make(mode: MatcherMode, key: "_regex" | "_checkRegex"): RegExp {
-    const str = this.regexPrefix.replace(
-      REGEX_REPLACE_TRAILING_WILDCARD,
-
-      // It does not need to bind pattern
-      TRAILING_WILD_CARD_REPLACERS[mode],
+    const matcher = this._matcher;
+    if (matcher === null) return false;
+    const isDirectory = REGEX_TEST_TRAILING_SLASH.test(path);
+    if (matcher.directoryOnly && !isDirectory) return false;
+    const stripped = isDirectory ? path.slice(0, -1) : path;
+    // > If there is a separator at the beginning or middle (or both) of the
+    // > pattern, then the pattern is relative to the directory level of the
+    // > particular .gitignore file itself. Otherwise the pattern may also
+    // > match at any level below the .gitignore level.
+    const target = matcher.anchored ? stripped : stripped.slice(stripped.lastIndexOf(SLASH) + 1);
+    if (matcher.glob.test(target)) return true;
+    // When doing `git check-ignore`, 'abc/*' DOES match 'abc/'.
+    return (
+      mode === MODE_CHECK_IGNORE &&
+      isDirectory &&
+      matcher.parent !== undefined &&
+      matcher.parent.test(target)
     );
-
-    const regex = this.ignoreCase ? new RegExp(str, "i") : new RegExp(str);
-
-    return define(this, key, regex);
   }
 }
+
+interface RuleMatcher {
+  readonly glob: Glob;
+  // > If there is a separator at the end of the pattern then the pattern
+  // > will only match directories.
+  readonly directoryOnly: boolean;
+  readonly anchored: boolean;
+  // For a pattern ending in `/*`, the pattern without it.
+  readonly parent: Glob | undefined;
+}
+
+const compileRule = (body: string, ignoreCase: boolean): RuleMatcher | undefined => {
+  let pattern = body
+    // Remove BOM
+    .replace(/^\uFEFF/, EMPTY)
+    // (a\ ) -> (a )
+    // (a  ) -> (a)
+    // (a \ ) -> (a  )
+    .replace(
+      REGEX_TRAILING_SPACES,
+      (_, m1: string, m2: string) => m1 + (m2.indexOf(ESCAPE) === 0 ? `${ESCAPE}${SPACE}` : EMPTY),
+    );
+  const directoryOnly = REGEX_TEST_TRAILING_SLASH.test(pattern);
+  if (directoryOnly) pattern = pattern.slice(0, -1);
+  // > A leading slash matches the beginning of the pathname.
+  const anchored = pattern.includes(SLASH);
+  if (pattern.startsWith(SLASH)) pattern = pattern.slice(1);
+  if (!pattern) return UNDEFINED;
+  const options = { caseInsensitive: ignoreCase };
+  const glob = compileGlob(pattern, options);
+  if (glob === UNDEFINED) return UNDEFINED;
+  const parent =
+    pattern.endsWith("/*") && !pattern.endsWith("\\/*")
+      ? compileGlob(pattern.slice(0, -2), options)
+      : UNDEFINED;
+  return { glob, directoryOnly, anchored, parent };
+};
 
 const createRule = ({ pattern, mark }: PatternParams, ignoreCase: boolean): IgnoreRule => {
   let negative = false;
@@ -448,9 +183,7 @@ const createRule = ({ pattern, mark }: PatternParams, ignoreCase: boolean): Igno
     // >   begin with a hash.
     .replace(REGEX_REPLACE_LEADING_EXCAPED_HASH, "#");
 
-  const regexPrefix = makeRegexPrefix(body);
-
-  return new IgnoreRule(pattern, mark, body, ignoreCase, negative, regexPrefix);
+  return new IgnoreRule(pattern, mark, body, ignoreCase, negative);
 };
 
 class RuleManager {
@@ -533,7 +266,7 @@ class RuleManager {
         return;
       }
 
-      const matched = rule[mode].test(path);
+      const matched = rule.test(path, mode);
 
       if (!matched) {
         return;

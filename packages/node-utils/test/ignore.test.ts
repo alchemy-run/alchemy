@@ -55,3 +55,19 @@ describe("ignore v7.0.5 upstream cases", () => {
     }
   });
 });
+
+describe("matching cost", () => {
+  it("stays linear on patterns that backtrack in a regex engine", () => {
+    // These took 30s+ when rules compiled to regular expressions.
+    const matcher = ignore().add([
+      "a**a**a**a**a**a**a**a**a**a**a**a",
+      "a*a*a*a*a*a*a*a*a*a*a*a/",
+    ]);
+    const start = performance.now();
+    for (const length of [61, 200, 1000]) {
+      expect(matcher.ignores(`${"a".repeat(length)}b`)).toBe(false);
+      expect(matcher.ignores(`${"a".repeat(length)}b/`)).toBe(false);
+    }
+    expect(performance.now() - start).toBeLessThan(1_000);
+  });
+});

@@ -31,6 +31,31 @@ const caseDefinitions = [
   //   }
   // ],
   /////////////////////////////////////////////////////////////////////
+  // Alchemy additions, checked against `git check-ignore` too.
+  [
+    "POSIX bracket classes",
+    ["secret[[:digit:]].txt", "[[:upper:]]_*.log", "x[![:alpha:]]y"],
+    {
+      "secret1.txt": 1,
+      "dir/secret9.txt": 1,
+      "secretA.txt": 0,
+      "secret[.txt": 0,
+      "A_trace.log": 1,
+      x1y: 1,
+      xay: 0,
+    },
+  ],
+  [
+    "repeated globstars inside a segment act as single stars",
+    ["a**a**a**a**a**a**a**a", "b**c/d"],
+    {
+      ["a".repeat(61)]: 1,
+      ["a".repeat(60) + "b"]: 0,
+      "aaaaaaab/aaaaaaaa": 1,
+      "bxc/d": 1,
+      "bx/yc/d": 0,
+    },
+  ],
   [
     "#148",
     ["/.a/"],

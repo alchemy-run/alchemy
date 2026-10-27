@@ -558,3 +558,16 @@ layer(NodeServices.layer)("Ignore rules match the real tools", (it) => {
     );
   }
 });
+
+describe("Ignore rules matching cost", { tags: ["unit", "local"] }, () => {
+  it("stays linear on patterns that backtrack in a regex engine", () => {
+    const pattern = "a*a*a*a*a*a*a*a*a*a*a*a";
+    const start = performance.now();
+    for (const dialect of ["gitignore", "dockerignore"] as const) {
+      const rules = parseIgnoreRules(`${pattern}\n${pattern.replaceAll("*", "**")}\n`, dialect);
+      expect(rules.ignores(`${"a".repeat(500)}b`)).toBe(false);
+      expect(rules.ignores("a".repeat(500))).toBe(true);
+    }
+    expect(performance.now() - start).toBeLessThan(1_000);
+  });
+});
