@@ -1295,7 +1295,10 @@ test.provider(
       );
       expect(fn.functionName).toBe(`${queueName.slice(-56)}-named`);
       const live = yield* Lambda.getFunction({ FunctionName: fn.functionName });
-      expect(live.Configuration?.Environment?.Variables?.SELF_NAME).toBe(fn.functionName);
+      const selfName = live.Configuration?.Environment?.Variables?.SELF_NAME;
+      expect(Redacted.isRedacted(selfName) ? Redacted.value(selfName) : selfName).toBe(
+        fn.functionName,
+      );
       yield* stack.destroy();
       yield* assertFunctionDeleted(fn.functionName);
       yield* assertRoleDeleted(fn.roleName);
