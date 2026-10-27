@@ -962,7 +962,7 @@ export const protocolWebSocket = (
  * **Example:** A helper for any Api
  * ```typescript
  * const tagsOf = <A extends Domain.Api.Any>(api: A): ReadonlyArray<Domain.Api.CommandsOf<A>["tag"]> =>
- *   Domain.Api.commandsOf(api).map((command) => command.tag);
+ *   Domain.apiCommands(api).map((command) => command.tag);
  *
  * tagsOf(CustomerApi); // ["DepositMoney", "WithdrawMoney"]
  * ```
@@ -998,13 +998,13 @@ export type RejectionSchema<A extends Any> = [RejectionsOf<A>] extends [never]
  *
  * **Example:** One UI action per command
  * ```typescript
- * for (const command of Domain.Api.commandsOf(CustomerApi)) {
+ * for (const command of Domain.apiCommands(CustomerApi)) {
  *   command.tag;     // "DepositMoney" | "WithdrawMoney"
  *   command.rejects; // the rejection classes it declares
  * }
  * ```
  */
-export const commandsOf = <A extends Any>(api: A): ReadonlyArray<CommandsOf<A>> =>
+export const apiCommands = <A extends Any>(api: A): ReadonlyArray<CommandsOf<A>> =>
   api.entries.filter((entry): entry is CommandsOf<A> => entry.kind === "Command");
 
 /**
@@ -1015,13 +1015,13 @@ export const commandsOf = <A extends Any>(api: A): ReadonlyArray<CommandsOf<A>> 
  *
  * **Example:** A rejection in a UI message
  * ```typescript
- * const Rejection = Domain.Api.rejectionSchema(CustomerApi);
+ * const Rejection = Domain.apiRejections(CustomerApi);
  * // Schema<InsufficientFunds | NotOwner | ...>
  * const Refused = Schema.TaggedStruct("Refused", { commandId: Schema.String, rejection: Rejection });
  * ```
  */
-export const rejectionSchema = <A extends Any>(api: A): RejectionSchema<A> => {
-  const rejections = [...new Set(commandsOf(api).flatMap((command) => command.rejects))];
+export const apiRejections = <A extends Any>(api: A): RejectionSchema<A> => {
+  const rejections = [...new Set(apiCommands(api).flatMap((command) => command.rejects))];
   return (rejections.length === 0
     ? Schema.Never
     : Schema.Union(rejections)) as unknown as RejectionSchema<A>;
