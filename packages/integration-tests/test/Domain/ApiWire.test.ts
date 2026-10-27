@@ -143,7 +143,7 @@ describe("Domain Api over the wire", () => {
       );
       expect(Exit.isFailure(exit)).toBe(true);
       const cause = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "";
-      expect(cause).toContain("Expected array");
+      expect(cause).toContain("Schema validation failed");
       expect(cause).not.toContain("is not a function");
     }).pipe(Effect.scoped, Effect.provide(Wire)),
   );
