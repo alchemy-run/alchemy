@@ -49,7 +49,7 @@ export interface Definition<
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 > extends Read.Contract<
   Aggregate.Ref<Key>,
-  Entry<Aggregate.Inst<Entries[number]>, Aggregate.IdOf<Key>> | null,
+  Entry<Aggregate.InstanceOf<Entries[number]>, Aggregate.IdOf<Key>> | null,
   Ms,
   Rejects
 > {
@@ -186,9 +186,9 @@ export const make = <
   Name,
   Definition<Key, Entries, Ms, Rejects>,
   Key,
-  Aggregate.Inst<Entries[number]>
+  Aggregate.InstanceOf<Entries[number]>
 > => {
-  const Tag = Context.Service<StreamKey<Name>, Host<Key, Aggregate.Inst<Entries[number]>>>()(
+  const Tag = Context.Service<StreamKey<Name>, Host<Key, Aggregate.InstanceOf<Entries[number]>>>()(
     `alchemy/Domain/Stream/${name}`,
   );
   return class extends Tag {
@@ -199,7 +199,7 @@ export const make = <
     Name,
     Definition<Key, Entries, Ms, Rejects>,
     Key,
-    Aggregate.Inst<Entries[number]>
+    Aggregate.InstanceOf<Entries[number]>
   >;
 };
 

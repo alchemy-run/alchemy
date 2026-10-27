@@ -82,8 +82,8 @@ export declare namespace Aggregate {
   export type Envelope<Id = string> = AggregateModule.Envelope<Id>;
   export type SendOptions = AggregateModule.SendOptions;
   export type ScheduleOptions = AggregateModule.ScheduleOptions;
-  /** The instance type of a class. */
-  export type Inst<C> = AggregateModule.Inst<C>;
+  /** The instance type of a class: `InstanceOf<typeof NotOwner>` is `NotOwner`. */
+  export type InstanceOf<C> = AggregateModule.InstanceOf<C>;
 }
 /** A consistency boundary that decides commands. See {@link AggregateModule.make}. */
 export const Aggregate = AggregateModule.make;

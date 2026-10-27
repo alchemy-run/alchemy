@@ -57,12 +57,12 @@ type Aggregates<E extends Entry> = Exclude<E, Command.Any | View.Any | DomainStr
 // ---------------------------------------------------------------- client types
 
 type ContractOf<D> = D extends Read.AnyContract ? D : never;
-type RejectsOf<D> = NonNullable<ContractOf<D>["rejects"]>[number];
+type RejectionOf<D> = Aggregate.InstanceOf<NonNullable<ContractOf<D>["rejects"]>[number]>;
 type MiddlewareOf<D> = NonNullable<ContractOf<D>["middleware"]>;
 
 /** Everything a read can fail with: the declared rejections, the middleware's errors, transport. */
 export type ReadError<D> =
-  | Aggregate.Inst<RejectsOf<D>>
+  | RejectionOf<D>
   | Middleware.Errors<MiddlewareOf<D>>
   | RpcClientError.RpcClientError;
 

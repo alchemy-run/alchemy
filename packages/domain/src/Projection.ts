@@ -78,7 +78,7 @@ export interface Any extends Context.Key<unknown, unknown> {
 export type InputOf<P extends Any> = Input<
   P["definition"]["key"],
   Sources<P["definition"]["from"]>,
-  Aggregate.Inst<P["definition"]["on"][number]>
+  Aggregate.InstanceOf<P["definition"]["on"][number]>
 >;
 
 /** The requirement identifier of a projection class. */
@@ -212,7 +212,7 @@ export const make = <
   name: Name,
   definition: Definition<From, Key, On, Writes>,
 ): ProjectionClass<Name, From, Key, On, Writes> => {
-  type I = Input<Key, Sources<From>, Aggregate.Inst<On[number]>>;
+  type I = Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>;
   const Tag = Context.Service<ProjectionKey<Name>, Implementation<I>>()(
     `alchemy/Domain/Projection/${name}`,
   );
@@ -254,7 +254,7 @@ export interface ProjectionClass<
 > extends Context.ServiceClass<
   ProjectionKey<Name>,
   string,
-  Implementation<Input<Key, Sources<From>, Aggregate.Inst<On[number]>>>
+  Implementation<Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>>
 > {
   readonly kind: "Projection";
   readonly projectionName: Name;
@@ -274,7 +274,11 @@ export interface ProjectionClass<
    * `options` tune how it runs, such as batching.
    */
   toLayer<E, R>(
-    build: Effect.Effect<Handler<Input<Key, Sources<From>, Aggregate.Inst<On[number]>>>, E, R>,
+    build: Effect.Effect<
+      Handler<Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>>,
+      E,
+      R
+    >,
     options?: Options,
   ): Layer.Layer<ProjectionKey<Name>, E, R>;
 }

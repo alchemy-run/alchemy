@@ -69,7 +69,7 @@ type KeyOfDefinition<D> = D extends { readonly key: infer K extends Aggregate.An
 /** The trigger type of a policy class. */
 export type TriggerOf<P extends Any> = Trigger<
   P["definition"]["from"],
-  Aggregate.Inst<P["definition"]["on"][number]>,
+  Aggregate.InstanceOf<P["definition"]["on"][number]>,
   KeyOfDefinition<P["definition"]>
 >;
 
@@ -226,7 +226,7 @@ export interface PolicyClass<
 > extends Context.ServiceClass<
   PolicyKey<Name>,
   string,
-  Handler<Trigger<F, Aggregate.Inst<On[number]>, Key>>
+  Handler<Trigger<F, Aggregate.InstanceOf<On[number]>, Key>>
 > {
   readonly kind: "Policy";
   readonly policyName: Name;

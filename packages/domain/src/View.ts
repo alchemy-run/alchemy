@@ -128,7 +128,7 @@ export type StateType<S> = S extends Schema.Top ? S["Type"] : null;
 export type Output<
   From extends ReadonlyArray<unknown>,
   Events extends ReadonlyArray<Event.Any>,
-> = Events extends readonly [] ? Inputs<From>["event"] : Aggregate.Inst<Events[number]>;
+> = Events extends readonly [] ? Inputs<From>["event"] : Aggregate.InstanceOf<Events[number]>;
 
 /**
  * Where an input is delivered and what handlers receive alongside it.
@@ -230,7 +230,7 @@ export interface Definition<
    */
   readonly emit?: {
     readonly [K in HandlerKey<From>]?: Routed<
-      EmitFn<StateType<S>, Key, InputFor<From, K>, Aggregate.Inst<Events[number]>>
+      EmitFn<StateType<S>, Key, InputFor<From, K>, Aggregate.InstanceOf<Events[number]>>
     >;
   };
   /** Values derived from state when read. */
