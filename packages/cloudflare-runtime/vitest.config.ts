@@ -131,6 +131,7 @@ export default defineConfig({
         test: {
           name: "workflows-shared",
           include: ["test/**/*.test.ts"],
+          globalSetup: ["./test/global-setup.ts"],
           testTimeout: 50_000,
         },
       },

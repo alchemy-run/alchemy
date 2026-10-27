@@ -806,7 +806,7 @@
     "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:frontend-peer"
   },
   "peerDependenciesMeta": {
     "@alchemy.run/domain": {
