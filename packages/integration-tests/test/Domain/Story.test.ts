@@ -4,6 +4,7 @@ import { InMemory } from "@alchemy.run/domain/InMemory";
 import { type Step, Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Headers from "effect/http/Headers";
@@ -904,6 +905,38 @@ describe("Domain Story", () => {
       Story.when(c1, new Increment({ by: 1 })),
       Story.then(c1, new Incremented({ by: 1, total: 1 })),
       Story.clock("2025-06-01T00:00:00Z"),
+    ),
+  );
+
+  it.effect("advance moves the clock forward by a duration", () =>
+    story(
+      Story.when(c1, new Cap()),
+      Story.then(c1, new Capped()),
+      Story.advance("59 minutes"),
+      Story.then(c1),
+      Story.advance(Duration.minutes(1)),
+      Story.then(c1, new Reminded()),
+      Story.clock("2026-01-01T01:00:00Z"),
+    ),
+  );
+
+  it.effect("advance by a negative duration fails", () =>
+    story(Story.advance("-1 hour")).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.reason).toBe("Advance: the clock only moves forward, not by -1h");
+        expect(failure.message).toContain("  ✗ 1 Advance    -1h");
+      }),
+    ),
+  );
+
+  it.effect("advance by something that is not a duration fails", () =>
+    story(Story.advance("Infinity")).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.reason).toBe("Advance: Infinity is not a duration");
+        expect(failure.message).toContain("  ✗ 1 Advance    Infinity");
+      }),
     ),
   );
 
