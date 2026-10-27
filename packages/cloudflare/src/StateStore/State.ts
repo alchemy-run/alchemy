@@ -777,10 +777,8 @@ const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
  * fails, such as one the credentials aren't permitted to make, fails this
  * check: a missing store is bootstrapped, and bootstrapping over a live
  * store replaces its auth token and encryption key.
- *
- * @internal exported for unit testing.
  */
-export const isStateStoreServing = (accountId: string, scriptName: string) =>
+const isStateStoreServing = (accountId: string, scriptName: string) =>
   Effect.gen(function* () {
     const subdomain = yield* workers.getSubdomain({ accountId }).pipe(
       Effect.map(({ subdomain }) => subdomain),
