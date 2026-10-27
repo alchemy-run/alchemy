@@ -526,12 +526,18 @@ export const RPC_STREAM_HEADER = "x-alchemy-rpc-stream";
  * not a dispatch.
  */
 export const rpcMethodOf = (request: { readonly url: string }): string | undefined => {
-  const { pathname } = new URL(request.url, "http://alchemy-rpc");
-  const prefixAt = pathname.indexOf(RPC_PATH_PREFIX);
-  if (prefixAt === -1) {
+  // String scanning, not `new URL`: this runs on every RPC request.
+  const { url } = request;
+  let end = url.length;
+  for (const delimiter of ["?", "#"]) {
+    const at = url.indexOf(delimiter);
+    if (at !== -1 && at < end) end = at;
+  }
+  const prefixAt = url.indexOf(RPC_PATH_PREFIX);
+  if (prefixAt === -1 || prefixAt + RPC_PATH_PREFIX.length > end) {
     return undefined;
   }
-  return decodeURIComponent(pathname.slice(prefixAt + RPC_PATH_PREFIX.length));
+  return decodeURIComponent(url.slice(prefixAt + RPC_PATH_PREFIX.length, end));
 };
 
 /**
