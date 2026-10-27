@@ -171,7 +171,10 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    */
   labels?: ContainerApplication.Label[];
   /**
-   * Network configuration for the deployment.
+   * Network configuration for the deployment: IPv4/IPv6 address assignment
+   * (`"none"` or `"predefined"`) and `mode` (`"private"` or `"public"`).
+   * `assignIpv4: "predefined"` implies `mode: "public"`, so private-only
+   * accounts set both families to `"none"`.
    */
   network?: ContainerApplication.Network;
   /**
@@ -742,7 +745,7 @@ export type ContainerShape = Main<ContainerServices>;
  * export class Web extends Cloudflare.Container<Web>()("Web", {
  *   main: import.meta.url,
  *   ports: [{ name: "http", port: 8080 }],
- *   network: { assignIpv4: "predefined", mode: "public" },
+ *   network: { assignIpv4: "none", assignIpv6: "none", mode: "private" },
  *   dns: { servers: ["1.1.1.1"], searches: ["internal"] },
  *   checks: [{ name: "ready", type: "http", port: "8080", tls: false }],
  * }) {}
@@ -752,6 +755,11 @@ export type ContainerShape = Main<ContainerServices>;
  * assignment and public/private reachability, `dns` overrides resolver settings,
  * and `checks` tells Cloudflare how to probe the container before routing
  * traffic to it.
+ *
+ * The example is the private shape, which every account accepts.
+ * `assignIpv4: "predefined"` requests public reachability: Cloudflare infers
+ * `mode: "public"` when `mode` is omitted, rejects it on accounts that only
+ * permit private networking, and refuses it alongside `mode: "private"`.
  *
  * ### Observability & Access
  * Turn on log shipping with `observability` and install `sshPublicKeyIds` for
