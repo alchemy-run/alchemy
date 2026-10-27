@@ -32,7 +32,7 @@ import { AccessKey } from "./IAM/AccessKey.ts";
 import type { PolicyStatement } from "./IAM/Policy.ts";
 import { Role } from "./IAM/Role.ts";
 import { User } from "./IAM/User.ts";
-import { DevCredentials } from "./Local/DevCredentials.ts";
+import { DEV_CREDENTIALS_ENV, DevCredentialsValue } from "./Local/DevCredentials.ts";
 import { CurrentRegion } from "./Region.ts";
 
 /**
@@ -50,7 +50,7 @@ import { CurrentRegion } from "./Region.ts";
  * - a host emulated by `alchemy dev` that binds a resource in the real cloud
  *   (`Alchemy.remote()`): its role exists only on the emulator, so that
  *   binding's calls sign with the developer's own credentials, which the dev
- *   sidecar relays into the emulator (see `DevCredentials`);
+ *   sidecar relays into the emulator (see `Local/DevCredentials.ts`);
  * - no host (a script or deploy-time Action): nothing is bound and calls use
  *   the deployer's credentials.
  *
@@ -116,13 +116,6 @@ const KEY_ENV = {
   roleArn: "ALCHEMY_AWS_ROLE_ARN",
   region: "ALCHEMY_AWS_REGION",
 } as const;
-
-/**
- * Env var naming the emulator parameter that holds the developer's
- * credentials (see `DevCredentials`), set on a host emulated by `alchemy dev`
- * that binds a resource in the real cloud.
- */
-const DEV_CREDENTIALS_ENV = "ALCHEMY_AWS_DEV_CREDENTIALS";
 
 /**
  * Env var marking a bound resource as living in the real cloud while its
@@ -265,7 +258,6 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
   const IamUser = yield* User;
   const IamAccessKey = yield* AccessKey;
   const IamRole = yield* Role;
-  const DevCredentialsRelay = yield* DevCredentials;
 
   return (label: TemplateStringsArray, ...args: unknown[]) =>
     Effect.fn(function* (data: HostBinding) {
@@ -274,7 +266,7 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
 
       if (runsAsRole(host)) {
         if (yield* bindsRealCloudFromEmulator(host)) {
-          return yield* bindDevCredentials(DevCredentialsRelay, data);
+          return yield* bindDevCredentials(data);
         }
         return yield* (host as unknown as BindTarget).bind(
           labelled("Allow", label),
@@ -405,22 +397,16 @@ const bindsRealCloudFromEmulator = Effect.fn(function* (host: ResourceLike) {
 
 /**
  * Bind real-cloud resources onto an emulated host: the host reads the
- * developer's credentials from the emulator parameter {@link DevCredentials}
- * keeps fresh, and each bound resource is marked so its client uses them.
+ * developer's credentials from the emulator parameter the dev sidecar
+ * keeps fresh (see `DevWatchProvider.ts`), and each bound resource is marked so its client uses them.
  * The policy statements are not attached anywhere: the developer's own
  * permissions apply in dev.
  */
-const bindDevCredentials = Effect.fn(function* (
-  relay: Effect.Success<typeof DevCredentials>,
-  data: HostBinding,
-) {
+const bindDevCredentials = Effect.fn(function* (data: HostBinding) {
   const runtime = (yield* CurrentRuntimeContext)!;
   const stack = yield* Effect.serviceOption(Stack);
   const scope = Option.isSome(stack) ? `${stack.value.name}/${stack.value.stage}` : "default";
-  const credentials = yield* relay("AWSDevCredentials", {
-    parameterName: `/alchemy/${scope}/dev-credentials`,
-  });
-  yield* runtime.set(DEV_CREDENTIALS_ENV, credentials.parameterName);
+  yield* runtime.set(DEV_CREDENTIALS_ENV, Output.literal(`/alchemy/${scope}/dev-credentials`));
   for (const target of yield* Binding.Targets) {
     yield* runtime.set(yield* realCloudMarker(target), Output.literal("1"));
   }
@@ -576,17 +562,6 @@ export const withCredentials: <Op>(
     ]),
   );
 });
-
-/** The JSON `DevCredentials` writes to its emulator parameter. */
-const DevCredentialsValue = Schema.fromJsonString(
-  Schema.Struct({
-    accessKeyId: Schema.String,
-    secretAccessKey: Schema.String,
-    sessionToken: Schema.optional(Schema.String),
-    region: Schema.String,
-    expiration: Schema.optional(Schema.Number),
-  }),
-);
 
 /** Re-read the parameter at least this often, to pick up refreshes. */
 const DEV_CREDENTIALS_TTL_MS = 60_000;

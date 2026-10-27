@@ -1,41 +1,22 @@
-import { Resource } from "alchemy/Resource";
-
-export interface DevCredentialsProps {
-  /** The emulator SSM parameter to write the credentials to. */
-  parameterName: string;
-}
-
-export interface DevCredentials extends Resource<
-  "AWS.Local.DevCredentials",
-  DevCredentialsProps,
-  {
-    /**
-     * The emulator SSM parameter holding the developer's current temporary
-     * credentials as JSON, refreshed while `alchemy dev` runs.
-     */
-    parameterName: string;
-  }
-> {}
+import * as Schema from "effect/Schema";
 
 /**
- * Relays the developer's own AWS credentials into the floci emulator during
- * `alchemy dev`, so a locally emulated Lambda or ECS task can reach a resource
- * in the real cloud (`Alchemy.remote()`).
- *
- * The dev sidecar reads the credentials from the developer's profile, writes
- * them to an SSM parameter on the emulator, and rewrites it while `alchemy
- * dev` runs. The bindings' runtime clients read the parameter over the
- * emulator endpoint the host already reaches. Nothing is created in the real
- * account. Created by `AWSBindings.Bind`; a no-op outside `alchemy dev`.
+ * Env var naming the emulator SSM parameter that holds the developer's AWS
+ * credentials during `alchemy dev`. `AWSBindings.Bind` sets it on an emulated
+ * host bound to a resource in the real cloud (`Alchemy.remote()`); the dev
+ * sidecar sees it in the host's props and keeps the parameter fresh (see
+ * `DevCredentialsRelay.ts`); the host's binding clients read the parameter
+ * and sign their real-cloud calls with it.
  */
-export const DevCredentials = Resource<DevCredentials>("AWS.Local.DevCredentials");
+export const DEV_CREDENTIALS_ENV = "ALCHEMY_AWS_DEV_CREDENTIALS";
 
-/** The JSON shape stored in {@link DevCredentials}' parameter. */
-export interface DevCredentialsValue {
-  accessKeyId: string;
-  secretAccessKey: string;
-  sessionToken: string | undefined;
-  region: string;
-  /** Epoch milliseconds. */
-  expiration: number | undefined;
-}
+/** The JSON the relay writes to the parameter. */
+export const DevCredentialsValue = Schema.fromJsonString(
+  Schema.Struct({
+    accessKeyId: Schema.String,
+    secretAccessKey: Schema.String,
+    sessionToken: Schema.optional(Schema.String),
+    region: Schema.String,
+    expiration: Schema.optional(Schema.Number),
+  }),
+);
