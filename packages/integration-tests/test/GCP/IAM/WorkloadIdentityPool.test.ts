@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import * as GCP from "@alchemy.run/gcp";
-import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -64,7 +64,6 @@ test.provider(
   "create, update, and delete a workload identity pool and provider",
   (stack) =>
     Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
       const deploy = (options: { displayName: string; condition: string; disabled?: boolean }) =>
@@ -85,7 +84,15 @@ test.provider(
               attributeCondition: options.condition,
               oidc: { issuerUri: GITHUB_ISSUER },
             });
-            return { pool, provider };
+            // Federated identities from one repository may impersonate it.
+            const deployer = yield* GCP.IAM.ServiceAccount("Deployer", {});
+            yield* GCP.IAM.Member("GithubDeployer", {
+              kind: "iam.serviceAccount",
+              name: deployer.name,
+              role: "roles/iam.workloadIdentityUser",
+              member: Output.interpolate`principalSet://iam.googleapis.com/${pool.name}/attribute.repository/alchemy-run/alchemy`,
+            });
+            return { pool, provider, deployer };
           }),
         );
 
@@ -95,8 +102,23 @@ test.provider(
       });
 
       expect(created.pool.workloadIdentityPoolId).toMatch(/^[a-z][a-z0-9-]{2,30}[a-z0-9]$/);
-      expect(created.pool.name).toEqual(
-        `projects/${project}/locations/global/workloadIdentityPools/${created.pool.workloadIdentityPoolId}`,
+      // GCP names pools by project number, which principalSet members need.
+      expect(created.pool.name).toMatch(
+        new RegExp(
+          `^projects/\\d+/locations/global/workloadIdentityPools/${created.pool.workloadIdentityPoolId}$`,
+        ),
+      );
+      expect(created.provider.name).toEqual(
+        `${created.pool.name}/providers/${created.provider.workloadIdentityPoolProviderId}`,
+      );
+      const policy = yield* iam.getIamPolicyProjectsServiceAccounts({
+        resource: created.deployer.name,
+      });
+      expect(
+        policy.bindings?.find((binding) => binding.role === "roles/iam.workloadIdentityUser")
+          ?.members,
+      ).toContain(
+        `principalSet://iam.googleapis.com/${created.pool.name}/attribute.repository/alchemy-run/alchemy`,
       );
       expect(created.pool.displayName).toEqual("Alchemy CI");
       expect(created.pool.description).toEqual("test pool");

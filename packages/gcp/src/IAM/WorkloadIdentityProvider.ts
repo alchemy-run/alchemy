@@ -76,7 +76,10 @@ export type WorkloadIdentityProvider = Resource<
   "GCP.IAM.WorkloadIdentityProvider",
   WorkloadIdentityProviderProps,
   {
-    /** Full resource name `projects/{project}/locations/global/workloadIdentityPools/{pool}/providers/{id}`. */
+    /**
+     * Full resource name as GCP returns it, with the project number:
+     * `projects/{projectNumber}/locations/global/workloadIdentityPools/{pool}/providers/{id}`.
+     */
     name: string;
     /** Project that owns the pool. */
     project: string;
@@ -183,7 +186,7 @@ const toAttrs = (
   poolId: string,
   providerId: string,
 ): WorkloadIdentityProvider["Attributes"] => ({
-  name: providerName(project, poolId, providerId),
+  name: provider.name ?? providerName(project, poolId, providerId),
   project,
   workloadIdentityPoolId: poolId,
   workloadIdentityPoolProviderId: providerId,
