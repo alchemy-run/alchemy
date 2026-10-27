@@ -350,9 +350,9 @@ interface PredictBase<Id> {
  * What the aggregate would do with a command, decided locally: the events it
  * would record and the state after them, the rejection it would return, or
  * `Unpredictable` when only the server can tell. `cause` says why: `decide`
- * read a service the caller did not give, waited on something asynchronous,
- * or broke its command's declaration (a `DefinitionError`, which the server
- * dies on).
+ * waited on something asynchronous (the server awaits it; `predict` is
+ * synchronous), died, or broke its command's declaration through a cast (a
+ * `DefinitionError`, which the server dies on).
  */
 export type Prediction<State, Ev, Rej, Id = string> =
   | {
@@ -372,8 +372,8 @@ export type Prediction<State, Ev, Rej, Id = string> =
  * the server answers.
  *
  * An effectful decision runs here synchronously, as the kernel runs it: a
- * rejection fails with itself, and a `decide` that reads a missing service or
- * suspends gives `Unpredictable`. `predict` never throws.
+ * rejection fails with itself, and a `decide` that suspends or dies gives
+ * `Unpredictable`. `predict` never throws.
  */
 export const predict = (
   aggregate: Any,

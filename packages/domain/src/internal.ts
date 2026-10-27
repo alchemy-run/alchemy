@@ -45,7 +45,7 @@ export type Settled =
 /**
  * Settle an effectful decision. A rejection is a `YieldableError`, so it is
  * an Effect too: running it fails with the rejection itself, which is the
- * decision. Any other failure (a missing service, a defect) stays a failure.
+ * decision. Any other failure, such as a defect, stays a failure.
  *
  * @internal
  */
