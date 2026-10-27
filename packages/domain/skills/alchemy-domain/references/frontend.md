@@ -49,7 +49,7 @@ export const Register = Command.define("Register", {
   execute: ({ customerId }) =>
     Effect.gen(function* () {
       const bank = yield* CustomerApi.Client;
-      yield* bank.RegisterCustomer({ target: customerId, name: customerId, username: Username.make(customerId) });
+      yield* bank.RegisterCustomer(customerId, { name: customerId, username: Username.make(customerId) });
       return Message.SucceededCommand();
     }).pipe(Effect.catch((error) => Effect.succeed(Message.FailedCommand({ reason: error._tag })))),
 });

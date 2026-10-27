@@ -79,8 +79,8 @@ export const Send = Command.define("Send", {
     Effect.gen(function* () {
       const bank = yield* CustomerApi.Client;
       yield* kind === "deposit"
-        ? bank.DepositMoney({ target: accountId, amount, commandId })
-        : bank.WithdrawMoney({ target: accountId, amount, commandId }, mfa);
+        ? bank.DepositMoney(accountId, { amount }, { commandId })
+        : bank.WithdrawMoney(accountId, { amount }, { commandId, ...mfa });
       return Message.Accepted({ commandId });
     }).pipe(
       Effect.catch((error) => Effect.succeed(Message.Rejected({ commandId, reason: error._tag }))),

@@ -76,8 +76,6 @@ WithdrawMoney: (s, cmd) =>
 
 The schemas also decode the command when it arrives from a client, so `decide` only ever sees well-formed input. A command with no input, like a request to close an account, leaves `input` out.
 
-Two names are taken. A client sends `target` and `commandId` in the same payload as the input, so an input field with either name is a type error, and `Domain.verify` reports it.
-
 ## Declare every outcome
 
 A command can end in one of two ways: the aggregate records events, or it refuses. `events` lists the events the command may record, and `rejects` lists the refusals it may return.
@@ -143,7 +141,7 @@ yield* accounts
   .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
 ```
 
-From a client of an [Api](/domain/api), each command is a method that takes the target and the input together: `bank.WithdrawMoney({ target: accountId, amount: 2_000 })`.
+From a client of an [Api](/domain/api), each command is a method that takes the target, the input, and optional call options: `bank.WithdrawMoney(accountId, { amount: 2_000 })`.
 
 Either way, `send` succeeds once the events have committed, with a receipt. It holds the stream and the version the instance committed at, the events it recorded, and the reply.
 
@@ -164,8 +162,8 @@ export const withdrawOnce = Effect.fn(function* (
   accountId: AccountId,
   requestId: string,
 ) {
-  const first = yield* bank.WithdrawMoney({ target: accountId, amount: 2_000, commandId: requestId }, mfa);
-  const retry = yield* bank.WithdrawMoney({ target: accountId, amount: 2_000, commandId: requestId }, mfa);
+  const first = yield* bank.WithdrawMoney(accountId, { amount: 2_000 }, { commandId: requestId, ...mfa });
+  const retry = yield* bank.WithdrawMoney(accountId, { amount: 2_000 }, { commandId: requestId, ...mfa });
   return first.version === retry.version;
 });
 ```

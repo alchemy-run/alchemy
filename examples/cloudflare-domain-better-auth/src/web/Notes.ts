@@ -67,7 +67,7 @@ export const WriteNote = Command.define("WriteNote", {
   execute: ({ userId, text }) =>
     Effect.gen(function* () {
       const notes = yield* NotesApi.Client;
-      yield* notes.WriteNote({ target: userId, text });
+      yield* notes.WriteNote(userId, { text });
       return Message.Saved();
     }).pipe(Effect.catch((error) => Effect.succeed(Message.Failed({ reason: error._tag })))),
 });

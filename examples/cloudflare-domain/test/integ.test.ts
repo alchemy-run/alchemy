@@ -100,20 +100,20 @@ test(
     const alexMain = yield* register(alex, "c-2", "alex");
 
     // a command's reply, computed from the committed state in the account's Durable Object
-    expect((yield* sam.DepositMoney({ target: samMain, amount: 100 })).reply).toEqual({
+    expect((yield* sam.DepositMoney(samMain, { amount: 100 })).reply).toEqual({
       balance: 100,
     });
 
     // MFA middleware, and ownership enforced by the aggregate against the session's actor
-    expect((yield* sam.WithdrawMoney({ target: samMain, amount: 10 }).pipe(Effect.flip))._tag).toBe(
+    expect((yield* sam.WithdrawMoney(samMain, { amount: 10 }).pipe(Effect.flip))._tag).toBe(
       "MfaRequired",
     );
-    expect((yield* sam.WithdrawMoney({ target: samMain, amount: 10 }, mfa)).reply).toEqual({
+    expect((yield* sam.WithdrawMoney(samMain, { amount: 10 }, mfa)).reply).toEqual({
       balance: 90,
     });
-    expect(
-      (yield* alex.WithdrawMoney({ target: samMain, amount: 10 }, mfa).pipe(Effect.flip))._tag,
-    ).toBe("NotOwner");
+    expect((yield* alex.WithdrawMoney(samMain, { amount: 10 }, mfa).pipe(Effect.flip))._tag).toBe(
+      "NotOwner",
+    );
 
     // a process manager across three aggregates, followed by the requester through a multi-source view
     const outcome = yield* transfer(sam, {

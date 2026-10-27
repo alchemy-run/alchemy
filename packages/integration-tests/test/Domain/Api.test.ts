@@ -118,7 +118,7 @@ describe("Domain Api", () => {
     Effect.gen(function* () {
       const bank: Domain.Api.ClientOf<typeof BankApi> = yield* BankApi.Client;
       const isRejection = Schema.is(BankApi.rejections);
-      const refused = yield* bank.Withdraw({ target: "a-1", amount: 5 }).pipe(Effect.flip);
+      const refused = yield* bank.Withdraw("a-1", { amount: 5 }).pipe(Effect.flip);
       expect(isRejection(refused)).toBe(true);
       expect(refused).toBeInstanceOf(InsufficientFunds);
     }).pipe(
@@ -196,10 +196,10 @@ describe("Domain Api in process", () => {
       const notes = yield* NotesApi.clientInProcess;
       const asSam = { headers: { "x-author": "sam" } };
 
-      const refused = yield* notes.Write({ target: "n-1", text: "hi" }).pipe(Effect.flip);
+      const refused = yield* notes.Write("n-1", { text: "hi" }).pipe(Effect.flip);
       expect(refused._tag).toBe("Unauthenticated");
 
-      const { reply } = yield* notes.Write({ target: "n-1", text: "hi" }, asSam);
+      const { reply } = yield* notes.Write("n-1", { text: "hi" }, asSam);
       expect(reply).toEqual({ by: "sam" });
       expect(yield* notes.Note.get("n-1", asSam)).toEqual({ text: "hi", by: "sam" });
 
@@ -214,7 +214,7 @@ describe("Domain Api in process", () => {
     Effect.gen(function* () {
       // The served Api keeps checking headers; only this client trusts its caller.
       const asKim = yield* NotesApi.clientInProcess.pipe(Effect.provide(trustedAuthor("kim")));
-      const { reply } = yield* asKim.Write({ target: "n-2", text: "from a webhook" });
+      const { reply } = yield* asKim.Write("n-2", { text: "from a webhook" });
       expect(reply).toEqual({ by: "kim" });
 
       const anonymous = yield* NotesApi.clientInProcess;
@@ -228,7 +228,8 @@ describe("Domain Api in process", () => {
     const writeAs = Effect.fn(function* (author: string) {
       const notes = yield* NotesApi.Client;
       return yield* notes.Write(
-        { target: "n-3", text: "shared code" },
+        "n-3",
+        { text: "shared code" },
         { headers: { "x-author": author } },
       );
     });
@@ -246,7 +247,7 @@ describe("Domain Api in process", () => {
     Effect.gen(function* () {
       const notes = yield* NotesApi.client;
       const asSam = { headers: { "x-author": "sam" } };
-      const { reply } = yield* notes.Write({ target: "n-4", text: "over a protocol" }, asSam);
+      const { reply } = yield* notes.Write("n-4", { text: "over a protocol" }, asSam);
       expect(reply).toEqual({ by: "sam" });
       expect(yield* notes.Note.get("n-4", asSam)).toEqual({ text: "over a protocol", by: "sam" });
     }).pipe(

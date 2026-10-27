@@ -58,7 +58,7 @@ const asSystem = Layer.succeed(Session, (effect) =>
   Effect.provideService(effect, CurrentActor, system("payments-webhook")),
 );
 const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem));   // per request, in Effect.scoped
-yield* bank.DepositMoney({ target: accountId, amount });
+yield* bank.DepositMoney(accountId, { amount });
 ```
 
 - Build `clientInProcess` per request in a Worker. `layerClientInProcess` provides `CustomerApi.Client` in process, for long-lived processes and scripts.

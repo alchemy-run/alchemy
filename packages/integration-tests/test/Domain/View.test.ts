@@ -52,7 +52,7 @@ const Wire = CounterApi.layerClient.pipe(
 /** Each read that takes `atLeast`, waiting for a version the view never reaches. */
 const neverCaughtUp = Effect.gen(function* () {
   const api = yield* CounterApi.Client;
-  const receipt = yield* api.Increment({ target: "c-3", by: 1 });
+  const receipt = yield* api.Increment("c-3", { by: 1 });
   const atLeast = { stream: receipt.stream, version: receipt.version + 1 };
   return yield* Effect.all(
     [
@@ -67,13 +67,13 @@ const neverCaughtUp = Effect.gen(function* () {
 /** A snapshot, two writes, then a feed that resumes after the snapshot's cursor. */
 const snapshotThenFeed = Effect.gen(function* () {
   const api = yield* CounterApi.Client;
-  const first = yield* api.Increment({ target: "c-1", by: 1 });
+  const first = yield* api.Increment("c-1", { by: 1 });
   const snapshot = yield* api.Totals.snapshot("c-1", {
     atLeast: { stream: first.stream, version: first.version },
   });
   // Written after the snapshot, before the feed starts.
-  yield* api.Increment({ target: "c-1", by: 2 });
-  const last = yield* api.Increment({ target: "c-1", by: 3 });
+  yield* api.Increment("c-1", { by: 2 });
+  const last = yield* api.Increment("c-1", { by: 3 });
   const entries = yield* api.Totals.events("c-1", { after: snapshot.cursor }).pipe(
     Stream.filter(Domain.Read.isEvent),
     Stream.take(2),
@@ -90,7 +90,7 @@ describe("Domain View reads", () => {
     Effect.gen(function* () {
       const api = yield* CounterApi.Client;
       expect(yield* api.Totals.snapshot("c-0")).toEqual({ state: null, cursor: 0 });
-      const receipt = yield* api.Increment({ target: "c-1", by: 4 });
+      const receipt = yield* api.Increment("c-1", { by: 4 });
       const snapshot = yield* api.Totals.snapshot("c-1", {
         atLeast: { stream: receipt.stream, version: receipt.version },
       });
@@ -124,7 +124,7 @@ describe("Domain View reads", () => {
   it.live("list waits for a write with atLeast, like get", () =>
     Effect.gen(function* () {
       const api = yield* CounterApi.Client;
-      const receipt = yield* api.Increment({ target: "c-2", by: 5 });
+      const receipt = yield* api.Increment("c-2", { by: 5 });
       const page = yield* api.Totals.list("c-2", {
         atLeast: { stream: receipt.stream, version: receipt.version },
       });
