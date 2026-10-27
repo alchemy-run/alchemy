@@ -32,7 +32,7 @@ import {
   failCredentialsRequired,
   demandPlanCredentials,
 } from "./Auth/Demand.ts";
-import { havePropsChanged, isResolved, stripUnresolved } from "./Diff.ts";
+import { havePropsChanged, isResolved, stripEffects, stripUnresolved } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
@@ -119,13 +119,18 @@ const track = (
  * props no longer identify the physical resource it was creating (e.g. a
  * stripped namespace makes a name match a different resource), so recovery
  * must not look the resource up from them.
+ *
+ * Effect-valued props don't count: `Output.evaluate` passes them through
+ * untouched, so even fully resolved props carry them (a Function's runtime
+ * wiring). They never name a physical resource, and treating them as holes
+ * would mark every create of such a resource and orphan it on interruption.
  */
 const propsIncomplete = (value: {
   attr?: unknown;
   props?: unknown;
   propsIncomplete?: true;
 }): true | undefined =>
-  value.attr === undefined && (value.propsIncomplete || !isResolved(value.props))
+  value.attr === undefined && (value.propsIncomplete || !isResolved(stripEffects(value.props)))
     ? true
     : undefined;
 
