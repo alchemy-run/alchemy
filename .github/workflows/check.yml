@@ -76,7 +76,9 @@ jobs:
         run: timeout 240 pnpm test:integration test/Domain --retry 0
 
       - name: Test CLI launcher
-        run: timeout 240 pnpm test test/Cli/launcher.test.ts test/Cli/exitCodes.test.ts --retry 0 --concurrency 1
+        run: |
+          timeout 240 pnpm test test/Cli/launcher.test.ts test/Cli/exitCodes.test.ts --retry 0 --concurrency 1
+          timeout 120 pnpm test:integration test/Cli/ProviderCheckEnv.test.ts --retry 0 --concurrency 1
 
       - name: Check API JSDocs
         run: pnpm docs:check-jsdoc

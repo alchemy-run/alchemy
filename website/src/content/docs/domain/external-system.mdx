@@ -61,6 +61,22 @@ export class Payments extends Domain.ExternalSystem("Payments", {
 }) {}
 ```
 
+When the vendor can refuse in several ways, list each error. The call fails with any of them, and a policy handles each one by its tag:
+
+```typescript
+class CardFrozen extends Domain.Rejection("CardFrozen") {}
+
+export class Payments extends Domain.ExternalSystem("Payments", {
+  refund: {
+    args: { settlementId: Schema.String, amount: Cents },
+    success: { refundId: Schema.String },
+    error: [RefundDeclined, CardFrozen],
+  },
+}) {}
+```
+
+A `Schema.Union([RefundDeclined, CardFrozen])` declares the same errors.
+
 ## Implement it with a Layer
 
 An adapter is a Layer that implements every call. Swap it for another vendor, or a fake, without touching the model.
