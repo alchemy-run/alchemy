@@ -1,10 +1,14 @@
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as pathe from "pathe";
+import { DestroyError } from "@/Apply";
 import * as Command from "@/Command";
 import * as Provider from "@/Provider";
+import { Stack } from "@/Stack";
+import { State } from "@/State";
 
 const { test } = Test.make({ providers: Command.providers() });
 
@@ -18,6 +22,20 @@ const makeTemporaryFixture = Effect.fn(function* () {
   const tempDir = yield* fs.makeTempDirectoryScoped();
   yield* fs.copy(FIXTURE_DIR, tempDir);
   return { cwd: tempDir };
+});
+
+// Each run appends a line, so the line count is the number of runs.
+const countLines = Effect.fn(function* (file: string) {
+  const fs = yield* FileSystem.FileSystem;
+  if (!(yield* fs.exists(file))) return 0;
+  const content = yield* fs.readFileString(file);
+  return content.split("\n").filter((line) => line.length > 0).length;
+});
+
+const readStateRow = Effect.fn(function* (fqn: string) {
+  const state = yield* yield* State;
+  const stack = yield* Stack;
+  return yield* state.get({ stack: stack.name, stage: stack.stage, fqn });
 });
 
 test.provider(
@@ -44,14 +62,7 @@ test.provider(
       const fixture = yield* makeTemporaryFixture();
       const runsLog = pathe.join(fixture.cwd, "runs.log");
       const inputFile = pathe.join(fixture.cwd, "src", "input.txt");
-
-      // The command appends a line per run; counting lines tells us exactly
-      // how many times the command actually executed.
-      const countRuns = Effect.gen(function* () {
-        if (!(yield* fs.exists(runsLog))) return 0;
-        const content = yield* fs.readFileString(runsLog);
-        return content.split("\n").filter((line) => line.length > 0).length;
-      });
+      const countRuns = countLines(runsLog);
 
       const deploy = (props: { command?: string; env?: { MARKER: string } }) =>
         stack.deploy(
@@ -112,6 +123,123 @@ test.provider(
       expect(exec6.hash.input).toBe(exec5.hash.input);
 
       yield* stack.destroy();
+    }),
+  { tags: ["unit", "local"], timeout: 60000 },
+);
+
+test.provider(
+  "destroyCommand runs on delete with the deployed cwd and env",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+
+      yield* stack.destroy();
+
+      const tempDir = yield* fs.makeTempDirectoryScoped();
+      const marker = pathe.join(tempDir, "destroyed.txt");
+
+      yield* stack.deploy(
+        Command.Exec("destroy-exec", {
+          command: "true",
+          destroyCommand: 'printf "%s" "$MARKER" > destroyed.txt',
+          shell: true,
+          cwd: tempDir,
+          env: { MARKER: "final" },
+          memo: false,
+        }),
+      );
+      expect(yield* fs.exists(marker)).toBe(false);
+
+      yield* stack.destroy();
+      expect(yield* fs.readFileString(marker)).toBe("final");
+    }),
+  { tags: ["unit", "local"], timeout: 30000 },
+);
+
+const destroyCommandEdits: Array<{
+  title: string;
+  memo: Command.ExecProps["memo"];
+  runs: number;
+}> = [
+  {
+    title: "a destroyCommand-only edit is saved without re-running a memoized command",
+    memo: { include: ["src/**"] },
+    runs: 1,
+  },
+  {
+    title: "a destroyCommand-only edit re-runs the command when memo is false",
+    memo: false,
+    runs: 2,
+  },
+];
+
+for (const { title, memo, runs } of destroyCommandEdits) {
+  test.provider(
+    title,
+    (stack) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+
+        yield* stack.destroy();
+
+        const fixture = yield* makeTemporaryFixture();
+        const runsLog = pathe.join(fixture.cwd, "runs.log");
+
+        const deploy = (destroyCommand: string) =>
+          stack.deploy(
+            Command.Exec("destroy-edit", {
+              command: "bash run.sh",
+              destroyCommand,
+              shell: true,
+              cwd: fixture.cwd,
+              memo,
+            }),
+          );
+
+        yield* deploy("echo A >> destroy.log");
+        yield* deploy("echo B >> destroy.log");
+        expect(yield* countLines(runsLog)).toBe(runs);
+
+        yield* stack.destroy();
+        expect(yield* fs.readFileString(pathe.join(fixture.cwd, "destroy.log"))).toBe("B\n");
+      }),
+    { tags: ["unit", "local"], timeout: 60000 },
+  );
+}
+
+test.provider(
+  "a failing destroyCommand fails destroy and keeps the state row",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+
+      yield* stack.destroy();
+
+      const tempDir = yield* fs.makeTempDirectoryScoped();
+      const deploy = (destroyCommand: string) =>
+        stack.deploy(
+          Command.Exec("failing-destroy", {
+            command: "true",
+            destroyCommand,
+            shell: true,
+            cwd: tempDir,
+            memo: false,
+          }),
+        );
+
+      yield* deploy("exit 3");
+
+      const error = yield* Effect.flip(stack.destroy());
+      expect(error).toBeInstanceOf(DestroyError);
+      const failures = error instanceof DestroyError ? error.failures : [];
+      expect(failures[0]?.cause.reasons.find(Cause.isFailReason)?.error).toBeInstanceOf(
+        Command.CommandError,
+      );
+      expect(yield* readStateRow("failing-destroy")).toBeDefined();
+
+      yield* deploy("true");
+      yield* stack.destroy();
+      expect(yield* readStateRow("failing-destroy")).toBeUndefined();
     }),
   { tags: ["unit", "local"], timeout: 60000 },
 );
