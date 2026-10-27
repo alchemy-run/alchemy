@@ -72,7 +72,7 @@ Story.succeed("a-1", FraudCheck.score, { risk: 0.95 }),
 
 Every call needs a `call` step before it's answered; each one matches a single call, earliest first. An untagged `succeed` with several calls waiting fails the story, and so does a call left unanswered at the end.
 
-`fail` answers a waiting call with the operation's declared `error:`, to test the branch where the vendor refuses. `die` answers it with a defect, as when the transport breaks. Both find the call the way `succeed` does, untagged or by tag, and only a declared error type-checks:
+`fail` answers a waiting call with the operation's declared `error:`, to test the branch where the vendor refuses. `die` answers it with a defect, as when the transport breaks. Both find the call the way `succeed` does, untagged or by tag, and only a declared error type-checks (any one of them, when the operation lists several):
 
 ```ts
 Story.call(Payments.refund, { settlementId: "st_1" }),
