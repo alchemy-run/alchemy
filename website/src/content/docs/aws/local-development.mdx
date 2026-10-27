@@ -176,9 +176,9 @@ const secret = yield* AWS.SecretsManager.Secret("ProdSecret", { ... })
 ```
 
 A local Function bound to a remote resource reaches it in the real
-cloud. Alchemy creates an IAM user and role in your account for that
-Function, grants the binding's permissions on the role, and the
-binding signs its calls with them:
+cloud with your own credentials. `alchemy dev` keeps a temporary copy
+of them in the emulator, refreshed before they expire, and the binding
+signs its calls with them:
 
 ```typescript
 const bucket = yield* AWS.S3.Bucket("Uploads").pipe(Alchemy.remote());

@@ -38,6 +38,8 @@ import * as Lambda from "@distilled.cloud/aws/lambda";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as SQS from "@distilled.cloud/aws/sqs";
+import * as SSM from "@distilled.cloud/aws/ssm";
+import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
@@ -476,7 +478,25 @@ test.provider(
       );
       expect(object).toBe("from-floci");
 
+      // The developer's credentials reach the Lambda through the emulator,
+      // always as temporary credentials; destroy removes them.
+      const { name, stage } = yield* Stack;
+      const relayed = SSM.getParameter({
+        Name: `/alchemy/${name}/${stage}/dev-credentials`,
+        WithDecryption: true,
+      }).pipe(Effect.provide(flociContext));
+      const parameter = yield* relayed;
+      const value = parameter.Parameter?.Value;
+      const credentials = JSON.parse(Redacted.isRedacted(value) ? Redacted.value(value) : value!);
+      expect(credentials.sessionToken).toBeTruthy();
+
       yield* stack.destroy();
+
+      const relayGone = yield* relayed.pipe(
+        Effect.map(() => false),
+        Effect.catchTag("ParameterNotFound", () => Effect.succeed(true)),
+      );
+      expect(relayGone).toBe(true);
 
       const gone = yield* S3.headBucket({ Bucket: bucketName }).pipe(
         Effect.map(() => false),

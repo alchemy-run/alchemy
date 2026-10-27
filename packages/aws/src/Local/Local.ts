@@ -15,8 +15,10 @@ import { FlociServiceProvider } from "../ECS/FlociServiceProvider.ts";
 import { FlociTaskProvider } from "../ECS/FlociTaskProvider.ts";
 import { FlociFunctionProvider } from "../Lambda/FlociFunctionProvider.ts";
 import { FlociMicrovmImageProvider } from "../Lambda/FlociMicrovmImageProvider.ts";
+import { DevCredentialsProviderLocal } from "./DevCredentialsProvider.ts";
 
 export default Layer.mergeAll(
+  DevCredentialsProviderLocal(),
   FlociFunctionProvider(),
   FlociMicrovmImageProvider(),
   FlociTaskProvider(),

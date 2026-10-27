@@ -138,6 +138,8 @@ import * as LakeFormation from "./LakeFormation/index.ts";
 import * as Lambda from "./Lambda/index.ts";
 import * as LexV2 from "./LexV2/index.ts";
 import * as LicenseManager from "./LicenseManager/index.ts";
+import { DevCredentials } from "./Local/DevCredentials.ts";
+import { DevCredentialsProvider } from "./Local/DevCredentialsProvider.ts";
 import { flociDual, flociServices } from "./Local/FlociServices.ts";
 import { captureAwsEnvironment, pinCollectionEnvironment } from "./Local/ProviderContext.ts";
 import * as Location from "./Location/index.ts";
@@ -270,6 +272,7 @@ export const providers = () =>
     Effect.flatMap(
       Provider.collection([
         KeyPair,
+        DevCredentials,
         Random,
         AccessAnalyzer.Analyzer,
         AccessAnalyzer.ArchiveRule,
@@ -1391,6 +1394,9 @@ export const providers = () =>
           flociDual(Lambda.EventSourceMapping, () => Lambda.EventSourceMappingProvider()),
           // Dual: live Lambda in deploy, floci-emulated (RPC-sidecar-hosted,
           // hot-reloading) Lambda in dev — see FlociFunctionProvider.
+          // Dev-only: relays the developer's credentials into floci for
+          // emulated hosts bound to `Alchemy.remote()` resources.
+          DevCredentialsProvider(),
           ProviderLayer.dual(Lambda.Function, {
             live: () => Lambda.FunctionProvider(),
             local: () => Lambda.FlociFunctionProvider(),
