@@ -1,9 +1,8 @@
-import type * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
 import type { CloudEvent } from "../Eventarc/EventSource.ts";
 import type { Database } from "./Database.ts";
-import { decodeFields } from "./Values.ts";
+import { decodeDocumentEventData } from "./internal/DocumentEventData.ts";
 
 /** Firestore document change kinds; `written` is any of the other three. */
 export type DocumentEventKind = "created" | "updated" | "deleted" | "written";
@@ -125,27 +124,22 @@ const matchParams = (pattern: string, document: string) => {
   return params;
 };
 
-type DocumentEventData = {
-  value?: firestore.Document;
-  oldValue?: firestore.Document;
-  updateMask?: { fieldPaths?: string[] };
-};
-
-/** Decode an Eventarc Firestore CloudEvent (JSON content type) into a {@link DocumentEvent}. */
+/**
+ * Decode an Eventarc Firestore CloudEvent (its `application/protobuf`
+ * payload) into a {@link DocumentEvent}.
+ */
 export const toDocumentEvent = (pattern: string, event: CloudEvent): DocumentEvent => {
-  const data = (event.data ?? {}) as DocumentEventData;
+  const data = decodeDocumentEventData(
+    ArrayBuffer.isView(event.data) ? (event.data as Uint8Array) : new Uint8Array(),
+  );
   const document = (event.subject ?? "").replace(/^documents\//, "");
   const kind = event.type.split(".").at(-1) as DocumentEvent["kind"];
   return {
     kind,
     document,
-    value: data.value?.fields ? decodeFields(data.value.fields) : data.value ? {} : undefined,
-    oldValue: data.oldValue?.fields
-      ? decodeFields(data.oldValue.fields)
-      : data.oldValue
-        ? {}
-        : undefined,
-    updatedFields: data.updateMask?.fieldPaths ?? [],
+    value: data.value?.fields,
+    oldValue: data.oldValue?.fields,
+    updatedFields: data.updatedFields,
     time: event.time,
     params: matchParams(pattern, document),
   };

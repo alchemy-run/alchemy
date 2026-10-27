@@ -17,7 +17,7 @@ import {
  * Deploy-time: one Eventarc trigger per change kind
  * (`google.cloud.firestore.document.v1.<kind>`), in the database's
  * location, filtered on the database id and the document path pattern,
- * with JSON payloads. Delivery is delegated to the provided
+ * with protobuf payloads (decoded for the handler). Delivery is delegated to the provided
  * `GCP.Eventarc.EventSource` implementation (`GCP.Run.EventarcEventSource`).
  *
  * ### Delivering document changes
@@ -57,7 +57,8 @@ export const DocumentEventSourceLive = Layer.effect(
           id,
           {
             location: database.location,
-            eventDataContentType: "application/json",
+            // Firestore events come only as protobuf.
+            eventDataContentType: "application/protobuf",
             path: props.path ? `${props.path}/${kind}` : undefined,
             eventFilters: [
               { attribute: "type", value: `google.cloud.firestore.document.v1.${kind}` },
