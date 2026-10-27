@@ -19,7 +19,7 @@ import {
   type StreamKit,
   type StreamMeta,
   type StreamWrite,
-  type Subscription,
+  Subscription,
   type ViewEntry,
   type ViewKit,
   type ViewSnapshot,
@@ -34,6 +34,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { WorkflowEngine } from "effect/workflow";
@@ -198,10 +199,9 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
 // ---------------------------------------------------------------- live reads
 
 /** What a live read's WebSocket carries across hibernation. */
-interface Attachment {
-  readonly key: string;
-  readonly subscription: Subscription;
-}
+const Attachment = Schema.Struct({ key: Schema.String, subscription: Subscription });
+type Attachment = typeof Attachment.Type;
+const decodeAttachment = Schema.decodeUnknownOption(Schema.fromJsonString(Attachment));
 
 const SUBSCRIPTION_HEADER = "x-domain-subscription";
 
@@ -244,7 +244,11 @@ const accept = (
     if (header === undefined || request.headers.upgrade?.toLowerCase() !== "websocket") {
       return HttpServerResponse.empty({ status: 426, headers: { Upgrade: "websocket" } });
     }
-    const { key, subscription } = JSON.parse(header) as Attachment;
+    const attachment = decodeAttachment(header);
+    if (Option.isNone(attachment)) {
+      return HttpServerResponse.text("Invalid live read", { status: 400 });
+    }
+    const { key, subscription } = attachment.value;
     return yield* exclusively(
       Effect.gen(function* () {
         const [response, socket] = yield* upgrade();

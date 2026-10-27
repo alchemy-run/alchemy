@@ -2,6 +2,7 @@ import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
 import type * as Event from "./Event.ts";
+import { FilterJson } from "./Filter.ts";
 import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
@@ -105,7 +106,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
           payload: {
             key,
             after: Schema.optional(Schema.Number),
-            where: Schema.optional(Schema.Unknown),
+            where: Schema.optional(FilterJson),
           },
           success: recorded,
           error,
@@ -116,7 +117,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
         Rpc.make(`${name}.list`, {
           payload: {
             key,
-            where: Schema.optional(Schema.Unknown),
+            where: Schema.optional(FilterJson),
             order: Schema.optional(Schema.Literals(["asc", "desc"])),
             take: Schema.optional(Schema.Number),
             after: Schema.optional(Schema.String),
@@ -146,7 +147,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
             atLeast: Schema.optional(
               Schema.Struct({ stream: Schema.String, version: Schema.Number }),
             ),
-            where: Schema.optional(Schema.Unknown),
+            where: Schema.optional(FilterJson),
           },
           success: state,
           error: waitError,
@@ -154,7 +155,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
       ),
       watch: guard(
         Rpc.make(`${name}.watch`, {
-          payload: { key, where: Schema.optional(Schema.Unknown) },
+          payload: { key, where: Schema.optional(FilterJson) },
           success: state,
           error,
           stream: true,
@@ -165,7 +166,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
           payload: {
             key,
             after: Schema.optional(Schema.String),
-            where: Schema.optional(Schema.Unknown),
+            where: Schema.optional(FilterJson),
           },
           success: recorded,
           error,
@@ -179,7 +180,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
             atLeast: Schema.optional(
               Schema.Struct({ stream: Schema.String, version: Schema.Number }),
             ),
-            where: Schema.optional(Schema.Unknown),
+            where: Schema.optional(FilterJson),
             order: Schema.optional(Schema.Literals(["asc", "desc"])),
             take: Schema.optional(Schema.Number),
             after: Schema.optional(Schema.String),
@@ -198,7 +199,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
             atLeast: Schema.optional(
               Schema.Struct({ stream: Schema.String, version: Schema.Number }),
             ),
-            where: Schema.optional(Schema.Unknown),
+            where: Schema.optional(FilterJson),
           },
           success: Schema.Struct({ state, cursor: Schema.String }),
           error: waitError,

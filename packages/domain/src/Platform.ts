@@ -1,12 +1,13 @@
 import type { HttpEffect } from "alchemy/Http";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import type * as Stream from "effect/Stream";
-import type * as Aggregate from "./Aggregate.ts";
+import * as Aggregate from "./Aggregate.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
 import type * as DomainStream from "./Stream.ts";
-import type { TraceJson } from "./Telemetry.ts";
+import { TraceJson } from "./Telemetry.ts";
 import type * as View from "./View.ts";
 
 /**
@@ -18,17 +19,15 @@ export type Json = unknown;
 /**
  * An event envelope in JSON form. `at` is epoch milliseconds.
  */
-export interface EnvelopeJson {
-  readonly id: string;
-  readonly stream: string;
-  readonly seq: number;
-  readonly at: number;
-  readonly commandId: string;
+export const EnvelopeJson = Schema.Struct({
+  ...Aggregate.Envelope.fields,
+  at: Schema.Number,
   /** Absent on events stored before correlation ids: the command id stands in. */
-  readonly correlationId?: string;
+  correlationId: Schema.optionalKey(Schema.String),
   /** The span that committed the event, so its reactions continue or link to it. */
-  readonly trace?: TraceJson;
-}
+  trace: Schema.optionalKey(TraceJson),
+});
+export type EnvelopeJson = typeof EnvelopeJson.Type;
 
 /**
  * A committed event as stored by an aggregate.
@@ -71,19 +70,20 @@ export interface Delivery {
  * attachment, so a hibernated object can resume pushing) and asks the kit's
  * `push` what to send after each commit.
  */
-export interface Subscription {
+export const Subscription = Schema.Struct({
   /** The client's request id, echoed as is (the client matches it by identity). */
-  readonly requestId: string | number;
-  readonly mode: "watch" | "events";
+  requestId: Schema.Union([Schema.String, Schema.Number]),
+  mode: Schema.Literals(["watch", "events"]),
   /** The client's filter: it narrows what a permitted read sends. */
-  readonly where?: Json;
+  where: Schema.optionalKey(Schema.Unknown),
   /** The context the read's middleware provided (see `Domain.RequestContext`), for `validate`. */
-  readonly context: Readonly<Record<string, Json>>;
+  context: Schema.Record(Schema.String, Schema.Unknown),
   /** Progress: the last state version (`watch`) or event `seq` (`events`) sent. */
-  readonly cursor: number;
+  cursor: Schema.Number,
   /** Set when the read was refused before reaching the key: the encoded `Exit` to send. */
-  readonly refused?: Json;
-}
+  refused: Schema.optionalKey(Schema.Unknown),
+});
+export type Subscription = typeof Subscription.Type;
 
 /**
  * What to send a subscriber, from a kit's `push`.

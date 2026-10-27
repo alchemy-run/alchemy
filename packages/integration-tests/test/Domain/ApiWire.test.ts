@@ -2,7 +2,12 @@ import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
+import * as Cause from "effect/Cause";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpServer from "effect/http/HttpServer";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -26,10 +31,11 @@ class Wallet extends Domain.Aggregate("Wallet", {
   read: {},
 }) {}
 
-class Booked extends Domain.Event("Booked", { wallet: Schema.String, amount: Schema.Number }) {}
+const BookedFields = { wallet: Schema.String, amount: Schema.Number, at: Schema.DateTimeUtc };
+class Booked extends Domain.Event("Booked", BookedFields) {}
 class Book extends Domain.Command("Book", {
   target: Schema.String,
-  input: { wallet: Schema.String, amount: Schema.Number },
+  input: BookedFields,
   events: [Booked],
 }) {}
 class Ledger extends Domain.Aggregate("Ledger", {
@@ -37,7 +43,7 @@ class Ledger extends Domain.Aggregate("Ledger", {
   state: Schema.Struct({ total: Schema.Number }),
   initial: { total: 0 },
   commands: [Book],
-  decide: { Book: (_, { wallet, amount }) => [new Booked({ wallet, amount })] },
+  decide: { Book: (_, { wallet, amount, at }) => [new Booked({ wallet, amount, at })] },
   evolve: { Booked: (s, e) => ({ total: s.total + e.amount }) },
   read: {},
 }) {}
@@ -46,8 +52,11 @@ class BookDeposits extends Domain.Policy("BookDeposits", { from: Wallet, on: [De
 const BookDepositsLive = BookDeposits.toLayer(
   Effect.gen(function* () {
     const ledger = yield* Ledger;
-    return Effect.fn(function* ({ source, event }) {
-      yield* ledger.send("main", new Book({ wallet: source.id, amount: event.amount }));
+    return Effect.fn(function* ({ source, event, envelope }) {
+      yield* ledger.send(
+        "main",
+        new Book({ wallet: source.id, amount: event.amount, at: envelope.at }),
+      );
     });
   }),
 );
@@ -106,6 +115,48 @@ describe("Domain Api over the wire", () => {
       // The wire gives what the in-process client gives.
       const [direct] = yield* local.Ledger.events("main").pipe(Stream.take(1), Stream.runCollect);
       expect(booked!.envelope).toEqual(direct!.envelope);
+    }).pipe(Effect.scoped, Effect.provide(Wire)),
+  );
+  it.live("a filter on a DateTime field works over the wire", () =>
+    Effect.gen(function* () {
+      const bank = yield* BankApi.client;
+      yield* bank.Deposit({ target: "w-1", amount: 5, commandId: "deposit-1" });
+      yield* bank.Ledger.events("main").pipe(Stream.take(1), Stream.runCollect);
+      const now = yield* DateTime.now;
+
+      const page = yield* bank.Bookings.list("main", { where: { at: { lte: now } } });
+      expect(page.entries.map((entry) => entry.event.amount)).toEqual([5]);
+      const none = yield* bank.Bookings.list("main", { where: { at: { gt: now } } });
+      expect(none.entries).toEqual([]);
+    }).pipe(Effect.scoped, Effect.provide(Wire)),
+  );
+
+  it.live("a malformed filter is refused before it is evaluated", () =>
+    Effect.gen(function* () {
+      const bank = yield* BankApi.client;
+      yield* bank.Deposit({ target: "w-1", amount: 5, commandId: "deposit-1" });
+      yield* bank.Ledger.events("main").pipe(Stream.take(1), Stream.runCollect);
+
+      // `in` takes a list: the filter fails to encode, rather than throwing where it is evaluated.
+      const exit = yield* Effect.exit(
+        bank.Bookings.list("main", { where: { amount: { in: 5 } } as never }),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      const cause = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "";
+      expect(cause).toContain("Expected array");
+      expect(cause).not.toContain("is not a function");
+    }).pipe(Effect.scoped, Effect.provide(Wire)),
+  );
+
+  it.live("a live read whose request does not decode gets a 400", () =>
+    Effect.gen(function* () {
+      const client = yield* HttpClient.HttpClient;
+      const response = yield* client.execute(
+        HttpClientRequest.get(`/?read=${encodeURIComponent("{not json")}`).pipe(
+          HttpClientRequest.setHeader("upgrade", "websocket"),
+        ),
+      );
+      expect(response.status).toBe(400);
     }).pipe(Effect.scoped, Effect.provide(Wire)),
   );
 });
