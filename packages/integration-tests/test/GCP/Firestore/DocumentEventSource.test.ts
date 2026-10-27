@@ -50,8 +50,9 @@ test.provider(
           Effect.map((downloaded) => JSON.parse(new TextDecoder().decode(downloaded.body))),
         );
 
-      // A new trigger starts delivering a while after Eventarc reports it
-      // ready: write warm-up items until one arrives.
+      // Deliveries are refused (403) until the host's invoker grant on itself
+      // propagates, which takes up to several minutes: write warm-up items
+      // until one arrives.
       yield* Effect.gen(function* () {
         const id = `warmup-${yield* Effect.sync(() => crypto.randomUUID().slice(0, 8))}`;
         yield* write(`items/${id}`, { warmup: true });
@@ -65,7 +66,7 @@ test.provider(
         Effect.retry({
           while: (error) => error._tag === "NotDeliveredYet",
           schedule: Schedule.spaced("1 second"),
-          times: 15,
+          times: 30,
         }),
       );
 
@@ -101,5 +102,5 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 1_200_000 },
+  { timeout: 1_800_000 },
 );
