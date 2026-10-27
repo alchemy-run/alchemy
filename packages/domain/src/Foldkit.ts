@@ -136,19 +136,19 @@ export function commands(api: Api.Any): unknown {
               reply,
               receipt: { stream, version },
             })),
-            Effect.catchCause((cause) =>
-              !Cause.hasFails(cause) && !Cause.hasDies(cause)
-                ? Effect.failCause(cause)
-                : Effect.succeed({
-                    _tag: `Failed${command.tag}`,
-                    commandId,
-                    failure: Cause.hasDies(cause)
-                      ? { _tag: "Unknown" }
-                      : classifyFailure(
-                          command,
-                          Option.getOrUndefined(Cause.findErrorOption(cause)),
-                        ),
-                  }),
+            Effect.catchCauseIf(
+              (cause) => Cause.hasFails(cause) || Cause.hasDies(cause),
+              (cause) =>
+                Effect.succeed({
+                  _tag: `Failed${command.tag}`,
+                  commandId,
+                  failure: Cause.hasDies(cause)
+                    ? { _tag: "Unknown" }
+                    : classifyFailure(
+                        command,
+                        cause.pipe(Cause.findErrorOption, Option.getOrUndefined),
+                      ),
+                }),
             ),
           );
         }),
@@ -187,7 +187,7 @@ export interface WatchOptions<Model, Message, V extends View.Any> {
   readonly toMessage: (snapshot: Snapshot<View.StateOf<V>>) => Message;
   readonly onFailure: (error: Api.ReadError<V["definition"]>) => Message;
   /** Handle unexpected read defects. Interruption does not call this callback. */
-  readonly onDefect: (cause: Cause.Cause<never>) => Message;
+  readonly onDefect: (cause: Cause.Cause<unknown>) => Message;
 }
 
 /** Follow a View's state and cursor. Pass the result as an entry to Subscription.make. */
@@ -230,7 +230,7 @@ export function watchView(
             ),
             Stream.catchCause((cause) => {
               if (Cause.hasDies(cause)) {
-                return Stream.succeed(options.onDefect(Cause.die(Cause.squash(cause))));
+                return Stream.succeed(options.onDefect(cause));
               }
               const error = Cause.findErrorOption(cause);
               return Option.isSome(error)
@@ -252,7 +252,7 @@ export interface EventsOptions<Model, Message, V extends View.Any> {
   readonly onCaughtUp: (cursor: number) => Message;
   readonly onFailure: (error: Api.ReadError<V["definition"]>) => Message;
   /** Handle unexpected read defects. Interruption does not call this callback. */
-  readonly onDefect: (cause: Cause.Cause<never>) => Message;
+  readonly onDefect: (cause: Cause.Cause<unknown>) => Message;
 }
 
 /** Follow View output entries after the Model's cursor, without counting sequence gaps. */
@@ -365,7 +365,7 @@ export function viewEvents(
           ),
           Stream.catchCause((cause) => {
             if (Cause.hasDies(cause)) {
-              return Stream.succeed(options.onDefect(Cause.die(Cause.squash(cause))));
+              return Stream.succeed(options.onDefect(cause));
             }
             const error = Cause.findErrorOption(cause);
             return Option.isSome(error)

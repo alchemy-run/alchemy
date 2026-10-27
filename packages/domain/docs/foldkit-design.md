@@ -92,7 +92,9 @@ For each command in `CustomerApi.commands`:
 | --- | --- | --- |
 | `Rejected { rejection }` | The aggregate refused. `rejection` decodes with the command's declared Rejections. | Show it. The intent is over. |
 | `Denied { error }` | Middleware refused (not signed in, missing MFA). | Ask for what is missing. The intent can be retried. |
-| `Unknown` | Transport failure. The command may have committed before the reply was lost. | Keep the intent and retry with the same `commandId`. Never treat it as a Rejection. |
+| `Unknown` | Transport failure or a defect. The command may have committed before the reply was lost. | Keep the intent and retry with the same `commandId`. Never treat it as a Rejection. |
+
+Interrupt-only Command Causes propagate without a result Message.
 
 `Bank.Message` types come from a mapped type over `CommandsOf<A>`, not from a runtime record, so each tag keeps its own `input`, `reply`, and Rejections. Declaration tests cover an empty input, a branded target, a Schema transform in the input, and a command with middleware.
 
@@ -109,10 +111,11 @@ watchView(CustomerApi, "AccountSummary", {
   key: (model) => model.accountId,
   toMessage: (snapshot): Message => Message.ReceivedSummary({ snapshot }),
   onFailure: (error): Message => Message.FailedWatchSummary({ reason: error._tag }),
+  onDefect: (): Message => Message.FailedWatchSummary({ reason: "Read defect" }),
 })
 ```
 
-A Subscription entry on `watch`. The app passes its own Message, so the app names the fact. `state: null` arrives as `Option.none()`. The cursor goes into the Model with the state. `onFailure` maps a read failure to an app Message. `isEnabled` can stop the stream while offline. A key change restarts the stream; a new cursor does not (`keepAliveEquivalence`, `packages/foldkit/src/subscription/subscription.ts:56` on `main`). A restart reads a fresh Snapshot. A middleware or `validate` failure becomes a Message.
+A Subscription entry on `watch`. The app passes its own Message, so the app names the fact. `state: null` arrives as `Option.none()`. The cursor goes into the Model with the state. `onFailure` maps a typed read failure to an app Message. `onDefect` receives the full Cause of an unexpected read defect. Interrupt-only Causes end the read without a Message. `isEnabled` can stop the stream while offline. A key change restarts the stream; a new cursor does not (`keepAliveEquivalence`, `packages/foldkit/src/subscription/subscription.ts:56` on `main`). A restart reads a fresh Snapshot. A middleware or `validate` failure becomes a Message.
 
 This is the state source. Not every state change has an output event: the Kernel can evolve a View's state and emit nothing (for example `AccountOpened` in `Statement`), so state never comes from `events`.
 
@@ -125,6 +128,7 @@ viewEvents(CustomerApi, "Statement", {
   onEntry: (entry): Message => Message.ReceivedStatementLine({ entry }),
   onCaughtUp: (cursor): Message => Message.CaughtUpStatement({ cursor }),
   onFailure: (error): Message => Message.FailedReadStatement({ reason: error._tag }),
+  onDefect: (): Message => Message.FailedReadStatement({ reason: "Read defect" }),
 })
 ```
 

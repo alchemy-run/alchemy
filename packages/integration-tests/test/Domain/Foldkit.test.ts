@@ -268,18 +268,21 @@ it.live("turns a mid-stream validate refusal into an app Message", () =>
 it.live("maps command defects to Unknown and preserves interruption", () =>
   Effect.gen(function* () {
     const client = yield* CounterApi.Client;
-    for (const failure of [Effect.die("storage failed"), Effect.interrupt]) {
-      const source = Layer.succeed(CounterApi.Client, { ...client, Increment: () => failure });
-      const exit = yield* Counter.Increment({
-        target,
-        input: { amount: 1 },
-        commandId: "page:die",
-      }).effect.pipe(Effect.provide(source), Effect.exit);
-      if (exit._tag === "Success") {
-        expect(exit.value).toMatchObject({ _tag: "FailedIncrement", failure: { _tag: "Unknown" } });
-      } else {
-        expect(Cause.hasInterrupts(exit.cause)).toBe(true);
-      }
+    const command = Counter.Increment({ target, input: { amount: 1 }, commandId: "page:die" });
+    const source = Layer.succeed(CounterApi.Client, {
+      ...client,
+      Increment: () => Effect.die("storage failed"),
+    });
+    const result = yield* command.effect.pipe(Effect.provide(source));
+    expect(result).toMatchObject({ _tag: "FailedIncrement", failure: { _tag: "Unknown" } });
+    const interrupted = Layer.succeed(CounterApi.Client, {
+      ...client,
+      Increment: () => Effect.interrupt,
+    });
+    const exit = yield* command.effect.pipe(Effect.provide(interrupted), Effect.exit);
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      expect(Cause.hasInterrupts(exit.cause)).toBe(true);
     }
   }).pipe(Effect.provide(Client)),
 );
@@ -311,5 +314,30 @@ it.live("turns watch and event defects into Messages", () =>
         .dependenciesToStream(dependencies, () => dependencies)
         .pipe(Stream.runCollect, Effect.provide(source)),
     ).toEqual(["defect"]);
+  }).pipe(Effect.provide(Client)),
+);
+
+it.live("preserves interruption in watch and event streams", () =>
+  Effect.gen(function* () {
+    const client = yield* CounterApi.Client;
+    const source = Layer.succeed(CounterApi.Client, {
+      ...client,
+      Total: {
+        ...client.Total,
+        watch: () => Stream.fromEffect(Effect.interrupt),
+        events: () => Stream.fromEffect(Effect.interrupt),
+      },
+    });
+    const reads = [
+      watched.dependenciesToStream({ key: target, isEnabled: true }).pipe(Stream.runDrain),
+      feed.dependenciesToStream(dependencies, () => dependencies).pipe(Stream.runDrain),
+    ];
+    for (const read of reads) {
+      const exit = yield* read.pipe(Effect.provide(source), Effect.exit);
+      expect(exit._tag).toBe("Failure");
+      if (exit._tag === "Failure") {
+        expect(Cause.hasInterrupts(exit.cause)).toBe(true);
+      }
+    }
   }).pipe(Effect.provide(Client)),
 );
