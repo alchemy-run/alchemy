@@ -87,7 +87,7 @@ export declare namespace Aggregate {
   export type Inst<C> = AggregateModule.Inst<C>;
   /** Options for `MyAggregate.predict`. */
   export type PredictOptions<Id = string> = AggregateModule.PredictOptions<Id>;
-  /** What `MyAggregate.predict` gives: accepted with events and state, rejected, or needs context. */
+  /** What `MyAggregate.predict` gives: accepted with events and state, rejected, or unpredictable. */
   export type Prediction<State, Ev, Rej, Id = string> = AggregateModule.Prediction<
     State,
     Ev,
@@ -123,7 +123,7 @@ export declare namespace View {
   export type Entry<S, E, Id = string> = ViewModule.Entry<S, E, Id>;
   export type Page<E> = ViewModule.Page<E>;
   /** What `MyView.evolve` applies. */
-  export type LocalInput<Def, Key extends AggregateModule.Any> = ViewModule.LocalInput<Def, Key>;
+  export type LocalInput<Def, Key extends KeyModule.Any> = ViewModule.LocalInput<Def, Key>;
 }
 /** A read model folded from events, per key. See {@link ViewModule.make}. */
 export const View = ViewModule.make;
