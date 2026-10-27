@@ -1,13 +1,12 @@
 import { describe, expect } from "bun:test";
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
 import * as Kubernetes from "@alchemy.run/kubernetes";
+import * as Test from "@alchemy.run/test/Bun";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as container from "@distilled.cloud/gcp/container_v1";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Bun";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -27,11 +26,6 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 // the deploy uses, so the test runs against the configured profile.
 const GcpHttp = Layer.mergeAll(GCP.GcpAuth, GCP.fromAuthProvider(), FetchHttpClient.layer);
 
-// `Api` and `SeedJob` are built from `main`, and `Web`'s image is mirrored
-// into Artifact Registry — both need a local Docker daemon.
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-
 // The project comes from the same credential the deploy uses.
 const currentProject = GCP.GcpEnvironment.current.pipe(
   Effect.map((env) => env.project),
@@ -39,7 +33,7 @@ const currentProject = GCP.GcpEnvironment.current.pipe(
 );
 
 // Deploy, tests and destroy all sit behind the same Docker guard.
-describe.skipIf(!dockerAvailable)("gcp-gke", () => {
+describe("gcp-gke", () => {
   // Autopilot cluster creation dominates the deploy (~5–10 min).
   const stack = beforeAll(deploy(Stack), { timeout: 1_800_000 });
 

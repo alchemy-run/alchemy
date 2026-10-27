@@ -66,11 +66,13 @@ Run stories with Vitest and `@effect/vitest`: each story is an Effect, so `it.ef
 
 ## Check every outcome
 
-The test above uses most of the checks. `then` checks the next events recorded on an instance; with no events, it checks that nothing new was recorded. `replied` checks the last command's reply, and `rejected` checks that it was refused with exactly this rejection. `state` checks an instance's current state directly.
+The test above uses most of the checks. `then` checks the next events recorded on an instance; with no events, it checks that nothing new was recorded. Every recorded event needs a `then`, on every instance, including the ones a policy writes. `replied` checks the last command's reply, and `rejected` checks that it was refused with exactly this rejection. `state` checks an instance's current state directly, or part of it.
 
 Views and streams are checked as a client would read them. `view` checks a view key's state, or part of it, and `emitted` checks every event a view key has emitted. `streamed` checks the next entries a projection appended to a stream key.
 
 Commands run as whoever `provide` says, as their middleware would. Here `asSam` provides `CurrentActor`, so the account's ownership check passes.
+
+The checks after a `when` are type-checked against its command. `rejected` takes only a rejection the command declares, and `replied` only its reply type. A `when` needs a `provide` step before it for every service its command's middleware provides, so without `asSam` the story does not compile.
 
 ## Answer outside systems
 
@@ -139,6 +141,8 @@ Story.call(Payments.refund, { settlementId: "st_1" }),
 Story.fail(Payments.refund, new RefundDeclined({ reason: "card-closed" })),
 ```
 
+When the operation declares several errors, `fail` takes any one of them, so a story can test each branch.
+
 `Story.die` fails a call with a defect instead, as when the connection to the vendor breaks:
 
 ```typescript
@@ -159,6 +163,7 @@ const story = Story.make(Bank, {
 it.effect("refunds through the real payments adapter", () =>
   story(
     Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
+    Story.then(account, new SettlementOnClosedAccount({ settlementId: "st_1", amount: 500 })),
     Story.call(Payments.refund, { settlementId: "st_1", amount: 500 }),
     Story.returned(Payments.refund, { refundId: "re_st_1" }),
   ).pipe(Effect.provide(StripePayments)),
@@ -169,11 +174,11 @@ The story records every real call. `call` checks what a call was sent, and `retu
 
 ## Move the clock
 
-A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it to an ISO string, epoch milliseconds or a `DateTime`. The clock only moves forward. A `clock` step with only `provide` steps before it may set any time; after that, a time earlier than the current one fails the story. Commands are stamped with it, so time-based rules like a daily limit are easy to test, and scheduled commands fire when it passes their time. See [Deadlines](/domain/deadlines).
+A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it to an ISO string, epoch milliseconds or a `DateTime`. The clock only moves forward. A `clock` step with only `provide` steps before it may set any time; after that, a time earlier than the current one fails the story. `Story.advance("1 day")` moves it forward by a duration instead of to a time. Commands are stamped with it, so time-based rules like a daily limit are easy to test, and scheduled commands fire when it passes their time. See [Deadlines](/domain/deadlines).
 
 ## Trust a passing story
 
-A story fails if a command is rejected and no `rejected` step checks it, if a call is answered or asserted before a `call` step checks it, if a stubbed call is left waiting at the end, or if no step asserts how a real call ended. A passing story has accounted for every outcome.
+A story fails if an event is committed and no `then` step checks it, if a command is rejected and no `rejected` step checks it, if a call is answered or asserted before a `call` step checks it, if a stubbed call is left waiting at the end, or if no step asserts how a real call ended. A passing story has accounted for every outcome.
 
 :::note
 Test what clients see through an Api in [Testing an Api](/domain/testing-apis).

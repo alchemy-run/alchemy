@@ -17,11 +17,13 @@ import { SiftFraudCheck } from "../src/Fraud/SiftFraudCheck.ts";
 import { MfaChallengeLive } from "../src/MfaChallenge.ts";
 import { SessionLive } from "../src/Session.ts";
 import { StripePayments } from "../src/Settlement/StripePayments.ts";
+import { SessionKeyTest } from "./session.ts";
 
 // The model, its external systems, and the middleware its Apis declare: what a Worker would serve.
 export const BankInMemory = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
   Layer.provideMerge(Bank.layer(BankHandlers)),
   Layer.provide(Layer.mergeAll(Domain.InMemory, SiftFraudCheck, StripePayments, MemoryLedgerStore)),
+  Layer.provideMerge(SessionKeyTest),
 );
 ```
 
@@ -29,20 +31,21 @@ Policies and projections run for real, and views catch up just after each comman
 
 ## Call it through an Api
 
-`testClient` calls an Api in the same process, through its real middleware. Provide the in-memory model, and sign in with `sessionClient`.
+`clientInProcess` calls an Api in the same process, through its real middleware. Provide the in-memory model, and sign in with `signedInAs` from [Testing an Api](/domain/testing-apis#sign-sessions-in-tests).
 
 ```typescript
 // packages/server/test/inMemory.test.ts
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
-import { sessionClient } from "@bank/domain/Session.middleware";
+import { customer } from "@bank/domain/Actor";
 import { BankInMemory } from "./bankInMemory.ts";
 import { register } from "./flows.ts";
+import { signedInAs } from "./session.ts";
 
 it.live("a customer registers and deposits", () =>
   Effect.gen(function* () {
-    const sam = yield* CustomerApi.testClient.pipe(Effect.provide(sessionClient("customer:c-1")));
+    const sam = yield* CustomerApi.clientInProcess.pipe(Effect.provide(signedInAs(customer("c-1"))));
     const accountId = yield* register(sam, "c-1", "sam");
     const { reply } = yield* sam.DepositMoney({ target: accountId, amount: 100 });
     expect(reply.balance).toBe(100);

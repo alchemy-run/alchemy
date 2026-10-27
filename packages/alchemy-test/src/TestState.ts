@@ -1,6 +1,6 @@
+import { Stack } from "alchemy/Stack";
+import * as State from "alchemy/State";
 import * as Layer from "effect/Layer";
-import { Stack } from "../Stack.ts";
-import * as State from "../State/index.ts";
 
 export const state = (resources: Record<string, State.ResourceState> = {}) =>
   Layer.effect(

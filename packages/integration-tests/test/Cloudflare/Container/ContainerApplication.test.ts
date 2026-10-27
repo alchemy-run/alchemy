@@ -3,6 +3,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { ContainerPlatform } from "@alchemy.run/cloudflare/Containers/ContainerPlatform";
 import { Docker } from "@alchemy.run/docker/Docker";
 import { assert, describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Deploy from "alchemy/Deploy";
 import * as Destroy from "alchemy/Destroy";
@@ -10,7 +11,6 @@ import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import { Stack } from "alchemy/Stack";
 import { State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";

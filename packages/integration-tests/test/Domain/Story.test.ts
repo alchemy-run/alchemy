@@ -1,8 +1,18 @@
 import * as Domain from "@alchemy.run/domain";
+import { errorSchema } from "@alchemy.run/domain/ExternalSystem";
 import { InMemory } from "@alchemy.run/domain/InMemory";
-import { type Step, Story } from "@alchemy.run/domain/Story";
+import {
+  type Checked,
+  type ProvideStep,
+  type RejectedStep,
+  type RepliedStep,
+  type Step,
+  Story,
+  type WhenStep,
+} from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Headers from "effect/http/Headers";
@@ -224,7 +234,9 @@ const RemindWhenCappedLive = RemindWhenCapped.toLayer(
   Effect.gen(function* () {
     const counters = yield* Counter;
     return Effect.fn(function* ({ source }) {
-      yield* counters.schedule(source, new Remind(), { after: "1 hour" });
+      yield* counters
+        .schedule(source, new Remind(), { after: "1 hour" })
+        .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
     });
   }),
 );
@@ -264,6 +276,38 @@ const real = (...steps: ReadonlyArray<Step>) =>
 // @ts-expect-error Approval is not provided
 export const unprovided: Effect.Effect<void, unknown, never> = unstubbed();
 
+// Each step is checked against the last command: `rejected` takes only a
+// rejection it declares, `replied` only its reply type, and a command whose
+// middleware provides a service needs a `provide` step for it first.
+export const typed = () => [
+  story(Story.when(c1, new Increment({ by: 11 })), Story.rejected(new TooBig({ max: 10 }))),
+  story(Story.when(c1, new Increment({ by: 1 })), Story.replied({ total: 1 })),
+  story(Story.provide(Operator, "sam"), Story.when(c1, new ResetCounter())),
+  // @ts-expect-error Increment does not reject with NotAnOperator
+  story(Story.when(c1, new Increment({ by: 1 })), Story.rejected(new NotAnOperator())),
+  // @ts-expect-error Increment replies with a number total
+  story(Story.when(c1, new Increment({ by: 1 })), Story.replied({ total: "1" })),
+  // @ts-expect-error Cap declares no reply
+  story(Story.when(c1, new Cap()), Story.replied({ total: 1 })),
+  // @ts-expect-error ResetCounter's middleware provides Operator, and no step does
+  story(Story.when(c1, new ResetCounter())),
+  // A step typed as a plain Step may be a `provide`, so it turns the checks off.
+  story(Story.provide(Operator, "sam") as Step, Story.when(c1, new ResetCounter())),
+];
+
+// The type error names the mistake on the step that makes it.
+export const messages: [
+  Checked<[WhenStep<typeof Increment>, RejectedStep<NotAnOperator>]>[1],
+  Checked<[WhenStep<typeof Cap>, RepliedStep<{ total: number }>]>[1],
+  Checked<[WhenStep<typeof ResetCounter>]>[0],
+  Checked<[ProvideStep<Operator>, WhenStep<typeof ResetCounter>]>[1],
+] = [
+  "Increment does not reject with NotAnOperator",
+  "Cap declares no reply",
+  "ResetCounter needs Story.provide(Test/Operator) before it",
+  Story.when(Counter.ref("c-1"), new ResetCounter()),
+];
+
 const c1 = Counter.ref("c-1");
 const c2 = Counter.ref("c-2");
 const m1 = Move.ref("m-1");
@@ -277,6 +321,28 @@ describe("Domain Story", () => {
       Story.replied({ total: 5 }),
       Story.view(Totals, c1, { total: 5 }),
       Story.emitted(History, c1, [{ by: 2 }, { by: 3 }]),
+    ),
+  );
+
+  it.effect("asserts part of an aggregate's state", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 2, total: 2 })),
+      Story.state(c1, { total: 2 }),
+      Story.state(c1, { total: 2, capped: false }),
+    ),
+  );
+
+  it.effect("a partial state that does not match fails", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 2, total: 2 })),
+      Story.state(c1, { total: 3 }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain(
+          'Counter/c-1\n  expected {"total":3}\n  actual   {"total":2,"capped":false}',
+        ),
+      ),
     ),
   );
 
@@ -560,6 +626,7 @@ describe("Domain Story", () => {
   );
 
   it.effect("a command without its context fails", () =>
+    // @ts-expect-error ResetCounter's middleware provides Operator, and no step does
     story(Story.when(c1, new ResetCounter())).pipe(
       Effect.flip,
       Effect.map((failure) => expect(String(failure)).toContain("Test/Operator")),
@@ -572,7 +639,7 @@ describe("Domain Story", () => {
   it.live("an Api exposes a command; its middleware provides the context", () =>
     Effect.gen(function* () {
       class CounterApi extends Domain.Api("CounterApi", ResetCounter) {}
-      const client = yield* CounterApi.testClient;
+      const client = yield* CounterApi.clientInProcess;
       const counters = yield* Counter;
       yield* counters.send(c1, new Increment({ by: 3 }));
       const reset = yield* client.ResetCounter(
@@ -609,7 +676,7 @@ describe("Domain Story", () => {
   it.live("an Api exposes views and aggregates; validate judges every read", () =>
     Effect.gen(function* () {
       class CounterApi extends Domain.Api("CounterApi", ResetCounter, Totals, Counter) {}
-      const client = yield* CounterApi.testClient;
+      const client = yield* CounterApi.clientInProcess;
       const counters = yield* Counter;
       const sam = { headers: Headers.fromInput({ "x-operator": "sam" }) };
       const guest = { headers: Headers.fromInput({ "x-operator": "guest" }) };
@@ -622,6 +689,20 @@ describe("Domain Story", () => {
         yield* client.Totals.get("c-1", { ...sam, atLeast, where: { total: { gt: 10 } } }),
       ).toBeNull();
       expect((yield* client.Totals.get("c-1", guest).pipe(Effect.flip))._tag).toBe("NotAnOperator");
+      // A snapshot is judged like a get, and its filter narrows the same way.
+      expect(yield* client.Totals.snapshot("c-1", { ...sam, atLeast })).toEqual({
+        state: { total: 3 },
+        cursor: 1,
+      });
+      expect(
+        (yield* client.Totals.snapshot("c-1", { ...sam, where: { total: { gt: 10 } } })).state,
+      ).toBeNull();
+      expect((yield* client.Totals.snapshot("c-1", guest).pipe(Effect.flip))._tag).toBe(
+        "NotAnOperator",
+      );
+      expect((yield* client.Totals.list("c-1", guest).pipe(Effect.flip))._tag).toBe(
+        "NotAnOperator",
+      );
       expect(yield* client.Counter.get("c-1", sam)).toEqual({ total: 3, capped: false });
       expect((yield* client.Counter.get("c-1", guest).pipe(Effect.flip))._tag).toBe(
         "NotAnOperator",
@@ -640,10 +721,14 @@ describe("Domain Story", () => {
       );
       yield* Effect.sleep("20 millis");
       yield* counters.send(c1, new Increment({ by: 2 }));
-      expect(yield* Fiber.join(totals)).toEqual([{ total: 3 }, { total: 5 }]);
-      expect((yield* Fiber.join(states)).map((s) => s.total)).toEqual([3, 5]);
+      expect(yield* Fiber.join(totals)).toEqual([
+        { state: { total: 3 }, cursor: 1 },
+        { state: { total: 5 }, cursor: 2 },
+      ]);
+      expect((yield* Fiber.join(states)).map(({ state }) => state.total)).toEqual([3, 5]);
 
       const events = yield* client.Counter.events("c-1", sam).pipe(
+        Stream.filter(Domain.Read.isEvent),
         Stream.take(2),
         Stream.runCollect,
       );
@@ -808,6 +893,60 @@ describe("Domain Story", () => {
     );
   });
 
+  it.effect("fails on a committed event no step asserts", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 2, total: 2 })),
+      Story.when(c1, new Increment({ by: 3 })),
+      Story.replied({ total: 5 }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.step).toBe(3);
+        expect(failure.reason).toBe(
+          "committed events no step asserts (assert them with then): Counter/c-1: Incremented { by: 3, total: 5 } (from step 2)",
+        );
+        expect(failure.message.split("\n\n")[1]).toBe(
+          [
+            "  ✓ 1 Given      Counter/c-1: Incremented { by: 2, total: 2 }",
+            "  ✓ 2 When       Counter/c-1: Increment { by: 3 }",
+            "  ✓ 3 Replied    { total: 5 }",
+            "  ✗   end        Counter/c-1: Incremented { by: 3, total: 5 } (from step 2)",
+            "  events so far",
+            "    Counter/c-1: Incremented → Incremented",
+          ].join("\n"),
+        );
+      }),
+    ),
+  );
+
+  it.effect("fails on the events after the ones a then names", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.call(Approval.check, { total: 16 }),
+      Story.succeed(Approval.check, { ok: true }),
+      Story.then(c1, new Incremented({ by: 6, total: 16 })),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(failure.reason).toContain("Counter/c-1: Capped (from step 4)"),
+      ),
+    ),
+  );
+
+  it.effect("fails on events a policy commits on a stream no step names", () =>
+    story(
+      Story.when(m1, new MakeMove({ from: "c-1", to: "c-2", amount: 30 })),
+      Story.then(m1, new Moved({ from: "c-1", to: "c-2", amount: 30 })),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.reason).toContain("Counter/c-1: Capped (from step 1)");
+        expect(failure.events).toEqual({ "Move/m-1": ["Moved"], "Counter/c-1": ["Capped"] });
+      }),
+    ),
+  );
+
   it.effect("a scheduled command fires when the clock reaches it", () =>
     story(
       Story.clock("2026-01-01T00:00:00Z"),
@@ -868,6 +1007,38 @@ describe("Domain Story", () => {
     ),
   );
 
+  it.effect("advance moves the clock forward by a duration", () =>
+    story(
+      Story.when(c1, new Cap()),
+      Story.then(c1, new Capped()),
+      Story.advance("59 minutes"),
+      Story.then(c1),
+      Story.advance(Duration.minutes(1)),
+      Story.then(c1, new Reminded()),
+      Story.clock("2026-01-01T01:00:00Z"),
+    ),
+  );
+
+  it.effect("advance by a negative duration fails", () =>
+    story(Story.advance("-1 hour")).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.reason).toBe("Advance: the clock only moves forward, not by -1h");
+        expect(failure.message).toContain("  ✗ 1 Advance    -1h");
+      }),
+    ),
+  );
+
+  it.effect("advance by something that is not a duration fails", () =>
+    story(Story.advance("Infinity")).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.reason).toBe("Advance: Infinity is not a duration");
+        expect(failure.message).toContain("  ✗ 1 Advance    Infinity");
+      }),
+    ),
+  );
+
   it.effect("a clock step that is not a time fails", () =>
     story(Story.clock("tomorrow")).pipe(
       Effect.flip,
@@ -875,6 +1046,140 @@ describe("Domain Story", () => {
         expect(failure.reason).toBe("Clock: tomorrow is not a time");
         expect(failure.message).toContain("  ✗ 1 Clock      tomorrow");
       }),
+    ),
+  );
+});
+
+// An operation that declares several errors: the policy handles each one.
+class LockOffline extends Domain.Rejection("LockOffline") {}
+class CodeTaken extends Domain.Rejection("CodeTaken", { code: Schema.String }) {}
+class LockJammed extends Domain.Rejection("LockJammed") {}
+class Keypad extends Domain.ExternalSystem("Keypad", {
+  setCode: {
+    args: { code: Schema.String },
+    success: { codeId: Schema.String },
+    error: [LockOffline, CodeTaken],
+  },
+}) {}
+
+class CodeRequested extends Domain.Event("CodeRequested", { code: Schema.String }) {}
+class CodeOutcome extends Domain.Event("CodeOutcome", { outcome: Schema.String }) {}
+class RequestCode extends Domain.Command("RequestCode", {
+  target: Schema.String,
+  input: { code: Schema.String },
+  events: [CodeRequested],
+}) {}
+class RecordOutcome extends Domain.Command("RecordOutcome", {
+  target: Schema.String,
+  input: { outcome: Schema.String },
+  events: [CodeOutcome],
+}) {}
+class Door extends Domain.Aggregate("Door", {
+  id: Schema.String,
+  state: Schema.Struct({}),
+  initial: {},
+  commands: [RequestCode, RecordOutcome],
+  decide: {
+    RequestCode: (_, { code }) => [new CodeRequested({ code })],
+    RecordOutcome: (_, { outcome }) => [new CodeOutcome({ outcome })],
+  },
+  evolve: { CodeRequested: (s) => s, CodeOutcome: (s) => s },
+}) {}
+class SetCodeOnLock extends Domain.Policy("SetCodeOnLock", {
+  from: Door,
+  on: [CodeRequested],
+}) {}
+const SetCodeOnLockLive = SetCodeOnLock.toLayer(
+  Effect.gen(function* () {
+    const keypad = yield* Keypad;
+    const doors = yield* Door;
+    return Effect.fn(function* ({ source, event }) {
+      const outcome = yield* keypad.setCode({ code: event.code }).pipe(
+        Effect.map(({ codeId }) => `set ${codeId}`),
+        Effect.catchTags({
+          LockOffline: () => Effect.succeed("offline"),
+          CodeTaken: ({ code }) => Effect.succeed(`taken ${code}`),
+        }),
+      );
+      yield* doors.send(source, new RecordOutcome({ outcome }));
+    });
+  }),
+);
+class Doors extends Domain.Model("Doors", { aggregates: [Door], policies: [SetCodeOnLock] }) {}
+const doorStory = Story.make(Doors, { layer: SetCodeOnLockLive, stub: [Keypad] });
+const d1 = Door.ref("d-1");
+
+// Only a declared error type-checks.
+// @ts-expect-error LockJammed is not one of setCode's errors
+export const undeclared = Story.fail(Keypad.setCode, new LockJammed());
+
+// A union schema declares the same errors.
+class UnionKeypad extends Domain.ExternalSystem("UnionKeypad", {
+  setCode: { args: { code: Schema.String }, error: Schema.Union([LockOffline, CodeTaken]) },
+}) {}
+export const unionErrors = [
+  Story.fail(UnionKeypad.setCode, new LockOffline()),
+  Story.fail(UnionKeypad.setCode, new CodeTaken({ code: "1234" })),
+];
+// @ts-expect-error LockJammed is not in the union
+export const undeclaredInUnion = Story.fail(UnionKeypad.setCode, new LockJammed());
+
+describe("Domain Story: an operation with several errors", () => {
+  it.effect("fails a pending call with each declared error", () =>
+    doorStory(
+      Story.when(d1, new RequestCode({ code: "1234" })),
+      Story.then(d1, new CodeRequested({ code: "1234" })),
+      Story.call(Keypad.setCode, { code: "1234" }),
+      Story.fail(Keypad.setCode, new LockOffline()),
+      Story.then(d1, new CodeOutcome({ outcome: "offline" })),
+      Story.when(d1, new RequestCode({ code: "5678" })),
+      Story.then(d1, new CodeRequested({ code: "5678" })),
+      Story.call(Keypad.setCode, { code: "5678" }),
+      Story.fail(Keypad.setCode, new CodeTaken({ code: "5678" })),
+      Story.then(d1, new CodeOutcome({ outcome: "taken 5678" })),
+    ),
+  );
+
+  it.effect("answers a call with its success when it declares several errors", () =>
+    doorStory(
+      Story.when(d1, new RequestCode({ code: "1234" })),
+      Story.call(Keypad.setCode, { code: "1234" }),
+      Story.succeed(Keypad.setCode, { codeId: "k_1" }),
+      Story.then(d1, new CodeRequested({ code: "1234" }), new CodeOutcome({ outcome: "set k_1" })),
+    ),
+  );
+
+  it("reads every form of a declared error as one schema", () => {
+    const declared = [new LockOffline(), new CodeTaken({ code: "1234" })];
+    for (const spec of [Keypad.ops.setCode, UnionKeypad.ops.setCode]) {
+      const is = Schema.is(errorSchema(spec));
+      expect(declared.map((error) => is(error))).toEqual([true, true]);
+      expect(is(new LockJammed())).toBe(false);
+    }
+    expect(Schema.is(errorSchema({}))(new LockOffline())).toBe(false);
+  });
+
+  it.effect("a real call fails with either declared error", () =>
+    Story.make(Doors, { layer: SetCodeOnLockLive })(
+      Story.when(d1, new RequestCode({ code: "0000" })),
+      Story.call(Keypad.setCode, { code: "0000" }),
+      Story.failed(Keypad.setCode, new CodeTaken({ code: "0000" })),
+      Story.then(
+        d1,
+        new CodeRequested({ code: "0000" }),
+        new CodeOutcome({ outcome: "taken 0000" }),
+      ),
+    ).pipe(
+      Effect.provide(
+        Keypad.toLayer(
+          Effect.succeed({
+            setCode: ({ code }) =>
+              code === "0000"
+                ? Effect.fail(new CodeTaken({ code }))
+                : Effect.fail(new LockOffline()),
+          }),
+        ),
+      ),
     ),
   );
 });

@@ -3,6 +3,7 @@ import type { CloudflareResolvedCredentials } from "@alchemy.run/cloudflare/Auth
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { LocalRuntimeState } from "@alchemy.run/cloudflare/LocalRuntime";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { apiTokenCredentials, Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { NodeServices } from "@effect/platform-node";
@@ -15,7 +16,6 @@ import { ResourceContext } from "alchemy/ResourceContext";
 import { Stack, type StackSpec } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { type ResourceState, State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

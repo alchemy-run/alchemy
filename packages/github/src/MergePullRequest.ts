@@ -1,17 +1,12 @@
-import type { RestEndpointMethodTypes } from "@octokit/rest";
+import type * as Pulls from "@distilled.cloud/github/pulls";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { GitHubApiError } from "./ApiError.ts";
-import type { EndpointParameters } from "./EndpointParameters.ts";
 import type { Repository } from "./Repository.ts";
 
-export interface MergePullRequestRequest extends EndpointParameters<
-  RestEndpointMethodTypes["pulls"]["merge"]["parameters"]
-> {}
+export interface MergePullRequestRequest extends Omit<Pulls.MergeRequest, "owner" | "repo"> {}
 
-export type MergePullRequestResponse =
-  RestEndpointMethodTypes["pulls"]["merge"]["response"]["data"];
+export type MergePullRequestResponse = Pulls.PullRequestMergeResult;
 
 /**
  * Merge a pull request (`pulls.merge`). Gate it yourself, e.g. on an approval
@@ -43,7 +38,7 @@ export interface MergePullRequest extends Binding.Service<
   ) => Effect.Effect<
     (
       request: MergePullRequestRequest,
-    ) => Effect.Effect<MergePullRequestResponse, GitHubApiError, RuntimeContext>
+    ) => Effect.Effect<MergePullRequestResponse, Pulls.MergeError, RuntimeContext>
   >
 > {}
 

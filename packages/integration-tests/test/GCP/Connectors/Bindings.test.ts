@@ -1,12 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as connectors from "@distilled.cloud/gcp/connectors_v2";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import ConnectorsBindingsHost, { Account, ENTITY_TYPE_PARENT } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -19,7 +19,7 @@ let entityName: string;
 
 // Entities live in an existing Integration Connectors connection; set
 // GCP_TEST_CONNECTORS_PARENT to its `…/entityTypes/{type}` to run this.
-describe.skipIf(!dockerAvailable || ENTITY_TYPE_PARENT.length === 0)(
+describe.skipIf(ENTITY_TYPE_PARENT.length === 0)(
   "Connectors Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:connectors", "provider:gcp:run", "live"],

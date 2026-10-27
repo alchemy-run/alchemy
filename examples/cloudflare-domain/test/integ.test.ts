@@ -3,11 +3,11 @@ import * as Axiom from "@alchemy.run/axiom";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Domain from "@alchemy.run/domain";
 import * as Stripe from "@alchemy.run/stripe";
+import * as Test from "@alchemy.run/test/Bun";
 // Runs under `bun test`: deploying a Worker from Vitest does not yet produce a
 // correct bundle (the Effect entrypoint is not detected under Vite's transform).
 import { CreatePaymentIntent } from "@distilled.cloud/stripe/stripe";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -32,6 +32,16 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const stack = beforeAll(destroy(Stack).pipe(Effect.andThen(deploy(Stack))));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
+/** Sign a customer in through the bank's `/api/session` route; returns the signed session token. */
+const signIn = Effect.fn(function* (url: string, customerId: string) {
+  const response = yield* HttpClient.execute(
+    HttpClientRequest.post(`${url}/api/session`).pipe(
+      HttpClientRequest.bodyJsonUnsafe({ customerId }),
+    ),
+  ).pipe(Effect.provide(FetchHttpClient.layer));
+  return ((yield* response.json) as { readonly token: string }).token;
+});
+
 /**
  * A typed CustomerApi client signed in as `customerId`: commands over HTTP,
  * every watch a WebSocket to the Durable Object that owns what it reads.
@@ -39,8 +49,8 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
  * with its calls through `sessionClient`, and on each WebSocket upgrade
  * through Bun's `WebSocket`, which accepts headers.
  */
-const customerClient = (url: string, customerId: string) => {
-  const token = `customer:${customerId}`;
+const customerClient = Effect.fn(function* (url: string, customerId: string) {
+  const token = yield* signIn(url, customerId);
   const webSockets = Layer.succeed(
     Socket.WebSocketConstructor,
     (socketUrl, protocols) =>
@@ -49,14 +59,14 @@ const customerClient = (url: string, customerId: string) => {
         headers: { authorization: `Bearer ${token}` },
       } as unknown as string[]),
   );
-  return CustomerApi.client.pipe(
+  return yield* CustomerApi.client.pipe(
     Effect.provide(
       Layer.mergeAll(Domain.protocolWebSocket(`${url}/api`), sessionClient(token)).pipe(
         Layer.provide(Layer.mergeAll(FetchHttpClient.layer, webSockets)),
       ),
     ),
   );
-};
+});
 
 test(
   "the deployed bank decides, projects, runs policies and streams views",
@@ -146,8 +156,46 @@ test(
       "deposit",
     ]);
 
+    // a feed pushed by the view's Durable Object marks the end of its history
+    const feed = yield* sam.Statement.events(samMain).pipe(
+      Stream.take(4),
+      Stream.runCollect,
+      Effect.timeout("20 seconds"),
+    );
+    expect(
+      feed.map((frame) => (Domain.Read.isCaughtUp(frame) ? frame.cursor : frame.event.kind)),
+    ).toEqual(["deposit", "withdrawal", "transfer-out", page.entries[0]!.envelope.seq]);
+    // a watched state's cursor resumes the feed with nothing twice: straight to CaughtUp
+    const [watched] = yield* sam.Statement.watch(samMain).pipe(
+      Stream.take(1),
+      Stream.runCollect,
+      Effect.timeout("20 seconds"),
+    );
+    expect(watched!.cursor).toBe(page.entries[0]!.envelope.seq);
+    const [resumed] = yield* sam.Statement.events(samMain, { after: watched!.cursor }).pipe(
+      Stream.take(1),
+      Stream.runCollect,
+      Effect.timeout("20 seconds"),
+    );
+    expect(resumed).toEqual({ _tag: "CaughtUp", cursor: watched!.cursor });
+
+    // an aggregate's Durable Object reads the same way: its watched cursor ends its history
+    const [account] = yield* sam.Account.watch(samMain).pipe(
+      Stream.take(1),
+      Stream.runCollect,
+      Effect.timeout("20 seconds"),
+    );
+    const history = yield* sam.Account.events(samMain).pipe(
+      Stream.takeUntil((frame) => Domain.Read.isCaughtUp(frame)),
+      Stream.runCollect,
+      Effect.timeout("20 seconds"),
+    );
+    expect(history.at(-1)).toEqual({ _tag: "CaughtUp", cursor: account!.cursor });
+    expect(history.length - 1).toBe(account!.cursor);
+
     // a projection (AccountCards) appends to a stream; its Durable Object pushes each new card
     const card = yield* sam.AccountCard.watch(samMain).pipe(
+      Stream.map(({ state }) => state),
       Stream.filter((latest) => latest?.event.balance === 50),
       Stream.runHead,
       Effect.timeout("20 seconds"),
@@ -159,7 +207,7 @@ test(
     // a projection (Ledger) writes D1 in batches; the ledger is served by a plain route
     const ledger = yield* HttpClient.execute(
       HttpClientRequest.get(`${base}/api/ledger/${samMain}`).pipe(
-        HttpClientRequest.setHeader("authorization", "Bearer customer:c-1"),
+        HttpClientRequest.bearerToken(yield* signIn(base, "c-1")),
       ),
     ).pipe(
       Effect.flatMap((res) => res.json),
@@ -180,6 +228,7 @@ test(
 
     // a live view (AccountSummary → CustomerDashboard, view to view), pushed by its Durable Object
     const dashboard = yield* sam.CustomerDashboard.watch(CustomerId.make("c-1")).pipe(
+      Stream.map(({ state }) => state),
       Stream.filter((d) => d !== null && CustomerDashboard.computed.totalBalance(d) === 50),
       Stream.runHead,
       Effect.timeout("20 seconds"),
