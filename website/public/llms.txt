@@ -6,7 +6,7 @@ This file is a navigation index for the documentation site at https://alchemy.ru
 
 ## Start here
 
-- [What is Alchemy?](https://alchemy.run/what-is-alchemy) — Alchemy is Infrastructure as Code built in pure Effect, with Infrastructure as Effects on top. Declare your cloud resources and the code that runs on them in one type-safe TypeScript program, and deploy it with one command.
+- [What is Alchemy?](https://alchemy.run/what-is-alchemy) — Alchemy is a TypeScript framework for building cloud applications with Effects and Layers. Your infrastructure and the code that runs on it are written, type-checked, and deployed together.
 - [Getting started](https://alchemy.run/getting-started) — Install Alchemy and create your first Stack in under two minutes.
 - [Migrating from v1](https://alchemy.run/migrating-from-v1) — Migrate your Alchemy v1 (async/await) project to Alchemy v2.
 
@@ -82,6 +82,7 @@ Stages, credential profiles, auth providers, secrets and config, local developme
 - [Doppler](https://alchemy.run/environments/doppler) — Load a Doppler config into your Stack — log in with the browser on your machine, use a service token in CI.
 - [Infisical](https://alchemy.run/environments/infisical) — Load an Infisical environment into your Stack — a machine identity on your machine, the platform's own OIDC token in CI.
 - [Local development](https://alchemy.run/environments/local-development) — How alchemy dev provides hot reloading, local execution, and local emulation with per-resource opt-in to real cloud services.
+- [Worktrees](https://alchemy.run/environments/worktrees) — Run alchemy deploy, dev, and tests from several git worktrees at once — one stage per worktree, so parallel agents never touch each other's resources.
 - [CI](https://alchemy.run/environments/ci) — Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.
 
 ## State Store
@@ -105,7 +106,7 @@ Tests run against real clouds: the model, the end-to-end walkthrough, provider-l
 - [Testing](https://alchemy.run/testing) — How Alchemy tests work — real clouds by default, local emulators on demand, one Stack deploy per suite, isolated stages, deploy → assert → destroy.
 - [Testing a Stack](https://alchemy.run/testing/testing-a-stack) — Deploy your real Stack once per suite, drive it over HTTP, tear it down.
 - [Testing Providers](https://alchemy.run/testing/testing-providers) — Exercise a provider's create, update, replace, and delete paths with test.provider and a scratch in-memory stack.
-- [Test harness](https://alchemy.run/testing/test-harness) — Reference for alchemy/Test — every helper, hook, and option exposed by Test.make for Bun and Vitest.
+- [Test harness](https://alchemy.run/testing/test-harness) — Reference for @alchemy.run/test — every helper, hook, and option exposed by Test.make, and how to run it with alchemy-test, bun test, or Vitest.
 - [Observability](https://alchemy.run/testing/observability) — Effect emits OpenTelemetry natively and the exporter is a Layer. Provision the receiving end — datasets, monitors, notifiers, alarms — as resources in the same Stack as the code that emits the signals.
 
 ## Cloudflare — start here
@@ -888,7 +889,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Stream](https://alchemy.run/domain/stream) — How a stream keeps a keyed, append-only log that a projection writes and clients read through an Api, with its latest entry as the current value.
 - [Policy](https://alchemy.run/domain/policy) — How a policy reacts to events with commands and calls to outside systems, and how to make it safe to run more than once.
 - [Saga](https://alchemy.run/domain/saga) — A process that spans several aggregates and takes time, run step by step as an Effect workflow, with steps that undo earlier ones when a later one fails.
-- [External System](https://alchemy.run/domain/external-system) — Declare the outside systems your model calls, implement them with Layers, and turn their events into commands.
+- [External System](https://alchemy.run/domain/external-system) — Declare the outside systems your model calls in the model's own language, implement them with Layers, and turn their events into commands.
 - [Api](https://alchemy.run/domain/api) — How an Api publishes a model to one kind of client, how it's served, and how a typed client calls it.
 - [Story](https://alchemy.run/domain/story) — A specification you can run. Given some history, when a command is sent, then these events are recorded.
 - [Testing a model](https://alchemy.run/domain/testing-models) — Test your model's rules, views, policies and deadlines with stories that run it in memory.
@@ -897,6 +898,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Optimistic updates](https://alchemy.run/domain/optimistic-updates) — Show a change the moment the user asks for it, then confirm it when the bank's event arrives, or mark it rejected.
 - [Offline and local first](https://alchemy.run/domain/local-first) — Choose how local an app is, and keep it working offline by recording intents and sending them when the connection returns.
 - [Sessions and middleware](https://alchemy.run/domain/sessions) — Authenticate every request, carry who is asking into the domain, and sign browsers in with a cookie.
+- [Sign in with better-auth](https://alchemy.run/domain/better-auth) — Sign users in to a Domain Api with GitHub or Google through better-auth, and give every command and view the signed-in user.
 - [Views as security boundaries](https://alchemy.run/domain/view-security) — Decide who may read each view, keep watches honest as data changes hands, and give each audience a view of its own.
 - [Unique values](https://alchemy.run/domain/unique-values) — Keep a value unique across every customer by making the value itself an aggregate.
 - [Deadlines](https://alchemy.run/domain/deadlines) — Give a waiting process a time limit with a scheduled command, and let the aggregate decide whether the deadline or the action wins.

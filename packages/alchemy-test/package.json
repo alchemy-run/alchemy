@@ -67,19 +67,41 @@
   },
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",
-    "build:package": "node scripts/build.ts"
+    "build:package": "node scripts/build.ts",
+    "test:vitest": "vitest run --config vitest/vitest.config.ts"
   },
   "dependencies": {
-    "@effect/platform-bun": "catalog:",
-    "@opentui/core": "catalog:"
+    "@effect/platform-bun": "catalog:"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@opentui/core": "catalog:",
     "@types/bun": "catalog:",
+    "alchemy": "workspace:*",
     "effect": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
-    "effect": "catalog:"
+    "@effect/vitest": "catalog:",
+    "@opentui/core": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@effect/vitest": {
+      "optional": true
+    },
+    "@opentui/core": {
+      "optional": true
+    },
+    "alchemy": {
+      "optional": true
+    },
+    "vitest": {
+      "optional": true
+    }
   },
   "engines": {
     "bun": ">=1.3"

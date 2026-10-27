@@ -1,7 +1,7 @@
 import { expect } from "bun:test";
 import * as Hetzner from "@alchemy.run/hetzner";
+import * as Test from "@alchemy.run/test/Bun";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Bun";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

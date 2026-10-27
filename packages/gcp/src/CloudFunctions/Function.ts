@@ -338,6 +338,12 @@ export type Function = Resource<
     maxInstanceCount: number | undefined;
     /** Runtime service account email. */
     serviceAccountEmail: string | undefined;
+    /**
+     * Numeric unique ID of the runtime service account: the `sub` of the
+     * Google ID tokens the host fetches. An AWS binding's IAM role trusts
+     * it, so the host reaches AWS without an access key.
+     */
+    serviceAccountUniqueId: string | undefined;
     /** Eventarc trigger resource name, if any. */
     trigger: string | undefined;
     /** RFC3339 creation timestamp. */
@@ -601,7 +607,11 @@ const toAttrs = (
   fn: cloudfunctions.Cloudfunctions_Function,
   project: string,
   region: string,
-  extras: { iamGrants?: AppliedIamGrant[]; codeHash?: string } = {},
+  extras: {
+    iamGrants?: AppliedIamGrant[];
+    codeHash?: string;
+    serviceAccountUniqueId?: string;
+  } = {},
 ): Function["Attributes"] => {
   const name = fn.name ?? "";
   const parsed = parseName(name, region);
@@ -634,6 +644,7 @@ const toAttrs = (
       resourceName: name,
       serviceAccount: fn.serviceConfig?.serviceAccountEmail,
     }),
+    serviceAccountUniqueId: extras.serviceAccountUniqueId,
     iamGrants: extras.iamGrants ?? [],
     codeHash: extras.codeHash,
   };
@@ -831,6 +842,7 @@ export const FunctionProvider = () =>
       const attrs = toAttrs(existing, env.project, env.region, {
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
+        serviceAccountUniqueId: output?.serviceAccountUniqueId,
       });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
@@ -1074,6 +1086,7 @@ export const FunctionProvider = () =>
       return toAttrs(current, env.project, env.region, {
         iamGrants: identity.grants,
         codeHash,
+        serviceAccountUniqueId: identity.uniqueId,
       });
     }),
 

@@ -24,8 +24,7 @@ type AppReference = string | App | Compute;
 
 export interface CustomDomainProps {
   /**
-   * App ID or Compute output that owns the domain. The App must be attached to
-   * the project's current default branch.
+   * App ID or Compute output that owns the domain.
    */
   app: AppReference;
   /**
@@ -90,7 +89,6 @@ export interface CustomDomain extends Resource<
 /**
  * A Prisma app custom domain.
  *
- * Domains can only attach to Apps on the project's current default branch.
  * Prisma verifies the hostname's `CNAME` to the app's regional switchboard
  * (`switchboard.{region}.prisma.build`, listed in `dnsRecords`) when the
  * domain is created, so publish it first. Creation then starts asynchronous
@@ -241,28 +239,6 @@ const waitForAuthoritativeCname = (hostname: string) =>
     if (visible) yield* Effect.sleep("10 seconds");
   });
 
-const ensureDefaultBranchApp = (client: PrismaManagementClient, appId: string) =>
-  Effect.gen(function* () {
-    const app = yield* client.getApp(appId);
-    if (!app.branchId) {
-      return yield* Effect.fail(
-        new Error("Prisma custom domains can only be attached to apps on the default Branch."),
-      );
-    }
-    const branch = yield* client
-      .getBranch(app.branchId)
-      .pipe(
-        Effect.catchIf(isNotFound, () =>
-          Effect.fail(new Error(`Unable to verify default Branch for Prisma app ${appId}.`)),
-        ),
-      );
-    if (!branch.isDefault) {
-      return yield* Effect.fail(
-        new Error("Prisma custom domains can only be attached to apps on the default Branch."),
-      );
-    }
-  });
-
 const ProviderLive = () =>
   Provider.effect(
     CustomDomain,
@@ -353,7 +329,6 @@ const ProviderLive = () =>
             return yield* Effect.fail(adoptionRequiredError(hostname, appId, "already exists"));
           }
           if (!domain) {
-            yield* ensureDefaultBranchApp(client, appId);
             yield* waitForAuthoritativeCname(hostname);
           }
           const reconciled = domain

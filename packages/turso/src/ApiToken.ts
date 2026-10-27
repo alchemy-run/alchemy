@@ -133,11 +133,13 @@ export const ApiTokenProvider = () =>
             } as const;
           }
         }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const name = output?.name ?? (yield* tokenName(id, olds?.name));
           const observed = yield* observe(name);
           if (!observed) return undefined;
           if (output !== undefined && output.id === observed.id) return output;
+          // The generation a delete-first replacement is about to revoke.
+          if (previous !== undefined && previous.id === observed.id) return previous;
           // The secret is only revealed at creation, so a token we have no
           // state for can't be adopted with its value — reconcile re-mints.
           return Unowned({

@@ -1,9 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Alchemist from "alchemy/Alchemist";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -41,7 +41,7 @@ const scriptExists = (accountId: string, scriptName: string) =>
 
 test.provider(
   "a named Cloudflare state store bootstraps, serves state and tears down beside the default",
-  () =>
+  (stack) =>
     Effect.gen(function* () {
       const environment = yield* yield* CloudflareEnvironment;
       const { accountId } = environment;
@@ -59,6 +59,7 @@ test.provider(
         );
 
       const before = yield* defaultStacks();
+      yield* stack.destroy();
       yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
 
       const created = yield* Alchemist.State.bootstrap(target).pipe(Effect.provide(alchemist));
@@ -68,7 +69,50 @@ test.provider(
       const adopted = yield* Alchemist.State.bootstrap(target).pipe(Effect.provide(alchemist));
       expect(adopted.status).toBe("adopted");
 
-      // The named store holds only its own bootstrap stack.
+      // Opening the store from a profile with no cached credentials, with a
+      // token that can't read Workers scripts, can't tell whether the store
+      // exists. It fails instead of bootstrapping over the live store, which
+      // would replace its auth token and encryption key.
+      const limited = yield* stack.deploy(
+        Cloudflare.ApiToken.AccountApiToken("NoWorkersScriptsRead", {
+          policies: [
+            {
+              effect: "allow",
+              permissionGroups: ["Account Settings Read"],
+              resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
+            },
+          ],
+        }),
+      );
+      const unknown = `Could not determine whether Cloudflare State Store '${worker}' exists, so it was left untouched`;
+      const blind = yield* inCI(
+        {
+          CLOUDFLARE_API_TOKEN: Redacted.value(limited.value),
+          CLOUDFLARE_ACCOUNT_ID: accountId,
+          ALCHEMY_PROFILE: `${stack.stage}-no-scripts-read`,
+        },
+        Effect.exit(
+          Alchemist.State.store(target).pipe(
+            Effect.flatMap((store) => store.listStacks()),
+            Effect.provide(alchemist),
+          ),
+        ),
+      ).pipe(
+        // A fresh token can take a few seconds to authenticate.
+        Effect.repeat({
+          until: (exit) => Exit.isFailure(exit) && Cause.pretty(exit.cause).includes(unknown),
+          schedule: Schedule.spaced("5 seconds"),
+          times: 6,
+        }),
+      );
+      expect(Exit.isFailure(blind)).toBe(true);
+      if (Exit.isFailure(blind)) {
+        expect(Cause.pretty(blind.cause)).toContain(unknown);
+        expect(Cause.pretty(blind.cause)).toContain("Workers Scripts Read");
+      }
+
+      // The named store holds only its own bootstrap stack, and still serves
+      // it with the credentials it had.
       const store = yield* Alchemist.State.store(target).pipe(Effect.provide(alchemist));
       expect(yield* store.listStacks()).toEqual(["CloudflareStateStore"]);
       expect(yield* store.listStages("CloudflareStateStore")).toEqual([worker]);
@@ -110,6 +154,7 @@ test.provider(
       // The default store kept serving through all of it.
       expect(yield* scriptExists(accountId, "alchemy-state-store")).toBe(true);
       expect(yield* defaultStacks()).toEqual(before);
+      yield* stack.destroy();
     }),
   // Exclusive: sets `CI` on the process.
   {

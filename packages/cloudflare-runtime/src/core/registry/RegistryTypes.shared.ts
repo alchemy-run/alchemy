@@ -90,3 +90,11 @@ export const resolvedTargetKey = (entry: ResolvedTarget | Subscriber) => {
       return `workflow:${entry.scriptName}:${entry.workflowName}` as const;
   }
 };
+
+/**
+ * Header carrying the per-instance credential for registry pushes to the
+ * registry proxy (Miniflare's `MF-Dev-Registry-Secret`). The credential lives
+ * only in the owning process and the proxy's private binding; it is never
+ * written to registry files.
+ */
+export const HEADER_REGISTRY_UPDATE_SECRET = "Alchemy-Runtime-Registry-Update-Secret";

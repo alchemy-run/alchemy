@@ -128,7 +128,7 @@ const handleDelivery = <Req>(
       payload = body;
     }
 
-    // The wire shape matches `EmitterWebhookEvent`, but the runtime can't
+    // The wire shape matches `WebhookEvent`, but the runtime can't
     // statically prove `name`/`payload` line up with a specific member of
     // the discriminated union — GitHub's headers are the source of truth, so
     // cast across the boundary.

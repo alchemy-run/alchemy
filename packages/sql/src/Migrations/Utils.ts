@@ -25,14 +25,17 @@ export const timestampPrefixMillis = (name: string): number | undefined => {
  * without native parameter support (the D1 HTTP API and the local workerd
  * tunnel).
  */
-export const sqlLiteral = (value: unknown): string => {
+export const sqlLiteral = (value: unknown, dialect?: MigrationDialect): string => {
   if (value === null || value === undefined) return "NULL";
   if (typeof value === "number" || typeof value === "bigint") {
     return String(value);
   }
   if (typeof value === "boolean") return value ? "1" : "0";
-  if (value instanceof Date) return `'${value.toISOString()}'`;
-  return `'${String(value).replaceAll("'", "''")}'`;
+  const text = value instanceof Date ? value.toISOString() : String(value);
+  // GoogleSQL escapes with backslashes; `''` is two adjacent literals.
+  return dialect === "googlesql"
+    ? `'${text.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`
+    : `'${text.replaceAll("'", "''")}'`;
 };
 
 /**
@@ -80,4 +83,18 @@ export const inlineSqlParams = (
 export const quoteIdentifier = (identifier: string, dialect: MigrationDialect): string =>
   dialect === "mysql"
     ? `\`${identifier.replaceAll("`", "``")}\``
-    : `"${identifier.replaceAll('"', '""')}"`;
+    : dialect === "googlesql"
+      ? `\`${identifier.replaceAll("\\", "\\\\").replaceAll("`", "\\`")}\``
+      : `"${identifier.replaceAll('"', '""')}"`;
+
+/**
+ * A bookkeeping column reference. GoogleSQL reserves `hash`, so its
+ * columns are always quoted; other dialects keep the bare names.
+ */
+export const bookkeepingColumns = (
+  dialect: MigrationDialect,
+  ...columns: ReadonlyArray<string>
+): string =>
+  columns
+    .map((column) => (dialect === "googlesql" ? quoteIdentifier(column, dialect) : column))
+    .join(", ");

@@ -1,15 +1,12 @@
+import * as Pulls from "@distilled.cloud/github/pulls";
 import * as Layer from "effect/Layer";
 import * as BindingHttp from "./BindingHttp.ts";
 import { MergePullRequest, type MergePullRequestRequest } from "./MergePullRequest.ts";
 
 export const mergePullRequestOperation = BindingHttp.operation(
   "pulls.merge",
-  (octokit, repo) => (request: MergePullRequestRequest) =>
-    octokit.rest.pulls.merge({
-      owner: repo.owner,
-      repo: repo.repository,
-      ...request,
-    }),
+  (repo) => (request: MergePullRequestRequest) =>
+    Pulls.merge({ owner: repo.owner, repo: repo.repository, ...request }),
 );
 
 /**

@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "@alchemy.run/test";
+import * as TestCore from "@alchemy.run/test/Core";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -19,7 +20,6 @@ import {
 import { Secrets, Stack, inMemoryState } from "@/index.ts";
 import * as Interaction from "@/Interaction.ts";
 import { evalStack } from "../../src/EvalStack";
-import * as TestCore from "../../src/Test/Core";
 import { TestLayers } from "../test.resources";
 
 const fixtureAbsolutePath = fileURLToPath(

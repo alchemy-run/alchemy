@@ -1,10 +1,9 @@
 import { describe, expect } from "bun:test";
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
+import * as Test from "@alchemy.run/test/Bun";
 import * as redis from "@distilled.cloud/gcp/redis_v1";
 import * as run from "@distilled.cloud/gcp/run_v2";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -23,10 +22,6 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 // the deploy uses, so the test runs against the configured profile.
 const GcpHttp = Layer.mergeAll(GCP.GcpAuth, GCP.fromAuthProvider(), FetchHttpClient.layer);
 
-// The service is built from `main`, which needs a local image build.
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-
 interface Counter {
   key: string;
   count: number;
@@ -37,7 +32,7 @@ interface Counter {
 }
 
 // Deploy, tests and destroy all sit behind the same Docker guard.
-describe.skipIf(!dockerAvailable)("gcp-memorystore-redis", () => {
+describe("gcp-memorystore-redis", () => {
   // Memorystore takes several minutes to create; the image build and the
   // Cloud Run rollout run after it.
   const stack = beforeAll(deploy(Stack), { timeout: 1_200_000 });

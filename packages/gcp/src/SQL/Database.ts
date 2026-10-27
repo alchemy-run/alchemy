@@ -1,3 +1,12 @@
+import {
+  diffMigrations,
+  migrationAttributesOf,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+  type MigrationAttributes,
+  type MigrationsInput,
+} from "@alchemy.run/sql/Migrations";
 import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -5,14 +14,17 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
-import { ALCHEMY_LABEL_PREFIX } from "../Labels.ts";
+import { ALCHEMY_LABEL_PREFIX, createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { runDatabaseMigrations, type MigrationsTransport } from "./Migrations.ts";
 import { recoverIfInstanceMissing, waitForSqlOperation } from "./operations.ts";
 
-const MAX_NAME_LENGTH = 63;
+// The SQL Admin API rejects longer database names on every engine.
+const MAX_NAME_LENGTH = 60;
 
 const SYSTEM_DATABASES = new Set([
   "mysql",
@@ -52,7 +64,7 @@ export type DatabaseProps = {
   /**
    * Database name inside the instance. If omitted, a unique name is
    * generated from the stack, stage, and logical id. Must start with a
-   * letter and contain only letters, numbers, and underscores (1–63
+   * letter and contain only letters, numbers, and underscores (1–60
    * characters). Immutable — changing it replaces the database.
    */
   databaseName?: string;
@@ -77,6 +89,36 @@ export type DatabaseProps = {
    * @default "DELETE"
    */
   deletionPolicy?: DatabaseDeletionPolicy;
+  /**
+   * SQL migrations to apply on deploy, once the database exists. Accepts a
+   * directory path, a `{ dir, table }` object, or a `Drizzle.Schema`
+   * output. Only pending migrations run; editing or removing an applied
+   * file fails the deploy. PostgreSQL and MySQL instances only.
+   *
+   * Bookkeeping lives in Alchemy's `__alchemy_migrations` table. A
+   * database migrated earlier by drizzle-kit or Prisma is adopted by a
+   * one-way conversion on first deploy.
+   */
+  migrations?: MigrationsInput;
+  /**
+   * How `migrations` reach the database: `"data-api"` (Cloud SQL's
+   * `executeSql`, no network route needed) or `"connector"` (a direct
+   * connection through the Cloud SQL connector, which needs a route to the
+   * instance's IP but no authorized networks).
+   * @default "data-api" when the instance has `dataApiAccess: true`, otherwise "connector"
+   */
+  migrationsTransport?: MigrationsTransport;
+  /**
+   * Built-in database user that `migrations` log in as. It owns the tables
+   * the migrations create.
+   */
+  migrationsUser?: string;
+  /**
+   * Password of `migrationsUser`. The Data API only reads passwords from
+   * Secret Manager, so the `"data-api"` transport stages it in a regional
+   * secret for the duration of the deploy and deletes it afterwards.
+   */
+  migrationsPassword?: string | Redacted.Redacted<string>;
 };
 
 export type Database = Resource<
@@ -99,6 +141,12 @@ export type Database = Resource<
     selfLink: string | undefined;
     /** HTTP etag. */
     etag: string | undefined;
+    /** Directory of the applied SQL migrations. */
+    migrationsDir: string | undefined;
+    /** Migration bookkeeping table. */
+    migrationsTable: string | undefined;
+    /** Applied migration content hashes. */
+    migrationsHashes: Record<string, string>;
   },
   never,
   Providers
@@ -119,7 +167,7 @@ export type Database = Resource<
  * ```typescript
  * const instance = yield* GCP.SQL.Instance("AppDb", {
  *   tier: "db-f1-micro",
- *   backupEnabled: false,
+ *   backup: { enabled: false },
  * });
  * const database = yield* GCP.SQL.Database("App", {
  *   instance: instance.instanceName,
@@ -133,6 +181,63 @@ export type Database = Resource<
  *   databaseName: "app_production",
  *   charset: "utf8mb4",
  *   collation: "utf8mb4_unicode_ci",
+ * });
+ * ```
+ *
+ * ### Migrations
+ * **Example:** Apply migrations over the Data API
+ * ```typescript
+ * const instance = yield* GCP.SQL.Instance("AppDb", {
+ *   databaseVersion: "POSTGRES_17",
+ *   dataApiAccess: true,
+ * });
+ * const password = yield* Alchemy.Random("AppPassword");
+ * const user = yield* GCP.SQL.User("App", {
+ *   instance: instance.instanceName,
+ *   password: password.text,
+ * });
+ * const database = yield* GCP.SQL.Database("App", {
+ *   instance: instance.instanceName,
+ *   migrations: "./migrations",
+ *   migrationsUser: user.userName,
+ *   migrationsPassword: password.text,
+ * });
+ * ```
+ *
+ * Migrations run as `migrationsUser` through `instances.executeSql`, so
+ * the deploying machine needs no route to the database. The deploying
+ * identity needs `cloudsql.instances.executeSql` and Secret Manager
+ * access: the password is staged in a regional secret while migrations
+ * run.
+ *
+ * **Example:** Apply migrations through the Cloud SQL connector
+ * ```typescript
+ * const database = yield* GCP.SQL.Database("App", {
+ *   instance: instance.instanceName,
+ *   migrations: "./migrations",
+ *   migrationsTransport: "connector",
+ *   migrationsUser: user.userName,
+ *   migrationsPassword: password.text,
+ * });
+ * ```
+ *
+ * The connector logs in with an ephemeral client certificate from the SQL
+ * Admin API, so the instance needs no authorized networks. The deploying
+ * machine needs a route to its IP: the public IP (the default), or the
+ * private IP from inside its network. Install `pg` (PostgreSQL) or `mysql2`
+ * (MySQL).
+ *
+ * **Example:** Migrations generated by Drizzle
+ * ```typescript
+ * const schema = yield* Drizzle.Schema("Schema", {
+ *   schema: "./src/schema.ts",
+ *   out: "./migrations",
+ * });
+ * const database = yield* GCP.SQL.Database("App", {
+ *   instance: instance.instanceName,
+ *   migrations: schema,
+ *   migrationsUser: user.userName,
+ *   migrationsPassword: password.text,
  * });
  * ```
  *
@@ -200,7 +305,12 @@ const toDatabaseName = (id: string, databaseName: string | undefined, existing?:
     );
   });
 
-const toAttrs = (database: sqladmin.Database, project: string, instance: string) => ({
+const toAttrs = (
+  database: sqladmin.Database,
+  project: string,
+  instance: string,
+  migrations?: Partial<MigrationAttributes>,
+): Database["Attributes"] => ({
   databaseName: database.name ?? "",
   instance: database.instance ?? instance,
   project: database.project ?? project,
@@ -209,6 +319,7 @@ const toAttrs = (database: sqladmin.Database, project: string, instance: string)
   sqlserverDatabaseDetails: database.sqlserverDatabaseDetails,
   selfLink: database.selfLink,
   etag: database.etag,
+  ...migrationAttributesOf(migrations),
 });
 
 const getByName = (project: string, instance: string, databaseName: string) =>
@@ -284,7 +395,12 @@ export const DatabaseProvider = () =>
         instanceIdOf(previousInstance) !== instanceIdOf(nextInstance);
       const nameChanged =
         previousName !== undefined && nextName !== undefined && previousName !== nextName;
-      if (!instanceChanged && !nameChanged) return undefined;
+      if (!instanceChanged && !nameChanged) {
+        if (yield* diffMigrations({ news, output })) {
+          return { action: "update" as const };
+        }
+        return undefined;
+      }
       return {
         action: "replace" as const,
         deleteFirst: false,
@@ -298,7 +414,7 @@ export const DatabaseProvider = () =>
       const databaseName = yield* toDatabaseName(id, olds?.databaseName, output?.databaseName);
       const existing = yield* getByName(env.project, instance, databaseName);
       if (existing === undefined) return undefined;
-      return toAttrs(existing, env.project, instance);
+      return toAttrs(existing, env.project, instance, output);
     }),
 
     list: () =>
@@ -400,7 +516,28 @@ export const DatabaseProvider = () =>
         current = yield* waitUntilExists(env.project, instance, databaseName);
       }
 
-      return toAttrs(current, env.project, instance);
+      // Sync migrations — the shared pipeline skips already-applied ones.
+      const migrationsInput = migrationsInputOf(news);
+      const migrations = migrationsInput
+        ? yield* runDatabaseMigrations({
+            project: env.project,
+            instance,
+            database: databaseName,
+            input: migrationsInput,
+            stamped: stampedOf(output),
+            transport: news.migrationsTransport,
+            user: news.migrationsUser,
+            password: news.migrationsPassword,
+            labels: yield* createInternalLabels(id),
+          })
+        : undefined;
+
+      return toAttrs(
+        current,
+        env.project,
+        instance,
+        migrationsAttrs({ input: migrationsInput, run: migrations, output }),
+      );
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {

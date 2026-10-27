@@ -9,8 +9,8 @@ export interface TableColumn {
 
 /**
  * List a table's columns (empty when the table doesn't exist), normalized
- * across dialects. `schema` defaults to the connection's current/default
- * schema.
+ * across dialects. `schema` defaults to the executor's `defaultSchema`, then
+ * the connection's current/default schema.
  */
 export const tableColumns = (
   executor: SqlExecutor,
@@ -36,7 +36,11 @@ export const tableColumns = (
           `SELECT column_name AS name, data_type AS type
              FROM information_schema.columns
             WHERE table_name = ${sqlLiteral(table)}
-              AND table_schema = ${schema ? sqlLiteral(schema) : "current_schema()"}
+              AND table_schema = ${
+                (schema ?? executor.defaultSchema)
+                  ? sqlLiteral(schema ?? executor.defaultSchema)
+                  : "current_schema()"
+              }
             ORDER BY ordinal_position;`,
         )
         .pipe(
@@ -64,6 +68,24 @@ export const tableColumns = (
             })),
           ),
           Effect.orElseSucceed(() => []),
+        );
+    case "googlesql":
+      // The default schema is the empty string; named schemas qualify tables.
+      return executor
+        .query(
+          `SELECT COLUMN_NAME AS name, SPANNER_TYPE AS type
+             FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = ${sqlLiteral(table, "googlesql")}
+              AND TABLE_SCHEMA = ${sqlLiteral(schema ?? "", "googlesql")}
+            ORDER BY ORDINAL_POSITION`,
+        )
+        .pipe(
+          Effect.map((rows) =>
+            rows.map((row) => ({
+              name: String(row.name),
+              type: String(row.type ?? "").toUpperCase(),
+            })),
+          ),
         );
   }
 };
