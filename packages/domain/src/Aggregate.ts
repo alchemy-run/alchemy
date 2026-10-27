@@ -33,25 +33,29 @@ export interface DecideContext<Id> {
 }
 
 /**
- * Metadata recorded with every committed event.
+ * Metadata recorded with every committed event. Its schema is what Api clients
+ * decode, so the wire carries every field.
  */
-export interface Envelope<Id = string> {
+export const Envelope = Schema.Struct({
   /** The id of the aggregate instance that committed the event. */
-  readonly id: Id;
+  id: Schema.String,
   /** The stream the event belongs to, e.g. `Account/a-1`. */
-  readonly stream: string;
+  stream: Schema.String,
   /** The event's sequence number within its stream, starting at 1. */
-  readonly seq: number;
+  seq: Schema.Number,
   /** The commit time. */
-  readonly at: DateTime.Utc;
+  at: Schema.DateTimeUtc,
   /** The id of the command that produced the event. */
-  readonly commandId: string;
+  commandId: Schema.String,
   /**
    * The id of the first command in the chain that led here: the same for a
    * command, the events it records, and every reaction and command they cause.
    */
-  readonly correlationId: string;
-}
+  correlationId: Schema.String,
+});
+
+/** An {@link Envelope} whose `id` is the aggregate's (branded) id. */
+export type Envelope<Id = string> = typeof Envelope.Type & { readonly id: Id };
 
 /**
  * The outcome of a successfully handled command.
@@ -434,8 +438,8 @@ export const predict = (
   aggregate: Any,
   state: unknown,
   command: { readonly _tag: string },
-  options: PredictOptions<unknown>,
-): Prediction<unknown, { readonly _tag: string }, { readonly _tag: string }, unknown> => {
+  options: PredictOptions,
+): Prediction<unknown, { readonly _tag: string }, { readonly _tag: string }> => {
   const def = aggregate.definition;
   const cls = def.commands.find((c) => c.tag === command._tag);
   const decide = def.decide[command._tag] as
@@ -468,10 +472,10 @@ export const predict = (
   if (judged._tag === "Rejected") return judged;
   const version = options.version ?? 0;
   const commandId = options.commandId ?? "";
-  const envelopes: Array<Envelope<unknown>> = [];
+  const envelopes: Array<Envelope> = [];
   let next = state;
   judged.events.forEach((event, index) => {
-    const envelope: Envelope<unknown> = {
+    const envelope: Envelope = {
       id: options.id,
       stream: `${aggregate.aggregateName}/${String(options.id)}`,
       seq: version + index + 1,
@@ -675,7 +679,7 @@ export const make = <
   const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 >(
   name: Name,
-  definition: Definition<Id, S, C, Ms, Rejects>,
+  definition: Definition<Id, S, C, Ms, Rejects> & TargetsMatch<Id, C>,
 ): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>> => {
   const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects>>>()(
     `alchemy/Domain/Aggregate/${name}`,
@@ -699,11 +703,32 @@ export const make = <
       this: Any,
       state: unknown,
       command: { readonly _tag: string },
-      options: PredictOptions<unknown>,
+      options: PredictOptions,
     ) {
       return predict(this, state, command, options);
     }
   } as unknown as AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>>;
+};
+
+/**
+ * A command whose `target` is the aggregate's `id`, both ways; any other
+ * command becomes a message naming it.
+ */
+type CheckTarget<Id extends IdSchema, Cmd> = Cmd extends Command.Any
+  ? [Id["Type"]] extends [Cmd["target"]["Type"]]
+    ? [Cmd["target"]["Type"]] extends [Id["Type"]]
+      ? Cmd
+      : `${Cmd["tag"]}'s target must be this aggregate's id schema`
+    : `${Cmd["tag"]}'s target must be this aggregate's id schema`
+  : Cmd;
+
+/**
+ * Every command's `target` must be the aggregate's `id`: an Api decodes the
+ * target with the command's schema and the aggregate decodes it with its own.
+ * A mismatched command is a type error on its entry in `commands`.
+ */
+export type TargetsMatch<Id extends IdSchema, C extends ReadonlyArray<Command.Any>> = {
+  readonly commands: { readonly [K in keyof C]: CheckTarget<Id, C[K]> };
 };
 
 /** A definition with its events collected from its commands. */

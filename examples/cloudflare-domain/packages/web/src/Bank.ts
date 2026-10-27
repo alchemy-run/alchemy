@@ -1,4 +1,4 @@
-import type * as Domain from "@alchemy.run/domain";
+import * as Domain from "@alchemy.run/domain";
 import { AccountId, mainAccountId } from "@bank/domain/Account/Account.id";
 import { StatementLine } from "@bank/domain/Account/Statement.view";
 import { CustomerId } from "@bank/domain/Customer/Customer.id";
@@ -381,7 +381,7 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
                 return bank.AccountSummary.watch(accountId);
               }),
             ).pipe(
-              Stream.map((summary) => Message.GotBalance({ balance: summary?.balance ?? null })),
+              Stream.map(({ state }) => Message.GotBalance({ balance: state?.balance ?? null })),
               Stream.catch((error) => Stream.succeed(Message.FailedWatch({ reason: error._tag }))),
             )
           : Stream.empty,
@@ -399,6 +399,7 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
                 return bank.Statement.events(accountId);
               }),
             ).pipe(
+              Stream.filter(Domain.Read.isEvent),
               Stream.map(({ event, envelope }) =>
                 Message.GotLine({ commandId: envelope.commandId, line: event }),
               ),

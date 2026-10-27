@@ -71,7 +71,7 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
               const bank = yield* CustomerApi.Client;
               return bank.AccountSummary.watch(accountId);
             })).pipe(
-              Stream.map((summary) => Message.GotBalance({ balance: summary?.balance ?? null })),
+              Stream.map(({ state }) => Message.GotBalance({ balance: state?.balance ?? null })),
               Stream.catch((error) => Stream.succeed(Message.FailedWatch({ reason: error._tag }))),
             )
           : Stream.empty,
@@ -81,6 +81,8 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
 ```
 
 Watch state with `View.watch(key)`, and watch emitted events with `View.events(key)` (e.g. statement lines). A failed `validate` ends the watch with its rejection.
+
+`watch` sends `{ state, cursor }`; `events` sends the history, a `CaughtUp { cursor }` frame (`Domain.Read.isCaughtUp(frame)`), then live entries. Show the feed as live once `CaughtUp` arrives, drop it with `Stream.filter(Domain.Read.isEvent)`, and pass a cursor as `after` to resume with nothing twice. Aggregates and streams read the same way.
 
 To show data at first paint, read `View.snapshot(key)` (on the server, or in `init`): it gives `{ state, cursor }` from one read. Start the feed with `View.events(key, { after: cursor })`, so a write between the two reads arrives once and none is missed.
 

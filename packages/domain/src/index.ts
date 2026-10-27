@@ -132,8 +132,6 @@ export declare namespace View {
   /** An event a view emitted, with its state after it. */
   export type Entry<S, E, Id = string> = ViewModule.Entry<S, E, Id>;
   export type Page<E> = ViewModule.Page<E>;
-  /** A key's state and the cursor it is valid at. */
-  export type Snapshot<S> = ViewModule.Snapshot<S>;
   /** What `MyView.evolve` applies. */
   export type LocalInput<Def, Key extends KeyModule.Any> = ViewModule.LocalInput<Def, Key>;
 }
@@ -249,6 +247,6 @@ export type { Filter, OrderBy } from "./Filter.ts";
 export { InMemory } from "./InMemory.ts";
 export type * as Middleware from "./Middleware.ts";
 export { Platform } from "./Platform.ts";
-export type * as Read from "./Read.ts";
+export * as Read from "./Read.ts";
 /** Trace attributes, hosting options and the metrics a model records. */
 export * as Telemetry from "./Telemetry.ts";
