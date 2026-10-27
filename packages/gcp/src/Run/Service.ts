@@ -429,6 +429,75 @@ export type ServiceShape = Main<ServiceServices>;
  * });
  * ```
  *
+ * ### Health Probes and Sidecars
+ * **Example:** HTTP startup probe, with a proxy that starts after the app
+ * ```typescript
+ * const api = yield* GCP.Run.Service("api", {
+ *   template: {
+ *     containers: [
+ *       {
+ *         name: "proxy",
+ *         image: proxyImage,
+ *         ports: [{ name: "h2c", containerPort: 8080 }],
+ *         dependsOn: ["app"],
+ *       },
+ *       {
+ *         name: "app",
+ *         image: appImage,
+ *         startupProbe: {
+ *           httpGet: { path: "/health", port: 3000 },
+ *           periodSeconds: 2,
+ *           failureThreshold: 30,
+ *         },
+ *         livenessProbe: { httpGet: { path: "/health", port: 3000 }, periodSeconds: 10 },
+ *       },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** TCP and gRPC probes
+ * ```typescript
+ * startupProbe: { tcpSocket: { port: 5432 }, initialDelaySeconds: 5 },
+ * livenessProbe: { grpc: { port: 9090, service: "health" }, timeoutSeconds: 3 },
+ * ```
+ * Changing a probe or `dependsOn` rolls a new revision. Removing
+ * `startupProbe` restores Cloud Run's default TCP probe.
+ *
+ * **Example:** Effect-native service with a sidecar
+ * ```typescript
+ * export class Api extends GCP.Run.Service<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     template: {
+ *       containers: [
+ *         {
+ *           // image, ports and env are filled in from `main`
+ *           startupProbe: { httpGet: { path: "/health" } },
+ *           dependsOn: ["cache"],
+ *         },
+ *         {
+ *           name: "cache",
+ *           image: "docker.io/library/redis:7",
+ *           startupProbe: { tcpSocket: { port: 6379 } },
+ *         },
+ *       ],
+ *     },
+ *   },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         if (request.url === "/health") return HttpServerResponse.text("ok");
+ *         return HttpServerResponse.text("hello");
+ *       }),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ * The first container runs `main`; the rest deploy as sidecars.
+ *
  * ### Effect-native Function with bindings
  * **Example:** Publish tweets to Pub/Sub, cache in Memorystore
  * ```typescript
