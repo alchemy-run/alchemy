@@ -6,9 +6,10 @@ import type * as Effect from "effect/Effect";
 import type * as Option from "effect/Option";
 import type * as Schema from "effect/Schema";
 import type * as Stream from "effect/Stream";
-import * as Aggregate from "./Aggregate.ts";
+import type * as Aggregate from "./Aggregate.ts";
 import type * as Event from "./Event.ts";
 import type { Filter } from "./Filter.ts";
+import type * as Key from "./Key.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
 import type * as Rejection from "./Rejection.ts";
@@ -48,7 +49,7 @@ export interface Any extends Context.Key<unknown, unknown> {
   readonly viewName: string;
   readonly definition: {
     readonly from: ReadonlyArray<Aggregate.Any | Any>;
-    readonly key: KeySource;
+    readonly key: Key.Any;
     readonly state?: Schema.Top;
     readonly initial?: unknown;
     readonly keyOf?: Handlers;
@@ -65,44 +66,6 @@ export interface Any extends Context.Key<unknown, unknown> {
 
 /** Something a view or policy can consume: an aggregate or a view. */
 export type Source = Aggregate.Any | Any;
-
-/** A string Schema that keys a view by value, such as an org id. */
-export type KeySchema = Schema.Top & { readonly Type: string; readonly Encoded: string };
-
-/**
- * What keys a view's instances: an aggregate (one instance per aggregate
- * ref), or a string Schema (one instance per value, with no aggregate).
- */
-export type KeySource = Aggregate.Any | KeySchema;
-
-/**
- * How one instance of a key is addressed: a ref for an aggregate key, the
- * value itself for a Schema key.
- */
-export type RefOf<K> = K extends Aggregate.Any
-  ? Aggregate.Ref<K>
-  : K extends Schema.Top
-    ? K["Type"]
-    : never;
-
-/** The id of one instance of a key: the aggregate id, or the Schema key's value. */
-export type IdOf<K> = K extends Aggregate.Any
-  ? Aggregate.IdOf<K>
-  : K extends Schema.Top
-    ? K["Type"]
-    : never;
-
-/** Is this key an aggregate (and not a Schema)? @internal */
-export const isAggregateKey = (key: KeySource): key is Aggregate.Any =>
-  (key as { readonly kind?: unknown }).kind === "Aggregate";
-
-/** Address the instance `id` of a key. @internal */
-export const refOf = (key: KeySource, id: string): RefOf<KeySource> =>
-  isAggregateKey(key) ? Aggregate.makeRef(key, id) : id;
-
-/** The Schema of a key's ids: an aggregate's id schema, or the Schema key itself. @internal */
-export const idSchemaOf = (key: KeySource): KeySchema =>
-  isAggregateKey(key) ? (key.definition.id as KeySchema) : key;
 
 /** The state type of a view class (`null` for a view without state). */
 export type StateOf<V extends Any> = V["~state"];
@@ -138,7 +101,7 @@ export type Input<S> = S extends unknown
       ? {
           readonly name: NameOf<S>;
           readonly event: E;
-          readonly source: RefOf<SourceKey<S>>;
+          readonly source: Key.RefOf<SourceKey<S>>;
           readonly state: SourceState<S>;
         }
       : never
@@ -185,9 +148,9 @@ export interface Routing<I> {
 /**
  * The context passed to `evolve` and `emit` handlers.
  */
-export interface HandlerContext<Key extends KeySource, I> {
+export interface HandlerContext<Key extends Key.Any, I> {
   /** The view instance being updated: a ref, or the value of a Schema key. */
-  readonly key: RefOf<Key>;
+  readonly key: Key.RefOf<Key>;
   /** The source instance the event came from. */
   readonly source: Routing<I>["source"];
   /** For a view source: its state after the event. */
@@ -198,7 +161,7 @@ export interface HandlerContext<Key extends KeySource, I> {
 }
 
 /** The context passed to `emit` handlers. */
-export interface EmitContext<Key extends KeySource, I, St> extends HandlerContext<Key, I> {
+export interface EmitContext<Key extends Key.Any, I, St> extends HandlerContext<Key, I> {
   /** This view's state before the event. */
   readonly before: St;
   /** This view's state after the event (`null` if it was deleted). */
@@ -206,13 +169,13 @@ export interface EmitContext<Key extends KeySource, I, St> extends HandlerContex
 }
 
 /** Picks the key an input goes to, or `undefined` for none. */
-export type KeyFn<Key extends KeySource, I> = (routing: Routing<I>) => RefOf<Key> | undefined;
-type EvolveFn<St, Key extends KeySource, I> = (
+export type KeyFn<Key extends Key.Any, I> = (routing: Routing<I>) => Key.RefOf<Key> | undefined;
+type EvolveFn<St, Key extends Key.Any, I> = (
   state: St,
   event: Routing<I>["event"],
   context: HandlerContext<Key, I>,
 ) => St | null;
-type EmitFn<St, Key extends KeySource, I, Out> = (
+type EmitFn<St, Key extends Key.Any, I, Out> = (
   event: Routing<I>["event"],
   context: EmitContext<Key, I, St>,
 ) => Out | ReadonlyArray<Out> | undefined;
@@ -225,13 +188,13 @@ export type Routed<F> = F | { readonly [route: string]: F };
  */
 export interface Definition<
   From extends ReadonlyArray<Source>,
-  Key extends KeySource,
+  Key extends Key.Any,
   S extends Schema.Top | undefined,
   Events extends ReadonlyArray<Event.Any>,
   Computed extends Record<string, unknown>,
   Ms extends Middleware.List = readonly [],
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
-> extends Read.Contract<RefOf<Key>, StateType<S> | null, Ms, Rejects> {
+> extends Read.Contract<Key.RefOf<Key>, StateType<S> | null, Ms, Rejects> {
   /** The aggregates and views this view consumes. */
   readonly from: From;
   /**
@@ -316,10 +279,10 @@ export interface WatchOptions<S> {
 /**
  * The read API of a view, obtained with `yield* MyView`.
  */
-export interface Host<S, Key extends KeySource, E> {
+export interface Host<S, Key extends Key.Any, E> {
   /** Read the current state of a key. `none` if it does not exist. */
   readonly query: (
-    key: RefOf<Key>,
+    key: Key.RefOf<Key>,
     options?: {
       /** Wait until the view has applied this write (a command's `stream` and `version`). */
       readonly atLeast?: { readonly stream: string; readonly version: number };
@@ -328,12 +291,15 @@ export interface Host<S, Key extends KeySource, E> {
   ) => Effect.Effect<Option.Option<S>, ConsistencyTimeout>;
   /** Wait until a key's state matches a filter. */
   readonly waitFor: (
-    key: RefOf<Key>,
+    key: Key.RefOf<Key>,
     where: Filter<S>,
     options: { readonly timeout: Duration.Input },
   ) => Effect.Effect<S, WaitTimeout>;
   /** The current state, then every change. */
-  readonly watch: (key: RefOf<Key>, options?: WatchOptions<S>) => Stream.Stream<Option.Option<S>>;
+  readonly watch: (
+    key: Key.RefOf<Key>,
+    options?: WatchOptions<S>,
+  ) => Stream.Stream<Option.Option<S>>;
   /**
    * Follow a changing set of keys derived from a parent stream, emitting the
    * parent together with the current state of every key that exists and
@@ -341,27 +307,27 @@ export interface Host<S, Key extends KeySource, E> {
    */
   readonly watchEach: <P, Err, R>(
     parent: Stream.Stream<P, Err, R>,
-    keysOf: (parent: P) => ReadonlyArray<RefOf<Key>>,
+    keysOf: (parent: P) => ReadonlyArray<Key.RefOf<Key>>,
     options?: WatchOptions<S>,
-  ) => Stream.Stream<readonly [P, ReadonlyArray<readonly [RefOf<Key>, S]>], Err, R>;
+  ) => Stream.Stream<readonly [P, ReadonlyArray<readonly [Key.RefOf<Key>, S]>], Err, R>;
   /**
    * Every event the key emitted, with the state after it: history (from
    * `after`, a cursor or entry `seq`), then live.
    */
   readonly events: (
-    key: RefOf<Key>,
+    key: Key.RefOf<Key>,
     options?: { readonly after?: string; readonly where?: Filter<E> },
-  ) => Stream.Stream<Entry<S, E, IdOf<Key>>>;
+  ) => Stream.Stream<Entry<S, E, Key.IdOf<Key>>>;
   /** A page of the key's emitted events, oldest first unless `order` is `"desc"`. */
   readonly list: (
-    key: RefOf<Key>,
+    key: Key.RefOf<Key>,
     options?: {
       readonly where?: Filter<E>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
       readonly after?: string;
     },
-  ) => Effect.Effect<Page<Entry<S, E, IdOf<Key>>>>;
+  ) => Effect.Effect<Page<Entry<S, E, Key.IdOf<Key>>>>;
 }
 
 /**
@@ -452,7 +418,7 @@ export interface ViewKey<Name extends string> {
 export const make = <
   const Name extends string,
   const From extends ReadonlyArray<Source>,
-  Key extends KeySource,
+  Key extends Key.Any,
   S extends Schema.Top | undefined = undefined,
   const Events extends ReadonlyArray<Event.Any> = readonly [],
   Computed extends Record<string, unknown> = {},
@@ -501,7 +467,7 @@ export interface ViewClass<
   Def,
   S extends Schema.Top | undefined,
   St,
-  Key extends KeySource,
+  Key extends Key.Any,
   Computed,
   Out,
 > extends Context.ServiceClass<ViewKey<Name>, string, Host<St, Key, Out>> {

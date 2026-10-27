@@ -147,7 +147,7 @@ export class OrgSchedule extends Domain.View("OrgSchedule", {
 }) {}
 ```
 
-Reads take the value too: `schedules.watch(orgId)`, `client.OrgSchedule.get(orgId)`, and `Story.view(OrgSchedule, orgId, ...)`. In handlers, `key` is the value, and a view or policy that consumes this view gets it as `source`. A view keyed by the same Schema follows this one without `keyOf`, so use a branded Schema to keep different kinds of ids apart.
+Reads take the value too: `schedules.watch(orgId)`, `client.OrgSchedule.get(orgId)`, and `Story.view(OrgSchedule, orgId, ...)`. In handlers, `key` is the value, and a view, policy or projection that consumes this view gets it as `source`. Policies, projections and streams take a Schema `key` the same way. A view keyed by the same Schema follows this one without `keyOf`, so use a branded Schema to keep different kinds of ids apart.
 
 ## Route one event to several keys
 

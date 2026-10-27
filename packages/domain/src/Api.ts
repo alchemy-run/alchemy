@@ -33,6 +33,7 @@ import type * as Event from "./Event.ts";
 import { type Filter, matches } from "./Filter.ts";
 import { captureContext } from "./internal.ts";
 import { decodeEnvelope } from "./Kernel.ts";
+import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
 import * as Model from "./Model.ts";
 import type { AggregateStore, StreamStore, Subscription, ViewStore } from "./Platform.ts";
@@ -40,7 +41,7 @@ import type * as Read from "./Read.ts";
 import { contractOf, nameOf, readRpcs } from "./ReadRpcs.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
-import * as View from "./View.ts";
+import type * as View from "./View.ts";
 import * as Watch from "./Watch.ts";
 
 /**
@@ -74,7 +75,7 @@ interface CallOptions {
 export interface ViewClient<V extends View.Any> {
   /** The key's current state (`null` if it does not exist or the filter excludes it). */
   readonly get: (
-    key: View.IdOf<View.KeyOf<V>>,
+    key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
       /** Wait until the view has applied this write (a command's `stream` and `version`). */
       readonly atLeast?: { readonly stream: string; readonly version: number };
@@ -83,23 +84,23 @@ export interface ViewClient<V extends View.Any> {
   ) => Effect.Effect<View.StateOf<V> | null, ReadError<V["definition"]>>;
   /** The key's state, then every change. Ends with a rejection when `validate` stops allowing it. */
   readonly watch: (
-    key: View.IdOf<View.KeyOf<V>>,
+    key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & { readonly where?: Filter<View.StateOf<V>> },
   ) => Stream.Stream<View.StateOf<V> | null, ReadError<V["definition"]>>;
   /** The events the key emitted, each with the state after it: history, then live. */
   readonly events: (
-    key: View.IdOf<View.KeyOf<V>>,
+    key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
       readonly after?: string;
       readonly where?: Filter<View.EventOf<V>>;
     },
   ) => Stream.Stream<
-    View.Entry<View.StateOf<V>, View.EventOf<V>, View.IdOf<View.KeyOf<V>>>,
+    View.Entry<View.StateOf<V>, View.EventOf<V>, Key.IdOf<View.KeyOf<V>>>,
     ReadError<V["definition"]>
   >;
   /** A page of the key's emitted events. */
   readonly list: (
-    key: View.IdOf<View.KeyOf<V>>,
+    key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
       readonly where?: Filter<View.EventOf<V>>;
       readonly order?: "asc" | "desc";
@@ -107,7 +108,7 @@ export interface ViewClient<V extends View.Any> {
       readonly after?: string;
     },
   ) => Effect.Effect<
-    View.Page<View.Entry<View.StateOf<V>, View.EventOf<V>, View.IdOf<View.KeyOf<V>>>>,
+    View.Page<View.Entry<View.StateOf<V>, View.EventOf<V>, Key.IdOf<View.KeyOf<V>>>>,
     ReadError<V["definition"]>
   >;
 }
@@ -116,37 +117,37 @@ export interface ViewClient<V extends View.Any> {
 export interface StreamClient<S extends DomainStream.Any> {
   /** The key's latest entry, or `null` if nothing was appended. */
   readonly peek: (
-    key: Aggregate.IdOf<DomainStream.KeyOf<S>>,
+    key: Key.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions & {
       /** Wait until the stream's writer has handled this write (a command's `stream` and `version`). */
       readonly atLeast?: { readonly stream: string; readonly version: number };
     },
   ) => Effect.Effect<
-    DomainStream.Entry<DomainStream.EventOf<S>, Aggregate.IdOf<DomainStream.KeyOf<S>>> | null,
+    DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>> | null,
     ReadError<S["definition"]>
   >;
   /** The key's latest entry, then each new one. Ends with a rejection when `validate` stops allowing it. */
   readonly watch: (
-    key: Aggregate.IdOf<DomainStream.KeyOf<S>>,
+    key: Key.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions,
   ) => Stream.Stream<
-    DomainStream.Entry<DomainStream.EventOf<S>, Aggregate.IdOf<DomainStream.KeyOf<S>>> | null,
+    DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>> | null,
     ReadError<S["definition"]>
   >;
   /** The key's entries from `after` (an entry `seq`), then live ones. */
   readonly events: (
-    key: Aggregate.IdOf<DomainStream.KeyOf<S>>,
+    key: Key.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions & {
       readonly after?: number;
       readonly where?: Filter<DomainStream.EventOf<S>>;
     },
   ) => Stream.Stream<
-    DomainStream.Entry<DomainStream.EventOf<S>, Aggregate.IdOf<DomainStream.KeyOf<S>>>,
+    DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>>,
     ReadError<S["definition"]>
   >;
   /** A page of the key's entries. */
   readonly list: (
-    key: Aggregate.IdOf<DomainStream.KeyOf<S>>,
+    key: Key.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions & {
       readonly where?: Filter<DomainStream.EventOf<S>>;
       readonly order?: "asc" | "desc";
@@ -154,7 +155,7 @@ export interface StreamClient<S extends DomainStream.Any> {
       readonly after?: string;
     },
   ) => Effect.Effect<
-    View.Page<DomainStream.Entry<DomainStream.EventOf<S>, Aggregate.IdOf<DomainStream.KeyOf<S>>>>,
+    View.Page<DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>>>,
     ReadError<S["definition"]>
   >;
 }
@@ -383,7 +384,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
       if (entry.kind === "Stream") {
         const host = internals.streamHosts.get(name)!;
         const key = entry.definition.key;
-        const refOf = (id: string) => ({ aggregate: key.aggregateName, id }) as Aggregate.Ref;
+        const refOf = (id: string) => Key.refOf(key, id);
         const latest = (id: string) =>
           host.peek(refOf(id)).pipe(Effect.orDie, Effect.map(Option.getOrNull));
         handlers[`${name}.peek`] = effect(rpcs.get, ({ key: id, atLeast }) =>
@@ -433,7 +434,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
       if (entry.kind === "View") {
         const host = internals.viewHosts.get(name)!;
         const key = entry.definition.key;
-        const refOf = (id: string) => View.refOf(key, id);
+        const refOf = (id: string) => Key.refOf(key, id);
         const visible = (state: unknown, where: unknown) =>
           state !== null && matches(where as Filter<unknown> | undefined, state) ? state : null;
         handlers[`${name}.get`] = effect(rpcs.get, ({ key: id, atLeast, where }) =>

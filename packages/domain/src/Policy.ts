@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import type * as Schedule from "effect/Schedule";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Event from "./Event.ts";
+import type * as Key from "./Key.ts";
 import type * as View from "./View.ts";
 
 /** One source, or several. */
@@ -14,17 +15,17 @@ export type SourcesOf<F> = F extends ReadonlyArray<infer S> ? S : F;
 /**
  * What a policy receives for each event it subscribes to.
  */
-export interface Trigger<F, E, Key extends View.KeySource = View.SourceKey<SourcesOf<F>>> {
+export interface Trigger<F, E, Key extends Key.Any = View.SourceKey<SourcesOf<F>>> {
   /** The key the event was routed to: the source instance, unless the policy declares `key`. */
-  readonly key: View.RefOf<Key>;
+  readonly key: Key.RefOf<Key>;
   /** The route named in `keyOf` that brought it here, if any. */
   readonly route: string | undefined;
   /** The aggregate or view instance the event came from (a view key's value for a Schema-keyed view). */
-  readonly source: View.RefOf<View.SourceKey<SourcesOf<F>>>;
+  readonly source: Key.RefOf<View.SourceKey<SourcesOf<F>>>;
   /** The event. */
   readonly event: E;
   /** The event's envelope. */
-  readonly envelope: Aggregate.Envelope<View.IdOf<View.SourceKey<SourcesOf<F>>>>;
+  readonly envelope: Aggregate.Envelope<Key.IdOf<View.SourceKey<SourcesOf<F>>>>;
   /** For a view source: the view's state after the event. */
   readonly state: View.SourceState<SourcesOf<F>>;
 }
@@ -54,17 +55,23 @@ export interface Any extends Context.Key<unknown, unknown> {
   readonly policyName: string;
   readonly definition: {
     readonly from: From;
-    readonly key?: Aggregate.Any;
+    readonly key?: Key.Any;
     readonly keyOf?: { readonly [key: string]: unknown };
     readonly on: ReadonlyArray<Event.Any>;
   };
 }
 
-type KeyOfDefinition<D> = D extends { readonly key: infer K extends Aggregate.Any }
-  ? K
-  : D extends { readonly from: infer F }
-    ? View.SourceKey<SourcesOf<F>>
-    : never;
+/** The declared `key` (an optional field), or the source's key when there is none. */
+type KeyOfDefinition<D> = D extends { readonly key?: infer K }
+  ? Exclude<K, undefined> extends infer Declared extends Key.Any
+    ? [Declared] extends [never]
+      ? SourceKeyOfDefinition<D>
+      : Declared
+    : SourceKeyOfDefinition<D>
+  : SourceKeyOfDefinition<D>;
+type SourceKeyOfDefinition<D> = D extends { readonly from: infer F }
+  ? View.SourceKey<SourcesOf<F>>
+  : never;
 
 /** The trigger type of a policy class. */
 export type TriggerOf<P extends Any> = Trigger<
@@ -81,17 +88,18 @@ type AsList<F> = F extends ReadonlyArray<View.Source> ? F : readonly [F];
 export interface Definition<
   F extends From,
   On extends ReadonlyArray<Event.Any>,
-  Key extends Aggregate.Any | undefined,
+  Key extends Key.Any | undefined,
 > {
   /** The aggregate or view, or several, whose events it reacts to. */
   readonly from: F;
   /**
-   * The aggregate whose refs partition it: triggers for one key run in order,
-   * one at a time. Defaults to the source instance.
+   * What partitions it: an aggregate, whose refs are its keys, or a string
+   * Schema, whose values are. Triggers for one key run in order, one at a
+   * time. Defaults to the source instance.
    */
   readonly key?: Key;
   /** Which key each trigger goes to, by event tag or source name (like a view's `keyOf`). */
-  readonly keyOf?: Key extends Aggregate.Any
+  readonly keyOf?: Key extends Key.Any
     ? {
         readonly [K in View.HandlerKey<AsList<F>>]?: View.Routed<
           View.KeyFn<Key, View.InputFor<AsList<F>, K>>
@@ -175,11 +183,11 @@ export const make = <
   const Name extends string,
   const F extends From,
   const On extends ReadonlyArray<Event.Any>,
-  Key extends Aggregate.Any | undefined = undefined,
+  Key extends Key.Any | undefined = undefined,
 >(
   name: Name,
   definition: Definition<F, On, Key>,
-): PolicyClass<Name, F, On, Key extends Aggregate.Any ? Key : View.SourceKey<SourcesOf<F>>> => {
+): PolicyClass<Name, F, On, Key extends Key.Any ? Key : View.SourceKey<SourcesOf<F>>> => {
   const Tag = Context.Service<PolicyKey<Name>, Handler<unknown>>()(`alchemy/Domain/Policy/${name}`);
   return class extends Tag {
     static readonly kind = "Policy" as const;
@@ -211,7 +219,7 @@ export const make = <
     Name,
     F,
     On,
-    Key extends Aggregate.Any ? Key : View.SourceKey<SourcesOf<F>>
+    Key extends Key.Any ? Key : View.SourceKey<SourcesOf<F>>
   >;
 };
 
@@ -222,7 +230,7 @@ export interface PolicyClass<
   Name extends string,
   F extends From,
   On extends ReadonlyArray<Event.Any>,
-  Key extends View.KeySource,
+  Key extends Key.Any,
 > extends Context.ServiceClass<
   PolicyKey<Name>,
   string,

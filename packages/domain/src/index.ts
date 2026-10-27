@@ -22,6 +22,7 @@ import * as ApiModule from "./Api.ts";
 import * as CommandModule from "./Command.ts";
 import * as EventModule from "./Event.ts";
 import * as ExternalSystemModule from "./ExternalSystem.ts";
+import type * as KeyModule from "./Key.ts";
 import * as ModelModule from "./Model.ts";
 import * as PolicyModule from "./Policy.ts";
 import * as ProjectionModule from "./Projection.ts";
@@ -88,16 +89,27 @@ export declare namespace Aggregate {
 /** A consistency boundary that decides commands. See {@link AggregateModule.make}. */
 export const Aggregate = AggregateModule.make;
 
+/**
+ * What keys a view, policy, projection or stream: an aggregate (one instance
+ * per ref) or a string Schema such as an org id (one instance per value).
+ */
+export declare namespace Key {
+  /** An aggregate, or a string Schema. */
+  export type Any = KeyModule.Any;
+  /** A string Schema that keys instances by value. */
+  export type Schema = KeyModule.Schema;
+  /** How one instance of a key is addressed: a ref, or a Schema key's value. */
+  export type RefOf<K> = KeyModule.RefOf<K>;
+  /** The id of one instance of a key: the aggregate id, or the Schema key's value. */
+  export type IdOf<K> = KeyModule.IdOf<K>;
+}
+
 export declare namespace View {
   /** Any View class. */
   export type Any = ViewModule.Any;
   export type StateOf<V extends ViewModule.Any> = ViewModule.StateOf<V>;
   export type EventOf<V extends ViewModule.Any> = ViewModule.EventOf<V>;
   export type KeyOf<V extends ViewModule.Any> = ViewModule.KeyOf<V>;
-  /** What keys a view: an aggregate, or a string Schema. */
-  export type KeySource = ViewModule.KeySource;
-  /** How one instance of a key is addressed: a ref, or a Schema key's value. */
-  export type RefOf<K> = ViewModule.RefOf<K>;
   /** An event a view emitted, with its state after it. */
   export type Entry<S, E, Id = string> = ViewModule.Entry<S, E, Id>;
   export type Page<E> = ViewModule.Page<E>;
@@ -135,7 +147,7 @@ export declare namespace Projection {
   /** Any Projection class. */
   export type Any = ProjectionModule.Any;
   /** One input a projection's handler receives. */
-  export type Input<Key extends AggregateModule.Any, S, E> = ProjectionModule.Input<Key, S, E>;
+  export type Input<K extends KeyModule.Any, S, E> = ProjectionModule.Input<K, S, E>;
   /** How a projection's Layer tunes it. */
   export type Options = ProjectionModule.Options;
 }

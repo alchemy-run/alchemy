@@ -36,7 +36,7 @@ const call = (url: string, method: "GET" | "POST", path: string) =>
   );
 
 test(
-  "a view keyed by a schema value runs on Durable Objects",
+  "views, projections, streams and policies keyed by a schema value run on Durable Objects",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const base = url.replace(/\/+$/, "");
@@ -86,6 +86,30 @@ test(
       }),
     );
     expect(busyAgain).toEqual({ org: acme, busy: true });
+
+    // OrgFeedWriter, keyed by the org id, writes one OrgFeed log per org
+    const feed = yield* call(base, "GET", `/feed/${acme}`).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (entries) => (entries as ReadonlyArray<unknown>).length >= 3,
+        times: 30,
+      }),
+    );
+    expect(feed).toEqual([
+      { id: acme, _tag: "FeedItem", tour: `t1-${run}`, unit: "1A" },
+      { id: acme, _tag: "FeedItem", tour: `t2-${run}`, unit: "2B" },
+      { id: acme, _tag: "FeedItem", tour: `t4-${run}`, unit: "4D" },
+    ]);
+
+    // NoteBookings, keyed by the org id, sends to the Board with that id
+    const board = yield* call(base, "GET", `/board/${acme}`).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (state) => ((state as { notes?: ReadonlyArray<string> }).notes?.length ?? 0) >= 3,
+        times: 30,
+      }),
+    );
+    expect(board).toEqual({ notes: [`t1-${run}`, `t2-${run}`, `t4-${run}`] });
   }),
   { timeout: 180_000 },
 );

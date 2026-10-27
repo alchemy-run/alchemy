@@ -77,20 +77,88 @@ class OrgBusy extends Domain.View("OrgBusy", {
   },
 }) {}
 
-class Tours extends Domain.Model("Tours", {
-  aggregates: [Tour],
-  views: [OrgSchedule, OrgBusy],
+class FeedItem extends Domain.Event("FeedItem", { tour: Schema.String, unit: Schema.String }) {}
+
+/** One ordered log per org. */
+class OrgFeed extends Domain.Stream("OrgFeed", { key: OrgId, entries: [FeedItem] }) {}
+
+/** Writes each org's feed, one org at a time. */
+class OrgFeedWriter extends Domain.Projection("OrgFeedWriter", {
+  from: [Tour],
+  key: OrgId,
+  keyOf: { Tour: ({ event }) => event.orgId },
+  on: [TourBooked],
+  writes: [OrgFeed],
+}) {}
+const OrgFeedWriterLive = OrgFeedWriter.toLayer(
+  Effect.gen(function* () {
+    const feed = yield* OrgFeed;
+    return Effect.fn(function* (batch) {
+      for (const input of batch) {
+        // `key` is the org id itself, not a ref.
+        const org: OrgId = input.key;
+        yield* feed.append(
+          input,
+          new FeedItem({ tour: input.source.id, unit: `${org}:${input.event.unit}` }),
+        );
+      }
+    });
+  }),
+);
+
+class Noted extends Domain.Event("Noted", { tour: Schema.String }) {}
+class Note extends Domain.Command("Note", {
+  target: Schema.String,
+  input: { tour: Schema.String },
+  events: [Noted],
+}) {}
+/** An org's bookings, as notes. Its ids are org ids. */
+class Board extends Domain.Aggregate("Board", {
+  id: Schema.String,
+  state: Schema.Struct({ notes: Schema.Array(Schema.String) }),
+  initial: { notes: [] },
+  commands: [Note],
+  decide: { Note: (_, { tour }) => [new Noted({ tour })] },
+  evolve: { Noted: (s, e) => ({ notes: [...s.notes, e.tour] }) },
 }) {}
 
-const story = Story.make(Tours);
+/** Runs in each org's order: a policy keyed by the org id. */
+class NoteBookings extends Domain.Policy("NoteBookings", {
+  from: Tour,
+  key: OrgId,
+  keyOf: { TourBooked: ({ event }) => event.orgId },
+  on: [TourBooked],
+}) {}
+const NoteBookingsLive = NoteBookings.toLayer(
+  Effect.gen(function* () {
+    const boards = yield* Board;
+    return Effect.fn(function* ({ key, source }) {
+      const org: OrgId = key;
+      yield* boards.send(org, new Note({ tour: source.id }));
+    });
+  }),
+);
+
+class Tours extends Domain.Model("Tours", {
+  aggregates: [Tour, Board],
+  views: [OrgSchedule, OrgBusy],
+  projections: [OrgFeedWriter],
+  streams: [OrgFeed],
+  policies: [NoteBookings],
+}) {}
+
+const handlers = Layer.mergeAll(OrgFeedWriterLive, NoteBookingsLive);
+const story = Story.make(Tours, { layer: handlers });
 
 // A Schema-keyed view is addressed by its value, not by a ref.
 // @ts-expect-error a ref is not an OrgId
 export const byRef = Story.view(OrgSchedule, Tour.ref("t-1"), Story.none);
+// @ts-expect-error a ref is not an OrgId
+export const streamedByRef = Story.streamed(OrgFeed, Tour.ref("t-1"));
 const acme = OrgId.make("acme");
 const globex = OrgId.make("globex");
 
-describe("Domain view keyed by a schema", () => {
+describe("Domain keyed by a schema", () => {
   it.effect("folds every aggregate's events into the org they name", () =>
     story(
       Story.when(Tour.ref("t-1"), new BookTour({ orgId: acme, unit: "1A" })),
@@ -111,6 +179,30 @@ describe("Domain view keyed by a schema", () => {
       Story.when(Tour.ref("t-2"), new BookTour({ orgId: acme, unit: "2B" })),
       Story.view(OrgBusy, acme, { org: "acme", busy: true }),
       Story.view(OrgBusy, globex, Story.none),
+    ),
+  );
+
+  it.effect("a projection keyed by the schema writes a stream keyed by it", () =>
+    story(
+      Story.when(Tour.ref("t-1"), new BookTour({ orgId: acme, unit: "1A" })),
+      Story.when(Tour.ref("t-3"), new BookTour({ orgId: globex, unit: "9Z" })),
+      Story.when(Tour.ref("t-2"), new BookTour({ orgId: acme, unit: "2B" })),
+      Story.streamed(
+        OrgFeed,
+        acme,
+        new FeedItem({ tour: "t-1", unit: "acme:1A" }),
+        new FeedItem({ tour: "t-2", unit: "acme:2B" }),
+      ),
+      Story.streamed(OrgFeed, globex, new FeedItem({ tour: "t-3", unit: "globex:9Z" })),
+    ),
+  );
+
+  it.effect("a policy keyed by the schema gets the value as its key", () =>
+    story(
+      Story.when(Tour.ref("t-1"), new BookTour({ orgId: acme, unit: "1A" })),
+      Story.when(Tour.ref("t-2"), new BookTour({ orgId: acme, unit: "2B" })),
+      Story.then(Board.ref("acme"), new Noted({ tour: "t-1" }), new Noted({ tour: "t-2" })),
+      Story.state(Board.ref("acme"), { notes: ["t-1", "t-2"] }),
     ),
   );
 
@@ -137,12 +229,12 @@ describe("Domain view keyed by a schema", () => {
       expect(page.entries.map((entry) => entry.envelope.id)).toEqual(["acme"]);
       expect(page.entries.map((entry) => entry.event.open)).toEqual([1]);
       expect(first.stream).toBe("Tour/t-1");
-    }).pipe(Effect.scoped, Effect.provide(Tours.layer(Layer.empty).pipe(Layer.provide(InMemory)))),
+    }).pipe(Effect.scoped, Effect.provide(Tours.layer(handlers).pipe(Layer.provide(InMemory)))),
   );
 
   it.live("is served through an Api by its key", () =>
     Effect.gen(function* () {
-      class TourApi extends Domain.Api("TourApi", OrgSchedule) {}
+      class TourApi extends Domain.Api("TourApi", OrgSchedule, OrgFeed) {}
       const client = yield* TourApi.testClient;
       const tours = yield* Tour;
       const receipt = yield* tours.send("t-1", new BookTour({ orgId: acme, unit: "1A" }));
@@ -154,6 +246,9 @@ describe("Domain view keyed by a schema", () => {
       expect(yield* client.OrgSchedule.get(globex)).toBeNull();
       const { entries } = yield* client.OrgSchedule.list(acme);
       expect(entries.map((entry) => entry.event.open)).toEqual([1]);
-    }).pipe(Effect.scoped, Effect.provide(Tours.layer(Layer.empty).pipe(Layer.provide(InMemory)))),
+      const latest = yield* client.OrgFeed.peek(acme, { atLeast });
+      expect(latest?.envelope.id).toBe("acme");
+      expect(latest?.event).toMatchObject({ tour: "t-1", unit: "acme:1A" });
+    }).pipe(Effect.scoped, Effect.provide(Tours.layer(handlers).pipe(Layer.provide(InMemory)))),
   );
 });

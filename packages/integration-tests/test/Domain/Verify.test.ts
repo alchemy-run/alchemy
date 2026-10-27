@@ -77,6 +77,15 @@ class BranchTotals extends Domain.View("BranchTotals", {
   initial: { total: 0 },
   evolve: { Deposited: (s, e) => ({ total: s.total + e.amount }) },
 }) {}
+// Keyed by branch id, so it cannot write a stream keyed by wallet.
+class BranchCard extends Domain.Stream("BranchCard", { key: Wallet, entries: [Card] }) {}
+class BranchCards extends Domain.Projection("BranchCards", {
+  from: [Wallet],
+  key: BranchId,
+  keyOf: { Deposited: () => BranchId.make("main") },
+  on: [Deposited],
+  writes: [BranchCard],
+}) {}
 class AlsoCards extends Domain.Projection("AlsoCards", {
   from: [Wallet],
   key: Wallet,
@@ -86,8 +95,8 @@ class AlsoCards extends Domain.Projection("AlsoCards", {
 class Broken extends Domain.Model("Broken", {
   aggregates: [Wallet, Payment],
   views: [Received, BranchTotals],
-  projections: [WalletCards, AlsoCards],
-  streams: [WalletCard],
+  projections: [WalletCards, AlsoCards, BranchCards],
+  streams: [WalletCard, BranchCard],
 }) {}
 
 // Notify listens for an event its source never emits, and Audit reads a view
@@ -118,6 +127,7 @@ describe("Domain verify", () => {
       "Received consumes 'Sent' from Payment, which is not keyed by Wallet: add keyOf.Sent",
       "BranchTotals consumes 'Deposited' from Wallet, which is not keyed by its key schema: add keyOf.Deposited",
       "WalletCard has two writers, WalletCards and AlsoCards: a stream key has exactly one",
+      "Projection BranchCards is keyed by a key schema, so it cannot write BranchCard, keyed by Wallet",
     ]);
   });
 
@@ -137,6 +147,7 @@ describe("Domain verify", () => {
           Layer.mergeAll(
             WalletCards.toLayer(Effect.succeed(() => Effect.void)),
             AlsoCards.toLayer(Effect.succeed(() => Effect.void)),
+            BranchCards.toLayer(Effect.succeed(() => Effect.void)),
           ),
         ),
       ).pipe(Effect.scoped, Effect.provide(InMemory)) as Effect.Effect<unknown>,

@@ -5,16 +5,32 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { BookTour, CancelTour, OrgBusy, OrgId, OrgSchedule, Tour, Tours } from "./tours.ts";
+import {
+  Board,
+  BookTour,
+  CancelTour,
+  NoteBookingsLive,
+  OrgBusy,
+  OrgFeed,
+  OrgFeedWriterLive,
+  OrgId,
+  OrgSchedule,
+  Tour,
+  Tours,
+} from "./tours.ts";
 
-const ToursLive = Tours.layer(Layer.empty).pipe(Layer.provide(DomainCloudflare.DurableObjects));
+const ToursLive = Tours.layer(Layer.mergeAll(OrgFeedWriterLive, NoteBookingsLive)).pipe(
+  Layer.provide(DomainCloudflare.DurableObjects),
+);
 
 /**
  * `POST /book/<tour>/<org>/<unit>` and `POST /cancel/<tour>/<org>` answer with
  * the org's schedule once it has applied the write; `GET /schedule/<org>`,
- * `GET /events/<org>` and `GET /busy/<org>` read the org's views.
+ * `GET /events/<org>` and `GET /busy/<org>` read the org's views, `GET /feed/<org>`
+ * its stream and `GET /board/<org>` the aggregate its policy writes.
  */
-const ROUTE = /^\/(book|cancel|schedule|events|busy)\/([^/]+)(?:\/([^/]+))?(?:\/([^/]+))?$/;
+const ROUTE =
+  /^\/(book|cancel|schedule|events|busy|feed|board)\/([^/]+)(?:\/([^/]+))?(?:\/([^/]+))?$/;
 
 export default class DomainToursWorker extends Cloudflare.Worker<DomainToursWorker>()(
   "DomainToursWorker",
@@ -23,6 +39,8 @@ export default class DomainToursWorker extends Cloudflare.Worker<DomainToursWork
     const tours = yield* Tour;
     const schedules = yield* OrgSchedule;
     const busy = yield* OrgBusy;
+    const feed = yield* OrgFeed;
+    const boards = yield* Board;
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -51,6 +69,13 @@ export default class DomainToursWorker extends Cloudflare.Worker<DomainToursWork
             entries.map((entry) => ({ id: entry.envelope.id, open: entry.event.open })),
           );
         }
+        if (action === "feed") {
+          const { entries } = yield* feed.list(orgId);
+          return yield* HttpServerResponse.json(
+            entries.map((entry) => ({ id: entry.envelope.id, ...entry.event })),
+          );
+        }
+        if (action === "board") return yield* HttpServerResponse.json(yield* boards.state(orgId));
         return yield* HttpServerResponse.json(Option.getOrNull(yield* busy.query(orgId)));
       }).pipe(
         // The view has not caught up with the write yet: the caller retries.

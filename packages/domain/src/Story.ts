@@ -13,6 +13,7 @@ import type { DurableDeferred, WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
 import * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
+import type * as Key from "./Key.ts";
 import * as Model from "./Model.ts";
 import type * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -90,20 +91,21 @@ export type Step =
       readonly _tag: "View";
       readonly view: View.Any;
       /** A ref, or the value of a Schema key. */
-      readonly key: View.RefOf<View.KeySource>;
+      readonly key: Key.RefOf<Key.Any>;
       readonly expected: unknown;
     }
   | {
       readonly _tag: "Emitted";
       readonly view: View.Any;
       /** A ref, or the value of a Schema key. */
-      readonly key: View.RefOf<View.KeySource>;
+      readonly key: Key.RefOf<Key.Any>;
       readonly expected: unknown;
     }
   | {
       readonly _tag: "Streamed";
       readonly stream: DomainStream.Any;
-      readonly key: Aggregate.Ref;
+      /** A ref, or the value of a Schema key. */
+      readonly key: Key.RefOf<Key.Any>;
       readonly events: ReadonlyArray<{ readonly _tag: string }>;
     }
   | {
@@ -197,7 +199,7 @@ const state = <A extends Aggregate.Any>(
 /** Assert on a view key: an expected (partial) state, a function, or {@link none}. */
 const view = <V extends View.Any>(
   view: V,
-  key: View.RefOf<View.KeyOf<V>>,
+  key: Key.RefOf<View.KeyOf<V>>,
   expected: Partial<View.StateOf<V>> | ((state: View.StateOf<V>) => void) | typeof none,
 ): Step => ({ _tag: "View", view, key, expected });
 
@@ -207,7 +209,7 @@ const view = <V extends View.Any>(
  */
 const emitted = <V extends View.Any>(
   view: V,
-  key: View.RefOf<View.KeyOf<V>>,
+  key: Key.RefOf<View.KeyOf<V>>,
   expected:
     | ReadonlyArray<Partial<View.EventOf<V>>>
     | ((entries: ReadonlyArray<View.Entry<View.StateOf<V>, View.EventOf<V>>>) => void),
@@ -219,7 +221,7 @@ const emitted = <V extends View.Any>(
  */
 const streamed = <S extends DomainStream.Any>(
   stream: S,
-  key: Aggregate.Ref<DomainStream.KeyOf<S>>,
+  key: Key.RefOf<DomainStream.KeyOf<S>>,
   ...events: ReadonlyArray<DomainStream.EventOf<S>>
 ): Step => ({
   _tag: "Streamed",
@@ -440,7 +442,7 @@ const describeStep = (s: Step): string => {
     case "Emitted":
       return `${s.view.viewName}(${Aggregate.targetId(s.key)})${typeof s.expected === "function" ? "" : `: ${summarizeAll(s.expected as ReadonlyArray<unknown>)}`}`;
     case "Streamed":
-      return `${s.stream.streamName}/${s.key.id}: ${summarizeAll(s.events)}`;
+      return `${s.stream.streamName}/${Aggregate.targetId(s.key)}: ${summarizeAll(s.events)}`;
     case "Call":
       return `${callName(s.tag, s.op)} ${summarize(s.args)}`;
     case "Answer":
@@ -895,7 +897,7 @@ const make =
             case "View": {
               const host = yield* s.view as unknown as Context.Key<
                 never,
-                View.Host<unknown, View.KeySource, unknown>
+                View.Host<unknown, Key.Any, unknown>
               >;
               const current = yield* host.query(s.key).pipe(Effect.orDie);
               if (s.expected === none) {
@@ -938,7 +940,7 @@ const make =
             case "Emitted": {
               const host = yield* s.view as unknown as Context.Key<
                 never,
-                View.Host<unknown, View.KeySource, unknown>
+                View.Host<unknown, Key.Any, unknown>
               >;
               const { entries } = yield* host.list(s.key);
               if (typeof s.expected === "function") {
@@ -959,8 +961,9 @@ const make =
             }
             case "Streamed": {
               const store = internals.streams.get(s.stream.streamName)!;
-              const id = `${s.stream.streamName}/${s.key.id}`;
-              const entries = yield* store.list(s.key.id as string);
+              const key = Aggregate.targetId(s.key);
+              const id = `${s.stream.streamName}/${key}`;
+              const entries = yield* store.list(key);
               const from = cursors.get(id) ?? 0;
               const actual = entries.slice(from).map((e) => e.event);
               const expected = s.events.map(encodeInstance);
