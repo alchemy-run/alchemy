@@ -6,11 +6,11 @@ import {
 } from "@alchemy.run/digitalocean/Droplet";
 import { hashOwnershipTag } from "@alchemy.run/digitalocean/internal/ownership";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { deleteTag, dropletsDestroy, getDroplet, getTag } from "@distilled.cloud/digitalocean";
 import { OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
 import { State } from "alchemy/State/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
 import { isGone, logLevel, skipSlow } from "./support.ts";

@@ -5,6 +5,7 @@ import {
   type FirewallInboundRule,
 } from "@alchemy.run/digitalocean/Firewall";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import {
   createFirewall,
   createTag,
@@ -13,7 +14,6 @@ import {
   getFirewall,
 } from "@distilled.cloud/digitalocean";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { forgetAttributes, isGone, logLevel, skipLive } from "./support.ts";
 

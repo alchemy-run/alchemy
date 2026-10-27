@@ -1,10 +1,10 @@
 import * as DigitalOcean from "@alchemy.run/digitalocean";
 import { authorizedKey, diffSshKey, fingerprintOf, SshKey } from "@alchemy.run/digitalocean/SshKey";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { createSshKey, deleteSshKey, getSshKey } from "@distilled.cloud/digitalocean";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import { KeyPair } from "alchemy/KeyPair";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { forgetAttributes, isGone, logLevel, skipLive } from "./support.ts";
 

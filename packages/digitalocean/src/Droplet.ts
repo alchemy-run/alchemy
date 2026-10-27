@@ -262,11 +262,11 @@ export class DropletActionFailed extends Data.TaggedError("DigitalOcean.DropletA
 }
 
 export class DropletCreateFailed extends Data.TaggedError("DigitalOcean.DropletCreateFailed")<{
-  readonly name: string;
+  readonly dropletName: string;
   readonly reason: string;
 }> {
   override get message() {
-    return `Droplet '${this.name}' was not created: ${this.reason}.`;
+    return `Droplet '${this.dropletName}' was not created: ${this.reason}.`;
   }
 }
 
@@ -649,7 +649,7 @@ const createDroplet = Effect.fn(function* (
   const dropletId = created.droplet?.id;
   if (dropletId === undefined) {
     return yield* new DropletCreateFailed({
-      name,
+      dropletName: name,
       reason: "create response carried no droplet",
     });
   }
