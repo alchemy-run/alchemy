@@ -6,9 +6,8 @@ import { resolve4, resolveNs, Resolver } from "node:dns/promises";
  * reports, Prisma activates the domain and serves HTTPS on it, and destroy
  * removes both the records and the Prisma domain.
  *
- * The website's implicit Project attaches the App to the project's current
- * default branch, which Prisma requires for custom domains. Prisma verifies
- * the hostname's CNAME on registration, so the composite publishes it first.
+ * Prisma verifies the hostname's CNAME on registration, so the composite
+ * publishes it first.
  */
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
