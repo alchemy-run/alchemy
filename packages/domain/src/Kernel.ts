@@ -157,7 +157,7 @@ export interface Kernel {
     commandTag: string,
     json: ReceiptJson,
   ) => Aggregate.Receipt;
-  readonly decodeState: (aggregate: Aggregate.Any, json: Json | null) => unknown;
+  readonly decodeState: (aggregate: Aggregate.Any, json: Json) => unknown;
   readonly decodeViewState: (view: View.Any, json: Json) => unknown;
   readonly decodeViewEntry: (view: View.Any, entry: ViewEntry) => View.Entry<unknown, unknown>;
   readonly decodeEvent: (json: Json) => unknown;
@@ -588,7 +588,7 @@ const build = (
     return codec;
   };
   /** Decode the state a delivery carries from a view source. */
-  const sourceState = (entry: SourceEntry, json: Json | null | undefined) =>
+  const sourceState = (entry: SourceEntry, json: Json) =>
     json === undefined || json === null || entry.kind !== "view" || !entry.view.definition.state
       ? json
       : viewCodec(entry.view).decode(json);

@@ -2,6 +2,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
@@ -51,7 +52,7 @@ const readBoundValue = (key: string): Effect.Effect<unknown> =>
 const readBound = (key: string): Effect.Effect<string | undefined> =>
   readBoundValue(key).pipe(
     Effect.map((inner) =>
-      inner === undefined ? undefined : typeof inner === "string" ? inner : String(inner),
+      inner === undefined ? undefined : typeof inner === "string" ? inner : Formatter.format(inner),
     ),
   );
 
@@ -410,8 +411,8 @@ const reference = Telemetry;
 export const buildEventTelemetry = (
   context: Context.Context<never>,
   scope: Scope.Scope,
-  override?: TelemetryLayer | undefined,
-  base?: TelemetryLayer | undefined,
+  override?: TelemetryLayer,
+  base?: TelemetryLayer,
 ): Effect.Effect<Context.Context<never>> =>
   Effect.suspend(() => {
     const bound = base ?? Context.get(context, reference);

@@ -1381,7 +1381,10 @@ const readPackageMain = Effect.fn(function* (directory: string) {
       const parsed = JSON.parse(text) as { main?: unknown };
       return typeof parsed.main === "string" ? parsed.main : undefined;
     },
-    catch: (cause) => new Error(`Failed to parse package.json in ${directory}: ${cause}`),
+    catch: (cause) =>
+      new Error(
+        `Failed to parse package.json in ${directory}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      ),
   });
 });
 

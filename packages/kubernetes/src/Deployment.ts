@@ -229,6 +229,7 @@ export interface Deployment extends Resource<
      * adapter (on EKS: the pod-identity role + association; on GKE: the
      * Workload Identity principal and the IAM grants applied to it).
      */
+    // oxlint-disable-next-line typescript/no-redundant-type-constituents -- registry type is `never` until cloud packages augment it
     identity: IdentityState | undefined;
     /**
      * Image-registry state provisioned by the cluster platform's adapter
@@ -252,6 +253,7 @@ export interface Deployment extends Resource<
   Providers
 > {}
 
+// oxlint-disable-next-line typescript/no-redundant-type-constituents -- registry type is `never` until cloud packages augment it
 export type DeploymentServices = ServerHostService | WorkloadServices;
 
 export type DeploymentShape = Main<DeploymentServices>;

@@ -39,7 +39,7 @@ export const make = <K, A, I, E, R>(
       const hit = yield* kv.get(id, { cacheTtl: seconds(MIN_TTL) }).pipe(
         Effect.flatMap((text) => (text === null ? Effect.succeed(undefined) : decode(text))),
         Effect.catch((e) =>
-          Effect.logWarning(`cache read of ${id} failed: ${e}`).pipe(Effect.as(undefined)),
+          Effect.logWarning(`cache read of ${id} failed: ${e.message}`).pipe(Effect.as(undefined)),
         ),
       );
       if (hit !== undefined) {
@@ -49,7 +49,7 @@ export const make = <K, A, I, E, R>(
       if (Duration.isGreaterThanOrEqualTo(fresh.ttl, MIN_TTL)) {
         yield* encode(fresh.value).pipe(
           Effect.flatMap((text) => kv.put(id, text, { expirationTtl: seconds(fresh.ttl) })),
-          Effect.catch((e) => Effect.logWarning(`cache write of ${id} failed: ${e}`)),
+          Effect.catch((e) => Effect.logWarning(`cache write of ${id} failed: ${e.message}`)),
         );
       }
       return fresh.value;

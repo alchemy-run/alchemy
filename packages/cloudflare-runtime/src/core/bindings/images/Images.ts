@@ -372,7 +372,7 @@ export async function imagesLocalFetcher(request: Request): Promise<Response> {
     return errorResponse(
       400,
       9523,
-      `ERROR: Internal Images binding error: expected image in request, got ${body}`,
+      `ERROR: Internal Images binding error: expected image in request, got ${String(body)}`,
     );
   }
 

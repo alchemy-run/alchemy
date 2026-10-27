@@ -645,12 +645,12 @@ export const CloudflareAuth = AuthProviderLayer<
         Clock.currentTimeMillis,
       ]).pipe(
         Effect.map(([creds, now]) => {
+          const resolvedSource: CloudflareResolvedCredentials["source"] = creds.source;
           const source = {
             key: "source",
-            value:
-              "details" in creds.source && creds.source.details
-                ? `${creds.source.type} - ${creds.source.details}`
-                : creds.source.type,
+            value: resolvedSource.details
+              ? `${resolvedSource.type} - ${resolvedSource.details}`
+              : resolvedSource.type,
           };
           return {
             lines: Match.value(creds).pipe(

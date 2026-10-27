@@ -194,7 +194,7 @@ const resolveSetValues = Effect.fn(function* (
         try: () => readFileSync(0, "utf8").trim(),
         catch: (cause) =>
           new UserInputError({
-            message: `Could not read stdin for --set ${key}=-: ${cause}`,
+            message: `Could not read stdin for --set ${key}=-: ${cause instanceof Error ? cause.message : String(cause)}`,
           }),
       });
     } else if (raw.startsWith("env:")) {

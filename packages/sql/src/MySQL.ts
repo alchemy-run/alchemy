@@ -45,7 +45,10 @@ const parseMySQLUrl = (url: Redacted.Redacted<string>) =>
         poolConfig: poolConfig as Mysql.PoolOptions,
       };
     },
-    catch: (cause) => new Error(`SQL.MySQL: failed to parse connection url: ${cause}`),
+    catch: (cause) =>
+      new Error(
+        `SQL.MySQL: failed to parse connection url: ${cause instanceof Error ? cause.message : String(cause)}`,
+      ),
   }).pipe(Effect.orDie);
 
 /**

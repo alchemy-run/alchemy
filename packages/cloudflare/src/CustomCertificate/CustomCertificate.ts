@@ -472,7 +472,11 @@ const parseCertificate = (pem: string) =>
       const x509 = new crypto.X509Certificate(pem);
       return { expiresAtMs: Date.parse(x509.validTo) };
     },
-    catch: (cause) => new Error(`failed to parse certificate PEM: ${cause}`, { cause }),
+    catch: (cause) =>
+      new Error(
+        `failed to parse certificate PEM: ${cause instanceof Error ? cause.message : String(cause)}`,
+        { cause },
+      ),
   });
 
 /**

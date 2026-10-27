@@ -9,6 +9,7 @@ import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import type * as Redacted from "effect/Redacted";
@@ -725,7 +726,7 @@ const syncMaintenance = (
               catch: () =>
                 new BasinTableSchemaUnsupported({
                   path: "maintenance.snapshotExpiration.olderThan",
-                  message: `Cloudflare.Basin.Table: invalid duration ${String(se.olderThan)}`,
+                  message: `Cloudflare.Basin.Table: invalid duration ${Formatter.format(se.olderThan)}`,
                 }),
             });
       const desired = {

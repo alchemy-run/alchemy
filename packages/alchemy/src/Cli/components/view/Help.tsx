@@ -340,7 +340,7 @@ export const brandedCliFormatter = (cli: Interaction["Service"]): CliOutput.Form
   const formatErrorLine = (message: string) =>
     `${paint(ansiFg(theme.color.danger), `${glyphs.error} error:`)} ${message}`;
   return {
-    ...fallback,
+    formatCliError: fallback.formatCliError,
     formatHelpDoc: (doc) =>
       doc.usage.startsWith("alchemy <subcommand>")
         ? formatRootHelp(cli, doc)

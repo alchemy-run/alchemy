@@ -257,8 +257,7 @@ export const TcpFlowProtectionRuleProvider = () =>
 
 type ObservedRule = ddos.GetAdvancedTcpProtectionTcpFlowProtectionRuleItemResponse;
 
-const ruleName = (props: { scope: TcpFlowProtectionRuleScope | string; name?: string }) =>
-  props.name ?? "global";
+const ruleName = (props: { scope: string; name?: string }) => props.name ?? "global";
 
 /**
  * Read a rule by id, mapping "gone" (`TcpFlowProtectionRuleNotFound`,

@@ -368,20 +368,21 @@ const ProviderLive = () =>
           return attrsFrom(reconciled);
         }),
         delete: Effect.fn(function* ({ output }) {
-          if (isPrismaDevId(output.customDomainId)) return;
+          const customDomainId = concreteIdOf(output.customDomainId);
+          if (customDomainId === undefined) return;
           const domain = yield* client
-            .getCustomDomain(output.customDomainId)
+            .getCustomDomain(customDomainId)
             .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
           if (!domain) return;
           if (domain.appId !== output.appId || !sameHostname(domain.hostname, output.hostname)) {
             return yield* Effect.fail(
               new Error(
-                `Prisma custom domain '${output.customDomainId}' no longer matches app '${output.appId}' and hostname '${output.hostname}'. Refusing to delete a mismatched domain.`,
+                `Prisma custom domain '${customDomainId}' no longer matches app '${output.appId}' and hostname '${output.hostname}'. Refusing to delete a mismatched domain.`,
               ),
             );
           }
           yield* client
-            .deleteCustomDomain(output.customDomainId)
+            .deleteCustomDomain(customDomainId)
             .pipe(Effect.catchIf(isNotFound, () => Effect.void));
         }),
       };

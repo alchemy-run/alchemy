@@ -470,7 +470,7 @@ export const ProjectProvider = () =>
     }),
   });
 
-const rootDir = Effect.sync(process.cwd);
+const rootDir = Effect.sync(() => process.cwd());
 
 const createProjectName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

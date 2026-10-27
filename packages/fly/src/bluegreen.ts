@@ -293,7 +293,9 @@ export const reconcileBlueGreen = Effect.fn(function* (
     reusable?.[0] ??
     (yield* sha256Object({
       workload,
-      predecessors: owned.map((machine) => machine.id).sort(),
+      predecessors: owned
+        .map((machine) => machine.id)
+        .sort((a, b) => ((a ?? "") < (b ?? "") ? -1 : (a ?? "") > (b ?? "") ? 1 : 0)),
     })).slice(0, 20);
   const desired = reusable?.[1] ?? [];
   if (

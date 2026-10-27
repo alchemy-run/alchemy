@@ -1755,11 +1755,7 @@ const isOwnedApplication = (
 ) => explicitName === undefined || observed.applicationId === previous?.applicationId;
 
 const toAttributes = (
-  application:
-    | Containers.CreateContainerApplicationResponse
-    | Containers.UpdateContainerApplicationResponse
-    | Containers.GetContainerApplicationResponse
-    | Containers.ListContainerApplicationsResponse[number],
+  application: Containers.CreateContainerApplicationResponse,
 ): ContainerApplication["Attributes"] => {
   // Durable Object applications have no scaling, affinities or versions.
   const scheduled = "version" in application ? application : undefined;

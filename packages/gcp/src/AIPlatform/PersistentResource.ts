@@ -298,8 +298,12 @@ export const PersistentResourceProvider = () =>
         olds !== undefined && (news.displayName ?? "") !== (olds.displayName ?? "");
       const labelsChanged =
         olds !== undefined &&
-        JSON.stringify(Object.entries(news.labels ?? {}).sort()) !==
-          JSON.stringify(Object.entries(olds.labels ?? {}).sort());
+        JSON.stringify(
+          Object.entries(news.labels ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        ) !==
+          JSON.stringify(
+            Object.entries(olds.labels ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+          );
       // GCP only updates Ray-cluster persistent resources ("Currently we only
       // support the update function on Ray cluster"); any other resource is
       // replaced when its replica counts change.

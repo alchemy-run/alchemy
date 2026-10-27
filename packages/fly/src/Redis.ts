@@ -525,7 +525,7 @@ const waitUntilGone = (id: string, name: string) =>
 const desiredOptions = (
   props: RedisProps,
   plan: RedisPlan,
-  observed: unknown | undefined,
+  observed: unknown,
 ): Record<string, unknown> => {
   const options = recordOf(observed);
   if (props.eviction !== undefined) options.eviction = props.eviction;

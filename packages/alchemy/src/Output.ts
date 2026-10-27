@@ -163,7 +163,7 @@ export type ArrayExpr<A extends any[], Req = any> = Output<A, Req> & {
 };
 
 export const isResourceExpr = <Value = any, Req = any>(
-  node: Expr<Value, Req> | any,
+  node: any,
 ): node is ResourceExpr<Value, Req> => exprKind(node) === "ResourceExpr";
 
 export class ResourceExpr<Value, Req = never> extends BaseExpr<Value, Req> {

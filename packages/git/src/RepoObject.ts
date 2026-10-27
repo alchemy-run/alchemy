@@ -686,9 +686,7 @@ export interface GitRepoShape {
   readonly updateRepoMeta: (
     patch: RepoMetaPatch,
   ) => Effect.Effect<RepoMetaData, RepoAuthError | RefNotFound, RuntimeContext>;
-  readonly listRefs: (
-    prefix?: string | undefined,
-  ) => Effect.Effect<RefsPage, RepoAuthError, RuntimeContext>;
+  readonly listRefs: (prefix?: string) => Effect.Effect<RefsPage, RepoAuthError, RuntimeContext>;
   readonly getRef: (
     name: string,
   ) => Effect.Effect<RefData, RepoAuthError | RefNotFound, RuntimeContext>;
@@ -2798,7 +2796,10 @@ export const gunzipIfNeeded = (
       )
         .arrayBuffer()
         .then((buffer) => new Uint8Array(buffer)),
-    catch: (error) => PackIngestError.make({ reason: `gzip decompression failed: ${error}` }),
+    catch: (error) =>
+      PackIngestError.make({
+        reason: `gzip decompression failed: ${error instanceof Error ? error.message : String(error)}`,
+      }),
   });
 };
 
@@ -3063,7 +3064,7 @@ export const GitRepoLive = GitRepo.make(
 
       const listAllRefs = (
         repoId: string,
-        prefix?: string | undefined,
+        prefix?: string,
       ): Effect.Effect<Array<RefData>, StoreError> =>
         Effect.gen(function* () {
           const rows =
@@ -4207,7 +4208,7 @@ export const GitRepoLive = GitRepo.make(
           return result;
         }),
 
-        listRefs: Effect.fn(function* (prefix?: string | undefined) {
+        listRefs: Effect.fn(function* (prefix?: string) {
           const meta = yield* requireMeta;
           const refs = yield* listAllRefs(meta.repoId, prefix);
           const headRef = `refs/heads/${meta.defaultBranch}`;

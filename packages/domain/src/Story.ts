@@ -6,6 +6,7 @@ import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -532,12 +533,15 @@ const clockMillis = (at: string | number | DateTime.DateTime) =>
 const advanceDuration = (by: Duration.Input) =>
   Option.getOrUndefined(Option.filter(Duration.fromInput(by), Duration.isFinite));
 
+const showDurationInput = (by: Duration.Input): string =>
+  typeof by === "string" ? by : Formatter.format(by);
+
 /** A one-line summary of a step, before it runs. */
 const describeStep = (s: Step): string => {
   switch (s._tag) {
     case "Advance": {
       const by = advanceDuration(s.by);
-      if (by === undefined) return String(s.by);
+      if (by === undefined) return showDurationInput(s.by);
       return `${Duration.isNegative(by) ? "" : "+"}${Duration.format(by)}`;
     }
     case "Clock": {
@@ -916,7 +920,8 @@ const make =
             }
             case "Advance": {
               const by = advanceDuration(s.by);
-              if (by === undefined) return yield* fail(`${String(s.by)} is not a duration`);
+              if (by === undefined)
+                return yield* fail(`${showDurationInput(s.by)} is not a duration`);
               if (Duration.isNegative(by)) {
                 return yield* fail(`the clock only moves forward, not by ${Duration.format(by)}`);
               }

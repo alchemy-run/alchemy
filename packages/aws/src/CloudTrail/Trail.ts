@@ -586,8 +586,16 @@ export const TrailProvider = () =>
               InsightType: s.insightType,
             }));
             if (
-              JSON.stringify(observedInsights.map((s) => s.InsightType).sort()) !==
-              JSON.stringify(desiredInsights.map((s) => s.InsightType).sort())
+              JSON.stringify(
+                observedInsights
+                  .map((s) => s.InsightType)
+                  .sort((a, b) => ((a ?? "") < (b ?? "") ? -1 : (a ?? "") > (b ?? "") ? 1 : 0)),
+              ) !==
+              JSON.stringify(
+                desiredInsights
+                  .map((s) => s.InsightType)
+                  .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+              )
             ) {
               yield* session.note(`Updating Insights selectors`);
               yield* retryWhileConflict(

@@ -1265,7 +1265,10 @@ const readPackageJson = Effect.fn(function* (appPath: string) {
   if (!text) return undefined;
   return yield* Effect.try({
     try: () => JSON.parse(text) as Record<string, unknown>,
-    catch: (cause) => new Error(`Failed to parse package.json in ${appPath}: ${cause}`),
+    catch: (cause) =>
+      new Error(
+        `Failed to parse package.json in ${appPath}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      ),
   });
 });
 

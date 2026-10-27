@@ -195,7 +195,7 @@ export const aggregatePush =
   (
     id: string,
     subscription: Subscription,
-    current: { readonly state: Json | null; readonly version: number },
+    current: { readonly state: Json; readonly version: number },
     events: ReadonlyArray<StoredEvent>,
   ): Effect.Effect<Push> =>
     Effect.suspend(() => {
