@@ -1,9 +1,11 @@
 import {
   diffMigrations,
+  migrationAttributesOf,
   MigrationError,
   migrationsAttrs,
   migrationsInputOf,
   stampedOf,
+  type MigrationAttributes,
   type MigrationsInput,
 } from "@alchemy.run/sql/Migrations";
 import * as alloydb from "@distilled.cloud/gcp/alloydb_v1";
@@ -523,15 +525,10 @@ const isAvailable = (state: string | undefined) => {
 
 const isFailed = (state: string | undefined) => (state ?? "").toUpperCase() === "FAILED";
 
-type MigrationAttrs = Pick<
-  Instance["Attributes"],
-  "migrationsDir" | "migrationsTable" | "migrationsHashes"
->;
-
 const toAttrs = (
   instance: alloydb.Instance,
   project: string,
-  migrations?: Partial<MigrationAttrs>,
+  migrations?: Partial<MigrationAttributes>,
 ): Instance["Attributes"] => {
   const name = instance.name ?? "";
   const parsed = parseName(name);
@@ -562,9 +559,7 @@ const toAttrs = (
     uid: instance.uid,
     createTime: instance.createTime,
     updateTime: instance.updateTime,
-    migrationsDir: migrations?.migrationsDir,
-    migrationsTable: migrations?.migrationsTable,
-    migrationsHashes: migrations?.migrationsHashes ?? {},
+    ...migrationAttributesOf(migrations),
   };
 };
 

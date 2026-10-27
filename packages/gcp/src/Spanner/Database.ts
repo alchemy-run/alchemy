@@ -1,8 +1,10 @@
 import {
   diffMigrations,
+  migrationAttributesOf,
   migrationsAttrs,
   migrationsInputOf,
   stampedOf,
+  type MigrationAttributes,
   type MigrationsInput,
 } from "@alchemy.run/sql/Migrations";
 import * as spanner from "@distilled.cloud/gcp/spanner_v1";
@@ -295,15 +297,10 @@ const encryptionKey = (config: EncryptionConfig | undefined) =>
 
 const extraKey = (statements: string[] | undefined) => JSON.stringify(statements ?? []);
 
-type MigrationAttrs = Pick<
-  Database["Attributes"],
-  "migrationsDir" | "migrationsTable" | "migrationsHashes"
->;
-
 const toAttrs = (
   database: spanner.Database,
   project: string,
-  migrations?: Partial<MigrationAttrs>,
+  migrations?: Partial<MigrationAttributes>,
 ): Database["Attributes"] => {
   const name = database.name ?? "";
   const parsed = parseName(name);
@@ -321,9 +318,7 @@ const toAttrs = (
     encryptionConfig: encryptionOf(database.encryptionConfig),
     reconciling: database.reconciling,
     createTime: database.createTime,
-    migrationsDir: migrations?.migrationsDir,
-    migrationsTable: migrations?.migrationsTable,
-    migrationsHashes: migrations?.migrationsHashes ?? {},
+    ...migrationAttributesOf(migrations),
   };
 };
 

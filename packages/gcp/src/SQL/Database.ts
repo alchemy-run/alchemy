@@ -1,8 +1,10 @@
 import {
   diffMigrations,
+  migrationAttributesOf,
   migrationsAttrs,
   migrationsInputOf,
   stampedOf,
+  type MigrationAttributes,
   type MigrationsInput,
 } from "@alchemy.run/sql/Migrations";
 import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
@@ -303,16 +305,11 @@ const toDatabaseName = (id: string, databaseName: string | undefined, existing?:
     );
   });
 
-type MigrationAttrs = Pick<
-  Database["Attributes"],
-  "migrationsDir" | "migrationsTable" | "migrationsHashes"
->;
-
 const toAttrs = (
   database: sqladmin.Database,
   project: string,
   instance: string,
-  migrations?: Partial<MigrationAttrs>,
+  migrations?: Partial<MigrationAttributes>,
 ): Database["Attributes"] => ({
   databaseName: database.name ?? "",
   instance: database.instance ?? instance,
@@ -322,9 +319,7 @@ const toAttrs = (
   sqlserverDatabaseDetails: database.sqlserverDatabaseDetails,
   selfLink: database.selfLink,
   etag: database.etag,
-  migrationsDir: migrations?.migrationsDir,
-  migrationsTable: migrations?.migrationsTable,
-  migrationsHashes: migrations?.migrationsHashes ?? {},
+  ...migrationAttributesOf(migrations),
 });
 
 const getByName = (project: string, instance: string, databaseName: string) =>

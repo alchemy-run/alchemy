@@ -1,7 +1,9 @@
 import * as crypto from "node:crypto";
 import {
   MigrationError,
+  migrationError,
   runMigrations,
+  splitSqlScript,
   type MigrationRecord,
   type NormalizedMigrationsInput,
   type SqlExecutor,
@@ -22,87 +24,6 @@ type SpannerDialect = "googlesql" | "postgres";
 
 const DDL = /^(?:CREATE|ALTER|DROP|RENAME|GRANT|REVOKE|ANALYZE)\b/i;
 
-/**
- * Split a migration into single statements with comments removed: Spanner
- * takes one statement per `executeSql` call and per `updateDdl` entry,
- * without terminators. Quoted text (GoogleSQL backslash escapes and triple
- * quotes, PostgreSQL doubled quotes and dollar quotes) never splits.
- */
-export const splitSpannerStatements = (sql: string, dialect: SpannerDialect): string[] => {
-  const statements: string[] = [];
-  let current = "";
-  let i = 0;
-  const push = () => {
-    if (current.trim().length > 0) statements.push(current.trim());
-    current = "";
-  };
-  while (i < sql.length) {
-    const rest = sql.slice(i);
-    if (rest.startsWith("--") || (dialect === "googlesql" && sql[i] === "#")) {
-      const end = sql.indexOf("\n", i);
-      i = end < 0 ? sql.length : end;
-      continue;
-    }
-    if (rest.startsWith("/*")) {
-      let depth = 1;
-      i += 2;
-      while (i < sql.length && depth > 0) {
-        if (dialect === "postgres" && sql.startsWith("/*", i)) {
-          depth++;
-          i += 2;
-        } else if (sql.startsWith("*/", i)) {
-          depth--;
-          i += 2;
-        } else i++;
-      }
-      current += " ";
-      continue;
-    }
-    const dollar = dialect === "postgres" ? /^\$(?:[A-Za-z_][A-Za-z_0-9]*)?\$/.exec(rest) : null;
-    if (dollar) {
-      const end = sql.indexOf(dollar[0], i + dollar[0].length);
-      const stop = end < 0 ? sql.length : end + dollar[0].length;
-      current += sql.slice(i, stop);
-      i = stop;
-      continue;
-    }
-    const ch = sql[i]!;
-    if (ch === "'" || ch === '"' || (dialect === "googlesql" && ch === "`")) {
-      const triple = dialect === "googlesql" && ch !== "`" && sql.startsWith(ch.repeat(3), i);
-      const close = triple ? ch.repeat(3) : ch;
-      let j = i + close.length;
-      while (j < sql.length) {
-        if (dialect === "googlesql" && sql[j] === "\\") {
-          j += 2;
-          continue;
-        }
-        if (sql.startsWith(close, j)) {
-          j += close.length;
-          // PostgreSQL doubles a quote to escape it.
-          if (dialect === "postgres" && sql[j] === ch) {
-            j++;
-            continue;
-          }
-          break;
-        }
-        j++;
-      }
-      current += sql.slice(i, j);
-      i = j;
-      continue;
-    }
-    if (ch === ";") {
-      push();
-      i++;
-      continue;
-    }
-    current += ch;
-    i++;
-  }
-  push();
-  return statements;
-};
-
 /** Consecutive statements of one kind: DDL goes to `updateDdl`, DML to a transaction. */
 const groupStatements = (statements: ReadonlyArray<string>) => {
   const groups: Array<{ ddl: boolean; statements: string[] }> = [];
@@ -114,14 +35,6 @@ const groupStatements = (statements: ReadonlyArray<string>) => {
   }
   return groups;
 };
-
-const toMigrationError =
-  (context: string) =>
-  <E extends { readonly _tag: string; readonly message?: string }>(cause: E) =>
-    new MigrationError({
-      message: `${context} failed: ${cause.message ?? cause._tag}`,
-      cause,
-    });
 
 /** Attempts per DDL statement whose earlier operations failed. */
 const MAX_DDL_ATTEMPTS = 20;
@@ -162,13 +75,13 @@ const makeSpannerExecutor = Effect.fn(function* (options: {
               message: `Spanner DDL on ${database} failed: ${cause.message}`,
               cause,
             })
-          : toMigrationError(`Spanner DDL on ${database}`)(cause),
+          : migrationError(`Spanner DDL on ${database}`)(cause),
       ),
     );
 
   const runDdl = (statements: ReadonlyArray<string>) =>
     updateDdl({ database, body: { statements: [...statements] } }).pipe(
-      Effect.mapError(toMigrationError(`Spanner DDL on ${database}`)),
+      Effect.mapError(migrationError(`Spanner DDL on ${database}`)),
       Effect.flatMap(awaitDdl),
     );
 
@@ -193,7 +106,7 @@ const makeSpannerExecutor = Effect.fn(function* (options: {
               Effect.map((operation) => ({ operation, replayed: true })),
             ),
           ),
-          Effect.mapError(toMigrationError(`Spanner DDL on ${database}`)),
+          Effect.mapError(migrationError(`Spanner DDL on ${database}`)),
         );
         const outcome = yield* Effect.result(awaitDdl(submitted.operation));
         if (Result.isSuccess(outcome)) return;
@@ -213,7 +126,7 @@ const makeSpannerExecutor = Effect.fn(function* (options: {
           seqno: "1",
           statements: statements.map((sql) => ({ sql })),
         },
-      }).pipe(Effect.mapError(toMigrationError(`Spanner DML on ${database}`)));
+      }).pipe(Effect.mapError(migrationError(`Spanner DML on ${database}`)));
       if (result.status?.code) {
         return yield* new MigrationError({
           message: `Spanner DML on ${database} failed: ${result.status.message ?? `code ${result.status.code}`}`,
@@ -226,12 +139,12 @@ const makeSpannerExecutor = Effect.fn(function* (options: {
         });
       }
       yield* commit({ session, body: { transactionId } }).pipe(
-        Effect.mapError(toMigrationError(`Committing DML on ${database}`)),
+        Effect.mapError(migrationError(`Committing DML on ${database}`)),
       );
     });
 
   const splitAll = (statements: ReadonlyArray<string>) =>
-    statements.flatMap((statement) => splitSpannerStatements(statement, dialect));
+    statements.flatMap((statement) => splitSqlScript(statement, dialect));
 
   const runGroups = (statements: ReadonlyArray<string>) =>
     Effect.forEach(
@@ -254,7 +167,7 @@ const makeSpannerExecutor = Effect.fn(function* (options: {
       : {}),
     query: (sql) =>
       executeSql({ session, body: { sql: splitAll([sql])[0] ?? sql } }).pipe(
-        Effect.mapError(toMigrationError(`Spanner query on ${database}`)),
+        Effect.mapError(migrationError(`Spanner query on ${database}`)),
         Effect.map((result) => {
           const fields = (result.metadata?.rowType?.fields ?? []).map((field) => field.name ?? "");
           return (result.rows ?? []).map((row) =>
@@ -305,7 +218,7 @@ export const runDatabaseMigrations = Effect.fn(function* (options: {
     withExecutor: (apply) =>
       Effect.acquireUseRelease(
         createSession({ database: options.database, body: {} }).pipe(
-          Effect.mapError(toMigrationError(`Opening a session on ${options.database}`)),
+          Effect.mapError(migrationError(`Opening a session on ${options.database}`)),
         ),
         (session) =>
           makeSpannerExecutor({

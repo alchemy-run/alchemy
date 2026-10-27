@@ -412,7 +412,8 @@ are the mistakes that most often slip through review (each has a check in
   a create.
 - **SQL databases take `migrations`.** Every resource that hosts a SQL
   schema applies migrations on deploy through `@alchemy.run/sql/Migrations`;
-  the provider only writes a `SqlExecutor` for its transport. Prefer the
+  the provider only writes the cloud-specific call, built on its executor
+  helpers (`withPgExecutor`, `makeStatementExecutor`, `splitSqlScript`). Prefer the
   cloud's HTTPS data API, then a direct or connector connection, then an
   in-network runner, and take credentials from the platform before asking
   for `migrationsUser` / `migrationsPassword`. Follow **SQL database
