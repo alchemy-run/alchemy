@@ -1,9 +1,7 @@
 import * as DigitalOcean from "@alchemy.run/digitalocean";
-import {
-  Firewall,
-  haveSameRules,
-  type FirewallInboundRule,
-} from "@alchemy.run/digitalocean/Firewall";
+import { Firewall, type FirewallRule } from "@alchemy.run/digitalocean/Firewall";
+import { haveSameRules, uniqueRules } from "@alchemy.run/digitalocean/internal/firewallRules";
+import { ignoreNotFound } from "@alchemy.run/digitalocean/internal/notFound";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import {
@@ -28,12 +26,18 @@ const DROPLET_TAG = "alchemy-test-firewall-droplets";
 
 const EVERYWHERE = ["0.0.0.0/0", "::/0"];
 
-const SSH_ONLY: FirewallInboundRule[] = [{ protocol: "tcp", ports: "22", addresses: EVERYWHERE }];
+const SSH_ONLY: FirewallRule[] = [{ protocol: "tcp", ports: "22", addresses: EVERYWHERE }];
 
-const WEB_RULES: FirewallInboundRule[] = [
+const WEB_RULES: FirewallRule[] = [
   { protocol: "tcp", ports: "22", addresses: EVERYWHERE },
   { protocol: "tcp", ports: "80", addresses: EVERYWHERE },
   { protocol: "tcp", ports: "443", addresses: EVERYWHERE },
+];
+
+const ALL_OUTBOUND: FirewallRule[] = [
+  { protocol: "tcp", ports: "0", addresses: EVERYWHERE },
+  { protocol: "udp", ports: "0", addresses: EVERYWHERE },
+  { protocol: "icmp", ports: "0", addresses: EVERYWHERE },
 ];
 
 const UNIT_TAGS = ["unit", "provider:digitalocean", "provider:digitalocean:firewall", "local"];
@@ -50,6 +54,30 @@ describe("haveSameRules", { tags: UNIT_TAGS }, () => {
       haveSameRules(
         [{ protocol: "tcp", ports: "22", addresses: ["0.0.0.0/0", "2001:DB8::/32"] }],
         [{ protocol: "tcp", ports: "22", addresses: ["2001:db8::/32", "0.0.0.0/0"] }],
+      ),
+    ).toBe(true);
+  });
+
+  it("compares rule tags case-sensitively", () => {
+    expect(
+      haveSameRules(
+        [{ protocol: "tcp", ports: "22", tags: ["Web"] }],
+        [{ protocol: "tcp", ports: "22", tags: ["web"] }],
+      ),
+    ).toBe(false);
+  });
+
+  it("compares ports in canonical numeric form", () => {
+    expect(
+      haveSameRules(
+        [{ protocol: "tcp", ports: "022", addresses: ["0.0.0.0/0"] }],
+        [{ protocol: "tcp", ports: "22", addresses: ["0.0.0.0/0"] }],
+      ),
+    ).toBe(true);
+    expect(
+      haveSameRules(
+        [{ protocol: "tcp", ports: "08000-09000", addresses: ["0.0.0.0/0"] }],
+        [{ protocol: "tcp", ports: "8000-9000", addresses: ["0.0.0.0/0"] }],
       ),
     ).toBe(true);
   });
@@ -135,16 +163,16 @@ describe("haveSameRules", { tags: UNIT_TAGS }, () => {
   });
 });
 
+describe("uniqueRules", { tags: UNIT_TAGS }, () => {
+  it("keeps one of each rule, in first-seen order", () => {
+    expect(uniqueRules([...WEB_RULES, ...SSH_ONLY, ...WEB_RULES])).toEqual(WEB_RULES);
+  });
+});
+
 const readFirewall = (firewallId: string) =>
   getFirewall({ firewall_id: firewallId }).pipe(Effect.map((response) => response.firewall));
 
-const isFirewallGone = (firewallId: string) => isGone(getFirewall({ firewall_id: firewallId }));
-
-const deleteFirewallIfExists = (firewallId: string) =>
-  deleteFirewall({ firewall_id: firewallId }).pipe(Effect.catchTag("NotFound", () => Effect.void));
-
-const deleteTagIfExists = (tag: string) =>
-  deleteTag({ tag_id: tag }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+const isFirewallGone = (firewallId: string) => isGone(readFirewall(firewallId));
 
 test.provider.skipIf(skipLive)(
   "firewall lifecycle: create, rename and widen rules in place, destroy",
@@ -157,13 +185,8 @@ test.provider.skipIf(skipLive)(
       );
       expect(created.name).toEqual(FIREWALL_NAME);
       expect(created.status).toEqual("succeeded");
-      expect(created.inboundRules).toHaveLength(1);
-      expect(created.inboundRules[0]?.action).toEqual("allow");
-      expect(created.outboundRules.map((rule) => rule.protocol).sort()).toEqual([
-        "icmp",
-        "tcp",
-        "udp",
-      ]);
+      expect(haveSameRules(created.inboundRules, SSH_ONLY)).toBe(true);
+      expect(haveSameRules(created.outboundRules, ALL_OUTBOUND)).toBe(true);
 
       const remote = yield* readFirewall(created.firewallId);
       expect(remote.name).toEqual(FIREWALL_NAME);
@@ -174,7 +197,7 @@ test.provider.skipIf(skipLive)(
       );
       expect(widened.firewallId).toEqual(created.firewallId);
       expect(widened.name).toEqual(RENAMED_FIREWALL_NAME);
-      expect(widened.inboundRules.map((rule) => rule.ports).sort()).toEqual(["22", "443", "80"]);
+      expect(haveSameRules(widened.inboundRules, WEB_RULES)).toBe(true);
 
       const remoteWidened = yield* readFirewall(created.firewallId);
       expect(remoteWidened.name).toEqual(RENAMED_FIREWALL_NAME);
@@ -188,34 +211,39 @@ test.provider.skipIf(skipLive)(
 );
 
 test.provider.skipIf(skipLive)(
-  "tags select the droplets a firewall protects and update in place",
+  "a firewall's droplet tags update in place",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      yield* deleteTagIfExists(DROPLET_TAG);
-      yield* createTag({ name: DROPLET_TAG });
-      yield* Effect.addFinalizer(() => deleteTagIfExists(DROPLET_TAG).pipe(Effect.orDie));
+      yield* ignoreNotFound(deleteTag({ tag_id: DROPLET_TAG }));
 
-      const created = yield* stack.deploy(
-        Firewall("Tagged", {
-          name: TAGGED_FIREWALL_NAME,
-          tags: [DROPLET_TAG],
-          inboundRules: SSH_ONLY,
-        }),
+      yield* Effect.acquireUseRelease(
+        createTag({ name: DROPLET_TAG }),
+        () =>
+          Effect.gen(function* () {
+            const created = yield* stack.deploy(
+              Firewall("Tagged", {
+                name: TAGGED_FIREWALL_NAME,
+                tags: [DROPLET_TAG],
+                inboundRules: SSH_ONLY,
+              }),
+            );
+            expect(created.tags).toEqual([DROPLET_TAG]);
+            expect((yield* readFirewall(created.firewallId)).tags).toEqual([DROPLET_TAG]);
+
+            const untagged = yield* stack.deploy(
+              Firewall("Tagged", { name: TAGGED_FIREWALL_NAME, inboundRules: SSH_ONLY }),
+            );
+            expect(untagged.firewallId).toEqual(created.firewallId);
+            expect(untagged.tags).toEqual([]);
+            expect((yield* readFirewall(created.firewallId)).tags ?? []).toEqual([]);
+
+            yield* stack.destroy();
+
+            expect(yield* isFirewallGone(created.firewallId)).toBe(true);
+          }),
+        () => ignoreNotFound(deleteTag({ tag_id: DROPLET_TAG })),
       );
-      expect(created.tags).toEqual([DROPLET_TAG]);
-      expect((yield* readFirewall(created.firewallId)).tags).toEqual([DROPLET_TAG]);
-
-      const untagged = yield* stack.deploy(
-        Firewall("Tagged", { name: TAGGED_FIREWALL_NAME, inboundRules: SSH_ONLY }),
-      );
-      expect(untagged.firewallId).toEqual(created.firewallId);
-      expect(untagged.tags).toEqual([]);
-      expect((yield* readFirewall(created.firewallId)).tags ?? []).toEqual([]);
-
-      yield* stack.destroy();
-
-      expect(yield* isFirewallGone(created.firewallId)).toBe(true);
     }).pipe(logLevel),
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );
@@ -249,30 +277,32 @@ test.provider.skipIf(skipLive)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const foreignFirewall = yield* createFirewall({
-        name: FOREIGN_FIREWALL_NAME,
-        inbound_rules: [{ protocol: "tcp", ports: "22", sources: { addresses: EVERYWHERE } }],
-      }).pipe(Effect.map((response) => response.firewall));
-      yield* Effect.addFinalizer(() =>
-        deleteFirewallIfExists(foreignFirewall.id).pipe(Effect.orDie),
+      yield* Effect.acquireUseRelease(
+        createFirewall({
+          name: FOREIGN_FIREWALL_NAME,
+          inbound_rules: [{ protocol: "tcp", ports: "22", sources: { addresses: EVERYWHERE } }],
+        }).pipe(Effect.map((response) => response.firewall)),
+        (foreignFirewall) =>
+          Effect.gen(function* () {
+            const refused = yield* stack
+              .deploy(Firewall("Adopted", { name: FOREIGN_FIREWALL_NAME, inboundRules: SSH_ONLY }))
+              .pipe(Effect.flip);
+            expect(refused).toBeInstanceOf(OwnedBySomeoneElse);
+
+            const adopted = yield* stack.deploy(
+              Firewall("Adopted", { name: FOREIGN_FIREWALL_NAME, inboundRules: WEB_RULES }).pipe(
+                adopt(true),
+              ),
+            );
+            expect(adopted.firewallId).toEqual(foreignFirewall.id);
+            expect(haveSameRules(adopted.inboundRules, WEB_RULES)).toBe(true);
+
+            yield* stack.destroy();
+
+            expect(yield* isFirewallGone(foreignFirewall.id)).toBe(true);
+          }),
+        (foreignFirewall) => ignoreNotFound(deleteFirewall({ firewall_id: foreignFirewall.id })),
       );
-
-      const refused = yield* stack
-        .deploy(Firewall("Adopted", { name: FOREIGN_FIREWALL_NAME, inboundRules: SSH_ONLY }))
-        .pipe(Effect.flip);
-      expect(refused).toBeInstanceOf(OwnedBySomeoneElse);
-
-      const adopted = yield* stack.deploy(
-        Firewall("Adopted", { name: FOREIGN_FIREWALL_NAME, inboundRules: WEB_RULES }).pipe(
-          adopt(true),
-        ),
-      );
-      expect(adopted.firewallId).toEqual(foreignFirewall.id);
-      expect(adopted.inboundRules).toHaveLength(3);
-
-      yield* stack.destroy();
-
-      expect(yield* isFirewallGone(foreignFirewall.id)).toBe(true);
     }).pipe(logLevel),
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );

@@ -21,19 +21,19 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const key = yield* Alchemy.KeyPair("deploy-key", { algorithm: "ed25519" });
-    const sshKey = yield* DigitalOcean.SshKey("deploy-key", {
-      publicKey: key.publicKey,
+    const pair = yield* Alchemy.KeyPair("deploy-key-pair");
+    const key = yield* DigitalOcean.SshKey("deploy-key", {
+      publicKey: pair.publicKey,
     });
     const host = yield* DigitalOcean.Droplet("app", {
       region: "sfo3",
       size: "s-2vcpu-4gb",
       image: "ubuntu-24-04-x64",
-      sshKeys: [sshKey.fingerprint],
+      sshKeys: [key.fingerprint],
       tags: ["app"],
     });
-    yield* DigitalOcean.Firewall("app", {
-      tags: ["app"],
+    yield* DigitalOcean.Firewall("app-firewall", {
+      tags: host.tags,
       inboundRules: [
         { protocol: "tcp", ports: "22", addresses: ["0.0.0.0/0", "::/0"] },
         { protocol: "tcp", ports: "443", addresses: ["0.0.0.0/0", "::/0"] },
@@ -44,7 +44,7 @@ export default Alchemy.Stack(
 );
 ```
 
-`alchemy deploy` registers the key, creates the Droplet and attaches the firewall by tag. Only `name` and `tags` change in place; a new region, size or image replaces the Droplet, so provision it with `userData` (cloud-init).
+`alchemy deploy` registers the key, creates the Droplet and attaches the firewall by tag. Passing `host.tags` instead of `["app"]` makes the firewall wait for the Droplet that creates the tag. `name`, `tags` and enabling `ipv6` update the Droplet in place. Any other change replaces it, so provision it with `userData` (cloud-init).
 
 ## Learn more
 

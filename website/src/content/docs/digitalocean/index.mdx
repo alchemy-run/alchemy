@@ -1,19 +1,18 @@
 ---
 title: DigitalOcean
-description: Droplets, SSH keys, and Cloud Firewalls as Stack resources — Linux VMs declared, keyed, and firewalled in the same Stack as the rest of your infrastructure.
+description: Droplets, SSH keys, and Cloud Firewalls as resources in the same Stack as the rest of your infrastructure.
 ---
 
-DigitalOcean provides Linux virtual machines. In alchemy the Droplet,
-its SSH key, and its firewall are resources in one Stack. Every
-change shows as a diff before deploy.
+Droplets, their SSH keys, and Cloud Firewalls are resources in one
+Stack.
 
 New here? [Set up credentials](/digitalocean/setup) first.
 
 ## Resources
 
 A `Droplet` is the VM, an `SshKey` is a public key registered on the
-team, and a `Firewall` is a free network-level filter applied to
-droplets by id or tag:
+team, and a `Firewall` is a network-level filter applied to droplets
+by id or tag:
 
 ```typescript
 import * as Alchemy from "alchemy";
@@ -29,7 +28,7 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const key = yield* DigitalOcean.SshKey("deploy-key", {
-      publicKey: yield* Config.string("SSH_PUBLIC_KEY"),
+      publicKey: yield* Config.String("SSH_PUBLIC_KEY"),
     });
 
     const host = yield* DigitalOcean.Droplet("app", {
@@ -63,13 +62,12 @@ Marketplace 1-Click images).
 
 ## Droplets
 
-Three droplet props update in place: `name` (a rename), `tags`
-(assign/unassign), and `ipv6` when you enable it. Each is a droplet
-action on the running VM. Disabling `ipv6`, or changing anything else
-(`region`, `size`, `image`, `sshKeys`, `backups`, `userData`,
-`volumes`, `vpcUuid`, `monitoring`, `withDropletAgent`) **replaces**
-the host with a fresh VM. Put all setup in `userData`
-(cloud-init) so a replacement droplet configures itself.
+`name`, `tags`, and enabling `ipv6` update a droplet in place.
+Disabling `ipv6`, or changing anything else (`region`, `size`,
+`image`, `sshKeys`, `backups`, `userData`, `volumes`, `vpcUuid`,
+`monitoring`, `withDropletAgent`), **replaces** the host with a fresh
+VM. Put all setup in `userData` (cloud-init) so a replacement droplet
+configures itself.
 
 Replacement is create-first: the new droplet is created and becomes
 active, then the old one is deleted. A droplet takes one to two
@@ -87,9 +85,10 @@ deploy after the droplet crosses that age rebuilds it on a fresh
 image — kernel and base-image updates arrive by replacement instead
 of in-place mutation.
 
-Drift is handled the same way. If someone resizes the droplet in the
-console, the next `plan` observes the live size and shows a
-replacement back to the declared one. Reconcile never fails on drift.
+`plan` compares against the last deployed state, so it does not see
+a resize made in the console. [`alchemy drift`](/cli/drift) reports
+it. Once `alchemy drift --repair` records the live size, the next
+deploy replaces the droplet with one of the declared size.
 
 ## SSH keys
 
@@ -110,10 +109,14 @@ const key = yield* DigitalOcean.SshKey("deploy-key", {
 });
 ```
 
+A plan cannot see a new key that is still an unresolved `Output`,
+such as the public key of a replaced `KeyPair`. That rotation takes
+two deploys: the first fails with `DigitalOcean.SshKeyMaterialChanged`,
+and the next one replaces the key.
+
 ## Firewalls
 
-A `Firewall` updates entirely in place — the API accepts the full
-desired rule set on every change, so nothing forces a replacement.
+A `Firewall` updates in place; no change replaces it.
 
 Each rule has a `protocol`, `ports`, and the sources (inbound) or
 destinations (outbound) it matches: `addresses`, `dropletIds`,
@@ -126,10 +129,10 @@ Traffic not matched by an inbound rule is dropped. Omitting
 outbound traffic.
 
 `dropletIds` selects fixed droplets. `tags` selects every droplet
-with the tag, including droplets created later. Each tag must
-already exist — DigitalOcean rejects an unknown tag with a typed
-`DigitalOcean.FirewallTagNotFound` error. Tag the droplets first
-(the `Droplet` `tags` prop creates missing tags).
+with the tag, including droplets created later. DigitalOcean rejects
+a tag that does not exist yet (`FirewallTagNotFound`). A literal tag
+string does not make the firewall wait for the droplet that creates
+the tag, so pass the droplet's output: `tags: host.tags`.
 
 ## Ownership and adoption
 
@@ -150,20 +153,16 @@ When a resource already exists but alchemy didn't create it, the
 deploy fails instead of silently taking it over:
 
 - A same-named **droplet** without the ownership tag.
-- An explicitly named **SSH key** whose fingerprint is already
-  registered — the same key can be uploaded by someone else, and a
-  name match proves nothing.
+- An **SSH key** whose public key is already registered on the team
+  under any name but the one alchemy generated for this resource.
+  DigitalOcean allows one registration per key, so omitting `name`
+  does not help.
 - An explicitly named **firewall** that already exists — firewalls
   carry no ownership tag, so a name match proves nothing.
 
 Re-run with `--adopt` to take ownership; see
-[Adopting resources](/cli/adopting-resources). For keys and
-firewalls, omitting `name` avoids the collision entirely — generated
-names are unique.
-
-Errors the provider raises are tagged `DigitalOcean.<Name>`
-(`DigitalOcean.FirewallTagNotFound`, `DigitalOcean.DropletWaitTimedOut`),
-so you can `Effect.catchTag` them by name.
+[Adopting resources](/cli/adopting-resources). For firewalls,
+omitting `name` avoids the collision.
 
 ## Compose with your cloud
 

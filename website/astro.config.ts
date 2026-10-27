@@ -39,11 +39,11 @@ function providersSidebarEntry() {
       { label: "Hetzner", link: "/hetzner" },
       { label: "Fly", link: "/fly" },
       { label: "Railway", link: "/railway" },
+      { label: "DigitalOcean", link: "/digitalocean" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
       { label: "Prisma", link: "/prisma" },
-      { label: "DigitalOcean", link: "/digitalocean" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
@@ -1290,6 +1290,14 @@ export default defineConfig({
           ],
         },
         {
+          label: "DigitalOcean",
+          items: [
+            { label: "Overview", link: "/digitalocean" },
+            { label: "Setup", link: "/digitalocean/setup" },
+            providerResourcesEntry("DigitalOcean"),
+          ],
+        },
+        {
           label: "PlanetScale",
           items: [
             { label: "Overview", link: "/planetscale" },
@@ -1516,14 +1524,6 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Stripe"),
-          ],
-        },
-        {
-          label: "DigitalOcean",
-          items: [
-            { label: "Overview", link: "/digitalocean" },
-            { label: "Setup", link: "/digitalocean/setup" },
-            providerResourcesEntry("DigitalOcean"),
           ],
         },
         {

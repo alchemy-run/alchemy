@@ -12,9 +12,8 @@ import * as Redacted from "effect/Redacted";
 
 export const DIGITALOCEAN_AUTH_PROVIDER_NAME = "DigitalOcean";
 
-// The Terraform provider reads `DIGITALOCEAN_TOKEN`, `doctl` reads
-// `DIGITALOCEAN_ACCESS_TOKEN`, and the distilled SDK also reads
-// `DIGITALOCEAN_API_KEY`. The first name set wins.
+// Terraform reads `DIGITALOCEAN_TOKEN`, doctl `DIGITALOCEAN_ACCESS_TOKEN`,
+// distilled `DIGITALOCEAN_API_KEY`.
 export const DIGITALOCEAN_TOKEN_ENV = "DIGITALOCEAN_TOKEN";
 export const DIGITALOCEAN_ACCESS_TOKEN_ENV = "DIGITALOCEAN_ACCESS_TOKEN";
 export const DIGITALOCEAN_API_KEY_ENV = "DIGITALOCEAN_API_KEY";
@@ -34,7 +33,7 @@ export type DigitalOceanResolvedCredentials = {
   source: { type: DigitalOceanAuthConfig["method"] | "env"; details?: string };
 };
 
-const firstTokenInEnvironment = Effect.fn(function* () {
+const firstTokenInEnvironment = Effect.gen(function* () {
   for (const name of TOKEN_ENV_NAMES) {
     const apiToken = yield* getEnvRedacted(name);
     if (apiToken) return { name, apiToken };
@@ -45,7 +44,7 @@ const firstTokenInEnvironment = Effect.fn(function* () {
 });
 
 const readEnvironment = Effect.gen(function* () {
-  const token = yield* firstTokenInEnvironment();
+  const token = yield* firstTokenInEnvironment;
   const apiBaseUrl = yield* getEnv(DIGITALOCEAN_API_BASE_URL_ENV);
   return {
     type: "apiToken" as const,
@@ -86,7 +85,7 @@ const digitalOceanAuth = makeStoredAuthProvider<DigitalOceanResolvedCredentials>
       required: true,
       secret: true,
       alternatives: [DIGITALOCEAN_ACCESS_TOKEN_ENV, DIGITALOCEAN_API_KEY_ENV],
-      description: "Personal access token; doctl and the SDK set the alternative names.",
+      description: "Personal access token.",
     },
     {
       name: DIGITALOCEAN_API_BASE_URL_ENV,
@@ -100,8 +99,8 @@ const digitalOceanAuth = makeStoredAuthProvider<DigitalOceanResolvedCredentials>
  * Layer that registers the DigitalOcean {@link AuthProvider} into the
  * {@link AuthProviders} registry.
  *
- * Auth is a Personal Access Token (`DIGITALOCEAN_TOKEN`,
- * `DIGITALOCEAN_ACCESS_TOKEN` as set by `doctl`, or `DIGITALOCEAN_API_KEY`).
+ * Auth is a Personal Access Token from `DIGITALOCEAN_TOKEN`,
+ * `DIGITALOCEAN_ACCESS_TOKEN` or `DIGITALOCEAN_API_KEY`, first set wins.
  * An optional `DIGITALOCEAN_API_BASE_URL` overrides the API root.
  */
 export const DigitalOceanAuth = digitalOceanAuth.layer;

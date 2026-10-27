@@ -1,19 +1,22 @@
 import * as DigitalOcean from "@alchemy.run/digitalocean";
-import {
-  diffDroplet,
-  propsChangedSinceLastDeploy,
-  propsDriftedFromCloud,
-} from "@alchemy.run/digitalocean/Droplet";
-import { hashOwnershipTag } from "@alchemy.run/digitalocean/internal/ownership";
-import { describe, expect, it } from "@alchemy.run/test";
+import { ignoreNotFound } from "@alchemy.run/digitalocean/internal/notFound";
+import { hashOwnershipTag, isAlchemyTag } from "@alchemy.run/digitalocean/internal/ownership";
+import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import { deleteTag, dropletsDestroy, getDroplet, getTag } from "@distilled.cloud/digitalocean";
+import {
+  deleteTag,
+  dropletsDestroy,
+  getDroplet,
+  getTag,
+  type Droplet as ApiDroplet,
+} from "@distilled.cloud/digitalocean";
 import { OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
+import { KeyPair } from "alchemy/KeyPair";
 import * as Output from "alchemy/Output";
-import { State } from "alchemy/State/State";
+import type * as Plan from "alchemy/Plan";
+import { isResourceState, State } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
-import * as TestClock from "effect/testing/TestClock";
-import { isGone, logLevel, skipSlow } from "./support.ts";
+import { forgetAttributes, isGone, logLevel, skipLive, skipSlow } from "./support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
 
@@ -24,517 +27,291 @@ const DROPLET_TAG = "alchemy-test-droplet";
 const EXTRA_DROPLET_TAG = "alchemy-test-droplet-extra";
 const DROPLET_NAME = "alchemy-test-droplet";
 const RENAMED_DROPLET_NAME = "alchemy-test-droplet-renamed";
-// The smallest size that exists in every region. A live droplet costs
-// money. Each live test creates one droplet and always destroys it.
+const REPLACED_DROPLET_NAME = "alchemy-test-droplet-replaced";
+const ORPHAN_DROPLET_NAME = "alchemy-test-droplet-orphan";
 const REGION = "sfo2";
+const OTHER_REGION = "nyc3";
+// The smallest size, available in every region.
 const SIZE = "s-1vcpu-512mb-10gb";
+const OTHER_SIZE = "s-1vcpu-1gb";
 const IMAGE = "ubuntu-24-04-x64";
 const OTHER_IMAGE = "ubuntu-22-04-x64";
+// Plans never send these, so they need not exist.
+const SSH_KEY_FINGERPRINT = "3b:16:bf:e4:8b:00:8b:b8:59:8c:a9:d3:f0:19:45:fa";
+const VOLUME_ID = "506f78a4-e098-11e5-ad9f-000f53306ae1";
+const VPC_UUID = "760e09ef-dc84-11e8-981e-3cfdfeaae000";
+const CLOUD_CONFIG = "#cloud-config\npackages: [docker.io]";
 // A droplet takes one to two minutes to create and as long to destroy.
-const LIVE_TIMEOUT = 240_000;
+const LIVE_TIMEOUT = 420_000;
 
-const UNIT_TAGS = ["unit", "provider:digitalocean", "provider:digitalocean:droplet", "local"];
 const LIVE_TAGS = ["provider:digitalocean", "provider:digitalocean:droplet", "live"];
 
 const PROPS: DropletProps = { region: REGION, size: SIZE, image: IMAGE };
 
-const NOW = Date.parse("2026-06-01T00:00:00Z");
-const DAY = 24 * 60 * 60 * 1000;
+const droplet = (props: Partial<DropletProps> = {}) =>
+  DigitalOcean.Droplet("TestDroplet", { ...PROPS, ...props });
 
-const daysAgo = (days: number) => new Date(NOW - days * DAY).toISOString();
+// The name comes from a key pair the plan has not created, so it is unknown.
+const dropletWithUnresolvedName = (props: Partial<DropletProps>) =>
+  Effect.gen(function* () {
+    const pending = yield* KeyPair("PendingName");
+    return yield* DigitalOcean.Droplet("TestDroplet", {
+      ...PROPS,
+      ...props,
+      name: Output.map(pending.publicKey, () => DROPLET_NAME),
+    });
+  });
 
-const observed = (overrides: Partial<DropletAttributes> = {}): DropletAttributes => ({
-  dropletId: 1,
-  name: "web",
-  status: "active",
-  region: REGION,
-  sizeSlug: SIZE,
-  imageId: 100,
-  imageSlug: IMAGE,
-  ipv4: "1.2.3.4",
-  privateIpv4: undefined,
-  ipv6: undefined,
-  vpcUuid: undefined,
-  features: [],
-  tags: [],
-  createdAt: daysAgo(1),
-  ...overrides,
-});
+const DEPLOYED: Partial<DropletProps> = { name: DROPLET_NAME, tags: [DROPLET_TAG] };
+const UPDATED: Partial<DropletProps> = {
+  name: RENAMED_DROPLET_NAME,
+  tags: [DROPLET_TAG, EXTRA_DROPLET_TAG],
+  ipv6: true,
+};
 
-const diff = (input: Parameters<typeof diffDroplet>[0]) =>
-  TestClock.setTime(NOW).pipe(Effect.andThen(diffDroplet(input)));
-
+const NOOP = { action: "noop" };
+const UPDATE = { action: "update" };
 const REPLACE = { action: "replace", deleteFirst: false };
 const REPLACE_DELETING_FIRST = { action: "replace", deleteFirst: true };
 
-describe("Droplet diff", { tags: UNIT_TAGS }, () => {
-  it.effect("replaceAfter replaces a droplet older than the limit", () =>
-    Effect.gen(function* () {
-      const props = { ...PROPS, replaceAfter: "30 days" as const };
-      const result = yield* diff({
-        olds: { ...props },
-        news: props,
-        output: observed({ createdAt: daysAgo(31) }),
-      });
-      expect(result).toEqual(REPLACE);
-    }),
-  );
+interface PlanCase {
+  readonly change: string;
+  /** Desired props, on top of the deployed ones. */
+  readonly props?: Partial<DropletProps>;
+  /** The persisted row, rewritten as if the cloud or the last deploy differed. */
+  readonly persisted?: {
+    readonly attr?: Partial<DropletAttributes>;
+    readonly props?: Partial<DropletProps>;
+  };
+  readonly expected: object;
+}
 
-  it.effect("replaceAfter replaces a droplet exactly as old as the limit", () =>
-    Effect.gen(function* () {
-      const props = { ...PROPS, replaceAfter: "30 days" as const };
-      const result = yield* diff({
-        olds: { ...props },
-        news: props,
-        output: observed({ createdAt: daysAgo(30) }),
-      });
-      expect(result).toEqual(REPLACE);
-    }),
-  );
+const PLAN_CASES: ReadonlyArray<PlanCase> = [
+  { change: "nothing", expected: NOOP },
+  { change: "region", props: { region: OTHER_REGION }, expected: REPLACE },
+  { change: "size", props: { size: OTHER_SIZE }, expected: REPLACE },
+  { change: "image", props: { image: OTHER_IMAGE }, expected: REPLACE },
+  { change: "sshKeys", props: { sshKeys: [SSH_KEY_FINGERPRINT] }, expected: REPLACE },
+  { change: "backups", props: { backups: true }, expected: REPLACE },
+  { change: "monitoring", props: { monitoring: true }, expected: REPLACE },
+  { change: "userData", props: { userData: CLOUD_CONFIG }, expected: REPLACE },
+  { change: "volumes", props: { volumes: [VOLUME_ID] }, expected: REPLACE },
+  { change: "vpcUuid", props: { vpcUuid: VPC_UUID }, expected: REPLACE },
+  {
+    change: "withDropletAgent set to false",
+    props: { withDropletAgent: false },
+    expected: REPLACE,
+  },
+  { change: "name", props: { name: RENAMED_DROPLET_NAME }, expected: UPDATE },
+  { change: "tags", props: { tags: [DROPLET_TAG, EXTRA_DROPLET_TAG] }, expected: UPDATE },
+  { change: "ipv6 enabled", props: { ipv6: true }, expected: UPDATE },
+  {
+    change: "replaceAfter longer than the droplet's age",
+    props: { replaceAfter: "30 days" },
+    expected: UPDATE,
+  },
+  {
+    change: "replaceAfter shorter than the droplet's age",
+    props: { replaceAfter: "1 second" },
+    expected: REPLACE,
+  },
+  { change: "region drifted", persisted: { attr: { region: OTHER_REGION } }, expected: REPLACE },
+  { change: "size drifted", persisted: { attr: { sizeSlug: OTHER_SIZE } }, expected: REPLACE },
+  { change: "image drifted", persisted: { attr: { imageSlug: OTHER_IMAGE } }, expected: REPLACE },
+  {
+    change: "image slug unreported",
+    persisted: { attr: { imageSlug: undefined } },
+    expected: NOOP,
+  },
+  {
+    change: "size of a droplet that holds volumes",
+    props: { size: OTHER_SIZE, volumes: [VOLUME_ID] },
+    persisted: { props: { volumes: [VOLUME_ID] } },
+    expected: REPLACE_DELETING_FIRST,
+  },
+];
 
-  it.effect("replaceAfter keeps a droplet younger than the limit", () =>
-    Effect.gen(function* () {
-      const props = { ...PROPS, replaceAfter: "30 days" as const };
-      const result = yield* diff({
-        olds: { ...props },
-        news: props,
-        output: observed({ createdAt: daysAgo(29) }),
-      });
-      expect(result).toBeUndefined();
-    }),
-  );
+const plannedAction = (plan: Plan.Plan) => {
+  const node = plan.resources.TestDroplet;
+  return node?.action === "replace"
+    ? { action: node.action, deleteFirst: node.deleteFirst }
+    : { action: node?.action };
+};
 
-  it.effect("replaceAfter ignores an unreadable createdAt", () =>
-    Effect.gen(function* () {
-      const props = { ...PROPS, replaceAfter: "30 days" as const };
-      const result = yield* diff({
-        olds: { ...props },
-        news: props,
-        output: observed({ createdAt: "not-a-date" }),
-      });
-      expect(result).toBeUndefined();
-    }),
-  );
-
-  it.effect("a region that drifted on the cloud replaces", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS },
-        news: { ...PROPS },
-        output: observed({ region: "nyc3" }),
-      });
-      expect(result).toEqual(REPLACE);
-    }),
-  );
-
-  it.effect("a size that drifted on the cloud replaces", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS },
-        news: { ...PROPS },
-        output: observed({ sizeSlug: "s-2vcpu-4gb" }),
-      });
-      expect(result).toEqual(REPLACE);
-    }),
-  );
-
-  it.effect("a droplet that matches its props is kept", () =>
-    Effect.gen(function* () {
-      const news = { ...PROPS, image: 100 };
-      const result = yield* diff({ olds: news, news, output: observed() });
-      expect(result).toBeUndefined();
-    }),
-  );
-
-  it.effect("a droplet without an image slug does not drift", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS },
-        news: { ...PROPS },
-        output: observed({ imageSlug: undefined }),
-      });
-      expect(result).toBeUndefined();
-    }),
-  );
-
-  it.effect("clearing withDropletAgent replaces", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS, withDropletAgent: undefined },
-        news: { ...PROPS, withDropletAgent: false },
-        output: observed(),
-      });
-      expect(result).toEqual(REPLACE);
-    }),
-  );
-
-  it.effect("omitting a defaulted boolean is not a change", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS, monitoring: false },
-        news: { ...PROPS, monitoring: undefined },
-        output: observed(),
-      });
-      expect(result).toBeUndefined();
-    }),
-  );
-
-  it.effect("enabling ipv6 is left to the in-place update", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS, ipv6: false },
-        news: { ...PROPS, ipv6: true },
-        output: observed(),
-      });
-      expect(result).toBeUndefined();
-    }),
-  );
-
-  it.effect("disabling ipv6 replaces", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS, ipv6: true },
-        news: { ...PROPS, ipv6: false },
-        output: observed({ features: ["ipv6"] }),
-      });
-      expect(result).toEqual(REPLACE);
-    }),
-  );
-
-  it.effect("turning backups on replaces", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS },
-        news: { ...PROPS, backups: true },
-        output: observed(),
-      });
-      expect(result).toEqual(REPLACE);
-    }),
-  );
-
-  it.effect("name and tags are left to the engine's update", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS, name: "a", tags: ["x"] },
-        news: { ...PROPS, name: "b", tags: ["x", "y"] },
-        output: observed(),
-      });
-      expect(result).toBeUndefined();
-    }),
-  );
-
-  it.effect("a droplet with volumes is deleted before its replacement", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS, volumes: ["volume-1"] },
-        news: { ...PROPS, size: "s-2vcpu-4gb", volumes: ["volume-1"] },
-        output: observed(),
-      });
-      expect(result).toEqual(REPLACE_DELETING_FIRST);
-    }),
-  );
-
-  it.effect("an ssh key known only after deploy replaces", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS, sshKeys: ["aa:bb"] },
-        news: { ...PROPS, sshKeys: [Output.literal("cc:dd")] },
-        output: observed(),
-      });
-      expect(result).toEqual(REPLACE);
-    }),
-  );
-
-  it.effect(
-    "an ssh key known only after deploy does not replace a droplet that does not exist yet",
-    () =>
-      Effect.gen(function* () {
-        const result = yield* diff({
-          olds: { ...PROPS },
-          news: { ...PROPS, sshKeys: [Output.literal("cc:dd")] },
-          output: undefined,
-        });
-        expect(result).toBeUndefined();
-      }),
-  );
-
-  it.effect("a name known only after deploy does not replace", () =>
-    Effect.gen(function* () {
-      const result = yield* diff({
-        olds: { ...PROPS, name: "a" },
-        news: { ...PROPS, name: Output.literal("b") },
-        output: observed(),
-      });
-      expect(result).toBeUndefined();
-    }),
-  );
+const dropletRow = (stack: Test.ScratchStack) => ({
+  stack: stack.name,
+  stage: stack.stage,
+  fqn: "TestDroplet",
 });
 
-describe("propsDriftedFromCloud", { tags: UNIT_TAGS }, () => {
-  const cases: Array<{
-    name: string;
-    news: DropletProps;
-    droplet: DropletAttributes;
-    expected: string[];
-  }> = [
-    {
-      name: "matching droplet",
-      news: PROPS,
-      droplet: observed(),
-      expected: [],
-    },
-    {
-      name: "image given as a matching number",
-      news: { ...PROPS, image: 100 },
-      droplet: observed(),
-      expected: [],
-    },
-    {
-      name: "image given as a different number",
-      news: { ...PROPS, image: 101 },
-      droplet: observed(),
-      expected: ["image"],
-    },
-    {
-      name: "image slug unknown on the droplet",
-      news: PROPS,
-      droplet: observed({ imageSlug: undefined }),
-      expected: [],
-    },
-    {
-      name: "different image slug",
-      news: { ...PROPS, image: "debian-13-x64" },
-      droplet: observed(),
-      expected: ["image"],
-    },
-    {
-      name: "region and size differ",
-      news: { ...PROPS, region: "nyc3", size: "s-2vcpu-4gb" },
-      droplet: observed(),
-      expected: ["region", "size"],
-    },
-    {
-      name: "feature flags are not compared with the lagging features list",
-      news: { ...PROPS, backups: true },
-      droplet: observed({ features: ["ipv6", "monitoring"] }),
-      expected: [],
-    },
-    {
-      name: "vpc only checked when desired",
-      news: PROPS,
-      droplet: observed({ vpcUuid: "vpc-1" }),
-      expected: [],
-    },
-    {
-      name: "different vpc",
-      news: { ...PROPS, vpcUuid: "vpc-2" },
-      droplet: observed({ vpcUuid: "vpc-1" }),
-      expected: ["vpcUuid"],
-    },
-  ];
-  for (const testCase of cases) {
-    it(testCase.name, () => {
-      expect(propsDriftedFromCloud(testCase.news, testCase.droplet)).toEqual(testCase.expected);
-    });
-  }
-});
+/** Runs `effect` while the persisted row is rewritten, then puts the row back. */
+const withPersistedRow = <A, E, R>(
+  stack: Test.ScratchStack,
+  rewrite: NonNullable<PlanCase["persisted"]>,
+  effect: Effect.Effect<A, E, R>,
+) =>
+  Effect.gen(function* () {
+    const state = yield* yield* State;
+    const address = dropletRow(stack);
+    const deployed = yield* state.get(address);
+    if (!isResourceState(deployed) || deployed.attr === undefined) {
+      return yield* Effect.die(new Error("Expected a deployed TestDroplet row"));
+    }
+    const rewritten = {
+      ...deployed,
+      attr: { ...deployed.attr, ...rewrite.attr },
+      props: { ...deployed.props, ...rewrite.props },
+    };
+    return yield* Effect.acquireUseRelease(
+      state.set({ ...address, value: rewritten }),
+      () => effect,
+      () => Effect.asVoid(state.set({ ...address, value: deployed })),
+    );
+  });
 
-describe("propsChangedSinceLastDeploy", { tags: UNIT_TAGS }, () => {
-  const cases: Array<{
-    name: string;
-    olds: DropletProps;
-    news: DropletProps;
-    expected: string[];
-  }> = [
-    { name: "same props", olds: PROPS, news: { ...PROPS }, expected: [] },
-    {
-      name: "name, tags and replaceAfter change in place",
-      olds: { ...PROPS, name: "a", tags: ["x"] },
-      news: { ...PROPS, name: "b", tags: ["y"], replaceAfter: "30 days" },
-      expected: [],
-    },
-    {
-      name: "backups turned on",
-      olds: PROPS,
-      news: { ...PROPS, backups: true },
-      expected: ["backups"],
-    },
-    {
-      name: "user data differs",
-      olds: { ...PROPS, userData: "#cloud-config\na" },
-      news: { ...PROPS, userData: "#cloud-config\nb" },
-      expected: ["userData"],
-    },
-    {
-      name: "ssh keys in another order",
-      olds: { ...PROPS, sshKeys: ["aa:bb", 7] },
-      news: { ...PROPS, sshKeys: [7, "aa:bb"] },
-      expected: [],
-    },
-    {
-      name: "an ssh key is swapped",
-      olds: { ...PROPS, sshKeys: ["aa:bb"] },
-      news: { ...PROPS, sshKeys: ["cc:dd"] },
-      expected: ["sshKeys"],
-    },
-    {
-      name: "a volume is added",
-      olds: PROPS,
-      news: { ...PROPS, volumes: ["volume-1"] },
-      expected: ["volumes"],
-    },
-    {
-      name: "monitoring omitted instead of false",
-      olds: { ...PROPS, monitoring: false },
-      news: PROPS,
-      expected: [],
-    },
-    {
-      name: "monitoring turned on",
-      olds: PROPS,
-      news: { ...PROPS, monitoring: true },
-      expected: ["monitoring"],
-    },
-    {
-      name: "ipv6 turned on",
-      olds: PROPS,
-      news: { ...PROPS, ipv6: true },
-      expected: [],
-    },
-    {
-      name: "ipv6 turned off",
-      olds: { ...PROPS, ipv6: true },
-      news: PROPS,
-      expected: ["ipv6"],
-    },
-    {
-      name: "the droplet agent omitted instead of false",
-      olds: { ...PROPS, withDropletAgent: false },
-      news: PROPS,
-      expected: ["withDropletAgent"],
-    },
-  ];
-  for (const testCase of cases) {
-    it(testCase.name, () => {
-      expect(propsChangedSinceLastDeploy(testCase.news, testCase.olds)).toEqual(testCase.expected);
-    });
-  }
-});
-
-const droplet = (props: Partial<DropletProps>) =>
-  DigitalOcean.Droplet("TestDroplet", { ...PROPS, ...props });
+const planDroplet = (stack: Test.ScratchStack, { props, persisted }: PlanCase) => {
+  const plan = stack.plan(droplet({ ...DEPLOYED, ...props }));
+  return persisted === undefined ? plan : withPersistedRow(stack, persisted, plan);
+};
 
 const isGenerationTag = (tag: string) => tag.startsWith("alchemy:generation:");
 
-/** Destroys a droplet the stack no longer knows about, and the tags only it carried. */
-const destroyOrphan = (dropletId: number, tags: ReadonlyArray<string | undefined>) =>
-  dropletsDestroy({ droplet_id: dropletId }).pipe(
-    Effect.catchTag("NotFound", () => Effect.void),
+const generationTagOf = (dropletId: number) =>
+  getDroplet({ droplet_id: dropletId }).pipe(
+    Effect.flatMap((response) => Effect.fromNullishOr(response.droplet.tags.find(isGenerationTag))),
+  );
+
+/** Deletes the state row, as if the state store had lost it. */
+const forgetStateRow = Effect.fn(function* (stack: Test.ScratchStack) {
+  const state = yield* yield* State;
+  yield* state.delete(dropletRow(stack));
+});
+
+/** Destroys a droplet the stack no longer knows about, and its alchemy tags. */
+const destroyOrphan = (orphan: ApiDroplet) =>
+  ignoreNotFound(dropletsDestroy({ droplet_id: orphan.id })).pipe(
     Effect.andThen(
       Effect.forEach(
-        tags.filter((tag) => tag !== undefined),
-        (tag) => deleteTag({ tag_id: tag }).pipe(Effect.catchTag("NotFound", () => Effect.void)),
+        orphan.tags.filter(isAlchemyTag),
+        (tag) => ignoreNotFound(deleteTag({ tag_id: tag })),
         { discard: true },
       ),
     ),
-    Effect.catchCause((cause) =>
-      Effect.logWarning(`Droplet ${dropletId} was not cleaned up`, cause),
-    ),
   );
 
-const generationTagOf = (dropletId: number) =>
-  getDroplet({ droplet_id: dropletId }).pipe(
-    Effect.map((response) => response.droplet.tags.find(isGenerationTag)),
-  );
-
-test.provider.skipIf(skipSlow)(
-  "droplet lifecycle: create, update name, tags and ipv6 in place, refuse foreign and reserved names, destroy",
+test.provider.skipIf(skipLive)(
+  "a tag with the reserved alchemy: prefix is refused before anything is created",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const created = yield* stack.deploy(droplet({ name: DROPLET_NAME, tags: [DROPLET_TAG] }));
-      expect(created.name).toEqual(DROPLET_NAME);
-      expect(created.status).toEqual("active");
-      expect(created.region).toEqual(REGION);
-      expect(created.sizeSlug).toEqual(SIZE);
+      const refused = yield* stack.deploy(droplet({ tags: ["alchemy:mine"] })).pipe(Effect.flip);
+      expect(refused).toBeInstanceOf(DigitalOcean.DropletTagReserved);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: LIVE_TAGS },
+);
+
+test.provider.skipIf(skipSlow)(
+  "droplet lifecycle: create, plan each change, resume lost attributes, update in place, refuse a foreign twin, destroy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(droplet(DEPLOYED));
+      expect(created).toMatchObject({
+        name: DROPLET_NAME,
+        status: "active",
+        region: REGION,
+        sizeSlug: SIZE,
+        tags: [DROPLET_TAG],
+      });
       expect(created.ipv4).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
-      expect(created.tags).toEqual([DROPLET_TAG]);
 
       const remote = yield* getDroplet({ droplet_id: created.dropletId });
-      expect(remote.droplet.name).toEqual(DROPLET_NAME);
       const ownershipTag = yield* hashOwnershipTag(stack.name, stack.stage, "TestDroplet");
-      const generationTag = remote.droplet.tags.find(isGenerationTag);
-      expect(remote.droplet.tags).toHaveLength(3);
-      expect(remote.droplet.tags).toContain(DROPLET_TAG);
-      expect(remote.droplet.tags).toContain(ownershipTag);
-      expect(generationTag).toBeDefined();
-
-      const updated = yield* stack.deploy(
-        droplet({ name: RENAMED_DROPLET_NAME, tags: [DROPLET_TAG, EXTRA_DROPLET_TAG], ipv6: true }),
+      const generationTag = yield* generationTagOf(created.dropletId);
+      expect(remote.droplet.name).toEqual(DROPLET_NAME);
+      expect([...remote.droplet.tags].sort()).toEqual(
+        [DROPLET_TAG, ownershipTag, generationTag].sort(),
       );
-      expect(updated.dropletId).toEqual(created.dropletId);
-      expect(updated.name).toEqual(RENAMED_DROPLET_NAME);
-      expect(updated.ipv4).toEqual(created.ipv4);
+
+      const planned = yield* Effect.forEach(PLAN_CASES, (planCase) =>
+        planDroplet(stack, planCase).pipe(
+          Effect.map((plan) => [planCase.change, plannedAction(plan)] as const),
+        ),
+      );
+      expect(Object.fromEntries(planned)).toEqual(
+        Object.fromEntries(PLAN_CASES.map(({ change, expected }) => [change, expected])),
+      );
+
+      // A name known only after deploy does not hide a change that replaces.
+      const behindUnresolvedName = yield* stack.plan(
+        dropletWithUnresolvedName({ ...DEPLOYED, userData: CLOUD_CONFIG }),
+      );
+      expect(plannedAction(behindUnresolvedName)).toEqual(REPLACE);
+
+      yield* forgetAttributes(dropletRow(stack));
+      const resumed = yield* stack.deploy(droplet(DEPLOYED));
+      expect(resumed.dropletId).toEqual(created.dropletId);
+
+      const updated = yield* stack.deploy(droplet(UPDATED));
+      expect(updated).toMatchObject({
+        dropletId: created.dropletId,
+        name: RENAMED_DROPLET_NAME,
+        ipv4: created.ipv4,
+      });
       expect([...updated.tags].sort()).toEqual([DROPLET_TAG, EXTRA_DROPLET_TAG]);
       expect(updated.features).toContain("ipv6");
       expect(updated.ipv6).toMatch(/:/);
+      expect(plannedAction(yield* stack.plan(droplet({ ...UPDATED, ipv6: false })))).toEqual(
+        REPLACE,
+      );
 
       // A same-named droplet without this resource's tag belongs to someone else.
       const twinFailure = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            yield* droplet({
-              name: RENAMED_DROPLET_NAME,
-              tags: [DROPLET_TAG, EXTRA_DROPLET_TAG],
-              ipv6: true,
-            });
-            return yield* DigitalOcean.Droplet("Twin", { ...PROPS, name: RENAMED_DROPLET_NAME });
-          }),
+        .plan(
+          droplet(UPDATED).pipe(
+            Effect.andThen(DigitalOcean.Droplet("Twin", { ...PROPS, name: RENAMED_DROPLET_NAME })),
+          ),
         )
         .pipe(Effect.flip);
       expect(twinFailure).toBeInstanceOf(OwnedBySomeoneElse);
 
-      const reserved = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            yield* droplet({
-              name: RENAMED_DROPLET_NAME,
-              tags: [DROPLET_TAG, EXTRA_DROPLET_TAG],
-              ipv6: true,
-            });
-            return yield* DigitalOcean.Droplet("Reserved", { ...PROPS, tags: ["alchemy:mine"] });
-          }),
-        )
-        .pipe(Effect.flip);
-      expect(reserved).toBeInstanceOf(DigitalOcean.DropletTagReserved);
-
       yield* stack.destroy();
 
       expect(yield* isGone(getDroplet({ droplet_id: created.dropletId }))).toBe(true);
-      // The user tags stay; the alchemy tags go with their last droplet.
       expect(yield* isGone(getTag({ tag_id: ownershipTag }))).toBe(true);
-      expect(yield* isGone(getTag({ tag_id: generationTag ?? "" }))).toBe(true);
+      expect(yield* isGone(getTag({ tag_id: generationTag }))).toBe(true);
+      expect(yield* isGone(getTag({ tag_id: DROPLET_TAG }))).toBe(false);
+      yield* Effect.forEach(
+        [DROPLET_TAG, EXTRA_DROPLET_TAG],
+        (tag) => ignoreNotFound(deleteTag({ tag_id: tag })),
+        { discard: true },
+      );
     }).pipe(logLevel),
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );
 
 test.provider.skipIf(skipSlow)(
-  "a new image replaces the droplet: the replacement is created before the old one is deleted",
+  "a replacement gets a new generation tag, and the old droplet and its tag are deleted",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const created = yield* stack.deploy(droplet({ name: DROPLET_NAME }));
+      const created = yield* stack.deploy(droplet({ name: REPLACED_DROPLET_NAME }));
       const oldGenerationTag = yield* generationTagOf(created.dropletId);
 
-      const replaced = yield* stack.deploy(droplet({ name: DROPLET_NAME, image: OTHER_IMAGE }));
+      const replaced = yield* stack.deploy(
+        droplet({ name: REPLACED_DROPLET_NAME, image: OTHER_IMAGE }),
+      );
       expect(replaced.dropletId).not.toEqual(created.dropletId);
       expect(replaced.imageSlug).toEqual(OTHER_IMAGE);
-      expect(replaced.name).toEqual(DROPLET_NAME);
-      expect(yield* isGone(getDroplet({ droplet_id: created.dropletId }))).toBe(true);
-      expect(yield* isGone(getTag({ tag_id: oldGenerationTag ?? "" }))).toBe(true);
+      expect(replaced.name).toEqual(REPLACED_DROPLET_NAME);
       expect(yield* generationTagOf(replaced.dropletId)).not.toEqual(oldGenerationTag);
+      expect(yield* isGone(getDroplet({ droplet_id: created.dropletId }))).toBe(true);
+      expect(yield* isGone(getTag({ tag_id: oldGenerationTag }))).toBe(true);
 
       yield* stack.destroy();
 
@@ -548,30 +325,27 @@ test.provider.skipIf(skipSlow)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const orphanDroplet = droplet({ name: ORPHAN_DROPLET_NAME });
 
-      const created = yield* stack.deploy(droplet({ name: DROPLET_NAME }));
-      const orphanTags = [
-        yield* generationTagOf(created.dropletId),
-        yield* hashOwnershipTag(stack.name, stack.stage, "TestDroplet"),
-      ];
-      // A deleted state row hides the droplet from the harness teardown.
-      yield* Effect.addFinalizer(() => destroyOrphan(created.dropletId, orphanTags));
+      yield* Effect.acquireUseRelease(
+        stack.deploy(orphanDroplet).pipe(
+          Effect.flatMap((created) => getDroplet({ droplet_id: created.dropletId })),
+          Effect.map((response) => response.droplet),
+          Effect.tap(() => forgetStateRow(stack)),
+        ),
+        (orphan) =>
+          Effect.gen(function* () {
+            const recreated = yield* stack.deploy(orphanDroplet);
+            expect(recreated.dropletId).not.toEqual(orphan.id);
 
-      const state = yield* yield* State;
-      yield* state.delete({
-        stack: stack.name,
-        stage: stack.stage,
-        fqn: "TestDroplet",
-      });
+            yield* stack.destroy();
 
-      const recreated = yield* stack.deploy(droplet({ name: DROPLET_NAME }));
-      expect(recreated.dropletId).not.toEqual(created.dropletId);
-      expect(yield* isGone(getDroplet({ droplet_id: created.dropletId }))).toBe(false);
-
-      yield* stack.destroy();
-
-      expect(yield* isGone(getDroplet({ droplet_id: recreated.dropletId }))).toBe(true);
-      expect(yield* isGone(getDroplet({ droplet_id: created.dropletId }))).toBe(false);
+            expect(yield* isGone(getDroplet({ droplet_id: recreated.dropletId }))).toBe(true);
+            expect(yield* isGone(getDroplet({ droplet_id: orphan.id }))).toBe(false);
+          }),
+        // A deleted state row hides the droplet from the harness teardown.
+        destroyOrphan,
+      );
     }).pipe(logLevel),
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );

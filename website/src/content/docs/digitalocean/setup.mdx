@@ -1,6 +1,6 @@
 ---
 title: Setup
-description: Install Alchemy and connect it to DigitalOcean — create a project, generate an API token, and store it in a profile.
+description: Install Alchemy and connect it to DigitalOcean — generate an API token and store it in a profile.
 ---
 
 import PackageManagers from "../../../components/PackageManagers.astro";
@@ -76,15 +76,10 @@ export default Alchemy.Stack(
 );
 ```
 
-In CI (`CI=true`) alchemy skips the prompt and reads the token from
-the environment instead:
-
-| Variable | Purpose |
-| --- | --- |
-| `DIGITALOCEAN_TOKEN` | The token. The name the Terraform provider reads. |
-| `DIGITALOCEAN_ACCESS_TOKEN` | Read when `DIGITALOCEAN_TOKEN` is not set. The name `doctl` reads. |
-| `DIGITALOCEAN_API_KEY` | Read when neither of the above is set. |
-| `DIGITALOCEAN_API_BASE_URL` | Optional. Overrides the API base URL. |
+In CI (`CI=true`) alchemy skips the prompt and reads
+`DIGITALOCEAN_TOKEN` (or `DIGITALOCEAN_ACCESS_TOKEN`, then
+`DIGITALOCEAN_API_KEY`), plus an optional `DIGITALOCEAN_API_BASE_URL`,
+from the environment instead.
 
 To re-run the setup later (e.g. to rotate the token, or configure a
 separate `prod` profile):

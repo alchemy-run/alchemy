@@ -4,14 +4,13 @@ import type * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 
 export interface PollBudget {
-  /** Longest pause between two observations. */
-  readonly every: Duration.Input;
+  readonly maxDelay: Duration.Input;
   /** Observations after the first one. */
   readonly times: number;
 }
 
-const backoffUpTo = (every: Duration.Input) =>
-  Schedule.min([Schedule.exponential(Duration.millis(500), 1.5), Schedule.spaced(every)]);
+const backoffUpTo = (maxDelay: Duration.Input) =>
+  Schedule.min([Schedule.exponential(Duration.millis(500), 1.5), Schedule.spaced(maxDelay)]);
 
 /**
  * Observes until `until` holds and returns that observation. Fails with
@@ -41,7 +40,7 @@ export const pollUntil: {
 ): Effect.Effect<A, E | Timeout, R> =>
   observe.pipe(
     Effect.repeat({
-      schedule: backoffUpTo(options.every),
+      schedule: backoffUpTo(options.maxDelay),
       until: options.until,
       times: options.times,
     }),

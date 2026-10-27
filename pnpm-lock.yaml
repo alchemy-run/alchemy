@@ -9046,9 +9046,6 @@ importers:
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/digitalocean
     devDependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)(redis@6.2.1)
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3

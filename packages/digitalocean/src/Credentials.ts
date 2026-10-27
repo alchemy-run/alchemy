@@ -1,15 +1,9 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials } from "@distilled.cloud/digitalocean/Credentials";
-import {
-  deferUntilFirstUse,
-  orDieCredentialsUnavailable,
-  resolveProviderConfig,
-} from "alchemy/Auth/Resolve";
-import * as Effect from "effect/Effect";
+import { lazyCredentials } from "alchemy/Auth/Resolve";
 import * as Layer from "effect/Layer";
 import {
   DIGITALOCEAN_AUTH_PROVIDER_NAME,
-  type DigitalOceanAuthConfig,
   type DigitalOceanResolvedCredentials,
 } from "./AuthProvider.ts";
 
@@ -31,31 +25,8 @@ export {
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
-    Effect.gen(function* () {
-      // Defer profile lookup and credential resolution until first use, so
-      // building the provider layers never requires a configured profile.
-      const resolve = yield* resolveProviderConfig<
-        DigitalOceanAuthConfig,
-        DigitalOceanResolvedCredentials
-      >(DIGITALOCEAN_AUTH_PROVIDER_NAME).pipe(
-        Effect.flatMap(({ profileName, resolve }) =>
-          resolve.pipe(
-            Effect.map((creds) => ({
-              apiKey: creds.apiToken,
-              apiBaseUrl: creds.apiBaseUrl,
-            })),
-            Effect.mapError((e) =>
-              ConfigError.make({
-                message: `Failed to resolve DigitalOcean credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-              }),
-            ),
-          ),
-        ),
-        deferUntilFirstUse,
-      );
-      return yield* resolve.pipe(
-        orDieCredentialsUnavailable(DIGITALOCEAN_AUTH_PROVIDER_NAME),
-        Effect.cached,
-      );
-    }),
+    lazyCredentials<DigitalOceanResolvedCredentials, ConfigError>()(
+      DIGITALOCEAN_AUTH_PROVIDER_NAME,
+      (creds) => ({ apiKey: creds.apiToken, apiBaseUrl: creds.apiBaseUrl }),
+    ),
   );

@@ -1,3 +1,8 @@
+import {
+  DIGITALOCEAN_ACCESS_TOKEN_ENV,
+  DIGITALOCEAN_API_KEY_ENV,
+  DIGITALOCEAN_TOKEN_ENV,
+} from "@alchemy.run/digitalocean";
 import type { NotFound } from "@distilled.cloud/digitalocean";
 import { isActionState, State } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
@@ -8,19 +13,15 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const hasDigitalOceanToken = !!(
-  process.env.DIGITALOCEAN_TOKEN ||
-  process.env.DIGITALOCEAN_ACCESS_TOKEN ||
-  process.env.DIGITALOCEAN_API_KEY
-);
-
-/** Live tests need a token. */
-export const skipLive = !hasDigitalOceanToken;
+export const skipLive = ![
+  DIGITALOCEAN_TOKEN_ENV,
+  DIGITALOCEAN_ACCESS_TOKEN_ENV,
+  DIGITALOCEAN_API_KEY_ENV,
+].some((name) => process.env[name]);
 
 /** A droplet takes minutes to create and destroy, so `--fast` skips it. */
 export const skipSlow = skipLive || !!process.env.FAST;
 
-/** True when a read answers that the resource does not exist. */
 export const isGone = <A, E, R>(read: Effect.Effect<A, E | NotFound, R>) =>
   read.pipe(
     Effect.as(false),

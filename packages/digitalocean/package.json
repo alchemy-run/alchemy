@@ -58,21 +58,14 @@
     "@distilled.cloud/digitalocean": "workspace:*"
   },
   "devDependencies": {
-    "@effect/platform-node": "catalog:",
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "typescript": "catalog:"
   },
   "peerDependencies": {
-    "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:"
-  },
-  "peerDependenciesMeta": {
-    "@effect/platform-node": {
-      "optional": true
-    }
   },
   "alchemy": {
     "contributes": [

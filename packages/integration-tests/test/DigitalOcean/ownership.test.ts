@@ -7,9 +7,7 @@ describe("ownership tags", { tags: ["unit", "provider:digitalocean", "local"] },
     Effect.gen(function* () {
       const tag = yield* hashOwnershipTag("stack", "stage", "id");
       expect(tag).toEqual(yield* hashOwnershipTag("stack", "stage", "id"));
-      expect(tag.startsWith("alchemy:")).toBe(true);
-      expect(tag).toMatch(/^[a-zA-Z0-9:_-]+$/);
-      expect(tag.length).toBeLessThanOrEqual(255);
+      expect(tag).toMatch(/^alchemy:[0-9a-f]{64}$/);
     }),
   );
 

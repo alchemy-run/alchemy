@@ -1,57 +1,69 @@
 import { pollUntil } from "@alchemy.run/digitalocean/internal/poll";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Arr from "effect/Array";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Ref from "effect/Ref";
 import * as TestClock from "effect/testing/TestClock";
 
 class TimedOut extends Data.TaggedError("TimedOut")<{
   readonly last: number;
 }> {}
 
-// The backoff starts at 500ms and grows by 1.5× up to `every`.
-const BUDGET = { every: "3 seconds", times: 3 } as const;
-
-/** Observes 1, 2, 3, … until the observation reaches `target`. */
-const countUpTo = (target: number) => {
-  let observations = 0;
-  const poll = pollUntil(
-    Effect.sync(() => ++observations),
-    {
-      ...BUDGET,
-      until: (observed) => observed >= target,
-      onTimeout: (last) => new TimedOut({ last }),
-    },
+/** Polls the test clock until `until` holds, recording when each observation ran. */
+const pollClock = Effect.fn(function* (until: (now: number) => boolean) {
+  const observedAt = yield* Ref.make<ReadonlyArray<number>>([]);
+  const observe = Clock.currentTimeMillis.pipe(
+    Effect.tap((now) => Ref.update(observedAt, Arr.append(now))),
   );
-  return { poll, observations: () => observations };
-};
+  const poll = pollUntil(observe, {
+    maxDelay: "1 second",
+    times: 4,
+    until,
+    onTimeout: (last) => new TimedOut({ last }),
+  });
+  return { poll, observedAt: Ref.get(observedAt) };
+});
 
-describe("pollUntil", { tags: ["unit", "local"] }, () => {
+const runOnTestClock = Effect.fn(function* <A, E>(poll: Effect.Effect<A, E>) {
+  const fiber = yield* Effect.forkChild(poll);
+  yield* TestClock.adjust("1 minute");
+  return yield* Fiber.join(fiber);
+});
+
+describe("pollUntil", { tags: ["unit", "provider:digitalocean", "local"] }, () => {
   it.effect("returns the first observation when it already holds", () =>
     Effect.gen(function* () {
-      expect(yield* countUpTo(1).poll).toEqual(1);
+      const { poll, observedAt } = yield* pollClock(() => true);
+      expect(yield* poll).toEqual(0);
+      expect(yield* observedAt).toEqual([0]);
     }),
   );
 
-  it.effect("backs off between observations until the condition holds", () =>
+  it.effect("returns the first observation that holds", () =>
     Effect.gen(function* () {
-      const counter = countUpTo(3);
-      const fiber = yield* Effect.forkChild(counter.poll);
-      yield* TestClock.adjust("500 millis");
-      expect(counter.observations()).toEqual(2);
-      yield* TestClock.adjust("750 millis");
-      expect(yield* Fiber.join(fiber)).toEqual(3);
+      const { poll, observedAt } = yield* pollClock((now) => now >= 1000);
+      expect(yield* runOnTestClock(poll)).toEqual(1250);
+      expect(yield* observedAt).toEqual([0, 500, 1250]);
     }),
   );
 
-  it.effect("fails with the last observation when the budget runs out", () =>
+  it.effect("waits 500ms, then 1.5× longer each time, never longer than `maxDelay`", () =>
     Effect.gen(function* () {
-      const counter = countUpTo(10);
-      const fiber = yield* Effect.forkChild(Effect.flip(counter.poll));
-      yield* TestClock.adjust("10 seconds");
-      const timeout = yield* Fiber.join(fiber);
+      const { poll, observedAt } = yield* pollClock(() => false);
+      yield* runOnTestClock(Effect.flip(poll));
+      expect(yield* observedAt).toEqual([0, 500, 1250, 2250, 3250]);
+    }),
+  );
+
+  it.effect("fails with the last observation once `times` retries are spent", () =>
+    Effect.gen(function* () {
+      const { poll } = yield* pollClock(() => false);
+      const timeout = yield* runOnTestClock(Effect.flip(poll));
       expect(timeout).toBeInstanceOf(TimedOut);
-      expect(timeout.last).toEqual(BUDGET.times + 1);
+      expect(timeout.last).toEqual(3250);
     }),
   );
 });
