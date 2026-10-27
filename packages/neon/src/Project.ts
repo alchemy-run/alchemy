@@ -5,7 +5,7 @@ import {
   stampedOf,
   type MigrationsInput,
 } from "@alchemy.run/sql/Migrations";
-import { hashImports, readSqlFile } from "@alchemy.run/sql/SqlFile";
+import { hashImports } from "@alchemy.run/sql/SqlFile";
 import {
   deleteProject,
   getConnectionURI,
@@ -29,7 +29,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { runPgMigrations, runSql } from "./Migrations.ts";
+import { runImports, runPgMigrations } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -675,28 +675,4 @@ const hydrateProjectAttributes = (
       migrationsHashes: opts.migrationsHashes ?? {},
       importHashes: opts.importHashes ?? {},
     } satisfies ProjectAttributes;
-  });
-
-const runImports = (
-  connectionUri: Redacted.Redacted<string>,
-  importFiles: ReadonlyArray<string>,
-  rootDir: string,
-  previous: Record<string, string>,
-) =>
-  Effect.gen(function* () {
-    const hashes: Record<string, string> = { ...previous };
-    for (const filePath of importFiles) {
-      const file = yield* readSqlFile(rootDir, filePath);
-      if (previous[filePath] === file.hash) {
-        hashes[filePath] = file.hash;
-        continue;
-      }
-      yield* runSql(connectionUri, file.sql);
-      hashes[filePath] = file.hash;
-    }
-    const tracked = new Set(importFiles);
-    for (const key of Object.keys(hashes)) {
-      if (!tracked.has(key)) delete hashes[key];
-    }
-    return hashes;
   });
