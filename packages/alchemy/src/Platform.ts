@@ -15,9 +15,11 @@ import * as Redacted from "effect/Redacted";
 import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import type { Dependencies } from "./Dependencies.ts";
+import { toFqn } from "./FQN.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
 import type { Named, Tag } from "./Named.ts";
+import { CurrentNamespace } from "./Namespace.ts";
 import * as Output from "./Output.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
@@ -32,6 +34,7 @@ import {
 } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
 import type { Stack, StackServices } from "./Stack.ts";
+import { StackContext } from "./StackContext.ts";
 import type { Stage } from "./Stage.ts";
 import { effectClass } from "./Util/effect.ts";
 
@@ -311,9 +314,6 @@ export const Platform = <
           (resolved) => hooks.transformProps!(id, resolved),
         );
 
-  // Registered resources whose `onCreate` hook has run (or is running).
-  const onCreateRan = new WeakSet<object>();
-
   const constructor = (id?: string, props?: any, impl?: Impl, isTag = false): any => {
     if (!id) {
       // impl was not provided inline, this is a tagged instance
@@ -339,8 +339,8 @@ export const Platform = <
               isExternal: true,
             };
       };
-      const evaluate = () =>
-        (!isTag
+      const register = () =>
+        !isTag
           ? // this is a non-tagged resource yielded without providing an implementation
             // e.g.
             // yield* Cloudflare.Worker("id", { main: "./src/worker.ts" })
@@ -379,27 +379,40 @@ export const Platform = <
                   ),
                 onSome: Effect.succeed,
               }),
-            )
-        ).pipe(
-          Effect.tap((resource) => {
-            // Run the hook once per registered resource. Every `yield*` of
-            // this declaration returns the already-registered resource, so
-            // re-running the hook would re-yield its `env` — and two Workers
-            // whose `env` entries yield each other would recurse forever
-            // (#2672). Marking before the hook runs lets a cycle back to
-            // this resource see it as in progress and stop.
-            if (!hooks.onCreate || onCreateRan.has(resource)) return Effect.void;
-            onCreateRan.add(resource);
-            return Effect.flatMap(
-              // `props` may itself be an Effect (e.g. when wrapped by
-              // `Cloudflare.Website.Vite` via `Effect.map`); resolve it before
-              // handing it to the hook so `onCreate` always sees the
-              // plain props object — the second call site (in
-              // `cls.make`) already does this.
-              Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
-              (resolved) => hooks.onCreate!(resource as R, resolved),
             );
-          }),
+      // Whether this `yield*` registers the resource. The stack holds one
+      // resource per FQN and every later `yield*` returns it. Outside a
+      // stack (at runtime) nothing registers, so the hook runs as before.
+      const isFirstRegistration = Effect.flatMap(
+        Effect.serviceOption(StackContext),
+        Option.match({
+          onNone: () => Effect.succeed(true),
+          onSome: (stack) =>
+            Effect.map(CurrentNamespace, (namespace) => !(toFqn(namespace, id) in stack.resources)),
+        }),
+      );
+      const evaluate = () =>
+        Effect.flatMap(isFirstRegistration, (firstRegistration) =>
+          register().pipe(
+            Effect.tap((resource) =>
+              // Run the hook only for the `yield*` that registered the
+              // resource. The hook yields the resource's `env`, so re-running
+              // it on every `yield*` lets two Workers whose `env` entries
+              // yield each other recurse forever (#2672). The resource is
+              // registered before the hook runs, so a cycle back to it stops.
+              hooks.onCreate && firstRegistration
+                ? Effect.flatMap(
+                    // `props` may itself be an Effect (e.g. when wrapped by
+                    // `Cloudflare.Website.Vite` via `Effect.map`); resolve it
+                    // before handing it to the hook so `onCreate` always sees
+                    // the plain props object — the second call site (in
+                    // `cls.make`) already does this.
+                    Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
+                    (resolved) => hooks.onCreate!(resource as R, resolved),
+                  )
+                : Effect.void,
+            ),
+          ),
         );
       return Object.assign(
         function (props: Props, impl: Impl) {
@@ -476,13 +489,11 @@ export const Platform = <
               const buildScope = yield* Effect.scope;
               const instance = Object.assign(
                 yield* resource(id, props as any).pipe(
-                  Effect.flatMap((resource) => {
-                    onCreateRan.add(resource);
-                    return (
+                  Effect.flatMap(
+                    (resource) =>
                       hooks.onCreate?.(resource, props).pipe(Effect.map(() => resource)) ??
-                      Effect.succeed(resource)
-                    );
-                  }),
+                      Effect.succeed(resource),
+                  ),
                 ),
                 runtimeContext,
               );
