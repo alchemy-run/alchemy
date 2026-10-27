@@ -18,6 +18,7 @@ import * as Schedule from "effect/Schedule";
 import { DataBucket, Tweets } from "./fixtures/bound-resources.ts";
 import PublishOnlyService from "./fixtures/service-publish-only.ts";
 import BoundRedisService from "./fixtures/service-redis.ts";
+import SidecarService from "./fixtures/service-sidecar.ts";
 import BoundService from "./fixtures/service.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -158,6 +159,133 @@ const fetchJson = <A>(url: string) =>
     );
     return (yield* response.json) as A;
   });
+
+const NGINX_IMAGE = "docker.io/library/nginx:1.27-alpine";
+
+const latestRevision = (service: { name: string; latestReadyRevision: string | undefined }) =>
+  cloudrun.getProjectsLocationsServicesRevisions({
+    name: `${service.name}/revisions/${service.latestReadyRevision?.split("/").pop()}`,
+  });
+
+const probedContainers = (probe: { periodSeconds: number } | undefined): GCP.Run.Container[] => [
+  {
+    name: "proxy",
+    image: HELLO_IMAGE,
+    ports: [{ name: "http1", containerPort: 8080 }],
+    ...(probe ? { dependsOn: ["app"] } : {}),
+  },
+  {
+    name: "app",
+    image: NGINX_IMAGE,
+    ...(probe
+      ? {
+          startupProbe: {
+            httpGet: { path: "/", port: 80 },
+            periodSeconds: probe.periodSeconds,
+            failureThreshold: 30,
+          },
+          livenessProbe: { httpGet: { path: "/", port: 80 }, periodSeconds: 10 },
+        }
+      : {}),
+  },
+];
+
+test.provider(
+  "startup probes, liveness probes, and dependsOn roll new revisions",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (probe: { periodSeconds: number } | undefined) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* GCP.Run.Service("Probed", {
+              location: "us-central1",
+              template: { containers: probedContainers(probe) },
+            });
+          }),
+        );
+
+      const created = yield* deploy({ periodSeconds: 2 });
+      const first = yield* latestRevision(created);
+      const [proxy, app] = first.containers ?? [];
+      expect(proxy?.dependsOn).toEqual(["app"]);
+      expect(app?.startupProbe).toMatchObject({
+        httpGet: { path: "/", port: 80 },
+        periodSeconds: 2,
+        failureThreshold: 30,
+      });
+      expect(app?.livenessProbe).toMatchObject({
+        httpGet: { path: "/", port: 80 },
+        periodSeconds: 10,
+      });
+
+      const retimed = yield* deploy({ periodSeconds: 5 });
+      expect(retimed.latestReadyRevision).not.toEqual(created.latestReadyRevision);
+      const second = yield* latestRevision(retimed);
+      expect(second.containers?.[1]?.startupProbe).toMatchObject({
+        httpGet: { path: "/", port: 80 },
+        periodSeconds: 5,
+      });
+
+      // Dropping the probes and dependsOn resets them to Cloud Run's defaults.
+      const reset = yield* deploy(undefined);
+      expect(reset.latestReadyRevision).not.toEqual(retimed.latestReadyRevision);
+      const third = yield* latestRevision(reset);
+      expect(third.containers?.[0]?.dependsOn ?? []).toEqual([]);
+      expect(third.containers?.[1]?.startupProbe?.httpGet).toBeUndefined();
+      expect(third.containers?.[1]?.livenessProbe).toBeUndefined();
+
+      // A redeploy of the reset props is a no-op, not another revision.
+      const again = yield* deploy(undefined);
+      expect(again.latestReadyRevision).toEqual(reset.latestReadyRevision);
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(created.name)).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 600_000 },
+);
+
+test.provider(
+  "an Effect-native service keeps its sidecars and probes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* SidecarService;
+        }),
+      );
+
+      const revision = yield* latestRevision(deployed);
+      const [main, sidecar] = revision.containers ?? [];
+      expect(revision.containers?.length).toEqual(2);
+      expect(main?.dependsOn).toEqual(["sidecar"]);
+      expect(main?.startupProbe).toMatchObject({
+        httpGet: { path: "/health", port: 8080 },
+        periodSeconds: 2,
+      });
+      expect(sidecar?.name).toEqual("sidecar");
+      expect(sidecar?.image).toContain("nginx");
+
+      const client = yield* HttpClient.HttpClient;
+      const health = yield* client.get(`${deployed.uri}/health`).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? Effect.succeed(response)
+            : Effect.fail(new ServiceNotReady({ status: response.status })),
+        ),
+        Effect.flatMap((response) => response.text),
+        Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 8 }),
+      );
+      expect(health).toEqual("ok");
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(deployed.name)).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 900_000 },
+);
 
 test.provider(
   "effect-native Function grants resource-scoped IAM and revokes it when a binding is removed",

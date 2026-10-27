@@ -74,8 +74,54 @@ export type ResourceRequirements = {
   startupCpuBoost?: boolean;
 };
 
+export type HttpHeader = {
+  /** Header name. */
+  name: string;
+  /** Header value. */
+  value?: string;
+};
+
+export type Probe = {
+  /**
+   * Perform an HTTP GET; any 2xx–3xx response passes. Exactly one of
+   * `httpGet`, `tcpSocket`, or `grpc` must be set.
+   */
+  httpGet?: {
+    /** Request path. @default "/" */
+    path?: string;
+    /** Port to probe. @default the container's `ports[0].containerPort` */
+    port?: number;
+    /** Extra request headers. */
+    httpHeaders?: HttpHeader[];
+  };
+  /** Open a TCP connection; passes once the port accepts it. */
+  tcpSocket?: {
+    /** Port to probe. @default the container's `ports[0].containerPort` */
+    port?: number;
+  };
+  /** Call the gRPC health checking protocol. */
+  grpc?: {
+    /** Port to probe. @default the container's `ports[0].containerPort` */
+    port?: number;
+    /** Service name sent in the `HealthCheckRequest`. */
+    service?: string;
+  };
+  /**
+   * Seconds after the container starts before the first probe (max 240
+   * for startup probes, 3600 for liveness probes).
+   * @default 0
+   */
+  initialDelaySeconds?: number;
+  /** Seconds before a probe attempt times out. Must be less than `periodSeconds`. @default 1 */
+  timeoutSeconds?: number;
+  /** Seconds between probe attempts (max 240 for startup probes). @default 10 */
+  periodSeconds?: number;
+  /** Consecutive failures before the probe fails. @default 3 */
+  failureThreshold?: number;
+};
+
 export type Container = {
-  /** DNS_LABEL container name. */
+  /** DNS_LABEL container name. Required to reference it from `dependsOn`. */
   name?: string;
   /**
    * Container image (Artifact Registry, GCR, or Docker Hub). Required
@@ -97,6 +143,24 @@ export type Container = {
   workingDir?: string;
   /** Volume mounts. Names must match the template's `volumes`. */
   volumeMounts?: cloudrun.GoogleCloudRunV2VolumeMountList;
+  /**
+   * Probe that must pass before the container counts as started. Until it
+   * does, the revision takes no traffic and containers that `dependsOn`
+   * this one wait. Omitting it restores Cloud Run's default TCP probe on
+   * the serving port.
+   */
+  startupProbe?: Probe;
+  /**
+   * Probe run for the container's lifetime; Cloud Run restarts the
+   * container after `failureThreshold` consecutive failures. Omitting it
+   * removes any liveness probe.
+   */
+  livenessProbe?: Probe;
+  /**
+   * Names of containers that must start, and pass their startup probe,
+   * before this one starts.
+   */
+  dependsOn?: string[];
 };
 
 export type RevisionScaling = {
@@ -371,6 +435,75 @@ export type ServiceShape = Main<ServiceServices>;
  * });
  * ```
  *
+ * ### Health Probes and Sidecars
+ * **Example:** HTTP startup probe, with a proxy that starts after the app
+ * ```typescript
+ * const api = yield* GCP.Run.Service("api", {
+ *   template: {
+ *     containers: [
+ *       {
+ *         name: "proxy",
+ *         image: proxyImage,
+ *         ports: [{ name: "h2c", containerPort: 8080 }],
+ *         dependsOn: ["app"],
+ *       },
+ *       {
+ *         name: "app",
+ *         image: appImage,
+ *         startupProbe: {
+ *           httpGet: { path: "/health", port: 3000 },
+ *           periodSeconds: 2,
+ *           failureThreshold: 30,
+ *         },
+ *         livenessProbe: { httpGet: { path: "/health", port: 3000 }, periodSeconds: 10 },
+ *       },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** TCP and gRPC probes
+ * ```typescript
+ * startupProbe: { tcpSocket: { port: 5432 }, initialDelaySeconds: 5 },
+ * livenessProbe: { grpc: { port: 9090, service: "health" }, timeoutSeconds: 3 },
+ * ```
+ * Changing a probe or `dependsOn` rolls a new revision. Removing
+ * `startupProbe` restores Cloud Run's default TCP probe.
+ *
+ * **Example:** Effect-native service with a sidecar
+ * ```typescript
+ * export class Api extends GCP.Run.Service<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     template: {
+ *       containers: [
+ *         {
+ *           // image, ports and env are filled in from `main`
+ *           startupProbe: { httpGet: { path: "/health" } },
+ *           dependsOn: ["cache"],
+ *         },
+ *         {
+ *           name: "cache",
+ *           image: "docker.io/library/redis:7",
+ *           startupProbe: { tcpSocket: { port: 6379 } },
+ *         },
+ *       ],
+ *     },
+ *   },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         if (request.url === "/health") return HttpServerResponse.text("ok");
+ *         return HttpServerResponse.text("hello");
+ *       }),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ * The first container runs `main`; the rest deploy as sidecars.
+ *
  * ### Effect-native Function with bindings
  * **Example:** Publish tweets to Pub/Sub, cache in Memorystore
  * ```typescript
@@ -569,6 +702,66 @@ const envFingerprint = (env: cloudrun.GoogleCloudRunV2EnvVarList | undefined) =>
       .sort((left, right) => left.name.localeCompare(right.name)),
   );
 
+// Cloud Run reports an unnamed port as `http1`.
+const portsFingerprint = (ports: cloudrun.GoogleCloudRunV2ContainerPortList | undefined) =>
+  JSON.stringify(
+    (ports ?? []).map((port) => ({
+      name: port.name || "http1",
+      containerPort: port.containerPort ?? 0,
+    })),
+  );
+
+// Cloud Run gives a serving container without a startup probe this one.
+const DEFAULT_STARTUP_PROBE: cloudrun.GoogleCloudRunV2Probe = {
+  tcpSocket: {},
+  timeoutSeconds: 240,
+  periodSeconds: 240,
+  failureThreshold: 1,
+};
+
+const probeFingerprint = (
+  probe: cloudrun.GoogleCloudRunV2Probe | undefined,
+  container: cloudrun.GoogleCloudRunV2Container,
+) => {
+  if (probe === undefined) return "";
+  const defaultPort = container.ports?.[0]?.containerPort ?? 8080;
+  return JSON.stringify({
+    httpGet:
+      probe.httpGet === undefined
+        ? null
+        : {
+            path: probe.httpGet.path || "/",
+            port: probe.httpGet.port || defaultPort,
+            headers: (probe.httpGet.httpHeaders ?? []).map((header) => [
+              header.name ?? "",
+              header.value ?? "",
+            ]),
+          },
+    tcpSocket: probe.tcpSocket === undefined ? null : { port: probe.tcpSocket.port || defaultPort },
+    grpc:
+      probe.grpc === undefined
+        ? null
+        : { port: probe.grpc.port || defaultPort, service: probe.grpc.service ?? "" },
+    initialDelaySeconds: probe.initialDelaySeconds ?? 0,
+    timeoutSeconds: probe.timeoutSeconds ?? 1,
+    periodSeconds: probe.periodSeconds ?? 10,
+    failureThreshold: probe.failureThreshold ?? 3,
+  });
+};
+
+// An omitted probe means the Cloud Run default, so a dropped probe still
+// rolls a revision that resets it.
+const startupProbeNeedsSync = (
+  desired: cloudrun.GoogleCloudRunV2Container,
+  observed: cloudrun.GoogleCloudRunV2Container,
+) => {
+  const have = probeFingerprint(observed.startupProbe, observed);
+  if (desired.startupProbe !== undefined) {
+    return probeFingerprint(desired.startupProbe, desired) !== have;
+  }
+  return have !== "" && have !== probeFingerprint(DEFAULT_STARTUP_PROBE, observed);
+};
+
 const containerNeedsSync = (
   desired: cloudrun.GoogleCloudRunV2ContainerList | undefined,
   observed: cloudrun.GoogleCloudRunV2ContainerList | undefined,
@@ -603,18 +796,7 @@ const containerNeedsSync = (
     }
     if (
       container.ports !== undefined &&
-      JSON.stringify(
-        container.ports.map((port) => ({
-          name: port.name ?? "",
-          containerPort: port.containerPort ?? 0,
-        })),
-      ) !==
-        JSON.stringify(
-          (current.ports ?? []).map((port) => ({
-            name: port.name ?? "",
-            containerPort: port.containerPort ?? 0,
-          })),
-        )
+      portsFingerprint(container.ports) !== portsFingerprint(current.ports)
     ) {
       return true;
     }
@@ -638,6 +820,16 @@ const containerNeedsSync = (
       return true;
     }
     if (container.name !== undefined && container.name !== (current.name ?? "")) {
+      return true;
+    }
+    if (startupProbeNeedsSync(container, current)) return true;
+    if (
+      probeFingerprint(container.livenessProbe, container) !==
+      probeFingerprint(current.livenessProbe, current)
+    ) {
+      return true;
+    }
+    if (JSON.stringify(container.dependsOn ?? []) !== JSON.stringify(current.dependsOn ?? [])) {
       return true;
     }
     if (
@@ -1042,7 +1234,7 @@ export const ServiceProvider = () =>
           })
           .pipe(Effect.onError(() => identity.cleanup));
         codeHash = image.codeHash;
-        const container = template.containers?.[0] ?? {};
+        const [container = {}, ...sidecars] = template.containers ?? [];
         template.containers = [
           {
             ...container,
@@ -1050,6 +1242,7 @@ export const ServiceProvider = () =>
             ports: container.ports ?? [{ containerPort: port }],
             env: mergeContainerEnv(container.env, identity.env, yield* alchemyRuntimeEnv, news.env),
           },
+          ...sidecars,
         ];
       } else {
         const runtimeEnv = { ...identity.env, ...news.env };
