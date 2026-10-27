@@ -59,7 +59,7 @@ class CloseApi extends Domain.Api("CloseApi", Close, Account) {}
 
 /** A helper written once for every Api: the tags of its commands. */
 const tagsOf = <A extends Domain.Api.Any>(api: A): ReadonlyArray<Domain.Api.CommandsOf<A>["tag"]> =>
-  Domain.apiCommands(api).map((command) => command.tag);
+  api.commands.map((command) => command.tag);
 
 describe("Domain Api", () => {
   it.effect("a concrete Api is an Api.Any", () =>
@@ -71,22 +71,16 @@ describe("Domain Api", () => {
     }),
   );
 
-  it.effect("apiCommands gives the command classes, in the order the Api lists them", () =>
+  it.effect("commands are the command classes, in the order the Api lists them", () =>
     Effect.sync(() => {
-      expect(Domain.apiCommands(BankApi)).toEqual([Deposit, Withdraw]);
-      expect(Domain.apiCommands(CloseApi)).toEqual([Close]);
+      expect(BankApi.commands).toEqual([Deposit, Withdraw]);
+      expect(CloseApi.commands).toEqual([Close]);
     }),
   );
 
-  it.effect("Domain.Api is the Api constructor alone, with no helpers attached", () =>
+  it.effect("rejections decodes every declared rejection to its class", () =>
     Effect.sync(() => {
-      expect(Object.keys(Domain.Api)).toEqual([]);
-    }),
-  );
-
-  it.effect("apiRejections decodes every declared rejection to its class", () =>
-    Effect.sync(() => {
-      const Rejection = Domain.apiRejections(BankApi);
+      const Rejection = BankApi.rejections;
       const decoded = Schema.decodeUnknownSync(Rejection)({
         _tag: "InsufficientFunds",
         balance: 1,
@@ -110,9 +104,9 @@ describe("Domain Api", () => {
     }),
   );
 
-  it.effect("an Api whose commands never reject has Schema.Never", () =>
+  it.effect("an Api whose commands never reject has Schema.Never rejections", () =>
     Effect.sync(() => {
-      const Rejection: typeof Schema.Never = Domain.apiRejections(CloseApi);
+      const Rejection: typeof Schema.Never = CloseApi.rejections;
       expect(Rejection).toBe(Schema.Never);
     }),
   );
@@ -120,7 +114,7 @@ describe("Domain Api", () => {
   it.live("a rejection from the client is a member of the schema", () =>
     Effect.gen(function* () {
       const bank: Domain.Api.ClientOf<typeof BankApi> = yield* BankApi.Client;
-      const isRejection = Schema.is(Domain.apiRejections(BankApi));
+      const isRejection = Schema.is(BankApi.rejections);
       const refused = yield* bank.Withdraw({ target: "a-1", amount: 5 }).pipe(Effect.flip);
       expect(isRejection(refused)).toBe(true);
       expect(refused).toBeInstanceOf(InsufficientFunds);

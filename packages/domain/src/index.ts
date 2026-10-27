@@ -177,15 +177,9 @@ export declare namespace Api {
   export type RejectionsOf<A extends ApiModule.Any> = ApiModule.RejectionsOf<A>;
   /** The client an Api's `Client` service gives. */
   export type ClientOf<A extends ApiModule.Any> = ApiModule.ClientOf<A>;
-  /** The Schema {@link apiRejections} gives for an Api. */
-  export type RejectionSchema<A extends ApiModule.Any> = ApiModule.RejectionSchema<A>;
 }
 /** The public surface of a domain for one client. See {@link ApiModule.make}. */
 export const Api = ApiModule.make;
-/** The command classes an Api exposes, in order. See {@link ApiModule.apiCommands}. */
-export const apiCommands = ApiModule.apiCommands;
-/** One Schema for every rejection an Api's commands declare. See {@link ApiModule.apiRejections}. */
-export const apiRejections = ApiModule.apiRejections;
 /** An Api client protocol: everything over HTTP, live reads as streamed responses. */
 export const protocolHttp = ApiModule.protocolHttp;
 /** An Api client protocol: calls over HTTP, each live read a WebSocket to the object that owns it. */

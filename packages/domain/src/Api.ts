@@ -227,6 +227,14 @@ export interface ApiClass<
   readonly apiName: Name;
   /** The commands, views and aggregates this Api exposes. */
   readonly entries: Entries;
+  /** The command classes this Api exposes, in the order it lists them. */
+  readonly commands: ReadonlyArray<Commands<Entries[number]>>;
+  /**
+   * One Schema for every rejection this Api's commands declare: a union of the
+   * rejection classes, each once, decoding to class instances as the client
+   * fails with them. `Schema.Never` when no command rejects.
+   */
+  readonly rejections: RejectionUnion<Commands<Entries[number]>["rejects"][number]>;
   /** The underlying Effect RPC group. */
   readonly group: RpcGroup.RpcGroup<Rpc.Any>;
   /**
@@ -688,6 +696,9 @@ const build = (
     Effect.map((flat) => nest(entries, flat as unknown as Flat)),
   );
   const Client = Context.Service<ClientKey<string>, unknown>()(`alchemy/Domain/Api/${name}/Client`);
+  const commands = entries.filter((entry): entry is Command.Any => entry.kind === "Command");
+  const rejectionClasses = [...new Set(commands.flatMap((command) => command.rejects))];
+  const rejections = rejectionClasses.length === 0 ? Schema.Never : Schema.Union(rejectionClasses);
   // Serve the Api over HTTP (Effect RPC, NDJSON), with live reads over WebSockets.
   const serve = Effect.gen(function* () {
     const handlers = yield* handlersOf(entries);
@@ -715,6 +726,8 @@ const build = (
       kind: "Api" as const,
       apiName: name,
       entries,
+      commands,
+      rejections,
       group,
       middleware: (middleware: RpcMiddleware.AnyService) =>
         build(name, entries, group.middleware(middleware) as unknown as RpcGroup.RpcGroup<Rpc.Any>),
@@ -953,6 +966,11 @@ export const protocolWebSocket = (
 
 // ---------------------------------------------------------------- generic helpers
 
+/** The Schema of a union of rejection classes; `Schema.Never` when there are none. */
+type RejectionUnion<R> = [R] extends [never]
+  ? typeof Schema.Never
+  : Schema.Codec<Aggregate.Inst<R>, Schema.Codec.Encoded<R>>;
+
 /**
  * Any Api class. Use it to write code that works with every Api, such as a
  * helper that turns each command of an Api into a UI action. `ApiClass` does
@@ -962,7 +980,7 @@ export const protocolWebSocket = (
  * **Example:** A helper for any Api
  * ```typescript
  * const tagsOf = <A extends Domain.Api.Any>(api: A): ReadonlyArray<Domain.Api.CommandsOf<A>["tag"]> =>
- *   Domain.apiCommands(api).map((command) => command.tag);
+ *   api.commands.map((command) => command.tag);
  *
  * tagsOf(CustomerApi); // ["DepositMoney", "WithdrawMoney"]
  * ```
@@ -972,57 +990,19 @@ export interface Any {
   readonly apiName: string;
   /** The commands, views and aggregates the Api exposes. */
   readonly entries: ReadonlyArray<Entry>;
+  /** The command classes the Api exposes, in order. */
+  readonly commands: ReadonlyArray<Command.Any>;
+  /** One Schema for every rejection the Api's commands declare. */
+  readonly rejections: Schema.Top;
   /** The Api's client service. */
   readonly Client: Context.Key<ClientKey<string>, unknown>;
 }
 
 /** The command classes an Api exposes. */
-export type CommandsOf<A extends Any> = Commands<A["entries"][number]>;
+export type CommandsOf<A extends Any> = A["commands"][number];
 
 /** The rejection classes the commands of an Api declare. */
 export type RejectionsOf<A extends Any> = CommandsOf<A>["rejects"][number];
 
 /** The client an Api's `Client` service gives (`yield* MyApi.Client`). */
 export type ClientOf<A extends Any> = A["Client"]["Service"];
-
-/**
- * The Schema of every rejection an Api's commands declare. It decodes to the
- * rejection class instances, as the client fails with them.
- */
-export type RejectionSchema<A extends Any> = [RejectionsOf<A>] extends [never]
-  ? typeof Schema.Never
-  : Schema.Codec<Aggregate.Inst<RejectionsOf<A>>, Schema.Codec.Encoded<RejectionsOf<A>>>;
-
-/**
- * The command classes an Api exposes, in the order it lists them.
- *
- * **Example:** One UI action per command
- * ```typescript
- * for (const command of Domain.apiCommands(CustomerApi)) {
- *   command.tag;     // "DepositMoney" | "WithdrawMoney"
- *   command.rejects; // the rejection classes it declares
- * }
- * ```
- */
-export const apiCommands = <A extends Any>(api: A): ReadonlyArray<CommandsOf<A>> =>
-  api.entries.filter((entry): entry is CommandsOf<A> => entry.kind === "Command");
-
-/**
- * One Schema for every rejection the commands of an Api declare: a union of
- * the rejection classes, each once. Decoding gives the class instance with
- * its payload, so a message or a model can hold a rejection as data.
- * `Schema.Never` when no command rejects.
- *
- * **Example:** A rejection in a UI message
- * ```typescript
- * const Rejection = Domain.apiRejections(CustomerApi);
- * // Schema<InsufficientFunds | NotOwner | ...>
- * const Refused = Schema.TaggedStruct("Refused", { commandId: Schema.String, rejection: Rejection });
- * ```
- */
-export const apiRejections = <A extends Any>(api: A): RejectionSchema<A> => {
-  const rejections = [...new Set(apiCommands(api).flatMap((command) => command.rejects))];
-  return (rejections.length === 0
-    ? Schema.Never
-    : Schema.Union(rejections)) as unknown as RejectionSchema<A>;
-};

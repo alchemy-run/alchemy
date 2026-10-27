@@ -212,20 +212,23 @@ export const withdraw = Effect.fn(function* (bank: CustomerClient, accountId: Ac
 });
 ```
 
-## Write helpers for any Api
+## Read an Api's commands and rejections
 
-`Domain.Api.Any` is the type of every Api. Use it for code you write once for all your Apis, such as a helper that turns each command into a UI action. `Domain.apiCommands` gives an Api's command classes, and `Domain.apiRejections` gives one Schema for every rejection they declare:
+`CustomerApi.commands` lists the Api's command classes, in order. `CustomerApi.rejections` is one Schema for every rejection they declare, so a UI message can hold a refusal as data:
+
+```typescript
+const Refused = Schema.TaggedStruct("Refused", {
+  commandId: Schema.String,
+  rejection: CustomerApi.rejections, // InsufficientFunds | NotOwner | ...
+});
+```
+
+`Domain.Api.Any` is the type every Api fits. Use it for helpers you write once for all your Apis:
 
 ```typescript
 const actionsOf = <A extends Domain.Api.Any>(api: A) =>
-  Domain.apiCommands(api).map((command) => ({ tag: command.tag, rejects: command.rejects }));
-
-const Rejection = Domain.apiRejections(CustomerApi);
-// decodes to InsufficientFunds | NotOwner | ... instances, with their fields
-const Refused = Schema.TaggedStruct("Refused", { commandId: Schema.String, rejection: Rejection });
+  api.commands.map((command) => ({ tag: command.tag, rejects: command.rejects }));
 ```
-
-`Domain.Api.CommandsOf<A>`, `Domain.Api.RejectionsOf<A>`, `Domain.Api.RejectionSchema<A>` and `Domain.Api.ClientOf<A>` are the matching types.
 
 ## Provide the client to an app
 
