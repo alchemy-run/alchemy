@@ -125,18 +125,28 @@ export const SessionLive = Layer.succeed(Session, (effect, { headers }) =>
 
 A `RequestContext` has a schema, so its value travels with the command to the aggregate's Durable Object. A `decide` that reads `CurrentActor` won't type-check for a command without the middleware that provides it.
 
-Another service calls the Api through middleware too, never through hand-written routes. Declare it `requiredForClient: true`; the client middleware signs each request and the server middleware checks it and provides the caller:
+A user proves who they are with a session. A backend service, such as payroll calling the bank, has no session, so it proves who it is with a secret it shares with the Api. It signs each request with the secret, and the Api checks the signature. Both halves are one middleware, declared with `requiredForClient: true` so it also runs in the caller's client:
 
 ```ts
-// what both sides sign: one request, not the HTTP body (an NDJSON body may carry several)
-const signedText = (rpc: Rpc.AnyWithProps, payload: unknown, s: { service: string; timestamp: string; nonce: string }) =>
-  Schema.encodeUnknownEffect(Schema.toCodecJson(rpc.payloadSchema as Schema.Codec<unknown>))(payload).pipe(
-    Effect.map((json) => [rpc._tag, s.service, s.timestamp, s.nonce, JSON.stringify(json)].join("\n")),
-    Effect.orDie,
-  );
+// ServiceAuth.middleware.ts (domain)
+export class ServiceAuth extends RpcMiddleware.Service<ServiceAuth, { provides: Caller }>()(
+  "Bank/ServiceAuth",
+  { error: BadSignature, requiredForClient: true },
+) {}
+
+// a command only another service may send
+export class PaySalary extends Domain.Command("PaySalary", {
+  target: AccountId,
+  middleware: [ServiceAuth],
+  input: { amount: Cents },
+  events: [SalaryPaid],
+  rejects: [NotOpen],
+}) {}
 ```
 
-The client (`RpcMiddleware.layerClient`) sends `x-service`, `x-timestamp`, `x-nonce` and the HMAC as `x-signature`. The server looks the secret up with `Object.hasOwn` (a plain `secrets[service]` finds `constructor`), refuses a timestamp more than five minutes off, verifies with `crypto.subtle.verify` (constant time), then claims the nonce in a Durable Object until `timestamp + maxAge`, so a request can't be replayed while it's valid.
+The client half adds four headers: who is calling (`x-service`), when (`x-timestamp`), a random id (`x-nonce`), and an HMAC of all three plus the command and its payload (`x-signature`). Sign the payload as the command's schema encodes it, not the HTTP body, because one NDJSON body can carry several requests.
+
+The server half finds the caller's secret with `Object.hasOwn`, because `secrets[service]` would also find `constructor`. It refuses a timestamp more than five minutes off and checks the signature with `crypto.subtle.verify`. Last, it records the nonce in a Durable Object until `timestamp + 5 minutes` and refuses one it has seen, so a copied request can't be sent twice.
 
 Full recipe: website `domain/sessions` ("Authenticate another service").
 
