@@ -5,12 +5,18 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireDays } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { syncAmpTags, toTagRecord } from "./internal.ts";
+
+export class AMPWorkspaceNotReady extends Data.TaggedError("AMPWorkspaceNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface WorkspaceLabelSetLimit {
   /**
@@ -279,11 +285,9 @@ export const WorkspaceProvider = () =>
           }),
         );
         if (workspace.status.statusCode !== "ACTIVE") {
-          return yield* Effect.fail(
-            new Error(
-              `AMP workspace ${workspaceId} did not become ACTIVE (status: ${workspace.status.statusCode})`,
-            ),
-          );
+          return yield* new AMPWorkspaceNotReady({
+            message: `AMP workspace ${workspaceId} did not become ACTIVE (status: ${workspace.status.statusCode})`,
+          });
         }
         return workspace;
       });

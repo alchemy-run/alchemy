@@ -206,9 +206,9 @@ export const readArtifactFile = (artifact: ArtifactFile) =>
       }),
     );
     if (offset !== artifact.size) {
-      return yield* Effect.fail(
-        new Error("Prisma deployment artifact length changed while it was being read."),
-      );
+      return yield* new ArtifactFileError({
+        message: "Prisma deployment artifact length changed while it was being read.",
+      });
     }
     return bytes;
   });

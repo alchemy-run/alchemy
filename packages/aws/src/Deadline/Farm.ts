@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -17,6 +18,16 @@ import {
   retryWhileConflict,
   syncDeadlineTags,
 } from "./internal.ts";
+
+export class FarmInvalidProps extends Data.TaggedError("FarmInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class FarmUnexpectedResponse extends Data.TaggedError("FarmUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface FarmProps {
   /**
@@ -190,7 +201,7 @@ export const FarmProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (news === undefined) {
-            return yield* Effect.fail(new Error("AWS.Deadline.Farm requires props"));
+            return yield* new FarmInvalidProps({ message: "AWS.Deadline.Farm requires props" });
           }
           const arnOf = yield* deadlineArnOf;
           const displayName = yield* createFarmName(id, news);
@@ -215,7 +226,9 @@ export const FarmProvider = () =>
             yield* session.note(`Created farm ${displayName} (${created.farmId})`);
             state = yield* readFarmById(created.farmId, arnOf);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created farm ${displayName}`));
+              return yield* new FarmUnexpectedResponse({
+                message: `failed to read created farm ${displayName}`,
+              });
             }
           }
 
@@ -243,7 +256,9 @@ export const FarmProvider = () =>
           yield* session.note(state.attrs.farmArn);
           const final = yield* readFarmById(state.attrs.farmId, arnOf);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled farm ${displayName}`));
+            return yield* new FarmUnexpectedResponse({
+              message: `failed to read reconciled farm ${displayName}`,
+            });
           }
           return final.attrs;
         }),

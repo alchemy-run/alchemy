@@ -15,6 +15,11 @@ import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
 import { abortMultipartUploads } from "./internal/MultipartUploads.ts";
 
+export class BucketOperationFailed extends Data.TaggedError("BucketOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export const isBucket = (value: any): value is Bucket =>
   isResourceOfType(value, "Cloudflare.R2.Bucket");
 
@@ -759,9 +764,9 @@ export const ProviderLive = () =>
           const { accountId } = yield* yield* CloudflareEnvironment;
           const observed = yield* listCustomDomains(bucketName, jurisdiction);
           if (!observed) {
-            return yield* Effect.fail(
-              new Error(`Cannot reconcile custom domains for missing R2 bucket "${bucketName}"`),
-            );
+            return yield* new BucketOperationFailed({
+              message: `Cannot reconcile custom domains for missing R2 bucket "${bucketName}"`,
+            });
           }
           const observedByDomain = new Map(observed.map((domain) => [domain.domain, domain]));
           const desiredDomains = new Set(desired.map((domain) => domain.name));

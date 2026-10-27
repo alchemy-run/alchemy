@@ -11,6 +11,20 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class SageMakerEndpointInvalidProps extends Data.TaggedError(
+  "SageMakerEndpointInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class SageMakerEndpointUnexpectedResponse extends Data.TaggedError(
+  "SageMakerEndpointUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type EndpointStatus = sagemaker.EndpointStatus;
 
 export interface EndpointProps {
@@ -222,7 +236,9 @@ export const EndpointProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("SageMaker Endpoint requires props"));
+            return yield* new SageMakerEndpointInvalidProps({
+              message: "SageMaker Endpoint requires props",
+            });
           }
           const name = output?.endpointName ?? (yield* createEndpointName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -278,7 +294,9 @@ export const EndpointProvider = () =>
           yield* waitForEndpoint(name, "InService");
           const final = yield* describeEndpointOrUndefined(name);
           if (final === undefined) {
-            return yield* Effect.fail(new Error(`failed to read reconciled endpoint ${name}`));
+            return yield* new SageMakerEndpointUnexpectedResponse({
+              message: `failed to read reconciled endpoint ${name}`,
+            });
           }
 
           // Sync tags — diff against OBSERVED cloud tags.

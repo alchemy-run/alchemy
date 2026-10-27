@@ -4,8 +4,19 @@ import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+
+export class KeyGroupConflict extends Data.TaggedError("KeyGroupConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class KeyGroupUnexpectedResponse extends Data.TaggedError("KeyGroupUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface KeyGroupProps {
   /**
@@ -203,16 +214,18 @@ export const KeyGroupProvider = () =>
                             Location: undefined,
                           })
                         : Effect.fail(
-                            new Error(
-                              `Key group '${name}' already exists but could not be recovered`,
-                            ),
+                            new KeyGroupConflict({
+                              message: `Key group '${name}' already exists but could not be recovered`,
+                            }),
                           ),
                     ),
                   ),
                 ),
               );
             if (!created.KeyGroup?.Id) {
-              return yield* Effect.fail(new Error("createKeyGroup returned no identifier"));
+              return yield* new KeyGroupUnexpectedResponse({
+                message: "createKeyGroup returned no identifier",
+              });
             }
             yield* session.note(created.KeyGroup.Id);
             return toAttrs(created.KeyGroup.Id, created.KeyGroup.KeyGroupConfig, created.ETag);
@@ -226,7 +239,9 @@ export const KeyGroupProvider = () =>
             KeyGroupConfig: buildConfig(observed.config.Name, items, news.comment),
           });
           if (!updated.KeyGroup?.Id) {
-            return yield* Effect.fail(new Error("updateKeyGroup returned no identifier"));
+            return yield* new KeyGroupUnexpectedResponse({
+              message: "updateKeyGroup returned no identifier",
+            });
           }
           yield* session.note(observed.id);
           return toAttrs(updated.KeyGroup.Id, updated.KeyGroup.KeyGroupConfig, updated.ETag);

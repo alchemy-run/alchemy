@@ -11,6 +11,20 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class QBusinessApplicationInvalidProps extends Data.TaggedError(
+  "QBusinessApplicationInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class QBusinessApplicationUnexpectedResponse extends Data.TaggedError(
+  "QBusinessApplicationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type ApplicationStatus = qbusiness.ApplicationStatus;
 export type IdentityType = qbusiness.IdentityType;
 
@@ -331,7 +345,9 @@ export const ApplicationProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("QBusiness Application requires props"));
+            return yield* new QBusinessApplicationInvalidProps({
+              message: "QBusiness Application requires props",
+            });
           }
           const displayName = yield* createDisplayName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -364,9 +380,9 @@ export const ApplicationProvider = () =>
               })),
             });
             if (!created.applicationId) {
-              return yield* Effect.fail(
-                new Error(`CreateApplication for '${displayName}' returned no applicationId`),
-              );
+              return yield* new QBusinessApplicationUnexpectedResponse({
+                message: `CreateApplication for '${displayName}' returned no applicationId`,
+              });
             }
             yield* session.note(
               `Creating application ${displayName} (${created.applicationId})...`,
@@ -374,9 +390,9 @@ export const ApplicationProvider = () =>
             yield* waitForApplicationStatus(created.applicationId, "ACTIVE");
             state = yield* readApplicationById(created.applicationId);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created application ${displayName}`),
-              );
+              return yield* new QBusinessApplicationUnexpectedResponse({
+                message: `failed to read created application ${displayName}`,
+              });
             }
           }
 
@@ -438,9 +454,9 @@ export const ApplicationProvider = () =>
 
           const final = yield* readApplicationById(state.attrs.applicationId);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled application ${displayName}`),
-            );
+            return yield* new QBusinessApplicationUnexpectedResponse({
+              message: `failed to read reconciled application ${displayName}`,
+            });
           }
           return final.attrs;
         }),

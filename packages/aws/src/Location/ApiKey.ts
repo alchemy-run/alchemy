@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
+
+export class LocationApiKeyUnexpectedResponse extends Data.TaggedError(
+  "LocationApiKeyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * What a Location API key is allowed to call. Keys authorize *unsigned*
@@ -245,7 +253,9 @@ export const ApiKeyProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             state = yield* readKey(keyName);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created API key ${keyName}`));
+              return yield* new LocationApiKeyUnexpectedResponse({
+                message: `failed to read created API key ${keyName}`,
+              });
             }
           }
 
@@ -286,7 +296,9 @@ export const ApiKeyProvider = () =>
 
           const final = yield* readKey(keyName);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled API key ${keyName}`));
+            return yield* new LocationApiKeyUnexpectedResponse({
+              message: `failed to read reconciled API key ${keyName}`,
+            });
           }
           return final;
         }),

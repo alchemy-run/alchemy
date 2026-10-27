@@ -13,6 +13,18 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class SageMakerClusterInvalidProps extends Data.TaggedError("SageMakerClusterInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class SageMakerClusterUnexpectedResponse extends Data.TaggedError(
+  "SageMakerClusterUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type ClusterStatus = sagemaker.ClusterStatus;
 
 /**
@@ -604,7 +616,9 @@ export const ClusterProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("SageMaker HyperPod Cluster requires props"));
+            return yield* new SageMakerClusterInvalidProps({
+              message: "SageMaker HyperPod Cluster requires props",
+            });
           }
           const name = output?.clusterName ?? (yield* createClusterName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -696,9 +710,9 @@ export const ClusterProvider = () =>
           yield* waitForCluster(name, "InService");
           described = yield* describeClusterOrUndefined(name);
           if (described === undefined) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled HyperPod cluster ${name}`),
-            );
+            return yield* new SageMakerClusterUnexpectedResponse({
+              message: `failed to read reconciled HyperPod cluster ${name}`,
+            });
           }
           const attrs = toAttrs(described);
 

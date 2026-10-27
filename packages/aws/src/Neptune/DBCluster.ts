@@ -5,11 +5,17 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
 import { toWireDays } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class NeptuneDBClusterNotReady extends Data.TaggedError("NeptuneDBClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ServerlessV2ScalingConfiguration {
   /**
@@ -382,11 +388,15 @@ export const DBClusterProvider = () =>
         return yield* readCluster(clusterId).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster?.DBClusterArn) {
-              return Effect.fail(new Error(`DB cluster '${clusterId}' not found`));
+              return Effect.fail(
+                new NeptuneDBClusterNotReady({ message: `DB cluster '${clusterId}' not found` }),
+              );
             }
             if (cluster.Status !== "available") {
               return Effect.fail(
-                new Error(`DB cluster '${clusterId}' not available (status: ${cluster.Status})`),
+                new NeptuneDBClusterNotReady({
+                  message: `DB cluster '${clusterId}' not available (status: ${cluster.Status})`,
+                }),
               );
             }
             return Effect.succeed(cluster);

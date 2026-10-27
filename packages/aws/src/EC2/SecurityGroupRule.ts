@@ -19,6 +19,13 @@ import {
 } from "./defaultVpcScope.ts";
 import type { SecurityGroupId, SecurityGroupRuleData } from "./SecurityGroup.ts";
 
+export class SecurityGroupRuleUnexpectedResponse extends Data.TaggedError(
+  "SecurityGroupRuleUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type SecurityGroupRuleId<ID extends string = string> = `sgr-${ID}`;
 export const SecurityGroupRuleId = <ID extends string>(id: ID): ID & SecurityGroupRuleId<ID> =>
   `sgr-${id}` as ID & SecurityGroupRuleId<ID>;
@@ -358,7 +365,11 @@ export const SecurityGroupRuleProvider = () =>
           Effect.flatMap((rule) =>
             rule
               ? Effect.succeed(rule)
-              : Effect.fail(new Error(`Security Group Rule ${ruleId} not found`)),
+              : Effect.fail(
+                  new SecurityGroupRuleUnexpectedResponse({
+                    message: `Security Group Rule ${ruleId} not found`,
+                  }),
+                ),
           ),
         );
 

@@ -6,11 +6,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class ReplicationSubnetGroupUnexpectedResponse extends Data.TaggedError(
+  "ReplicationSubnetGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ReplicationSubnetGroupProps {
   /**
@@ -237,9 +245,9 @@ export const ReplicationSubnetGroupProvider = () =>
       const toAttrs = Effect.fn(function* (group: dms.ReplicationSubnetGroup) {
         const identifier = group.ReplicationSubnetGroupIdentifier;
         if (!identifier) {
-          return yield* Effect.fail(
-            new Error("DMS replication subnet group is missing its identifier"),
-          );
+          return yield* new ReplicationSubnetGroupUnexpectedResponse({
+            message: "DMS replication subnet group is missing its identifier",
+          });
         }
         const arn = yield* toArn(identifier);
         return {
@@ -333,9 +341,9 @@ export const ReplicationSubnetGroupProvider = () =>
           }
 
           if (!observed?.ReplicationSubnetGroupIdentifier) {
-            return yield* Effect.fail(
-              new Error(`DMS replication subnet group '${name}' not found after reconcile`),
-            );
+            return yield* new ReplicationSubnetGroupUnexpectedResponse({
+              message: `DMS replication subnet group '${name}' not found after reconcile`,
+            });
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.

@@ -2,9 +2,17 @@ import * as rds from "@distilled.cloud/aws/rds";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class DBProxyTargetGroupUnexpectedResponse extends Data.TaggedError(
+  "DBProxyTargetGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DBProxyTargetGroupProps {
   /**
@@ -335,9 +343,9 @@ export const DBProxyTargetGroupProvider = () =>
             targetGroupName,
           });
           if (!observedGroup?.TargetGroupName) {
-            return yield* Effect.fail(
-              new Error(`DB proxy target group '${targetGroupName}' not found`),
-            );
+            return yield* new DBProxyTargetGroupUnexpectedResponse({
+              message: `DB proxy target group '${targetGroupName}' not found`,
+            });
           }
           yield* session.note(
             observedGroup.TargetGroupArn ?? output?.targetGroupArn ?? observedGroup.TargetGroupName,

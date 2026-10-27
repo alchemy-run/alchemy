@@ -14,6 +14,11 @@ import type { PolicyDocument } from "../IAM/Policy.ts";
 import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 
+export class SecretUnexpectedResponse extends Data.TaggedError("SecretUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface GenerateSecretStringProps extends secretsmanager.GetRandomPasswordRequest {
   /**
    * JSON template merged with the generated password.
@@ -426,7 +431,9 @@ export const SecretProvider = () =>
           }
 
           if (!observed?.ARN || !observed.Name) {
-            return yield* Effect.fail(new Error(`Failed to describe Secret '${secretName}'`));
+            return yield* new SecretUnexpectedResponse({
+              message: `Failed to describe Secret '${secretName}'`,
+            });
           }
 
           const secretArn = observed.ARN;

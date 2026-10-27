@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
 import { toWireDays, toWireSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -13,6 +14,11 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { reapLogGroupsByPrefix } from "../Logs/reapLogGroups.ts";
 import type { Providers } from "../Providers.ts";
+
+export class RDSDBClusterNotReady extends Data.TaggedError("RDSDBClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DBClusterProps {
   /**
@@ -581,11 +587,15 @@ export const DBClusterProvider = () =>
         return yield* readCluster(clusterId).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster?.DBClusterArn) {
-              return Effect.fail(new Error(`DB cluster '${clusterId}' not found`));
+              return Effect.fail(
+                new RDSDBClusterNotReady({ message: `DB cluster '${clusterId}' not found` }),
+              );
             }
             if (requireAvailable && cluster.Status !== "available") {
               return Effect.fail(
-                new Error(`DB cluster '${clusterId}' not available (status: ${cluster.Status})`),
+                new RDSDBClusterNotReady({
+                  message: `DB cluster '${clusterId}' not available (status: ${cluster.Status})`,
+                }),
               );
             }
             return Effect.succeed(cluster);

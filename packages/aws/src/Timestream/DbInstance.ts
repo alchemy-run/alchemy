@@ -12,6 +12,16 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class DbInstanceInvalidProps extends Data.TaggedError("DbInstanceInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class DbInstanceUnexpectedResponse extends Data.TaggedError("DbInstanceUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type DbInstanceStatus = influxdb.Status;
 
 export interface DbInstanceProps {
@@ -337,7 +347,9 @@ export const DbInstanceProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("Timestream DbInstance requires props"));
+            return yield* new DbInstanceInvalidProps({
+              message: "Timestream DbInstance requires props",
+            });
           }
           const name = output?.name ?? (yield* createInstanceName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -375,7 +387,9 @@ export const DbInstanceProvider = () =>
             yield* waitForStatus(created.id, "AVAILABLE");
             state = yield* readInstanceById(created.id);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created DB instance ${name}`));
+              return yield* new DbInstanceUnexpectedResponse({
+                message: `failed to read created DB instance ${name}`,
+              });
             }
           }
 
@@ -424,7 +438,9 @@ export const DbInstanceProvider = () =>
 
           const final = yield* readInstanceById(state.id);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled DB instance ${name}`));
+            return yield* new DbInstanceUnexpectedResponse({
+              message: `failed to read reconciled DB instance ${name}`,
+            });
           }
           return final;
         }),

@@ -2,9 +2,15 @@ import * as identitystore from "@distilled.cloud/aws/identitystore";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import { listGroups, resolveIdentityStoreId, retryIdentityCenter, unredact } from "./common.ts";
+
+export class GroupUnexpectedResponse extends Data.TaggedError("GroupUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface GroupProps {
   /**
@@ -135,9 +141,9 @@ export const GroupProvider = () =>
               }));
 
             if (!existing) {
-              return yield* Effect.fail(
-                new Error(`group '${news.displayName}' not found after create`),
-              );
+              return yield* new GroupUnexpectedResponse({
+                message: `group '${news.displayName}' not found after create`,
+              });
             }
 
             yield* session.note(existing.groupId);
@@ -178,9 +184,9 @@ export const GroupProvider = () =>
 
             const updated = yield* readGroupById(existing.identityStoreId, existing.groupId);
             if (!updated) {
-              return yield* Effect.fail(
-                new Error(`group '${existing.groupId}' not found after update`),
-              );
+              return yield* new GroupUnexpectedResponse({
+                message: `group '${existing.groupId}' not found after update`,
+              });
             }
             yield* session.note(updated.groupId);
             return updated;

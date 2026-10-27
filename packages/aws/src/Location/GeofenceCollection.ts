@@ -5,10 +5,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
+
+export class GeofenceCollectionUnexpectedResponse extends Data.TaggedError(
+  "GeofenceCollectionUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface GeofenceCollectionProps {
   /**
@@ -152,9 +160,9 @@ export const GeofenceCollectionProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             state = yield* readCollection(collectionName);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created geofence collection ${collectionName}`),
-              );
+              return yield* new GeofenceCollectionUnexpectedResponse({
+                message: `failed to read created geofence collection ${collectionName}`,
+              });
             }
           }
 
@@ -183,9 +191,9 @@ export const GeofenceCollectionProvider = () =>
 
           const final = yield* readCollection(collectionName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled geofence collection ${collectionName}`),
-            );
+            return yield* new GeofenceCollectionUnexpectedResponse({
+              message: `failed to read reconciled geofence collection ${collectionName}`,
+            });
           }
           return final;
         }),

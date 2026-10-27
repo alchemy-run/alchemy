@@ -3,11 +3,19 @@ import * as Retry from "@distilled.cloud/cloudflare/Retry";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class SuperSlurperJobUnexpectedResponse extends Data.TaggedError(
+  "SuperSlurperJobUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /** S3-compatible credentials with access to a migration bucket. */
 export interface SuperSlurperCredentials {
@@ -265,7 +273,9 @@ export const SuperSlurperJobProvider = () =>
             }),
           );
         if (!created.id) {
-          return yield* Effect.fail(new Error("Super Slurper did not return a job ID"));
+          return yield* new SuperSlurperJobUnexpectedResponse({
+            message: "Super Slurper did not return a job ID",
+          });
         }
         identity = attributes({ accountId, jobId: created.id }, { status: "running" });
         observed = { id: created.id, status: "running" };
@@ -317,7 +327,9 @@ const findInHistory = Effect.fn(function* (identity: { accountId: string; jobId:
     if (page.result.length === 0) return undefined;
     const ids = page.result.flatMap((item) => (item.id ? [item.id] : []));
     if (ids.every((id) => seen.has(id))) {
-      return yield* Effect.fail(new Error("Super Slurper job history pagination did not advance"));
+      return yield* new SuperSlurperJobUnexpectedResponse({
+        message: "Super Slurper job history pagination did not advance",
+      });
     }
     for (const id of ids) seen.add(id);
     offset += page.result.length;

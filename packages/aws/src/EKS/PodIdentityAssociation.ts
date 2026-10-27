@@ -6,9 +6,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class PodIdentityAssociationUnexpectedResponse extends Data.TaggedError(
+  "PodIdentityAssociationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface PodIdentityAssociationProps {
   /**
@@ -232,11 +240,9 @@ export const PodIdentityAssociationProvider = () =>
             });
 
             if (!state) {
-              return yield* Effect.fail(
-                new Error(
-                  `PodIdentityAssociation '${news.namespace}/${news.serviceAccount}' could not be read after creation`,
-                ),
-              );
+              return yield* new PodIdentityAssociationUnexpectedResponse({
+                message: `PodIdentityAssociation '${news.namespace}/${news.serviceAccount}' could not be read after creation`,
+              });
             }
           }
 
@@ -282,11 +288,9 @@ export const PodIdentityAssociationProvider = () =>
             associationId: state.associationId,
           });
           if (!final) {
-            return yield* Effect.fail(
-              new Error(
-                `PodIdentityAssociation '${state.associationId}' could not be read after reconcile`,
-              ),
-            );
+            return yield* new PodIdentityAssociationUnexpectedResponse({
+              message: `PodIdentityAssociation '${state.associationId}' could not be read after reconcile`,
+            });
           }
 
           yield* session.note(final.associationArn);

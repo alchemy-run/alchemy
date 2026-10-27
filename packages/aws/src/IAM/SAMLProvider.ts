@@ -4,12 +4,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord, unwrapRedactedString } from "./common.ts";
+
+export class SAMLProviderConflict extends Data.TaggedError("SAMLProviderConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface SAMLProviderProps {
   /**
@@ -188,11 +194,9 @@ export const SAMLProviderProvider = () =>
                   SAMLProviderArn: samlProviderArn,
                 });
                 if (!hasTags(internalTags, existingTags.Tags)) {
-                  return yield* Effect.fail(
-                    new Error(
-                      `SAML provider '${name}' already exists and is not managed by alchemy`,
-                    ),
-                  );
+                  return yield* new SAMLProviderConflict({
+                    message: `SAML provider '${name}' already exists and is not managed by alchemy`,
+                  });
                 }
                 return { SAMLProviderArn: samlProviderArn };
               }),

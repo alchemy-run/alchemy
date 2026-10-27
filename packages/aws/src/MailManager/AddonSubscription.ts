@@ -4,10 +4,18 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readMailManagerTags, syncMailManagerTags } from "./internal.ts";
+
+export class AddonSubscriptionUnexpectedResponse extends Data.TaggedError(
+  "AddonSubscriptionUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface AddonSubscriptionProps {
   /**
@@ -183,11 +191,9 @@ export const AddonSubscriptionProvider = () =>
           }
           const attrs = subscription !== undefined ? toAttrs(subscription) : undefined;
           if (attrs === undefined) {
-            return yield* Effect.fail(
-              new Error(
-                `Mail Manager Add On subscription for '${news.addonName}' not found after create`,
-              ),
-            );
+            return yield* new AddonSubscriptionUnexpectedResponse({
+              message: `Mail Manager Add On subscription for '${news.addonName}' not found after create`,
+            });
           }
 
           // 3. SYNC — only tags are mutable.

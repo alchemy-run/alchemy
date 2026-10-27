@@ -4,9 +4,22 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ScheduleGroupConflict extends Data.TaggedError("ScheduleGroupConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ScheduleGroupUnexpectedResponse extends Data.TaggedError(
+  "ScheduleGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ScheduleGroupProps {
   /**
@@ -120,16 +133,16 @@ export const ScheduleGroupProvider = () =>
                             Effect.filterOrFail(
                               ({ Tags }) => hasTags(internalTags, Tags),
                               () =>
-                                new Error(
-                                  `ScheduleGroup '${scheduleGroupName}' already exists and is not managed by alchemy`,
-                                ),
+                                new ScheduleGroupConflict({
+                                  message: `ScheduleGroup '${scheduleGroupName}' already exists and is not managed by alchemy`,
+                                }),
                             ),
                             Effect.asVoid,
                           )
                         : Effect.fail(
-                            new Error(
-                              `ScheduleGroup '${scheduleGroupName}' already exists but could not be described`,
-                            ),
+                            new ScheduleGroupConflict({
+                              message: `ScheduleGroup '${scheduleGroupName}' already exists but could not be described`,
+                            }),
                           ),
                     ),
                   ),
@@ -141,9 +154,9 @@ export const ScheduleGroupProvider = () =>
           }
 
           if (!observed?.Arn) {
-            return yield* Effect.fail(
-              new Error(`Failed to read created ScheduleGroup '${scheduleGroupName}'`),
-            );
+            return yield* new ScheduleGroupUnexpectedResponse({
+              message: `Failed to read created ScheduleGroup '${scheduleGroupName}'`,
+            });
           }
 
           const groupArn = observed.Arn;

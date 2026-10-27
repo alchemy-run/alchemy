@@ -36,6 +36,13 @@ import {
   type KubernetesObjectRef,
 } from "./Objects.ts";
 
+export class KubernetesClientOperationFailed extends Data.TaggedError(
+  "KubernetesClientOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export class KubernetesApiError extends Data.TaggedError("KubernetesApiError")<{
   method: string;
   path: string;
@@ -162,13 +169,21 @@ const requestJson = Effect.fn(function* ({
           resume(Effect.fail(error));
         });
         incoming.on("aborted", () => {
-          resume(Effect.fail(new Error(`Kubernetes ${method} ${path} response aborted`)));
+          resume(
+            Effect.fail(
+              new KubernetesClientOperationFailed({
+                message: `Kubernetes ${method} ${path} response aborted`,
+              }),
+            ),
+          );
         });
         incoming.on("end", () => {
           if (incoming.complete === false) {
             resume(
               Effect.fail(
-                new Error(`Kubernetes ${method} ${path} response ended before completion`),
+                new KubernetesClientOperationFailed({
+                  message: `Kubernetes ${method} ${path} response ended before completion`,
+                }),
               ),
             );
             return;
@@ -184,7 +199,13 @@ const requestJson = Effect.fn(function* ({
       },
     );
     request.on("error", (error) => {
-      resume(Effect.fail(error instanceof Error ? error : new Error(String(error))));
+      resume(
+        Effect.fail(
+          error instanceof Error
+            ? error
+            : new KubernetesClientOperationFailed({ message: String(error) }),
+        ),
+      );
     });
     if (prepared.payload !== undefined) request.write(prepared.payload);
     request.end();
@@ -199,9 +220,9 @@ const requestJson = Effect.fn(function* ({
     Effect.timeout(requestTimeout),
     Effect.mapError(
       (error) =>
-        new Error(
-          `Failed Kubernetes ${method} ${path}: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+        new KubernetesClientOperationFailed({
+          message: `Failed Kubernetes ${method} ${path}: ${error instanceof Error ? error.message : String(error)}`,
+        }),
     ),
     // Transport-level failures (ECONNREFUSED/ECONNRESET/ETIMEDOUT/DNS,
     // the per-attempt deadline) are transient — a fresh managed endpoint's

@@ -11,6 +11,7 @@ import { Resource } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { createInternalTags, diffTags, hasTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
@@ -27,6 +28,18 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
 import { AWSEnvironment } from "../index.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+
+export class LaunchTemplateUnexpectedResponse extends Data.TaggedError(
+  "LaunchTemplateUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class LaunchTemplateConflict extends Data.TaggedError("LaunchTemplateConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type LaunchTemplateId = `lt-${string}`;
 export type LaunchTemplateName = string;
@@ -361,9 +374,9 @@ export const LaunchTemplateProvider = () =>
 
         const versionNumber = created.LaunchTemplateVersion?.VersionNumber;
         if (versionNumber === undefined) {
-          return yield* Effect.fail(
-            new Error(`createLaunchTemplateVersion returned no version for '${launchTemplateId}'`),
-          );
+          return yield* new LaunchTemplateUnexpectedResponse({
+            message: `createLaunchTemplateVersion returned no version for '${launchTemplateId}'`,
+          });
         }
 
         yield* ec2.modifyLaunchTemplate({
@@ -510,20 +523,18 @@ export const LaunchTemplateProvider = () =>
             } as any);
             const template = created.LaunchTemplate;
             if (!template?.LaunchTemplateId || !template.LaunchTemplateName) {
-              return yield* Effect.fail(
-                new Error(`createLaunchTemplate returned no launch template for '${id}'`),
-              );
+              return yield* new LaunchTemplateUnexpectedResponse({
+                message: `createLaunchTemplate returned no launch template for '${id}'`,
+              });
             }
             yield* session.note(template.LaunchTemplateId);
             return yield* toAttributes(template as ec2.LaunchTemplate, runtime);
           }
 
           if (!hasTags(desiredTags, toTagRecord(existing.Tags))) {
-            return yield* Effect.fail(
-              new Error(
-                `Launch template '${launchTemplateName}' already exists and is not managed by alchemy`,
-              ),
-            );
+            return yield* new LaunchTemplateConflict({
+              message: `Launch template '${launchTemplateName}' already exists and is not managed by alchemy`,
+            });
           }
 
           // Sync version — each reconcile creates a new version pinned as
@@ -544,9 +555,9 @@ export const LaunchTemplateProvider = () =>
 
           const refreshed = yield* describeById(existing.LaunchTemplateId!);
           if (!refreshed) {
-            return yield* Effect.fail(
-              new Error(`Launch template '${launchTemplateName}' was not readable after reconcile`),
-            );
+            return yield* new LaunchTemplateUnexpectedResponse({
+              message: `Launch template '${launchTemplateName}' was not readable after reconcile`,
+            });
           }
           yield* session.note(refreshed.LaunchTemplateId!);
           return yield* toAttributes(refreshed, runtime);

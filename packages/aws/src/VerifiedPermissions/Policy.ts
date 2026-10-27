@@ -2,8 +2,16 @@ import * as avp from "@distilled.cloud/aws/verifiedpermissions";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+
+export class VerifiedPermissionsPolicyInvalidProps extends Data.TaggedError(
+  "VerifiedPermissionsPolicyInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Identifies a Cedar entity, e.g.
@@ -121,11 +129,10 @@ export const Policy = Resource<Policy>("AWS.VerifiedPermissions.Policy");
 const toDefinition = (news: PolicyProps) =>
   Effect.gen(function* () {
     if (news.templateId !== undefined && news.statement !== undefined) {
-      return yield* Effect.fail(
-        new Error(
+      return yield* new VerifiedPermissionsPolicyInvalidProps({
+        message:
           "a Policy accepts either `statement` (static) or `templateId` (template-linked), not both",
-        ),
-      );
+      });
     }
     if (news.templateId !== undefined) {
       return {
@@ -137,11 +144,9 @@ const toDefinition = (news: PolicyProps) =>
       } as const;
     }
     if (news.statement === undefined) {
-      return yield* Effect.fail(
-        new Error(
-          "a Policy requires either `statement` (static) or `templateId` (template-linked)",
-        ),
-      );
+      return yield* new VerifiedPermissionsPolicyInvalidProps({
+        message: "a Policy requires either `statement` (static) or `templateId` (template-linked)",
+      });
     }
     return {
       static: { statement: news.statement, description: news.description },

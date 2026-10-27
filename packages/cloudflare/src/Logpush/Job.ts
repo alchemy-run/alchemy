@@ -3,12 +3,18 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+
+export class JobUnexpectedResponse extends Data.TaggedError("JobUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const TypeId = "Cloudflare.Logpush.Job" as const;
 type TypeId = typeof TypeId;
@@ -400,7 +406,9 @@ export const JobProvider = () =>
 
       const jobId = observed.id;
       if (jobId === undefined || jobId === null) {
-        return yield* Effect.fail(new Error("Cloudflare did not return an id for the Logpush job"));
+        return yield* new JobUnexpectedResponse({
+          message: "Cloudflare did not return an id for the Logpush job",
+        });
       }
 
       // 3. Sync — Cloudflare's update endpoint is PUT-style; resend the
@@ -414,9 +422,9 @@ export const JobProvider = () =>
 
       const attrs = toAttributes({ ...observed, id: jobId }, scope);
       if (!attrs) {
-        return yield* Effect.fail(
-          new Error("Cloudflare returned a Logpush job without id/dataset/destination"),
-        );
+        return yield* new JobUnexpectedResponse({
+          message: "Cloudflare returned a Logpush job without id/dataset/destination",
+        });
       }
       // Prefer the desired destination — the observed echo redacts secrets.
       return { ...attrs, destinationConf, name: attrs.name || name };

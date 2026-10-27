@@ -22,6 +22,26 @@ import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { eksConnectionOf, makeEksTransport } from "./KubernetesAdapter.ts";
 
+export class EKSClusterUnexpectedResponse extends Data.TaggedError("EKSClusterUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class EKSClusterInvalidProps extends Data.TaggedError("EKSClusterInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class EKSClusterConflict extends Data.TaggedError("EKSClusterConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class EKSClusterOperationFailed extends Data.TaggedError("EKSClusterOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type ClusterName = string;
 export type ClusterArn = `arn:aws:eks:${RegionID}:${AccountID}:cluster/${ClusterName}`;
 
@@ -573,22 +593,23 @@ export const ClusterProvider = () =>
       const validateProps = Effect.fn(function* (props: ClusterProps) {
         const subnetIds = props.resourcesVpcConfig.subnetIds ?? [];
         if (subnetIds.length < 2) {
-          return yield* Effect.fail(new Error("AWS.EKS.Cluster requires at least two subnet IDs"));
+          return yield* new EKSClusterInvalidProps({
+            message: "AWS.EKS.Cluster requires at least two subnet IDs",
+          });
         }
         if (!props.roleArn && props.compute !== "auto") {
-          return yield* Effect.fail(
-            new Error("AWS.EKS.Cluster requires roleArn unless compute is 'auto'"),
-          );
+          return yield* new EKSClusterInvalidProps({
+            message: "AWS.EKS.Cluster requires roleArn unless compute is 'auto'",
+          });
         }
         if (
           props.computeConfig?.enabled &&
           props.accessConfig?.authenticationMode === "CONFIG_MAP"
         ) {
-          return yield* Effect.fail(
-            new Error(
+          return yield* new EKSClusterInvalidProps({
+            message:
               "AWS.EKS.Cluster Auto Mode requires accessConfig.authenticationMode to include API access",
-            ),
-          );
+          });
         }
       });
 
@@ -632,7 +653,9 @@ export const ClusterProvider = () =>
                 Effect.filterOrFail(
                   (existing) => hasTags(tags, existing.Role?.Tags),
                   () =>
-                    new Error(`Role '${roleName}' already exists and is not managed by alchemy`),
+                    new EKSClusterConflict({
+                      message: `Role '${roleName}' already exists and is not managed by alchemy`,
+                    }),
                 ),
               ),
             ),
@@ -718,26 +741,26 @@ export const ClusterProvider = () =>
           kubernetesObjects,
           managedRoles,
         }).pipe(
-          Effect.flatMap((state) => {
-            if (!state) {
-              return Effect.fail(
-                new ClusterNotReady({
+          Effect.flatMap(
+            Effect.fnUntraced(function* (state) {
+              if (!state) {
+                return yield* new ClusterNotReady({
                   status: undefined,
-                }),
-              );
-            }
-            if (state.status === "ACTIVE") {
-              return Effect.succeed(state);
-            }
-            if (state.status === "FAILED") {
-              return Effect.fail(new Error(`EKS cluster '${clusterName}' entered FAILED state`));
-            }
-            return Effect.fail(
-              new ClusterNotReady({
+                });
+              }
+              if (state.status === "ACTIVE") {
+                return state;
+              }
+              if (state.status === "FAILED") {
+                return yield* new EKSClusterOperationFailed({
+                  message: `EKS cluster '${clusterName}' entered FAILED state`,
+                });
+              }
+              return yield* new ClusterNotReady({
                 status: state.status,
-              }),
-            );
-          }),
+              });
+            }),
+          ),
           Effect.retry({
             while: (error) => error instanceof ClusterNotReady,
             schedule: updateRetrySchedule,
@@ -764,23 +787,21 @@ export const ClusterProvider = () =>
             updateId,
           })
           .pipe(
-            Effect.flatMap(({ update }) => {
-              if (update?.status === "Successful") {
-                return Effect.succeed(update);
-              }
-              if (update?.status === "Failed" || update?.status === "Cancelled") {
-                return Effect.fail(
-                  new Error(
-                    `EKS cluster update '${updateId}' failed with status '${update?.status}'`,
-                  ),
-                );
-              }
-              return Effect.fail(
-                new ClusterUpdateNotComplete({
+            Effect.flatMap(
+              Effect.fnUntraced(function* ({ update }) {
+                if (update?.status === "Successful") {
+                  return update;
+                }
+                if (update?.status === "Failed" || update?.status === "Cancelled") {
+                  return yield* new EKSClusterOperationFailed({
+                    message: `EKS cluster update '${updateId}' failed with status '${update?.status}'`,
+                  });
+                }
+                return yield* new ClusterUpdateNotComplete({
                   status: update?.status,
-                }),
-              );
-            }),
+                });
+              }),
+            ),
             Effect.retry({
               while: (error) => error instanceof ClusterUpdateNotComplete,
               schedule: updateRetrySchedule,
@@ -896,9 +917,9 @@ export const ClusterProvider = () =>
             managedNodeRoleName = undefined;
           }
           if (!roleArn) {
-            return yield* Effect.fail(
-              new Error("AWS.EKS.Cluster requires roleArn unless compute is 'auto'"),
-            );
+            return yield* new EKSClusterInvalidProps({
+              message: "AWS.EKS.Cluster requires roleArn unless compute is 'auto'",
+            });
           }
           const managedRoles = { managedClusterRoleName, managedNodeRoleName };
           const effective = applyAutoModeDefaults(news, {
@@ -1013,9 +1034,9 @@ export const ClusterProvider = () =>
             managedRoles,
           });
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`EKS cluster '${clusterName}' could not be read after reconcile`),
-            );
+            return yield* new EKSClusterUnexpectedResponse({
+              message: `EKS cluster '${clusterName}' could not be read after reconcile`,
+            });
           }
 
           const kubernetesObjects = yield* reconcileObjects({

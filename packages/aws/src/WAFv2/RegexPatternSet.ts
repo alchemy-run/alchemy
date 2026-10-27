@@ -6,6 +6,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import {
@@ -16,6 +17,13 @@ import {
   type WafScope,
   withWafScope,
 } from "./internal.ts";
+
+export class RegexPatternSetUnexpectedResponse extends Data.TaggedError(
+  "RegexPatternSetUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface RegexPatternSetProps {
   /**
@@ -300,9 +308,9 @@ export const RegexPatternSetProvider = () =>
           const set = observed?.RegexPatternSet;
           const arn = set?.ARN;
           if (set === undefined || arn === undefined) {
-            return yield* Effect.fail(
-              new Error(`Failed to observe RegexPatternSet '${name}' after create`),
-            );
+            return yield* new RegexPatternSetUnexpectedResponse({
+              message: `Failed to observe RegexPatternSet '${name}' after create`,
+            });
           }
 
           yield* session.note(arn);

@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readMemoryDbTags, sameStringSet } from "./internal.ts";
+
+export class MemoryDBSubnetGroupUnexpectedResponse extends Data.TaggedError(
+  "MemoryDBSubnetGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface SubnetGroupProps {
   /**
@@ -92,7 +100,9 @@ export const SubnetGroupProvider = () =>
 
       const toAttrs = Effect.fn(function* (group: memorydb.SubnetGroup) {
         if (!group.Name || !group.ARN) {
-          return yield* Effect.fail(new Error(`Subnet group '${group.Name}' is missing its ARN`));
+          return yield* new MemoryDBSubnetGroupUnexpectedResponse({
+            message: `Subnet group '${group.Name}' is missing its ARN`,
+          });
         }
         return {
           subnetGroupName: group.Name,
@@ -152,7 +162,9 @@ export const SubnetGroupProvider = () =>
             observed = yield* readGroup(name);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(new Error(`Subnet group '${name}' not found after create`));
+            return yield* new MemoryDBSubnetGroupUnexpectedResponse({
+              message: `Subnet group '${name}' not found after create`,
+            });
           }
 
           // 3. Sync — apply description / subnet delta from OBSERVED state.

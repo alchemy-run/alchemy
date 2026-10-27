@@ -14,6 +14,11 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import { createComputeArchive } from "../ComputeArchive.ts";
 
+export class ArtifactOperationFailed extends Data.TaggedError("ArtifactOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /** Resolved framework output to stage after Website.Server has built it. */
 export interface WebsiteArtifactProps {
   /** Application root, relative to the initial working directory. */
@@ -74,7 +79,7 @@ export class WebsiteTraceError extends Data.TaggedError("WebsiteTraceError")<{
   readonly cause?: unknown;
 }> {}
 
-const fail = (message: string) => Effect.fail(new Error(message));
+const fail = (message: string) => Effect.fail(new ArtifactOperationFailed({ message }));
 
 /**
  * Stage real build files and NFT's reachable runtime graph without relocating

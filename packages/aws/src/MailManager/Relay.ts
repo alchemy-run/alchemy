@@ -4,10 +4,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readMailManagerTags, sameShape, syncMailManagerTags } from "./internal.ts";
+
+export class RelayUnexpectedResponse extends Data.TaggedError("RelayUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface RelayProps {
   /**
@@ -132,9 +138,9 @@ export const RelayProvider = () =>
 
       const toAttrs = Effect.fn(function* (relay: mm.GetRelayResponse) {
         if (relay.RelayArn === undefined || relay.RelayName === undefined) {
-          return yield* Effect.fail(
-            new Error(`Mail Manager relay '${relay.RelayId}' returned without ARN/name`),
-          );
+          return yield* new RelayUnexpectedResponse({
+            message: `Mail Manager relay '${relay.RelayId}' returned without ARN/name`,
+          });
         }
         return {
           relayId: relay.RelayId,
@@ -203,9 +209,9 @@ export const RelayProvider = () =>
                 : yield* observe(undefined, name);
           }
           if (relay === undefined) {
-            return yield* Effect.fail(
-              new Error(`Mail Manager relay '${name}' not found after create`),
-            );
+            return yield* new RelayUnexpectedResponse({
+              message: `Mail Manager relay '${name}' not found after create`,
+            });
           }
 
           // 3. SYNC — diff OBSERVED state against desired; apply only the

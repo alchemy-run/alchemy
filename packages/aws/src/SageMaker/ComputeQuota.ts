@@ -11,6 +11,18 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class ComputeQuotaInvalidProps extends Data.TaggedError("ComputeQuotaInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ComputeQuotaUnexpectedResponse extends Data.TaggedError(
+  "ComputeQuotaUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface ComputeQuotaProps {
   /**
    * Name of the compute allocation. Maximum 63 characters, alphanumeric and
@@ -307,7 +319,9 @@ export const ComputeQuotaProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("SageMaker ComputeQuota requires props"));
+            return yield* new ComputeQuotaInvalidProps({
+              message: "SageMaker ComputeQuota requires props",
+            });
           }
           const name = yield* createQuotaName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -344,7 +358,9 @@ export const ComputeQuotaProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             quotaId = created?.ComputeQuotaId ?? (yield* findQuotaByName(name))?.ComputeQuotaId;
             if (quotaId === undefined) {
-              return yield* Effect.fail(new Error(`failed to create compute quota ${name}`));
+              return yield* new ComputeQuotaUnexpectedResponse({
+                message: `failed to create compute quota ${name}`,
+              });
             }
             yield* session.note(`Creating compute quota ${name}...`);
             yield* waitForQuota(quotaId, "Ready");
@@ -379,7 +395,9 @@ export const ComputeQuotaProvider = () =>
 
           described = yield* describeQuotaOrUndefined(quotaId);
           if (described === undefined) {
-            return yield* Effect.fail(new Error(`failed to read reconciled compute quota ${name}`));
+            return yield* new ComputeQuotaUnexpectedResponse({
+              message: `failed to read reconciled compute quota ${name}`,
+            });
           }
           const attrs = toAttrs(described);
 

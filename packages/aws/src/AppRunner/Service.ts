@@ -37,6 +37,26 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import { readAppRunnerTags, syncAppRunnerTags, toWireTags } from "./internal.ts";
 
+export class ServiceOperationFailed extends Data.TaggedError("ServiceOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ServiceInvalidProps extends Data.TaggedError("ServiceInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ServiceUnexpectedResponse extends Data.TaggedError("ServiceUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ServiceConflict extends Data.TaggedError("ServiceConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /**
  * Container image source for an App Runner service.
  */
@@ -881,7 +901,9 @@ export const ServiceProvider = () =>
                 Effect.filterOrFail(
                   (existing) => hasTags(tags, existing.Role?.Tags),
                   () =>
-                    new Error(`Role '${roleName}' already exists and is not managed by alchemy`),
+                    new ServiceConflict({
+                      message: `Role '${roleName}' already exists and is not managed by alchemy`,
+                    }),
                 ),
               ),
             ),
@@ -921,9 +943,9 @@ export const ServiceProvider = () =>
           );
         const repository = created.repository;
         if (!repository?.repositoryUri) {
-          return yield* Effect.fail(
-            new Error(`Failed to resolve ECR repository '${repositoryName}'`),
-          );
+          return yield* new ServiceOperationFailed({
+            message: `Failed to resolve ECR repository '${repositoryName}'`,
+          });
         }
         return { repositoryUri: repository.repositoryUri };
       });
@@ -1156,20 +1178,20 @@ await bootstrap(entrypoint);
       // deleted right after.
       const waitUntilGone = Effect.fn(function* (arn: string) {
         yield* readService(arn).pipe(
-          Effect.flatMap((service) => {
-            if (service === undefined) return Effect.void;
-            if (statusIs(service.Status, "DELETE_FAILED")) {
-              return Effect.fail(
-                new Error(`App Runner service '${arn}' failed to delete (status: DELETE_FAILED)`),
-              );
-            }
-            return Effect.fail(
-              new AppRunnerServiceNotSettled({
+          Effect.flatMap(
+            Effect.fnUntraced(function* (service) {
+              if (service === undefined) return;
+              if (statusIs(service.Status, "DELETE_FAILED")) {
+                return yield* new ServiceOperationFailed({
+                  message: `App Runner service '${arn}' failed to delete (status: DELETE_FAILED)`,
+                });
+              }
+              return yield* new AppRunnerServiceNotSettled({
                 serviceArn: arn,
                 status: service.Status,
-              }),
-            );
-          }),
+              });
+            }),
+          ),
           Effect.retry({
             while: (e) => e instanceof AppRunnerServiceNotSettled,
             schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
@@ -1357,25 +1379,23 @@ await bootstrap(entrypoint);
                 Object.keys(binding.data?.env ?? {}).length > 0,
             )
           ) {
-            return yield* Effect.fail(
-              new Error(
+            return yield* new ServiceInvalidProps({
+              message:
                 `App Runner service '${name}' received capability bindings but uses ` +
-                  "the low-level `imageRepository` form. Bindings attach IAM policies " +
-                  "and environment variables to the Alchemy-managed instance role, " +
-                  "which only exists for Effect-native services (`main`). Either use " +
-                  "the Effect-native form or grant the permissions on your own " +
-                  "`instanceConfiguration.instanceRoleArn`.",
-              ),
-            );
+                "the low-level `imageRepository` form. Bindings attach IAM policies " +
+                "and environment variables to the Alchemy-managed instance role, " +
+                "which only exists for Effect-native services (`main`). Either use " +
+                "the Effect-native form or grant the permissions on your own " +
+                "`instanceConfiguration.instanceRoleArn`.",
+            });
           }
 
           if (effective.imageRepository === undefined) {
-            return yield* Effect.fail(
-              new Error(
+            return yield* new ServiceInvalidProps({
+              message:
                 `App Runner service '${name}' needs either \`imageRepository\` ` +
-                  "(container-image form) or `main` (Effect-native form)",
-              ),
-            );
+                "(container-image form) or `main` (Effect-native form)",
+            });
           }
           const desired = effective as ResolvedServiceProps;
 
@@ -1418,18 +1438,17 @@ await bootstrap(entrypoint);
           // for the service to settle before mutating it.
           const settled = yield* waitForSettled(observed.ServiceArn);
           if (settled === undefined) {
-            return yield* Effect.fail(
-              new Error(`App Runner service '${name}' disappeared while reconciling`),
-            );
+            return yield* new ServiceUnexpectedResponse({
+              message: `App Runner service '${name}' disappeared while reconciling`,
+            });
           }
           observed = settled;
           if (statusIs(observed.Status, "CREATE_FAILED")) {
-            return yield* Effect.fail(
-              new Error(
+            return yield* new ServiceOperationFailed({
+              message:
                 `App Runner service '${name}' failed to create (status: CREATE_FAILED). ` +
-                  "Check the service's event and application logs in CloudWatch.",
-              ),
-            );
+                "Check the service's event and application logs in CloudWatch.",
+            });
           }
 
           // 3. Sync — compare each user-specified aspect against OBSERVED
@@ -1475,9 +1494,9 @@ await bootstrap(entrypoint);
             });
             const updated = yield* waitForSettled(observed.ServiceArn);
             if (updated === undefined) {
-              return yield* Effect.fail(
-                new Error(`App Runner service '${name}' disappeared while updating`),
-              );
+              return yield* new ServiceUnexpectedResponse({
+                message: `App Runner service '${name}' disappeared while updating`,
+              });
             }
             observed = updated;
           }

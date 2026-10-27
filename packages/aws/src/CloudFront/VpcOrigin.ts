@@ -9,6 +9,11 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 
+export class VpcOriginUnexpectedResponse extends Data.TaggedError("VpcOriginUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 class VpcOriginPendingDeployment extends Data.TaggedError("VpcOriginPendingDeployment")<{
   message: string;
 }> {}
@@ -329,7 +334,9 @@ export const VpcOriginProvider = () =>
               );
 
             if (!created?.vpcOrigin.Id) {
-              return yield* Effect.fail(new Error("createVpcOrigin returned no identifier"));
+              return yield* new VpcOriginUnexpectedResponse({
+                message: "createVpcOrigin returned no identifier",
+              });
             }
 
             yield* session.note(created.vpcOrigin.Id);

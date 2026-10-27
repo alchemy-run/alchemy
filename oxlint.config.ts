@@ -65,6 +65,7 @@ export default defineConfig({
     "effecttsgo/floating-effect-in-vitest": "error",
     "effecttsgo/generic-effect-services": "error",
     "effecttsgo/global-error-in-effect-catch": "error",
+    "effecttsgo/global-error-in-effect-failure": "error",
     "effecttsgo/instance-of-schema": "error",
     "effecttsgo/layer-merge-all-with-dependencies": "off",
     // `XProvider()`, `providers()` and other Layer factories stay functions: they
@@ -166,4 +167,11 @@ export default defineConfig({
     "unicorn/no-useless-spread": "error",
     "unicorn/prefer-string-starts-ends-with": "error",
   },
+  overrides: [
+    {
+      // CLI tooling, not library code: a plain Error is fine here.
+      files: ["scripts/**", "benchmark/**", "stacks/**"],
+      rules: { "effecttsgo/global-error-in-effect-failure": "off" },
+    },
+  ],
 } satisfies OxlintConfig);

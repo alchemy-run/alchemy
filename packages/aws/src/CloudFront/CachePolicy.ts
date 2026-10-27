@@ -4,9 +4,22 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { toWireSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+
+export class CachePolicyConflict extends Data.TaggedError("CachePolicyConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class CachePolicyUnexpectedResponse extends Data.TaggedError(
+  "CachePolicyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface CachePolicyProps {
   /**
@@ -252,16 +265,18 @@ export const CachePolicyProvider = () =>
                             Location: undefined,
                           })
                         : Effect.fail(
-                            new Error(
-                              `Cache policy '${name}' already exists but could not be recovered`,
-                            ),
+                            new CachePolicyConflict({
+                              message: `Cache policy '${name}' already exists but could not be recovered`,
+                            }),
                           ),
                     ),
                   ),
                 ),
               );
             if (!created.CachePolicy?.Id) {
-              return yield* Effect.fail(new Error("createCachePolicy returned no identifier"));
+              return yield* new CachePolicyUnexpectedResponse({
+                message: "createCachePolicy returned no identifier",
+              });
             }
             yield* session.note(created.CachePolicy.Id);
             return toAttrs(
@@ -280,7 +295,9 @@ export const CachePolicyProvider = () =>
             CachePolicyConfig: desired,
           });
           if (!updated.CachePolicy?.Id) {
-            return yield* Effect.fail(new Error("updateCachePolicy returned no identifier"));
+            return yield* new CachePolicyUnexpectedResponse({
+              message: "updateCachePolicy returned no identifier",
+            });
           }
           yield* session.note(observed.id);
           return toAttrs(

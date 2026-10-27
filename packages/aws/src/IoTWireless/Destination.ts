@@ -5,10 +5,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readIotWirelessTags, syncIotWirelessTags } from "./internal.ts";
+
+export class IoTWirelessDestinationUnexpectedResponse extends Data.TaggedError(
+  "IoTWirelessDestinationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DestinationProps {
   /**
@@ -160,9 +168,9 @@ export const DestinationProvider = () =>
 
       const toAttrs = Effect.fn(function* (destination: iotw.GetDestinationResponse, name: string) {
         if (destination.Arn === undefined) {
-          return yield* Effect.fail(
-            new Error(`IoT Wireless destination '${name}' returned without Arn`),
-          );
+          return yield* new IoTWirelessDestinationUnexpectedResponse({
+            message: `IoT Wireless destination '${name}' returned without Arn`,
+          });
         }
         return {
           destinationName: destination.Name ?? name,
@@ -244,9 +252,9 @@ export const DestinationProvider = () =>
             destination = yield* getDestination(name);
           }
           if (destination === undefined) {
-            return yield* Effect.fail(
-              new Error(`IoT Wireless destination '${name}' not found after create`),
-            );
+            return yield* new IoTWirelessDestinationUnexpectedResponse({
+              message: `IoT Wireless destination '${name}' not found after create`,
+            });
           }
 
           // 3. SYNC — apply the expression/description/role delta from
@@ -268,9 +276,9 @@ export const DestinationProvider = () =>
             destination = yield* getDestination(name);
           }
           if (destination === undefined) {
-            return yield* Effect.fail(
-              new Error(`IoT Wireless destination '${name}' vanished during update`),
-            );
+            return yield* new IoTWirelessDestinationUnexpectedResponse({
+              message: `IoT Wireless destination '${name}' vanished during update`,
+            });
           }
 
           // 3b. SYNC tags — diff against OBSERVED cloud tags.

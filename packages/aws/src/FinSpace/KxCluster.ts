@@ -11,6 +11,16 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 
+export class KxClusterInvalidProps extends Data.TaggedError("KxClusterInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class KxClusterUnexpectedResponse extends Data.TaggedError("KxClusterUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type KxClusterStatus = finspace.KxClusterStatus;
 export type KxClusterType = finspace.KxClusterType;
 export type KxAzMode = finspace.KxAzMode;
@@ -374,7 +384,9 @@ export const KxClusterProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("FinSpace KxCluster requires props"));
+            return yield* new KxClusterInvalidProps({
+              message: "FinSpace KxCluster requires props",
+            });
           }
           const environmentId = news.environmentId;
           const clusterName = output?.clusterName ?? (yield* createClusterName(id, news));
@@ -418,9 +430,9 @@ export const KxClusterProvider = () =>
             yield* waitForClusterStatus(environmentId, clusterName, "RUNNING");
             cluster = yield* readCluster(environmentId, clusterName);
             if (cluster === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created kdb cluster ${clusterName}`),
-              );
+              return yield* new KxClusterUnexpectedResponse({
+                message: `failed to read created kdb cluster ${clusterName}`,
+              });
             }
           }
 
@@ -461,9 +473,9 @@ export const KxClusterProvider = () =>
 
           const final = yield* readCluster(environmentId, clusterName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled kdb cluster ${clusterName}`),
-            );
+            return yield* new KxClusterUnexpectedResponse({
+              message: `failed to read reconciled kdb cluster ${clusterName}`,
+            });
           }
           return toAttributes(final, environmentId, clusterName);
         }),

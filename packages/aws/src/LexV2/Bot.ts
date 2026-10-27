@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -18,6 +19,11 @@ import {
   syncLexTags,
   waitForBotSettled,
 } from "./internal.ts";
+
+export class BotUnexpectedResponse extends Data.TaggedError("BotUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface BotProps {
   /**
@@ -259,7 +265,9 @@ export const BotProvider = () =>
                 ),
               );
             if (created === undefined) {
-              return yield* Effect.fail(new Error(`failed to create Lex bot ${botName}`));
+              return yield* new BotUnexpectedResponse({
+                message: `failed to create Lex bot ${botName}`,
+              });
             }
             observed = yield* waitForBotSettled(created);
           }

@@ -6,9 +6,15 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { otelDatasetHeader } from "./OtelHeaders.ts";
 import type { Providers } from "./Providers.ts";
+
+export class DatasetUnexpectedResponse extends Data.TaggedError("DatasetUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type DatasetKind =
   | "otel:metrics:v1"
@@ -178,9 +184,9 @@ export const DatasetProvider = () =>
 
       const toAttrs = Effect.fn(function* (dataset: Axiom.Dataset) {
         if (!dataset.edgeDeployment || !dataset.edgeDeploymentUrl) {
-          return yield* Effect.fail(
-            new Error(`Axiom dataset "${dataset.name}" is missing its edge deployment metadata`),
-          );
+          return yield* new DatasetUnexpectedResponse({
+            message: `Axiom dataset "${dataset.name}" is missing its edge deployment metadata`,
+          });
         }
         const { apiBaseUrl } = yield* credentials;
         const apiRoot = apiBaseUrl.replace(/\/$/, "");

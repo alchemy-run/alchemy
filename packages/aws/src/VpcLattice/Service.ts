@@ -6,12 +6,20 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
 import { toWireSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict, waitUntilAbsent, waitUntilStable } from "./internal.ts";
 import type { ServiceNetworkAuthType } from "./ServiceNetwork.ts";
+
+export class VpcLatticeServiceUnexpectedResponse extends Data.TaggedError(
+  "VpcLatticeServiceUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ServiceProps {
   /**
@@ -207,7 +215,9 @@ export const ServiceProvider = () =>
               })
               .pipe(Effect.catchTag("ConflictException", () => findByName(name)));
             if (!created?.arn || !created.id) {
-              return yield* Effect.fail(new Error(`Failed to create service ${name}`));
+              return yield* new VpcLatticeServiceUnexpectedResponse({
+                message: `Failed to create service ${name}`,
+              });
             }
             serviceId = created.id;
             serviceArn = created.arn;

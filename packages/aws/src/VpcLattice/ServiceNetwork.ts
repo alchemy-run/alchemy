@@ -5,10 +5,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict, waitUntilAbsent } from "./internal.ts";
+
+export class ServiceNetworkUnexpectedResponse extends Data.TaggedError(
+  "ServiceNetworkUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Authorization mode for a service network. `NONE` allows all traffic;
@@ -301,7 +309,9 @@ export const ServiceNetworkProvider = () =>
               .createServiceNetwork({ name, authType: desiredAuthType })
               .pipe(Effect.catchTag("ConflictException", () => findByName(name)));
             if (!network?.arn || !network.id) {
-              return yield* Effect.fail(new Error(`Failed to create service network ${name}`));
+              return yield* new ServiceNetworkUnexpectedResponse({
+                message: `Failed to create service network ${name}`,
+              });
             }
           } else if ((network.authType ?? "NONE") !== desiredAuthType) {
             // Sync auth type — the only mutable setting.

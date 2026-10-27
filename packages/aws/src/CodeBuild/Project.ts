@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireMinutes } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -16,6 +17,11 @@ import {
   type PolicyDocument,
 } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
+
+export class ProjectUnexpectedResponse extends Data.TaggedError("ProjectUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Where CodeBuild fetches the source to build.
@@ -502,9 +508,9 @@ export const ProjectProvider = () =>
           }
 
           if (observed === undefined || observed.arn === undefined) {
-            return yield* Effect.fail(
-              new Error(`CodeBuild project '${name}' disappeared while reconciling`),
-            );
+            return yield* new ProjectUnexpectedResponse({
+              message: `CodeBuild project '${name}' disappeared while reconciling`,
+            });
           }
 
           // 3b. Sync — resource policy. Compare observed against desired in

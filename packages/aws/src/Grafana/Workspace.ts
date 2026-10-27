@@ -4,12 +4,18 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { syncGrafanaTags, toTagRecord, unredact } from "./internal.ts";
+
+export class GrafanaWorkspaceNotReady extends Data.TaggedError("GrafanaWorkspaceNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface WorkspaceProps {
   /**
@@ -138,9 +144,9 @@ export const WorkspaceProvider = () =>
           }),
         );
         if (ws.status !== "ACTIVE") {
-          return yield* Effect.fail(
-            new Error(`Grafana workspace ${id} did not become ACTIVE (status: ${ws.status})`),
-          );
+          return yield* new GrafanaWorkspaceNotReady({
+            message: `Grafana workspace ${id} did not become ACTIVE (status: ${ws.status})`,
+          });
         }
         return ws;
       });

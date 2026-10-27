@@ -14,6 +14,13 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict, waitUntilAbsent, waitUntilStable } from "./internal.ts";
 
+export class VpcLatticeTargetGroupUnexpectedResponse extends Data.TaggedError(
+  "VpcLatticeTargetGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /**
  * The kind of compute a target group routes to.
  */
@@ -402,7 +409,9 @@ export const TargetGroupProvider = () =>
               })
               .pipe(Effect.catchTag("ConflictException", () => findByName(name)));
             if (!created?.arn || !created.id) {
-              return yield* Effect.fail(new Error(`Failed to create target group ${name}`));
+              return yield* new VpcLatticeTargetGroupUnexpectedResponse({
+                message: `Failed to create target group ${name}`,
+              });
             }
             group = yield* observe(created.id);
             if (!group?.arn || !group.id) {
@@ -412,7 +421,9 @@ export const TargetGroupProvider = () =>
           const targetGroupId = group.id;
           const targetGroupArn = group.arn;
           if (!targetGroupId || !targetGroupArn) {
-            return yield* Effect.fail(new Error(`Target group ${name} is missing its id/arn`));
+            return yield* new VpcLatticeTargetGroupUnexpectedResponse({
+              message: `Target group ${name} is missing its id/arn`,
+            });
           }
 
           // Target groups reject updates while CREATE_IN_PROGRESS.

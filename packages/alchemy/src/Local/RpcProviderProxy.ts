@@ -1,6 +1,7 @@
 import { newWebSocketRpcSession, type RpcStub } from "capnweb";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
@@ -13,6 +14,20 @@ import { unwrapRpcHandlers } from "./RpcSerialization.ts";
 import type { RpcProxyApi, SessionProviderCounts } from "./RpcServer.ts";
 import { encodeSessionEnvironment, SESSION_ENV_PARAM } from "./RpcServerEnvironment.ts";
 import type { RpcSpawnPayload } from "./RpcSpawner.ts";
+
+export class RpcProviderProxyOperationFailed extends Data.TaggedError(
+  "RpcProviderProxyOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class RpcProviderProxyUnexpectedResponse extends Data.TaggedError(
+  "RpcProviderProxyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /** A test file's leases on the sessions it actually uses. */
 export interface SessionOwner {
@@ -100,26 +115,20 @@ const make = Effect.fn(function* (spawnerUrl: string) {
       });
       const body = yield* response.text;
       if (response.status !== 200) {
-        return yield* Effect.fail(
-          new Error(
-            `RPC spawner POST ${spawnerUrl} returned ${response.status}: ${body.slice(0, 300)}`,
-          ),
-        );
+        return yield* new RpcProviderProxyOperationFailed({
+          message: `RPC spawner POST ${spawnerUrl} returned ${response.status}: ${body.slice(0, 300)}`,
+        });
       }
       if (!URL.canParse(body)) {
-        return yield* Effect.fail(
-          new Error(
-            `RPC spawner POST ${spawnerUrl} did not return a websocket URL (got ${JSON.stringify(body.slice(0, 200))})`,
-          ),
-        );
+        return yield* new RpcProviderProxyUnexpectedResponse({
+          message: `RPC spawner POST ${spawnerUrl} did not return a websocket URL (got ${JSON.stringify(body.slice(0, 200))})`,
+        });
       }
       const websocketUrl = new URL(body);
       if (websocketUrl.protocol !== "ws:" && websocketUrl.protocol !== "wss:") {
-        return yield* Effect.fail(
-          new Error(
-            `RPC spawner POST ${spawnerUrl} returned a non-websocket URL: ${websocketUrl.toString()}`,
-          ),
-        );
+        return yield* new RpcProviderProxyUnexpectedResponse({
+          message: `RPC spawner POST ${spawnerUrl} returned a non-websocket URL: ${websocketUrl.toString()}`,
+        });
       }
       websocketUrl.searchParams.set(SESSION_ENV_PARAM, sessionEnv);
       const socket = new WebSocket(websocketUrl.toString());

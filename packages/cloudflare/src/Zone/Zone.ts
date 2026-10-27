@@ -5,12 +5,18 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { stripNullFields } from "alchemy/Util/data";
 import * as Array from "effect/Array";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Equivalence from "effect/Equivalence";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { findZoneByName } from "./lookup.ts";
+
+export class ZoneUnexpectedResponse extends Data.TaggedError("ZoneUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type Type = "full" | "partial" | "secondary" | "internal";
 export type Status = "initializing" | "pending" | "active" | "moved";
@@ -271,9 +277,9 @@ export const ZoneProvider = () =>
                       match
                         ? Effect.succeed(match.id)
                         : Effect.fail(
-                            new Error(
-                              `Cloudflare reported zone ${news.name} already exists but it could not be found`,
-                            ),
+                            new ZoneUnexpectedResponse({
+                              message: `Cloudflare reported zone ${news.name} already exists but it could not be found`,
+                            }),
                           ),
                     ),
                   ),

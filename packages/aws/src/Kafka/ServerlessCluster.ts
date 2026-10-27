@@ -5,10 +5,23 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ServerlessClusterNotReady extends Data.TaggedError("ServerlessClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ServerlessClusterUnexpectedResponse extends Data.TaggedError(
+  "ServerlessClusterUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ServerlessClusterProps {
   /**
@@ -163,7 +176,9 @@ export const ServerlessClusterProvider = () =>
         return yield* describeByArn(arn).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster) {
-              return Effect.fail(new Error(`MSK cluster '${arn}' not found`));
+              return Effect.fail(
+                new ServerlessClusterNotReady({ message: `MSK cluster '${arn}' not found` }),
+              );
             }
             if (cluster.State === "FAILED") {
               return Effect.die(
@@ -174,7 +189,9 @@ export const ServerlessClusterProvider = () =>
             }
             if (cluster.State !== "ACTIVE") {
               return Effect.fail(
-                new Error(`MSK cluster '${arn}' not active (state: ${cluster.State})`),
+                new ServerlessClusterNotReady({
+                  message: `MSK cluster '${arn}' not active (state: ${cluster.State})`,
+                }),
               );
             }
             return Effect.succeed(cluster);
@@ -185,9 +202,9 @@ export const ServerlessClusterProvider = () =>
 
       const toAttrs = Effect.fn(function* (cluster: kafka.Cluster) {
         if (!cluster.ClusterName || !cluster.ClusterArn) {
-          return yield* Effect.fail(
-            new Error(`MSK cluster is missing its name or ARN (state: ${cluster.State})`),
-          );
+          return yield* new ServerlessClusterUnexpectedResponse({
+            message: `MSK cluster is missing its name or ARN (state: ${cluster.State})`,
+          });
         }
         const bootstrap =
           cluster.State === "ACTIVE" ? yield* readBrokers(cluster.ClusterArn) : undefined;

@@ -5,6 +5,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
@@ -15,6 +16,20 @@ import {
   unredact,
   updateResourceTags,
 } from "./common.ts";
+
+export class OrganizationsAccountOperationFailed extends Data.TaggedError(
+  "OrganizationsAccountOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class OrganizationsAccountUnexpectedResponse extends Data.TaggedError(
+  "OrganizationsAccountUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type AccountId = string;
 export type AccountArn = string;
@@ -204,7 +219,9 @@ export const AccountProvider = () =>
               });
             }
             if (!state) {
-              return yield* Effect.fail(new Error(`account '${news.name}' not found after create`));
+              return yield* new OrganizationsAccountUnexpectedResponse({
+                message: `account '${news.name}' not found after create`,
+              });
             }
           }
 
@@ -245,9 +262,9 @@ export const AccountProvider = () =>
 
           const updated = yield* readAccountById(state.accountId);
           if (!updated) {
-            return yield* Effect.fail(
-              new Error(`account '${state.accountId}' not found after reconcile`),
-            );
+            return yield* new OrganizationsAccountUnexpectedResponse({
+              message: `account '${state.accountId}' not found after reconcile`,
+            });
           }
 
           yield* session.note(updated.accountArn);
@@ -369,13 +386,15 @@ const waitForCreateAccount = (requestId: string) =>
     }
 
     if (status.State === "FAILED") {
-      return yield* Effect.fail(
-        new Error(`account creation failed: ${status.FailureReason ?? "unknown failure"}`),
-      );
+      return yield* new OrganizationsAccountOperationFailed({
+        message: `account creation failed: ${status.FailureReason ?? "unknown failure"}`,
+      });
     }
 
     if (!status.AccountId) {
-      return yield* Effect.fail(new Error("account creation succeeded without AccountId"));
+      return yield* new OrganizationsAccountUnexpectedResponse({
+        message: "account creation succeeded without AccountId",
+      });
     }
 
     return status;

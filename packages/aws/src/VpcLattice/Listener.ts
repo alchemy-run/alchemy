@@ -5,10 +5,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict, waitUntilAbsent } from "./internal.ts";
+
+export class VpcLatticeListenerUnexpectedResponse extends Data.TaggedError(
+  "VpcLatticeListenerUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The action a listener (or rule) applies to matched traffic: forward to
@@ -235,7 +243,9 @@ export const ListenerProvider = () =>
               Effect.catchTag("ConflictException", () => findByName(news.serviceIdentifier, name)),
             );
             if (!listener?.arn || !listener.id) {
-              return yield* Effect.fail(new Error(`Failed to create listener ${name}`));
+              return yield* new VpcLatticeListenerUnexpectedResponse({
+                message: `Failed to create listener ${name}`,
+              });
             }
           } else if (
             JSON.stringify(listener.defaultAction) !== JSON.stringify(news.defaultAction)

@@ -10,6 +10,13 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 
+export class EnvironmentUnexpectedResponse extends Data.TaggedError(
+  "EnvironmentUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type EnvironmentStatus = finspace.EnvironmentStatus;
 export type FederationMode = finspace.FederationMode;
 export type FederationParameters = finspace.FederationParameters;
@@ -316,9 +323,9 @@ export const EnvironmentProvider = () =>
               tags: desiredTags,
             });
             if (!created.environmentId) {
-              return yield* Effect.fail(
-                new Error(`CreateEnvironment for '${name}' returned no id`),
-              );
+              return yield* new EnvironmentUnexpectedResponse({
+                message: `CreateEnvironment for '${name}' returned no id`,
+              });
             }
             yield* session.note(
               `Creating FinSpace environment ${name} (${created.environmentId})...`,
@@ -326,12 +333,16 @@ export const EnvironmentProvider = () =>
             yield* waitForEnvironmentStatus(created.environmentId, "CREATED");
             env = yield* readEnvironmentById(created.environmentId);
             if (env === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created environment ${name}`));
+              return yield* new EnvironmentUnexpectedResponse({
+                message: `failed to read created environment ${name}`,
+              });
             }
           }
           const environmentId = env.environmentId;
           if (environmentId === undefined) {
-            return yield* Effect.fail(new Error(`environment '${name}' has no environmentId`));
+            return yield* new EnvironmentUnexpectedResponse({
+              message: `environment '${name}' has no environmentId`,
+            });
           }
 
           // Sync mutable settings — only call UpdateEnvironment on drift.
@@ -372,7 +383,9 @@ export const EnvironmentProvider = () =>
 
           const final = yield* readEnvironmentById(environmentId);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled environment ${name}`));
+            return yield* new EnvironmentUnexpectedResponse({
+              message: `failed to read reconciled environment ${name}`,
+            });
           }
           return yield* toAttributes(final, environmentId);
         }),

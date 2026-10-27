@@ -1,10 +1,16 @@
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { nodeFileTrace } from "@vercel/nft";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { TraceInput } from "./Trace.ts";
+
+export class TraceRunnerInvalidProps extends Data.TaggedError("TraceRunnerInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 NodeRuntime.runMain(
   Effect.gen(function* () {
@@ -13,7 +19,7 @@ NodeRuntime.runMain(
     const inputPath = process.argv[2];
     const outputPath = process.argv[3];
     if (!inputPath || !outputPath)
-      return yield* Effect.fail(new Error("Missing dependency trace paths"));
+      return yield* new TraceRunnerInvalidProps({ message: "Missing dependency trace paths" });
     const source = yield* fs.readFileString(inputPath);
     const input = yield* Effect.try(() => JSON.parse(source) as TraceInput);
     const trace = (seeds: string[], emitGlobs: boolean) =>

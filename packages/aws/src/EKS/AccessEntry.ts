@@ -5,9 +5,17 @@ import type { Input } from "alchemy/Input";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class AccessEntryUnexpectedResponse extends Data.TaggedError(
+  "AccessEntryUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface AccessPolicyAssociation {
   /**
@@ -211,9 +219,9 @@ export const AccessEntryProvider = () =>
         });
 
         if (!state) {
-          return yield* Effect.fail(
-            new Error(`AccessEntry '${principalArn}' could not be read after creation`),
-          );
+          return yield* new AccessEntryUnexpectedResponse({
+            message: `AccessEntry '${principalArn}' could not be read after creation`,
+          });
         }
       }
 
@@ -301,7 +309,9 @@ export const AccessEntryProvider = () =>
           finalState
             ? Effect.succeed(finalState)
             : Effect.fail(
-                new Error(`AccessEntry '${principalArn}' could not be read after reconcile`),
+                new AccessEntryUnexpectedResponse({
+                  message: `AccessEntry '${principalArn}' could not be read after reconcile`,
+                }),
               ),
         ),
       );

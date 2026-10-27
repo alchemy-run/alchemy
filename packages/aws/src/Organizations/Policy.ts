@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { ServiceControlPolicyDocument } from "../IAM/Policy.ts";
@@ -16,6 +17,13 @@ import {
   retryOrganizations,
   updateResourceTags,
 } from "./common.ts";
+
+export class OrganizationsPolicyUnexpectedResponse extends Data.TaggedError(
+  "OrganizationsPolicyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type PolicyId = string;
 export type PolicyArn = string;
@@ -256,7 +264,9 @@ export const PolicyProvider = () =>
               name,
             });
             if (!state) {
-              return yield* Effect.fail(new Error(`policy '${name}' not found after create`));
+              return yield* new OrganizationsPolicyUnexpectedResponse({
+                message: `policy '${name}' not found after create`,
+              });
             }
           }
 
@@ -294,9 +304,9 @@ export const PolicyProvider = () =>
 
           const updated = yield* readPolicyById(state.policyId);
           if (!updated) {
-            return yield* Effect.fail(
-              new Error(`policy '${state.policyId}' not found after reconcile`),
-            );
+            return yield* new OrganizationsPolicyUnexpectedResponse({
+              message: `policy '${state.policyId}' not found after reconcile`,
+            });
           }
 
           yield* session.note(updated.policyArn);

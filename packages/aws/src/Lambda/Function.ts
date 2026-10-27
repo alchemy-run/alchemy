@@ -71,6 +71,11 @@ import {
   withInvocationDeadline,
 } from "./InvocationDeadline.ts";
 
+export class LambdaFunctionInvalidProps extends Data.TaggedError("LambdaFunctionInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type { FunctionImageSource } from "./FunctionImage.ts";
 export {
   InvalidFunctionDomain,
@@ -484,9 +489,9 @@ export const validateFunctionPackageProps = Effect.fn("AWS.Lambda.validateFuncti
   function* (id: string, props: FunctionPackageValidationProps) {
     if (props.image === undefined) {
       if (props.main === undefined) {
-        return yield* Effect.fail(
-          new Error(`Function(${id}): declare exactly one of main or image`),
-        );
+        return yield* new LambdaFunctionInvalidProps({
+          message: `Function(${id}): declare exactly one of main or image`,
+        });
       }
       return;
     }
@@ -502,11 +507,9 @@ export const validateFunctionPackageProps = Effect.fn("AWS.Lambda.validateFuncti
       ["durableConfig", props.durableConfig],
     ].flatMap(([name, value]) => (value === undefined ? [] : [name]));
     if (incompatible.length > 0) {
-      return yield* Effect.fail(
-        new Error(
-          `Function(${id}): image functions cannot use ZIP/runtime options: ${incompatible.join(", ")}`,
-        ),
-      );
+      return yield* new LambdaFunctionInvalidProps({
+        message: `Function(${id}): image functions cannot use ZIP/runtime options: ${incompatible.join(", ")}`,
+      });
     }
   },
 );

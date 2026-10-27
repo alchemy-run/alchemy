@@ -4,6 +4,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { arrayEqualsUnordered } from "alchemy/Util/equal";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
@@ -11,6 +12,13 @@ import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+
+export class HealthcheckUnexpectedResponse extends Data.TaggedError(
+  "HealthcheckUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const TypeId = "Cloudflare.Healthcheck.Healthcheck" as const;
 type TypeId = typeof TypeId;
@@ -384,9 +392,9 @@ export const HealthcheckProvider = () =>
       // 4. Return.
       const attrs = observed ? toAttributes(observed, zoneId) : undefined;
       if (!attrs) {
-        return yield* Effect.fail(
-          new Error(`Cloudflare did not return a usable health check for "${name}"`),
-        );
+        return yield* new HealthcheckUnexpectedResponse({
+          message: `Cloudflare did not return a usable health check for "${name}"`,
+        });
       }
       return attrs;
     }),

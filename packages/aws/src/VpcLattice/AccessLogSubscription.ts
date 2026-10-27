@@ -4,10 +4,18 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict } from "./internal.ts";
+
+export class AccessLogSubscriptionUnexpectedResponse extends Data.TaggedError(
+  "AccessLogSubscriptionUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Which traffic a service-network access log subscription captures.
@@ -233,7 +241,9 @@ export const AccessLogSubscriptionProvider = () =>
               ),
             );
             if (!created) {
-              return yield* Effect.fail(new Error("Failed to create access log subscription"));
+              return yield* new AccessLogSubscriptionUnexpectedResponse({
+                message: "Failed to create access log subscription",
+              });
             }
             subscription = created;
           }

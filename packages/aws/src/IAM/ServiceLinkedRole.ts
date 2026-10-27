@@ -8,6 +8,13 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class ServiceLinkedRoleUnexpectedResponse extends Data.TaggedError(
+  "ServiceLinkedRoleUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /**
  * Deleting a service-linked role is asynchronous: `deleteServiceLinkedRole`
  * returns a deletion task that can end in `FAILED` (usually because the
@@ -309,11 +316,9 @@ export const ServiceLinkedRoleProvider = () =>
             observed = created.Role;
           }
           if (!observed) {
-            return yield* Effect.fail(
-              new Error(
-                `Service-linked role for '${news.awsServiceName}' was created but could not be described`,
-              ),
-            );
+            return yield* new ServiceLinkedRoleUnexpectedResponse({
+              message: `Service-linked role for '${news.awsServiceName}' was created but could not be described`,
+            });
           }
 
           // Sync description — the only aspect IAM lets us edit on a

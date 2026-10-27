@@ -13,6 +13,13 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readTags, syncTags, toWireTags } from "./internal.ts";
 
+export class RedshiftServerlessNamespaceUnexpectedResponse extends Data.TaggedError(
+  "RedshiftServerlessNamespaceUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface NamespaceProps {
   /**
    * Name of the namespace. Must be 3-64 characters, lowercase letters,
@@ -298,9 +305,9 @@ export const NamespaceProvider = () =>
           const settled = yield* waitForAvailable(name);
           if (settled !== undefined) observed = settled;
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`Redshift namespace '${name}' disappeared while reconciling`),
-            );
+            return yield* new RedshiftServerlessNamespaceUnexpectedResponse({
+              message: `Redshift namespace '${name}' disappeared while reconciling`,
+            });
           }
 
           // 3. Sync — apply mutable aspects the user specified when they drift

@@ -9,9 +9,22 @@ import * as iam from "@distilled.cloud/aws/iam";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createInternalTags, hasTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { PolicyStatement } from "../../IAM/Policy.ts";
+
+export class EKSPodIdentityUnexpectedResponse extends Data.TaggedError(
+  "EKSPodIdentityUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class EKSPodIdentityConflict extends Data.TaggedError("EKSPodIdentityConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export const toClientRequestToken = (id: string, action: string) =>
   createPhysicalName({
@@ -54,7 +67,10 @@ export const ensurePodRole = Effect.fn(function* ({
         iam.getRole({ RoleName: roleName }).pipe(
           Effect.filterOrFail(
             (existing) => hasTags(tags, existing.Role?.Tags),
-            () => new Error(`Role '${roleName}' already exists and is not managed by alchemy`),
+            () =>
+              new EKSPodIdentityConflict({
+                message: `Role '${roleName}' already exists and is not managed by alchemy`,
+              }),
           ),
         ),
       ),
@@ -189,11 +205,9 @@ export const ensureAssociation = Effect.fn(function* ({
       serviceAccount,
     });
     if (!state) {
-      return yield* Effect.fail(
-        new Error(
-          `PodIdentityAssociation '${namespace}/${serviceAccount}' could not be read after creation`,
-        ),
-      );
+      return yield* new EKSPodIdentityUnexpectedResponse({
+        message: `PodIdentityAssociation '${namespace}/${serviceAccount}' could not be read after creation`,
+      });
     }
   } else if (state.roleArn !== roleArn) {
     yield* eks.updatePodIdentityAssociation({

@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
 import { toWireDays, toWireHours } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
@@ -13,6 +14,18 @@ import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { withWriteEndpoint } from "./internal.ts";
+
+export class TimestreamTableInvalidProps extends Data.TaggedError("TimestreamTableInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class TimestreamTableUnexpectedResponse extends Data.TaggedError(
+  "TimestreamTableUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type TableArn =
   `arn:aws:timestream:${RegionID}:${AccountID}:database/${string}/table/${string}`;
@@ -276,7 +289,9 @@ export const TableProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news?.databaseName) {
-            return yield* Effect.fail(new Error("Timestream Table requires a databaseName"));
+            return yield* new TimestreamTableInvalidProps({
+              message: "Timestream Table requires a databaseName",
+            });
           }
           const { accountId, region } = yield* AWSEnvironment.current;
           const databaseName = news.databaseName;
@@ -308,7 +323,9 @@ export const TableProvider = () =>
             yield* session.note(`Creating table ${tableName}...`);
             state = yield* readTable(databaseName, tableName);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created table ${tableName}`));
+              return yield* new TimestreamTableUnexpectedResponse({
+                message: `failed to read created table ${tableName}`,
+              });
             }
           }
 
@@ -354,7 +371,9 @@ export const TableProvider = () =>
 
           const final = yield* readTable(databaseName, tableName);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled table ${tableName}`));
+            return yield* new TimestreamTableUnexpectedResponse({
+              message: `failed to read reconciled table ${tableName}`,
+            });
           }
           return final;
         }),

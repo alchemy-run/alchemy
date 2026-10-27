@@ -1,9 +1,27 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import { retryOrganizations, unredact } from "./common.ts";
+
+export class OrganizationInvalidProps extends Data.TaggedError("OrganizationInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class OrganizationOperationFailed extends Data.TaggedError("OrganizationOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class OrganizationUnexpectedResponse extends Data.TaggedError(
+  "OrganizationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type OrganizationId = string;
 export type OrganizationArn = string;
@@ -115,7 +133,9 @@ export const OrganizationProvider = () =>
           }
 
           if (!org?.Id || !org.Arn) {
-            return yield* Effect.fail(new Error("failed to resolve organization after reconcile"));
+            return yield* new OrganizationUnexpectedResponse({
+              message: "failed to resolve organization after reconcile",
+            });
           }
 
           const orgArn = org.Arn;
@@ -180,16 +200,13 @@ const ensureFeatureSet = Effect.fn(function* ({
       return updated;
     }
 
-    return yield* Effect.fail(
-      new Error(
+    return yield* new OrganizationOperationFailed({
+      message:
         "Organization upgrade to ALL features requires handshake completion before deployment can converge",
-      ),
-    );
+    });
   }
 
-  return yield* Effect.fail(
-    new Error(
-      `Organization feature set cannot be changed from '${current.FeatureSet}' to '${desiredFeatureSet}'`,
-    ),
-  );
+  return yield* new OrganizationInvalidProps({
+    message: `Organization feature set cannot be changed from '${current.FeatureSet}' to '${desiredFeatureSet}'`,
+  });
 });

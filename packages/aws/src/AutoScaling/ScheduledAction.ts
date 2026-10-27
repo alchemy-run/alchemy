@@ -4,11 +4,19 @@ import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import type { AutoScalingGroup as AutoScalingGroupResource } from "./AutoScalingGroup.ts";
+
+export class ScheduledActionUnexpectedResponse extends Data.TaggedError(
+  "ScheduledActionUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type ScheduledActionName = string;
 
@@ -268,9 +276,9 @@ export const ScheduledActionProvider = () =>
               action
                 ? Effect.succeed(action)
                 : Effect.fail(
-                    new Error(
-                      `Scheduled action '${scheduledActionName}' was not readable after reconcile`,
-                    ),
+                    new ScheduledActionUnexpectedResponse({
+                      message: `Scheduled action '${scheduledActionName}' was not readable after reconcile`,
+                    }),
                   ),
             ),
           );

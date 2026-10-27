@@ -20,6 +20,11 @@ import type { AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
+export class TableUnexpectedResponse extends Data.TaggedError("TableUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type TableName = string;
 
 export type TableArn = `arn:aws:dynamodb:${RegionID}:${AccountID}:table/${TableName}`;
@@ -1256,7 +1261,7 @@ export const TableProvider = () =>
             );
           const table = response.Table;
           if (!table?.TableArn) {
-            return yield* Effect.fail(new Error(`Table ${tableName} not found`));
+            return yield* new TableUnexpectedResponse({ message: `Table ${tableName} not found` });
           }
 
           const [tagsResult, continuousBackupsResult, ttlResult] = yield* Effect.all([
@@ -1786,7 +1791,9 @@ export const TableProvider = () =>
 
             state = yield* readTableState(tableName);
             if (!state) {
-              return yield* Effect.fail(new Error(`Failed to read created table ${tableName}`));
+              return yield* new TableUnexpectedResponse({
+                message: `Failed to read created table ${tableName}`,
+              });
             }
           }
 
@@ -2135,7 +2142,9 @@ export const TableProvider = () =>
           // attributes reflect the post-reconcile cloud state.
           const final = yield* readTableState(tableName);
           if (!final) {
-            return yield* Effect.fail(new Error(`Failed to read reconciled table ${tableName}`));
+            return yield* new TableUnexpectedResponse({
+              message: `Failed to read reconciled table ${tableName}`,
+            });
           }
 
           yield* session.note(final.table.TableArn!);

@@ -26,6 +26,18 @@ import {
 } from "./ManagedPolicies.ts";
 import { OriginAccessControl } from "./OriginAccessControl.ts";
 
+export class DistributionConflict extends Data.TaggedError("DistributionConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class DistributionUnexpectedResponse extends Data.TaggedError(
+  "DistributionUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 const CLOUDFRONT_HOSTED_ZONE_ID = "Z2FDTNDATAQYW2" as const;
 
 class DistributionFunctionAssociationPending extends Data.TaggedError(
@@ -1148,11 +1160,9 @@ export const DistributionProvider = () =>
                       );
                       const recovered = yield* getByCallerReference(callerReference);
                       if (!recovered?.distribution.Id) {
-                        return yield* Effect.fail(
-                          new Error(
-                            `CloudFront distribution with caller reference '${callerReference}' already exists but could not be recovered`,
-                          ),
-                        );
+                        return yield* new DistributionConflict({
+                          message: `CloudFront distribution with caller reference '${callerReference}' already exists but could not be recovered`,
+                        });
                       }
                       return {
                         distributionId: recovered.distribution.Id,
@@ -1187,7 +1197,9 @@ export const DistributionProvider = () =>
               );
 
             if (!created.distributionId) {
-              return yield* Effect.fail(new Error("createDistribution returned no distribution"));
+              return yield* new DistributionUnexpectedResponse({
+                message: "createDistribution returned no distribution",
+              });
             }
 
             yield* Effect.logInfo(
@@ -1250,7 +1262,9 @@ export const DistributionProvider = () =>
             );
 
           if (!updated.Distribution?.Id) {
-            return yield* Effect.fail(new Error("updateDistribution returned no distribution"));
+            return yield* new DistributionUnexpectedResponse({
+              message: "updateDistribution returned no distribution",
+            });
           }
 
           // Sync tags — diff observed cloud tags against desired and apply

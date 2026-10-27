@@ -12,6 +12,20 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class FargateProfileOperationFailed extends Data.TaggedError(
+  "FargateProfileOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class FargateProfileUnexpectedResponse extends Data.TaggedError(
+  "FargateProfileUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface FargateProfileProps {
   /**
    * Name of the EKS cluster that owns this Fargate profile.
@@ -182,20 +196,22 @@ export const FargateProfileProvider = () =>
 
       const waitForProfileActive = (clusterName: string, fargateProfileName: string) =>
         readProfile({ clusterName, fargateProfileName }).pipe(
-          Effect.flatMap((state) => {
-            if (!state) {
-              return Effect.fail(new FargateProfileNotReady({ status: undefined }));
-            }
-            if (state.status === "ACTIVE") {
-              return Effect.succeed(state);
-            }
-            if (state.status === "CREATE_FAILED" || state.status === "DELETE_FAILED") {
-              return Effect.fail(
-                new Error(`EKS Fargate profile '${fargateProfileName}' entered ${state.status}`),
-              );
-            }
-            return Effect.fail(new FargateProfileNotReady({ status: state.status }));
-          }),
+          Effect.flatMap(
+            Effect.fnUntraced(function* (state) {
+              if (!state) {
+                return yield* new FargateProfileNotReady({ status: undefined });
+              }
+              if (state.status === "ACTIVE") {
+                return state;
+              }
+              if (state.status === "CREATE_FAILED" || state.status === "DELETE_FAILED") {
+                return yield* new FargateProfileOperationFailed({
+                  message: `EKS Fargate profile '${fargateProfileName}' entered ${state.status}`,
+                });
+              }
+              return yield* new FargateProfileNotReady({ status: state.status });
+            }),
+          ),
           Effect.retry({
             while: (error) => error instanceof FargateProfileNotReady,
             schedule: waitSchedule,
@@ -341,11 +357,9 @@ export const FargateProfileProvider = () =>
 
           const final = yield* readProfile({ clusterName, fargateProfileName });
           if (!final) {
-            return yield* Effect.fail(
-              new Error(
-                `EKS Fargate profile '${fargateProfileName}' could not be read after reconcile`,
-              ),
-            );
+            return yield* new FargateProfileUnexpectedResponse({
+              message: `EKS Fargate profile '${fargateProfileName}' could not be read after reconcile`,
+            });
           }
           return final;
         }),

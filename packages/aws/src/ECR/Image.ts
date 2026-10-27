@@ -6,11 +6,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ImageUnexpectedResponse extends Data.TaggedError("ImageUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Docker login credentials for the account's private ECR registry, in the
@@ -303,9 +309,9 @@ export const ImageProvider = () =>
           );
         const repositoryUri = created.repository?.repositoryUri;
         if (!repositoryUri) {
-          return yield* Effect.fail(
-            new Error(`Failed to create or read ECR repository '${repositoryName}'`),
-          );
+          return yield* new ImageUnexpectedResponse({
+            message: `Failed to create or read ECR repository '${repositoryName}'`,
+          });
         }
         return repositoryUri;
       });
@@ -393,7 +399,9 @@ export const ImageProvider = () =>
 
           const pushed = yield* describeImage(repositoryName, imageTag);
           if (!pushed?.imageDigest) {
-            return yield* Effect.fail(new Error(`Image ${imageUri} not found in ECR after push`));
+            return yield* new ImageUnexpectedResponse({
+              message: `Image ${imageUri} not found in ECR after push`,
+            });
           }
           yield* session.note(imageUri);
           return {

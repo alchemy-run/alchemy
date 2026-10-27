@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { Region } from "../Region.ts";
+
+export class ECRPublicRepositoryUnexpectedResponse extends Data.TaggedError(
+  "ECRPublicRepositoryUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 // Amazon ECR Public is a single global registry hosted only in us-east-1. Every
 // control-plane call must target that region regardless of the ambient stack
@@ -270,9 +278,9 @@ export const PublicRepositoryProvider = () =>
             );
             repository = created;
             if (!repository?.repositoryArn || !repository.repositoryUri) {
-              return yield* Effect.fail(
-                new Error(`Failed to create or read public repository ${repositoryName}`),
-              );
+              return yield* new ECRPublicRepositoryUnexpectedResponse({
+                message: `Failed to create or read public repository ${repositoryName}`,
+              });
             }
           } else if (news.catalogData) {
             // Sync catalog data on updates (create already set it).

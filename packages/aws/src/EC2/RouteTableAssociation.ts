@@ -4,12 +4,34 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import type { RouteTableId } from "./RouteTable.ts";
 import type { SubnetId } from "./Subnet.ts";
+
+export class RouteTableAssociationUnexpectedResponse extends Data.TaggedError(
+  "RouteTableAssociationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class RouteTableAssociationOperationFailed extends Data.TaggedError(
+  "RouteTableAssociationOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class RouteTableAssociationNotReady extends Data.TaggedError(
+  "RouteTableAssociationNotReady",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type RouteTableAssociationId<ID extends string = string> = `rtbassoc-${ID}`;
 export const RouteTableAssociationId = <ID extends string>(
@@ -357,7 +379,9 @@ const waitForAssociationState = (
 
       const routeTable = result.RouteTables?.[0];
       if (!routeTable) {
-        return yield* Effect.fail(new Error("Route table not found"));
+        return yield* new RouteTableAssociationUnexpectedResponse({
+          message: "Route table not found",
+        });
       }
 
       const association = routeTable.Associations?.find(
@@ -366,7 +390,9 @@ const waitForAssociationState = (
 
       if (!association) {
         // Association might not exist yet, retry
-        return yield* Effect.fail(new Error("Association not found"));
+        return yield* new RouteTableAssociationUnexpectedResponse({
+          message: "Association not found",
+        });
       }
 
       if (association.AssociationState?.State === targetState) {
@@ -374,15 +400,15 @@ const waitForAssociationState = (
       }
 
       if (association.AssociationState?.State === "failed") {
-        return yield* Effect.fail(
-          new Error(`Association failed: ${association.AssociationState.StatusMessage}`),
-        );
+        return yield* new RouteTableAssociationOperationFailed({
+          message: `Association failed: ${association.AssociationState.StatusMessage}`,
+        });
       }
 
       // Still in progress, fail to trigger retry
-      return yield* Effect.fail(
-        new Error(`Association state: ${association.AssociationState?.State}`),
-      );
+      return yield* new RouteTableAssociationNotReady({
+        message: `Association state: ${association.AssociationState?.State}`,
+      });
     }),
     {
       schedule: Schedule.max([Schedule.fixed(1000), Schedule.recurs(30)]).pipe(

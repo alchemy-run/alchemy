@@ -12,6 +12,20 @@ import * as EffectStream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
+export class KendraSearchIndexInvalidProps extends Data.TaggedError(
+  "KendraSearchIndexInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class KendraSearchIndexUnexpectedResponse extends Data.TaggedError(
+  "KendraSearchIndexUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type IndexStatus = kendra.IndexStatus;
 export type IndexEdition = kendra.IndexEdition;
 
@@ -339,7 +353,9 @@ export const IndexProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("Kendra Index requires props"));
+            return yield* new KendraSearchIndexInvalidProps({
+              message: "Kendra Index requires props",
+            });
           }
           const arnOf = yield* currentArnOf;
           const name = yield* createIndexName(id, news);
@@ -373,13 +389,17 @@ export const IndexProvider = () =>
               }),
             );
             if (!created.Id) {
-              return yield* Effect.fail(new Error(`CreateIndex for '${name}' returned no Id`));
+              return yield* new KendraSearchIndexUnexpectedResponse({
+                message: `CreateIndex for '${name}' returned no Id`,
+              });
             }
             yield* session.note(`Creating index ${name} (${created.Id})...`);
             yield* waitForIndexStatus(created.Id, "ACTIVE");
             state = yield* readIndexById(created.Id, arnOf);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created index ${name}`));
+              return yield* new KendraSearchIndexUnexpectedResponse({
+                message: `failed to read created index ${name}`,
+              });
             }
           }
 
@@ -441,7 +461,9 @@ export const IndexProvider = () =>
 
           const final = yield* readIndexById(state.attrs.id, arnOf);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled index ${name}`));
+            return yield* new KendraSearchIndexUnexpectedResponse({
+              message: `failed to read reconciled index ${name}`,
+            });
           }
           return final.attrs;
         }),

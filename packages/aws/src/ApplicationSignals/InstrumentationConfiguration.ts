@@ -4,8 +4,16 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+
+export class InstrumentationConfigurationUnexpectedResponse extends Data.TaggedError(
+  "InstrumentationConfigurationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface InstrumentationConfigurationProps {
   /**
@@ -303,9 +311,9 @@ export const InstrumentationConfigurationProvider = () =>
                     Effect.flatMap((observed) =>
                       observed === undefined
                         ? Effect.fail(
-                            new Error(
-                              `instrumentation configuration for '${news.service}' conflicted but was not observable`,
-                            ),
+                            new InstrumentationConfigurationUnexpectedResponse({
+                              message: `instrumentation configuration for '${news.service}' conflicted but was not observable`,
+                            }),
                           )
                         : Effect.succeed(observed),
                     ),

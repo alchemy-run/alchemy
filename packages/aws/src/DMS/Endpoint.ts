@@ -5,10 +5,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class EndpointUnexpectedResponse extends Data.TaggedError("EndpointUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Direction of a DMS endpoint relative to the replication:
@@ -213,11 +219,9 @@ export const EndpointProvider = () =>
 
       const toAttrs = Effect.fn(function* (endpoint: dms.Endpoint) {
         if (!endpoint.EndpointIdentifier || !endpoint.EndpointArn) {
-          return yield* Effect.fail(
-            new Error(
-              `DMS endpoint '${endpoint.EndpointIdentifier}' is missing its identifier or ARN`,
-            ),
-          );
+          return yield* new EndpointUnexpectedResponse({
+            message: `DMS endpoint '${endpoint.EndpointIdentifier}' is missing its identifier or ARN`,
+          });
         }
         return {
           endpointIdentifier: endpoint.EndpointIdentifier,
@@ -322,9 +326,9 @@ export const EndpointProvider = () =>
           }
 
           if (!observed?.EndpointArn) {
-            return yield* Effect.fail(
-              new Error(`DMS endpoint '${name}' has no ARN after reconcile`),
-            );
+            return yield* new EndpointUnexpectedResponse({
+              message: `DMS endpoint '${name}' has no ARN after reconcile`,
+            });
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.

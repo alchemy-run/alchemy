@@ -4,10 +4,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { SubnetId } from "../EC2/Subnet.ts";
 import type { Providers } from "../Providers.ts";
+
+export class RDSDBSubnetGroupUnexpectedResponse extends Data.TaggedError(
+  "RDSDBSubnetGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DBSubnetGroupProps {
   /**
@@ -165,9 +173,9 @@ export const DBSubnetGroupProvider = () =>
               .pipe(Effect.catchTag("DBSubnetGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(dbSubnetGroupName);
             if (!observed?.DBSubnetGroupName) {
-              return yield* Effect.fail(
-                new Error(`Failed to create DB subnet group '${dbSubnetGroupName}'`),
-              );
+              return yield* new RDSDBSubnetGroupUnexpectedResponse({
+                message: `Failed to create DB subnet group '${dbSubnetGroupName}'`,
+              });
             }
           } else {
             // Sync description and subnet membership — `modifyDBSubnetGroup`
@@ -180,9 +188,9 @@ export const DBSubnetGroupProvider = () =>
             });
             observed = yield* readGroup(dbSubnetGroupName);
             if (!observed?.DBSubnetGroupName) {
-              return yield* Effect.fail(
-                new Error(`DB subnet group '${dbSubnetGroupName}' not found after update`),
-              );
+              return yield* new RDSDBSubnetGroupUnexpectedResponse({
+                message: `DB subnet group '${dbSubnetGroupName}' not found after update`,
+              });
             }
           }
 

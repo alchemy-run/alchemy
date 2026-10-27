@@ -5,11 +5,24 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readElastiCacheTags, sameStringSet, tagsToWire } from "./internal.ts";
+
+export class CacheClusterNotReady extends Data.TaggedError("CacheClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class CacheClusterUnexpectedResponse extends Data.TaggedError(
+  "CacheClusterUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface CacheClusterProps {
   /** Cache cluster identifier. Generated deterministically when omitted. */
@@ -96,7 +109,9 @@ export const CacheClusterProvider = () =>
           Effect.flatMap((cluster) =>
             cluster?.CacheClusterStatus === "available"
               ? Effect.succeed(cluster)
-              : Effect.fail(new Error(`Cache cluster '${name}' is not available`)),
+              : Effect.fail(
+                  new CacheClusterNotReady({ message: `Cache cluster '${name}' is not available` }),
+                ),
           ),
           Effect.retry({
             schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]),
@@ -108,7 +123,11 @@ export const CacheClusterProvider = () =>
           Effect.flatMap((cluster) =>
             cluster === undefined
               ? Effect.void
-              : Effect.fail(new Error(`Cache cluster '${name}' is still deleting`)),
+              : Effect.fail(
+                  new CacheClusterNotReady({
+                    message: `Cache cluster '${name}' is still deleting`,
+                  }),
+                ),
           ),
           Effect.retry({
             schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]),
@@ -117,9 +136,9 @@ export const CacheClusterProvider = () =>
       });
       const attrs = Effect.fn(function* (cluster: elasticache.CacheCluster) {
         if (!cluster.CacheClusterId || !cluster.ARN) {
-          return yield* Effect.fail(
-            new Error("ElastiCache cache cluster is missing its id or ARN"),
-          );
+          return yield* new CacheClusterUnexpectedResponse({
+            message: "ElastiCache cache cluster is missing its id or ARN",
+          });
         }
         return {
           cacheClusterId: cluster.CacheClusterId,

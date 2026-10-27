@@ -4,10 +4,18 @@ import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule_ from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class SchedulerScheduleUnexpectedResponse extends Data.TaggedError(
+  "SchedulerScheduleUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * EventBridge Scheduler validates that the target's execution role is
@@ -218,9 +226,9 @@ export const ScheduleProvider = () =>
           }
 
           if (!observed?.Arn) {
-            return yield* Effect.fail(
-              new Error(`Failed to read created Schedule '${scheduleName}'`),
-            );
+            return yield* new SchedulerScheduleUnexpectedResponse({
+              message: `Failed to read created Schedule '${scheduleName}'`,
+            });
           }
 
           const scheduleArn = observed.Arn;

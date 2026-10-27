@@ -2,6 +2,7 @@ import type * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import type { Input } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { Distribution } from "../CloudFront/Distribution.ts";
 import { Invalidation } from "../CloudFront/Invalidation.ts";
@@ -24,6 +25,11 @@ import {
   type WebsiteInvalidationProps,
   type WebsiteStandaloneDomainProps,
 } from "./shared.ts";
+
+export class SsrSiteInvalidProps extends Data.TaggedError("SsrSiteInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The dynamic origin CloudFront forwards requests to: a Lambda Function URL,
@@ -309,9 +315,9 @@ export const SsrSite = (id: string, props: SsrSiteProps) =>
     }
 
     if (domain && domain.dns === false && !domain.cert) {
-      return yield* Effect.fail(
-        new Error("SsrSite domain configuration with `dns: false` requires `cert`."),
-      );
+      return yield* new SsrSiteInvalidProps({
+        message: "SsrSite domain configuration with `dns: false` requires `cert`.",
+      });
     }
 
     const managed =

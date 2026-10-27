@@ -2,9 +2,17 @@ import * as iam from "@distilled.cloud/aws/iam";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class SSHPublicKeyUnexpectedResponse extends Data.TaggedError(
+  "SSHPublicKeyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface SSHPublicKeyProps {
   /**
@@ -123,7 +131,9 @@ export const SSHPublicKeyProvider = () =>
           SSHPublicKeyBody: news.sshPublicKeyBody,
         });
         if (!uploaded.SSHPublicKey?.SSHPublicKeyId) {
-          return yield* Effect.fail(new Error(`uploadSSHPublicKey returned no key id`));
+          return yield* new SSHPublicKeyUnexpectedResponse({
+            message: `uploadSSHPublicKey returned no key id`,
+          });
         }
         key = uploaded.SSHPublicKey;
       }

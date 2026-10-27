@@ -5,11 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
+
+export class MapUnexpectedResponse extends Data.TaggedError("MapUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Rendering configuration for a map. `style` selects the base map style and is
@@ -185,7 +191,9 @@ export const MapProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             state = yield* readMap(mapName);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created map ${mapName}`));
+              return yield* new MapUnexpectedResponse({
+                message: `failed to read created map ${mapName}`,
+              });
             }
           }
 
@@ -222,7 +230,9 @@ export const MapProvider = () =>
 
           const final = yield* readMap(mapName);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled map ${mapName}`));
+            return yield* new MapUnexpectedResponse({
+              message: `failed to read reconciled map ${mapName}`,
+            });
           }
           return final;
         }),

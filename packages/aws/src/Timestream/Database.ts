@@ -5,12 +5,20 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { withWriteEndpoint } from "./internal.ts";
+
+export class TimestreamDatabaseUnexpectedResponse extends Data.TaggedError(
+  "TimestreamDatabaseUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type DatabaseArn = `arn:aws:timestream:${RegionID}:${AccountID}:database/${string}`;
 
@@ -199,9 +207,9 @@ export const DatabaseProvider = () =>
             yield* session.note(`Creating database ${databaseName}...`);
             state = yield* readDatabase(databaseName);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created database ${databaseName}`),
-              );
+              return yield* new TimestreamDatabaseUnexpectedResponse({
+                message: `failed to read created database ${databaseName}`,
+              });
             }
           }
 
@@ -239,9 +247,9 @@ export const DatabaseProvider = () =>
 
           const final = yield* readDatabase(databaseName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled database ${databaseName}`),
-            );
+            return yield* new TimestreamDatabaseUnexpectedResponse({
+              message: `failed to read reconciled database ${databaseName}`,
+            });
           }
           return final;
         }),

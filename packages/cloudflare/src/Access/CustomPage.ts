@@ -3,12 +3,18 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class CustomPageUnexpectedResponse extends Data.TaggedError("CustomPageUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type CustomPageType = "identity_denied" | "forbidden";
 
@@ -189,7 +195,9 @@ export const CustomPageProvider = () =>
             ),
           );
         if (!created.uid) {
-          return yield* Effect.fail(new Error("CustomPage: created page missing uid"));
+          return yield* new CustomPageUnexpectedResponse({
+            message: "CustomPage: created page missing uid",
+          });
         }
         return toAttrs({ ...created, type: news.type }, acct);
       }

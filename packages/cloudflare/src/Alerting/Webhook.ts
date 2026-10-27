@@ -2,6 +2,7 @@ import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
@@ -10,6 +11,11 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class WebhookUnexpectedResponse extends Data.TaggedError("WebhookUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const TypeId = "Cloudflare.Alerting.Webhook" as const;
 type TypeId = typeof TypeId;
@@ -217,9 +223,9 @@ export const NotificationWebhookProvider = () =>
             }),
           );
         if (!created.id) {
-          return yield* Effect.fail(
-            new Error("Cloudflare did not return an id for the created webhook destination"),
-          );
+          return yield* new WebhookUnexpectedResponse({
+            message: "Cloudflare did not return an id for the created webhook destination",
+          });
         }
         const fresh = yield* observeWebhook(accountId, created.id);
         return toWebhookAttributes(fresh ?? { id: created.id }, accountId);

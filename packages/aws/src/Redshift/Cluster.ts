@@ -16,6 +16,18 @@ import { durationToDays, unwrapRedactedString } from "../IAM/common.ts";
 import type { Providers } from "../Providers.ts";
 import { applyRedshiftTagDelta, redshiftArn, sameStringSet, toTagRecord } from "./internal.ts";
 
+export class RedshiftClusterNotReady extends Data.TaggedError("RedshiftClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class RedshiftClusterUnexpectedResponse extends Data.TaggedError(
+  "RedshiftClusterUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /**
  * Creating a provisioned Redshift cluster requires either a
  * `masterUserPassword` or `manageMasterPassword: true`.
@@ -322,13 +334,15 @@ export const ClusterProvider = () =>
           readCluster(identifier).pipe(
             Effect.flatMap((cluster) => {
               if (cluster === undefined) {
-                return Effect.fail(new Error(`Cluster '${identifier}' not found`));
+                return Effect.fail(
+                  new RedshiftClusterNotReady({ message: `Cluster '${identifier}' not found` }),
+                );
               }
               if (cluster.ClusterStatus !== "available") {
                 return Effect.fail(
-                  new Error(
-                    `Cluster '${identifier}' not available (status: ${cluster.ClusterStatus})`,
-                  ),
+                  new RedshiftClusterNotReady({
+                    message: `Cluster '${identifier}' not available (status: ${cluster.ClusterStatus})`,
+                  }),
                 );
               }
               return Effect.succeed(cluster);
@@ -349,9 +363,9 @@ export const ClusterProvider = () =>
                 cluster.ClusterStatus !== "deleting"
               ) {
                 return Effect.fail(
-                  new Error(
-                    `Cluster '${identifier}' still settling (status: ${cluster.ClusterStatus})`,
-                  ),
+                  new RedshiftClusterNotReady({
+                    message: `Cluster '${identifier}' still settling (status: ${cluster.ClusterStatus})`,
+                  }),
                 );
               }
               return Effect.succeed(cluster);
@@ -363,7 +377,9 @@ export const ClusterProvider = () =>
       const toAttrs = Effect.fn(function* (cluster: redshift.Cluster) {
         const { accountId, region } = yield* AWSEnvironment.current;
         if (!cluster.ClusterIdentifier) {
-          return yield* Effect.fail(new Error("Cluster is missing its identifier"));
+          return yield* new RedshiftClusterUnexpectedResponse({
+            message: "Cluster is missing its identifier",
+          });
         }
         return {
           clusterIdentifier: cluster.ClusterIdentifier,

@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { applyRedshiftTagDelta, redshiftArn, toTagRecord } from "./internal.ts";
+
+export class ClusterParameterGroupUnexpectedResponse extends Data.TaggedError(
+  "ClusterParameterGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ClusterParameterGroupProps {
   /**
@@ -139,7 +147,9 @@ export const ClusterParameterGroupProvider = () =>
       const toAttrs = Effect.fn(function* (group: redshift.ClusterParameterGroup) {
         const { accountId, region } = yield* AWSEnvironment.current;
         if (!group.ParameterGroupName) {
-          return yield* Effect.fail(new Error("Cluster parameter group is missing its name"));
+          return yield* new ClusterParameterGroupUnexpectedResponse({
+            message: "Cluster parameter group is missing its name",
+          });
         }
         return {
           clusterParameterGroupName: group.ParameterGroupName,
@@ -202,9 +212,9 @@ export const ClusterParameterGroupProvider = () =>
               .pipe(Effect.catchTag("ClusterParameterGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
             if (!observed?.ParameterGroupName) {
-              return yield* Effect.fail(
-                new Error(`Failed to create cluster parameter group '${name}'`),
-              );
+              return yield* new ClusterParameterGroupUnexpectedResponse({
+                message: `Failed to create cluster parameter group '${name}'`,
+              });
             }
           }
 

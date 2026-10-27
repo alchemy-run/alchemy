@@ -4,10 +4,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class DBInstanceNotReady extends Data.TaggedError("DBInstanceNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DBInstanceProps {
   /**
@@ -225,7 +231,9 @@ export const DBInstanceProvider = () =>
         return yield* readInstance(instanceId).pipe(
           Effect.flatMap((instance) => {
             if (!instance?.DBInstanceArn) {
-              return Effect.fail(new Error(`DB instance '${instanceId}' not found`));
+              return Effect.fail(
+                new DBInstanceNotReady({ message: `DB instance '${instanceId}' not found` }),
+              );
             }
             const status = instance.DBInstanceStatus;
             if (
@@ -234,7 +242,9 @@ export const DBInstanceProvider = () =>
               status !== "incompatible-restore"
             ) {
               return Effect.fail(
-                new Error(`DB instance '${instanceId}' not available (status: ${status})`),
+                new DBInstanceNotReady({
+                  message: `DB instance '${instanceId}' not available (status: ${status})`,
+                }),
               );
             }
             return Effect.succeed(instance);

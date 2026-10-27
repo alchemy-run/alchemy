@@ -5,10 +5,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class KeyspaceNotReady extends Data.TaggedError("KeyspaceNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface KeyspaceProps {
   /**
@@ -157,7 +163,7 @@ export const KeyspaceProvider = () =>
             observed = yield* readKeyspace(name).pipe(
               Effect.flatMap((k) =>
                 k === undefined
-                  ? Effect.fail(new Error(`Keyspace '${name}' not found`))
+                  ? Effect.fail(new KeyspaceNotReady({ message: `Keyspace '${name}' not found` }))
                   : Effect.succeed(k),
               ),
               Effect.retry({
@@ -209,7 +215,9 @@ export const KeyspaceProvider = () =>
             Effect.flatMap((k) =>
               k === undefined
                 ? Effect.void
-                : Effect.fail(new Error(`Keyspace '${name}' still deleting`)),
+                : Effect.fail(
+                    new KeyspaceNotReady({ message: `Keyspace '${name}' still deleting` }),
+                  ),
             ),
             Effect.retry({
               schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),

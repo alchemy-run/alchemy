@@ -4,10 +4,16 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readB2biTags, syncB2biTags, toWireTags } from "./internal.ts";
+
+export class TransformerInvalidProps extends Data.TaggedError("TransformerInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface TransformerProps {
   /**
@@ -214,11 +220,9 @@ export const TransformerProvider = () =>
           const nameDrift = live.name !== news.name;
           const statusDrift = live.status !== desiredStatus;
           if (live.status === "active" && (configDrift || nameDrift)) {
-            return yield* Effect.fail(
-              new Error(
-                `Transformer '${live.transformerId}' is active and cannot be updated in place — B2BI rejects every update to an active transformer. Replace it instead.`,
-              ),
-            );
+            return yield* new TransformerInvalidProps({
+              message: `Transformer '${live.transformerId}' is active and cannot be updated in place — B2BI rejects every update to an active transformer. Replace it instead.`,
+            });
           }
           if (configDrift || nameDrift) {
             // Config update carries NO status field (a status change in the
