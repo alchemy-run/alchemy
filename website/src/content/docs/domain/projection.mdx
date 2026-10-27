@@ -9,6 +9,29 @@ A projection consumes events into a store you own: a database table, a search in
 
 It shares the view's routing and ordering, and differs from a [policy](/domain/policy) in one way that shapes everything else: a projection never sends commands. Its only effect is on its own store, so it can always be replayed.
 
+## When a view isn't the right store
+
+A view answers one question about one key, and the model serves it. That covers most screens. Some questions don't fit that shape. An accountant wants every money movement across every account this quarter, filtered by amount and sorted by date. A search box wants to find a customer by any part of their name. A data team wants the bank's history in their warehouse. Each needs a store built for its kind of query, a SQL table, a search index, a warehouse, and each is a store you run.
+
+A projection is how events reach a store like that. It's still a read model in the CQRS sense: built from events, and never the source of truth. If the table is lost or its schema changes, you empty it and replay the projection over the history to build it again.
+
+<DAG
+  nodes={[
+    { id: "events", label: "Account events", type: "the record", kind: "event", layer: 0 },
+    { id: "view", label: "AccountSummary", type: "served for you", kind: "view", layer: 1 },
+    { id: "ledger", label: "Ledger", type: "into your store", kind: "projection", layer: 1 },
+    { id: "table", label: "ledger table", type: "query it your way", layer: 2 },
+  ]}
+  edges={[
+    { from: "events", to: "view", dashed: true },
+    { from: "events", to: "ledger", dashed: true },
+    { from: "ledger", to: "table" },
+  ]}
+  caption="The same events feed a view the model serves and a table you query yourself."
+/>
+
+Reach for a view first. Reach for a projection when the query needs a store a view doesn't give you, or when the data has to leave the model altogether.
+
 ## Declare what it consumes
 
 A projection names its sources, the key that partitions it, and the events it consumes. The bank's ledger records every money movement on an account.
@@ -168,15 +191,7 @@ A policy is the opposite. It acts on the world, through commands and external sy
 
 Your store is eventually consistent with the model. A caller who has just sent a command and wants to read the result from your store waits for the projection first.
 
-```typescript
-// packages/domain/test/ledgerAfterWithdrawal.ts
-import * as Effect from "effect/Effect";
-import { Account } from "../src/Account/Account.aggregate.ts";
-import type { AccountId } from "../src/Account/Account.id.ts";
-import { WithdrawMoney } from "../src/Account/WithdrawMoney.command.ts";
-import { Ledger } from "../src/Ledger/Ledger.projection.ts";
-import { LedgerStore } from "../src/Ledger/LedgerStore.ts";
-
+```typescript title="packages/domain/test/ledgerAfterWithdrawal.ts"
 export const ledgerAfterWithdrawal = Effect.fn(function* (accountId: AccountId) {
   const accounts = yield* Account;
   const receipt = yield* accounts.send(accountId, new WithdrawMoney({ amount: 2_000 }));
@@ -199,7 +214,8 @@ if (actor.value._tag === "Customer" && owner !== actor.value.customerId) {
 }
 return yield* HttpServerResponse.json(yield* ledger.forAccount(accountId));
 ```
- Clients that want to know when to refetch can follow the same events the projection consumed, through the Api.
+
+Clients that want to know when to refetch can follow the same events the projection consumed, through the Api.
 
 To have the model serve a projection's output for you, with live updates and `validate`, write a [stream](/domain/stream) instead.
 
@@ -217,4 +233,4 @@ yield* ledgerStory(
 ).pipe(Effect.provide(ledger.layer));
 ```
 
-Next, [Stream](/domain/stream) is the store the model keeps and serves for a projection.
+Next, [Stream](/domain/stream): a store the model keeps and serves for a projection.

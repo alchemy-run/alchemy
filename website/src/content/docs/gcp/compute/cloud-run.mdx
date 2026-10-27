@@ -201,8 +201,28 @@ A failing liveness probe restarts the container. Probes can also use
 ## Add a sidecar
 
 Containers after the first run next to `main` in the same instance and
-reach each other on `localhost`. `dependsOn` holds a container back
-until the ones it names pass their startup probes:
+reach each other on `localhost`. Only the first container takes
+requests:
+
+```typescript
+{
+  main: import.meta.url,
+  template: {
+    containers: [
+      {},
+      { name: "cache", image: "docker.io/library/redis:7" },
+    ],
+  },
+}
+```
+
+## Start containers in order
+
+Cloud Run starts every container at once, and the instance takes
+requests as soon as the first one passes its startup probe. The first
+requests can reach a sidecar before it listens. `dependsOn` holds a
+container back until the containers it names pass their startup
+probes:
 
 ```typescript
 {
@@ -220,7 +240,51 @@ until the ones it names pass their startup probes:
 }
 ```
 
-Only the first container takes requests.
+Give each dependency a startup probe that checks it can serve. A
+sidecar has no ports, so the probe names its port.
+
+## Chain dependencies
+
+A container that others wait on can wait too. Here `main` waits for
+`app`, and `app` waits for `cache`:
+
+```typescript
+{
+  main: import.meta.url,
+  template: {
+    containers: [
+      { dependsOn: ["app"] },
+      {
+        name: "app",
+        image: "us-docker.pkg.dev/my-project/images/app",
+        dependsOn: ["cache"],
+        startupProbe: { httpGet: { path: "/health", port: 3000 } },
+      },
+      {
+        name: "cache",
+        image: "docker.io/library/redis:7",
+        startupProbe: { tcpSocket: { port: 6379 } },
+      },
+    ],
+  },
+}
+```
+
+```text
+cache ✓ → app ✓ → main ✓ → requests
+```
+
+Containers that don't depend on each other still start together.
+
+## When a dependency fails
+
+If a dependency never passes its startup probe, the containers waiting
+on it never start. The new revision fails and traffic stays on the
+previous one.
+
+`dependsOn` only orders startup. A dependency that crashes later
+doesn't stop the containers that wait on it. Give it a `livenessProbe`
+so Cloud Run restarts it.
 
 ## Run your own program as a sidecar
 
@@ -245,8 +309,8 @@ export default class Worker extends GCP.Run.Container<Worker>()(
 ) {}
 ```
 
-`GCP.Run.bindContainer` adds it to the service's revision, starts the
-service after it, and returns a typed client that calls it on
+`GCP.Run.bindContainer` adds it to the service's revision, adds it to
+the service's `dependsOn`, and returns a typed client that calls it on
 `localhost`:
 
 ```typescript
@@ -274,6 +338,11 @@ Bindings inside a Container work as they do in the service: their env
 lands on the container and their roles go to the service's account.
 For a protocol other than HTTP, `GCP.Run.bindPort(Cache, 6379)` returns
 the sidecar's address instead.
+
+You don't write `dependsOn` for a bound container. A Container that
+binds another waits for it the same way, so `Api → Worker → Cache`
+starts `Cache` first. A Container's own `dependsOn` is kept alongside
+the names its bindings add.
 
 ## Receive events
 

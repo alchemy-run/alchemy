@@ -30,6 +30,39 @@ The bank's transfer is a saga: it debits one account, credits another, and refun
   caption="A policy decides when the transfer runs; the saga carries it out, one step at a time."
 />
 
+This chapter starts with why a process across aggregates can't be one transaction, and what to do instead. Then it builds the transfer saga step by step.
+
+## No transaction spans two aggregates
+
+Moving money between two accounts touches two aggregates, and each is its own consistency boundary. There's no step in which both change together. So a transfer can't be "debit and credit, or neither", the way a database transaction would make it.
+
+Instead, it's a sequence of steps, each committed on its own: debit the source, then credit the destination. In between, the money is in flight. It has left one account and not yet reached the other, and anyone reading both balances at that moment sees it. That's not a bug to hide; it's how money moves in real banks too, and the `Transfer` aggregate records that the transfer is pending so screens can show it.
+
+## Undo with a new fact, not an erasure
+
+When a later step fails, the earlier ones have already happened. Their events are facts and can't be erased. So the saga undoes them the way a bank would, by recording another fact that reverses the effect: a debited transfer whose credit is refused is refunded, and the account's history shows the debit and the refund, one after the other.
+
+<DAG
+  nodes={[
+    { id: "debited", label: "TransferDebited", type: "a-1 · −50", kind: "event", col: 0, row: 0 },
+    { id: "refused", label: "CreditTransfer", type: "a-2 is closed", kind: "rejection", col: 1, row: 0 },
+    { id: "refunded", label: "TransferRefunded", type: "a-1 · +50", kind: "event", col: 2, row: 0 },
+  ]}
+  edges={[
+    { from: "debited", to: "refused" },
+    { from: "refused", to: "refunded" },
+  ]}
+  caption="A compensation doesn't rewrite history. It adds the step that puts things right."
+/>
+
+These undo steps are called **compensations**. Each step that can be undone declares its compensation next to it, and a saga that fails runs them in reverse order. A compensation must not be refused, or the process would be stuck halfway, so the command it sends records a fact in every state. See [Never refuse a compensation](/domain/aggregate#never-refuse-a-compensation).
+
+## Saga or policy?
+
+A [policy](/domain/policy) is one reaction: an event arrives, the policy acts, and it's done. A saga is a process with memory. It knows which step it's on, waits between steps, and knows what to undo if something fails.
+
+Reach for a saga when a process has more than one step, waits for something, a decision or a timer, or has to undo earlier steps on failure. A policy usually starts the saga, on the event that records the request.
+
 ## Declare a saga
 
 A saga has a key, the input it starts with, and every way it can be refused. The key identifies one run: starting the saga again with the same transfer id returns the same run.
@@ -198,14 +231,7 @@ The Transfer decides the race between approval and expiry, so there's one source
 
 `TransferStatus` is a view of the transfer and both accounts. A client watches it to see the saga finish: the saga reports every step to the Transfer, so the view has everything a client should see.
 
-```typescript
-// packages/server/test/followTransfer.ts
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-import { TransferId } from "@bank/domain/Transfer/Transfer.id";
-import { TransferStatus } from "@bank/domain/Transfer/TransferStatus.view";
-import type { CustomerClient } from "./flows.ts";
-
+```typescript title="packages/server/test/followTransfer.ts"
 export const followTransfer = Effect.fn(function* (bank: CustomerClient, transferId: string) {
   yield* bank.TransferStatus.watch(TransferId.make(transferId)).pipe(
     Stream.map(({ state }) => state),
@@ -245,4 +271,6 @@ Story.signal(ExecuteTransfer, transfer, Decision, "approved"),
 
 A step that calls an external system waits until the story answers the call, as a policy does. A run that dies fails the story, unless a step expects it with `Story.saga(ExecuteTransfer, transfer, { _tag: "Died" })`.
 
-On Cloudflare, each run is a Durable Object named by its key, with its steps stored in its SQLite. `DomainCloudflare.DurableObjects` hosts sagas with the rest of the model, and `Domain.InMemory` runs them in memory.
+A saga runs wherever its model runs: in memory in a story, and on [Cloudflare Durable Objects](/domain/cloudflare) in production, with each run's steps stored durably.
+
+Next, [External System](/domain/external-system): how the model talks to the world outside it.

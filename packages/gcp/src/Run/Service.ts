@@ -169,8 +169,13 @@ export type ContainerSpec = {
    */
   livenessProbe?: Probe;
   /**
-   * Names of containers that must start, and pass their startup probe,
-   * before this one starts.
+   * Names of containers in the same revision that must start, and pass
+   * their startup probe, before this one starts. Without it, every
+   * container starts at once. It only orders startup: a dependency that
+   * crashes later doesn't stop this container.
+   *
+   * A container bound with `GCP.Run.bindContainer` or `GCP.Run.bindPort`
+   * is added for you.
    */
   dependsOn?: string[];
 };

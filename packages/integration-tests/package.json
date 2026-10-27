@@ -82,6 +82,7 @@
     "@tanstack/react-router": "catalog:",
     "@tanstack/react-router-devtools": "catalog:",
     "@tanstack/react-start": "catalog:",
+    "@tsrx/oxc": "catalog:",
     "@types/aws-lambda": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
