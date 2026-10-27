@@ -125,9 +125,12 @@ export class InvokeServiceError extends Data.TaggedError("GCP.Run.InvokeServiceE
  *   }),
  * ) {}
  * ```
- * Keep the service's IAM invoker check on: a service that returns
- * methods and sets `invokerIamDisabled` fails to deploy with
- * `GCP.Run.ServiceRpcPublic`.
+ * Keep the service private: a service that returns methods fails to
+ * deploy with `GCP.Run.ServiceRpcPublic` when it sets
+ * `invokerIamDisabled` or its IAM policy grants `allUsers` or
+ * `allAuthenticatedUsers` an invoker role, and a `GCP.IAM.Member` that
+ * would add such a grant fails the same way. A grant made outside
+ * Alchemy after the deploy is not caught.
  *
  * **Example:** Call them from another service
  * ```typescript
