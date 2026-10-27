@@ -339,12 +339,24 @@ export const VolumeProvider = () =>
                 ],
                 DryRun: false,
               });
-            // EC2 refuses a token whose volume was deleted. That happens only
-            // after a lost reply (no saved volume id) and a delete outside the
-            // stack; nothing is left to collide with, so create untokened.
-            const created = yield* create(`${instanceId}-${output?.volumeId ?? "initial"}`).pipe(
-              Effect.catchTag("IdempotentVolumeDeleted", () => create(undefined)),
-            );
+            // EC2 refuses a token whose volume was deleted, which a recreate
+            // with no saved volume id (Drift.repair) runs into. Step to the
+            // next token in a fixed sequence, so a retry after a lost reply
+            // walks the same sequence and returns the same volume.
+            const token = `${instanceId}-${output?.volumeId ?? "initial"}`;
+            const createFrom = (
+              attempt: number,
+            ): Effect.Effect<
+              ec2.Volume,
+              Effect.Error<ReturnType<typeof create>>,
+              Effect.Services<ReturnType<typeof create>>
+            > =>
+              create(attempt === 0 ? token : `${token}-${attempt}`).pipe(
+                Effect.catchTag("IdempotentVolumeDeleted", (e) =>
+                  attempt < 8 ? createFrom(attempt + 1) : Effect.fail(e),
+                ),
+              );
+            const created = yield* createFrom(0);
             const volumeId = created.VolumeId! as VolumeId;
             yield* session.note(`Volume created: ${volumeId}`);
             volume = yield* waitForVolumeAvailable(volumeId, session);

@@ -285,25 +285,29 @@ echo ${queue.queueUrl}
       Effect.gen(function* () {
         yield* stack.destroy();
 
-        const program = Effect.gen(function* () {
-          const vpc = yield* Vpc("ClientTokenVpc", { cidrBlock: "10.0.0.0/16" });
-          const subnet = yield* Subnet("ClientTokenSubnet", {
-            vpcId: vpc.vpcId,
-            cidrBlock: "10.0.1.0/24",
-          });
-          const instance = yield* Instance("ClientTokenInstance", {
-            imageId: amazonLinux2023(),
-            instanceType: "t3.micro",
-            subnetId: subnet.subnetId,
-          });
-          return { vpc, instance };
-        });
+        const deployWith = (tags: Record<string, string>) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              const vpc = yield* Vpc("ClientTokenVpc", { cidrBlock: "10.0.0.0/16" });
+              const subnet = yield* Subnet("ClientTokenSubnet", {
+                vpcId: vpc.vpcId,
+                cidrBlock: "10.0.1.0/24",
+              });
+              const instance = yield* Instance("ClientTokenInstance", {
+                imageId: amazonLinux2023(),
+                instanceType: "t3.micro",
+                subnetId: subnet.subnetId,
+                tags,
+              });
+              return { vpc, instance };
+            }),
+          );
+        const key = { stack: stack.name, stage: stack.stage, fqn: "ClientTokenInstance" };
 
         // Simulate a lost RunInstances reply: drop the saved output and the
         // generation tag the recovery lookup finds the instance by.
         const loseReply = Effect.fn(function* (instanceId: string) {
           const state = yield* yield* State;
-          const key = { stack: stack.name, stage: stack.stage, fqn: "ClientTokenInstance" };
           const row = yield* state.get(key);
           if (row?.status !== "created") {
             return yield* Effect.die(new Error("Expected a created instance row"));
@@ -330,10 +334,10 @@ echo ${queue.queueUrl}
             Effect.map((owned) => (owned.Reservations ?? []).flatMap((r) => r.Instances ?? [])),
           );
 
-        const first = yield* stack.deploy(program);
+        const first = yield* deployWith({ v: "1" });
         const generation = yield* loseReply(first.instance.instanceId);
 
-        const retried = yield* stack.deploy(program);
+        const retried = yield* deployWith({ v: "1" });
         expect(retried.instance.instanceId).toBe(first.instance.instanceId);
 
         // Only one live instance carries this resource's ownership tags, and
@@ -350,17 +354,39 @@ echo ${queue.queueUrl}
         yield* loseReply(first.instance.instanceId);
         yield* terminateOutOfBand(first.instance.instanceId);
 
-        const relaunched = yield* stack.deploy(program);
+        const relaunched = yield* deployWith({ v: "1" });
         expect(relaunched.instance.instanceId).not.toBe(first.instance.instanceId);
         expect((yield* ownedInstances).map((i) => i.InstanceId)).toEqual([
           relaunched.instance.instanceId,
         ]);
 
+        // Terminate the instance outside the stack and change a tag. The
+        // update finds the saved instance terminated and relaunches under a
+        // token keyed on it. Then lose that reply: state still holds the
+        // terminated instance, so the retry must send the same token and get
+        // the same new instance.
+        const state = yield* yield* State;
+        const beforeRecreate = yield* state.get(key);
+        yield* terminateOutOfBand(relaunched.instance.instanceId);
+        const recreated = yield* deployWith({ v: "2" });
+        expect(recreated.instance.instanceId).not.toBe(relaunched.instance.instanceId);
+
+        yield* state.set({ ...key, value: beforeRecreate! });
+        yield* ec2.deleteTags({
+          Resources: [recreated.instance.instanceId],
+          Tags: [{ Key: "alchemy::instance" }],
+        });
+        const retriedRecreate = yield* deployWith({ v: "2" });
+        expect(retriedRecreate.instance.instanceId).toBe(recreated.instance.instanceId);
+        expect((yield* ownedInstances).map((i) => i.InstanceId)).toEqual([
+          recreated.instance.instanceId,
+        ]);
+
         yield* stack.destroy();
-        yield* assertInstanceTerminated(relaunched.instance.instanceId);
+        yield* assertInstanceTerminated(recreated.instance.instanceId);
         yield* assertVpcGone(first.vpc.vpcId);
       }).pipe(logLevel),
-    { timeout: 600_000 },
+    { timeout: 900_000 },
   );
 
   // EC2 keeps listing a terminated instance for a while. `read` must report
@@ -387,6 +413,9 @@ echo ${queue.queueUrl}
         });
 
         const deployed = yield* stack.deploy(program);
+        const state = yield* yield* State;
+        const key = { stack: stack.name, stage: stack.stage, fqn: "DriftInstance" };
+        const beforeRepair = yield* state.get(key);
 
         yield* terminateOutOfBand(deployed.instance.instanceId);
 
@@ -404,11 +433,38 @@ echo ${queue.queueUrl}
         const live = yield* ec2.describeInstances({ InstanceIds: [relaunched.instanceId] });
         expect(live.Reservations?.[0]?.Instances?.[0]?.State?.Name).toBe("running");
 
+        // Lose the repair's reply: state still holds the terminated instance
+        // and the recovery lookup misses. Repairing again must return the
+        // same instance rather than launch a second one.
+        yield* state.set({ ...key, value: beforeRepair! });
+        yield* ec2.deleteTags({
+          Resources: [relaunched.instanceId],
+          Tags: [{ Key: "alchemy::instance" }],
+        });
+        const retried = yield* Drift.repair({ name: stack.name, stage: stack.stage }).pipe(
+          Effect.provide(stack.state),
+        );
+        expect(retried.resources.DriftInstance?.action).toBe("recreated");
+        expect((retried.resources.DriftInstance?.attr as typeof deployed.instance).instanceId).toBe(
+          relaunched.instanceId,
+        );
+        const owned = yield* ec2.describeInstances({
+          Filters: [
+            { Name: "tag:alchemy::stack", Values: [stack.name] },
+            { Name: "tag:alchemy::stage", Values: [stack.stage] },
+            { Name: "tag:alchemy::id", Values: ["DriftInstance"] },
+            { Name: "instance-state-name", Values: ["pending", "running"] },
+          ],
+        });
+        expect(
+          (owned.Reservations ?? []).flatMap((r) => r.Instances ?? []).map((i) => i.InstanceId),
+        ).toEqual([relaunched.instanceId]);
+
         yield* stack.destroy();
         yield* assertInstanceTerminated(relaunched.instanceId);
         yield* assertVpcGone(deployed.vpc.vpcId);
       }).pipe(logLevel),
-    { timeout: 600_000 },
+    { timeout: 900_000 },
   );
 
   // A Redacted userData is revealed only for RunInstances and compared by
