@@ -53,14 +53,12 @@
     "build:package": "node scripts/build.ts"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "foldkit": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "catalog:"
+    "typescript": "catalog:"
   },
   "peerDependencies": {
     "alchemy": "workspace:*",
