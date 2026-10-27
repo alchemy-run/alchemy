@@ -322,6 +322,12 @@ const proxy = yield* GCP.Run.Service("Proxy", {
 });
 ```
 
+`worker.name` is an Output. Alchemy deploys `Worker` first and puts
+the name it gave the container into `dependsOn`, so the proxy starts
+after it. Use the Output rather than writing the name out: the name
+comes from the Container's id or its `name` prop. The Container has to
+be in the same `containers` list.
+
 ## Destroy
 
 `alchemy destroy` deletes the service, its image repository, and the

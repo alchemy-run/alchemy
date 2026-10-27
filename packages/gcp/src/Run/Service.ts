@@ -543,6 +543,8 @@ export type ServiceShape = Main<ServiceServices>;
  * });
  * ```
  * A listed Container brings its bindings' roles and the sidecars it binds.
+ * `worker.name` is an Output that resolves to the container's name in the
+ * revision, so the proxy starts after it.
  *
  * ### Effect-native Function with bindings
  * **Example:** Publish tweets to Pub/Sub, cache in Memorystore
