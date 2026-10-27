@@ -203,6 +203,8 @@ export type Organization = Resource<
  *   first deploy rather than failing on conflict.
  * - The `delete` lifecycle is a **no-op** that logs a warning. Removing the
  *   resource from your stack leaves the Cloudflare-side settings untouched.
+ * - Settings you don't declare keep their current values (MFA, deny
+ *   unmatched requests, login branding, …); only declared props change.
  *
  * ### Configuring the organization
  * **Example:** Adopt and brand the organization

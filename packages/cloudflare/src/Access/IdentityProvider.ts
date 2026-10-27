@@ -67,7 +67,9 @@ export interface OAuthClientConfig {
    */
   clientId: string;
   /**
-   * OAuth client secret. Cloudflare masks this field on read, so it
+   * OAuth client secret. Pass a `Redacted` value (e.g.
+   * `yield* Config.Redacted("GITHUB_CLIENT_SECRET")`) to keep it out of
+   * plan output and state. Cloudflare masks this field on read, so it
    * diffs against the previously declared props rather than observed
    * cloud state.
    */
@@ -543,6 +545,17 @@ export type IdentityProvider = Resource<
  *     tokenUrl: "https://idp.example.com/token",
  *     certsUrl: "https://idp.example.com/keys",
  *     scopes: ["openid", "email", "profile"],
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** GitHub with the client secret from config
+ * ```typescript
+ * const github = yield* Cloudflare.Access.IdentityProvider("GitHub", {
+ *   type: "github",
+ *   config: {
+ *     clientId: "my-client-id",
+ *     clientSecret: yield* Config.Redacted("GITHUB_CLIENT_SECRET"),
  *   },
  * });
  * ```
