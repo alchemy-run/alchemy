@@ -235,6 +235,29 @@ describe("Celld Application lifecycle", { tags: ["unit", "local", "provider:cell
         }).pipe(Effect.provide(env.layer));
       }),
   );
+  test.effect("a different graph supersedes a publication whose activation failed", () =>
+    Effect.gen(function* () {
+      const env = yield* setup;
+      yield* Effect.gen(function* () {
+        const broken = yield* prepare();
+        yield* stageDeployment(env.store, broken);
+        env.calls.fail = true;
+        expect(
+          Result.isFailure(yield* Effect.result(reconcileApplication(propsFor(broken), owner))),
+        ).toBe(true);
+        expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(true);
+        expect(yield* readApplication(propsFor(broken), owner)).toBeUndefined();
+        env.calls.fail = false;
+        const fixed = yield* prepare("fixed");
+        yield* stageDeployment(env.store, fixed);
+        const published = yield* reconcileApplication(propsFor(fixed), owner);
+        expect((yield* readPublicationReceipt(env.store))!.revision).toBe(published.revision);
+        expect(published.candidates).toEqual([fixed.candidate.key]);
+        expect(env.objects.has(APPLICATION_LOCK_KEY)).toBe(false);
+      }).pipe(Effect.provide(env.layer));
+    }),
+  );
+
   test.effect("does not return readiness if native pointers change during activation", () =>
     Effect.gen(function* () {
       const env = yield* setup;
@@ -355,7 +378,9 @@ describe("Celld Application lifecycle", { tags: ["unit", "local", "provider:cell
           expect(env.writes.slice(writes)).toEqual([APPLICATION_LOCK_KEY]);
           expect(env.calls.count).toBe(2);
           env.calls.fail = true;
-          expect(Result.isFailure(yield* Effect.result(readApplication(props, owner)))).toBe(true);
+          // An unverified activation reports the publication as missing so
+          // the deploy reconciles it, rather than failing the plan.
+          expect(yield* readApplication(props, owner)).toBeUndefined();
           expect(Result.isFailure(yield* Effect.result(reconcileApplication(props, owner)))).toBe(
             true,
           );

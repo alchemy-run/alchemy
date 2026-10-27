@@ -11,6 +11,7 @@ import {
   readPublicationReceipt,
   readPublicationRecovery,
   readPublicationTransaction,
+  releaseCommittedLock,
   type ApplicationOwner,
   type PreparedDeployment,
   type PublicationReceipt,
@@ -220,17 +221,22 @@ const publishMembers = (
   props: ApplicationResourceProps,
   graph: Effect.Success<ReturnType<typeof prepareMembers>>,
   receipt: PublicationReceipt | undefined,
-  recovery: Effect.Success<ReturnType<typeof readPublicationRecovery>>,
+  recoveryIn: Effect.Success<ReturnType<typeof readPublicationRecovery>>,
   note: (message: string) => Effect.Effect<void>,
   takeover = false,
 ) =>
   Effect.gen(function* () {
+    let recovery = recoveryIn;
     const { prepared, candidates } = graph;
+    const matches = receipt !== undefined && (yield* matchesPublication(receipt, prepared));
+    // A committed publication whose activation never verified (e.g. its code
+    // failed to load) must not pin the fleet: a different graph supersedes it.
+    if (recovery?.committed && !matches) {
+      yield* releaseCommittedLock(store, recovery.transactionId);
+      recovery = undefined;
+    }
     const operation =
-      recovery ??
-      (receipt && (yield* matchesPublication(receipt, prepared))
-        ? yield* readPublicationTransaction(store, receipt)
-        : undefined);
+      recovery ?? (matches ? yield* readPublicationTransaction(store, receipt) : undefined);
     const priorRevision = operation ? operation.priorRevision : receipt?.revision;
     const transactionId = yield* digest(
       yield* encode({
@@ -302,6 +308,9 @@ export const readApplication = (props: ApplicationResourceProps, owner: Applicat
     if (recovery && recovery.transactionId !== receipt.transactionId) return undefined;
     const graph = yield* prepareMembers(store, members);
     if (!(yield* matchesPublication(receipt, graph.prepared))) return undefined;
+    // An unverified activation is not a failed plan: report the publication
+    // as missing so the deploy reconciles it, and a graph that never
+    // activates can be replaced.
     return yield* publishMembers(
       store,
       owner,
@@ -311,7 +320,7 @@ export const readApplication = (props: ApplicationResourceProps, owner: Applicat
       receipt,
       recovery,
       () => Effect.void,
-    );
+    ).pipe(Effect.catch(() => Effect.succeed(undefined)));
   });
 
 /** Resume owned publication before checking old receipt ETags, then activate even on a graph no-op. @internal */

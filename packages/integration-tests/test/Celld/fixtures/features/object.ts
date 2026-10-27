@@ -14,7 +14,8 @@ export class Notes extends Celld.DurableObject<Notes, NotesShape>()("Notes") {}
 export const NotesLive = Notes.make(
   Effect.gen(function* () {
     const migrations = yield* Celld.SqlMigrations({
-      dir: new URL("./object-migrations", import.meta.url).pathname,
+      // Relative to the directory Alchemy runs in (packages/integration-tests).
+      dir: "./test/Celld/fixtures/features/object-migrations",
       table: "notes_history",
     });
     const state = yield* Celld.DurableObjectState;

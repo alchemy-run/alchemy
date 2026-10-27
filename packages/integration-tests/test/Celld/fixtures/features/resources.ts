@@ -14,7 +14,8 @@ export const Files = Celld.R2.Bucket("Files");
 export const Jobs = Celld.Queues.Queue("Jobs");
 export const Dead = Celld.Queues.Queue("Dead");
 export const Database = Celld.D1.Database("Database", {
-  migrations: new URL("./migrations", import.meta.url).pathname,
+  // Relative to the directory Alchemy runs in (packages/integration-tests).
+  migrations: "./test/Celld/fixtures/features/migrations",
 });
 
 /** The Application entrypoint. */

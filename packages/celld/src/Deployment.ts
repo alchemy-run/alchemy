@@ -29,6 +29,7 @@ export {
   readPublicationReceipt,
   readPublicationRecovery,
   readPublicationTransaction,
+  releaseCommittedLock,
   verifyPublicationReceipt,
   APPLICATION_CLAIM_KEY,
   APPLICATION_LOCK_KEY,

@@ -168,10 +168,30 @@ export const readPublicationRecovery = (store: Store, owner: ApplicationOwner) =
         "invalid-record",
         "Publisher lock has a different prior revision from its journal.",
       );
+    const receipt = yield* readPublicationReceipt(store);
     return {
       transactionId: lock.transactionId,
       ...(priorRevision === undefined ? {} : { priorRevision }),
+      // The transaction's receipt already committed: only its activation is
+      // unverified, so a different graph may supersede it.
+      committed: journal?.complete === true && receipt?.transactionId === lock.transactionId,
     };
+  });
+
+/**
+ * Release a publisher lock whose transaction already committed its receipt
+ * (its activation failed or was interrupted), so a different graph can
+ * publish. Conditional on the exact lock observed.
+ */
+export const releaseCommittedLock = (store: Store, transactionId: string) =>
+  Effect.gen(function* () {
+    const object = yield* store.get(APPLICATION_LOCK_KEY);
+    if (!object) return;
+    const lock = yield* decode(LockSchema, object.body);
+    const receipt = yield* readPublicationReceipt(store);
+    if (lock.transactionId !== transactionId || receipt?.transactionId !== transactionId)
+      return yield* refuse("locked", "The publisher lock changed; it can no longer be released.");
+    yield* store.delete(APPLICATION_LOCK_KEY, { ifMatch: object.etag });
   });
 
 /** Recover a completed current transaction's original baseline for locked activation replay. */

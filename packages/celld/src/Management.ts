@@ -632,10 +632,10 @@ export const proveRootReload = (
           );
           yield* assertLiveSession(store, node, options);
           const reloaded = yield* Node.reloadDeployment({}).pipe(
-            Effect.catchTag("ReloadFailed", () =>
+            Effect.catchTag("ReloadFailed", (error) =>
               fail(
                 "reload-failed",
-                "Celld refused the forced root reload; the prior generation remains active.",
+                `Celld refused the forced root reload; the prior generation remains active: ${error.message}`,
               ),
             ),
             Effect.timeout("10 seconds"),
