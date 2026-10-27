@@ -58,7 +58,7 @@ test.provider(
           Effect.repeat({
             schedule: Schedule.spaced("5 seconds"),
             until: (items) => items.length >= count,
-            times: 48,
+            times: 120,
           }),
         );
 
@@ -92,5 +92,5 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 900_000 },
+  { timeout: 1_500_000 },
 );

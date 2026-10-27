@@ -4,10 +4,14 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 
-/** Queue the host works; retried tasks back off briefly. */
+/**
+ * Queue the host works. Dispatches are refused (403) until the worker's
+ * invoker grant on itself propagates, which can take several minutes, so
+ * the retry budget outlasts that.
+ */
 export const Work = GCP.CloudTasks.Queue("Work", {
   location: "us-central1",
-  retryConfig: { maxAttempts: 5, minBackoff: "1s", maxBackoff: "5s" },
+  retryConfig: { maxAttempts: 100, minBackoff: "5s", maxBackoff: "15s" },
 });
 
 /** Bucket the worker records each dispatched task in. */
