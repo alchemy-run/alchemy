@@ -1,3 +1,8 @@
+import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
+import * as NodePath from "@effect/platform-node/NodePath";
+import * as NodeStdio from "@effect/platform-node/NodeStdio";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { getWorkerExport, type SharedBuildOptions } from "alchemy/Workers/Worker";
 import { makeWorkerBridge, workerdBuildOptions } from "alchemy/Workers/Workerd/WorkerBridge";
@@ -36,12 +41,46 @@ import type { WorkerRuntimeContext } from "alchemy/Workers/Workerd/WorkerRuntime
  * Bundled into the fleet worker: keep it free of node-only APIs.
  */
 import type { WorkerEntrypoint } from "cloudflare:workers";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Terminal from "effect/Terminal";
 import { WorkerExecutionContext, fromExecutionContext } from "./ExecutionContext.ts";
+
+// Celld's V8 harness has no stdin: `NodeServices`' terminal registers stdin
+// listeners at construction (`process.stdin.once`), so build the platform
+// from the individual services with an output-only terminal.
+const terminal = Layer.succeed(
+  Terminal.Terminal,
+  Terminal.make({
+    columns: Effect.succeed(0),
+    rows: Effect.succeed(0),
+    readInput: Effect.die(new Error("Terminal input is unavailable in Celld")),
+    readLine: Effect.die(new Error("Terminal input is unavailable in Celld")),
+    display: (text) => Effect.sync(() => console.log(text)),
+  }),
+);
 
 // `WorkerExecutionContext` is a Reference whose default is the deferred
 // context, so the isolate build needs no engine-specific services.
-const buildOptions: SharedBuildOptions = workerdBuildOptions;
+const buildOptions: SharedBuildOptions = {
+  ...workerdBuildOptions,
+  platform: Layer.mergeAll(
+    Layer.provideMerge(
+      NodeChildProcessSpawner.layer,
+      Layer.mergeAll(
+        NodeFileSystem.layer,
+        NodeCrypto.layer,
+        NodePath.layer,
+        NodeStdio.layer,
+        terminal,
+      ),
+    ),
+    FetchHttpClient.layer,
+    Logger.layer([Logger.consolePretty()]),
+  ),
+};
 
 export const getCelldWorkerExport = <Export = any>(options: {
   entrypoint: any;

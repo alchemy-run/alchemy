@@ -83,7 +83,7 @@ describe.skipIf(!!process.env.FAST)(
         yield* waitForReady(baseUrl, { attempts: 60, base: "5 seconds" });
       }),
       // Three-node fleet provisioning and the Lambda's VPC attachment.
-      { timeout: 900_000 },
+      { timeout: 1_500_000 },
     );
 
     // Destroy must ride out Lambda hyperplane ENI teardown (5-20 min before
