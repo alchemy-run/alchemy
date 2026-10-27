@@ -7,7 +7,10 @@ export type ScriptDialect = "postgres" | "mysql" | "googlesql";
 
 /** One statement of a script, without its terminating `;`. */
 export interface ScannedStatement {
-  /** The statement's source text, comments included. */
+  /**
+   * The statement's exact source slice, comments and surrounding whitespace
+   * included, so offsets into `code` index it directly.
+   */
   readonly sql: string;
   /** The statement with comments removed: what to send to the database. */
   readonly text: string;
@@ -17,6 +20,8 @@ export interface ScannedStatement {
    * keyword found in `code` can be sliced out of `sql`.
    */
   readonly code: string;
+  /** A comment or quoted span that never closed before the end of the script. */
+  readonly unterminated?: "comment" | "quote";
 }
 
 interface Rules {
@@ -72,8 +77,13 @@ const endOfLine = (sql: string, i: number) => {
   return end < 0 ? sql.length : end;
 };
 
-/** Index just past a block comment starting at `i`. */
-const endOfBlockComment = (sql: string, i: number, nested: boolean) => {
+interface Span {
+  readonly end: number;
+  readonly closed: boolean;
+}
+
+/** The end of a block comment starting at `i`. */
+const blockComment = (sql: string, i: number, nested: boolean): Span => {
   let depth = 1;
   let j = i + 2;
   while (j < sql.length && depth > 0) {
@@ -85,21 +95,21 @@ const endOfBlockComment = (sql: string, i: number, nested: boolean) => {
       j += 2;
     } else j++;
   }
-  return j;
+  return { end: j, closed: depth === 0 };
 };
 
 /**
- * Index just past a quoted span starting at `i`. A doubled closing quote
+ * The end of a quoted span starting at `i`. A doubled closing quote
  * escapes itself in every dialect except GoogleSQL; backslashes escape when
  * the dialect (or a PostgreSQL `E'…'` string) says so, never in a GoogleSQL
  * raw string (`r'…'`).
  */
-const endOfQuoted = (
+const quoted = (
   sql: string,
   i: number,
   close: string,
   options: { backslashEscapes: boolean; doubledEscapes: boolean },
-) => {
+): Span => {
   let j = i + close.length;
   while (j < sql.length) {
     if (options.backslashEscapes && sql[j] === "\\") {
@@ -112,11 +122,11 @@ const endOfQuoted = (
         j++;
         continue;
       }
-      return j;
+      return { end: j, closed: true };
     }
     j++;
   }
-  return sql.length;
+  return { end: sql.length, closed: false };
 };
 
 const isWordChar = (ch: string | undefined) => ch !== undefined && /[A-Za-z0-9_]/.test(ch);
@@ -140,9 +150,15 @@ export const scanSqlScript = (
   let start = 0;
   let text = "";
   let code = "";
+  let unterminated: ScannedStatement["unterminated"];
   const push = (end: number) => {
     if (code.trim().length > 0) {
-      statements.push({ sql: sql.slice(start, end).trim(), text: text.trim(), code });
+      statements.push({
+        sql: sql.slice(start, end),
+        text: text.trim(),
+        code,
+        ...(unterminated ? { unterminated } : {}),
+      });
     }
     start = end + 1;
     text = "";
@@ -168,16 +184,18 @@ export const scanSqlScript = (
       continue;
     }
     if (ch === "/" && next === "*") {
-      const end = endOfBlockComment(sql, i, rules.nestedBlockComments);
-      code += blank(sql.slice(i, end));
+      const span = blockComment(sql, i, rules.nestedBlockComments);
+      if (!span.closed) unterminated = "comment";
+      code += blank(sql.slice(i, span.end));
       text += " ";
-      i = end;
+      i = span.end;
       continue;
     }
     if (rules.dollarQuotes && ch === "$" && !isWordChar(sql[i - 1])) {
       const tag = /^\$(?:[A-Za-z_][A-Za-z_0-9]*)?\$/.exec(sql.slice(i))?.[0];
       if (tag) {
         const close = sql.indexOf(tag, i + tag.length);
+        if (close < 0) unterminated = "quote";
         const end = close < 0 ? sql.length : close + tag.length;
         code += mask(sql.slice(i, end));
         text += sql.slice(i, end);
@@ -196,13 +214,14 @@ export const scanSqlScript = (
       const escaped = dialect === "postgres" && prefix === "e" && ch === "'";
       const close =
         rules.tripleQuotes && ch !== "`" && sql.startsWith(ch.repeat(3), i) ? ch.repeat(3) : ch;
-      const end = endOfQuoted(sql, i, close, {
+      const span = quoted(sql, i, close, {
         backslashEscapes: !raw && (rules.backslashEscapes || escaped),
         doubledEscapes: dialect !== "googlesql",
       });
-      code += mask(sql.slice(i, end));
-      text += sql.slice(i, end);
-      i = end;
+      if (!span.closed) unterminated = "quote";
+      code += mask(sql.slice(i, span.end));
+      text += sql.slice(i, span.end);
+      i = span.end;
       continue;
     }
     if (ch === ";") {
