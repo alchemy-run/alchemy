@@ -36,6 +36,9 @@ export const isGcpListenHost = (
 
 const notFound = Effect.succeed(HttpServerResponse.text("Not Found", { status: 404 }));
 
+/** Env var a host's impl sets when it returns RPC methods. */
+export const RPC_METHODS_ENV = "ALCHEMY_RPC_METHODS";
+
 /** Methods on an impl shape that are served as RPC. */
 export const rpcMethodsOf = (shape: Record<string, unknown> | undefined) =>
   Object.fromEntries(
@@ -49,10 +52,12 @@ export const createGcpHostRuntimeContext =
     type: string,
     options?: {
       /**
-       * Serve the impl's methods on `/__rpc__/*`. Only for hosts no
+       * Serve the impl's methods on `/__rpc__/*`. `true` for hosts no
        * request reaches from outside the instance (sidecar containers).
+       * `"private"` also records {@link RPC_METHODS_ENV} in the host's env
+       * so its provider can refuse to deploy the methods on a public host.
        */
-      rpc?: boolean;
+      rpc?: boolean | "private";
     },
   ) =>
   (id: string): GcpHostRuntimeContext => {
@@ -84,6 +89,9 @@ export const createGcpHostRuntimeContext =
         served = true;
         const routed = route(handler as HttpEffect<any>);
         const methods = options?.rpc ? rpcMethodsOf(serveOptions?.shape) : {};
+        if (options?.rpc === "private" && Object.keys(methods).length > 0) {
+          base.env[RPC_METHODS_ENV] = "1";
+        }
         return base.serve(
           Object.keys(methods).length > 0 ? serveRpc(methods, routed) : routed,
           serveOptions,

@@ -1,7 +1,9 @@
+import { makeFetchRpcStub } from "alchemy/Rpc";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import type { HttpMethod } from "effect/http/HttpMethod";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
@@ -10,6 +12,7 @@ import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor } from "../HttpBinding.ts";
 import {
   InvokeService,
+  type InvokeServiceClient,
   InvokeServiceError,
   type InvokeServiceRequestInit,
   type InvokeServiceResponse,
@@ -184,7 +187,37 @@ export const InvokeServiceHttp: Layer.Layer<InvokeService, never, HttpClient.Htt
             }),
           } satisfies InvokeServiceResponse;
         });
-        return { fetch };
+        const signed = (request: HttpClientRequest.HttpClientRequest) =>
+          Effect.gen(function* () {
+            const base = yield* uri;
+            if (base === undefined) {
+              return yield* new InvokeServiceError({
+                message: `Cloud Run service ${service.LogicalId} has no URI`,
+              });
+            }
+            const audience = base.replace(/\/+$/, "");
+            const token = yield* idToken(audience);
+            const url = /^[a-z]+:\/\//i.test(request.url)
+              ? request.url
+              : `${audience}/${request.url.replace(/^\/+/, "")}`;
+            return request.pipe(
+              HttpClientRequest.setUrl(url),
+              HttpClientRequest.bearerToken(token),
+            );
+          });
+        const httpClient = HttpClient.mapRequestEffect(http, signed);
+        // RPC methods post to `/__rpc__/<name>` on the service with the
+        // same ID token; the service serves them only behind its IAM
+        // invoker check.
+        return makeFetchRpcStub<InvokeServiceClient>({
+          baseUrl: "",
+          fetch: (request) =>
+            httpClient.execute(request) as Effect.Effect<
+              HttpClientResponse.HttpClientResponse,
+              unknown
+            >,
+          base: { fetch, httpClient },
+        });
       });
     }),
   );

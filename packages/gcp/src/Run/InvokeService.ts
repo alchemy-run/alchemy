@@ -1,7 +1,10 @@
 import * as Binding from "alchemy/Binding";
+import type { Rpc } from "alchemy/Rpc";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Data from "effect/Data";
 import type * as Effect from "effect/Effect";
+import type * as HttpClient from "effect/http/HttpClient";
+import type * as HttpClientError from "effect/http/HttpClientError";
 import type { Service } from "./Service.ts";
 
 /** Request options for {@link InvokeServiceClient.fetch}. */
@@ -26,8 +29,12 @@ export interface InvokeServiceResponse {
   readonly json: Effect.Effect<unknown, InvokeServiceError>;
 }
 
-/** Runtime client returned by {@link InvokeService}. */
-export interface InvokeServiceClient {
+/**
+ * Runtime client returned by {@link InvokeService}: the target's RPC
+ * methods, `fetch` for its HTTP routes, and an `httpClient` for anything
+ * else (an Effect RPC or HttpApi client, streaming responses).
+ */
+export type InvokeServiceClient<Shape = {}> = Omit<Shape, "fetch" | "run"> & {
   /**
    * Call the bound service at `path` (relative to its `uri`) with a
    * Google-signed ID token for the host's runtime service account.
@@ -36,7 +43,15 @@ export interface InvokeServiceClient {
     path: string,
     init?: InvokeServiceRequestInit,
   ): Effect.Effect<InvokeServiceResponse, InvokeServiceError, RuntimeContext>;
-}
+  /**
+   * An `HttpClient` that signs every request with an ID token for the
+   * service. A relative URL such as `/orders` resolves against its `uri`.
+   */
+  httpClient: HttpClient.HttpClient.With<HttpClientError.HttpClientError | InvokeServiceError>;
+};
+
+/** The RPC shape a Cloud Run service class declares, if any. */
+type ShapeOf<Target> = Target extends Rpc<infer Shape> ? Shape : {};
 
 /**
  * Minting the ID token, reaching the service, or decoding its response
@@ -91,6 +106,37 @@ export class InvokeServiceError extends Data.TaggedError("GCP.Run.InvokeServiceE
  * const order = yield* response.json;
  * ```
  *
+ * ### Calling RPC methods
+ * **Example:** Methods on a private service
+ * ```typescript
+ * export default class Quotes extends GCP.Run.Service<Quotes>()(
+ *   "Quotes",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     return {
+ *       quote: (symbol: string) => Effect.succeed({ symbol, price: 42 }),
+ *       ticks: (symbol: string) => Stream.make(41, 42, 43),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ * Keep the service's IAM invoker check on: a service that returns
+ * methods and sets `invokerIamDisabled` fails to deploy with
+ * `GCP.Run.ServiceRpcPublic`.
+ *
+ * **Example:** Call them from another service
+ * ```typescript
+ * const quotes = yield* GCP.Run.InvokeService(Quotes);
+ * const { price } = yield* quotes.quote("GOOG");
+ * const ticks = yield* quotes.ticks("GOOG").pipe(Stream.take(3), Stream.runCollect);
+ * ```
+ *
+ * ### Bring your own client
+ * **Example:** `httpClient` signs every request
+ * ```typescript
+ * const response = yield* quotes.httpClient.get("/health");
+ * ```
+ *
  * @binding
  * @category Run
  */
@@ -98,6 +144,10 @@ export interface InvokeService extends Binding.Service<
   InvokeService,
   "GCP.Run.InvokeService",
   (service: Service) => Effect.Effect<InvokeServiceClient>
-> {}
+> {
+  <Target extends Service, Req = never>(
+    service: Target | Effect.Effect<Target, never, Req>,
+  ): Effect.Effect<InvokeServiceClient<ShapeOf<Target>>, never, InvokeService | Req>;
+}
 
 export const InvokeService = Binding.Service<InvokeService>("GCP.Run.InvokeService");

@@ -18,7 +18,11 @@ import * as Stream from "effect/Stream";
 import { destroyHostImageRepository, makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { retryActAs, type AppliedIamGrant, type GcpHostBinding } from "../Host.ts";
-import { createGcpHostRuntimeContext, type GcpHostRuntimeContext } from "../HostContext.ts";
+import {
+  createGcpHostRuntimeContext,
+  RPC_METHODS_ENV,
+  type GcpHostRuntimeContext,
+} from "../HostContext.ts";
 import {
   alchemyRuntimeEnv,
   isManagedServiceAccount,
@@ -566,9 +570,9 @@ export type ServiceShape = Main<ServiceServices>;
  */
 export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
   Platform("GCP.Run.Service", {
-    createRuntimeContext: createGcpHostRuntimeContext("GCP.Run.Service") as (
-      id: string,
-    ) => ServiceRuntimeContext,
+    createRuntimeContext: createGcpHostRuntimeContext("GCP.Run.Service", {
+      rpc: "private",
+    }) as (id: string) => ServiceRuntimeContext,
   });
 
 export class ServiceNotResolved extends Data.TaggedError("GCP.Run.ServiceNotResolved")<{
@@ -585,6 +589,18 @@ export class ServiceReconciling extends Data.TaggedError("GCP.Run.ServiceReconci
   name: string;
   state: string;
 }> {}
+
+/**
+ * The service returns RPC methods but `invokerIamDisabled` is set, so
+ * anyone could call them.
+ */
+export class ServiceRpcPublic extends Data.TaggedError("GCP.Run.ServiceRpcPublic")<{
+  id: string;
+}> {
+  override get message() {
+    return `GCP.Run.Service ${this.id} returns RPC methods but sets invokerIamDisabled, so they would be public. Keep the IAM invoker check on and call it with GCP.Run.InvokeService.`;
+  }
+}
 
 export class ServiceStillExists extends Data.TaggedError("GCP.Run.ServiceStillExists")<{
   name: string;
@@ -1180,6 +1196,9 @@ export const ServiceProvider = () =>
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
+      if (news.invokerIamDisabled === true && news.env?.[RPC_METHODS_ENV] !== undefined) {
+        return yield* new ServiceRpcPublic({ id });
+      }
       const env = yield* GcpEnvironment.current;
       const serviceId = yield* toId(id, news.serviceId, output?.serviceId);
       const location = normalizeLocation(news.location ?? output?.location, env.region);
