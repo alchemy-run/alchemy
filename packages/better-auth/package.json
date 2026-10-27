@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/better-auth",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.84",
   "description": "Better Auth integration for Alchemy.",
   "keywords": [
     "alchemy",
@@ -53,7 +53,15 @@
     "build:package": "node scripts/build.ts",
     "test": "alchemy-test"
   },
+  "dependencies": {
+    "@alchemy.run/sql": "workspace:*"
+  },
   "devDependencies": {
+    "@alchemy.run/aws": "workspace:*",
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/neon": "workspace:*",
+    "@alchemy.run/planetscale": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@better-auth/drizzle-adapter": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "@distilled.cloud/aws": "workspace:*",
@@ -62,7 +70,6 @@
     "@types/bun": "catalog:",
     "@types/pg": "catalog:",
     "alchemy": "workspace:*",
-    "alchemy-test": "workspace:*",
     "better-auth": "catalog:",
     "better-auth-1.6": "npm:better-auth@1.6.25",
     "drizzle-orm": "catalog:",
@@ -74,6 +81,8 @@
     "typescript": "catalog:"
   },
   "peerDependencies": {
+    "@alchemy.run/aws": "workspace:*",
+    "@alchemy.run/cloudflare": "workspace:*",
     "@better-auth/drizzle-adapter": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "@distilled.cloud/aws": "workspace:*",
@@ -87,6 +96,12 @@
     "pg": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@alchemy.run/aws": {
+      "optional": true
+    },
+    "@alchemy.run/cloudflare": {
+      "optional": true
+    },
     "@better-auth/drizzle-adapter": {
       "optional": true
     },

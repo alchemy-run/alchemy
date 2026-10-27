@@ -1,12 +1,11 @@
 import { describe, expect } from "bun:test";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import * as GCP from "@alchemy.run/gcp";
+import * as Test from "@alchemy.run/test/Bun";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as run from "@distilled.cloud/gcp/run_v2";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Alchemy from "alchemy";
-import * as GCP from "alchemy/GCP";
-import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -32,10 +31,6 @@ const currentProject = GCP.GcpEnvironment.current.pipe(
   Effect.provide(GCP.fromCredentials().pipe(Layer.provide(GcpHttp))),
 );
 
-// Both services are built from `main`, which needs a local image build.
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-
 // Kept for the post-destroy checks in `afterAll`.
 let deployed:
   | {
@@ -48,7 +43,7 @@ let deployed:
   | undefined;
 
 // Deploy, tests and destroy all sit behind the same Docker guard.
-describe.skipIf(!dockerAvailable)("gcp-storage-uploads", () => {
+describe("gcp-storage-uploads", () => {
   const stack = beforeAll(
     deploy(Stack).pipe(
       Effect.tap((outputs) =>

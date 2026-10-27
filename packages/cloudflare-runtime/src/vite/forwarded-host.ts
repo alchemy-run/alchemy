@@ -35,7 +35,7 @@ export function proxyRequestHeaders(
   proxySharedSecret: string,
 ): IncomingHttpHeaders {
   const original = new URL(target);
-  const protocol = firstHeaderValue(request.headers["x-forwarded-proto"]);
+  const protocol = firstHeaderValue(request.headers["x-forwarded-proto"])?.toLowerCase();
   original.protocol =
     protocol === "https" || protocol === "http"
       ? `${protocol}:`
@@ -45,6 +45,9 @@ export function proxyRequestHeaders(
   original.port = "";
   original.host = resolveForwardedHost(request.headers, target.host);
   return {
+    // The Worker sees the dev server's host in `X-Forwarded-Host` when the
+    // client sent none, as under `@cloudflare/vite-plugin`.
+    "x-forwarded-host": firstHeaderValue(request.headers.host) ?? target.host,
     ...request.headers,
     host: original.host,
     [HEADER_ORIGINAL_URL.toLowerCase()]: original.href,

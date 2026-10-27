@@ -38,6 +38,8 @@ export class Docker extends Context.Service<
       WorkerdConfig.Worker_ContainerEngine,
       SystemError
     >;
+    /** Docker privileges for every local container (see {@link FUSE_CONTAINER_PRIVILEGES}). */
+    readonly getContainerPrivileges: Effect.Effect<WorkerdConfig.Worker_DurableObjectNamespace_ContainerOptions_ContainerPrivileges>;
     readonly generateImageTag: (className: string, suffix?: string) => string;
     readonly registerImageEnv: (
       className: string,
@@ -86,6 +88,17 @@ const ContainerEgressInterceptorImage = Config.String("CONTAINER_EGRESS_INTERCEP
     ),
   ),
 );
+
+/**
+ * The Docker privileges FUSE filesystems (s3fs, tigrisfs, …) need to mount
+ * inside a container. Deployed Containers can always mount FUSE, so every
+ * local container gets them too.
+ */
+export const FUSE_CONTAINER_PRIVILEGES = {
+  capabilities: ["SYS_ADMIN"],
+  devices: [{ pathOnHost: "/dev/fuse", pathInContainer: "/dev/fuse", cgroupPermissions: "rwm" }],
+  securityOpt: ["apparmor:unconfined"],
+} satisfies WorkerdConfig.Worker_DurableObjectNamespace_ContainerOptions_ContainerPrivileges;
 
 /**
  * Docker's containerd image store rejects combined `repo:tag@digest` pull
@@ -542,8 +555,22 @@ export const DockerLive = Layer.effect(
       { concurrent: true },
     ).pipe(Effect.forkScoped({ startImmediately: false }));
 
+    // Docker refuses to create a container whose device is missing on the
+    // host, so a Linux host without /dev/fuse gets the capability alone.
+    // VM-based engines (macOS, Windows) always have /dev/fuse in the VM.
+    const getContainerPrivileges = yield* Effect.cached(
+      Effect.gen(function* () {
+        const platform = yield* Effect.sync(() => process.platform);
+        const hasFuse =
+          platform !== "linux" ||
+          (yield* fs.exists("/dev/fuse").pipe(Effect.orElseSucceed(() => false)));
+        return hasFuse ? FUSE_CONTAINER_PRIVILEGES : { ...FUSE_CONTAINER_PRIVILEGES, devices: [] };
+      }),
+    );
+
     return Docker.of({
       getWorkerdDockerConfiguration: Fiber.join(docker),
+      getContainerPrivileges,
       registerImageEnv: (className, tag, env) => {
         const alias = generateImageTag(className);
         return Effect.acquireRelease(

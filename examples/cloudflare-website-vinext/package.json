@@ -15,6 +15,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "react": "catalog:",
@@ -24,12 +25,13 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
+    "@alchemy.run/test": "workspace:*",
+    "@cloudflare/workers-types": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
-    "@vitejs/plugin-rsc": "^0.5.34",
+    "@vitejs/plugin-rsc": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"

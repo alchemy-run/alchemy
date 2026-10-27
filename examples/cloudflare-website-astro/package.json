@@ -18,7 +18,9 @@
     "astro": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@tailwindcss/vite": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",

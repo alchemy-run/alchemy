@@ -35,6 +35,7 @@ import {
   BINDING_IMAGES_LOOPBACK,
   BINDING_IMAGES_STORE,
   PATH_IMAGE_DELIVERY,
+  PATH_IMAGE_DELIVERY_LEGACY,
   PATH_IMAGES_PUBLIC_URL,
   SERVICE_IMAGES,
   SERVICE_IMAGES_STORAGE,
@@ -120,7 +121,10 @@ export const ImagesLive = Layer.effect(
             res
               .writeHead(200, { "content-type": "application/json" })
               .end(
-                JSON.stringify(publicPort === undefined ? null : `http://127.0.0.1:${publicPort}`),
+                JSON.stringify(
+                  worker.publicUrl ??
+                    (publicPort === undefined ? null : `http://127.0.0.1:${publicPort}`),
+                ),
               );
             return;
           }
@@ -200,7 +204,7 @@ export const ImagesLive = Layer.effect(
                 ],
               },
             };
-            // Serve hosted variant URLs (`/cdn-cgi/mf/imagedelivery/...`)
+            // Serve hosted variant URLs (`/__cf_local/imagedelivery/...`)
             // from the entry chain, mirroring Miniflare's core entry routing
             // (`SERVICE_IMAGES_DELIVERY`). Sits inside the `plugin:entry`
             // middleware (order 0) and before the user worker.
@@ -215,7 +219,10 @@ export const ImagesLive = Layer.effect(
                       export default {
                         fetch(request, env) {
                           const url = new URL(request.url);
-                          if (url.pathname.startsWith("${PATH_IMAGE_DELIVERY}/")) {
+                          if (
+                            url.pathname.startsWith("${PATH_IMAGE_DELIVERY}/") ||
+                            url.pathname.startsWith("${PATH_IMAGE_DELIVERY_LEGACY}/")
+                          ) {
                             return env.IMAGES.fetch(request);
                           }
                           return env.UPSTREAM.fetch(request);
@@ -293,12 +300,12 @@ export const remote = (binding: string) =>
 // options are ignored. Deltas from upstream:
 // - Output bytes are buffered (`toBuffer`) instead of streamed, so a Sharp
 //   failure surfaces as a loopback 500 rather than a broken stream.
-// - The `cf.image` outbound fetcher (`cfImageLocalFetcher`) is not ported:
-//   this runtime has no outbound `fetch(url, { cf: { image } })` rewriting.
+// - The `cf.image` outbound fetcher lives in `globals/CfImage.ts`, beside the
+//   outbound interceptor that calls it.
 // -----------------------------------------------------------------------------
 
 /** Read a Node.js request into a fetch `Request` (bodies are buffered). */
-async function readNodeRequest(req: NodeHttp.IncomingMessage, url: URL): Promise<Request> {
+export async function readNodeRequest(req: NodeHttp.IncomingMessage, url: URL): Promise<Request> {
   const headers = new Headers();
   for (const [key, value] of Object.entries(req.headers)) {
     if (value === undefined) continue;
@@ -369,12 +376,12 @@ export async function imagesLocalFetcher(request: Request): Promise<Response> {
     );
   }
 
-  const transformer = sharp(await body.arrayBuffer(), {});
+  const source = await body.arrayBuffer();
 
   const url = new URL(request.url);
 
   if (url.pathname === "/info") {
-    return runInfo(transformer);
+    return runInfo(sharp(source, {}));
   } else {
     const badTransformsResponse = errorResponse(
       400,
@@ -404,7 +411,10 @@ export async function imagesLocalFetcher(request: Request): Promise<Response> {
         );
       }
 
-      return await runTransform(transformer, transforms, outputFormat);
+      // Production applies EXIF orientation before any transforms.
+      // autoOrient bakes the rotation into the pixels at decode so
+      // EXIF-rotated photos (e.g. phone portraits) come out upright.
+      return await runTransform(sharp(source, { autoOrient: true }), transforms, outputFormat);
     } catch {
       return badTransformsResponse;
     }

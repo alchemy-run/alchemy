@@ -54,7 +54,7 @@ export const Website = Prisma.Website.Waku("Website", {
 
 ```typescript
 // alchemy.run.ts
-import * as Prisma from "alchemy/Prisma";
+import * as Prisma from "@alchemy.run/prisma";
 
 export const Website = Prisma.Website.Waku("Website");
 ```
@@ -133,7 +133,7 @@ const site = yield* Prisma.Website.Waku("Web", {
 ```
 
 `domain` creates `Prisma.CustomDomain` and makes `site.url` the HTTPS
-hostname. The app must be on the project's current default branch.
+hostname.
 Configure returned DNS records yourself and verify status before cutover;
 see [Custom domains](/prisma/frontend/websites#custom-domains).
 

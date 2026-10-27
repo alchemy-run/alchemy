@@ -8,8 +8,9 @@ import * as Exit from "effect/Exit";
 import type * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import type { JSX } from "react";
+import { Screen, type ScreenController } from "../../../Interaction.ts";
 import type { InvalidStatePath, StateStoreError } from "../../../State/index.ts";
-import { Screen, theme, type ScreenController } from "../../CliKit/index.ts";
+import { theme } from "../../../Util/Theme.ts";
 import { formatYamlLines, matchYamlKey } from "../../PropertyDiff.ts";
 import {
   Box,

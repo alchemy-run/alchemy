@@ -6,6 +6,7 @@
  */
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import {
+  HEADER_REGISTRY_UPDATE_SECRET,
   resolvedTargetKey,
   type ResolvedTarget,
   type ResolvedTargetMap,
@@ -14,7 +15,45 @@ import {
 
 interface Env {
   REGISTRY_DEBUG_PORT: Env.WorkerdDebugPortConnector;
+  /** Per-instance credential required on registry pushes. */
+  REGISTRY_UPDATE_SECRET: ArrayBuffer;
 }
+
+/**
+ * Receives registry pushes from the owning process (Miniflare's
+ * `dev-registry-proxy.worker.ts` default export). The credential is verified
+ * before the body is parsed; updates are only accepted on the loopback host's
+ * root path and never from a browser (`Origin`).
+ */
+export default {
+  async fetch(request, env) {
+    const supplied = new TextEncoder().encode(
+      request.headers.get(HEADER_REGISTRY_UPDATE_SECRET) ?? "",
+    );
+    const expected = env.REGISTRY_UPDATE_SECRET;
+    if (
+      expected === undefined ||
+      supplied.byteLength !== expected.byteLength ||
+      !crypto.subtle.timingSafeEqual(supplied, expected)
+    ) {
+      return new Response("Forbidden", { status: 403 });
+    }
+    const url = new URL(request.url);
+    if (
+      url.pathname !== "/" ||
+      url.hostname !== "127.0.0.1" ||
+      !/^127\.0\.0\.1(?::\d+)?$/.test(request.headers.get("Host") ?? "") ||
+      request.headers.has("Origin")
+    ) {
+      return new Response("Forbidden", { status: 403 });
+    }
+    if (request.method !== "POST") {
+      return new Response("Not Found", { status: 404 });
+    }
+    Target.set(await request.json<ResolvedTargetMap>());
+    return new Response("ok");
+  },
+} satisfies ExportedHandler<Env>;
 
 declare namespace Env {
   /**
@@ -56,7 +95,7 @@ export namespace Target {
 
   /**
    * Constructs a cached target resolver for a subscriber.
-   * This reuses the same fetcher if the debug port address hasn't changed.
+   * This reuses the same fetcher while the target's debug port address and workerd instance are unchanged.
    * The `toFetcher` function should use the debug port binding to create a fetcher for the target service.
    */
   export function makeResolver<T extends Subscriber>(
@@ -66,19 +105,26 @@ export namespace Target {
     const key = resolvedTargetKey(subscriber);
     let fetcher: Fetcher | undefined;
     let debugPortAddress: string | undefined;
+    let instanceId: string | undefined;
     return {
       resolve: () => {
         const target = value[key] as ResolvedTarget<T> | undefined;
         if (!target) {
           fetcher = undefined;
           debugPortAddress = undefined;
+          instanceId = undefined;
           return undefined;
         }
-        if (fetcher && debugPortAddress === target.debugPortAddress) {
+        if (
+          fetcher &&
+          debugPortAddress === target.debugPortAddress &&
+          instanceId === target.instanceId
+        ) {
           return fetcher;
         }
         fetcher = toFetcher(target);
         debugPortAddress = target.debugPortAddress;
+        instanceId = target.instanceId;
         return fetcher;
       },
     };

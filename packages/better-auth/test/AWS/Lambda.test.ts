@@ -1,8 +1,8 @@
-import { expect } from "alchemy-test";
-import * as AWS from "alchemy/AWS";
-import * as Neon from "alchemy/Neon";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
+import * as AWS from "@alchemy.run/aws";
+import * as Neon from "@alchemy.run/neon";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
