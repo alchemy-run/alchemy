@@ -15,7 +15,7 @@ export const Greet = Workflow.make("Greet", {
   idempotencyKey: ({ id }) => id,
 });
 
-/** Sleeps durably between two steps. */
+/** Sleeps durably between two steps; an interrupt undoes the first. */
 export const Nap = Workflow.make("Nap", {
   payload: { id: Schema.String, seconds: Schema.Number },
   success: Schema.String,
@@ -63,7 +63,9 @@ export const WorkflowsLive = Layer.mergeAll(
   Workflows.layer(
     Nap,
     Effect.fn(function* ({ seconds }) {
-      yield* Activity.make({ name: "before", execute: Effect.void });
+      yield* Activity.make({ name: "before", execute: Effect.void }).pipe(
+        Nap.withCompensation(() => Activity.make({ name: "undo", execute: Effect.void })),
+      );
       yield* DurableClock.sleep({
         name: "nap",
         duration: `${seconds} seconds`,

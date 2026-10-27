@@ -274,6 +274,26 @@ describe(
     );
 
     test.provider(
+      "interrupting a sleeping workflow runs its compensations",
+      (_stack) =>
+        Effect.gen(function* () {
+          const id = yield* freshId("interrupt-nap");
+          const run = yield* start("Nap", id, "?seconds=60");
+          yield* stepsOf("Nap", run.executionId).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (steps) => steps.includes("before"),
+              times: 30,
+            }),
+          );
+          yield* request(`${url}/interrupt/Nap/${id}?executionId=${run.executionId}`, "POST");
+          expect(yield* awaitResult(run.status)).toEqual({ _tag: "Interrupted" });
+          expect(yield* stepsOf("Nap", run.executionId)).toEqual(["before", "undo"]);
+        }),
+      { timeout: 180_000 },
+    );
+
+    test.provider(
       "runs a child workflow",
       (_stack) =>
         Effect.gen(function* () {

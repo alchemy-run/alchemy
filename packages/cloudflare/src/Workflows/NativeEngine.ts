@@ -13,6 +13,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import { Workflow as EffectWorkflow, WorkflowEngine } from "effect/workflow";
@@ -44,6 +45,8 @@ class CurrentRun extends Context.Service<
     readonly context: Context.Context<never>;
     readonly clocks: Map<string, Duration.Duration>;
     readonly instance: WorkflowEngine.WorkflowInstance["Service"];
+    /** Succeeds once the run is interrupted. */
+    readonly interrupted: Effect.Effect<void>;
   }
 >()("alchemy/Cloudflare/Workflows/NativeEngine/CurrentRun") {}
 
@@ -52,6 +55,72 @@ const currentRun = (operation: string) =>
     Option.isSome(run)
       ? Effect.succeed(run.value)
       : Effect.die(new Error(`NativeEngine: ${operation} only runs inside a workflow run`)),
+  );
+
+/**
+ * The steps a run takes, and the wait for its interrupt.
+ *
+ * Cloudflare pauses, restarts, or terminates a run by rejecting the step it
+ * waits on with an `Aborting engine: ...` error, and expects the run to reject
+ * with that same error. The abort isn't the run's outcome, so each step
+ * suspends the run instead, which runs no compensation, and hands the error to
+ * `onAbort`.
+ *
+ * Cloudflare hands each event to the first step waiting for its type, even one
+ * the run stopped waiting on, so an invocation waits for its interrupt once,
+ * and every wait races that one step.
+ */
+const runSteps = (
+  step: WorkflowStep["Service"],
+  instance: WorkflowEngine.WorkflowInstance["Service"],
+  onAbort: (error: unknown) => void,
+) => {
+  const suspendOnAbort = <A, E>(effect: Effect.Effect<A, E>) =>
+    Effect.catchDefect(effect, (defect) => {
+      if (
+        !Predicate.hasProperty(defect, "message") ||
+        typeof defect.message !== "string" ||
+        !defect.message.startsWith("Aborting engine:")
+      ) {
+        return Effect.die(defect);
+      }
+      onAbort(defect);
+      return EffectWorkflow.suspend(instance);
+    });
+  let interrupt: Promise<Exit.Exit<unknown>> | undefined;
+  return {
+    step: {
+      do: (options) => suspendOnAbort(step.do(options)),
+      sleep: (name, duration) => suspendOnAbort(step.sleep(name, duration)),
+      sleepUntil: (name, timestamp) => suspendOnAbort(step.sleepUntil(name, timestamp)),
+      waitForEvent: (name, options) => suspendOnAbort(step.waitForEvent(name, options)),
+    } satisfies WorkflowStep["Service"],
+    interrupted: suspendOnAbort(
+      Effect.flatMap(
+        Effect.promise(
+          () =>
+            (interrupt ??= Effect.runPromiseExit(
+              step.waitForEvent(INTERRUPT, { type: INTERRUPT, timeout: SIGNAL_TIMEOUT }),
+            )),
+        ),
+        (exit) => exit,
+      ),
+    ).pipe(Effect.asVoid),
+  };
+};
+
+/** Wait for `wait`, unless the run is interrupted first. */
+const unlessInterrupted = <A>(run: CurrentRun["Service"], wait: Effect.Effect<A>) =>
+  Effect.raceFirst(
+    Effect.map(wait, (value) => Option.some(value)),
+    Effect.as(run.interrupted, Option.none<A>()),
+  ).pipe(
+    Effect.flatMap((value) => {
+      if (Option.isSome(value)) return Effect.succeed(value.value);
+      run.instance.interrupted = true;
+      run.instance.suspended = false;
+      return Effect.interrupt;
+    }),
   );
 
 /**
@@ -66,7 +135,7 @@ const nameOf = (...parts: ReadonlyArray<string>) => {
   return `${name.slice(0, 91)}-${hash.toString(16).padStart(8, "0")}`;
 };
 
-/** Every wait for a signal also waits for this event, which interrupts the run. */
+/** Every wait also waits for this event, which interrupts the run. */
 const INTERRUPT = "alchemy-interrupt";
 
 /** How long a run waits for a signal; Cloudflare's limit for `waitForEvent`. */
@@ -196,7 +265,6 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
               new Error(`Workflow ${invocation.workflow} is not hosted here`),
             );
           }
-          const step = yield* WorkflowStep;
           const context = yield* Effect.context<never>();
           const { workflow, execute } = registration;
           const payload = yield* Schema.decodeEffect(payloadCodec(workflow))(
@@ -206,16 +274,28 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
             workflow,
             invocation.executionId,
           );
+          const aborted: { error?: unknown } = {};
+          const { step, interrupted } = runSteps(yield* WorkflowStep, instance, (error) => {
+            aborted.error = error;
+          });
           const result = yield* execute(payload as object, invocation.executionId).pipe(
             EffectWorkflow.intoResult,
             Effect.provide(
               Layer.mergeAll(
                 Layer.succeed(WorkflowEngine.WorkflowInstance, instance),
                 Layer.succeed(WorkflowEngine.WorkflowEngine, engine),
-                Layer.succeed(CurrentRun, { step, context, clocks: new Map(), instance }),
+                Layer.succeed(CurrentRun, {
+                  step,
+                  context,
+                  clocks: new Map(),
+                  instance,
+                  interrupted,
+                }),
               ),
             ),
           );
+          // Cloudflare stopped the run; on resume it replays the finished steps.
+          if ("error" in aborted) return yield* Effect.die(aborted.error);
           // Every wait blocks inside the instance, so a run always finishes.
           if (result._tag === "Suspended") {
             return yield* Effect.die(new Error(`Workflow ${workflow._tag} suspended unexpectedly`));
@@ -280,7 +360,10 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
             if (text !== "") {
               return yield* decodeResult(workflow as EffectWorkflow.AnyWithProps, text);
             }
-            yield* run.value.step.sleep(`child-wait/${id}/${check}`, "5 seconds");
+            yield* unlessInterrupted(
+              run.value,
+              run.value.step.sleep(`child-wait/${id}/${check}`, "5 seconds"),
+            );
           }
         }) as Effect.Effect<any>,
 
@@ -357,30 +440,19 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
           const run = yield* currentRun("DurableDeferred reads");
           const duration = run.clocks.get(deferred.name);
           if (duration !== undefined) {
-            yield* run.step.sleep(deferred.name, Duration.toMillis(duration));
+            yield* unlessInterrupted(
+              run,
+              run.step.sleep(deferred.name, Duration.toMillis(duration)),
+            );
             return Option.some(Exit.void);
           }
-          const signal = yield* run.step
-            .waitForEvent<string>(deferred.name, {
+          const signal = yield* unlessInterrupted(
+            run,
+            run.step.waitForEvent<string>(deferred.name, {
               type: nameOf(deferred.name),
               timeout: SIGNAL_TIMEOUT,
-            })
-            .pipe(
-              Effect.map((event) => ({ interrupted: false, payload: event.payload })),
-              Effect.raceFirst(
-                run.step
-                  .waitForEvent(`${deferred.name}/interrupt`, {
-                    type: INTERRUPT,
-                    timeout: SIGNAL_TIMEOUT,
-                  })
-                  .pipe(Effect.as({ interrupted: true, payload: "" })),
-              ),
-            );
-          if (signal.interrupted) {
-            run.instance.interrupted = true;
-            run.instance.suspended = false;
-            return yield* Effect.interrupt;
-          }
+            }),
+          );
           return Option.some(yield* decodeExit(signal.payload));
         }),
 

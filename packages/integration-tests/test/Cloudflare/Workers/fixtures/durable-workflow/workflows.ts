@@ -17,7 +17,7 @@ export const Greet = Workflow.make("Greet", {
   idempotencyKey: ({ id }) => id,
 });
 
-/** Sleeps durably between two activities. */
+/** Sleeps durably between two activities; an interrupt undoes the first. */
 export const Nap = Workflow.make("Nap", {
   payload: { id: Schema.String, seconds: Schema.Number },
   success: Schema.String,
@@ -29,6 +29,13 @@ export const Approval = DurableDeferred.make("approval", { success: Schema.Strin
 
 export const Approve = Workflow.make("Approve", {
   payload: { id: Schema.String },
+  success: Schema.String,
+  idempotencyKey: ({ id }) => id,
+});
+
+/** Waits for approval, then sleeps before it finishes. */
+export const Hold = Workflow.make("Hold", {
+  payload: { id: Schema.String, seconds: Schema.Number },
   success: Schema.String,
   idempotencyKey: ({ id }) => id,
 });
@@ -80,7 +87,9 @@ export const NapLive = Workflows.layer(
   Effect.gen(function* () {
     const record = yield* Recorder;
     return Effect.fn(function* ({ id, seconds }) {
-      yield* Activity.make({ name: "before", execute: record(id, "before") });
+      yield* Activity.make({ name: "before", execute: record(id, "before") }).pipe(
+        Nap.withCompensation(() => Activity.make({ name: "undo", execute: record(id, "undo") })),
+      );
       yield* DurableClock.sleep({
         name: "nap",
         duration: `${seconds} seconds`,
@@ -101,6 +110,25 @@ export const ApproveLive = Workflows.layer(
       const by = yield* DurableDeferred.await(Approval);
       yield* Activity.make({ name: "approved", execute: record(id, `approved:${by}`) });
       return `approved by ${by}`;
+    });
+  }),
+);
+
+export const HoldLive = Workflows.layer(
+  Hold,
+  Effect.gen(function* () {
+    const record = yield* Recorder;
+    return Effect.fn(function* ({ id, seconds }) {
+      yield* Activity.make({ name: "requested", execute: record(id, "requested") });
+      const by = yield* DurableDeferred.await(Approval);
+      yield* Activity.make({ name: "approved", execute: record(id, `approved:${by}`) });
+      yield* DurableClock.sleep({
+        name: "hold",
+        duration: `${seconds} seconds`,
+        inMemoryThreshold: 0,
+      });
+      yield* Activity.make({ name: "released", execute: record(id, "released") });
+      return "released";
     });
   }),
 );
@@ -143,6 +171,7 @@ export const WorkflowsLive = Layer.mergeAll(
   GreetLive,
   NapLive,
   ApproveLive,
+  HoldLive,
   CheckoutLive,
   ParentLive,
 );

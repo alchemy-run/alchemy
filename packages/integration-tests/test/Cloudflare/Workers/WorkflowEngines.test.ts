@@ -220,6 +220,90 @@ describe.concurrent.each([
   );
 
   test(
+    "interrupting a sleeping workflow runs its compensations",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const id = yield* freshId("interrupt-nap");
+      const run = yield* start(url, "Nap", id, "?seconds=20");
+      yield* request<string[]>(`${url}/journal/${id}`).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          until: (entries) => entries.length > 0,
+          times: 30,
+        }),
+      );
+      yield* request(`${url}/interrupt/Nap/${id}?executionId=${run.executionId}`, "POST");
+      expect(yield* awaitResult(run.status)).toEqual({ _tag: "Interrupted" });
+      expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["before", "undo"]);
+    }),
+    { timeout: 90_000 },
+  );
+
+  test(
+    "interrupting a workflow sleeping after a signal finishes it",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const id = yield* freshId("hold");
+      const run = yield* start(url, "Hold", id, "?seconds=20");
+      const journal = (length: number) =>
+        request<string[]>(`${url}/journal/${id}`).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("500 millis"),
+            until: (entries) => entries.length >= length,
+            times: 30,
+          }),
+        );
+      yield* journal(1);
+      yield* request(`${url}/approve/Hold/${id}?executionId=${run.executionId}&by=agent`, "POST");
+      yield* journal(2);
+      yield* request(`${url}/interrupt/Hold/${id}?executionId=${run.executionId}`, "POST");
+      expect(yield* awaitResult(run.status)).toEqual({ _tag: "Interrupted" });
+      expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual([
+        "requested",
+        "approved:agent",
+      ]);
+    }),
+    { timeout: 90_000 },
+  );
+
+  test.skipIf(engine !== "native")(
+    "pausing a sleeping workflow suspends it until resumed",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const id = yield* freshId("pause");
+      const run = yield* start(url, "Nap", id, "?seconds=10");
+      yield* request<string[]>(`${url}/journal/${id}`).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          until: (entries) => entries.length > 0,
+          times: 30,
+        }),
+      );
+      const native = (operation: string) =>
+        request<{ status: string }>(
+          `${url}/native/${operation}/Nap?executionId=${run.executionId}`,
+          "POST",
+        );
+      yield* native("pause");
+      // Cloudflare stops the sleep to pause the run; the run must not finish.
+      expect(
+        yield* native("status").pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("500 millis"),
+            until: ({ status }) => status !== "waitingForPause" && status !== "waiting",
+            times: 30,
+          }),
+        ),
+      ).toMatchObject({ status: "paused" });
+      expect(yield* request<RunStatus>(run.status)).toEqual({ _tag: "Running" });
+      yield* native("resume");
+      expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: "rested" });
+      expect(yield* request<string[]>(`${url}/journal/${id}`)).toEqual(["before", "after"]);
+    }),
+    { timeout: 90_000 },
+  );
+
+  test(
     "runs a child workflow",
     Effect.gen(function* () {
       const { url } = yield* stack;

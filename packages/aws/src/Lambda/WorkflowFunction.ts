@@ -328,13 +328,13 @@ const makeWorkflowRunner = <ROut, E, RIn>(
         if (!registration) {
           return yield* Effect.die(new Error(`Workflow ${invocation.workflow} is not hosted here`));
         }
-        const durable = yield* DurableStep;
         const runContext = yield* Effect.context<never>();
         const { workflow, execute } = registration;
         const payload = yield* Schema.decodeEffect(payloadCodec(workflow))(invocation.payload).pipe(
           Effect.orDie,
         );
         const instance = WorkflowEngine.WorkflowInstance.initial(workflow, invocation.executionId);
+        const durable = suspendable(yield* DurableStep, instance);
         const result = yield* execute(payload as object, invocation.executionId).pipe(
           Workflow.intoResult,
           Effect.provide(
@@ -396,28 +396,74 @@ const currentRun = (operation: string) =>
       : Effect.die(new Error(`WorkflowFunction: ${operation} only runs inside a workflow run`)),
   );
 
+/**
+ * When the SDK suspends an invocation, the operation the run waits on never
+ * settles, and the invocation stops the run. That's a suspension, not the
+ * run's outcome, so no compensation runs.
+ */
+const suspendable = (
+  durable: DurableStep["Service"],
+  instance: WorkflowEngine.WorkflowInstance["Service"],
+): DurableStep["Service"] => {
+  const suspend = <A>(effect: Effect.Effect<A>) =>
+    Effect.onInterrupt(effect, () =>
+      Effect.sync(() => {
+        instance.suspended = true;
+      }),
+    );
+  return {
+    step: (options) => suspend(durable.step(options)),
+    wait: (name, duration) => suspend(durable.wait(name, duration)),
+    waitForCallback: (options) => suspend(durable.waitForCallback(options)),
+  };
+};
+
 /** A callback failed with this type interrupts the run waiting on it. */
 const INTERRUPT = "alchemy/WorkflowInterrupted";
 
-/** The SDK's callback error arrives wrapped, with the type in its cause chain. */
-const isInterrupt = (defect: unknown) => {
+interface SdkError {
+  readonly name?: unknown;
+  readonly message?: unknown;
+  readonly cause?: unknown;
+}
+
+/** The SDK's callback errors arrive wrapped, with the type in their cause chain. */
+const causedBy = (defect: unknown, matches: (error: SdkError) => boolean) => {
   let node = defect;
   for (let depth = 0; node !== null && typeof node === "object" && depth < 5; depth++) {
-    const error = node as {
-      readonly name?: unknown;
-      readonly message?: unknown;
-      readonly cause?: unknown;
-    };
-    if (
-      error.name === INTERRUPT ||
-      (typeof error.message === "string" && error.message.includes(INTERRUPT))
-    ) {
-      return true;
-    }
+    const error = node as SdkError;
+    if (matches(error)) return true;
     node = error.cause;
   }
   return false;
 };
+
+const isInterrupt = (defect: unknown) =>
+  causedBy(
+    defect,
+    (error) =>
+      error.name === INTERRUPT ||
+      (typeof error.message === "string" && error.message.includes(INTERRUPT)),
+  );
+
+const isTimeout = (defect: unknown) =>
+  causedBy(defect, (error) => error.name === "CallbackTimeoutError");
+
+/** Wait for a callback, or interrupt the run when it's failed with an interrupt. */
+const awaitCallback = <A>(
+  run: CurrentRun["Service"],
+  options: { readonly name: string; readonly timeout?: Duration.Duration },
+) =>
+  run.durable.waitForCallback<A>({ ...options, submitter: () => Effect.void }).pipe(
+    Effect.catchDefect((defect) =>
+      isInterrupt(defect)
+        ? Effect.sync(() => {
+            run.instance.interrupted = true;
+            run.instance.suspended = false;
+          }).pipe(Effect.andThen(Effect.interrupt))
+        : Effect.die(defect),
+    ),
+  );
 
 /** Lambda's calls for one host function. */
 interface Calls {
@@ -644,7 +690,7 @@ const makeEngine = (options: {
         return Option.some(result ?? new Workflow.Suspended({}));
       }),
 
-    // A run waiting on a signal is woken with an interrupt, so its
+    // A run waiting on a signal or a clock is woken with an interrupt, so its
     // compensations run; a run busy in a step can only be stopped.
     interrupt: (workflow, executionId) =>
       Effect.gen(function* () {
@@ -707,27 +753,22 @@ const makeEngine = (options: {
         return new Workflow.Complete({ exit: yield* decodeExit(text) });
       }),
 
-    // A clock's sleep is a durable wait; a signal is a callback to wait for.
+    // A signal is a callback to wait for. A clock is a callback that times
+    // out when it's due, so an interrupt can wake a sleeping run too.
     deferredResult: (deferred) =>
       Effect.gen(function* () {
         const run = yield* currentRun("DurableDeferred reads");
         const duration = run.clocks.get(deferred.name);
         if (duration !== undefined) {
-          yield* run.durable.wait(deferred.name, Duration.max(duration, Duration.seconds(1)));
+          yield* awaitCallback(run, {
+            name: deferred.name,
+            timeout: Duration.max(duration, Duration.seconds(1)),
+          }).pipe(
+            Effect.catchDefect((defect) => (isTimeout(defect) ? Effect.void : Effect.die(defect))),
+          );
           return Option.some(Exit.void);
         }
-        const text = yield* run.durable
-          .waitForCallback<string>({ name: deferred.name, submitter: () => Effect.void })
-          .pipe(
-            Effect.catchDefect((defect) =>
-              isInterrupt(defect)
-                ? Effect.sync(() => {
-                    run.instance.interrupted = true;
-                    run.instance.suspended = false;
-                  }).pipe(Effect.andThen(Effect.interrupt))
-                : Effect.die(defect),
-            ),
-          );
+        const text = yield* awaitCallback<string>(run, { name: deferred.name });
         return Option.some(
           yield* decodeExit(typeof text === "string" ? text : JSON.stringify(text)),
         );

@@ -133,6 +133,7 @@ describe(
               reserved: true,
               total: 42,
               runtime: "AWS.Lambda.Function",
+              unclosed: 0,
             });
           }),
         { timeout: 150_000 },
