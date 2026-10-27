@@ -67,8 +67,8 @@ export type Project = Resource<
     name: string;
     /** User-assigned project id. */
     projectId: string;
-    /** Parent `organizations/{org}` or `folders/{folder}`, or empty when standalone. */
-    parent: string;
+    /** Parent `organizations/{org}` or `folders/{folder}`; `undefined` when standalone. */
+    parent: string | undefined;
     /** User-assigned display name. */
     displayName: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
@@ -120,7 +120,7 @@ export type Project = Resource<
  * ```typescript
  * // With no `parent`, the project lands under the current project's
  * // organization or folder. When the current project has none, it is
- * // created standalone and `parent` is "". Google only lets user
+ * // created standalone and `parent` is `undefined`. Google only lets user
  * // credentials create standalone projects, not service accounts.
  * const project = yield* GCP.ResourceManager.Project("Sandbox", {
  *   displayName: "Sandbox",
@@ -199,7 +199,7 @@ const sanitizeDisplayName = (value: string | undefined, fallback: string) => {
 const toAttrs = (project: resourcemanager.Project) => ({
   name: project.name ?? "",
   projectId: project.projectId ?? lastSegment(project.name ?? ""),
-  parent: project.parent ?? "",
+  parent: project.parent || undefined,
   displayName: project.displayName,
   labels: userLabels(project.labels),
   state: project.state,
@@ -268,19 +268,18 @@ const ensureActive = (project: resourcemanager.Project) =>
   });
 
 // Unlike folders, a project may be standalone (no organization or folder).
-// An empty parent omits `parent` on create and never moves the project; a
-// recorded empty parent keeps a standalone project out of the ambient hierarchy.
+// No parent omits `parent` on create and never moves the project. A deployed
+// project keeps the parent it has, so a standalone one stays out of the
+// current project's hierarchy.
 const resolveProjectParent = Effect.fn(function* (
   explicit: string | undefined,
-  existing: string | undefined,
+  output: { readonly parent: string | undefined } | undefined,
 ) {
-  if (explicit !== undefined && explicit.length > 0) {
-    return normalizeHierarchyParent(explicit);
+  if (explicit) return normalizeHierarchyParent(explicit);
+  if (output !== undefined) {
+    return output.parent ? normalizeHierarchyParent(output.parent) : undefined;
   }
-  if (existing !== undefined) {
-    return existing.length > 0 ? normalizeHierarchyParent(existing) : "";
-  }
-  return (yield* tryResolveParent()) ?? "";
+  return yield* tryResolveParent();
 });
 
 export const ProjectProvider = () =>
@@ -325,7 +324,7 @@ export const ProjectProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const projectId = yield* toProjectId(id, news.projectId, output?.projectId);
-      const parent = yield* resolveProjectParent(news.parent, output?.parent);
+      const parent = yield* resolveProjectParent(news.parent, output);
       const displayName = sanitizeDisplayName(news.displayName, projectId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -339,7 +338,7 @@ export const ProjectProvider = () =>
           .createProjects({
             body: {
               projectId,
-              parent: parent || undefined,
+              parent,
               displayName,
               labels: desiredLabels,
             },
@@ -394,7 +393,7 @@ export const ProjectProvider = () =>
 
       if (
         current.parent !== undefined &&
-        parent.length > 0 &&
+        parent !== undefined &&
         !sameHierarchyParent(current.parent, parent)
       ) {
         const operation = yield* resourcemanager.moveProjects({

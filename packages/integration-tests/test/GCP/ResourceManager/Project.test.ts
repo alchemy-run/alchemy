@@ -99,8 +99,8 @@ test.provider.skipIf(!runLifecycle)(
       yield* stack.destroy();
 
       // Standalone when the current project has no organization or folder.
-      const expectedParent = (yield* resolveParent) ?? "";
-      if (runStandalone) expect(expectedParent).toEqual("");
+      const expectedParent = yield* resolveParent;
+      if (runStandalone) expect(expectedParent).toBeUndefined();
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
