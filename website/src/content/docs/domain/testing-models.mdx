@@ -72,6 +72,8 @@ Views and streams are checked as a client would read them. `view` checks a view 
 
 Commands run as whoever `provide` says, as their middleware would. Here `asSam` provides `CurrentActor`, so the account's ownership check passes.
 
+The checks after a `when` are type-checked against its command. `rejected` takes only a rejection the command declares, and `replied` only its reply type. A `when` needs a `provide` step before it for every service its command's middleware provides, so without `asSam` the story does not compile.
+
 ## Answer outside systems
 
 External system calls wait until you answer them, so you decide what the outside world says, and when.
