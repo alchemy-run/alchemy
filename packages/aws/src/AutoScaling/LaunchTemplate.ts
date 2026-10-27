@@ -290,7 +290,7 @@ export const LaunchTemplateProvider = () =>
           } as any)
           .pipe(
             Effect.map((result) => result.LaunchTemplates?.[0]),
-            Effect.catchIf(isLaunchTemplateNotFound, () => Effect.succeed(undefined)),
+            Effect.catchIf(isLaunchTemplateNotFound, () => Effect.undefined),
           );
 
       const describeByName = (launchTemplateName: string) =>
@@ -300,7 +300,7 @@ export const LaunchTemplateProvider = () =>
           } as any)
           .pipe(
             Effect.map((result) => result.LaunchTemplates?.[0]),
-            Effect.catchIf(isLaunchTemplateNotFound, () => Effect.succeed(undefined)),
+            Effect.catchIf(isLaunchTemplateNotFound, () => Effect.undefined),
           );
 
       const syncTemplateTags = Effect.fn(function* ({

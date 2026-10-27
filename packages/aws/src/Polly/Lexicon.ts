@@ -154,7 +154,7 @@ export const LexiconProvider = () =>
 
       const getOne = (name: string) =>
         retryTransient(polly.getLexicon({ Name: name })).pipe(
-          Effect.catchTag("LexiconNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("LexiconNotFoundException", () => Effect.undefined),
         );
 
       const waitForContent = (name: string, desired: string) =>

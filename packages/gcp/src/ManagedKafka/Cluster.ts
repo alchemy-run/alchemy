@@ -368,7 +368,7 @@ export const ClusterProvider = () =>
           })
           .pipe(
             retryCreateQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -431,7 +431,7 @@ export const ClusterProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const op = yield* kafka
         .deleteProjectsLocationsClusters({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (op !== undefined) {
         yield* waitForOperation(op, { notFoundOk: true });
       }

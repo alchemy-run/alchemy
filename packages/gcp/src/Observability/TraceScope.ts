@@ -154,7 +154,7 @@ const toAttrs = (scope: observability.TraceScope, project: string, location: str
 const getByName = (name: string) =>
   observability
     .getProjectsLocationsTraceScopes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const TraceScopeProvider = () =>
   Provider.succeed(TraceScope, {

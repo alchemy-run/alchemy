@@ -256,7 +256,7 @@ const toAttrs = (repo: artifactregistry.Repository, project: string, region: str
 const getByName = (name: string) =>
   artifactregistry
     .getProjectsLocationsRepositories({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const mavenKey = (config: RepositoryProps["mavenConfig"] | undefined) =>
   `${config?.allowSnapshotOverwrites === true}:${(
@@ -403,7 +403,7 @@ export const RepositoryProvider = () =>
               cleanupPolicyDryRun: desiredCleanupDryRun,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -460,7 +460,7 @@ export const RepositoryProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* artifactregistry
         .deleteProjectsLocationsRepositories({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);
       }

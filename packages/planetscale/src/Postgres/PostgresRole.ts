@@ -251,8 +251,8 @@ export const PostgresRoleProvider = () =>
             }),
           ),
           Effect.catchTags({
-            Forbidden: () => Effect.succeed(undefined),
-            NotFound: () => Effect.succeed(undefined),
+            Forbidden: () => Effect.undefined,
+            NotFound: () => Effect.undefined,
           }),
         );
     }),
@@ -277,7 +277,7 @@ export const PostgresRoleProvider = () =>
               organization,
               database: databaseName,
             })
-            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)))
+            .pipe(Effect.catchTag("NotFound", () => Effect.undefined))
         : undefined;
 
       // 2. Ensure — create if missing. Single branch covers both

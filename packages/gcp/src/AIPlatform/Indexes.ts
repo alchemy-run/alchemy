@@ -167,7 +167,7 @@ const toAttrs = (index: aiplatform.GoogleCloudAiplatformV1Index, project: string
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsIndexes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listPage = (parent: string, filter?: string) =>
   aiplatform.listProjectsLocationsIndexes.pages({ parent, pageSize: 100, filter }).pipe(
@@ -316,7 +316,7 @@ export const IndexProvider = () =>
               encryptionSpec: news.encryptionSpec,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const name = resourceNameFromOperation(done);
@@ -378,7 +378,7 @@ export const IndexProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

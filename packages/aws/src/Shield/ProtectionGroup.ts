@@ -124,9 +124,7 @@ export const ProtectionGroup = Resource<ProtectionGroup>("AWS.Shield.ProtectionG
 const observeGroup = (protectionGroupId: string) =>
   shield.describeProtectionGroup({ ProtectionGroupId: protectionGroupId }).pipe(
     Effect.map((r) => r.ProtectionGroup),
-    Effect.catchTag(["ResourceNotFoundException", "SubscriptionNotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["ResourceNotFoundException", "SubscriptionNotFound"], () => Effect.undefined),
   );
 
 const toTagRecord = (tags: shield.Tag[] | undefined): Record<string, string> =>

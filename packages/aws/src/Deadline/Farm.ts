@@ -118,7 +118,7 @@ interface FarmState {
 const readFarmById = Effect.fn(function* (farmId: string, arnOf: (path: string) => string) {
   const described = yield* deadline
     .getFarm({ farmId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described) return undefined;
   const farmArn = arnOf(`farm/${described.farmId}`);
   const state: FarmState = {

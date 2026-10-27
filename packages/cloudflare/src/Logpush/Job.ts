@@ -458,7 +458,7 @@ const observeById = (scope: Scope, jobId: number) =>
     : logpush.getJobForAccount({ accountId: scope.accountId, jobId })
   ).pipe(
     Effect.map((job): logpush.GetJobResponse | undefined => job),
-    Effect.catchTag("JobNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("JobNotFound", () => Effect.undefined),
   );
 
 const findByName = (scope: Scope, name: string, dataset: Dataset | undefined) =>

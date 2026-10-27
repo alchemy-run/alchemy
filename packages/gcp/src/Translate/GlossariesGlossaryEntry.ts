@@ -210,10 +210,10 @@ const toAttrs = (entry: translate.GlossaryEntry, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : translate
         .getProjectsLocationsGlossariesGlossaryEntries({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const glossaryParentOf = (project: string, location: string, parent: string) =>
   expandParent(parent, project, location, "glossaries");

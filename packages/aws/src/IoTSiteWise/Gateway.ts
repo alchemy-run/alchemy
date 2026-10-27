@@ -108,7 +108,7 @@ interface GatewayState {
 const readGatewayById = Effect.fn(function* (gatewayId: string) {
   const described = yield* sitewise
     .describeGateway({ gatewayId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described) return undefined;
   const state: GatewayState = {
     described,

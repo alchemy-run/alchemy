@@ -542,7 +542,7 @@ const isPlaceholder = (instance: redis.Instance) => {
 const getByName = (name: string) =>
   redis
     .getProjectsLocationsInstances({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /** Wait for an operation through the shared GCP waiter. */
 const waitForOperation = (operation: redis.Operation, options?: { notFoundOk?: boolean }) =>
@@ -779,7 +779,7 @@ export const InstanceProvider = () =>
               authEnabled,
             ),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -895,7 +895,7 @@ export const InstanceProvider = () =>
         }),
       );
       const operation = yield* redis.deleteProjectsLocationsInstances({ name: output.name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         Effect.retry({
           while: (error) => error._tag === "Conflict",
           times: 24,

@@ -377,7 +377,7 @@ export const CloudAgentProvider = () =>
           environmentId,
           name,
           ...(props.variables !== undefined ? { variables: props.variables } : {}),
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         current =
           created !== undefined && !isGone(created)
             ? created

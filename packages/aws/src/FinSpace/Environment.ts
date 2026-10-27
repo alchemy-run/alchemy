@@ -143,8 +143,9 @@ const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* finspace
     .listTagsForResource({ resourceArn: arn })
     .pipe(
-      Effect.catchTag(["ResourceNotFoundException", "InvalidRequestException"], () =>
-        Effect.succeed(undefined),
+      Effect.catchTag(
+        ["ResourceNotFoundException", "InvalidRequestException"],
+        () => Effect.undefined,
       ),
     );
   return Object.fromEntries(
@@ -177,7 +178,7 @@ const isGone = (status: EnvironmentStatus | undefined) =>
 const readEnvironmentById = Effect.fn(function* (environmentId: string) {
   const response = yield* finspace
     .getEnvironment({ environmentId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   const env = response?.environment;
   if (!env || isGone(env.status)) return undefined;
   return env;
@@ -240,7 +241,7 @@ const waitForEnvironmentStatus = (environmentId: string, target: "CREATED" | "DE
     Effect.gen(function* () {
       const response = yield* finspace
         .getEnvironment({ environmentId })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       const status = response?.environment?.status;
       if (target === "DELETED") {
         if (response === undefined || isGone(status)) return;

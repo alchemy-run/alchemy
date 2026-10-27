@@ -401,7 +401,7 @@ export const PrivateNetworkProvider = () =>
       const name = output?.name ?? olds?.name ?? PLATFORM_NETWORK_NAME;
       if (environmentId === undefined) return undefined;
       const config = yield* readNetworkConfig(environmentId).pipe(
-        Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("RailwayNotFound", () => Effect.undefined),
       );
       if (config === undefined || config.privateNetworkDisabled === true) {
         return undefined;
@@ -723,7 +723,7 @@ const getEndpoint = (input: {
     serviceId: input.serviceId,
   }).pipe(
     Effect.map((endpoint) => (endpoint == null || isGoneEndpoint(endpoint) ? undefined : endpoint)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const resolveServiceName = (serviceId: string, hint?: string) =>
@@ -825,7 +825,7 @@ export const PrivateNetworkEndpointProvider = () =>
             id: service.id,
             name: service.name,
             deletedAt: service.deletedAt,
-          })).pipe(Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)));
+          })).pipe(Effect.catchTag("RailwayNotFound", () => Effect.undefined));
           const services = (live ?? []).filter((service) => service.deletedAt == null);
           const nested = yield* Effect.forEach(owned, (network) =>
             Effect.forEach(services, (service) =>

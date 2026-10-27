@@ -99,7 +99,7 @@ export const DBClusterParameterGroupProvider = () =>
           .describeDBClusterParameterGroups({
             DBClusterParameterGroupName: name,
           })
-          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.undefined));
         return response?.DBClusterParameterGroups?.[0];
       });
 

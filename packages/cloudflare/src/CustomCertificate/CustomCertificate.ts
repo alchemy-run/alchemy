@@ -441,7 +441,7 @@ type ObservedCertificate = customCertificates.GetCustomCertificateResponse;
 const getCertificate = (zoneId: string, customCertificateId: string) =>
   customCertificates.getCustomCertificate({ zoneId, customCertificateId }).pipe(
     Effect.map((cert): ObservedCertificate | undefined => cert),
-    Effect.catchTag("CustomCertificateNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("CustomCertificateNotFound", () => Effect.undefined),
   );
 
 /**

@@ -126,10 +126,10 @@ export class ContactNotResolved extends Data.TaggedError(
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : essentialcontacts
         .getProjectsContacts({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string) =>
   parent.length === 0

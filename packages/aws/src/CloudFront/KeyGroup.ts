@@ -89,7 +89,7 @@ export const KeyGroupProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getKeyGroupConfig({ Id: id })
-          .pipe(Effect.catchTag("NoSuchResource", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchResource", () => Effect.undefined));
         if (!config?.KeyGroupConfig) return undefined;
         return { config: config.KeyGroupConfig, etag: config.ETag };
       });

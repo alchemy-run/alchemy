@@ -191,7 +191,7 @@ const toAttrs = (channel: monitoring.NotificationChannel, project: string) => {
 const getByName = (name: string) =>
   monitoring
     .getProjectsNotificationChannels({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   monitoring.listProjectsNotificationChannels

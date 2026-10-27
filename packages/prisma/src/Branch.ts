@@ -280,7 +280,7 @@ const ProviderLive = () =>
           const branch = branchId
             ? yield* getBranch({ branchId }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : yield* findBranchInProject;
           if (!branch) return undefined;
@@ -295,7 +295,7 @@ const ProviderLive = () =>
           let branch = branchId
             ? yield* getBranch({ branchId }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           if (!branch) {
@@ -368,7 +368,7 @@ const ProviderLive = () =>
             branchId: output.branchId,
           }).pipe(
             Effect.map((response) => response.data),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!branch) return;
           yield* ensureBranchIdentity(branch, {
@@ -431,7 +431,7 @@ const ProviderLive = () =>
               branchId: branch.id,
             }).pipe(
               Effect.map((response) => response.data),
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("NotFound", () => Effect.undefined),
             );
             if (!demoted) return;
             yield* ensureBranchIdentity(demoted, {

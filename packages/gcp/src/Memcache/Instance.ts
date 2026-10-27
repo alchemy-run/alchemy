@@ -412,7 +412,7 @@ const isPlaceholder = (instance: memcache.Instance) => {
 const getByName = (name: string) =>
   memcache
     .getProjectsLocationsInstances({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait for a Memorystore for Memcached operation; instance create,
@@ -601,7 +601,7 @@ export const InstanceProvider = () =>
             instanceId,
             body: toCreateBody(news, desiredLabels, nodeCount, nodeConfig),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -704,7 +704,7 @@ export const InstanceProvider = () =>
       const operation = yield* memcache
         .deleteProjectsLocationsInstances({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

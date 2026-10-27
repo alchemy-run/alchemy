@@ -124,10 +124,10 @@ const toAttrs = (set: cci.GoogleCloudContactcenterinsightsV1AuthorizedViewSet, p
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsAuthorizedViewSets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   cci.listProjectsLocationsAuthorizedViewSets.pages({ parent, pageSize: 100 }).pipe(

@@ -104,7 +104,7 @@ export const DistributionConfigurationProvider = () =>
           .getDistributionConfiguration({
             distributionConfigurationArn: arn,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.distributionConfiguration;
       });
 
@@ -163,9 +163,7 @@ export const DistributionConfigurationProvider = () =>
                 tags: desiredTags,
                 clientToken,
               })
-              .pipe(
-                Effect.catchTag("ResourceAlreadyExistsException", () => Effect.succeed(undefined)),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.undefined));
             observed = yield* getConfiguration(created?.distributionConfigurationArn ?? arn);
             if (observed === undefined) {
               return yield* Effect.fail(

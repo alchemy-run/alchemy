@@ -117,7 +117,7 @@ export const UserProvider = () =>
       const readUser = Effect.fn(function* (name: string) {
         const response = yield* memorydb
           .describeUsers({ UserName: name })
-          .pipe(Effect.catchTag("UserNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("UserNotFoundFault", () => Effect.undefined));
         return response?.Users?.[0];
       });
 

@@ -156,7 +156,7 @@ export const ReplicationGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* elasticache
           .describeReplicationGroups({ ReplicationGroupId: name })
-          .pipe(Effect.catchTag("ReplicationGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ReplicationGroupNotFoundFault", () => Effect.undefined));
         return response?.ReplicationGroups?.[0];
       });
       const waitForAvailable = Effect.fn(function* (name: string) {

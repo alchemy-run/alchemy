@@ -329,7 +329,7 @@ export const ZoneProvider = () =>
               (zoneId) =>
                 zones.getZone({ zoneId }).pipe(
                   Effect.map((result) => toZoneAttributes(result, accountId)),
-                  Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)),
+                  Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined),
                 ),
               { concurrency: 10 },
             );

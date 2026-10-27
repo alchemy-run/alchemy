@@ -144,10 +144,10 @@ const toAttrs = (config: scc.GoogleCloudSecuritycenterV1MuteConfig, project: str
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getProjectsMuteConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const MuteConfigProvider = () =>
   Provider.succeed(MuteConfig, {

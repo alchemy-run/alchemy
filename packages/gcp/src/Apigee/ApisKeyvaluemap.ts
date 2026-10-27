@@ -108,14 +108,14 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApisKeyvaluemaps({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const getOwnershipEntry = (mapName: string) =>
   apigee
     .getOrganizationsApisKeyvaluemapsEntries({
       name: `${mapName}/entries/${OWNERSHIP_KEY}`,
     })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const ownershipValue = (labels: Record<string, string>) => JSON.stringify(labels);
 

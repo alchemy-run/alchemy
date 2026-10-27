@@ -69,7 +69,7 @@ const observe = (
 ) =>
   Neon.listBranchNeonAuthOauthProviders(authRequest(scope)).pipe(
     Effect.map((response) => response.providers.find((item) => item.id === provider)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const attributes = (

@@ -342,7 +342,7 @@ export const TagBindingProvider = () =>
           .createTagBindings({
             body: createBody(parent, tagValue),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -380,7 +380,7 @@ export const TagBindingProvider = () =>
 
       const operation = yield* resourcemanager
         .deleteTagBindings({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

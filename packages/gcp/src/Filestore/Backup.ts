@@ -252,7 +252,7 @@ const getByName = (name: string) =>
     if (name.length === 0 || name.includes("//")) return undefined;
     return yield* file
       .getProjectsLocationsBackups({ name })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
 export const BackupProvider = () =>
@@ -380,7 +380,7 @@ export const BackupProvider = () =>
               tags: news.tags,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -439,7 +439,7 @@ export const BackupProvider = () =>
           times: 8,
           schedule: Schedule.spaced("5 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

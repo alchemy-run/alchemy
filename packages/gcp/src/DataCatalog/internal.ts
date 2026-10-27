@@ -256,11 +256,11 @@ export const missingGet =
   ) =>
   (name: string) =>
     name.length === 0
-      ? Effect.succeed(undefined)
+      ? Effect.undefined
       : effect({ name }).pipe(
           Effect.catchIf(
             (error) => error._tag === "NotFound",
-            () => Effect.succeed(undefined),
+            () => Effect.undefined,
           ),
         );
 

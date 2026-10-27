@@ -184,7 +184,7 @@ export const ResolverRuleProvider = () =>
       const getRule = (ruleId: string) =>
         r53r.getResolverRule({ ResolverRuleId: ruleId }).pipe(
           Effect.map((r) => r.ResolverRule),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       const observe = Effect.fn(function* (name: string, ruleId: string | undefined) {
@@ -368,7 +368,7 @@ export const ResolverRuleProvider = () =>
                       VPCId: assoc.VPCId,
                     })
                     .pipe(
-                      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                      Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                       Effect.asVoid,
                     )
                 : Effect.void,

@@ -227,7 +227,7 @@ export const UserProvider = () =>
                   };
                 }).pipe(
                   // A user may be deleted concurrently mid-hydration.
-                  Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
                 ),
               { concurrency: 10 },
             );
@@ -251,7 +251,7 @@ export const UserProvider = () =>
             .getUser({
               UserName: userName,
             })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (!response?.User?.Arn) {
             return undefined;
           }
@@ -281,7 +281,7 @@ export const UserProvider = () =>
           // Observe — read the live user (or absence).
           const observedResponse = yield* iam
             .getUser({ UserName: userName })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           let observedUser = observedResponse?.User;
 
           // Ensure — create the user when missing. On race, verify

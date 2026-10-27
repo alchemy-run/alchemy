@@ -167,7 +167,7 @@ const toAttrs = (mapping: appengine.DomainMapping, appsId: string, project: stri
 
 const getByDomain = (appsId: string, domain: string) =>
   domain.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         appengine.getAppsDomainMappings({
           appsId,
@@ -303,7 +303,7 @@ export const AppsDomainMappingProvider = () =>
           appsId: output.appsId,
           domainMappingsId: output.domain,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation === undefined) return;
       yield* waitForOperation(operation, {
         appsId: output.appsId,

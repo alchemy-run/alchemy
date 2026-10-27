@@ -335,7 +335,7 @@ const ProviderLive = () =>
                 envVarId: variableId,
               }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : yield* findVariableInProject;
           if (!variable) return undefined;
@@ -364,7 +364,7 @@ const ProviderLive = () =>
                 envVarId: variableId,
               }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           const value = news.value;
@@ -416,7 +416,7 @@ const ProviderLive = () =>
             envVarId: output.environmentVariableId,
           }).pipe(
             Effect.map((response) => response.data),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!variable) return;
           yield* ensureVariableIdentity(variable, {

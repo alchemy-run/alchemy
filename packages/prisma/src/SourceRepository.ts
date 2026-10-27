@@ -422,7 +422,7 @@ const ProviderLive = () =>
                 id: sourceRepositoryId,
               }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : yield* findRepositoryInProject;
           if (!repo) return undefined;
@@ -439,7 +439,7 @@ const ProviderLive = () =>
                 id: sourceRepositoryId,
               }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           if (repo && !matchesDesiredRepository(repo, projectId, news)) {
@@ -544,7 +544,7 @@ const ProviderLive = () =>
             id: output.sourceRepositoryId,
           }).pipe(
             Effect.map((response) => response.data),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!repo) return;
           if (

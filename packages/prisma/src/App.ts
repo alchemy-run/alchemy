@@ -337,7 +337,7 @@ const ProviderLive = () =>
           const app = appId
             ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : yield* findAppInProject;
           if (!app) return undefined;
@@ -363,7 +363,7 @@ const ProviderLive = () =>
           let app: ObservedApp | undefined = appId
             ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           if (!app) {
@@ -445,7 +445,7 @@ const ProviderLive = () =>
           if (isPrismaDevId(output.appId)) return;
           const app = yield* getService({ serviceId: output.appId }).pipe(
             Effect.map((response) => response.data),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!app) return;
           if (app.projectId !== output.projectId || app.region.id !== output.regionId) {

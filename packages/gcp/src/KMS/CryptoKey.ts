@@ -386,7 +386,7 @@ const toAttrs = (key: kms.CryptoKey, project: string, region: string): CryptoKey
 const getByName = (name: string) =>
   kms
     .getProjectsLocationsKeyRingsCryptoKeys({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const paginate = <A, E, R>(
   fetch: (
@@ -587,9 +587,9 @@ const destroyVersion = (name: string) =>
 const deleteVersion = (name: string) =>
   kms.deleteProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({ name }).pipe(
     Effect.catchTags({
-      NotFound: () => Effect.succeed(undefined),
-      BadRequest: () => Effect.succeed(undefined),
-      Conflict: () => Effect.succeed(undefined),
+      NotFound: () => Effect.undefined,
+      BadRequest: () => Effect.undefined,
+      Conflict: () => Effect.undefined,
     }),
     Effect.flatMap(
       (

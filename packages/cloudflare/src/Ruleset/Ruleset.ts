@@ -164,7 +164,7 @@ export const RulesetProvider = () =>
           zoneId: output.zoneId,
           rulesetPhase: output.phase ?? olds.phase,
         })
-        .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
       if (entrypoint === undefined) return;
       const owned = new Set(output.rules.map((rule) => rule.id));
       yield* Effect.forEach(
@@ -188,7 +188,7 @@ export const RulesetProvider = () =>
         })
         .pipe(
           Effect.map((ruleset) => toRulesetAttributes(zoneId, ruleset)),
-          Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("RulesetNotFound", () => Effect.undefined),
         );
     }),
     // A `Ruleset` is a zone phase entrypoint (kind: "zone"). There is no
@@ -222,9 +222,7 @@ export const RulesetProvider = () =>
                       Effect.map((ruleset) => toRulesetAttributes(zone.id, ruleset)),
                       // Per-item not-found / plan-gated entrypoints are
                       // skipped rather than failing the whole enumeration.
-                      Effect.catchTag(["RulesetNotFound", "Forbidden"], () =>
-                        Effect.succeed(undefined),
-                      ),
+                      Effect.catchTag(["RulesetNotFound", "Forbidden"], () => Effect.undefined),
                     ),
                 { concurrency: 10 },
               ),

@@ -486,7 +486,7 @@ const observeById = (zoneId: string, dnsRecordId: string) =>
   Effect.gen(function* () {
     const r = yield* dns.getRecord({ zoneId, dnsRecordId }).pipe(
       // Only a missing record should fall through to the find-by-name path.
-      Effect.catchTag("RecordNotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("RecordNotFound", () => Effect.undefined),
     );
     if (r === undefined) return undefined;
     return narrowRecord(r as Parameters<typeof narrowRecord>[0]);

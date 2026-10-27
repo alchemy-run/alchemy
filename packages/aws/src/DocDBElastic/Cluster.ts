@@ -200,7 +200,7 @@ export const ClusterProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* docdbelastic
           .getCluster({ clusterArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.cluster;
       });
 
@@ -340,7 +340,7 @@ export const ClusterProvider = () =>
                 preferredBackupWindow: props.preferredBackupWindow,
                 tags: desiredTags,
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             observed = response?.cluster ?? (yield* findByName(name));
             created = true;
           }
@@ -496,7 +496,7 @@ export const ClusterProvider = () =>
                 (summary) =>
                   getByArn(summary.clusterArn).pipe(
                     Effect.flatMap((cluster) =>
-                      cluster === undefined ? Effect.succeed(undefined) : toAttrs(cluster),
+                      cluster === undefined ? Effect.undefined : toAttrs(cluster),
                     ),
                   ),
                 { concurrency: 4 },

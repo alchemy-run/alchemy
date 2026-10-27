@@ -336,7 +336,7 @@ interface AclLanRequest {
 const getAcl = (accountId: string, siteId: string, aclId: string) =>
   magicTransit.getSiteAcl({ accountId, siteId, aclId }).pipe(
     Effect.map((acl): ObservedAcl | undefined => acl),
-    Effect.catchTag("SiteAclNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("SiteAclNotFound", () => Effect.undefined),
   );
 
 /**

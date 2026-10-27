@@ -169,12 +169,12 @@ export const samePayload = (left: string | undefined, right: string | undefined)
 export const getParameter = (name: string) =>
   parametermanager
     .getProjectsLocationsParameters({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getVersion = (name: string) =>
   parametermanager
     .getProjectsLocationsParametersVersions({ name, view: "FULL" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const waitUntilParameterGone = (name: string) =>
   getParameter(name).pipe(

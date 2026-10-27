@@ -128,10 +128,10 @@ const toAttrs = (schema: documentai.GoogleCloudDocumentaiV1NextSchema, project: 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : documentai
         .getProjectsLocationsSchemas({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (id: string, project: string, parent: string, hinted?: string) =>
   Effect.gen(function* () {
@@ -256,7 +256,7 @@ export const SchemaProvider = () =>
           name: output.name,
           force: true,
         }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

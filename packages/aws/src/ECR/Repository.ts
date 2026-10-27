@@ -132,7 +132,7 @@ export const RepositoryProvider = () =>
           Effect.map((response) => response.policyText),
           Effect.catchTag(
             ["RepositoryPolicyNotFoundException", "RepositoryNotFoundException"],
-            () => Effect.succeed(undefined),
+            () => Effect.undefined,
           ),
         );
 
@@ -175,7 +175,7 @@ export const RepositoryProvider = () =>
             .describeRepositories({
               repositoryNames: [repositoryName],
             })
-            .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined));
           const repository = described?.repositories?.[0];
           if (!repository?.repositoryArn || !repository.repositoryUri) {
             return undefined;
@@ -211,7 +211,7 @@ export const RepositoryProvider = () =>
             .describeRepositories({
               repositoryNames: [repositoryName],
             })
-            .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined));
           let repository = described?.repositories?.[0];
 
           // Ensure — create the repository if missing. Tolerate
@@ -362,9 +362,7 @@ export const RepositoryProvider = () =>
                     })
                     .pipe(
                       Effect.map((res) => res.lifecyclePolicyText),
-                      Effect.catchTag("LifecyclePolicyNotFoundException", () =>
-                        Effect.succeed(undefined),
-                      ),
+                      Effect.catchTag("LifecyclePolicyNotFoundException", () => Effect.undefined),
                     );
                   return {
                     repositoryName: repository.repositoryName,

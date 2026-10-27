@@ -140,7 +140,7 @@ const toAttrs = (account: iam.ServiceAccount, project: string): ServiceAccount["
 const getByName = (name: string) =>
   iam
     .getProjectsServiceAccounts({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAccountId = (id: string, explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {

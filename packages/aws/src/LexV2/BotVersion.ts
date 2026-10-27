@@ -74,7 +74,7 @@ export const BotVersion = Resource<BotVersion>("AWS.LexV2.BotVersion");
 const describeVersion = Effect.fn(function* (botId: string, botVersion: string) {
   return yield* lexm
     .describeBotVersion({ botId, botVersion })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 });
 
 export const BotVersionProvider = () =>

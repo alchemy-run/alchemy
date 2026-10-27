@@ -85,7 +85,7 @@ export const DomainProvider = () =>
       const observeDomain = Effect.fn(function* (name: string) {
         return yield* sdb
           .domainMetadata({ DomainName: name })
-          .pipe(Effect.catchTag("NoSuchDomain", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchDomain", () => Effect.undefined));
       });
 
       return Domain.Provider.of({

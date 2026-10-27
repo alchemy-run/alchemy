@@ -169,7 +169,7 @@ export const TableProvider = () =>
           type: t.type,
           createdAt: t.createdAt,
         })),
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
     }),
     diff: Effect.fn(function* ({ id, news, olds }) {
@@ -203,7 +203,7 @@ export const TableProvider = () =>
         .getTable({ tableBucketARN: tableBucketArn, namespace, name })
         .pipe(
           Effect.map((t) => t),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       // Ensure — create if missing, tolerating a concurrent create.

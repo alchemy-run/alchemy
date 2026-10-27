@@ -619,7 +619,7 @@ export const InstanceProvider = () =>
           ),
           Effect.flatMap((instance) =>
             instance.State?.Name === "terminated"
-              ? Effect.succeed(undefined)
+              ? Effect.undefined
               : Effect.fail(new InstanceStillExists({ instanceId })),
           ),
           Effect.retry({
@@ -786,8 +786,8 @@ export const InstanceProvider = () =>
           const instance = output?.instanceId
             ? yield* describeInstance(output.instanceId).pipe(
                 Effect.catchTags({
-                  "InvalidInstanceID.NotFound": () => Effect.succeed(undefined),
-                  InstanceNotFound: () => Effect.succeed(undefined),
+                  "InvalidInstanceID.NotFound": () => Effect.undefined,
+                  InstanceNotFound: () => Effect.undefined,
                 }),
               )
             : yield* findInstanceByTags(id, instanceId);
@@ -841,8 +841,8 @@ export const InstanceProvider = () =>
           let instance: ec2.Instance | undefined = output?.instanceId
             ? yield* describeInstance(output.instanceId).pipe(
                 Effect.catchTags({
-                  "InvalidInstanceID.NotFound": () => Effect.succeed(undefined),
-                  InstanceNotFound: () => Effect.succeed(undefined),
+                  "InvalidInstanceID.NotFound": () => Effect.undefined,
+                  InstanceNotFound: () => Effect.undefined,
                 }),
               )
             : yield* findInstanceByTags(id, generation);

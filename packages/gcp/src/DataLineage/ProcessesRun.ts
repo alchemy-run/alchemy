@@ -175,10 +175,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : datalineage
         .getProjectsLocationsProcessesRuns({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ProcessesRunProvider = () =>
   Provider.succeed(ProcessesRun, {
@@ -309,7 +309,7 @@ export const ProcessesRunProvider = () =>
           name: output.name,
           allowMissing: true,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

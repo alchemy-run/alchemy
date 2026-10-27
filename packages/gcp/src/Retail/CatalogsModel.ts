@@ -177,10 +177,10 @@ const resourceName = (catalog: string, modelId: string) => `${catalog}/models/${
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : retail
         .getProjectsLocationsCatalogsModels({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const refresh = (name: string) =>
   getByName(name).pipe(
@@ -310,7 +310,7 @@ export const CatalogsModelProvider = () =>
         );
         if (current === undefined) {
           current = yield* refresh(name).pipe(
-            Effect.catchTag("GCP.Retail.CatalogsModelNotResolved", () => Effect.succeed(undefined)),
+            Effect.catchTag("GCP.Retail.CatalogsModelNotResolved", () => Effect.undefined),
           );
         }
       }

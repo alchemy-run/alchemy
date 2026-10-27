@@ -446,7 +446,7 @@ const lookupCreatedAt = (
       );
     }
     default:
-      return Effect.succeed(undefined);
+      return Effect.undefined;
   }
 };
 

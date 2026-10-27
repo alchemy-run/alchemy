@@ -183,7 +183,7 @@ const desiredBody = (
 const getByName = (name: string) =>
   dataproc
     .getProjectsLocationsWorkflowTemplates({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listLocation = (project: string, location: string) =>
   emptyOnMissing(

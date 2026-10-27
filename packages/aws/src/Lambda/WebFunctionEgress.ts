@@ -29,7 +29,7 @@ export const sameConnector = (a: string | undefined, b: string | undefined) =>
 export const connectorOfRevision = (functionName: string, revisionId: string) =>
   LambdaWeb.getWebFunctionRevision({ functionName, revisionId }).pipe(
     Effect.map((revision) => revision.serviceConfig.egressNetworkConnectorArn),
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
   );
 
 /**

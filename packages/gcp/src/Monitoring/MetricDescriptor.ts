@@ -315,7 +315,7 @@ const toBody = (
 const getByName = (name: string) =>
   monitoring
     .getProjectsMetricDescriptors({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilSynced = (name: string, desired: { displayName?: string; description: string }) =>
   getByName(name).pipe(

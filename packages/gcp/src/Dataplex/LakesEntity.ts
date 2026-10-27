@@ -261,7 +261,7 @@ const toAttrs = (entity: dataplex.GoogleCloudDataplexV1Entity, project: string) 
 const getByName = (name: string) =>
   dataplex
     .getProjectsLocationsLakesZonesEntities({ name, view: "FULL" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwnedEntities = (project: string, region: string) =>
   Effect.gen(function* () {

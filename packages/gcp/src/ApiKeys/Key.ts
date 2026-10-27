@@ -363,12 +363,12 @@ const toAttrs = (key: apikeys.V2Key, project: string, keyString?: string): Key["
 const getByName = (name: string) =>
   apikeys
     .getProjectsLocationsKeys({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const getKeyStringValue = (name: string) =>
   apikeys.getKeyStringProjectsLocationsKeys({ name }).pipe(
     Effect.map((response) => response.keyString),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const toAttrsLive = (key: apikeys.V2Key, project: string) =>
@@ -410,7 +410,7 @@ const reviveDeleted = (name: string) =>
   Effect.gen(function* () {
     const operation = yield* apikeys
       .undeleteProjectsLocationsKeys({ name, body: {} })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     if (operation !== undefined) {
       yield* waitForOperation(operation);
     }
@@ -504,7 +504,7 @@ export const KeyProvider = () =>
             keyId,
             body: toCreateBody(news, desiredAnnotations),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -566,7 +566,7 @@ export const KeyProvider = () =>
             times: 8,
             schedule: Schedule.spaced("1 second"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

@@ -124,7 +124,7 @@ const retryLocked = <A, E extends { readonly _tag: string }, R>(effect: Effect.E
 const getZone = (idOrName: string) =>
   Hetzner.zones.getZone({ id_or_name: idOrName }).pipe(
     Effect.map(({ zone }) => zone),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 /** Resolve the zone owning `hostname`: the pinned zone, else the most specific zone in the project. */

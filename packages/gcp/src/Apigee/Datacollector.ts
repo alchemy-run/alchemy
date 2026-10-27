@@ -132,7 +132,7 @@ const toAttrs = (collector: apigee.GoogleCloudApigeeV1DataCollector, organizatio
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDatacollectors({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const DatacollectorProvider = () =>
   Provider.succeed(Datacollector, {

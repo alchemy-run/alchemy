@@ -238,10 +238,10 @@ const toAttrs = (zone: dataplex.GoogleCloudDataplexV1Zone, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dataplex
         .getProjectsLocationsLakesZones({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
@@ -379,7 +379,7 @@ export const LakesZoneProvider = () =>
               discoverySpec: desiredDiscovery,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -432,8 +432,8 @@ export const LakesZoneProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
           }),
           Effect.catchTags({
-            NotFound: () => Effect.succeed(undefined),
-            BadRequest: () => Effect.succeed(undefined),
+            NotFound: () => Effect.undefined,
+            BadRequest: () => Effect.undefined,
           }),
         );
       if (operation !== undefined) {

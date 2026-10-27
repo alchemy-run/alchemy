@@ -87,7 +87,7 @@ export const SubnetGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* dax
           .describeSubnetGroups({ SubnetGroupNames: [name] })
-          .pipe(Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.undefined));
         return response?.SubnetGroups?.[0];
       });
 

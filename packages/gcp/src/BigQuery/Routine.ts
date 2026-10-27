@@ -397,7 +397,7 @@ const toAttrs = (routine: bigquery.Routine, project: string) => {
 const getByRef = (projectId: string, datasetId: string, routineId: string) =>
   bigquery
     .getRoutines({ projectId, datasetId, routineId })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const defaultLanguage = (news: RoutineProps, observed?: bigquery.Routine) => {
   if (news.language !== undefined) return news.language;

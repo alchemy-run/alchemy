@@ -137,7 +137,7 @@ interface MonitorState {
 const readMonitorById = Effect.fn(function* (monitorId: string, arnOf: (path: string) => string) {
   const described = yield* deadline
     .getMonitor({ monitorId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described) return undefined;
   const monitorArn = arnOf(`monitor/${described.monitorId}`);
   const state: MonitorState = {

@@ -344,7 +344,7 @@ const readPolicyById = Effect.fn(function* (policyId: string) {
   const described = yield* retryOrganizations(
     organizations.describePolicy({ PolicyId: policyId }).pipe(
       Effect.map((response) => response.Policy),
-      Effect.catchTag("PolicyNotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("PolicyNotFoundException", () => Effect.undefined),
     ),
   );
 

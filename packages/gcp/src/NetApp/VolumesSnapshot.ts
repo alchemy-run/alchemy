@@ -151,10 +151,10 @@ const toAttrs = (snapshot: netapp.Snapshot, project: string, region: string) => 
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : netapp
         .getProjectsLocationsVolumesSnapshots({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   listAtNested(project, "volumes/-", (parent) =>
@@ -242,7 +242,7 @@ export const VolumesSnapshotProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -296,7 +296,7 @@ export const VolumesSnapshotProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

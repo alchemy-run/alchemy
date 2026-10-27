@@ -256,7 +256,7 @@ const toAttrs = (channel: eventarc.Channel, project: string, region: string) => 
 const getByName = (name: string) =>
   eventarc
     .getProjectsLocationsChannels({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -382,7 +382,7 @@ export const ChannelProvider = () =>
               cryptoKeyName: desiredCryptoKey,
             }),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -428,7 +428,7 @@ export const ChannelProvider = () =>
         .deleteProjectsLocationsChannels({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

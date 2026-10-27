@@ -163,7 +163,7 @@ export const AdapterProvider = () =>
       const getOne = (adapterId: string) =>
         throttleRetry(textract.getAdapter({ AdapterId: adapterId })).pipe(
           Effect.map((adapter) => ({ ...adapter, AdapterId: adapterId })),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       // Adapter ids are server-assigned, so recovery without persisted
@@ -243,7 +243,7 @@ export const AdapterProvider = () =>
                 AutoUpdate: news.autoUpdate,
                 Tags: desiredTags,
               }),
-            ).pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+            ).pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             adapterId = created?.AdapterId ?? (yield* findByName(name));
             if (!adapterId) {
               return yield* Effect.die(

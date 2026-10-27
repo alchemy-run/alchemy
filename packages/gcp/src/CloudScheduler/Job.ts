@@ -424,7 +424,7 @@ const toAttrs = (job: scheduler.Job, project: string, region: string) => {
 const getByName = (name: string) =>
   scheduler
     .getProjectsLocationsJobs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /** Poll until Cloud Scheduler reports the job in the desired ENABLED/PAUSED state. */
 const waitForJobState = (name: string, paused: boolean) =>

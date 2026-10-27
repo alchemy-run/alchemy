@@ -360,7 +360,7 @@ const toAttrs = (firewall: ObservedFirewall): FirewallAttributes => ({
 const getById = (id: number) =>
   Hetzner.firewalls.getFirewall({ id }).pipe(
     Effect.map(({ firewall }) => firewall),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>

@@ -139,10 +139,8 @@ export const TransformerProvider = () =>
             head._tag === "Some"
               ? b2bi
                   .getTransformer({ transformerId: head.value.transformerId })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  )
-              : Effect.succeed(undefined),
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
+              : Effect.undefined,
           ),
         );
 
@@ -172,7 +170,7 @@ export const TransformerProvider = () =>
           const found = output?.transformerId
             ? yield* b2bi
                 .getTransformer({ transformerId: output.transformerId })
-                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : yield* findByName(olds?.name ?? "");
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
@@ -189,7 +187,7 @@ export const TransformerProvider = () =>
           let live = output?.transformerId
             ? yield* b2bi
                 .getTransformer({ transformerId: output.transformerId })
-                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : yield* findByName(news.name);
 
           // 2. Ensure.
@@ -272,7 +270,7 @@ export const TransformerProvider = () =>
             Stream.mapEffect((s) =>
               b2bi.getTransformer({ transformerId: s.transformerId }).pipe(
                 Effect.map(toAttrs),
-                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
               ),
             ),
             Stream.filter((item) => item !== undefined),

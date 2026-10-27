@@ -170,7 +170,7 @@ export const FlowProvider = () =>
       const readFlow = Effect.fn(function* (flowArn: string) {
         const response = yield* mediaconnect
           .describeFlow({ FlowArn: flowArn })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         return response?.Flow;
       });
 
@@ -190,7 +190,7 @@ export const FlowProvider = () =>
       const readFlowTags = Effect.fn(function* (flowArn: string) {
         const response = yield* mediaconnect
           .listTagsForResource({ ResourceArn: flowArn })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         const tags: Record<string, string> = {};
         for (const [key, value] of Object.entries(response?.Tags ?? {})) {
           if (value !== undefined) tags[key] = value;

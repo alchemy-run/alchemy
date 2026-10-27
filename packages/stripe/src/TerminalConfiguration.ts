@@ -707,7 +707,7 @@ const isMissingConfiguration = isMissingStripeResource;
 const getById = (configuration: string) =>
   GetTerminalConfiguration({ configuration }).pipe(
     Effect.map(asConfiguration),
-    Effect.catchIf(isMissingConfiguration, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingConfiguration, () => Effect.undefined),
   );
 
 const listNonDefault = Effect.fn(function* () {

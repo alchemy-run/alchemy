@@ -234,9 +234,7 @@ const resolveAppName = (id: string, name: string | undefined, existing?: string)
   });
 
 const getByName = (appName: string) =>
-  machines
-    .getApp({ app_name: appName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  machines.getApp({ app_name: appName }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const hasAlchemyMachines = (appName: string) =>
   machines.listMachines({ app_name: appName }).pipe(

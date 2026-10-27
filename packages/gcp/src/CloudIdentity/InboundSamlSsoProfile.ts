@@ -183,11 +183,7 @@ export const InboundSamlSsoProfileProvider = () =>
       if (current === undefined) {
         const created = yield* cloudidentity
           .createInboundSamlSsoProfiles({ body: desired })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              Effect.succeed<cloudidentity.Operation | undefined>(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created).pipe(
             Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),
@@ -243,11 +239,7 @@ export const InboundSamlSsoProfileProvider = () =>
       if (output.name.length === 0) return;
       const deleted = yield* cloudidentity
         .deleteInboundSamlSsoProfiles({ name: output.name })
-        .pipe(
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed<cloudidentity.Operation | undefined>(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitForOperation(deleted, { notFoundOk: true });
       }

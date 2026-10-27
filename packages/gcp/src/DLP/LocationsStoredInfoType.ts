@@ -177,10 +177,10 @@ const toAttrs = (stored: dlp.GooglePrivacyDlpV2StoredInfoType, project: string, 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsLocationsStoredInfoTypes({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const LocationsStoredInfoTypeProvider = () =>
   Provider.succeed(LocationsStoredInfoType, {

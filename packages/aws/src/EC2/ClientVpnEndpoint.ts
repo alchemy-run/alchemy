@@ -223,7 +223,7 @@ const usable = (endpoint: EC2.ClientVpnEndpoint) =>
 const describe = (endpointId: string) =>
   EC2.describeClientVpnEndpoints({ ClientVpnEndpointIds: [endpointId] }).pipe(
     Effect.map((result) => result.ClientVpnEndpoints?.find((endpoint) => !gone(endpoint))),
-    Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () => Effect.undefined),
   );
 
 const authentication = (

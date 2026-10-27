@@ -144,10 +144,10 @@ const toAttrs = (assessment: cci.GoogleCloudContactcenterinsightsV1Assessment, p
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAtParent = (parent: string, project: string) =>
   cci.listProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsAssessments
@@ -173,7 +173,7 @@ const findOwned = (parent: string, displayName: string, agentId: string | undefi
       ),
       Stream.runHead,
       Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
 
 export const AuthorizedViewSetsAuthorizedViewsConversationsAssessmentProvider = () =>

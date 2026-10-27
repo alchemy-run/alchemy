@@ -206,7 +206,7 @@ const toAttrs = (type: dataplex.GoogleCloudDataplexV1EntryType, project: string)
 
 const getByName = (name: string) =>
   retryQuota(dataplex.getProjectsLocationsEntryTypes({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listTypes = (project: string, region: string) => {
@@ -303,7 +303,7 @@ export const EntryTypeProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -384,7 +384,7 @@ export const EntryTypeProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

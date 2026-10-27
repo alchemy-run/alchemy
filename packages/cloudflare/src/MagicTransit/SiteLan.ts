@@ -389,7 +389,7 @@ interface ObservedLan {
 const getLan = (accountId: string, siteId: string, lanId: string) =>
   magicTransit.getSiteLan({ accountId, siteId, lanId }).pipe(
     Effect.map((lan): ObservedLan | undefined => lan),
-    Effect.catchTag("SiteLanNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("SiteLanNotFound", () => Effect.undefined),
   );
 
 /**

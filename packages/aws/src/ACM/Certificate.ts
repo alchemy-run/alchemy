@@ -299,7 +299,7 @@ export const CertificateProvider = () =>
       const describeCertificate = Effect.fn(function* (certificateArn: string) {
         return yield* acm.describeCertificate({ CertificateArn: certificateArn }).pipe(
           Effect.map((response) => response.Certificate),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           withCertRegion(regionOfCertificateArn(certificateArn)),
         );
       });
@@ -830,7 +830,7 @@ export const validationRecordsOf = (
 export const describeCertificateDetail = (certificateArn: string) =>
   acm.describeCertificate({ CertificateArn: certificateArn }).pipe(
     Effect.map((response) => response.Certificate),
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
     withCertRegion(regionOfCertificateArn(certificateArn)),
   );
 

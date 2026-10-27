@@ -88,14 +88,14 @@ const parentOf = (name: string) =>
   name.startsWith("projects/")
     ? resourcemanager.getProjects({ name }).pipe(
         Effect.map((resource) => resource.parent),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       )
     : name.startsWith("folders/")
       ? resourcemanager.getFolders({ name }).pipe(
           Effect.map((folder) => folder.parent),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         )
-      : Effect.succeed(undefined);
+      : Effect.undefined;
 
 export const tryResolveOrganization = () =>
   Effect.gen(function* () {
@@ -124,7 +124,7 @@ export const resolveOrganization = (explicit: string | undefined, existing: stri
 export const projectNumberOf = (project: string) =>
   resourcemanager.getProjects({ name: `projects/${project}` }).pipe(
     Effect.map((resource) => lastSegment(resource.name ?? "")),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const normalizeScope = (scope: string, projectNumber?: string) => {

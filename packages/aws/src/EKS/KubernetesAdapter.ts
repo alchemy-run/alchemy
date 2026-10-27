@@ -439,7 +439,7 @@ export const EksKubernetesAdapter = () =>
         region?: string | undefined;
       }) {
         const described = yield* eks.describeCluster({ name: auth.clusterName }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           withAws(auth.region),
         );
         const cluster = described?.cluster;
@@ -545,7 +545,7 @@ export const EksKubernetesAdapter = () =>
           // invalid state` mid-teardown).
           if (auth !== undefined && typeof state?.associationId === "string") {
             const cluster = yield* describeLiveCluster(auth).pipe(
-              Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
+              Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.undefined),
             );
             if (cluster) {
               yield* deleteAssociation({
@@ -641,7 +641,7 @@ export const EksKubernetesAdapter = () =>
         // default to an internet-facing NLB so the returned `url` is
         // actually reachable.
         const cluster = yield* describeLiveCluster(auth).pipe(
-          Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
+          Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.undefined),
         );
         return {
           loadBalancerClass: cluster?.kubernetesNetworkConfig?.elasticLoadBalancing?.enabled

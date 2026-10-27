@@ -102,7 +102,7 @@ const createEndpointName = (id: string, props: { endpointName?: string | undefin
 const fetchEndpointTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.undefined));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -113,7 +113,7 @@ const fetchEndpointTags = Effect.fn(function* (arn: string) {
 const describeEndpointOrUndefined = (name: string) =>
   sagemaker
     .describeEndpoint({ EndpointName: name })
-    .pipe(Effect.catchTag("EndpointNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("EndpointNotFound", () => Effect.undefined));
 
 /**
  * The endpoint is still transitioning toward the awaited state — retried by

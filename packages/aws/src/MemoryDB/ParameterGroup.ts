@@ -99,7 +99,7 @@ export const ParameterGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* memorydb
           .describeParameterGroups({ ParameterGroupName: name })
-          .pipe(Effect.catchTag("ParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ParameterGroupNotFoundFault", () => Effect.undefined));
         return response?.ParameterGroups?.[0];
       });
 

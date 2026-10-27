@@ -169,7 +169,7 @@ export const ImageRecipeProvider = () =>
       const getRecipe = Effect.fn(function* (arn: string) {
         const response = yield* imagebuilder
           .getImageRecipe({ imageRecipeArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.imageRecipe;
       });
 
@@ -356,7 +356,7 @@ export const ImageRecipeProvider = () =>
                 (summary) =>
                   getRecipe(summary.arn).pipe(
                     Effect.flatMap((recipe) =>
-                      recipe === undefined ? Effect.succeed(undefined) : toAttrs(recipe),
+                      recipe === undefined ? Effect.undefined : toAttrs(recipe),
                     ),
                   ),
                 { concurrency: 4 },

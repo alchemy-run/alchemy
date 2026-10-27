@@ -93,7 +93,7 @@ export const ServiceNetworkVpcAssociationProvider = () =>
           .getServiceNetworkVpcAssociation({
             serviceNetworkVpcAssociationIdentifier: id,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
         const listed = yield* vpclattice.listTagsForResource({

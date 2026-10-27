@@ -135,7 +135,7 @@ const resourceName = (engine: string, assistantId: string) => `${engine}/assista
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEnginesAssistants({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (
   assistant: discoveryengine.GoogleCloudDiscoveryengineV1Assistant,

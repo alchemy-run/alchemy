@@ -277,7 +277,7 @@ const toAttrs = (
 const getById = (project: string, datasetId: string) =>
   bigquery
     .getDatasets({ projectId: project, datasetId })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const sameString = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");

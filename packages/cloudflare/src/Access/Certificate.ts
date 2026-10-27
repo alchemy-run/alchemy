@@ -142,7 +142,7 @@ export const CertificateProvider = () =>
             accountId: acct,
             certificateId: output.certificateId,
           })
-          .pipe(Effect.catchTag("AccessCertificateNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("AccessCertificateNotFound", () => Effect.undefined));
         if (direct && direct.id) {
           return toAttrs(direct, acct, output.certificate);
         }
@@ -171,7 +171,7 @@ export const CertificateProvider = () =>
             accountId: acct,
             certificateId: output.certificateId,
           })
-          .pipe(Effect.catchTag("AccessCertificateNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("AccessCertificateNotFound", () => Effect.undefined));
       }
       if (!observed || !observed.id) {
         observed = yield* findCertificateByName(acct, name);

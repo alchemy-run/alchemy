@@ -898,7 +898,7 @@ const observeById = (accountId: string, appId: string) =>
       // observe falls through to recreate. Transient 403 back-pressure is
       // retried; anything else is a real failure and propagates.
       retryTransientAccessError,
-      Effect.catchTag("AccessApplicationNotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("AccessApplicationNotFound", () => Effect.undefined),
     );
     if (r === undefined) return undefined;
     return narrowApp(r as Parameters<typeof narrowApp>[0]);

@@ -214,10 +214,10 @@ const toAttrs = (item: saasservicemgmt.RolloutKind, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : saasservicemgmt
         .getProjectsLocationsRolloutKinds({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, location: string) =>
   collectPages(

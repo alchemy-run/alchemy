@@ -287,7 +287,7 @@ export const SecretProvider = () =>
           .describeSecret({
             SecretId: secretId,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         // A secret with `DeletedDate` set is scheduled for deletion (our
         // delete uses `ForceDeleteWithoutRecovery`, which still completes
         // asynchronously). It cannot be updated, so treat it as missing —
@@ -323,7 +323,7 @@ export const SecretProvider = () =>
       const restoreIfPendingDeletion = Effect.fn(function* (id: string, secretId: string) {
         const described = yield* secretsmanager
           .describeSecret({ SecretId: secretId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         if (!described?.DeletedDate) {
           return;
         }
@@ -477,7 +477,7 @@ export const SecretProvider = () =>
             .getResourcePolicy({ SecretId: secretArn })
             .pipe(
               Effect.map((response) => response.ResourcePolicy),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
 
           if (desiredPolicy !== undefined) {

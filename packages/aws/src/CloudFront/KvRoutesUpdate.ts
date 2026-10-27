@@ -83,7 +83,7 @@ export const KvRoutesUpdateProvider = () =>
       const getRoutes = Effect.fn(function* (store: string, fullKey: string) {
         const res = yield* kvs
           .getKey({ KvsARN: store, Key: fullKey })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
         if (!res) {
           return { routes: [] as string[], chunkNum: 1 };

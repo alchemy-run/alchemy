@@ -248,7 +248,7 @@ const toAttrs = (store: aiplatform.GoogleCloudAiplatformV1FeatureOnlineStore, pr
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsFeatureOnlineStores({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -404,7 +404,7 @@ export const FeatureOnlineStoreProvider = () =>
               encryptionSpec: news.encryptionSpec,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -468,7 +468,7 @@ export const FeatureOnlineStoreProvider = () =>
           force: true,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

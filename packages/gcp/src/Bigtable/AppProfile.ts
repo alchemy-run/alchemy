@@ -218,7 +218,7 @@ const toAttrs = (profile: bigtable.AppProfile, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesAppProfiles({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toBody = (news: AppProfileProps): bigtable.AppProfile => {
   const body: bigtable.AppProfile = {

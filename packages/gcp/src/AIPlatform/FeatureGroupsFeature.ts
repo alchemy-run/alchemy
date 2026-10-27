@@ -163,7 +163,7 @@ const toAttrs = (feature: aiplatform.GoogleCloudAiplatformV1Feature, project: st
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsFeatureGroupsFeatures({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -315,7 +315,7 @@ export const FeatureGroupsFeatureProvider = () =>
               pointOfContact: news.pointOfContact,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -374,7 +374,7 @@ export const FeatureGroupsFeatureProvider = () =>
       const operation = yield* aiplatform
         .deleteProjectsLocationsFeatureGroupsFeatures({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

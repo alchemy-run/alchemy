@@ -111,7 +111,7 @@ export const SAMLProviderProvider = () =>
       }
       const response = yield* iam
         .getSAMLProvider({ SAMLProviderArn: output.samlProviderArn })
-        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
       if (!response) {
         return undefined;
       }
@@ -147,7 +147,7 @@ export const SAMLProviderProvider = () =>
             };
           }).pipe(
             // A provider can disappear between listing, reading and tag lookup.
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -165,7 +165,7 @@ export const SAMLProviderProvider = () =>
       // mode, and UUID; absence is `NoSuchEntityException`.
       let observed = yield* iam
         .getSAMLProvider({ SAMLProviderArn: samlProviderArn })
-        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
 
       // Ensure — create when missing. Race with a peer is recovered by
       // verifying alchemy ownership tags on the existing provider.

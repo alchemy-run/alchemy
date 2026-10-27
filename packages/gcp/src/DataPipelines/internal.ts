@@ -195,10 +195,10 @@ export const replaceOnIdentity = (input: {
 
 export const getPipeline = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : datapipelines
         .getProjectsLocationsPipelines({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ignoreMissing = <A, R>(
   effect: Effect.Effect<A, datapipelines.DeleteProjectsLocationsPipelinesError, R>,

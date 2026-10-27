@@ -256,7 +256,7 @@ export const AccessPointProvider = () =>
       const observeAccessPoint = (accountId: string, name: string) =>
         s3control
           .getAccessPoint({ AccountId: accountId, Name: name })
-          .pipe(Effect.catchTag("NoSuchAccessPoint", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchAccessPoint", () => Effect.undefined));
 
       const observedTags = (accountId: string, arn: string) =>
         s3control.listTagsForResource({ AccountId: accountId, ResourceArn: arn }).pipe(

@@ -141,9 +141,7 @@ const toAttrs = (lien: resourcemanager.Lien, project: string) => ({
 });
 
 const getByName = (name: string) =>
-  resourcemanager
-    .getLiens({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  resourcemanager.getLiens({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnParent = (parent: string) =>
   collectPages(
@@ -344,7 +342,7 @@ export const LienProvider = () =>
               restrictions,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined && created.name !== undefined) {
           current = created;
         } else {

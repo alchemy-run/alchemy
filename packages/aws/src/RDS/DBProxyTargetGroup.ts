@@ -122,9 +122,7 @@ export const DBProxyTargetGroupProvider = () =>
             DBProxyName: dbProxyName,
             TargetGroupName: targetGroupName,
           })
-          .pipe(
-            Effect.catchTag("DBProxyTargetGroupNotFoundFault", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("DBProxyTargetGroupNotFoundFault", () => Effect.undefined));
         return response?.TargetGroups?.[0];
       });
 
@@ -159,9 +157,9 @@ export const DBProxyTargetGroupProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              DBProxyTargetNotFoundFault: () => Effect.succeed(undefined),
-              DBProxyTargetGroupNotFoundFault: () => Effect.succeed(undefined),
-              DBProxyNotFoundFault: () => Effect.succeed(undefined),
+              DBProxyTargetNotFoundFault: () => Effect.undefined,
+              DBProxyTargetGroupNotFoundFault: () => Effect.undefined,
+              DBProxyNotFoundFault: () => Effect.undefined,
             }),
           );
         const targets = response?.Targets ?? [];

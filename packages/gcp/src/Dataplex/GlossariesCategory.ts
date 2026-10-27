@@ -181,7 +181,7 @@ const toAttrs = (category: dataplex.GoogleCloudDataplexV1GlossaryCategory, proje
 
 const getByName = (name: string) =>
   retryQuota(dataplex.getProjectsLocationsGlossariesCategories({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listCategoriesUnder = (parent: string, project: string) =>

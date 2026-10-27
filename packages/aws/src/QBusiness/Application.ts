@@ -176,7 +176,7 @@ const createDisplayName = (id: string, props: { displayName?: string | undefined
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qbusiness
     .listTagsForResource({ resourceARN: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return Object.fromEntries((response?.tags ?? []).map((tag) => [tag.key, tag.value]));
 });
 
@@ -188,7 +188,7 @@ interface ApplicationState {
 const readApplicationById = Effect.fn(function* (applicationId: string) {
   const described = yield* qbusiness
     .getApplication({ applicationId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.status === "DELETING") return undefined;
   const arn = described.applicationArn;
   if (arn === undefined) return undefined;
@@ -269,7 +269,7 @@ const waitForApplicationStatus = (applicationId: string, target: "ACTIVE" | "DEL
     Effect.gen(function* () {
       const described = yield* qbusiness
         .getApplication({ applicationId })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new ApplicationNotReady({ applicationId, status: described.status });

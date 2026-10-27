@@ -123,7 +123,7 @@ export const ReplicationSubnetGroupProvider = () =>
           .describeReplicationSubnetGroups({
             Filters: [{ Name: "replication-subnet-group-id", Values: [identifier] }],
           })
-          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.undefined));
         return response?.ReplicationSubnetGroups?.[0];
       });
 
@@ -179,7 +179,7 @@ export const ReplicationSubnetGroupProvider = () =>
 
           const tags = yield* iam
             .listRoleTags({ RoleName: DMS_VPC_ROLE_NAME })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (tags === undefined) return;
           const owned = (tags.Tags ?? []).some(
             (tag) =>
@@ -216,7 +216,7 @@ export const ReplicationSubnetGroupProvider = () =>
 
           const remaining = yield* iam
             .getRole({ RoleName: DMS_VPC_ROLE_NAME })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (remaining === undefined) return;
           yield* Effect.sleep("1 second");
         }

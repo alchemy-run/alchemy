@@ -110,14 +110,14 @@ const toAttrs = (map: apigee.GoogleCloudApigeeV1KeyValueMap, organization: strin
 const getByName = (name: string) =>
   apigee
     .getOrganizationsKeyvaluemaps({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const getOwnershipEntry = (mapName: string) =>
   apigee
     .getOrganizationsKeyvaluemapsEntries({
       name: `${mapName}/entries/${OWNERSHIP_ENTRY}`,
     })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const upsertOwnershipEntry = (mapName: string, marker: string) =>
   apigee

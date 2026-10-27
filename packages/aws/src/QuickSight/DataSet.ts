@@ -137,7 +137,7 @@ export const DataSetProvider = () =>
       const readSet = Effect.fn(function* (accountId: string, dataSetId: string) {
         const response = yield* quicksight
           .describeDataSet({ AwsAccountId: accountId, DataSetId: dataSetId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.DataSet;
       });
 

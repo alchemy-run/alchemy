@@ -149,7 +149,7 @@ const toAttrs = (schema: pubsub.Pubsub_Schema, project: string) => {
 const getByName = (name: string) =>
   pubsub
     .getProjectsSchemas({ name: canonicalName(name), view: "FULL" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const definitionsEqual = (left: string | undefined, right: string | undefined) => {
   const a = (left ?? "").trim();

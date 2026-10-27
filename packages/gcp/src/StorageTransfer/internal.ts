@@ -238,18 +238,18 @@ export const collectPages = <Page, Item, E, R>(
 
 export const getAgentPool = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : storagetransfer.getProjectsAgentPools({ name }).pipe(
         retryApiDisabled,
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
 
 export const getTransferJob = (jobName: string, projectId: string) =>
   jobName.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : storagetransfer.getTransferJobs({ jobName, projectId }).pipe(
         retryApiDisabled,
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
 
 export const isDeletedJob = (job: storagetransfer.TransferJob | undefined) =>
@@ -281,7 +281,7 @@ export const waitAgentPoolCreated = (name: string) =>
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag("GCP.StorageTransfer.ResourceNotResolved", () => Effect.succeed(undefined)),
+    Effect.catchTag("GCP.StorageTransfer.ResourceNotResolved", () => Effect.undefined),
   );
 
 export const waitAgentPoolGone = (name: string) =>

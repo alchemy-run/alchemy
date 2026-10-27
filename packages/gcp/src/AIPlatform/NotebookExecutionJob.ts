@@ -211,7 +211,7 @@ const toAttrs = (job: aiplatform.GoogleCloudAiplatformV1NotebookExecutionJob, pr
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsNotebookExecutionJobs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -347,7 +347,7 @@ export const NotebookExecutionJobProvider = () =>
               encryptionSpec: news.encryptionSpec,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -365,7 +365,7 @@ export const NotebookExecutionJobProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* aiplatform
         .deleteProjectsLocationsNotebookExecutionJobs({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

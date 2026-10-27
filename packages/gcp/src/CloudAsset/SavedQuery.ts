@@ -188,10 +188,10 @@ const toAttrs = (query: cloudasset.SavedQuery, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cloudasset
         .getSavedQueries({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const observe = (project: string, savedQueryId: string, outputName?: string) =>
   Effect.gen(function* () {

@@ -163,7 +163,7 @@ const toAttrs = (secret: composer.UserWorkloadsSecret, environmentName: string) 
 const getByName = (name: string) =>
   composer
     .getProjectsLocationsEnvironmentsUserWorkloadsSecrets({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(

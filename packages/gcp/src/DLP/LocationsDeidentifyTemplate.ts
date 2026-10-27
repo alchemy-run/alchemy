@@ -146,10 +146,10 @@ const toAttrs = (template: dlp.GooglePrivacyDlpV2DeidentifyTemplate, project: st
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsLocationsDeidentifyTemplates({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const LocationsDeidentifyTemplateProvider = () =>
   Provider.succeed(LocationsDeidentifyTemplate, {

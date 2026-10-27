@@ -202,7 +202,7 @@ const toAttrs = (gateway: compute.TargetVpnGateway, project: string) => ({
 const getByName = (project: string, region: string, targetVpnGateway: string) =>
   compute
     .getTargetVpnGateways({ project, region, targetVpnGateway })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const requireGateway = (project: string, region: string, targetVpnGatewayName: string) =>
   Effect.gen(function* () {

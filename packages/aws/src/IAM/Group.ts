@@ -214,7 +214,7 @@ export const GroupProvider = () =>
                   // per-group hydration (e.g. a sibling test tearing its group
                   // down) — `NoSuchEntityException` here just means it's gone,
                   // so drop it rather than failing the whole enumeration.
-                  Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
                 ),
               { concurrency: 10 },
             );
@@ -235,7 +235,7 @@ export const GroupProvider = () =>
             .getGroup({
               GroupName: groupName,
             })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (!response?.Group?.Arn) {
             return undefined;
           }
@@ -261,7 +261,7 @@ export const GroupProvider = () =>
           // ensure step below.
           let observed = yield* iam
             .getGroup({ GroupName: groupName })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
 
           // Ensure — create the group when it is missing. A concurrent
           // peer reconciler may win the race, so tolerate

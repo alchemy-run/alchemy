@@ -165,7 +165,7 @@ const useCasesOf = (
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEnginesControls({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (control: discoveryengine.GoogleCloudDiscoveryengineV1Control, project: string) => {
   const name = control.name ?? "";

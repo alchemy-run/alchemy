@@ -115,7 +115,7 @@ export const InputSecurityGroupProvider = () =>
       const getGroup = Effect.fn(function* (id: string) {
         const isg = yield* medialive
           .describeInputSecurityGroup({ InputSecurityGroupId: id })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         if (isg === undefined || isg.State === "DELETED") return undefined;
         if (!hasIdentity(isg)) return undefined;
         return isg;

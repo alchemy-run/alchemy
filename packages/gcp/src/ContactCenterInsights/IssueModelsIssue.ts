@@ -120,10 +120,10 @@ const toAttrs = (issue: cci.GoogleCloudContactcenterinsightsV1Issue, project: st
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsIssueModelsIssues({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -166,7 +166,7 @@ const findOwned = (parent: string, displayDescription: string, displayName: stri
           (displayName !== undefined && issue.displayName === displayName),
       ),
     ),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const IssueModelsIssueProvider = () =>
@@ -229,7 +229,7 @@ export const IssueModelsIssueProvider = () =>
               displayDescription,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const createdName = resourceNameFromOperation(done) ?? "";

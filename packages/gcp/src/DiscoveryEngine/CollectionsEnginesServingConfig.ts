@@ -161,7 +161,7 @@ const toId = (id: string, explicit: string | undefined, existing: string | undef
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEnginesServingConfigs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (
   config: discoveryengine.GoogleCloudDiscoveryengineV1ServingConfig,

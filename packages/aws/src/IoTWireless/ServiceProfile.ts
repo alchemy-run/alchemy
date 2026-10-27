@@ -98,7 +98,7 @@ export const ServiceProfileProvider = () =>
       const getById = (serviceProfileId: string) =>
         iotw
           .getServiceProfile({ Id: serviceProfileId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // Service profiles have no name-keyed Get — enumerate and match. The
       // physical name is deterministic, so this recovers identity after a
@@ -203,7 +203,7 @@ export const ServiceProfileProvider = () =>
                 LoRaWAN: news.loRaWAN,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             profile =
               created?.Id !== undefined
                 ? yield* getById(created.Id)

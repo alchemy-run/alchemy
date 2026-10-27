@@ -227,7 +227,7 @@ const sameCdnPolicy = (
 const getByName = (project: string, name: string) =>
   compute
     .getBackendBuckets({ project, backendBucket: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, name: string) =>
   getByName(project, name).pipe(
@@ -310,7 +310,7 @@ export const BackendBucketProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (inserted !== undefined) {
           current = yield* awaitResource(env.project, name);

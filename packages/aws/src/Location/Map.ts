@@ -111,7 +111,7 @@ const createMapName = (id: string, props: { mapName?: string | undefined }) =>
 const readMap = Effect.fn(function* (mapName: string) {
   const found = yield* location
     .describeMap({ MapName: mapName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!found) return undefined;
   return {
     mapName: found.MapName,

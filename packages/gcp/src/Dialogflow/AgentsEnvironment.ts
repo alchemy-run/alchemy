@@ -150,10 +150,10 @@ const toAttrs = (environment: dialogflow.GoogleCloudDialogflowCxV3Environment, p
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsEnvironments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (id: string, agent: string, hinted?: string) =>
   Effect.gen(function* () {
@@ -266,7 +266,7 @@ export const AgentsEnvironmentProvider = () =>
             parent: agent,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
           current = yield* resolveFromOperation(operation);
         }

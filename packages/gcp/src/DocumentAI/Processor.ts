@@ -185,10 +185,10 @@ const toAttrs = (processor: documentai.GoogleCloudDocumentaiV1Processor, project
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : documentai
         .getProjectsLocationsProcessors({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (id: string, project: string, parent: string, hinted?: string) =>
   Effect.gen(function* () {
@@ -409,7 +409,7 @@ export const ProcessorProvider = () =>
         documentai.deleteProjectsLocationsProcessors({
           name: output.name,
         }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

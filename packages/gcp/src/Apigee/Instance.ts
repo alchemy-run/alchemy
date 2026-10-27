@@ -324,7 +324,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsInstances({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 /** Instance provisioning and deletion take 30–60 minutes. */
 const INSTANCE_BUDGET = "75 minutes";
@@ -509,7 +509,7 @@ export const InstanceProvider = () =>
             parent: orgParent(organization),
             body: toBody(news, instanceId, desiredDescription, location),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, {
             alreadyExistsOk: true,
@@ -583,9 +583,7 @@ export const InstanceProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const deleted = yield* apigee
         .deleteOrganizationsInstances({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitForOperation(deleted, {
           notFoundOk: true,

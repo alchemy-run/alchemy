@@ -289,7 +289,7 @@ const toAttrs = (cluster: oracle.ExadbVmCluster, project: string) => {
 
 const getByName = (name: string) =>
   retryQuota(oracle.getProjectsLocationsExadbVmClusters({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listClusters = (project: string, region: string) => {
@@ -383,7 +383,7 @@ export const ExadbVmClusterProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -444,7 +444,7 @@ export const ExadbVmClusterProvider = () =>
         })
         .pipe(
           retryConflict,
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

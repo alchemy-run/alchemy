@@ -138,7 +138,7 @@ const readConsumer = Effect.fn(function* ({
       ConsumerName: consumerName,
       ConsumerARN: consumerArn,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
   if (!response) {
     return undefined;
@@ -410,7 +410,7 @@ export const StreamConsumerProvider = () =>
               tags: toTagRecord(tagsResponse.Tags),
             })),
             // A consumer may be deregistered between list and tag fetch.
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );

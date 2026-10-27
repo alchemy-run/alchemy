@@ -327,7 +327,7 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (clusterId: string) {
         const response = yield* emr
           .describeCluster({ ClusterId: clusterId })
-          .pipe(Effect.catchTag("ClusterNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ClusterNotFound", () => Effect.undefined));
         const cluster = response?.Cluster;
         if (!cluster?.Id) return undefined;
         if (TERMINAL_STATES.has(cluster.Status?.State ?? "")) return undefined;

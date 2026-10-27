@@ -118,9 +118,7 @@ export const ClusterParameterGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* redshift
           .describeClusterParameterGroups({ ParameterGroupName: name })
-          .pipe(
-            Effect.catchTag("ClusterParameterGroupNotFoundFault", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("ClusterParameterGroupNotFoundFault", () => Effect.undefined));
         return response?.ParameterGroups?.[0];
       });
 

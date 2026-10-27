@@ -594,8 +594,8 @@ const isIssuingNotEnabled = (error: StripeOpError): boolean =>
 
 const getById = (cardholder: string) =>
   GetIssuingCardholder({ cardholder }).pipe(
-    Effect.catchIf(isMissingCardholder, () => Effect.succeed(undefined)),
-    Effect.catchIf(isIssuingNotEnabled, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingCardholder, () => Effect.undefined),
+    Effect.catchIf(isIssuingNotEnabled, () => Effect.undefined),
   );
 
 const listByStatus = Effect.fn(function* (status: IssuingCardholderStatus) {

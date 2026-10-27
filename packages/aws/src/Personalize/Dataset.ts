@@ -102,7 +102,7 @@ export const DatasetProvider = () =>
       const describe = Effect.fn(function* (datasetArn: string) {
         const response = yield* personalize
           .describeDataset({ datasetArn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.dataset;
       });
 

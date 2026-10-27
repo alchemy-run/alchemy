@@ -252,7 +252,7 @@ const toAttrs = (item: developerconnect.InsightsConfig, project: string, region:
 const getByName = (name: string) =>
   developerconnect
     .getProjectsLocationsInsightsConfigs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -350,7 +350,7 @@ export const InsightsConfigProvider = () =>
             insightsConfigId,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -381,7 +381,7 @@ export const InsightsConfigProvider = () =>
               projects: undefined,
             }),
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (operation === undefined) {
           const created = yield* developerconnect
             .createProjectsLocationsInsightsConfigs({
@@ -389,7 +389,7 @@ export const InsightsConfigProvider = () =>
               insightsConfigId,
               body,
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
           if (created !== undefined) {
             yield* waitForOperation(created);
           }
@@ -405,7 +405,7 @@ export const InsightsConfigProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* developerconnect
         .deleteProjectsLocationsInsightsConfigs({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

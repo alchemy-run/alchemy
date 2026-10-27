@@ -160,7 +160,7 @@ const toAttrs = (namespace: servicedirectory.Namespace, project: string, region:
 const getByName = (name: string) =>
   servicedirectory
     .getProjectsLocationsNamespaces({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listNamespacesAt = (parent: string, project: string, region: string) =>
   Effect.gen(function* () {

@@ -276,7 +276,7 @@ const toAttrs = (user: alloydb.User, project: string) => {
 const getByName = (name: string) =>
   alloydb
     .getProjectsLocationsClustersUsers({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -455,7 +455,7 @@ export const ClustersUserProvider = () =>
               includeKeepExtraRoles: true,
             }),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created !== undefined ? created : yield* waitUntilExists(name);
       }
 

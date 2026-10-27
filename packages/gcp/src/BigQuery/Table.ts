@@ -565,7 +565,7 @@ const getByRef = (projectId: string, datasetId: string, tableId: string) =>
       tableId,
       view: "FULL",
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toTableBody = (
   projectId: string,

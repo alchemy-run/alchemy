@@ -144,10 +144,10 @@ const toAttrs = (invocation: dataform.WorkflowInvocation, project: string, regio
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dataform
         .getProjectsLocationsRepositoriesWorkflowInvocations({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const invocationBody = (
   news: RepositoriesWorkflowInvocationProps,
@@ -207,7 +207,7 @@ export const RepositoriesWorkflowInvocationProvider = () =>
       const attrs = toAttrs(existing, env.project, env.region);
       const parent = yield* dataform
         .getProjectsLocationsRepositories({ name: attrs.repository })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (parent === undefined) return Unowned(attrs);
       return hasAlchemyLabelMap(parent.labels) ? attrs : Unowned(attrs);
     }),

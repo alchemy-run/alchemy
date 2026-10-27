@@ -212,7 +212,7 @@ const toAttrs = (view: logging.LogView, project: string, location: string, bucke
 const getByName = (name: string) =>
   logging
     .getProjectsLocationsBucketsViews({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const BucketsViewProvider = () =>
   Provider.succeed(BucketsView, {

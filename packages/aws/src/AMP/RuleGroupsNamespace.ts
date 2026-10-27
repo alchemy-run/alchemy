@@ -83,7 +83,7 @@ export const RuleGroupsNamespaceProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string, name: string) {
         const response = yield* amp
           .describeRuleGroupsNamespace({ workspaceId, name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.ruleGroupsNamespace;
       });
 

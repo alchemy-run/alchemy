@@ -137,7 +137,7 @@ const getByName = (name: string) =>
     }
     return yield* baremetalsolution
       .getProjectsLocationsVolumesSnapshots({ name })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
 export const VolumesSnapshotProvider = () =>

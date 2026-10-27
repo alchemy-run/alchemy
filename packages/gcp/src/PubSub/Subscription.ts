@@ -510,7 +510,7 @@ const toAttrs = (subscription: pubsub.Subscription, project: string) => {
 const getByName = (name: string) =>
   pubsub
     .getProjectsSubscriptions({ subscription: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
@@ -902,9 +902,7 @@ export const SubscriptionProvider = () =>
       let current =
         output !== undefined
           ? yield* waitUntilPresent(name).pipe(
-              Effect.catchTag("GCP.PubSub.SubscriptionNotResolved", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("GCP.PubSub.SubscriptionNotResolved", () => Effect.undefined),
             )
           : yield* getByName(name);
 

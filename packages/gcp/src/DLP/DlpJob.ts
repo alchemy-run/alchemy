@@ -165,10 +165,8 @@ const toAttrs = (job: dlp.GooglePrivacyDlpV2DlpJob, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
-    : dlp
-        .getProjectsDlpJobs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    ? Effect.undefined
+    : dlp.getProjectsDlpJobs({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DlpJobProvider = () =>
   Provider.succeed(DlpJob, {

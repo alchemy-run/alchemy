@@ -205,7 +205,7 @@ export const AccountAssignmentProvider = () =>
                 TargetId: output.targetId,
                 TargetType: "AWS_ACCOUNT",
               })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined))),
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined)),
           );
 
           const requestId = response?.AccountAssignmentDeletionStatus?.RequestId ?? undefined;

@@ -187,7 +187,7 @@ const toAttributes = (control: auditmanager.Control): Control["Attributes"] => (
 const readControlById = Effect.fn(function* (controlId: string) {
   const response = yield* auditmanager
     .getControl({ controlId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return response?.control;
 });
 

@@ -156,7 +156,7 @@ export const StreamProvider = () =>
       const readStream = Effect.fn(function* (clusterIdentifier: string, streamIdentifier: string) {
         return yield* dsql
           .getStream({ clusterIdentifier, streamIdentifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // Bounded readiness wait — stream creation typically completes in one

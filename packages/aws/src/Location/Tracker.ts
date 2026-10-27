@@ -101,7 +101,7 @@ const createTrackerName = (id: string, props: { trackerName?: string | undefined
 const readTracker = Effect.fn(function* (trackerName: string) {
   const found = yield* location
     .describeTracker({ TrackerName: trackerName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!found) return undefined;
   return {
     trackerName: found.TrackerName,

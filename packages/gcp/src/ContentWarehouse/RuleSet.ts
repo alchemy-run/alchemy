@@ -145,10 +145,10 @@ const toAttrs = (item: cw.GoogleCloudContentwarehouseV1RuleSet, project: string)
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cw
         .getProjectsLocationsRuleSets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string) =>
   collectPages(
@@ -228,7 +228,7 @@ export const RuleSetProvider = () =>
             parent,
             body: { description, source, rules },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current =
           created ??
           (yield* findInParent) ??

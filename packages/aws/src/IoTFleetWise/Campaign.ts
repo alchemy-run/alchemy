@@ -361,7 +361,7 @@ export const CampaignProvider = () =>
       const readCampaign = Effect.fn(function* (name: string) {
         return yield* iotfleetwise.getCampaign({ name }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

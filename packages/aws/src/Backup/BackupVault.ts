@@ -155,8 +155,9 @@ export const BackupVaultProvider = () =>
           const found = yield* backup
             .describeBackupVault({ BackupVaultName: name })
             .pipe(
-              Effect.catchTag(["ResourceNotFoundException", "AccessDeniedException"], () =>
-                Effect.succeed(undefined),
+              Effect.catchTag(
+                ["ResourceNotFoundException", "AccessDeniedException"],
+                () => Effect.undefined,
               ),
             );
           if (!found?.BackupVaultArn) return undefined;
@@ -190,8 +191,9 @@ export const BackupVaultProvider = () =>
           let live = yield* backup
             .describeBackupVault({ BackupVaultName: name })
             .pipe(
-              Effect.catchTag(["ResourceNotFoundException", "AccessDeniedException"], () =>
-                Effect.succeed(undefined),
+              Effect.catchTag(
+                ["ResourceNotFoundException", "AccessDeniedException"],
+                () => Effect.undefined,
               ),
             );
 
@@ -219,7 +221,7 @@ export const BackupVaultProvider = () =>
             .getBackupVaultAccessPolicy({ BackupVaultName: name })
             .pipe(
               Effect.map((r) => (r.Policy ? r.Policy : undefined)),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           const policyDrifted =
             desiredPolicy === undefined || currentPolicy === undefined

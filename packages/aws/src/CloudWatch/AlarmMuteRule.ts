@@ -100,7 +100,7 @@ export const AlarmMuteRuleProvider = () =>
           .getAlarmMuteRule({
             AlarmMuteRuleName: name,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
         if (!output?.Name || !output.AlarmMuteRuleArn) {
           return undefined;
@@ -149,7 +149,7 @@ export const AlarmMuteRuleProvider = () =>
               (summary) => {
                 const name = summary.AlarmMuteRuleArn?.split(":alarm-mute-rule:")[1];
                 if (!name) {
-                  return Effect.succeed(undefined);
+                  return Effect.undefined;
                 }
                 return readAlarmMuteRule(name);
               },

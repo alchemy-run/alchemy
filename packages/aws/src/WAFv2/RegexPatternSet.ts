@@ -155,9 +155,7 @@ export const RegexPatternSetProvider = () =>
             scope,
             wafv2
               .getRegexPatternSet({ Name: name, Scope: scope, Id: cachedId })
-              .pipe(
-                Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-              ),
+              .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
           );
           if (byId?.RegexPatternSet) {
             return byId;
@@ -183,9 +181,7 @@ export const RegexPatternSetProvider = () =>
                   Scope: scope,
                   Id: summary.Id,
                 })
-                .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
             );
           }
           if (!listed.NextMarker || (listed.RegexPatternSets?.length ?? 0) === 0) {
@@ -221,13 +217,9 @@ export const RegexPatternSetProvider = () =>
                         Scope: scope,
                         Id: summary.Id,
                       })
-                      .pipe(
-                        Effect.catchTag("WAFNonexistentItemException", () =>
-                          Effect.succeed(undefined),
-                        ),
-                      ),
+                      .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
                   )
-                : Effect.succeed(undefined),
+                : Effect.undefined,
             { concurrency: 5 },
           );
           for (const detail of details) {
@@ -300,9 +292,7 @@ export const RegexPatternSetProvider = () =>
                   Description: news.description,
                   Tags: createTagsList(desiredTags),
                 })
-                .pipe(
-                  Effect.catchTag("WAFDuplicateItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFDuplicateItemException", () => Effect.undefined)),
             );
             observed = yield* findSet(scope, name, undefined);
           }
@@ -375,9 +365,7 @@ export const RegexPatternSetProvider = () =>
                   Scope: scope,
                   Id: output.regexPatternSetId,
                 })
-                .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
             );
             if (!found?.RegexPatternSet || found.LockToken === undefined) {
               return;

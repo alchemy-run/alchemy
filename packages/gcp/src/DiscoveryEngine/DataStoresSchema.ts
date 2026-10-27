@@ -138,10 +138,10 @@ const toAttrs = (schema: discoveryengine.GoogleCloudDiscoveryengineV1Schema, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsDataStoresSchemas({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DataStoresSchemaProvider = () =>
   Provider.succeed(DataStoresSchema, {
@@ -200,7 +200,7 @@ export const DataStoresSchemaProvider = () =>
               times: 8,
               schedule: Schedule.spaced("5 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -242,7 +242,7 @@ export const DataStoresSchemaProvider = () =>
       if (existing === undefined) return;
       const operation = yield* discoveryengine
         .deleteProjectsLocationsDataStoresSchemas({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

@@ -180,7 +180,7 @@ const toAttrs = (feedback: apigee.GoogleCloudApigeeV1SecurityFeedback, organizat
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSecurityFeedback({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const toBody = (
   news: SecurityFeedbackProps,

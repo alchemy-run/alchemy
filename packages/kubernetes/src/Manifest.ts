@@ -219,7 +219,7 @@ export const ManifestProvider = () =>
           const observed = yield* readObject({
             transport,
             object: output.ref,
-          }).pipe(Effect.catchTag("KubernetesNotFound", () => Effect.succeed(undefined)));
+          }).pipe(Effect.catchTag("KubernetesNotFound", () => Effect.undefined));
           if (!observed) return undefined;
           const uid = (observed as { metadata?: { uid?: string } }).metadata?.uid;
           const attrs = { ...output, uid };

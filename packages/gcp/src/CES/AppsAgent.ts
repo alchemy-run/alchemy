@@ -187,10 +187,10 @@ const toAttrs = (agent: ces.Agent, project: string, region: string, appHint?: st
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ces
         .getProjectsLocationsAppsAgents({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   collectPages(

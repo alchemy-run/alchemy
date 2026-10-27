@@ -201,10 +201,10 @@ const toAttrs = (rule: cci.GoogleCloudContactcenterinsightsV1AssessmentRule, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsAssessmentRules({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   cci.listProjectsLocationsAssessmentRules.pages({ parent, pageSize: 100 }).pipe(

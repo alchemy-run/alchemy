@@ -164,10 +164,10 @@ const toAttrs = (label: cci.GoogleCloudContactcenterinsightsV1FeedbackLabel, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsConversationsFeedbackLabels({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAll = (parent: string, project: string) =>
   cci.listAllFeedbackLabelsProjectsLocations.pages({ parent, pageSize: 100 }).pipe(

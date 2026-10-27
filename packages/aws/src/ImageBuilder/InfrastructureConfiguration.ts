@@ -175,7 +175,7 @@ export const InfrastructureConfigurationProvider = () =>
           .getInfrastructureConfiguration({
             infrastructureConfigurationArn: arn,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.infrastructureConfiguration;
       });
 
@@ -266,9 +266,7 @@ export const InfrastructureConfigurationProvider = () =>
                 tags: desiredTags,
                 clientToken,
               }),
-            ).pipe(
-              Effect.catchTag("ResourceAlreadyExistsException", () => Effect.succeed(undefined)),
-            );
+            ).pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.undefined));
             observed = yield* getConfiguration(created?.infrastructureConfigurationArn ?? arn);
             if (observed === undefined) {
               return yield* Effect.fail(

@@ -113,7 +113,7 @@ export const AccessKeyProvider = () =>
             Effect.map((listed) =>
               listed.AccessKeyMetadata.find((entry) => entry.AccessKeyId === output.accessKeyId),
             ),
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           )
         : undefined;
 

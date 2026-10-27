@@ -222,7 +222,7 @@ export const HealthCheckProvider = () =>
       const observe = Effect.fn(function* (id: string) {
         return yield* route53.getHealthCheck({ HealthCheckId: id }).pipe(
           Effect.map((r) => r.HealthCheck),
-          Effect.catchTag("NoSuchHealthCheck", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchHealthCheck", () => Effect.undefined),
         );
       });
 

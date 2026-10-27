@@ -237,7 +237,7 @@ const environmentDelete = Query.fn((id: string) => Railway.environmentDelete({ i
 const getById = (environmentId: string, projectId?: string) =>
   readEnvironment(environmentId, projectId).pipe(
     Effect.map((env) => (isGone(env) ? undefined : env)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const findByName = (projectId: string, name: string) =>
@@ -246,7 +246,7 @@ const findByName = (projectId: string, name: string) =>
     Stream.take(1),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 export const EnvironmentProvider = () =>
@@ -333,7 +333,7 @@ export const EnvironmentProvider = () =>
               ? { sourceEnvironmentId: props.sourceEnvironmentId }
               : {}),
           }),
-        ).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         current = created ?? (yield* findByName(projectId, name));
       }
 

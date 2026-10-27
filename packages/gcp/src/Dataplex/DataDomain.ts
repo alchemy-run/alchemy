@@ -154,7 +154,7 @@ const toAttrs = (domain: dataplex.GoogleCloudDataplexV1DataDomain, project: stri
 
 const getByName = (name: string) =>
   retryQuota(dataplex.getProjectsLocationsDataDomains({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listDomains = (project: string, region: string) => {
@@ -256,7 +256,7 @@ export const DataDomainProvider = () =>
               contacts: news.contacts,
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -309,7 +309,7 @@ export const DataDomainProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

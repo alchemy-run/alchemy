@@ -130,7 +130,7 @@ export const CustomPageProvider = () =>
             accountId: acct,
             customPageId: output.customPageId,
           })
-          .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.undefined));
         if (direct && direct.uid) {
           return toAttrs(direct, acct);
         }
@@ -140,7 +140,7 @@ export const CustomPageProvider = () =>
       if (!existing || !existing.uid) return undefined;
       const full = yield* zeroTrust
         .getAccessCustomPage({ accountId: acct, customPageId: existing.uid })
-        .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.undefined));
       if (!full || !full.uid) return undefined;
       return toAttrs(full, acct);
     }),
@@ -158,14 +158,14 @@ export const CustomPageProvider = () =>
             accountId: acct,
             customPageId: output.customPageId,
           })
-          .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.undefined));
       }
       if (!observed || !observed.uid) {
         const byName = yield* findPageByName(acct, name);
         if (byName?.uid) {
           observed = yield* zeroTrust
             .getAccessCustomPage({ accountId: acct, customPageId: byName.uid })
-            .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.undefined));
         }
       }
 

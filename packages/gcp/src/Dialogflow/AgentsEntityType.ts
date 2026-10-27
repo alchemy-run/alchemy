@@ -212,10 +212,10 @@ const toAttrs = (entityType: dialogflow.GoogleCloudDialogflowCxV3EntityType, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsEntityTypes({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findByDisplayName = (agent: string, displayName: string) =>
   listEntityTypes(agent).pipe(

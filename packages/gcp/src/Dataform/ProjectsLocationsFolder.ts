@@ -132,10 +132,10 @@ const toAttrs = (folder: dataform.Folder, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dataform
         .getProjectsLocationsFolders({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (
   project: string,

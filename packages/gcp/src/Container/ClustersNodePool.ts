@@ -566,7 +566,7 @@ const getByRef = (project: string, zone: string, clusterId: string, nodePoolId: 
       clusterId,
       nodePoolId,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const getByName = (name: string) => {
   const parsed = parseName(name);
@@ -951,7 +951,7 @@ export const ClustersNodePoolProvider = () =>
             zone: ref.zone,
             clusterId: ref.clusterId,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         const workloadIdentity = (cluster?.workloadIdentityConfig?.workloadPool ?? "").length > 0;
         const created = yield* retryConflict(
           container
@@ -963,7 +963,7 @@ export const ClustersNodePoolProvider = () =>
                 nodePool: toCreatePool(news, nodePoolId, desiredLabels, workloadIdentity),
               },
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined))),
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined)),
         );
         if (created !== undefined) {
           yield* waitForOperation(ref.project, ref.zone, created);
@@ -1145,7 +1145,7 @@ export const ClustersNodePoolProvider = () =>
           nodePoolId,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

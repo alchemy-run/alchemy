@@ -157,7 +157,7 @@ const toAttrs = (space: apigee.GoogleCloudApigeeV1Space, org: string) => {
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSpaces({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const SpaceProvider = () =>
   Provider.succeed(Space, {

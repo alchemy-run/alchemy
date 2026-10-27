@@ -146,10 +146,10 @@ const toAttrs = (model: translate.Model, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : translate
         .getProjectsLocationsModels({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ModelProvider = () =>
   Provider.succeed(Model, {
@@ -224,7 +224,7 @@ export const ModelProvider = () =>
         translate.deleteProjectsLocationsModels({
           name: output.name,
         }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined && "done" in operation) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

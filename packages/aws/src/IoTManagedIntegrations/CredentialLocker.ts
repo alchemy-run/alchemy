@@ -79,7 +79,7 @@ export const CredentialLockerProvider = () =>
       const observeById = (identifier: string) =>
         mi
           .getCredentialLocker({ Identifier: identifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // Recover an existing locker by name when no Id is cached (e.g. after a
       // state persistence failure). Names are not unique server-side, so take

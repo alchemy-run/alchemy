@@ -159,9 +159,7 @@ const toAttrs = (exclusion: logging.LogExclusion, folderId: string) => {
 };
 
 const getByName = (name: string) =>
-  logging
-    .getFoldersExclusions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  logging.getFoldersExclusions({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const FolderExclusionProvider = () =>
   Provider.succeed(FolderExclusion, {

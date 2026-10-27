@@ -443,18 +443,12 @@ export const ConnectionProvider = () =>
               reservedPeeringRanges: [...desiredRanges],
             },
           })
-          .pipe(
-            Effect.catchTag(["Conflict", "ConnectionAlreadyExists"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag(["Conflict", "ConnectionAlreadyExists"], () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { ignoreRangeConflict: true });
         }
         current = yield* waitUntilPresent(parent, consumerNetwork).pipe(
-          Effect.catchTag("GCP.ServiceNetworking.ConnectionNotResolved", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("GCP.ServiceNetworking.ConnectionNotResolved", () => Effect.undefined),
         );
         if (
           current !== undefined &&
@@ -465,9 +459,7 @@ export const ConnectionProvider = () =>
             Effect.catchTag(["Conflict", "ConnectionAlreadyExists"], () => Effect.void),
           );
           current = yield* waitUntilPresent(parent, consumerNetwork).pipe(
-            Effect.catchTag("GCP.ServiceNetworking.ConnectionNotResolved", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("GCP.ServiceNetworking.ConnectionNotResolved", () => Effect.undefined),
           );
         }
       }
@@ -509,7 +501,7 @@ export const ConnectionProvider = () =>
           body: { consumerNetwork },
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

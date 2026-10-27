@@ -129,7 +129,7 @@ const toAttrs = (link: logging.Link, bucketName: string) => {
 const getByName = (name: string) =>
   logging
     .getFoldersLocationsBucketsLinks({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilActive = (name: string) =>
   Effect.gen(function* () {

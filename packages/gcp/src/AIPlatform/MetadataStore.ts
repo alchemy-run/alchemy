@@ -134,7 +134,7 @@ const toAttrs = (store: aiplatform.GoogleCloudAiplatformV1MetadataStore, project
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsMetadataStores({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listPage = (parent: string) =>
   aiplatform.listProjectsLocationsMetadataStores.pages({ parent, pageSize: 100 }).pipe(
@@ -257,7 +257,7 @@ export const MetadataStoreProvider = () =>
               dataplexConfig: news.dataplexConfig,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -279,7 +279,7 @@ export const MetadataStoreProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

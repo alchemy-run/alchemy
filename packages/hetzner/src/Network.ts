@@ -318,7 +318,7 @@ const cidrContains = (outer: string, inner: string): boolean => {
 const getById = (id: number) =>
   Hetzner.networks.getNetwork({ id }).pipe(
     Effect.map(({ network }) => network),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>

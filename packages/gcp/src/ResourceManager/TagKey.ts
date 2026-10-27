@@ -202,12 +202,12 @@ const toAttrs = (key: resourcemanager.TagKey) => ({
 const getByName = (name: string) =>
   resourcemanager
     .getTagKeys({ name })
-    .pipe(Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.undefined));
 
 const getByNamespaced = (name: string) =>
   resourcemanager
     .getNamespacedTagKeys({ name })
-    .pipe(Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.undefined));
 
 const observe = (resourceName: string | undefined, namespacedName: string) =>
   Effect.gen(function* () {
@@ -358,7 +358,7 @@ export const TagKeyProvider = () =>
           .createTagKeys({
             body: toCreateBody(parent, shortName, desiredDescription, news),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const settled = yield* waitForCreate(created);
           current = yield* waitUntilExists(
@@ -399,7 +399,7 @@ export const TagKeyProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.succeed(undefined)),
+        Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

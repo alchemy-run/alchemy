@@ -227,7 +227,7 @@ export const ReportGroupProvider = () =>
               })
               .pipe(
                 Effect.map((res) => res.reportGroup),
-                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
               );
           }
 

@@ -206,7 +206,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDevelopersAppsKeys({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const listDeveloperEmails = (organization: string) =>
   apigee

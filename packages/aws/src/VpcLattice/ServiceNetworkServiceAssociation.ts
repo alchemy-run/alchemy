@@ -91,7 +91,7 @@ export const ServiceNetworkServiceAssociationProvider = () =>
           .getServiceNetworkServiceAssociation({
             serviceNetworkServiceAssociationIdentifier: id,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // Discover an existing association between the pair (create-conflict
       // recovery / lost-state recovery).
@@ -101,9 +101,7 @@ export const ServiceNetworkServiceAssociationProvider = () =>
           .pipe(
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.items ?? [])),
-            Effect.flatMap((items) =>
-              items[0]?.id ? observe(items[0].id) : Effect.succeed(undefined),
-            ),
+            Effect.flatMap((items) => (items[0]?.id ? observe(items[0].id) : Effect.undefined)),
           );
 
       const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {

@@ -152,7 +152,7 @@ export const ServiceLinkedRoleProvider = () =>
       const getRole = Effect.fn(function* (roleName: string) {
         const response = yield* iam
           .getRole({ RoleName: roleName })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         return response?.Role;
       });
 
@@ -163,7 +163,7 @@ export const ServiceLinkedRoleProvider = () =>
               error._tag === "LimitExceededException" || error._tag === "ServiceFailureException",
             schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
           }),
-          Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
         );
       });
 
@@ -204,7 +204,7 @@ export const ServiceLinkedRoleProvider = () =>
                 // failures; never translate them into successful deletion.
                 Effect.catchTags({
                   NoSuchEntityException: () => Effect.succeed("TASK_NOT_FOUND" as const),
-                  ServiceFailureException: () => Effect.succeed(undefined),
+                  ServiceFailureException: () => Effect.undefined,
                 }),
               );
             if (status === "TASK_NOT_FOUND") {

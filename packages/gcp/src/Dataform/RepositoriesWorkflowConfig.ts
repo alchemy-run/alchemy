@@ -211,10 +211,10 @@ const toAttrs = (config: dataform.WorkflowConfig, project: string, region: strin
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dataform
         .getProjectsLocationsRepositoriesWorkflowConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const RepositoriesWorkflowConfigProvider = () =>
   Provider.succeed(RepositoriesWorkflowConfig, {
@@ -262,7 +262,7 @@ export const RepositoriesWorkflowConfigProvider = () =>
       const attrs = toAttrs(existing, env.project, env.region);
       const parent = yield* dataform
         .getProjectsLocationsRepositories({ name: attrs.repository })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (parent === undefined) return Unowned(attrs);
       return hasAlchemyLabelMap(parent.labels) ? attrs : Unowned(attrs);
     }),

@@ -1259,7 +1259,7 @@ export const ingestStoreOf = (store: ObjectStore): IngestStore => ({
       .pipe(
         Effect.flatMap((meta) =>
           meta === undefined
-            ? Effect.succeed(undefined)
+            ? Effect.undefined
             : store.readContent(oid).pipe(Effect.map((content) => ({ type: meta.type, content }))),
         ),
       ),

@@ -101,7 +101,7 @@ export class CollectionsEnginesConversationNotResolved extends Data.TaggedError(
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEnginesConversations({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (
   conversation: discoveryengine.GoogleCloudDiscoveryengineV1Conversation,
@@ -170,7 +170,7 @@ export const CollectionsEnginesConversationProvider = () =>
               messages: news.messages,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? undefined;
       }
 

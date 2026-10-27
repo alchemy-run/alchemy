@@ -199,10 +199,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   !isValidLinkName(name)
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : observability
         .getProjectsLocationsBucketsDatasetsLinks({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilPresent = (name: string) =>
   getByName(name).pipe(

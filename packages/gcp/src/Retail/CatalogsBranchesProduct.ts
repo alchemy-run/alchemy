@@ -283,10 +283,10 @@ const toBody = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : retail
         .getProjectsLocationsCatalogsBranchesProducts({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const CatalogsBranchesProductProvider = () =>
   Provider.succeed(CatalogsBranchesProduct, {

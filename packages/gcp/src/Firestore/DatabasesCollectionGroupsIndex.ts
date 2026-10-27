@@ -284,7 +284,7 @@ const matchesDesired = (
 const getByName = (name: string) =>
   firestore
     .getProjectsDatabasesCollectionGroupsIndexes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnParent = (parent: string) =>
   firestore.listProjectsDatabasesCollectionGroupsIndexes.pages({ parent }).pipe(
@@ -438,7 +438,7 @@ export const DatabasesCollectionGroupsIndexProvider = () =>
             parent,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         const name = yield* resolveCreatedIndexName(created, parent, news);
         current = yield* waitUntilExists(name);
       } else if (current.name !== undefined) {

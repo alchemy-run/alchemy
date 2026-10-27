@@ -286,14 +286,14 @@ const s3Objects = (
       s3.getObject({ Bucket: bucket, Key: key }).pipe(
         Effect.flatMap((result) =>
           result.Body === undefined
-            ? Effect.succeed(undefined)
+            ? Effect.undefined
             : result.Body.pipe(
                 Stream.decodeText,
                 Stream.mkString,
                 Effect.map((text) => ({ text, version: result.ETag ?? "" })),
               ),
         ),
-        Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+        Effect.catchTag("NoSuchKey", () => Effect.undefined),
       ),
     ),
   write: (key, body, condition) =>
@@ -326,8 +326,9 @@ const s3Objects = (
             times: 4,
           }),
           // A lost condition: 412, or 409 after retries.
-          Effect.catchTag(["PreconditionFailed", "ConditionalRequestConflict"], () =>
-            Effect.succeed(undefined),
+          Effect.catchTag(
+            ["PreconditionFailed", "ConditionalRequestConflict"],
+            () => Effect.undefined,
           ),
         ),
     ),
@@ -446,9 +447,7 @@ const ensureStateBucket = (bucket: string, region: string, options: S3StateOptio
     };
     const observedPublicAccess = yield* s3.getPublicAccessBlock({ Bucket: bucket }).pipe(
       Effect.map((result) => result.PublicAccessBlockConfiguration),
-      Effect.catchTag("NoSuchPublicAccessBlockConfiguration", () =>
-        Effect.succeed<s3.PublicAccessBlockConfiguration | undefined>(undefined),
-      ),
+      Effect.catchTag("NoSuchPublicAccessBlockConfiguration", () => Effect.undefined),
     );
     const publicAccessFingerprint = (config: s3.PublicAccessBlockConfiguration | undefined) =>
       JSON.stringify({
@@ -469,9 +468,7 @@ const ensureStateBucket = (bucket: string, region: string, options: S3StateOptio
     const desiredOwnership = "BucketOwnerEnforced";
     const observedOwnership = yield* s3.getBucketOwnershipControls({ Bucket: bucket }).pipe(
       Effect.map((result) => result.OwnershipControls?.Rules?.[0]?.ObjectOwnership),
-      Effect.catchTag("OwnershipControlsNotFoundError", () =>
-        Effect.succeed<string | undefined>(undefined),
-      ),
+      Effect.catchTag("OwnershipControlsNotFoundError", () => Effect.undefined),
     );
     if (observedOwnership !== desiredOwnership) {
       yield* s3.putBucketOwnershipControls({

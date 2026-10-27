@@ -436,9 +436,7 @@ const toAttrs = (account: StripeAccount) => ({
 const isMissingAccount = isMissingStripeResource;
 
 const getById = (account: string) =>
-  GetAccountByAccount({ account }).pipe(
-    Effect.catchIf(isMissingAccount, () => Effect.succeed(undefined)),
-  );
+  GetAccountByAccount({ account }).pipe(Effect.catchIf(isMissingAccount, () => Effect.undefined));
 
 const listAllAccounts = Effect.fn(function* () {
   const accounts: StripeAccount[] = [];

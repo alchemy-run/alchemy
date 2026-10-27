@@ -313,7 +313,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   firestore.getProjectsDatabases({ name }).pipe(
     Effect.map((database) => (database.deleteTime !== undefined ? undefined : database)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 /**
@@ -474,7 +474,7 @@ export const DatabaseProvider = () =>
                 : undefined,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }

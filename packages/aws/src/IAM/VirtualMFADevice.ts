@@ -121,7 +121,7 @@ export const VirtualMFADeviceProvider = () =>
             SerialNumber: serialNumber,
             UserName: userName,
           })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
       });
 
       return {

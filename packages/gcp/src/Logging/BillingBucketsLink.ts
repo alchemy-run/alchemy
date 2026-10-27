@@ -186,7 +186,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   logging
     .getBillingAccountsLocationsBucketsLinks({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilActive = (name: string) =>
   Effect.gen(function* () {

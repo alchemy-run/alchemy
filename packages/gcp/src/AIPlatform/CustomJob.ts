@@ -167,7 +167,7 @@ const toAttrs = (job: aiplatform.GoogleCloudAiplatformV1CustomJob, project: stri
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsCustomJobs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listJobs = (project: string, region: string) => {
   const collect = (parent: string) =>
@@ -225,8 +225,8 @@ const cancelAndDelete = (name: string) =>
         schedule: Schedule.spaced("3 seconds"),
       }),
       Effect.catchTags({
-        NotFound: () => Effect.succeed(undefined),
-        Conflict: () => Effect.succeed(undefined),
+        NotFound: () => Effect.undefined,
+        Conflict: () => Effect.undefined,
       }),
     );
     if (operation !== undefined) {

@@ -220,7 +220,7 @@ export const PolicyProvider = () =>
       const readPolicy = Effect.fn(function* (policyArn: string) {
         const response = yield* iam
           .getPolicy({ PolicyArn: policyArn })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         return response?.Policy;
       });
 
@@ -239,7 +239,7 @@ export const PolicyProvider = () =>
             PolicyArn: policyArn,
             VersionId: versionId,
           })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         return parsePolicyDocument(response?.PolicyVersion?.Document);
       });
 
@@ -304,7 +304,7 @@ export const PolicyProvider = () =>
                   // A peer test may delete a policy between `listPolicies` and
                   // hydrating its tags/version — skip the vanished entry rather
                   // than failing the whole enumeration.
-                  Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
                 ),
               { concurrency: 10 },
             );
@@ -484,7 +484,7 @@ export const PolicyProvider = () =>
             .listPolicyVersions({
               PolicyArn: output.policyArn,
             })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           for (const version of versions?.Versions ?? []) {
             if (!version.IsDefaultVersion && version.VersionId) {
               yield* iam

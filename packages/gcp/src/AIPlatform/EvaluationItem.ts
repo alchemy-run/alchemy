@@ -157,7 +157,7 @@ const toAttrs = (item: aiplatform.GoogleCloudAiplatformV1EvaluationItem, project
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsEvaluationItems({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, location = "-") =>
   aiplatform.listProjectsLocationsEvaluationItems
@@ -292,7 +292,7 @@ export const EvaluationItemProvider = () =>
       const operation = yield* aiplatform
         .deleteProjectsLocationsEvaluationItems({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

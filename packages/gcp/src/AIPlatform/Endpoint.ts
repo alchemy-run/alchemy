@@ -348,7 +348,7 @@ const toAttrs = (endpoint: aiplatform.GoogleCloudAiplatformV1Endpoint, project: 
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsEndpoints({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Look an endpoint up by name. An endpoint is invisible while its create
@@ -513,7 +513,7 @@ export const EndpointProvider = () =>
             endpointId,
             body: toCreateBody(news, endpointId, desiredLabels),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -618,7 +618,7 @@ export const EndpointProvider = () =>
       const operation = yield* aiplatform
         .deleteProjectsLocationsEndpoints({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

@@ -461,7 +461,7 @@ const ProviderLive = () =>
               id: connectionId,
             }).pipe(
               Effect.map((response) => response.data),
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("NotFound", () => Effect.undefined),
             );
             if (!connection) return undefined;
             if (
@@ -517,7 +517,7 @@ const ProviderLive = () =>
           let connection: ObservedConnectionRecord | undefined = connectionId
             ? yield* getConnection({ id: connectionId }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
 
@@ -629,7 +629,7 @@ const ProviderLive = () =>
             id: output.connectionId,
           }).pipe(
             Effect.map((response) => response.data),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!connection) return;
           if (

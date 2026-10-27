@@ -142,7 +142,7 @@ export const PodIdentityAssociationProvider = () =>
                               clusterName,
                               associationId: summary.associationId,
                             })
-                          : Effect.succeed(undefined),
+                          : Effect.undefined,
                       { concurrency: 5 },
                     ),
                   ),
@@ -336,7 +336,7 @@ const readAssociationById = Effect.fn(function* ({
       clusterName,
       associationId,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
   const association = response?.association;
   if (

@@ -737,7 +737,7 @@ const streamObject = (kit: StreamKit) =>
           .pipe(Effect.map((rows) => [...rows.values()]));
       const latest = (meta: StreamMeta) =>
         meta.seq === 0
-          ? Effect.succeed(undefined)
+          ? Effect.undefined
           : state.storage.get<StreamEntry>(`entry:${pad(meta.seq)}`);
       return {
         append: (key: string, write: StreamWrite) =>

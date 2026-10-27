@@ -98,7 +98,7 @@ export const KeyspaceProvider = () =>
       const readKeyspace = Effect.fn(function* (name: string) {
         return yield* keyspaces
           .getKeyspace({ keyspaceName: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const readTags = Effect.fn(function* (arn: string) {

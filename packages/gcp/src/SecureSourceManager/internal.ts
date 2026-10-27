@@ -448,7 +448,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
   effect.pipe(
     Effect.catchIf(
       (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 

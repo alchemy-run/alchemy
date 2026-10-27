@@ -124,10 +124,10 @@ const resourceName = (dataStore: string, schemaId: string) => `${dataStore}/sche
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsCollectionsDataStoresSchemas({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -230,7 +230,7 @@ export const CollectionsDataStoresSchemaProvider = () =>
               times: 8,
               schedule: Schedule.spaced("5 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -269,7 +269,7 @@ export const CollectionsDataStoresSchemaProvider = () =>
         .deleteProjectsLocationsCollectionsDataStoresSchemas({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

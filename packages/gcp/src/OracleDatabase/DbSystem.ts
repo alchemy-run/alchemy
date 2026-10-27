@@ -298,7 +298,7 @@ const toAttrs = (system: oracle.DbSystem, project: string) => {
 
 const getByName = (name: string) =>
   retryQuota(oracle.getProjectsLocationsDbSystems({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listSystems = (project: string, region: string) => {
@@ -376,7 +376,7 @@ export const DbSystemProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -404,7 +404,7 @@ export const DbSystemProvider = () =>
         })
         .pipe(
           retryConflict,
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

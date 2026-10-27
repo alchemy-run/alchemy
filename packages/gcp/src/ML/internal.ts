@@ -274,17 +274,15 @@ export const replaceOnIdentity = (input: {
 
 export const getModel = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
-    : ml
-        .getProjectsModels({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    ? Effect.undefined
+    : ml.getProjectsModels({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getVersion = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ml
         .getProjectsModelsVersions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const emptyList = <A>() => Effect.succeed([] as A[]);
 

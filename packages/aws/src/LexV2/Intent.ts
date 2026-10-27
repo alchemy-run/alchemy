@@ -112,7 +112,7 @@ const createIntentName = (id: string, props: { intentName?: string | undefined }
 const describeIntent = Effect.fn(function* (botId: string, localeId: string, intentId: string) {
   return yield* lexm
     .describeIntent({ botId, botVersion: "DRAFT", localeId, intentId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 });
 
 /** Find an intent of the locale by exact name (used when state was lost). */

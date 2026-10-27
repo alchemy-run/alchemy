@@ -84,7 +84,7 @@ export const SSHPublicKeyProvider = () =>
           SSHPublicKeyId: output.sshPublicKeyId,
           Encoding: "SSH",
         })
-        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
       if (!response?.SSHPublicKey?.SSHPublicKeyId) {
         return undefined;
       }
@@ -111,7 +111,7 @@ export const SSHPublicKeyProvider = () =>
             })
             .pipe(
               Effect.map((r) => r.SSHPublicKey),
-              Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+              Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
             )
         : undefined;
 
@@ -186,7 +186,7 @@ export const SSHPublicKeyProvider = () =>
                       Effect.map((r) => r.SSHPublicKey),
                       // The key may be deleted between enumeration and
                       // hydration.
-                      Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+                      Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
                     ),
                 { concurrency: 10 },
               ),

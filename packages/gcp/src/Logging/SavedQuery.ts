@@ -276,7 +276,7 @@ const toAttrs = (query: logging.SavedQuery, project: string, location: string) =
 const getByName = (name: string) =>
   logging
     .getProjectsLocationsSavedQueries({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const SavedQueryProvider = () =>
   Provider.succeed(SavedQuery, {

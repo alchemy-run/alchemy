@@ -100,7 +100,7 @@ export const ServiceNetworkProvider = () =>
       const observe = (serviceNetworkIdentifier: string) =>
         vpclattice
           .getServiceNetwork({ serviceNetworkIdentifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const findByName = (name: string) =>
         vpclattice.listServiceNetworks.pages({}).pipe(
@@ -110,9 +110,7 @@ export const ServiceNetworkProvider = () =>
               .flatMap((page) => page.items ?? [])
               .find((s) => s.name === name),
           ),
-          Effect.flatMap((summary) =>
-            summary?.id ? observe(summary.id) : Effect.succeed(undefined),
-          ),
+          Effect.flatMap((summary) => (summary?.id ? observe(summary.id) : Effect.undefined)),
         );
 
       const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
@@ -140,7 +138,7 @@ export const ServiceNetworkProvider = () =>
       ) {
         const listed = yield* vpclattice
           .listTagsForResource({ resourceArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         if (!listed) return false;
         const tags = tagRecord(listed.tags);
         return (
@@ -180,9 +178,7 @@ export const ServiceNetworkProvider = () =>
                   .getServiceNetworkVpcAssociation({
                     serviceNetworkVpcAssociationIdentifier: association.id,
                   })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  ),
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined)),
               );
             }),
           { concurrency: 10 },
@@ -219,9 +215,7 @@ export const ServiceNetworkProvider = () =>
                   .getServiceNetworkServiceAssociation({
                     serviceNetworkServiceAssociationIdentifier: association.id,
                   })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  ),
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined)),
               );
             }),
           { concurrency: 10 },
@@ -258,9 +252,7 @@ export const ServiceNetworkProvider = () =>
                   .getServiceNetworkResourceAssociation({
                     serviceNetworkResourceAssociationIdentifier: association.id,
                   })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  ),
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined)),
               );
             }),
           { concurrency: 10 },

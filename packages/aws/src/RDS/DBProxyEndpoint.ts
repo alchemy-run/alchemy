@@ -151,7 +151,7 @@ export const DBProxyEndpointProvider = () =>
             DBProxyName: dbProxyName,
             DBProxyEndpointName: dbProxyEndpointName,
           })
-          .pipe(Effect.catchTag("DBProxyEndpointNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBProxyEndpointNotFoundFault", () => Effect.undefined));
         return response?.DBProxyEndpoints?.[0];
       });
 

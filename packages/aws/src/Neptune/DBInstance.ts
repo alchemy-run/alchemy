@@ -185,7 +185,7 @@ export const DBInstanceProvider = () =>
           .describeDBInstances({
             DBInstanceIdentifier: instanceId,
           })
-          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.undefined));
         return response?.DBInstances?.[0];
       });
 
@@ -193,7 +193,7 @@ export const DBInstanceProvider = () =>
         if (!arn) return {} as Record<string, string>;
         const response = yield* neptune
           .listTagsForResource({ ResourceName: arn })
-          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.undefined));
         return toTagRecord(response?.TagList);
       });
 

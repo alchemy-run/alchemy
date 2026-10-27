@@ -157,10 +157,10 @@ const toAttrs = (subnet: oracle.OdbSubnet, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : oracle
         .getProjectsLocationsOdbNetworksOdbSubnets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listSubnets = (parent: string) =>
   oracle.listProjectsLocationsOdbNetworksOdbSubnets.pages({ parent, pageSize: 1000 }).pipe(
@@ -284,7 +284,7 @@ export const OdbNetworksOdbSubnetProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -315,8 +315,8 @@ export const OdbNetworksOdbSubnetProvider = () =>
             schedule: Schedule.spaced("5 seconds"),
           }),
           Effect.catchTags({
-            NotFound: () => Effect.succeed(undefined),
-            BadRequest: () => Effect.succeed(undefined),
+            NotFound: () => Effect.undefined,
+            BadRequest: () => Effect.undefined,
           }),
         );
       if (operation !== undefined) {

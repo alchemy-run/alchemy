@@ -131,7 +131,7 @@ const resourceName = (engine: string, sessionId: string) => `${engine}/sessions/
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEnginesSessions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const userLabels = (labels: readonly string[] | undefined) => [...(labels ?? [])];
 

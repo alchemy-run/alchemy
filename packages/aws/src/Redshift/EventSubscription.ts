@@ -201,7 +201,7 @@ export const EventSubscriptionProvider = () =>
       const readSubscription = Effect.fn(function* (name: string) {
         const response = yield* redshift
           .describeEventSubscriptions({ SubscriptionName: name })
-          .pipe(Effect.catchTag("SubscriptionNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("SubscriptionNotFoundFault", () => Effect.undefined));
         return response?.EventSubscriptionsList?.[0];
       });
 
@@ -328,7 +328,7 @@ export const EventSubscriptionProvider = () =>
               .deleteEventSubscription({
                 SubscriptionName: output.subscriptionName,
               })
-              .pipe(Effect.catchTag("SubscriptionNotFoundFault", () => Effect.succeed(undefined))),
+              .pipe(Effect.catchTag("SubscriptionNotFoundFault", () => Effect.undefined)),
           );
         }),
 

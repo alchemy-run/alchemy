@@ -255,7 +255,7 @@ export const TaxonomiesPolicyTagProvider = () =>
               parentPolicyTag,
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* observe(id, undefined, taxonomy));
       }
 

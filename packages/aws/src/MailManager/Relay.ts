@@ -108,7 +108,7 @@ export const RelayProvider = () =>
       const getById = (relayId: string) =>
         mm
           .getRelay({ RelayId: relayId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const findByName = (name: string) =>
         mm.listRelays.pages({}).pipe(
@@ -196,7 +196,7 @@ export const RelayProvider = () =>
                 Authentication: news.authentication,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             relay =
               created !== undefined
                 ? yield* getById(created.RelayId)

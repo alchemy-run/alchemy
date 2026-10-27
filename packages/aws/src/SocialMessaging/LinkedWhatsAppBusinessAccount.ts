@@ -189,7 +189,7 @@ interface LinkedAccountState {
 const readLinkedAccount = Effect.fn(function* (accountId: string) {
   const response = yield* socialmessaging
     .getLinkedWhatsAppBusinessAccount({ id: accountId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   const account = response?.account;
   if (account === undefined) return undefined;
   const state: LinkedAccountState = {

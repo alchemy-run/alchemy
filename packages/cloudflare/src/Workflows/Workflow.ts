@@ -1123,7 +1123,7 @@ export const WorkflowResource = Resource<WorkflowResource>(WorkflowResourceTypeI
 const getWorkflowOrUndefined = (accountId: string, workflowName: string) =>
   workflows
     .getWorkflow({ accountId, workflowName })
-    .pipe(Effect.catchTag("WorkflowNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("WorkflowNotFound", () => Effect.undefined));
 
 export const ProviderLive = () =>
   Provider.succeed(WorkflowResource, {

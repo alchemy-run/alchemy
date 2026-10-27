@@ -1271,7 +1271,7 @@ const readPackageJson = Effect.fn(function* (appPath: string) {
   const packagePath = path.join(appPath, "package.json");
   const text = yield* fs
     .readFileString(packagePath)
-    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
   if (!text) return undefined;
   return yield* Effect.try({
     try: () => JSON.parse(text) as Record<string, unknown>,

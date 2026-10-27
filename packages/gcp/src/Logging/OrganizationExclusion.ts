@@ -166,7 +166,7 @@ const toAttrs = (exclusion: logging.LogExclusion, organization: string, project:
 const getByName = (name: string) =>
   logging
     .getOrganizationsExclusions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const OrganizationExclusionProvider = () =>
   Provider.succeed(OrganizationExclusion, {

@@ -140,7 +140,7 @@ const createQuotaName = (id: string, props: { name?: string | undefined }) =>
 const describeQuotaOrUndefined = (quotaId: string) =>
   sagemaker
     .describeComputeQuota({ ComputeQuotaId: quotaId })
-    .pipe(Effect.catchTag("ResourceNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFound", () => Effect.undefined));
 
 /**
  * Look a compute allocation up by exact name — used when state was lost
@@ -157,7 +157,7 @@ const findQuotaByName = Effect.fn(function* (name: string) {
 const fetchQuotaTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.undefined));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -341,7 +341,7 @@ export const ComputeQuotaProvider = () =>
                   Value,
                 })),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             quotaId = created?.ComputeQuotaId ?? (yield* findQuotaByName(name))?.ComputeQuotaId;
             if (quotaId === undefined) {
               return yield* Effect.fail(new Error(`failed to create compute quota ${name}`));

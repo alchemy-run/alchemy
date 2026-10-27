@@ -194,7 +194,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
   effect.pipe(
     Effect.catchIf(
       (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 
@@ -302,7 +302,7 @@ export const waitUntilExists = <A, E, R>(
 
 export const getDatasource = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(cloudsearch.getSettingsDatasources({ name: toDatasourceName(name) }));
 
 export const listDatasources = () =>
@@ -331,7 +331,7 @@ export const findOwnedDatasource = (id: string) =>
 
 export const getSearchApplication = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         cloudsearch.getSettingsSearchapplications({
           name: toSearchApplicationName(name),

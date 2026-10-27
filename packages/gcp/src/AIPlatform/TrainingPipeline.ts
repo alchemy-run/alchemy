@@ -224,7 +224,7 @@ const toAttrs = (pipeline: aiplatform.GoogleCloudAiplatformV1TrainingPipeline, p
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsTrainingPipelines({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string) =>
   aiplatform.listProjectsLocationsTrainingPipelines.pages({ parent, pageSize: 100 }).pipe(
@@ -388,7 +388,7 @@ export const TrainingPipelineProvider = () =>
           times: 24,
           schedule: Schedule.spaced("10 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
@@ -403,7 +403,7 @@ export const TrainingPipelineProvider = () =>
               times: 8,
               schedule: Schedule.spaced("3 seconds"),
             }),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
         if (jobDelete !== undefined) {
           yield* waitForOperation(jobDelete, { notFoundOk: true });

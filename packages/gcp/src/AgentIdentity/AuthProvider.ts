@@ -283,7 +283,7 @@ export const AuthProviderProvider = () =>
             name: current.name ?? name,
             body: {},
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       }
 
       if (current === undefined) {

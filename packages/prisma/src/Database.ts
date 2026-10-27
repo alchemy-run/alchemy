@@ -692,7 +692,7 @@ const ProviderLive = () =>
           let database = databaseId
             ? yield* getDatabase({ databaseId }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           if (!database && databaseId === undefined) {
@@ -747,7 +747,7 @@ const ProviderLive = () =>
           let database: ObservedProjectDatabase | undefined = databaseId
             ? yield* getDatabase({ databaseId }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           const logicalId = news.logicalId ?? fqn;
@@ -940,7 +940,7 @@ const ProviderLive = () =>
             databaseId: output.databaseId,
           }).pipe(
             Effect.map((response) => response.data),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!database) return;
           if (database.isDefault) {

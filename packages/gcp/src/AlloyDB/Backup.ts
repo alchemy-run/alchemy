@@ -365,7 +365,7 @@ const isPlaceholder = (backup: alloydb.Backup) => {
 const getByName = (name: string) =>
   alloydb
     .getProjectsLocationsBackups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -586,7 +586,7 @@ export const BackupProvider = () =>
               times: 40,
               schedule: Schedule.spaced("15 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -650,7 +650,7 @@ export const BackupProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* alloydb.deleteProjectsLocationsBackups({ name: output.name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         Effect.retry({
           while: (error) => error._tag === "Conflict",
           times: 40,

@@ -392,7 +392,7 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
                 references: news.references,
               },
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined))),
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined)),
         );
         const lookedUp = yield* kafka
           .lookupVersionProjectsLocationsSchemaRegistriesContextsSubjects({
@@ -404,7 +404,7 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
               references: news.references,
             },
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         current =
           lookedUp ??
           (yield* getContextSchemaVersion(versionName(parent, news.version ?? "latest")));

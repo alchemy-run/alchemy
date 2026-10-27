@@ -108,7 +108,7 @@ export const DestinationProvider = () =>
       const observe = (name: string) =>
         mi
           .getDestination({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // GetDestination does not return an ARN; the tag APIs need one, so
       // construct it from the ambient account/region.

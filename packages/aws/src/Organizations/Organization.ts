@@ -156,7 +156,7 @@ const readOrganization = () =>
   retryOrganizations(
     organizations.describeOrganization({}).pipe(
       Effect.map((response) => response.Organization),
-      Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.succeed(undefined)),
+      Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.undefined),
     ),
   );
 

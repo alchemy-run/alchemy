@@ -156,7 +156,7 @@ export const DestinationProvider = () =>
       const getDestination = (name: string) =>
         iotw
           .getDestination({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const toAttrs = Effect.fn(function* (destination: iotw.GetDestinationResponse, name: string) {
         if (destination.Arn === undefined) {

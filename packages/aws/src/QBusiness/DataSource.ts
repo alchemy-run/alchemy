@@ -164,7 +164,7 @@ const createDisplayName = (id: string, props: { displayName?: string | undefined
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qbusiness
     .listTagsForResource({ resourceARN: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return Object.fromEntries((response?.tags ?? []).map((tag) => [tag.key, tag.value]));
 });
 
@@ -180,7 +180,7 @@ const readDataSourceById = Effect.fn(function* (
 ) {
   const described = yield* qbusiness
     .getDataSource({ applicationId, indexId, dataSourceId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.status === "DELETING") return undefined;
   const arn = described.dataSourceArn;
   if (arn === undefined) return undefined;
@@ -274,7 +274,7 @@ const waitForDataSourceStatus = (
     Effect.gen(function* () {
       const described = yield* qbusiness
         .getDataSource({ applicationId, indexId, dataSourceId })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new DataSourceNotReady({ dataSourceId, status: described.status });

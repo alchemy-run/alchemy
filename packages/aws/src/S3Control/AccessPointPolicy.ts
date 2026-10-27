@@ -82,9 +82,7 @@ export const AccessPointPolicyProvider = () =>
       const observePolicy = (accountId: string, name: string) =>
         s3control.getAccessPointPolicy({ AccountId: accountId, Name: name }).pipe(
           Effect.map((r) => r.Policy),
-          Effect.catchTag(["NoSuchAccessPointPolicy", "NoSuchAccessPoint"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag(["NoSuchAccessPointPolicy", "NoSuchAccessPoint"], () => Effect.undefined),
         );
 
       const desiredPolicy = (props: AccessPointPolicyProps) =>

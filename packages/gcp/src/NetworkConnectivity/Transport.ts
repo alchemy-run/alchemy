@@ -357,7 +357,7 @@ const toAttrs = (transport: networkconnectivity.Transport, project: string, regi
 const getByName = (name: string) =>
   networkconnectivity
     .getProjectsLocationsTransports({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isPendingState = (state: string | undefined) =>
   state === "CREATING" ||
@@ -562,7 +562,7 @@ export const TransportProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -631,7 +631,7 @@ export const TransportProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

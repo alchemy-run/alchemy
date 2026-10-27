@@ -253,7 +253,7 @@ const toAttrs = (sink: logging.LogSink, billingAccountId: string) => {
 const getByName = (name: string) =>
   logging
     .getBillingAccountsSinks({ sinkName: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toCreateBody = (
   sinkId: string,

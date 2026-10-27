@@ -80,9 +80,7 @@ export const GroupProvider = () =>
             const rows = yield* Effect.forEach(
               groups,
               (group) =>
-                group.GroupId
-                  ? readGroupById(identityStoreId, group.GroupId)
-                  : Effect.succeed(undefined),
+                group.GroupId ? readGroupById(identityStoreId, group.GroupId) : Effect.undefined,
               { concurrency: 10 },
             );
             return rows.filter((row): row is Group["Attributes"] => row !== undefined);
@@ -212,7 +210,7 @@ const readGroupById = Effect.fn(function* (identityStoreId: string, groupId: str
         IdentityStoreId: identityStoreId,
         GroupId: groupId,
       })
-      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined))),
+      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined)),
   );
 
   if (!response?.GroupId || !response.IdentityStoreId) {

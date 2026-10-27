@@ -657,7 +657,7 @@ const ensureDeployKey = Effect.fn(function* (input: {
 const getById = (id: number) =>
   Hetzner.servers.getServer({ id }).pipe(
     Effect.map(({ server }) => server),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getByName = (name: string) =>
@@ -971,7 +971,7 @@ export const ServerProvider = () =>
               schedule: Schedule.spaced("5 seconds"),
               times: 8,
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             // The deploy key is a side-effect, not a stack resource. If
             // createServer fails after minting it (quota skip, timeout),
             // nothing is persisted for Server.delete to clean up.
@@ -1071,7 +1071,7 @@ export const ServerProvider = () =>
         }
 
         const deleted = yield* Hetzner.servers.deleteServer({ id: current.id }).pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({ while: retryable, times: 8, schedule: backoff }),
         );
         if (deleted?.action) {

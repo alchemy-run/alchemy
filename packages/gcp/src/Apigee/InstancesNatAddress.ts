@@ -135,7 +135,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsInstancesNatAddresses({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const listByInstance = (parent: string) =>
   apigee.listOrganizationsInstancesNatAddresses
@@ -259,7 +259,7 @@ export const InstancesNatAddressProvider = () =>
             parent,
             body: { name: natAddressId },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -292,9 +292,7 @@ export const InstancesNatAddressProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const deleted = yield* apigee
         .deleteOrganizationsInstancesNatAddresses({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitForOperation(deleted, { notFoundOk: true });
       }

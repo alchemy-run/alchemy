@@ -214,7 +214,7 @@ const toAttrs = (project: resourcemanager.Project) => ({
 const getByName = (name: string) =>
   resourcemanager
     .getProjects({ name })
-    .pipe(Effect.catchTag(["NotFound", "ProjectNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ProjectNotFound"], () => Effect.undefined));
 
 const observe = (resourceName: string | undefined, projectId: string) =>
   Effect.gen(function* () {
@@ -344,7 +344,7 @@ export const ProjectProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const settled = yield* waitForCreate(created);
           current = yield* waitUntilExists(
@@ -412,7 +412,7 @@ export const ProjectProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag(["NotFound", "ProjectNotFound"], () => Effect.succeed(undefined)),
+        Effect.catchTag(["NotFound", "ProjectNotFound"], () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

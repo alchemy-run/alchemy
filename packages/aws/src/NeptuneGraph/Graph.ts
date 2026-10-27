@@ -200,7 +200,7 @@ export const GraphProvider = () =>
       const getGraph = Effect.fn(function* (graphId: string) {
         return yield* neptunegraph
           .getGraph({ graphIdentifier: graphId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // Graph names are unique per account/region — resolve a graph by name
@@ -226,7 +226,7 @@ export const GraphProvider = () =>
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* neptunegraph
           .listTagsForResource({ resourceArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return toTagRecord(response?.tags);
       });
 
@@ -344,7 +344,7 @@ export const GraphProvider = () =>
                 deletionProtection: news.deletionProtection,
                 tags: desiredTags,
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             const graphId = created?.id ?? (yield* findGraphByName(name))?.id;
             if (graphId === undefined) {
               return yield* Effect.fail(new Error(`Failed to create graph '${name}'`));
@@ -419,14 +419,14 @@ export const GraphProvider = () =>
                 graphIdentifier: output.graphId,
                 deletionProtection: false,
               })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           }
           yield* neptunegraph
             .deleteGraph({
               graphIdentifier: output.graphId,
               skipSnapshot: true,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           // Block until the graph is fully gone — deletion is async and the
           // graph bills until it disappears.
           yield* Effect.repeat(

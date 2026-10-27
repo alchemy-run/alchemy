@@ -367,7 +367,7 @@ const ProviderLive = () =>
             projects,
             Effect.fn(function* (project) {
               const database = yield* defaultDatabase(project.id).pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               );
               return attrsFrom(project, database, {});
             }),
@@ -454,12 +454,12 @@ const ProviderLive = () =>
           const project = projectId
             ? yield* getProject({ id: projectId }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : yield* findProjectByName(yield* createName(id, olds.name));
           if (!project) return undefined;
           const database = yield* defaultDatabase(project.id).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           const cachedSecrets = output?.databaseId === database?.id ? output : undefined;
           const attrs = attrsFrom(project, database, {
@@ -481,7 +481,7 @@ const ProviderLive = () =>
           let project: ObservedProject | undefined = outputProjectId
             ? yield* getProject({ id: outputProjectId }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : news.name === undefined
               ? yield* findProjectByName(name)
@@ -555,7 +555,7 @@ const ProviderLive = () =>
 
           if (news.createDatabase === false && !createdProject) {
             const existingDefault = yield* defaultDatabase(project.id).pipe(
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("NotFound", () => Effect.undefined),
             );
             if (existingDefault) {
               return yield* Effect.fail(
@@ -585,7 +585,7 @@ const ProviderLive = () =>
           let defaultDatabaseChanged = false;
           if (news.createDatabase !== false && !database) {
             database = yield* defaultDatabase(projectId).pipe(
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("NotFound", () => Effect.undefined),
             );
           }
 

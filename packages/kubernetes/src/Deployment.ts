@@ -540,7 +540,7 @@ export const DeploymentProvider = () =>
             hostname ? Effect.succeed(hostname) : Effect.fail(new ServiceNotReady()),
           ),
           retryUntilServiceReady,
-          Effect.catchTag("Kubernetes.ServiceNotReady", () => Effect.succeed(undefined)),
+          Effect.catchTag("Kubernetes.ServiceNotReady", () => Effect.undefined),
         );
 
       return {
@@ -615,7 +615,7 @@ export const DeploymentProvider = () =>
           const anchor = (output.kubernetesObjects ?? [])[0];
           if (!anchor) return output;
           const observed = yield* readObject({ transport, object: anchor }).pipe(
-            Effect.catchTag("KubernetesNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("KubernetesNotFound", () => Effect.undefined),
           );
           if (observed === undefined) return undefined;
           return output;

@@ -153,7 +153,7 @@ const createBotName = (id: string, props: { botName?: string | undefined }) =>
 const describeBot = Effect.fn(function* (botId: string) {
   return yield* lexm
     .describeBot({ botId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 });
 
 /** Find a bot by exact name. The physical name embeds app/stage/id. */
@@ -205,7 +205,7 @@ export const BotProvider = () =>
               ids,
               (id) =>
                 Effect.flatMap(describeBot(id), (bot) =>
-                  bot === undefined ? Effect.succeed(undefined) : attributesOf(bot),
+                  bot === undefined ? Effect.undefined : attributesOf(bot),
                 ),
               { concurrency: 5 },
             );

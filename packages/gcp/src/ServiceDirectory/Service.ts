@@ -217,7 +217,7 @@ const toAttrs = (service: servicedirectory.Service, project: string, region: str
 const getByName = (name: string) =>
   servicedirectory
     .getProjectsLocationsNamespacesServices({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const hasAlchemyAnnotation = (annotations: Record<string, string | undefined> | null | undefined) =>
   Object.keys(annotations ?? {}).some((key) => key.startsWith("alchemy-"));

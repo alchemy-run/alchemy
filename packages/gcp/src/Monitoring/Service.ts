@@ -397,9 +397,7 @@ const identifierBody = (
 };
 
 const getByName = (name: string) =>
-  monitoring
-    .getServices({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  monitoring.getServices({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listPages = (project: string) =>
   monitoring.listServices

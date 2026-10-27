@@ -162,10 +162,10 @@ const toAttrs = (trigger: dlp.GooglePrivacyDlpV2JobTrigger, project: string) => 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsJobTriggers({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const JobTriggerProvider = () =>
   Provider.succeed(JobTrigger, {

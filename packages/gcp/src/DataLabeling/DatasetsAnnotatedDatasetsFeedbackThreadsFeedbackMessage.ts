@@ -158,7 +158,7 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : datalabeling
         .getProjectsDatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessages({
           name,
@@ -166,8 +166,8 @@ const getByName = (name: string) =>
         .pipe(
           Effect.provide(noRetryLayer),
           Effect.catchTags({
-            NotFound: () => Effect.succeed(undefined),
-            BadGateway: () => Effect.succeed(undefined),
+            NotFound: () => Effect.undefined,
+            BadGateway: () => Effect.undefined,
           }),
         );
 
@@ -252,7 +252,7 @@ export const DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessageProvider = (
               requesterFeedbackMetadata: {},
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const createdName = resourceNameFromOperation(done);

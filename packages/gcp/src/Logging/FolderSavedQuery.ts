@@ -194,7 +194,7 @@ const toAttrs = (query: logging.SavedQuery, parent: string, location: string) =>
 const getByName = (name: string) =>
   logging
     .getFoldersLocationsSavedQueries({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toBody = (news: FolderSavedQueryProps, description: string): logging.SavedQuery => ({
   displayName: news.displayName,

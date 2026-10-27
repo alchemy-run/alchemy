@@ -281,7 +281,7 @@ export const AccountProvider = () =>
             const accounts = yield* listAccounts();
             const rows = yield* Effect.forEach(
               accounts,
-              (account) => (account.Id ? readAccountById(account.Id) : Effect.succeed(undefined)),
+              (account) => (account.Id ? readAccountById(account.Id) : Effect.undefined),
               { concurrency: 10 },
             );
             return rows.filter((row): row is Account["Attributes"] => row !== undefined);
@@ -307,14 +307,14 @@ const readParentId = (childId: string) =>
   ).pipe(
     retryOrganizations,
     Effect.map((parents) => parents[0]?.Id),
-    Effect.catchTag("ChildNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ChildNotFoundException", () => Effect.undefined),
   );
 
 const readAccountById = Effect.fn(function* (accountId: string) {
   const described = yield* retryOrganizations(
     organizations.describeAccount({ AccountId: accountId }).pipe(
       Effect.map((response) => response.Account),
-      Effect.catchTag("AccountNotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("AccountNotFoundException", () => Effect.undefined),
     ),
   );
 

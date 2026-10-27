@@ -326,7 +326,7 @@ export const makeFunctionImage = Effect.gen(function* () {
   const ensureRepository = Effect.fn(function* (id: string, repositoryName: string) {
     let repository = yield* ecr.describeRepositories({ repositoryNames: [repositoryName] }).pipe(
       Effect.map((response) => response.repositories?.[0]),
-      Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined),
     );
 
     if (!repository?.repositoryArn || !repository.repositoryUri) {
@@ -378,7 +378,7 @@ export const makeFunctionImage = Effect.gen(function* () {
     const desiredPolicy = yield* desiredRepositoryPolicy();
     const observedPolicy = yield* ecr.getRepositoryPolicy({ repositoryName }).pipe(
       Effect.map((response) => response.policyText),
-      Effect.catchTag("RepositoryPolicyNotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("RepositoryPolicyNotFoundException", () => Effect.undefined),
     );
     if (
       observedPolicy === undefined ||
@@ -403,8 +403,9 @@ export const makeFunctionImage = Effect.gen(function* () {
         imageIds: [{ imageTag }],
       })
       .pipe(
-        Effect.catchTag(["ImageNotFoundException", "RepositoryNotFoundException"], () =>
-          Effect.succeed(undefined),
+        Effect.catchTag(
+          ["ImageNotFoundException", "RepositoryNotFoundException"],
+          () => Effect.undefined,
         ),
       );
     return response?.imageDetails?.[0];
@@ -574,7 +575,7 @@ export const makeFunctionImage = Effect.gen(function* () {
   const isReady = Effect.fn(function* (id: string, repositoryName: string, imageTag: string) {
     const repository = yield* ecr.describeRepositories({ repositoryNames: [repositoryName] }).pipe(
       Effect.map((response) => response.repositories?.[0]),
-      Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined),
     );
     if (
       repository?.repositoryArn === undefined ||
@@ -588,12 +589,12 @@ export const makeFunctionImage = Effect.gen(function* () {
       [
         ecr
           .listTagsForResource({ resourceArn: repository.repositoryArn })
-          .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(undefined))),
+          .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined)),
         ecr.getRepositoryPolicy({ repositoryName }).pipe(
           Effect.map((response) => response.policyText),
           Effect.catchTag(
             ["RepositoryNotFoundException", "RepositoryPolicyNotFoundException"],
-            () => Effect.succeed(undefined),
+            () => Effect.undefined,
           ),
         ),
         describeImage(repositoryName, imageTag),

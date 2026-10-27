@@ -304,7 +304,7 @@ const toAttrs = (bucket: logging.LogBucket, project: string, location: string) =
 const getByName = (name: string) =>
   logging
     .getProjectsLocationsBuckets({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const undelete = (name: string) =>
   logging

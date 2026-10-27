@@ -133,7 +133,7 @@ const toAttrs = (category: apigee.GoogleCloudApigeeV1ApiCategory, org: string, s
 const getByName = (name: string) =>
   apigee.getOrganizationsSitesApicategories({ name }).pipe(
     Effect.map((response) => unwrap(response)),
-    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
+    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined),
   );
 
 const listBySite = (org: string, siteId: string) =>

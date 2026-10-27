@@ -234,7 +234,7 @@ const isGone = (status: KxClusterStatus | undefined) =>
 const readCluster = Effect.fn(function* (environmentId: string, clusterName: string) {
   const response = yield* finspace
     .getKxCluster({ environmentId, clusterName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!response || isGone(response.status)) return undefined;
   return response;
 });
@@ -294,7 +294,7 @@ const waitForClusterStatus = (
     Effect.gen(function* () {
       const response = yield* finspace
         .getKxCluster({ environmentId, clusterName })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       const status = response?.status;
       if (target === "DELETED") {
         if (response === undefined || status === "DELETED") return;
@@ -413,7 +413,7 @@ export const KxClusterProvider = () =>
                 executionRole: news.executionRole,
                 tags: { ...internalTags, ...news.tags },
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             yield* session.note(`Creating kdb cluster ${clusterName}...`);
             yield* waitForClusterStatus(environmentId, clusterName, "RUNNING");
             cluster = yield* readCluster(environmentId, clusterName);

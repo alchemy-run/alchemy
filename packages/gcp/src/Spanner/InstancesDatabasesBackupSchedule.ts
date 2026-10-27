@@ -224,7 +224,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   spanner
     .getProjectsInstancesDatabasesBackupSchedules({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toBody = (news: InstancesDatabasesBackupScheduleProps): spanner.BackupSchedule => {
   const incremental = news.incremental === true;

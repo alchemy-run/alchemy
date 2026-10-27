@@ -205,7 +205,7 @@ const toAttrs = (view: logging.LogView, fallbackBucket: string, project: string)
 const getByName = (name: string) =>
   logging
     .getOrganizationsLocationsBucketsViews({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const resolveParent = (
   organization: string,

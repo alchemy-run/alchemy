@@ -224,9 +224,9 @@ const recoverIfBackupMissing =
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : sqladmin.getBackupBackups({ name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         recoverIfBackupMissing(name, () => undefined),
       );
 
@@ -404,9 +404,7 @@ export const BackupProvider = () =>
           .pipe(
             Effect.catchTag("Conflict", (error) =>
               findByOwnership(env.project, ownership).pipe(
-                Effect.flatMap((existing) =>
-                  existing ? Effect.succeed(undefined) : Effect.fail(error),
-                ),
+                Effect.flatMap((existing) => (existing ? Effect.undefined : Effect.fail(error))),
               ),
             ),
             Effect.retry({

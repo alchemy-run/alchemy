@@ -305,7 +305,7 @@ export const RuleProvider = () =>
               Name: ruleName,
               EventBusName: eventBusName !== "default" ? eventBusName : undefined,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!described?.Name) {
             return undefined;
@@ -467,7 +467,7 @@ export const RuleProvider = () =>
                 EventBusName: eventBusParam,
                 Ids: removedTargetIds,
               })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
             if (response) {
               yield* assertRemoveTargetsSucceeded(response);

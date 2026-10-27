@@ -175,7 +175,7 @@ export const TenantProvider = () =>
       const getTenant = Effect.fn(function* (name: string) {
         return yield* sesv2.getTenant({ TenantName: name }).pipe(
           Effect.map((response) => response.Tenant),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
       });
 

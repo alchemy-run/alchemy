@@ -268,10 +268,10 @@ export const ignoreMissing = <E extends { readonly _tag: string }, R>(
 
 export const getConfig = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : rtb
         .getBiddersPretargetingConfigs({ name })
-        .pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+        .pipe(Effect.catchIf(isMissing, () => Effect.undefined));
 
 export const listConfigs = (parent: string) =>
   parent.length === 0

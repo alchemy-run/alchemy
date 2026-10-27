@@ -200,7 +200,7 @@ export const encodeOpenApiDocuments = (
   documents: readonly ApiConfigOpenApiDocument[] | undefined,
 ) =>
   documents === undefined
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : Effect.forEach(documents, (document) =>
         Effect.gen(function* () {
           return { document: yield* encodeFile(document.document) };
@@ -208,13 +208,13 @@ export const encodeOpenApiDocuments = (
       );
 
 export const encodeFiles = (files: readonly ApiConfigFile[] | undefined) =>
-  files === undefined ? Effect.succeed(undefined) : Effect.forEach(files, encodeFile);
+  files === undefined ? Effect.undefined : Effect.forEach(files, encodeFile);
 
 export const encodeGrpcServices = (
   services: readonly ApiConfigGrpcServiceDefinition[] | undefined,
 ) =>
   services === undefined
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : Effect.forEach(services, (service) =>
         Effect.gen(function* () {
           return {

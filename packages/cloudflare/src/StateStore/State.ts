@@ -783,7 +783,7 @@ const isStateStoreServing = (accountId: string, scriptName: string) =>
     const subdomain = yield* workers.getSubdomain({ accountId }).pipe(
       Effect.map(({ subdomain }) => subdomain),
       // Without a workers.dev subdomain, nothing can serve the store.
-      Effect.catchTag("SubdomainNotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("SubdomainNotFound", () => Effect.undefined),
     );
     if (!subdomain) return false;
     const { observed } = yield* checkStateStoreVersion(
@@ -878,7 +878,7 @@ const checkStateStoreVersion = Effect.fn("state_store.check_version", {
             Effect.flatMap((isAvailable) =>
               // if the worker is available, then we should assume it was recently created and retry by propagating the error
               // otherwise, return undefined (we don't know the version, there is no worker)
-              isAvailable ? Effect.fail(e) : Effect.succeed(undefined),
+              isAvailable ? Effect.fail(e) : Effect.undefined,
             ),
           )
         : Effect.fail(e),

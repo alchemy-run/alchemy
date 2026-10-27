@@ -228,7 +228,7 @@ const toAttrs = (backup: spanner.Backup, project: string): InstancesBackup["Attr
 const getByName = (name: string) =>
   spanner
     .getProjectsInstancesBackups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isBusy = (state: string | undefined) =>
   state === "CREATING" || state === "STATE_UNSPECIFIED" || state === undefined;
@@ -399,7 +399,7 @@ export const InstancesBackupProvider = () =>
               versionTime: news.versionTime,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined && created.done === true) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }

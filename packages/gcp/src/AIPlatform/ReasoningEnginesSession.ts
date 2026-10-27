@@ -147,10 +147,10 @@ const toAttrs = (session: aiplatform.GoogleCloudAiplatformV1Session, project: st
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsReasoningEnginesSessions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -268,7 +268,7 @@ export const ReasoningEnginesSessionProvider = () =>
               sessionState: news.sessionState,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created, {
             alreadyExistsOk: true,
@@ -325,7 +325,7 @@ export const ReasoningEnginesSessionProvider = () =>
         .deleteProjectsLocationsReasoningEnginesSessions({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

@@ -156,7 +156,7 @@ const toAttrs = (detector: networksecurity.DnsThreatDetector, project: string) =
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsDnsThreatDetectors({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DnsThreatDetectorProvider = () =>
   Provider.succeed(DnsThreatDetector, {

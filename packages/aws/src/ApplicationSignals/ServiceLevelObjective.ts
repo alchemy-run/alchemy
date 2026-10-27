@@ -258,7 +258,7 @@ export const ServiceLevelObjectiveProvider = () =>
       const observeSlo = (id: string) =>
         appsignals.getServiceLevelObjective({ Id: id }).pipe(
           Effect.map((r) => r.Slo),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       const observedTags = (sloArn: string) =>

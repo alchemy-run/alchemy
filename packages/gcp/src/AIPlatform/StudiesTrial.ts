@@ -118,10 +118,10 @@ const toAttrs = (trial: aiplatform.GoogleCloudAiplatformV1Trial, project: string
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsStudiesTrials({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listStudies = (parent: string) =>
   aiplatform.listProjectsLocationsStudies.pages({ parent, pageSize: 100 }).pipe(
@@ -222,9 +222,7 @@ export const StudiesTrialProvider = () =>
           .pipe(
             Effect.catchTag("Conflict", () =>
               findByClientId(news.parent, clientId, env.project).pipe(
-                Effect.flatMap((match) =>
-                  match ? getByName(match.name) : Effect.succeed(undefined),
-                ),
+                Effect.flatMap((match) => (match ? getByName(match.name) : Effect.undefined)),
               ),
             ),
           );

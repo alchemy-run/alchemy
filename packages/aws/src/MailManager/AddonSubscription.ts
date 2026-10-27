@@ -74,7 +74,7 @@ export const AddonSubscriptionProvider = () =>
       const getById = (addonSubscriptionId: string) =>
         mm
           .getAddonSubscription({ AddonSubscriptionId: addonSubscriptionId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const listAll = mm.listAddonSubscriptions.pages({}).pipe(
         Stream.runCollect,
@@ -169,7 +169,7 @@ export const AddonSubscriptionProvider = () =>
                 AddonName: news.addonName,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             if (created !== undefined) {
               const found = yield* getById(created.AddonSubscriptionId);
               subscription = {

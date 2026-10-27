@@ -198,7 +198,7 @@ const toAttributes = (assessment: auditmanager.Assessment): Assessment["Attribut
 const readAssessmentById = Effect.fn(function* (assessmentId: string) {
   const response = yield* auditmanager
     .getAssessment({ assessmentId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return response?.assessment;
 });
 

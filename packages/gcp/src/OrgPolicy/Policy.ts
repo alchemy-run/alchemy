@@ -370,7 +370,7 @@ const getByName = (name: string) => {
       : kind === "organizations"
         ? orgpolicy.getOrganizationsPolicies(request)
         : orgpolicy.getProjectsPolicies(request);
-  return get.pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  return get.pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 };
 
 const createPolicy = (parent: string, body: orgpolicy.GoogleCloudOrgpolicyV2Policy) => {

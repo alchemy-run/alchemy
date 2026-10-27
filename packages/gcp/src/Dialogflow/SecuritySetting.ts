@@ -235,10 +235,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsSecuritySettings({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   dialogflow.listProjectsLocationsSecuritySettings.pages({ parent, pageSize: 100 }).pipe(
@@ -256,7 +256,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
     Stream.filter((settings) => settings.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const SecuritySettingProvider = () =>

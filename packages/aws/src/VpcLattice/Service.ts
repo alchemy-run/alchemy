@@ -120,7 +120,7 @@ export const ServiceProvider = () =>
       const observe = (serviceIdentifier: string) =>
         vpclattice
           .getService({ serviceIdentifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const findByName = (name: string) =>
         vpclattice.listServices.pages({}).pipe(
@@ -130,9 +130,7 @@ export const ServiceProvider = () =>
               .flatMap((page) => page.items ?? [])
               .find((s) => s.name === name),
           ),
-          Effect.flatMap((summary) =>
-            summary?.id ? observe(summary.id) : Effect.succeed(undefined),
-          ),
+          Effect.flatMap((summary) => (summary?.id ? observe(summary.id) : Effect.undefined)),
         );
 
       const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {

@@ -79,7 +79,7 @@ const createCalculatorName = (id: string, props: { calculatorName?: string | und
 const readCalculator = Effect.fn(function* (calculatorName: string) {
   const found = yield* location
     .describeRouteCalculator({ CalculatorName: calculatorName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!found) return undefined;
   return {
     calculatorName: found.CalculatorName,

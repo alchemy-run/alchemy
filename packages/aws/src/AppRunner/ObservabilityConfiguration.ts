@@ -129,7 +129,7 @@ export const ObservabilityConfigurationProvider = () =>
           .describeObservabilityConfiguration({
             ObservabilityConfigurationArn: summary.ObservabilityConfigurationArn,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const config = described?.ObservabilityConfiguration;
         return config !== undefined && isActiveStatus(config.Status) ? config : undefined;
       });
@@ -286,10 +286,10 @@ export const ObservabilityConfigurationProvider = () =>
                               (attrs) =>
                                 attrs as ObservabilityConfiguration["Attributes"] | undefined,
                             )
-                          : Effect.succeed(undefined),
+                          : Effect.undefined,
                       ),
                       // Tolerate a delete race — drop the item.
-                      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                      Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                     ),
                 { concurrency: 4 },
               ),

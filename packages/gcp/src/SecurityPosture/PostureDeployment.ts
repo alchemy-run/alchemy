@@ -219,10 +219,10 @@ const toAttrs = (deployment: securityposture.PostureDeployment, project: string)
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : securityposture
         .getOrganizationsLocationsPostureDeployments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isBusy = (deployment: securityposture.PostureDeployment) =>
   deployment.reconciling === true ||
@@ -370,7 +370,7 @@ export const PostureDeploymentProvider = () =>
               annotations: desiredAnnotations,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitDeploymentOperation(created);
         }
@@ -423,7 +423,7 @@ export const PostureDeploymentProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitDeploymentOperationGone(operation);

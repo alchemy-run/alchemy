@@ -151,10 +151,10 @@ const toAttrs = (label: cci.GoogleCloudContactcenterinsightsV1FeedbackLabel, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsDatasetsConversationsFeedbackLabels({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listDatasets = (parent: string) =>
   cci.listProjectsLocationsDatasets.pages({ parent, pageSize: 100 }).pipe(

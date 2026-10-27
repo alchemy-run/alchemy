@@ -169,7 +169,7 @@ export const MonitorProvider = () =>
       const readMonitor = Effect.fn(function* (name: string) {
         return yield* im
           .getMonitor({ MonitorName: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // Bounded wait for the monitor to leave PENDING (create and updates
@@ -214,7 +214,7 @@ export const MonitorProvider = () =>
                   im.getMonitor({ MonitorName: monitor.MonitorName }).pipe(
                     Effect.map(toAttrs),
                     // Tolerate delete races between list and get.
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                   ),
                 { concurrency: 4 },
               ),

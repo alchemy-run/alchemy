@@ -735,7 +735,7 @@ const toCreateBody = (
 const getByName = (name: string) =>
   bigqueryconnection
     .getProjectsLocationsConnections({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwnedAt = (parent: string, project: string) =>
   bigqueryconnection.listProjectsLocationsConnections
@@ -944,7 +944,7 @@ export const ConnectionProvider = () =>
             updateMask: updateMask.join(","),
             body,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (patched === undefined) {
           const created = yield* bigqueryconnection
             .createProjectsLocationsConnections({

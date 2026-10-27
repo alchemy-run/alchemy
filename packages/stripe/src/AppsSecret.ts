@@ -199,7 +199,7 @@ const findByName = (name: string, scope: AppsSecretScope) =>
     expand: ["payload"],
   }).pipe(
     Effect.map((secret) => (isPresent(secret) ? secret : undefined)),
-    Effect.catchIf(isMissingSecret, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingSecret, () => Effect.undefined),
   );
 
 const listByScope = Effect.fn(function* (scope: AppsSecretScope) {

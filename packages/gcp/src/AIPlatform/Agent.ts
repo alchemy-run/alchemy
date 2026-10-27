@@ -217,7 +217,7 @@ const toAttrs = (agent: aiplatform.GoogleCloudAiplatformV1Agent, project: string
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsAgents({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAgents = (project: string, region: string) => {
   const collect = (parent: string) =>
@@ -359,7 +359,7 @@ export const AgentProvider = () =>
               base_environment: news.baseEnvironment,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const createdName = resourceNameFromOperation(done) ?? name;
@@ -415,7 +415,7 @@ export const AgentProvider = () =>
       if (existing === undefined) return;
       const operation = yield* aiplatform
         .deleteProjectsLocationsAgents({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

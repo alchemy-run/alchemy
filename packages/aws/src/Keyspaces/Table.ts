@@ -247,7 +247,7 @@ export const TableProvider = () =>
       const readTable = Effect.fn(function* (keyspaceName: string, tableName: string) {
         return yield* keyspaces
           .getTable({ keyspaceName, tableName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const readTags = Effect.fn(function* (arn: string) {
@@ -265,7 +265,7 @@ export const TableProvider = () =>
       const readLatestStreamArn = Effect.fn(function* (keyspaceName: string, tableName: string) {
         const response = yield* keyspacesstreams
           .listStreams({ keyspaceName, tableName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const sorted = [...(response?.streams ?? [])].sort((a, b) =>
           b.streamLabel.localeCompare(a.streamLabel),
         );

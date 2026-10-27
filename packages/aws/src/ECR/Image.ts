@@ -273,8 +273,9 @@ export const ImageProvider = () =>
             imageIds: [{ imageTag }],
           })
           .pipe(
-            Effect.catchTag(["ImageNotFoundException", "RepositoryNotFoundException"], () =>
-              Effect.succeed(undefined),
+            Effect.catchTag(
+              ["ImageNotFoundException", "RepositoryNotFoundException"],
+              () => Effect.undefined,
             ),
           );
         return described?.imageDetails?.[0];

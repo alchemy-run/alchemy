@@ -653,7 +653,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   cloudfunctions
     .getProjectsLocationsFunctions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const failedMessage = (fn: cloudfunctions.Cloudfunctions_Function) =>
   fn.stateMessages
@@ -964,7 +964,7 @@ export const FunctionProvider = () =>
           })
           .pipe(
             retryActAs,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
@@ -1093,7 +1093,7 @@ export const FunctionProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* cloudfunctions
         .deleteProjectsLocationsFunctions({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

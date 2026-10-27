@@ -333,7 +333,7 @@ type ApiSelector = tokenValidation.CreateRuleRequest["selector"];
 const getRule = (zoneId: string, ruleId: string) =>
   tokenValidation.getRule({ zoneId, ruleId }).pipe(
     Effect.map((r): ObservedRule | undefined => r),
-    Effect.catchTag("TokenValidationRuleNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("TokenValidationRuleNotFound", () => Effect.undefined),
   );
 
 /**

@@ -539,7 +539,7 @@ const tableExists = (namespace: string, table: string) =>
 
 const loadTable = (namespace: string, table: string) =>
   Iceberg.loadTable({ namespace, table }).pipe(
-    Effect.catchTag("NoSuchTableException", () => Effect.succeed(undefined)),
+    Effect.catchTag("NoSuchTableException", () => Effect.undefined),
   );
 
 const requirement = (type: string, fields: Record<string, unknown>): Iceberg.TableRequirement => ({

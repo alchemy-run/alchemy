@@ -368,7 +368,7 @@ export const ProviderLive = () =>
               migrationsHashes: output.migrationsHashes,
               importHashes: output.importHashes,
             })),
-            Effect.catchTag("DatabaseNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("DatabaseNotFound", () => Effect.undefined),
           );
       }
       const name = yield* createDatabaseName(id, olds?.name);
@@ -413,7 +413,7 @@ export const ProviderLive = () =>
       if (output?.databaseId) {
         observed = yield* d1
           .getDatabase({ accountId: acct, databaseId: output.databaseId })
-          .pipe(Effect.catchTag("DatabaseNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DatabaseNotFound", () => Effect.undefined));
       }
       if (!observed) {
         observed = yield* d1.listDatabases.items({ accountId: acct, name }).pipe(

@@ -368,7 +368,7 @@ const ownershipLabels = (id: string) =>
   });
 
 const getByName = (name: string) =>
-  sprites.getSprite({ name }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  sprites.getSprite({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitForSprite = (name: string) =>
   getByName(name).pipe(
@@ -578,12 +578,12 @@ export const SpriteProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = yield* resolveSpriteName(id, olds?.name, output?.name);
           const found = yield* (
-            output?.name !== undefined ? getByName(output.name) : Effect.succeed(undefined)
+            output?.name !== undefined ? getByName(output.name) : Effect.undefined
           ).pipe(
             Effect.flatMap((existing) =>
               existing !== undefined ? Effect.succeed(existing) : getByName(name),
             ),
-            Effect.catchTag("SpritesNotEnabled", () => Effect.succeed(undefined)),
+            Effect.catchTag("SpritesNotEnabled", () => Effect.undefined),
           );
           if (found === undefined) return undefined;
           const attrs = toAttrs(found, name, output?.code.hash ?? "");

@@ -182,7 +182,7 @@ export const FHIRDatastoreProvider = () =>
       const readDatastore = Effect.fn(function* (datastoreId: string) {
         const response = yield* healthlake
           .describeFHIRDatastore({ DatastoreId: datastoreId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.DatastoreProperties;
       });
 
@@ -417,7 +417,7 @@ export const FHIRDatastoreProvider = () =>
                 while: (e) => e._tag === "ConflictException",
                 schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(10)]),
               }),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           }
           // Deletion is asynchronous — wait until the data store is gone so

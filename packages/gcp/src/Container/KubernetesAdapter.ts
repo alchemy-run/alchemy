@@ -458,7 +458,7 @@ export const GkeKubernetesAdapter = () =>
           const name = clusterResourceName(project, auth.location, auth.clusterId);
           return yield* container
             .getProjectsLocationsClusters({ name })
-            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         }).pipe(withGcp);
         // STOPPING still serves the API until the endpoint is gone. A missing
         // CA with that endpoint is not "gone": connect fails and destroy retries

@@ -325,7 +325,7 @@ export const BrokerProvider = () =>
       const readBroker = Effect.fn(function* (brokerId: string) {
         return yield* mq
           .describeBroker({ BrokerId: brokerId })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       /** Find a live broker by name (listBrokers has no name filter). */

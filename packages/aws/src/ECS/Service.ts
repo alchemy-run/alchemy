@@ -2460,7 +2460,7 @@ const observeServiceConvergence = (input: {
         cluster: input.clusterArn,
         services: [input.serviceName],
       })
-      .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
     const service = described?.services?.find(
       (candidate) => candidate.serviceName === input.serviceName && candidate.status !== "INACTIVE",
     );
@@ -2731,7 +2731,7 @@ export const ServiceProvider = () =>
           .describeLoadBalancers({
             LoadBalancerArns: [ingress.loadBalancerArn],
           })
-          .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined));
         const dnsName = described?.LoadBalancers?.[0]?.DNSName;
         if (!dnsName) {
           return undefined;
@@ -3166,7 +3166,7 @@ export const ServiceProvider = () =>
               services: [serviceName],
               include: ["TAGS"],
             })
-            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
           const service = described?.services?.[0];
           if (!service?.serviceArn) {
             return undefined;
@@ -3292,7 +3292,7 @@ export const ServiceProvider = () =>
               services: [serviceName],
               include: ["TAGS"],
             })
-            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
           const observed = described?.services?.find(
             (s) =>
               s.serviceName === serviceName && s.status !== "INACTIVE" && s.status !== "DRAINING",

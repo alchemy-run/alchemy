@@ -288,7 +288,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   kms
     .getProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const paginate = <A, E, R>(
   fetch: (
@@ -493,9 +493,9 @@ const destroyVersion = (name: string) =>
     })
     .pipe(
       Effect.catchTags({
-        NotFound: () => Effect.succeed(undefined),
-        BadRequest: () => Effect.succeed(undefined),
-        Conflict: () => Effect.succeed(undefined),
+        NotFound: () => Effect.undefined,
+        BadRequest: () => Effect.undefined,
+        Conflict: () => Effect.undefined,
       }),
     );
 
@@ -507,18 +507,18 @@ const restoreVersion = (name: string) =>
     })
     .pipe(
       Effect.catchTags({
-        NotFound: () => Effect.succeed(undefined),
-        BadRequest: () => Effect.succeed(undefined),
-        Conflict: () => Effect.succeed(undefined),
+        NotFound: () => Effect.undefined,
+        BadRequest: () => Effect.undefined,
+        Conflict: () => Effect.undefined,
       }),
     );
 
 const deleteVersion = (name: string) =>
   kms.deleteProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({ name }).pipe(
     Effect.catchTags({
-      NotFound: () => Effect.succeed(undefined),
-      BadRequest: () => Effect.succeed(undefined),
-      Conflict: () => Effect.succeed(undefined),
+      NotFound: () => Effect.undefined,
+      BadRequest: () => Effect.undefined,
+      Conflict: () => Effect.undefined,
     }),
     Effect.flatMap(
       (
@@ -679,7 +679,7 @@ export const CryptoKeyVersionProvider = () =>
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
-              name !== undefined ? getByName(name) : Effect.succeed(undefined),
+              name !== undefined ? getByName(name) : Effect.undefined,
             ),
           );
         current = created ?? undefined;

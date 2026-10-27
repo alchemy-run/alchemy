@@ -53,6 +53,7 @@ export default defineConfig({
     "effecttsgo/effect-map-flatten": "error",
     "effecttsgo/effect-map-void": "error",
     "effecttsgo/effect-sleep-zero-to-yield-now": "error",
+    "effecttsgo/effect-succeed-with-void": "error",
     "effecttsgo/error-payload-shadows-name": "error",
     "effecttsgo/experimental-api-usage": "error",
     "effecttsgo/extends-native-error": "error",
@@ -66,6 +67,9 @@ export default defineConfig({
     "effecttsgo/global-error-in-effect-catch": "error",
     "effecttsgo/instance-of-schema": "error",
     "effecttsgo/layer-merge-all-with-dependencies": "off",
+    // `XProvider()`, `providers()` and other Layer factories stay functions: they
+    // are public API, return a fresh Layer per call, and avoid import-time builds.
+    "effecttsgo/lazy-effect": "off",
     "effecttsgo/lazy-promise-in-effect-sync": "error",
     "effecttsgo/leaking-requirements": "off",
     "effecttsgo/map-some-to-as-some": "error",

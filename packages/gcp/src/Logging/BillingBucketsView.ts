@@ -191,7 +191,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   logging
     .getBillingAccountsLocationsBucketsViews({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const BillingBucketsViewProvider = () =>
   Provider.succeed(BillingBucketsView, {

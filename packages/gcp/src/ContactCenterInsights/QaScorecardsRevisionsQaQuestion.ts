@@ -248,10 +248,10 @@ const toAttrs = (question: cci.GoogleCloudContactcenterinsightsV1QaQuestion, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsQaScorecardsRevisionsQaQuestions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listRevisions = (parent: string) =>
   cci.listProjectsLocationsQaScorecardsRevisions.pages({ parent, pageSize: 100 }).pipe(

@@ -603,13 +603,13 @@ const toAttrs = (input: {
 const getById = (serviceId: string) =>
   readService(serviceId).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const getInstance = (environmentId: string, serviceId: string) =>
   readServiceInstance(environmentId, serviceId).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listProjectServices = (projectId: string) =>
@@ -626,7 +626,7 @@ const findByName = (projectId: string, name: string) =>
 const getVolumeByInstanceId = (volumeInstanceId: string) =>
   readVolumeInstance(volumeInstanceId).pipe(
     Effect.map((instance) => (isGoneVolume(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
@@ -988,7 +988,7 @@ export const MongoProvider = () =>
       if (current === undefined) {
         const created = yield* serviceCreate({
           input: { projectId, environmentId, name, source: { image: sourceImage }, variables },
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         current = created ?? (yield* findByName(projectId, name));
       }
 
@@ -1096,7 +1096,7 @@ export const MongoProvider = () =>
       if (wantPublic && proxy === undefined) {
         const created = yield* tcpProxyCreate({
           input: { applicationPort: MONGO_PORT, environmentId, serviceId: current.id },
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         proxy =
           created !== undefined && !isGoneProxy(created)
             ? created

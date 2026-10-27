@@ -153,7 +153,7 @@ export const DBParameterGroupProvider = () =>
           .describeDBParameterGroups({
             DBParameterGroupName: name,
           })
-          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.undefined));
         return response?.DBParameterGroups?.[0];
       });
 
@@ -218,7 +218,7 @@ export const DBParameterGroupProvider = () =>
             if (!group) return { action: "update", stables: [] } as const;
             const desired = news.parameters ?? {};
             const parameters = yield* readParameters(output.dbParameterGroupName).pipe(
-              Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.succeed(undefined)),
+              Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.undefined),
             );
             if (parameters === undefined) {
               return { action: "update", stables: [] } as const;

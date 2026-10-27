@@ -284,10 +284,10 @@ const toAttrs = (item: ccaip.ContactCenter, project: string, region: string) => 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ccaip
         .getProjectsLocationsContactCenters({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const getLive = (name: string) =>
   getByName(name).pipe(
@@ -412,7 +412,7 @@ export const ContactCenterProvider = () =>
               critical: channel.critical,
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -514,7 +514,7 @@ export const ContactCenterProvider = () =>
       const deleted = yield* retryTransient(
         ccaip.deleteProjectsLocationsContactCenters({ name: output.name }),
       ).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         Effect.retry({
           while: (error) => error._tag === "Conflict",
           times: 8,

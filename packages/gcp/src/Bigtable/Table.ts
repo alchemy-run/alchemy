@@ -210,7 +210,7 @@ const toAttrs = (table: bigtable.Table, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesTables({ name, view: SCHEMA_VIEW })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(

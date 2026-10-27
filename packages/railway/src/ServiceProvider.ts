@@ -179,13 +179,13 @@ const readInstance = Query.fn((environmentId: string, serviceId: string) =>
 const getById = (serviceId: string) =>
   readService(serviceId).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const getInstance = (environmentId: string, serviceId: string) =>
   readInstance(environmentId, serviceId).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listProjectServices = (projectId: string) =>
@@ -595,8 +595,8 @@ const listUploadedDeployment = (input: {
     Stream.take(1),
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk)[0]),
-    Effect.timeoutOrElse({ duration: "8 seconds", orElse: () => Effect.succeed(undefined) }),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.timeoutOrElse({ duration: "8 seconds", orElse: () => Effect.undefined }),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const waitForDeploymentById = (input: {
@@ -1130,7 +1130,7 @@ export const ServiceProvider = () =>
               ...(sourceRepo !== undefined && props.branch !== undefined
                 ? { branch: props.branch }
                 : {}),
-            }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+            }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
             current = created ?? (yield* findByName(projectId, name));
           }
 

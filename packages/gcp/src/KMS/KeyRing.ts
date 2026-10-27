@@ -127,7 +127,7 @@ const toAttrs = (keyRing: kms.KeyRing, project: string, region: string) => {
 const getByName = (name: string) =>
   kms
     .getProjectsLocationsKeyRings({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listKeyRingsAt = (parent: string) =>
   Effect.gen(function* () {

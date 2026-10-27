@@ -80,7 +80,7 @@ const decodeKeyFile = (name: string, privateKeyData: string) =>
 const getKey = (name: string) =>
   iam
     .getProjectsServiceAccountsKeys({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ServiceAccountKeyProvider = () =>
   Provider.succeed(ServiceAccountKey, {

@@ -134,7 +134,7 @@ const toAttrs = (
 const getPool = (name: string) =>
   iam
     .getProjectsLocationsWorkloadIdentityPools({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitForPoolOperation = (operation: iam.Operation) =>
   waitForOperation(operation, (name) =>
@@ -295,7 +295,7 @@ export const WorkloadIdentityPoolProvider = () =>
       if (current?.state === "DELETED") return;
       const operation = yield* iam
         .deleteProjectsLocationsWorkloadIdentityPools({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) yield* waitForPoolOperation(operation);
     }),
   });

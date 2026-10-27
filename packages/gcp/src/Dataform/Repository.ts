@@ -236,10 +236,10 @@ const toAttrs = (repo: dataform.Repository, project: string, region: string) => 
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dataform
         .getProjectsLocationsRepositories({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const RepositoryProvider = () =>
   Provider.succeed(Repository, {

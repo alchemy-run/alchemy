@@ -246,7 +246,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsPersistentResources({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -411,7 +411,7 @@ export const PersistentResourceProvider = () =>
               resourceRuntimeSpec,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -472,7 +472,7 @@ export const PersistentResourceProvider = () =>
       );
       const operation = yield* aiplatform
         .deleteProjectsLocationsPersistentResources({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

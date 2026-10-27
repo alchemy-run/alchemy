@@ -299,7 +299,7 @@ const ProviderLive = () =>
           const domain = customDomainId
             ? yield* client
                 .getCustomDomain(customDomainId)
-                .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)))
+                .pipe(Effect.catchIf(isNotFound, () => Effect.undefined))
             : yield* findDomainInApp;
           if (!domain) return undefined;
           const attrs = attrsFrom(domain);
@@ -314,7 +314,7 @@ const ProviderLive = () =>
           const domain = customDomainId
             ? yield* client
                 .getCustomDomain(customDomainId)
-                .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)))
+                .pipe(Effect.catchIf(isNotFound, () => Effect.undefined))
             : yield* findDomain(client, appId, hostname);
           const identityMatches = (domain: ApiCustomDomain) =>
             domain.appId === appId && sameHostname(domain.hostname, hostname);
@@ -372,7 +372,7 @@ const ProviderLive = () =>
           if (customDomainId === undefined) return;
           const domain = yield* client
             .getCustomDomain(customDomainId)
-            .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+            .pipe(Effect.catchIf(isNotFound, () => Effect.undefined));
           if (!domain) return;
           if (domain.appId !== output.appId || !sameHostname(domain.hostname, output.hostname)) {
             return yield* Effect.fail(

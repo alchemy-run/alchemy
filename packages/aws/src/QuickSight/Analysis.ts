@@ -126,7 +126,7 @@ export const AnalysisProvider = () =>
       const readAnalysis = Effect.fn(function* (accountId: string, analysisId: string) {
         const response = yield* quicksight
           .describeAnalysis({ AwsAccountId: accountId, AnalysisId: analysisId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const analysis = response?.Analysis;
         if (analysis === undefined || analysis.Status === "DELETED") {
           return undefined;

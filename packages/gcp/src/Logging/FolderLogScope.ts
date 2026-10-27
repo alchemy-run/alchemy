@@ -156,7 +156,7 @@ const toAttrs = (scope: logging.LogScope, parent: string, location: string) => {
 const getByName = (name: string) =>
   logging
     .getFoldersLocationsLogScopes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const FolderLogScopeProvider = () =>
   Provider.succeed(FolderLogScope, {

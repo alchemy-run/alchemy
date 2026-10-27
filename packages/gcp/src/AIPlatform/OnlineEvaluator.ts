@@ -168,7 +168,7 @@ const toAttrs = (evaluator: aiplatform.GoogleCloudAiplatformV1OnlineEvaluator, p
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsOnlineEvaluators({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -338,7 +338,7 @@ export const OnlineEvaluatorProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* aiplatform
         .deleteProjectsLocationsOnlineEvaluators({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

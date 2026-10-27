@@ -336,7 +336,7 @@ const readFleetById = Effect.fn(function* (
 ) {
   const described = yield* deadline
     .getFleet({ farmId, fleetId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described) return undefined;
   const fleetArn = arnOf(`farm/${described.farmId}/fleet/${described.fleetId}`);
   const state: FleetState = {
@@ -433,7 +433,7 @@ const waitUntilFleetGone = (farmId: string, fleetId: string) =>
     Effect.gen(function* () {
       const described = yield* deadline
         .getFleet({ farmId, fleetId })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (described !== undefined) {
         return yield* new FleetNotReady({ fleetId, status: described.status });
       }

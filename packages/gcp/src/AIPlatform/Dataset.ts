@@ -226,10 +226,8 @@ const toAttrs = (dataset: aiplatform.GoogleCloudAiplatformV1Dataset, project: st
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
-    : aiplatform
-        .getDatasets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    ? Effect.undefined
+    : aiplatform.getDatasets({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listDatasets = (project: string, region: string) =>
   Effect.forEach(listLocations(region), (location) =>
@@ -383,7 +381,7 @@ export const DatasetProvider = () =>
               savedQueries: news.savedQueries,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const createdName =
@@ -438,7 +436,7 @@ export const DatasetProvider = () =>
       if (existing === undefined) return;
       const operation = yield* aiplatform
         .deleteDatasets({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

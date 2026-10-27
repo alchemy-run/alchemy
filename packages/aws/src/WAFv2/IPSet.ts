@@ -157,9 +157,7 @@ export const IPSetProvider = () =>
             scope,
             wafv2
               .getIPSet({ Name: name, Scope: scope, Id: cachedId })
-              .pipe(
-                Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-              ),
+              .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
           );
           if (byId?.IPSet) {
             return byId;
@@ -177,9 +175,7 @@ export const IPSetProvider = () =>
               scope,
               wafv2
                 .getIPSet({ Name: name, Scope: scope, Id: summary.Id })
-                .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
             );
           }
           if (!listed.NextMarker || (listed.IPSets?.length ?? 0) === 0) {
@@ -211,13 +207,9 @@ export const IPSetProvider = () =>
                         Scope: scope,
                         Id: summary.Id,
                       })
-                      .pipe(
-                        Effect.catchTag("WAFNonexistentItemException", () =>
-                          Effect.succeed(undefined),
-                        ),
-                      ),
+                      .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
                   )
-                : Effect.succeed(undefined),
+                : Effect.undefined,
             { concurrency: 5 },
           );
           for (const detail of details) {
@@ -291,9 +283,7 @@ export const IPSetProvider = () =>
                   Description: news.description,
                   Tags: createTagsList(desiredTags),
                 })
-                .pipe(
-                  Effect.catchTag("WAFDuplicateItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFDuplicateItemException", () => Effect.undefined)),
             );
             observed = yield* findIPSet(scope, name, undefined);
           }
@@ -363,9 +353,7 @@ export const IPSetProvider = () =>
                   Scope: scope,
                   Id: output.ipSetId,
                 })
-                .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
             );
             if (!found?.IPSet || found.LockToken === undefined) {
               return;

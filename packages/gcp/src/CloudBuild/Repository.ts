@@ -274,7 +274,7 @@ const toAttrs = (repository: cloudbuild.Repository, project: string) => {
 const getByName = (name: string) =>
   cloudbuild
     .getProjectsLocationsConnectionsRepositories({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait on a Cloud Build repositories long-running operation (seconds to a minute).
@@ -521,7 +521,7 @@ export const RepositoryProvider = () =>
               annotations: desiredAnnotations,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -542,7 +542,7 @@ export const RepositoryProvider = () =>
       }
       const operation = yield* cloudbuild
         .deleteProjectsLocationsConnectionsRepositories({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

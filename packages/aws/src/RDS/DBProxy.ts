@@ -202,7 +202,7 @@ export const DBProxyProvider = () =>
           .describeDBProxies({
             DBProxyName: name,
           })
-          .pipe(Effect.catchTag("DBProxyNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBProxyNotFoundFault", () => Effect.undefined));
         return response?.DBProxies?.[0];
       });
 
@@ -239,7 +239,7 @@ export const DBProxyProvider = () =>
                   if (!proxy.DBProxyArn) return undefined;
                   const tagResponse = yield* rds
                     .listTagsForResource({ ResourceName: proxy.DBProxyArn })
-                    .pipe(Effect.catchTag("DBProxyNotFoundFault", () => Effect.succeed(undefined)));
+                    .pipe(Effect.catchTag("DBProxyNotFoundFault", () => Effect.undefined));
                   if (tagResponse === undefined) return undefined;
                   const tags = Object.fromEntries(
                     (tagResponse.TagList ?? [])

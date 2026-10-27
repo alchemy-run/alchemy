@@ -146,7 +146,7 @@ const createFeatureGroupName = (id: string, props: { featureGroupName?: string |
 const fetchFeatureGroupTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.undefined));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -157,7 +157,7 @@ const fetchFeatureGroupTags = Effect.fn(function* (arn: string) {
 const describeFeatureGroupOrUndefined = (name: string) =>
   sagemaker
     .describeFeatureGroup({ FeatureGroupName: name })
-    .pipe(Effect.catchTag("ResourceNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFound", () => Effect.undefined));
 
 const toAttrs = (
   described: sagemaker.DescribeFeatureGroupResponse,

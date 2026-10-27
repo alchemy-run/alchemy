@@ -275,7 +275,7 @@ export const waitForVisible = <A, E, R>(get: Effect.Effect<A | undefined, E, R>)
     }),
     Effect.catchIf(
       (error): error is DatalabelingPending => error instanceof DatalabelingPending,
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 

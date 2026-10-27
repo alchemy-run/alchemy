@@ -167,7 +167,7 @@ export const FargateProfileProvider = () =>
       }) {
         const described = yield* eks
           .describeFargateProfile({ clusterName, fargateProfileName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const profile = described?.fargateProfile;
         if (
           !profile?.fargateProfileArn ||
@@ -205,7 +205,7 @@ export const FargateProfileProvider = () =>
       const waitForProfileDeleted = (clusterName: string, fargateProfileName: string) =>
         readProfile({ clusterName, fargateProfileName }).pipe(
           Effect.flatMap((state) =>
-            state ? Effect.fail(new FargateProfileStillExists()) : Effect.succeed(undefined),
+            state ? Effect.fail(new FargateProfileStillExists()) : Effect.undefined,
           ),
           Effect.retry({
             while: (error) => error instanceof FargateProfileStillExists,

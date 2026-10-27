@@ -130,7 +130,7 @@ const createConfigName = (id: string, props: { endpointConfigName?: string | und
 const fetchConfigTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.undefined));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -141,7 +141,7 @@ const fetchConfigTags = Effect.fn(function* (arn: string) {
 const readEndpointConfig = Effect.fn(function* (name: string) {
   const described = yield* sagemaker
     .describeEndpointConfig({ EndpointConfigName: name })
-    .pipe(Effect.catchTag("EndpointConfigNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("EndpointConfigNotFound", () => Effect.undefined));
   if (!described) return undefined;
   return {
     endpointConfigName: described.EndpointConfigName,

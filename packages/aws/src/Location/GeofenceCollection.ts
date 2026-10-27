@@ -85,7 +85,7 @@ const createCollectionName = (id: string, props: { collectionName?: string | und
 const readCollection = Effect.fn(function* (collectionName: string) {
   const found = yield* location
     .describeGeofenceCollection({ CollectionName: collectionName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!found) return undefined;
   return {
     collectionName: found.CollectionName,

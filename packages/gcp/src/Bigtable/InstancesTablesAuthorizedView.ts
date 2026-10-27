@@ -213,7 +213,7 @@ const toAttrs = (view: bigtable.AuthorizedView, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesTablesAuthorizedViews({ name, view: "FULL" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -340,7 +340,7 @@ export const InstancesTablesAuthorizedViewProvider = () =>
               deletionProtection: desiredProtection,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }

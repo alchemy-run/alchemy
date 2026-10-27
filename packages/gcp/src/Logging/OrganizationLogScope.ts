@@ -175,7 +175,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   logging
     .getOrganizationsLocationsLogScopes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const OrganizationLogScopeProvider = () =>
   Provider.succeed(OrganizationLogScope, {

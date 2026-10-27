@@ -352,7 +352,7 @@ const toAttrs = (cluster: oracle.CloudVmCluster, project: string) => {
 
 const getByName = (name: string) =>
   retryQuota(oracle.getProjectsLocationsCloudVmClusters({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listClusters = (project: string, region: string) => {
@@ -444,7 +444,7 @@ export const CloudVmClusterProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -473,7 +473,7 @@ export const CloudVmClusterProvider = () =>
         })
         .pipe(
           retryConflict,
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

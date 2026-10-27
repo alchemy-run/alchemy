@@ -493,53 +493,51 @@ export const retryCreateQuota = <A, E extends { readonly _tag: string }, R>(
 
 export const getCluster = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : kafka
         .getProjectsLocationsClusters({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getConnectCluster = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : kafka
         .getProjectsLocationsConnectClusters({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getAcl = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : kafka
         .getProjectsLocationsClustersAcls({ name })
-        .pipe(Effect.catchTag(["NotFound", "AclClusterNotFound"], () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag(["NotFound", "AclClusterNotFound"], () => Effect.undefined));
 
 export const getTopic = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : kafka
         .getProjectsLocationsClustersTopics({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getConnector = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : kafka
         .getProjectsLocationsConnectClustersConnectors({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getSchemaRegistry = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : kafka
         .getProjectsLocationsSchemaRegistries({ name })
         .pipe(
-          Effect.catchTag(["NotFound", "SchemaRegistryRequiresCluster"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag(["NotFound", "SchemaRegistryRequiresCluster"], () => Effect.undefined),
         );
 
 export const getSchemaVersion = (name: string, deleted = false) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : kafka
         .getProjectsLocationsSchemaRegistriesSubjectsVersions({
           name,
@@ -548,13 +546,13 @@ export const getSchemaVersion = (name: string, deleted = false) =>
         .pipe(
           Effect.catchTag(
             ["NotFound", "SchemaRegistryRequiresCluster", "SchemaRegistryPathNotFound"],
-            () => Effect.succeed(undefined),
+            () => Effect.undefined,
           ),
         );
 
 export const getContextSchemaVersion = (name: string, deleted = false) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : kafka
         .getProjectsLocationsSchemaRegistriesContextsSubjectsVersions({
           name,
@@ -563,7 +561,7 @@ export const getContextSchemaVersion = (name: string, deleted = false) =>
         .pipe(
           Effect.catchTag(
             ["NotFound", "SchemaRegistryRequiresCluster", "SchemaRegistryPathNotFound"],
-            () => Effect.succeed(undefined),
+            () => Effect.undefined,
           ),
         );
 

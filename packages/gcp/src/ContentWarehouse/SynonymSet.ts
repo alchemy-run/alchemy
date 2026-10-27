@@ -114,10 +114,10 @@ const toAttrs = (item: cw.GoogleCloudContentwarehouseV1SynonymSet, project: stri
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cw
         .getProjectsLocationsSynonymSets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const SynonymSetProvider = () =>
   Provider.succeed(SynonymSet, {

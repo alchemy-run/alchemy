@@ -182,7 +182,7 @@ export const makeBucketState = (options: BucketStateOptions) =>
       use((o) => o.read(key)).pipe(
         Effect.flatMap((object) =>
           object === undefined
-            ? Effect.succeed(undefined)
+            ? Effect.undefined
             : Effect.try({
                 try: () => JSON.parse(object.text, reviveState) as T,
                 catch: (cause) =>

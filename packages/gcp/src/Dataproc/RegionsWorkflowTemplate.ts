@@ -143,7 +143,7 @@ const desiredBody = (
 const getByName = (name: string) =>
   dataproc
     .getProjectsRegionsWorkflowTemplates({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listRegion = (project: string, region: string) =>
   emptyOnMissing(

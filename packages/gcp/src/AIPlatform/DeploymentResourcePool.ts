@@ -268,7 +268,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsDeploymentResourcePools({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listPools = (project: string, region: string) => {
   const collect = (parent: string) =>
@@ -436,7 +436,7 @@ export const DeploymentResourcePoolProvider = () =>
               },
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const createdName = resourceNameFromOperation(done) ?? name;
@@ -490,7 +490,7 @@ export const DeploymentResourcePoolProvider = () =>
         .deleteProjectsLocationsDeploymentResourcePools({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

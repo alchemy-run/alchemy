@@ -102,7 +102,7 @@ export const DatasetGroupProvider = () =>
       const describe = Effect.fn(function* (datasetGroupArn: string) {
         const response = yield* personalize
           .describeDatasetGroup({ datasetGroupArn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.datasetGroup;
       });
 

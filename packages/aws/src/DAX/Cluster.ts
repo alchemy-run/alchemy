@@ -215,7 +215,7 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (name: string) {
         const response = yield* dax
           .describeClusters({ ClusterNames: [name] })
-          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.undefined));
         return response?.Clusters?.[0];
       });
 

@@ -155,7 +155,7 @@ export const ReplicationInstanceProvider = () =>
           .describeReplicationInstances({
             Filters: [{ Name: "replication-instance-id", Values: [identifier] }],
           })
-          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.undefined));
         return response?.ReplicationInstances?.[0];
       });
 

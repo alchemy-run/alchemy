@@ -100,7 +100,7 @@ export const NamespaceProvider = () =>
           createdBy: n.createdBy,
           ownerAccountId: n.ownerAccountId,
         })),
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
     }),
     diff: Effect.fn(function* ({ id, news, olds }) {
@@ -122,7 +122,7 @@ export const NamespaceProvider = () =>
       // out-of-band even if `output` cached it.
       let ns = yield* s3tables.getNamespace({ tableBucketARN: tableBucketArn, namespace }).pipe(
         Effect.map((n) => n),
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
 
       // Ensure — create if missing, tolerating a concurrent create.

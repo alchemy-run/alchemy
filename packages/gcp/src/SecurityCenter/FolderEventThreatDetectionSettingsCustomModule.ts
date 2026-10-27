@@ -163,10 +163,10 @@ const toAttrs = (module: scc.EventThreatDetectionCustomModule, folder: string, p
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getFoldersEventThreatDetectionSettingsCustomModules({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string) =>
   scc.listFoldersEventThreatDetectionSettingsCustomModules.pages({ parent, pageSize: 100 }).pipe(

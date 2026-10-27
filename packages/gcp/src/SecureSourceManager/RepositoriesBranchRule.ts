@@ -249,7 +249,7 @@ const toAttrs = (item: ssm.BranchRule, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(ssm.getProjectsLocationsRepositoriesBranchRules({ name }));
 
 const listOnRepository = (repository: string) =>
@@ -361,7 +361,7 @@ export const RepositoriesBranchRuleProvider = () =>
               annotations,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -427,7 +427,7 @@ export const RepositoriesBranchRuleProvider = () =>
             name: output.name,
             allowMissing: true,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

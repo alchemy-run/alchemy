@@ -189,7 +189,7 @@ const getByDomain = (
   domain: string,
 ) =>
   domain.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         appengine.getProjectsLocationsApplicationsDomainMappings({
           projectsId,
@@ -350,7 +350,7 @@ export const ApplicationsDomainMappingProvider = () =>
           applicationsId: output.applicationsId,
           domainMappingsId: output.domain,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation === undefined) return;
       yield* waitForOperation(operation, {
         appsId: output.applicationsId,

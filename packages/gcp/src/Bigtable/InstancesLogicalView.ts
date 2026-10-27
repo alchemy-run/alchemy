@@ -140,7 +140,7 @@ const toAttrs = (view: bigtable.LogicalView, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesLogicalViews({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -257,7 +257,7 @@ export const InstancesLogicalViewProvider = () =>
               deletionProtection: desiredProtection,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }

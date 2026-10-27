@@ -175,10 +175,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : integrations.getProjectsLocationsSfdcInstancesSfdcChannels({ name }).pipe(
         Effect.map((channel) => (isDeleted(channel) ? undefined : channel)),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
 
 export const SfdcInstancesSfdcChannelProvider = () =>

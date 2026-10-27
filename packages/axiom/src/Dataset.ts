@@ -247,7 +247,7 @@ export const DatasetProvider = () =>
           // here mutation is safe.
           const datasetId = output?.id ?? news.name;
           const observed = yield* get({ dataset_id: datasetId }).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
 
           // Ensure — POST creates the dataset. Tolerate Conflict/
@@ -310,7 +310,7 @@ export const DatasetProvider = () =>
           const datasetId = output?.id ?? olds?.name;
           if (!datasetId) return undefined;
           const existing = yield* get({ dataset_id: datasetId }).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!existing) return undefined;
           const ownership = parseMarker(existing.description);

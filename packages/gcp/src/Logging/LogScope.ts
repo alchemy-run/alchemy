@@ -174,7 +174,7 @@ const toAttrs = (scope: logging.LogScope, project: string, location: string) => 
 const getByName = (name: string) =>
   logging
     .getProjectsLocationsLogScopes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const LogScopeProvider = () =>
   Provider.succeed(LogScope, {

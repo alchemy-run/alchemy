@@ -174,7 +174,7 @@ const toAttrs = (execution: aiplatform.GoogleCloudAiplatformV1Execution, project
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsMetadataStoresExecutions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listExecutions = (parent: string) =>
   aiplatform.listProjectsLocationsMetadataStoresExecutions.pages({ parent, pageSize: 100 }).pipe(
@@ -362,7 +362,7 @@ export const MetadataStoresExecutionProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

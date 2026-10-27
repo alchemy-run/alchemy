@@ -202,7 +202,7 @@ const readBudgetById = Effect.fn(function* (
 ) {
   const described = yield* deadline
     .getBudget({ farmId, budgetId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described) return undefined;
   const budgetArn = arnOf(`farm/${farmId}/budget/${described.budgetId}`);
   const state: BudgetState = {
