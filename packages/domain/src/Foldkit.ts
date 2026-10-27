@@ -129,29 +129,32 @@ export function commands(api: Api.Any): unknown {
             headersService._tag === "Some"
               ? yield* headersService.value.get(command.tag)
               : undefined;
-          return yield* client[command.tag](target, input, { commandId, headers }).pipe(
-            Effect.map(({ reply, stream, version }) => ({
-              _tag: `Succeeded${command.tag}`,
-              commandId,
-              reply,
-              receipt: { stream, version },
-            })),
-            Effect.catchCauseIf(
-              (cause) => Cause.hasFails(cause) || Cause.hasDies(cause),
-              (cause) =>
-                Effect.succeed({
-                  _tag: `Failed${command.tag}`,
-                  commandId,
-                  failure: Cause.hasDies(cause)
-                    ? { _tag: "Unknown" }
-                    : classifyFailure(
-                        command,
-                        cause.pipe(Cause.findErrorOption, Option.getOrUndefined),
-                      ),
-                }),
-            ),
-          );
-        }),
+          const { reply, stream, version } = yield* client[command.tag](target, input, {
+            commandId,
+            headers,
+          });
+          return {
+            _tag: `Succeeded${command.tag}`,
+            commandId,
+            reply,
+            receipt: { stream, version },
+          };
+        }).pipe(
+          Effect.catchCauseIf(
+            (cause) => Cause.hasFails(cause) || Cause.hasDies(cause),
+            (cause) =>
+              Effect.succeed({
+                _tag: `Failed${command.tag}`,
+                commandId,
+                failure: Cause.hasDies(cause)
+                  ? { _tag: "Unknown" }
+                  : classifyFailure(
+                      command,
+                      cause.pipe(Cause.findErrorOption, Option.getOrUndefined),
+                    ),
+              }),
+          ),
+        ),
     });
   }
   return definitions;

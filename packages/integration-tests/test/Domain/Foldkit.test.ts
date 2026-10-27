@@ -88,6 +88,21 @@ it.live("keeps transport uncertainty and reads headers only during execution", (
   }).pipe(Effect.provide(Client)),
 );
 
+it.live("turns a defect while reading headers into Unknown", () =>
+  Effect.gen(function* () {
+    const result = yield* Counter.Increment({
+      target,
+      input: { amount: 1 },
+      commandId: "page:4",
+    }).effect.pipe(
+      Effect.provideService(Foldkit.CommandHeaders, {
+        get: () => Effect.die("storage unavailable"),
+      }),
+    );
+    expect(result).toMatchObject({ _tag: "FailedIncrement", failure: { _tag: "Unknown" } });
+  }).pipe(Effect.provide(Client)),
+);
+
 it("allocates ids without changing the prior state", () => {
   const ids = Foldkit.CommandIds.make({ session: "page", sent: 0 });
   expect(Foldkit.next(ids)).toEqual({
