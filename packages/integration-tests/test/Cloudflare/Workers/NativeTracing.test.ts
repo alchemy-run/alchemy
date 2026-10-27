@@ -96,6 +96,9 @@ type Bindings = ReadonlyArray<ResourceBinding<Worker["Binding"]>>;
 const tracesBind = (traces: NonNullable<Worker["Binding"]["observability"]>["traces"]): Bindings =>
   [{ sid: "Cloudflare.Telemetry", data: { observability: { traces } } }] as unknown as Bindings;
 
+const logsBind = (logs: NonNullable<Worker["Binding"]["observability"]>["logs"]): Bindings =>
+  [{ sid: "Cloudflare.Telemetry", data: { observability: { logs } } }] as unknown as Bindings;
+
 describe(
   "resolveObservability",
   {
@@ -149,6 +152,42 @@ describe(
       expect(resolved.logs?.invocationLogs).toBe(true);
       expect(resolved.traces?.enabled).toBe(true);
       expect(resolved.traces?.headSamplingRate).toBe(0.1);
+    });
+
+    unit("bound logs fill in when props omit them", () => {
+      const resolved = resolveObservability(
+        {},
+        logsBind({ enabled: true, invocationLogs: true, destinations: ["otel-logs"] }),
+      );
+      expect(resolved.logs?.enabled).toBe(true);
+      expect(resolved.logs?.invocationLogs).toBe(true);
+      expect(resolved.logs?.destinations).toEqual(["otel-logs"]);
+    });
+
+    unit("explicit logs win over the bind", () => {
+      const resolved = resolveObservability(
+        { observability: { enabled: true, logs: { enabled: false, invocationLogs: false } } },
+        logsBind({ enabled: true, invocationLogs: true, destinations: ["otel-logs"] }),
+      );
+      expect(resolved.logs?.enabled).toBe(false);
+      expect(resolved.logs?.destinations).toBeUndefined();
+    });
+
+    unit("traces and logs from one bind both fill in", () => {
+      const resolved = resolveObservability({}, [
+        {
+          sid: "Cloudflare.Telemetry",
+          data: {
+            observability: {
+              traces: { enabled: true, destinations: ["otel-traces"] },
+              logs: { enabled: true, invocationLogs: true, destinations: ["otel-logs"] },
+            },
+          },
+        },
+      ] as unknown as Bindings);
+      expect(resolved.traces?.destinations).toEqual(["otel-traces"]);
+      expect(resolved.logs?.destinations).toEqual(["otel-logs"]);
+      expect(resolved.logs?.invocationLogs).toBe(true);
     });
 
     unit("no bind returns default logs", () => {

@@ -1359,13 +1359,13 @@ export type Worker<Bindings = any> = Resource<
      */
     cache?: WorkerCache;
     /**
-     * Workers Observability traces settings contributed by
-     * `Cloudflare.Telemetry()`. Deep-merged into upload metadata: bound
-     * traces fill in when `WorkerProps.observability.traces` is omitted,
-     * and never clobber the default logs config. An explicit
-     * `observability.traces` object wins.
+     * Workers Observability traces and logs settings contributed by a
+     * binding such as `Cloudflare.Telemetry()`. Merged into upload
+     * metadata: bound traces/logs fill in when `WorkerProps.observability`
+     * omits them, and bound logs are merged over the default logs config.
+     * An explicit `observability.traces` / `observability.logs` wins.
      */
-    observability?: Pick<WorkerObservability, "traces">;
+    observability?: Pick<WorkerObservability, "traces" | "logs">;
     containers?: {
       className: string;
       /** Set when an async `Cloudflare.DurableObject(name, { containers })` binding contributed the row. */
