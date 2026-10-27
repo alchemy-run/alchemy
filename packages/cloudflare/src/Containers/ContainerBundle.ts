@@ -1,5 +1,6 @@
 import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
+import { validateDockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
@@ -96,29 +97,31 @@ export const createContainerApplicationName = (id: string, name: string | undefi
  * - `image` alone — a pre-built remote image, exclusive with `dockerfile`
  *   and `context`.
  * - `dockerfile` (string path against `context`, or inline content with no
- *   `context`) — the user-Dockerfile build.
+ *   `context`) — the user-Dockerfile build. Only this source takes
+ *   `buildArgs` / `buildSecrets`.
  *
  * Invalid combinations are programmer errors, surfaced as plan-time defects
  * (`Effect.die`) rather than typed errors.
  */
 export const validateContainerImageProps = (
+  id: string,
   props: Pick<
     AnyContainerApplicationProps,
     "main" | "image" | "dockerfile" | "context" | "buildArgs" | "buildSecrets"
   >,
+): Effect.Effect<void> =>
+  validateImageSources(props).pipe(
+    Effect.andThen(
+      // An empty `main` declares no program, as in `validateImageSources`.
+      validateDockerfileBuildOptions(id, { ...props, main: props.main || undefined }),
+    ),
+  );
+
+const validateImageSources = (
+  props: Pick<AnyContainerApplicationProps, "main" | "image" | "dockerfile" | "context">,
 ): Effect.Effect<void> => {
   const df = props.dockerfile;
   const hasInline = df !== undefined && isInlineDockerfile(df);
-  if (
-    (props.main || props.image !== undefined) &&
-    (props.buildArgs !== undefined || props.buildSecrets !== undefined)
-  ) {
-    return Effect.die(
-      new Error(
-        "`buildArgs` and `buildSecrets` apply to a Dockerfile you build yourself (`context` / `dockerfile`) — they cannot be combined with `main` or `image`.",
-      ),
-    );
-  }
   if (props.main) {
     if (props.image !== undefined && df !== undefined) {
       return Effect.die(
@@ -393,7 +396,7 @@ export const prepareContainerBuildContext = Effect.fn(function* (
   if (!main) {
     return yield* Effect.die(new Error("Container requires a `main` entrypoint."));
   }
-  yield* validateContainerImageProps(news);
+  yield* validateContainerImageProps(id, news);
   const runtime = news.runtime ?? "bun";
   const context = yield* getStableContextDir(process.cwd(), dotAlchemy, `${id}-container`);
   const dockerfileContent = buildFinalDockerfile(

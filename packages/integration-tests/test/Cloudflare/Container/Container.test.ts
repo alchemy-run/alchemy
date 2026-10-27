@@ -19,8 +19,6 @@ import AttachmentStack, {
   attachmentStack,
   stackName as attachmentStackName,
 } from "./fixtures/attachment/stack.ts";
-import { BUILD_SECRET } from "./fixtures/buildsecrets/object.ts";
-import makeBuildSecretsStack from "./fixtures/buildsecrets/stack.ts";
 import EffectfulStack from "./fixtures/effectful/stack.ts";
 import makeExternalStack from "./fixtures/external/stack.ts";
 import makeInferredClassStack from "./fixtures/inferred/stack.ts";
@@ -50,7 +48,6 @@ describe.concurrent.each([
     const state = dev ? inMemoryState() : Cloudflare.state();
     const AsyncContainerStack = makeAsyncContainerStack(state);
     const ExternalStack = makeExternalStack(state);
-    const BuildSecretsStack = makeBuildSecretsStack(state);
     const InferredClassStack = makeInferredClassStack(state);
     const RemoteStack = makeRemoteStack(state);
 
@@ -180,29 +177,6 @@ describe.concurrent.each([
 
           const hello = yield* fetchReady(new URL("/inline", url), "inline dockerfile container");
           expect(hello).toContain("inline dockerfile container");
-        }).pipe(logLevel),
-        { tags: [...(dev ? ["local"] : ["live"])], timeout },
-      );
-    });
-
-    /**
-     * Dockerfile container with `buildArgs` and `buildSecrets`: the build
-     * writes the arg and the secret's length into the page it serves.
-     */
-    describe("external container with build args and secrets", () => {
-      const { test, beforeAll, afterAll, deploy, destroy } = make();
-      const stack = beforeAll(deploy(BuildSecretsStack), { timeout: HOOK_TIMEOUT });
-      afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(BuildSecretsStack), {
-        timeout: HOOK_TIMEOUT,
-      });
-
-      test(
-        "builds with the arg and the mounted secret",
-        Effect.gen(function* () {
-          const { url } = yield* stack;
-
-          const page = yield* fetchReady(new URL("/page", url), "hello");
-          expect(page.trim()).toBe(`hello ${BUILD_SECRET.length}`);
         }).pipe(logLevel),
         { tags: [...(dev ? ["local"] : ["live"])], timeout },
       );

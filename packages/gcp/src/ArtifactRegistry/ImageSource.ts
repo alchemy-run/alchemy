@@ -1,5 +1,10 @@
 import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile, type InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
+import {
+  validateDockerfileBuildOptions,
+  type DockerfileBuildOptions,
+  type DockerfileImageSource,
+} from "@alchemy.run/docker/ImageSource";
 /**
  * INTERNAL — Artifact Registry image-source machinery for GKE workloads.
  * Not exported from the GCP barrel or `ArtifactRegistry/index.ts`.
@@ -56,16 +61,13 @@ export interface BundledImageSource {
   install?: PackageInstall;
 }
 
-export interface DockerfileImageSource {
-  context?: string;
-  dockerfile?: string | InlineDockerfile;
-}
+export type { DockerfileImageSource };
 
 export interface RegistryImageSource {
   image: string;
 }
 
-export interface ImageSourceLike {
+export interface ImageSourceLike extends DockerfileBuildOptions {
   main?: string;
   handler?: string;
   build?: BundledImageSource["build"];
@@ -148,7 +150,7 @@ export const validateImageSource = (id: string, source: ImageSourceLike): Effect
       ),
     );
   }
-  return Effect.void;
+  return validateDockerfileBuildOptions(id, source);
 };
 
 export interface ResolvedImage {
@@ -207,6 +209,8 @@ export const computeStaticSourceHash = Effect.fn(function* (
       return (yield* sha256Object({
         dockerfile: source.dockerfile.content,
         platform: platform ?? "linux/amd64",
+        // Absent when unset, so existing hashes hold. Secrets are excluded.
+        buildArgs: source.buildArgs,
       })).slice(0, 16);
     }
     const fs = yield* FileSystem.FileSystem;
@@ -220,6 +224,7 @@ export const computeStaticSourceHash = Effect.fn(function* (
       contextHash,
       dockerfile: dockerfileContent,
       platform: platform ?? "linux/amd64",
+      buildArgs: source.buildArgs,
     })).slice(0, 16);
   }
   return undefined;
@@ -258,7 +263,7 @@ export const buildAndPushArtifactRegistryImage = Effect.fn(function* (
     dockerfile?: string;
     platform?: string;
     location: string;
-  },
+  } & DockerfileBuildOptions,
 ) {
   const credentials = yield* getArtifactRegistryCredentials(options.location);
   yield* docker.image.build({
@@ -266,6 +271,8 @@ export const buildAndPushArtifactRegistryImage = Effect.fn(function* (
     context: options.context,
     file: options.dockerfile,
     platform: options.platform,
+    "build-arg": options.buildArgs,
+    secrets: options.buildSecrets,
   });
   yield* docker.image.push(options.imageUri, credentials, options.platform).pipe(
     Effect.retry({
@@ -751,6 +758,8 @@ export const makeImageSource = Effect.gen(function* () {
         context: contextDir,
         platform,
         location,
+        buildArgs: source.buildArgs,
+        buildSecrets: source.buildSecrets,
       });
       yield* session.note(`Pushed ${imageUri}`);
       return { imageUri, repositoryName, repositoryUri, codeHash };
@@ -772,6 +781,8 @@ export const makeImageSource = Effect.gen(function* () {
       dockerfile,
       platform,
       location,
+      buildArgs: source.buildArgs,
+      buildSecrets: source.buildSecrets,
     });
     yield* session.note(`Pushed ${imageUri}`);
     return { imageUri, repositoryName, repositoryUri, codeHash };

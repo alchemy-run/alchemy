@@ -7,7 +7,10 @@ import {
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
 import { describe, expect, it, test } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 
 describe(
@@ -87,6 +90,28 @@ describe(
         expect(yield* dies({ main: "./i.ts", image: "oven/bun:1" })).toBe(false);
         expect(yield* dies({ main: "./i.ts", dockerfile: Dockerfile.inline`FROM x` })).toBe(false);
         expect(yield* dies({ context: "./app", dockerfile: "./app/Dockerfile" })).toBe(false);
+
+        // Build args and secrets need a Dockerfile build.
+        const buildArgs = { NODE_ENV: "production" };
+        const buildSecrets = { NPM_TOKEN: Redacted.make("token") };
+        expect(yield* dies({ context: "./app", buildArgs, buildSecrets })).toBe(false);
+        expect(yield* dies({ dockerfile: Dockerfile.inline`FROM x`, buildArgs })).toBe(false);
+        expect(yield* dies({ main: "./i.ts", buildArgs })).toBe(true);
+        expect(yield* dies({ image: "busybox", buildSecrets })).toBe(true);
+      }),
+    );
+
+    it.effect("build args and secrets on a main or image source die with a tagged defect", () =>
+      Effect.gen(function* () {
+        const exit = yield* Effect.exit(
+          validateImageSource("Api", { image: "busybox", buildArgs: { A: "1" } }),
+        );
+        const defect = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+        expect(defect).toMatchObject({
+          _tag: "DockerfileBuildOptionsConflict",
+          id: "Api",
+          source: "image",
+        });
       }),
     );
   },
@@ -164,16 +189,19 @@ RUN apt-get install -y ffmpeg`,
       Effect.gen(function* () {
         // main + image and main + inline dockerfile are the two environments.
         expect(
-          yield* dies(validateContainerImageProps({ main: "./i.ts", image: "oven/bun:1" })),
+          yield* dies(validateContainerImageProps("Api", { main: "./i.ts", image: "oven/bun:1" })),
         ).toBe(false);
         expect(
           yield* dies(
-            validateContainerImageProps({ main: "./i.ts", dockerfile: Dockerfile.inline`FROM x` }),
+            validateContainerImageProps("Api", {
+              main: "./i.ts",
+              dockerfile: Dockerfile.inline`FROM x`,
+            }),
           ),
         ).toBe(false);
         expect(
           yield* dies(
-            validateContainerImageProps({
+            validateContainerImageProps("Api", {
               main: "./i.ts",
               image: "oven/bun:1",
               dockerfile: Dockerfile.inline`FROM x`,
@@ -182,22 +210,24 @@ RUN apt-get install -y ffmpeg`,
         ).toBe(true);
         // A path dockerfile cannot be an environment on Cloudflare.
         expect(
-          yield* dies(validateContainerImageProps({ main: "./i.ts", dockerfile: "./Dockerfile" })),
+          yield* dies(
+            validateContainerImageProps("Api", { main: "./i.ts", dockerfile: "./Dockerfile" }),
+          ),
         ).toBe(true);
-        expect(yield* dies(validateContainerImageProps({ main: "./i.ts", context: "./app" }))).toBe(
-          true,
-        );
+        expect(
+          yield* dies(validateContainerImageProps("Api", { main: "./i.ts", context: "./app" })),
+        ).toBe(true);
         // Without main: image is exclusive with dockerfile/context.
         expect(
-          yield* dies(validateContainerImageProps({ image: "busybox", dockerfile: "./f" })),
+          yield* dies(validateContainerImageProps("Api", { image: "busybox", dockerfile: "./f" })),
         ).toBe(true);
         expect(
-          yield* dies(validateContainerImageProps({ image: "busybox", context: "./app" })),
+          yield* dies(validateContainerImageProps("Api", { image: "busybox", context: "./app" })),
         ).toBe(true);
         // Inline content has no build context.
         expect(
           yield* dies(
-            validateContainerImageProps({
+            validateContainerImageProps("Api", {
               dockerfile: Dockerfile.inline`FROM x`,
               context: "./app",
             }),
@@ -206,9 +236,31 @@ RUN apt-get install -y ffmpeg`,
         // The plain external build stays valid.
         expect(
           yield* dies(
-            validateContainerImageProps({ context: "./app", dockerfile: "./app/Dockerfile" }),
+            validateContainerImageProps("Api", {
+              context: "./app",
+              dockerfile: "./app/Dockerfile",
+            }),
           ),
         ).toBe(false);
+        // Build args and secrets need a Dockerfile build.
+        const buildSecrets = { NPM_TOKEN: Redacted.make("token") };
+        expect(
+          yield* dies(
+            validateContainerImageProps("Api", {
+              context: "./app",
+              buildArgs: { A: "1" },
+              buildSecrets,
+            }),
+          ),
+        ).toBe(false);
+        expect(
+          yield* dies(validateContainerImageProps("Api", { main: "./i.ts", buildSecrets })),
+        ).toBe(true);
+        expect(
+          yield* dies(
+            validateContainerImageProps("Api", { image: "busybox", buildArgs: { A: "1" } }),
+          ),
+        ).toBe(true);
       }),
     );
   },

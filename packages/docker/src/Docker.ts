@@ -1070,7 +1070,6 @@ const systemError = (input: {
     }),
   );
 
-/** Formats a set of options into a list of command-line arguments. */
 /**
  * `--secret id=<id>,env=<var>` per secret, with each value under a generated
  * variable name: an id is the Dockerfile author's choice and may collide with
@@ -1087,6 +1086,7 @@ const buildSecrets = (secrets: Record<string, string | Redacted.Redacted<string>
   return { args, env };
 };
 
+/** Formats a set of options into a list of command-line arguments. */
 const formatArgs = (
   options: Record<
     string,

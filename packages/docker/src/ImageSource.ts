@@ -3,9 +3,11 @@ import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
 import { hashDirectory } from "alchemy/Command/Memo";
 import { sha256Object } from "alchemy/Util/sha256";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
 import { Docker, type RegistryCredentials } from "./Docker.ts";
@@ -83,10 +85,34 @@ export interface BundledImageSource {
 }
 
 /**
+ * Build arguments and BuildKit secrets for an image built from the user's
+ * own Dockerfile (`context` / `dockerfile`).
+ */
+export interface DockerfileBuildOptions {
+  /**
+   * Docker build arguments (`--build-arg`), read by `ARG` instructions.
+   * They are part of the image's content hash, so changing one rebuilds the
+   * image. Never pass secrets here: build args are visible in the image
+   * history. Use {@link buildSecrets} instead.
+   */
+  buildArgs?: Record<string, string>;
+  /**
+   * BuildKit secrets, keyed by id. Mount one in a `RUN` step with
+   * `--mount=type=secret,id=<id>` and read it from `/run/secrets/<id>`, or
+   * add `env=<NAME>` to expose it as an environment variable for that step.
+   *
+   * A secret never enters the image, its build history, or `docker`'s argv.
+   * Secrets are left out of the image's content hash, so rotating one does
+   * not rebuild the image.
+   */
+  buildSecrets?: Record<string, Redacted.Redacted<string>>;
+}
+
+/**
  * Build the image from the user's own Dockerfile and build context — no
  * Effect program is bundled.
  */
-export interface DockerfileImageSource {
+export interface DockerfileImageSource extends DockerfileBuildOptions {
   /**
    * Docker build context directory. Optional when {@link dockerfile} is
    * inline content (which builds with an empty context).
@@ -127,6 +153,8 @@ export interface ImageSourceLike {
   context?: string;
   dockerfile?: string | InlineDockerfile;
   image?: string;
+  buildArgs?: Record<string, string>;
+  buildSecrets?: Record<string, Redacted.Redacted<string>>;
 }
 
 export type ImageSourceKind = "main" | "context" | "image";
@@ -147,8 +175,42 @@ export const imageSourceKind = (source: ImageSourceLike): ImageSourceKind | unde
         : undefined;
 
 /**
+ * `buildArgs` or `buildSecrets` set on an image that is not built from the
+ * user's own Dockerfile: a `main` program or a pre-built `image`.
+ */
+export class DockerfileBuildOptionsConflict extends Data.TaggedError(
+  "DockerfileBuildOptionsConflict",
+)<{
+  readonly id: string;
+  readonly source: "main" | "image";
+}> {
+  override get message() {
+    return `'${this.id}': 'buildArgs' and 'buildSecrets' apply to an image built from your own Dockerfile ('context' / 'dockerfile'), not to '${this.source}'`;
+  }
+}
+
+/**
+ * Dies with {@link DockerfileBuildOptionsConflict} when `buildArgs` or
+ * `buildSecrets` are set alongside `main` or `image`.
+ */
+export const validateDockerfileBuildOptions = (
+  id: string,
+  source: Pick<ImageSourceLike, "main" | "image" | "buildArgs" | "buildSecrets">,
+): Effect.Effect<void> =>
+  (source.main !== undefined || source.image !== undefined) &&
+  (source.buildArgs !== undefined || source.buildSecrets !== undefined)
+    ? Effect.die(
+        new DockerfileBuildOptionsConflict({
+          id,
+          source: source.main !== undefined ? "main" : "image",
+        }),
+      )
+    : Effect.void;
+
+/**
  * Validate environment-source exclusivity. Dies (plan-time defect) on
- * `image`+`dockerfile`, `image`+`context`, or inline-`dockerfile`+`context`.
+ * `image`+`dockerfile`, `image`+`context`, inline-`dockerfile`+`context`, or
+ * build args/secrets without a Dockerfile build.
  */
 export const validateImageSource = (id: string, source: ImageSourceLike): Effect.Effect<void> => {
   if (source.image !== undefined && source.dockerfile !== undefined) {
@@ -176,7 +238,7 @@ export const validateImageSource = (id: string, source: ImageSourceLike): Effect
       ),
     );
   }
-  return Effect.void;
+  return validateDockerfileBuildOptions(id, source);
 };
 
 /**
@@ -287,6 +349,8 @@ export const computeStaticSourceHash = Effect.fn(function* (
       return (yield* sha256Object({
         dockerfile: source.dockerfile.content,
         platform: platform ?? "linux/amd64",
+        // Absent when unset, so existing hashes hold. Secrets are excluded.
+        buildArgs: source.buildArgs,
       })).slice(0, 16);
     }
     const fs = yield* FileSystem.FileSystem;
@@ -300,6 +364,7 @@ export const computeStaticSourceHash = Effect.fn(function* (
       contextHash,
       dockerfile: dockerfileContent,
       platform: platform ?? "linux/amd64",
+      buildArgs: source.buildArgs,
     })).slice(0, 16);
   }
   return undefined;
@@ -514,6 +579,8 @@ export const makeContainerImageSource = Effect.gen(function* () {
       context: string;
       dockerfile?: string;
       platform?: string;
+      buildArgs?: Record<string, string>;
+      buildSecrets?: Record<string, Redacted.Redacted<string>>;
     },
   ) {
     const credentials = yield* target.credentials;
@@ -522,6 +589,8 @@ export const makeContainerImageSource = Effect.gen(function* () {
       context: options.context,
       file: options.dockerfile,
       platform: options.platform,
+      "build-arg": options.buildArgs,
+      secrets: options.buildSecrets,
     });
     yield* push(options.imageUri, credentials, options.platform);
     return options.imageUri;
@@ -676,6 +745,8 @@ export const makeContainerImageSource = Effect.gen(function* () {
         imageUri,
         context: contextDir,
         platform,
+        buildArgs: source.buildArgs,
+        buildSecrets: source.buildSecrets,
       });
       yield* session.note(`Pushed ${imageUri}`);
       return { imageUri, repositoryUri, codeHash };
@@ -698,6 +769,8 @@ export const makeContainerImageSource = Effect.gen(function* () {
       context,
       dockerfile,
       platform,
+      buildArgs: source.buildArgs,
+      buildSecrets: source.buildSecrets,
     });
     yield* session.note(`Pushed ${imageUri}`);
     return { imageUri, repositoryUri, codeHash };

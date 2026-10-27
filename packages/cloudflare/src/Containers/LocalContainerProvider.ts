@@ -67,7 +67,7 @@ export const LocalContainerProvider = () =>
       // `makeAttributes` attaches the freshly-computed env instead.
       const prepareImage = (id: string, news: AnyContainerApplicationProps) =>
         Effect.gen(function* () {
-          yield* validateContainerImageProps(news);
+          yield* validateContainerImageProps(id, news);
           // Variant 1 — Effect-native program. Bundle `main` and write it
           // (plus the generated Dockerfile) into a stable build context
           // directory. `Docker.build` in cloudflare-runtime reads `dockerfile`

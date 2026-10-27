@@ -1,4 +1,5 @@
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
+import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import type { ResourceBinding } from "alchemy/Resource";
 import type { ResourceContext } from "alchemy/ResourceContext";
@@ -179,6 +180,8 @@ export interface WorkloadImageSource {
   context?: string;
   dockerfile?: string | InlineDockerfile;
   image?: string;
+  buildArgs?: DockerfileBuildOptions["buildArgs"];
+  buildSecrets?: DockerfileBuildOptions["buildSecrets"];
 }
 
 export interface WorkloadIdentityReconcileOptions {

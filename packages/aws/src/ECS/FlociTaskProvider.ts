@@ -50,6 +50,8 @@ export const FlociTaskProvider = () =>
         isExternal: news.isExternal,
         context: source.context,
         dockerfile: source.dockerfile,
+        // Secrets are left out, as in the image hash: rotating one does not rebuild.
+        buildArgs: source.buildArgs,
         image: source.image,
         port: news.port,
         runtimePlatform: news.runtimePlatform,

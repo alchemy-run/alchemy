@@ -1,3 +1,4 @@
+import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import { isResolved } from "alchemy/Diff";
 import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -163,7 +164,7 @@ export interface BundledJobProps extends JobPropsBase {
 }
 
 /** Build the user's own Dockerfile (`context` + optional `dockerfile` path). */
-export interface DockerfileJobProps extends JobPropsBase {
+export interface DockerfileJobProps extends JobPropsBase, DockerfileBuildOptions {
   /** Docker build context directory. */
   context?: string;
   /**
@@ -263,6 +264,21 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * const migrate = yield* Kubernetes.Job("DbMigrate", {
  *   cluster,
  *   image: "ghcr.io/acme/migrator:v3",
+ *   backoffLimit: 2,
+ * });
+ * ```
+ *
+ * **Example:** Your own Dockerfile with build args and secrets
+ * ```typescript
+ * // Dockerfile:
+ * //   ARG NODE_ENV
+ * //   RUN --mount=type=secret,id=NPM_TOKEN,env=NPM_TOKEN npm ci
+ * const migrate = yield* Kubernetes.Job("DbMigrate", {
+ *   cluster,
+ *   context: "./migrator",
+ *   buildArgs: { NODE_ENV: "production" },
+ *   // Mounted only into the RUN step that asks for it; never in the image.
+ *   buildSecrets: { NPM_TOKEN: Config.Redacted("NPM_TOKEN") },
  *   backoffLimit: 2,
  * });
  * ```

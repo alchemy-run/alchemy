@@ -113,6 +113,8 @@ export const FlociServiceProvider = () =>
         isExternal: news.isExternal,
         context: source.context,
         dockerfile: source.dockerfile,
+        // Secrets are left out, as in the image hash: rotating one does not rebuild.
+        buildArgs: source.buildArgs,
         image: source.image,
         port: (news as { port?: number }).port,
         runtimePlatform: (news as { runtimePlatform?: unknown }).runtimePlatform,

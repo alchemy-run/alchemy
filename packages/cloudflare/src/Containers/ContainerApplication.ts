@@ -1,4 +1,5 @@
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
+import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -365,7 +366,8 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
  * Build the container image from your own Dockerfile — no Effect program is
  * bundled. The image is shipped as-is.
  */
-export interface ExternalContainerProps extends ContainerApplicationPropsBase {
+export interface ExternalContainerProps
+  extends ContainerApplicationPropsBase, DockerfileBuildOptions {
   /**
    * The build context directory containing the Dockerfile and any files it
    * copies. Only valid with a `dockerfile` PATH (not inline content).
@@ -381,20 +383,6 @@ export interface ExternalContainerProps extends ContainerApplicationPropsBase {
    * with {@link context}).
    */
   dockerfile?: string | InlineDockerfile;
-  /**
-   * Docker build arguments (`--build-arg`). They are part of the image's
-   * input hash, so changing one rebuilds the image.
-   */
-  buildArgs?: Record<string, string>;
-  /**
-   * BuildKit secrets for the build, keyed by id. Mount one in a `RUN` step
-   * with `--mount=type=secret,id=<id>` (read it from `/run/secrets/<id>`, or
-   * add `env=<NAME>` to expose it as an environment variable).
-   *
-   * Secrets never enter the image or its build history, and they are left
-   * out of the image's input hash: rotating one does not rebuild the image.
-   */
-  buildSecrets?: Record<string, Redacted.Redacted<string>>;
 }
 
 /**
@@ -457,7 +445,7 @@ export interface DurableObjectApplicationSettings {
  * new application and Durable Object namespace.
  */
 export interface DurableObjectContainerProps
-  extends DurableObjectApplicationSettings, PlatformProps {
+  extends DurableObjectApplicationSettings, PlatformProps, DockerfileBuildOptions {
   /** Select images and instance sizes in `ctx.container.start()`. */
   schedulingPolicy: "durable_object";
   /**
@@ -516,8 +504,8 @@ export interface AnyContainerApplicationProps extends Omit<
   image?: string;
   context?: string;
   dockerfile?: string | InlineDockerfile;
-  buildArgs?: Record<string, string>;
-  buildSecrets?: Record<string, Redacted.Redacted<string>>;
+  buildArgs?: DockerfileBuildOptions["buildArgs"];
+  buildSecrets?: DockerfileBuildOptions["buildSecrets"];
   handler?: string;
   runtime?: "bun" | "node";
   external?: string[];

@@ -391,7 +391,7 @@ export const LiveContainerProvider = () =>
         const makeRef = (imageHash: string) =>
           `${registryId}/${accountId}/${repositoryName}:${imageHash}`;
 
-        yield* validateContainerImageProps(props);
+        yield* validateContainerImageProps(id, props);
 
         // Preserve serialized imageName keys so existing publication hashes remain valid.
         // Variant 1 — Effect-native program. Bundle `main` and build a
