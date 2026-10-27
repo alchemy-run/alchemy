@@ -16,6 +16,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { tagListRecord } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { getDefaultVpcEmrManagedSecurityGroupIds, getDefaultVpcScope } from "./defaultVpcScope.ts";
@@ -185,6 +186,12 @@ export interface SecurityGroup extends Resource<
       description?: string;
       isEgress: true;
     }>;
+
+    /**
+     * Tags on the security group, as observed. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    tags?: Record<string, string>;
   },
   never,
   Providers
@@ -503,6 +510,7 @@ export const SecurityGroupProvider = () =>
           description: sg.Description!,
           vpcId: sg.VpcId as VpcId,
           ownerId: sg.OwnerId!,
+          tags: tagListRecord(sg.Tags),
           ingressRules: rules
             .filter((r) => !r.IsEgress)
             .map((r) => ({

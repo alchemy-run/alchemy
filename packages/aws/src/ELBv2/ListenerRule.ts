@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
+import { plainJson } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import {
@@ -16,6 +17,7 @@ import {
   serializeActions,
   serializeConditions,
 } from "./common.ts";
+import { readElbTags } from "./internal.ts";
 import type { Listener, ListenerArn } from "./Listener.ts";
 
 export type RuleArn =
@@ -70,6 +72,15 @@ export interface ListenerRule extends Resource<
     priority: number;
     /** Whether this is the listener's default rule. */
     isDefault: boolean;
+    /**
+     * Conditions, actions and tags, as observed. Lets `alchemy drift`
+     * detect out-of-band changes.
+     */
+    configuration?: {
+      conditions: unknown[];
+      actions: unknown[];
+      tags: Record<string, string>;
+    };
   },
   never,
   Providers
@@ -123,6 +134,19 @@ export interface ListenerRule extends Resource<
  */
 export const ListenerRule = Resource<ListenerRule>("AWS.ELBv2.ListenerRule");
 
+/**
+ * The configuration `read` and `reconcile` both report, so a converged rule
+ * reads unchanged.
+ */
+const observeRuleConfiguration = (rule: elbv2.Rule, tags: Record<string, string>) =>
+  plainJson({
+    conditions: [...(rule.Conditions ?? [])].sort((a, b) =>
+      JSON.stringify(a).localeCompare(JSON.stringify(b)),
+    ),
+    actions: [...(rule.Actions ?? [])].sort((a, b) => (a.Order ?? 0) - (b.Order ?? 0)),
+    tags,
+  });
+
 export const ListenerRuleProvider = () =>
   Provider.succeed(ListenerRule, {
     stables: ["ruleArn", "listenerArn"],
@@ -145,11 +169,13 @@ export const ListenerRuleProvider = () =>
       if (!rule?.RuleArn) {
         return undefined;
       }
+      const tags = yield* readElbTags(rule.RuleArn);
       return {
         ruleArn: rule.RuleArn as RuleArn,
         listenerArn: output.listenerArn,
         priority: Number(rule.Priority ?? output.priority),
         isDefault: rule.IsDefault ?? false,
+        configuration: observeRuleConfiguration(rule, tags),
       };
     }),
     // Rules belong to a listener, which belongs to a load balancer. Enumerate
@@ -300,6 +326,7 @@ export const ListenerRuleProvider = () =>
         listenerArn,
         priority: news.priority,
         isDefault: rule.IsDefault ?? false,
+        configuration: observeRuleConfiguration(rule, desiredTags),
       };
     }),
     delete: Effect.fn(function* ({ output }) {

@@ -180,7 +180,14 @@ export const ClusterProvider = () =>
           if (!cluster?.clusterArn || cluster.status === "INACTIVE") {
             return undefined;
           }
-          return toAttrs(cluster, output?.tags ?? {});
+          return toAttrs(
+            cluster,
+            Object.fromEntries(
+              (cluster.tags ?? []).flatMap((t) =>
+                typeof t.key === "string" && typeof t.value === "string" ? [[t.key, t.value]] : [],
+              ),
+            ),
+          );
         }),
         list: () =>
           Effect.gen(function* () {

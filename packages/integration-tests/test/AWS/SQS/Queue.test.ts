@@ -16,6 +16,7 @@ import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
+import { driftOf, repairDrift, waitForDrift } from "../drift.ts";
 import { QueueSinkFunction, QueueSinkFunctionLive } from "./sink-handler";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -1328,6 +1329,51 @@ const waitForQueueMessage = (queueUrl: string) =>
   );
 
 // Finalizer for adoption fixtures whose state has deliberately been removed.
+// #2688: `read` must observe the queue attributes and tags reconcile
+// converges, or an out-of-band change reads as `unchanged`.
+provider(
+  "drift detects and repairs out-of-band attribute and tag changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const queue = yield* stack.deploy(
+        Queue("DriftQueue", {
+          visibilityTimeout: "45 seconds",
+          messageRetentionPeriod: "2 days",
+          tags: { team: "declared" },
+        }),
+      );
+      expect((yield* driftOf(stack, "DriftQueue"))?.action).toBe("unchanged");
+
+      yield* SQS.setQueueAttributes({
+        QueueUrl: queue.queueUrl,
+        Attributes: { VisibilityTimeout: "90" },
+      });
+      yield* SQS.tagQueue({ QueueUrl: queue.queueUrl, Tags: { team: "out-of-band" } });
+
+      const drifted = yield* waitForDrift(stack, "DriftQueue", "drifted");
+      expect(drifted?.attr?.attributes?.VisibilityTimeout).toBe("90");
+      expect(drifted?.attr?.tags?.team).toBe("out-of-band");
+
+      const repaired = yield* repairDrift(stack);
+      expect(repaired.resources.DriftQueue?.action).toBe("repaired");
+      expect((yield* waitForDrift(stack, "DriftQueue", "unchanged"))?.action).toBe("unchanged");
+
+      const attributes = yield* SQS.getQueueAttributes({
+        QueueUrl: queue.queueUrl,
+        AttributeNames: ["VisibilityTimeout"],
+      });
+      expect(attributes.Attributes?.VisibilityTimeout).toBe("45");
+      const tags = yield* SQS.listQueueTags({ QueueUrl: queue.queueUrl });
+      expect(tags.Tags?.team).toBe("declared");
+
+      yield* stack.destroy();
+      yield* assertQueueDeleted(queue.queueUrl);
+    }),
+  { tags: ["provider:aws", "provider:aws:sqs", "live"], timeout: 180_000 },
+);
+
 const deleteQueueIfExists = (queueName: string) =>
   SQS.getQueueUrl({ QueueName: queueName }).pipe(
     Effect.flatMap((r) =>

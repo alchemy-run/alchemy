@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
+import { plainJson } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fetchWafTags,
@@ -104,6 +105,24 @@ export interface WebACL extends Resource<
      * Scope the web ACL was created in.
      */
     scope: WafScope;
+    /**
+     * The rules, default action, visibility settings, the optional aspects
+     * the props declare (custom responses, CAPTCHA/challenge, association
+     * config) and the tags, as observed. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    configuration?: {
+      defaultAction?: unknown;
+      description?: string;
+      rules: unknown[];
+      visibilityConfig?: unknown;
+      tokenDomains?: string[];
+      customResponseBodies?: unknown;
+      captchaConfig?: unknown;
+      challengeConfig?: unknown;
+      associationConfig?: unknown;
+      tags: Record<string, string>;
+    };
   },
   never,
   Providers
@@ -207,6 +226,30 @@ const toAttrs = (acl: WAFV2.WebACL, scope: WafScope) => ({
   webAclArn: acl.ARN,
   scope,
 });
+
+/**
+ * The configuration `read` and `reconcile` both report, so a converged web
+ * ACL reads unchanged. Aspects WAF fills with defaults are observed only
+ * when the props declare them, matching what reconcile converges.
+ */
+const observeWebACLConfiguration = (
+  acl: WAFV2.WebACL,
+  props: WebACLProps | undefined,
+  tags: Record<string, string>,
+) =>
+  plainJson({
+    defaultAction: acl.DefaultAction,
+    description: acl.Description || undefined,
+    rules: acl.Rules ?? [],
+    visibilityConfig: acl.VisibilityConfig,
+    tokenDomains: acl.TokenDomains?.length ? acl.TokenDomains : undefined,
+    customResponseBodies:
+      props?.customResponseBodies === undefined ? undefined : acl.CustomResponseBodies,
+    captchaConfig: props?.captchaConfig === undefined ? undefined : acl.CaptchaConfig,
+    challengeConfig: props?.challengeConfig === undefined ? undefined : acl.ChallengeConfig,
+    associationConfig: props?.associationConfig === undefined ? undefined : acl.AssociationConfig,
+    tags,
+  });
 
 export const WebACLProvider = () =>
   Provider.effect(
@@ -330,8 +373,11 @@ export const WebACLProvider = () =>
           if (!found?.WebACL) {
             return undefined;
           }
-          const attrs = toAttrs(found.WebACL, scope);
           const tags = yield* fetchWafTags(scope, found.WebACL.ARN);
+          const attrs = {
+            ...toAttrs(found.WebACL, scope),
+            configuration: observeWebACLConfiguration(found.WebACL, olds, tags),
+          };
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
@@ -437,7 +483,11 @@ export const WebACLProvider = () =>
           yield* syncWafTags(scope, acl.ARN, desiredTags);
 
           // 4. Return fresh attributes.
-          return toAttrs(acl, scope);
+          const final = yield* findWebACL(scope, name, acl.Id);
+          return {
+            ...toAttrs(acl, scope),
+            configuration: observeWebACLConfiguration(final?.WebACL ?? acl, news, desiredTags),
+          };
         }),
 
         delete: Effect.fn(function* ({ output }) {

@@ -1,3 +1,4 @@
+import type * as LambdaWeb from "@distilled.cloud/aws/lambda-web";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -7,6 +8,7 @@ import { connectorOfRevision, releaseEgressConnector, sameConnector } from "./We
 import {
   deleteEndpoint,
   endpointIdentityChanged,
+  endpointLimits,
   getEndpoint,
   latestRevisionId,
   servedRevisions,
@@ -122,6 +124,16 @@ export interface WebFunctionEndpoint extends Resource<
      * revision and the canary while a canary runs.
      */
     revisionWeights: WebFunctionRevisionWeight[];
+    /**
+     * Requests per second the endpoint allows, as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    rateLimit?: number;
+    /**
+     * Cap on the endpoint's execution environments, as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    maxEnvironments?: number;
   },
   never,
   Providers
@@ -241,15 +253,7 @@ export const WebFunctionEndpointProvider = () =>
 
       const toAttributes = (
         functionName: string,
-        endpoint: {
-          functionArn: string;
-          authType: string;
-          endpointType: string;
-          endpointName: string;
-          endpointArn: string;
-          domainName: string;
-          revisionWeights: { revisionId: string; weight: number }[];
-        },
+        endpoint: LambdaWeb.GetWebFunctionEndpointResponse,
         revisionId: string,
       ): WebFunctionEndpoint["Attributes"] => ({
         functionName,
@@ -262,6 +266,7 @@ export const WebFunctionEndpointProvider = () =>
         url: `https://${endpoint.domainName}`,
         revisionId,
         revisionWeights: servedRevisions(endpoint),
+        ...endpointLimits(endpoint),
       });
 
       return {

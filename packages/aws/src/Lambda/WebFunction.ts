@@ -15,7 +15,13 @@ import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
-import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasAlchemyTags,
+  tagRecord,
+} from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -41,6 +47,7 @@ import {
   createEndpointConfig,
   deleteEndpoint,
   endpointTypeOf,
+  endpointLimits,
   getEndpoint,
   latestRevisionId,
   servedRevisions,
@@ -263,6 +270,27 @@ export interface WebFunction extends Resource<
     code: {
       hash: string;
     };
+    /**
+     * Requests per second the built-in endpoint allows, as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    rateLimit?: number;
+    /**
+     * Cap on the built-in endpoint's execution environments, as observed.
+     * Lets `alchemy drift` detect out-of-band changes.
+     */
+    maxEnvironments?: number;
+    /**
+     * Tags on the web function, as observed. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    tags?: Record<string, string>;
+    /**
+     * Inline policies Alchemy writes on the execution role (binding grants
+     * and the log-group guard), as observed. Lets `alchemy drift` detect
+     * out-of-band edits.
+     */
+    executionRolePolicies?: Record<string, unknown>;
   },
   {
     env?: Record<string, any>;
@@ -986,6 +1014,48 @@ export const WebFunctionProvider = () =>
         roleName: role.roleName,
         roleArn: role.roleArn,
         code,
+        ...endpointLimits(endpoint),
+      });
+
+      /**
+       * Tags and Alchemy's execution-role inline policies, as observed.
+       * `read` and `reconcile` share it so a converged function reads
+       * unchanged.
+       */
+      const observeFunctionExtras = Effect.fn(function* ({
+        functionArn,
+        roleName,
+        policyName,
+      }: {
+        functionArn: string;
+        roleName: string;
+        policyName: string;
+      }) {
+        const readInlinePolicy = (PolicyName: string) =>
+          iam.getRolePolicy({ RoleName: roleName, PolicyName }).pipe(
+            Effect.map((policy): unknown => JSON.parse(decodeURIComponent(policy.PolicyDocument))),
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+          );
+        const [tags, bindingPolicy, guardPolicy] = yield* Effect.all(
+          [
+            LambdaWeb.listTags({ resource: functionArn }).pipe(
+              Effect.map((r) => tagRecord(r.tags)),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed({} as Record<string, string>),
+              ),
+            ),
+            readInlinePolicy(policyName),
+            readInlinePolicy(LOG_GROUP_GUARD_POLICY),
+          ],
+          { concurrency: "unbounded" },
+        );
+        return {
+          tags,
+          executionRolePolicies: {
+            ...(bindingPolicy === undefined ? {} : { [policyName]: bindingPolicy }),
+            ...(guardPolicy === undefined ? {} : { [LOG_GROUP_GUARD_POLICY]: guardPolicy }),
+          },
+        };
       });
 
       const logGroupNames = (functionName: string) => [
@@ -1104,21 +1174,23 @@ export const WebFunctionProvider = () =>
             } satisfies WebFunction["Attributes"];
             return (yield* hasAlchemyTags(id, role.Role.Tags)) ? attrs : Unowned(attrs);
           }
+          // A missing built-in endpoint reports no address, revision or
+          // traffic, so drift sees it is gone instead of the last persisted
+          // values.
           const endpoint = yield* getEndpoint(functionName, endpointName);
-          const tags = yield* LambdaWeb.listTags({ resource: fn.functionArn }).pipe(
-            Effect.map((r) => r.tags ?? {}),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed({} as Record<string, string | undefined>),
-            ),
-          );
+          const extras = yield* observeFunctionExtras({
+            functionArn: fn.functionArn,
+            roleName,
+            policyName: names.policyName,
+          });
           const attrs = {
             ...output,
             functionName: fn.functionName,
             functionArn: fn.functionArn,
             endpointName,
             endpointArn: endpoint?.endpointArn ?? `${fn.functionArn}/endpoint/${endpointName}`,
-            domainName: endpoint?.domainName ?? output?.domainName ?? "",
-            url: endpoint ? `https://${endpoint.domainName}` : (output?.url ?? ""),
+            domainName: endpoint?.domainName ?? "",
+            url: endpoint ? `https://${endpoint.domainName}` : "",
             authType: (endpoint?.authType ??
               output?.authType ??
               olds?.authType ??
@@ -1126,15 +1198,17 @@ export const WebFunctionProvider = () =>
             endpointType: (endpoint?.endpointType ??
               output?.endpointType ??
               endpointTypeOf(olds?.regions)) as WebFunctionEndpointType,
-            revisionId: endpoint
-              ? latestRevisionId(endpoint, output?.revisionId)
-              : (output?.revisionId ?? ""),
-            revisionWeights: endpoint ? servedRevisions(endpoint) : (output?.revisionWeights ?? []),
+            revisionId: endpoint ? latestRevisionId(endpoint, output?.revisionId) : "",
+            revisionWeights: endpoint ? servedRevisions(endpoint) : [],
             roleName,
             roleArn: output?.roleArn ?? `arn:aws:iam::${accountId}:role/${roleName}`,
             code: output?.code ?? { hash: "" },
+            ...(endpoint
+              ? endpointLimits(endpoint)
+              : { rateLimit: undefined, maxEnvironments: undefined }),
+            ...extras,
           } satisfies WebFunction["Attributes"];
-          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, extras.tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
           // Values that were Outputs at plan are resolved now.
@@ -1330,13 +1404,16 @@ export const WebFunctionProvider = () =>
           }
 
           yield* session.note(`https://${settled.domainName}`);
-          return toAttributes(
-            fn,
-            settled,
-            { roleName, roleArn },
-            { hash: identityHash },
-            revisionId,
-          );
+          const extras = yield* observeFunctionExtras({
+            functionArn: fn.functionArn,
+            roleName,
+            policyName: names.policyName,
+          });
+          return {
+            ...toAttributes(fn, settled, { roleName, roleArn }, { hash: identityHash }, revisionId),
+            ...extras,
+            tags: desiredTags,
+          };
         }),
         delete: Effect.fn(function* ({ id, output, session }) {
           // The role may already be gone — every step is idempotent. Grants

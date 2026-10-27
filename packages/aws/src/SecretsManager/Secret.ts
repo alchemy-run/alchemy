@@ -113,6 +113,11 @@ export interface Secret extends Resource<
      * Tags on the secret.
      */
     tags: Record<string, string>;
+    /**
+     * The resource-based policy (canonical JSON), as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    resourcePolicy?: string;
   },
   never,
   Providers
@@ -282,6 +287,31 @@ export const SecretProvider = () =>
         return {} as const;
       });
 
+      /**
+       * The attributes `read` and `reconcile` both report, observed on the
+       * secret, so a converged secret reads unchanged. The version is the
+       * live `AWSCURRENT` one, so a value written out of band shows up.
+       */
+      const observeSecretAttributes = Effect.fn(function* (
+        described: secretsmanager.DescribeSecretResponse & { ARN: string; Name: string },
+      ) {
+        const policy = yield* secretsmanager.getResourcePolicy({ SecretId: described.ARN }).pipe(
+          Effect.map((response) => response.ResourcePolicy),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
+        return {
+          secretArn: described.ARN,
+          secretName: described.Name,
+          versionId: Object.entries(described.VersionIdsToStages ?? {}).find(([, stages]) =>
+            stages?.includes("AWSCURRENT"),
+          )?.[0],
+          description: described.Description,
+          kmsKeyId: described.KmsKeyId,
+          tags: toTagRecord(described.Tags),
+          resourcePolicy: policy === undefined ? undefined : normalizePolicyDocument(policy),
+        };
+      });
+
       const readSecret = Effect.fn(function* (secretId: string) {
         const described = yield* secretsmanager
           .describeSecret({
@@ -367,14 +397,11 @@ export const SecretProvider = () =>
             return undefined;
           }
 
-          return {
-            secretArn: described.ARN,
-            secretName: described.Name,
-            versionId: output?.versionId,
-            description: described.Description,
-            kmsKeyId: described.KmsKeyId,
-            tags: toTagRecord(described.Tags),
-          };
+          return yield* observeSecretAttributes({
+            ...described,
+            ARN: described.ARN,
+            Name: described.Name,
+          });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           yield* validateRecoveryWindow(news.recoveryWindowInDays);
@@ -497,12 +524,18 @@ export const SecretProvider = () =>
           }
 
           yield* session.note(secretArn);
+          const final = yield* secretsmanager.describeSecret({ SecretId: secretArn });
+          const attributes = yield* observeSecretAttributes({
+            ...final,
+            ARN: secretArn,
+            Name: observed.Name,
+          });
           return {
-            secretArn,
-            secretName: observed.Name,
-            versionId: hasNewValue ? (updated.VersionId ?? output?.versionId) : output?.versionId,
-            description: news.description,
-            kmsKeyId: news.kmsKeyId,
+            ...attributes,
+            // DescribeSecret can lag a just-written value.
+            versionId: hasNewValue
+              ? (updated.VersionId ?? attributes.versionId)
+              : attributes.versionId,
             tags: desiredTags,
           };
         }),

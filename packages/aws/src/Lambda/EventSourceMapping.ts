@@ -2,7 +2,7 @@ import * as lambda from "@distilled.cloud/aws/lambda";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import { createInternalTags, diffTags, hasTags } from "alchemy/Tags";
+import { createInternalTags, diffTags, hasTags, tagRecord } from "alchemy/Tags";
 import { toWireSeconds } from "alchemy/Util/Duration";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
@@ -11,6 +11,7 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { plainJson } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 
 export type StartingPosition = "TRIM_HORIZON" | "LATEST" | "AT_TIMESTAMP";
@@ -183,6 +184,13 @@ export interface EventSourceMapping extends Resource<
      * The current state of the event source mapping.
      */
     state: string;
+    /**
+     * Enabled state, batching, retry, failure-destination, filter, scaling
+     * and metrics settings (those the props declare, plus the ones Alchemy
+     * defaults), and the tags, as observed. Lets `alchemy drift` detect a
+     * consumer disabled or reconfigured out of band.
+     */
+    configuration?: Record<string, unknown>;
   },
   never,
   Providers
@@ -616,6 +624,61 @@ export const EventSourceMappingProvider = () =>
         state: config.State!,
       });
 
+      /**
+       * The settings reconcile converges, as observed. Update leaves an
+       * omitted field unchanged, so a field is observed only when the props
+       * declare it (or Alchemy defaults it). `read` and `reconcile` share it
+       * so a converged mapping reads unchanged.
+       */
+      const observeMappingConfiguration = (
+        config: lambda.EventSourceMappingConfiguration,
+        props: EventSourceMappingProps | undefined,
+        tags: Record<string, string>,
+      ) => {
+        const declared = <V>(key: keyof EventSourceMappingProps, value: V) =>
+          props?.[key] === undefined ? undefined : value;
+        return plainJson({
+          // Transitional states (Creating, Updating) count as enabled.
+          enabled: config.State !== "Disabled" && config.State !== "Disabling",
+          batchSize: declared("batchSize", config.BatchSize),
+          maximumBatchingWindowInSeconds: declared(
+            "maximumBatchingWindow",
+            config.MaximumBatchingWindowInSeconds,
+          ),
+          bisectBatchOnFunctionError: declared(
+            "bisectBatchOnFunctionError",
+            config.BisectBatchOnFunctionError,
+          ),
+          maximumRecordAgeInSeconds: declared("maximumRecordAge", config.MaximumRecordAgeInSeconds),
+          maximumRetryAttempts: declared("maximumRetryAttempts", config.MaximumRetryAttempts),
+          tumblingWindowInSeconds: declared("tumblingWindow", config.TumblingWindowInSeconds),
+          functionResponseTypes:
+            props === undefined || defaultFunctionResponseTypes(props) === undefined
+              ? undefined
+              : [...(config.FunctionResponseTypes ?? [])].sort(),
+          scalingConfig: declared("scalingConfig", config.ScalingConfig),
+          destinationConfig: declared("destinationConfig", config.DestinationConfig),
+          filterCriteria: declared("filterCriteria", config.FilterCriteria),
+          kmsKeyArn: declared("kmsKeyArn", config.KMSKeyArn),
+          metricsConfig:
+            props === undefined || defaultMetricsConfig(props) === undefined
+              ? undefined
+              : config.MetricsConfig,
+          provisionedPollerConfig: declared(
+            "provisionedPollerConfig",
+            config.ProvisionedPollerConfig,
+          ),
+          loggingConfig: declared("loggingConfig", config.LoggingConfig),
+          tags,
+        });
+      };
+
+      const readMappingTags = (mappingArn: string) =>
+        lambda.listTags({ Resource: mappingArn }).pipe(
+          retryTransient,
+          Effect.map((r) => tagRecord(r.Tags)),
+        );
+
       const deleteMapping = (uuid: string) =>
         lambda.deleteEventSourceMapping({ UUID: uuid }).pipe(
           Effect.retry({
@@ -628,6 +691,45 @@ export const EventSourceMappingProvider = () =>
 
       return {
         stables: ["uuid", "eventSourceMappingArn"],
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          let config: lambda.EventSourceMappingConfiguration | undefined;
+          if (output?.uuid) {
+            config = yield* lambda
+              .getEventSourceMapping({ UUID: output.uuid })
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          } else if (olds?.functionName && olds.eventSourceArn) {
+            // No persisted UUID (interrupted create): find this stack's
+            // mapping for the function and source by its ownership tags.
+            const expectedInternalTags = yield* createEventSourceMappingTags(id);
+            config = yield* lambda.listEventSourceMappings
+              .pages({ FunctionName: olds.functionName })
+              .pipe(
+                Stream.flatMap((page) => Stream.fromIterable(page.EventSourceMappings ?? [])),
+                Stream.filter((m) => m.EventSourceArn === olds.eventSourceArn && !!m.UUID),
+                Stream.filterEffect((m) =>
+                  readMappingTags(
+                    `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${m.UUID}`,
+                  ).pipe(Effect.map((tags) => hasTags(expectedInternalTags, tags))),
+                ),
+                Stream.runHead,
+                Effect.map(Option.getOrUndefined),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              );
+          }
+          if (!config?.UUID || config.State === "Deleting") return undefined;
+          const tags = yield* readMappingTags(
+            `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${config.UUID}`,
+          ).pipe(
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed({} as Record<string, string>),
+            ),
+          );
+          return {
+            ...configToAttrs(config),
+            configuration: observeMappingConfiguration(config, olds, tags),
+          };
+        }),
         diff: Effect.fn(function* ({ news, olds }) {
           // `functionName` is required, so this narrows `news` to the props object.
           if (!("functionName" in news)) return;
@@ -861,7 +963,10 @@ export const EventSourceMappingProvider = () =>
 
           yield* session.note(config.EventSourceMappingArn ?? uuid);
 
-          return configToAttrs(config);
+          return {
+            ...configToAttrs(config),
+            configuration: observeMappingConfiguration(config, news, desiredTags),
+          };
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* deleteMapping(output.uuid);

@@ -231,7 +231,17 @@ export const KvRoutesUpdateProvider = () =>
         list: () => Effect.succeed([]),
         read: withKvsRegionFn(
           Effect.fn(function* ({ output }) {
-            return output;
+            if (output === undefined) return undefined;
+            // The managed state is one entry in the route table: report the
+            // update missing when the entry is gone so drift re-adds it.
+            const { routes } = yield* retryForKvsReadiness(
+              getRoutes(output.store, `${output.namespace}:${output.key}`),
+            ).pipe(
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed({ routes: [] as string[] }),
+              ),
+            );
+            return routes.includes(output.entry) ? output : undefined;
           }),
         ),
         reconcile: withKvsRegionFn(
