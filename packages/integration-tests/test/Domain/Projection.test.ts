@@ -302,7 +302,7 @@ describe("Domain Projection", () => {
     Effect.gen(function* () {
       const wallets = yield* Wallet;
       const receipt = yield* wallets.send(sam, new Deposit({ amount: 40 }));
-      const api = yield* WalletApi.testClient;
+      const api = yield* WalletApi.clientInProcess;
       const asSam = { headers: { "x-viewer": "sam" } };
       const latest = yield* api.WalletCard.peek("sam-1", {
         ...asSam,

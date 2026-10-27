@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { expect } from "@alchemy.run/test";
@@ -24,14 +23,6 @@ import BoundService from "./fixtures/service.ts";
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
 
 const HELLO_IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
 
@@ -168,7 +159,7 @@ const fetchJson = <A>(url: string) =>
     return (yield* response.json) as A;
   });
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "effect-native Function grants resource-scoped IAM and revokes it when a binding is removed",
   (stack) =>
     Effect.gen(function* () {
@@ -260,7 +251,7 @@ test.provider.skipIf(!dockerAvailable)(
 );
 
 // Memorystore Redis provisioning takes 5-10 minutes.
-test.provider.skipIf(!dockerAvailable || !process.env.GCP_TEST_SLOW || !!process.env.FAST)(
+test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
   "effect-native Function with Memorystore Redis over Direct VPC",
   (stack) =>
     Effect.gen(function* () {

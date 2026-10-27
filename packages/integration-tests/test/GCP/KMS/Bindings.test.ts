@@ -4,7 +4,7 @@ import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import KmsBindingsHost, { Cipher } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -15,7 +15,7 @@ let baseUrl: string;
 let keyName: string;
 let hostAccount: string;
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "KMS Bindings",
   { tags: ["provider:gcp", "provider:gcp:kms", "provider:gcp:run", "live"] },
   () => {

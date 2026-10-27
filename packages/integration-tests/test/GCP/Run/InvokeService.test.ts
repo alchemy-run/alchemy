@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
@@ -13,14 +12,6 @@ import InvokeCaller from "./fixtures/invoke-caller.ts";
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
 
 interface CallerBody {
   status: number;
@@ -48,7 +39,7 @@ const getUntil = <A>(
     }),
   );
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "InvokeService calls a private service with a Google-signed ID token",
   (stack) =>
     Effect.gen(function* () {

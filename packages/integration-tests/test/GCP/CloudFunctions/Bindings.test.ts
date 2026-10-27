@@ -6,7 +6,7 @@ import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import CloudFunctionsBindingsHost from "./fixtures/bindings-host.ts";
 import TargetFunction from "./fixtures/target-function.ts";
 
@@ -46,7 +46,7 @@ const expectFunctionGrants = Effect.gen(function* () {
 });
 
 // The target function's gen2 build takes 2-4 minutes.
-describe.skipIf(!dockerAvailable || !!process.env.FAST)(
+describe.skipIf(!!process.env.FAST)(
   "CloudFunctions Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:cloudfunctions", "provider:gcp:run", "live"],
