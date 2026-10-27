@@ -4,7 +4,7 @@ import * as spanner from "@distilled.cloud/gcp/spanner_v1";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import SpannerBindingsHost, { App, Db, ITEMS_DDL, Schema } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -40,7 +40,7 @@ const instanceRoles = Effect.suspend(() =>
     .pipe(Effect.map(rolesOf)),
 );
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "Spanner Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:spanner", "provider:gcp:run", "live"],

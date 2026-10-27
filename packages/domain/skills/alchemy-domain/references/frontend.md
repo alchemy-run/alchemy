@@ -82,6 +82,8 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
 
 Watch state with `View.watch(key)`, and watch emitted events with `View.events(key)` (e.g. statement lines). A failed `validate` ends the watch with its rejection.
 
+To show data at first paint, read `View.snapshot(key)` (on the server, or in `init`): it gives `{ state, cursor }` from one read. Start the feed with `View.events(key, { after: cursor })`, so a write between the two reads arrives once and none is missed.
+
 ## Tracing from the browser
 
 foldkit wraps every Command in a span, and Api calls carry the trace to the server (live reads too). Put a tracer in `resources` that exports to the app's own origin, and collect it in the server Worker with `Telemetry.relay`, which forwards it with the server's credentials:
@@ -109,6 +111,8 @@ Never put an ingest token in the browser. Workers Observability can't receive br
 
 - **Optimistic UI.** Send each command with a `commandId` the app chooses, and show it as pending. The view event carrying that `commandId` confirms it, and a typed rejection marks it rejected. Show the server's balance plus every unacknowledged line, so nothing is ever rolled back.
 - **Offline intents.** Record what the user asked for, never facts the server owns. Queue unreachable sends in order and persist them to `localStorage`. Deliver them when back online, deduplicated by `commandId`. A conflict is just a typed rejection.
+
+- **Predicted outcome.** `MyAggregate.predict(state, command, { id, now, context })` runs the aggregate's own `decide` and `evolve`: `Accepted` (events, envelopes, next state), `Rejected` (the same rejection the server returns), or `Unpredictable` (only the server can tell: `decide` suspended, died, or broke its declaration). `MyView.evolve(state, { name, event, source, envelope })` folds a predicted event like the server's view. `context` is required, by type, for whatever the command's middleware provides: build it from a client-side Layer of the same services (`yield* Layer.build(ClientSession)`). Still confirm from the stream.
 
 A local mirror of server aggregates, or local-authority sync, isn't supported. It needs a sync engine or CRDTs.
 

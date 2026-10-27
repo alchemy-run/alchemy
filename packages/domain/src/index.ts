@@ -79,15 +79,34 @@ export declare namespace Aggregate {
   export type Ref<A extends AggregateModule.Any = AggregateModule.Any> = AggregateModule.Ref<A>;
   /** What an accepted command returns: its stream, version, events and reply. */
   export type Receipt<Ev = unknown, Reply = unknown> = AggregateModule.Receipt<Ev, Reply>;
+  export type ScheduleReceipt = AggregateModule.ScheduleReceipt;
   /** Where an event sits: its instance, stream, sequence, time and command. */
   export type Envelope<Id = string> = AggregateModule.Envelope<Id>;
   export type SendOptions = AggregateModule.SendOptions;
   export type ScheduleOptions = AggregateModule.ScheduleOptions;
-  /** The instance type of a class. */
-  export type Inst<C> = AggregateModule.Inst<C>;
+  /** The instance type of a class: `InstanceOf<typeof NotOwner>` is `NotOwner`. */
+  export type InstanceOf<C> = AggregateModule.InstanceOf<C>;
+  /** Options for `MyAggregate.predict`. */
+  export type PredictOptions<Id = string, R = never> = AggregateModule.PredictOptions<Id, R>;
+  /** What `MyAggregate.predict` gives: accepted with events and state, rejected, or unpredictable. */
+  export type Prediction<State, Ev, Rej, Id = string> = AggregateModule.Prediction<
+    State,
+    Ev,
+    Rej,
+    Id
+  >;
 }
 /** A consistency boundary that decides commands. See {@link AggregateModule.make}. */
 export const Aggregate = AggregateModule.make;
+/** A command with this id already ran, so it can't be scheduled or cancelled. */
+export const AlreadyExecuted = AggregateModule.AlreadyExecuted;
+export type AlreadyExecuted = AggregateModule.AlreadyExecuted;
+/** The scheduled command was already cancelled. */
+export const AlreadyCancelled = AggregateModule.AlreadyCancelled;
+export type AlreadyCancelled = AggregateModule.AlreadyCancelled;
+/** No command was scheduled with that id. */
+export const NotScheduled = AggregateModule.NotScheduled;
+export type NotScheduled = AggregateModule.NotScheduled;
 
 /**
  * What keys a view, policy, projection or stream: an aggregate (one instance
@@ -113,6 +132,10 @@ export declare namespace View {
   /** An event a view emitted, with its state after it. */
   export type Entry<S, E, Id = string> = ViewModule.Entry<S, E, Id>;
   export type Page<E> = ViewModule.Page<E>;
+  /** A key's state and the cursor it is valid at. */
+  export type Snapshot<S> = ViewModule.Snapshot<S>;
+  /** What `MyView.evolve` applies. */
+  export type LocalInput<Def, Key extends KeyModule.Any> = ViewModule.LocalInput<Def, Key>;
 }
 /** A read model folded from events, per key. See {@link ViewModule.make}. */
 export const View = ViewModule.make;

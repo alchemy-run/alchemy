@@ -1,14 +1,13 @@
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
-import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
 import type * as Event from "./Event.ts";
+import { DefinitionError, judge, settle } from "./internal.ts";
 import * as Key from "./Key.ts";
 import type {
   Accepted,
@@ -66,17 +65,7 @@ export interface InputMetaValue {
   appends: number;
 }
 
-/**
- * A domain definition error (duplicate tag, missing `keyOf`, …), raised while
- * the kernel is built.
- */
-export class DefinitionError extends Data.TaggedError("DefinitionError")<{
-  readonly message: string;
-}> {
-  constructor(message: string) {
-    super({ message });
-  }
-}
+export { DefinitionError };
 
 interface JsonCodec {
   readonly encode: (value: unknown) => Json;
@@ -722,53 +711,36 @@ const build = (
           // context the command was sent with (its only requirement, enforced
           // by `Aggregate.Decision`).
           if (Effect.isEffect(decision)) {
-            const exit = yield* Effect.exit(
-              Effect.provideContext(
-                decision as Effect.Effect<unknown, unknown, never>,
-                RequestContext.restore(input.context),
+            const settled = settle(
+              yield* Effect.exit(
+                Effect.provideContext(
+                  decision as Effect.Effect<unknown, unknown, never>,
+                  RequestContext.restore(input.context),
+                ),
               ),
             );
-            if (Exit.isSuccess(exit)) {
-              decision = exit.value;
-            } else {
-              const rejection = Cause.findErrorOption(exit.cause);
-              if (Option.isNone(rejection))
-                return yield* Effect.failCause(exit.cause as Cause.Cause<never>);
-              decision = rejection.value;
-            }
+            if (settled._tag === "Failed")
+              return yield* Effect.failCause(settled.cause as Cause.Cause<never>);
+            decision = settled.decision;
           }
-          if (!Array.isArray(decision)) {
-            const rejection = decision as { readonly _tag: string };
-            const codec = codecs.rejections.get(rejection._tag);
-            const declared = command.cls.rejects.find((r) => r.tag === rejection._tag);
-            if (!codec || !declared) {
-              return yield* Effect.die(
-                new DefinitionError(
-                  `${aggregate.aggregateName}.decide.${decoded._tag} returned '${rejection?._tag}', which ${decoded._tag} does not declare in rejects`,
-                ),
-              );
-            }
+          const judged = judge(aggregate.aggregateName, command.cls, decision);
+          if (judged._tag === "Undeclared") return yield* Effect.die(judged.error);
+          if (judged._tag === "Rejected") {
+            const rejection = judged.rejection;
+            const codec = codecs.rejections.get(rejection._tag)!;
+            const declared = command.cls.rejects.find((r) => r.tag === rejection._tag)!;
             yield* Effect.annotateCurrentSpan({
               "domain.outcome": rejection._tag,
               ...Telemetry.attributesOf(declared, rejection),
             });
             return { _tag: "Rejected", rejection: codec.encode(rejection) } as HandleResult;
           }
-          for (const event of decision as ReadonlyArray<{ readonly _tag: string }>) {
-            if (!command.cls.events.some((e) => e.tag === event._tag)) {
-              return yield* Effect.die(
-                new DefinitionError(
-                  `${aggregate.aggregateName}.decide.${decoded._tag} returned '${event._tag}', which ${decoded._tag} does not declare in events`,
-                ),
-              );
-            }
-          }
           const trace = yield* Telemetry.currentTrace;
           const { next, events, deliveries } = commit(
             id,
             state,
             input.version,
-            decision,
+            judged.events,
             now,
             input.commandId,
             false,
@@ -779,8 +751,8 @@ const build = (
             decoded._tag
           ];
           const reply =
-            replyFn && command.reply ? command.reply.encode(replyFn(next, decision)) : null;
-          const decided = decision as ReadonlyArray<{ readonly _tag: string }>;
+            replyFn && command.reply ? command.reply.encode(replyFn(next, judged.events)) : null;
+          const decided = judged.events;
           yield* Effect.annotateCurrentSpan({
             "domain.outcome": "accepted",
             "domain.events": decided.length,

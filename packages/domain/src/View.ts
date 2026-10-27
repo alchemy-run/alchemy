@@ -4,11 +4,12 @@ import type * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
 import type * as Effect from "effect/Effect";
 import type * as Option from "effect/Option";
-import type * as Schema from "effect/Schema";
+import * as Schema from "effect/Schema";
 import type * as Stream from "effect/Stream";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Event from "./Event.ts";
 import type { Filter } from "./Filter.ts";
+import { evolveView, type LocalViewInput } from "./internal.ts";
 import type * as Key from "./Key.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
@@ -23,15 +24,13 @@ export class WaitTimeout extends Data.TaggedError("WaitTimeout")<{
 }> {}
 
 /**
- * Raised by `query(key, { atLeast })` when the view has not applied the
- * receipt's events before the timeout.
+ * Raised by a read with `atLeast` when the view has not applied that write
+ * before the timeout. A client receives it like a rejection.
  */
-export class ConsistencyTimeout extends Data.TaggedError("ConsistencyTimeout")<{
-  readonly view: string;
-  readonly key: string;
-  readonly stream: string;
-  readonly version: number;
-}> {}
+export class ConsistencyTimeout extends Schema.TaggedError<ConsistencyTimeout>()(
+  "ConsistencyTimeout",
+  { view: Schema.String, key: Schema.String, stream: Schema.String, version: Schema.Number },
+) {}
 
 /** A handler, or one handler per named route. */
 type Handlers = {
@@ -131,7 +130,7 @@ export type StateType<S> = S extends Schema.Top ? S["Type"] : null;
 export type Output<
   From extends ReadonlyArray<unknown>,
   Events extends ReadonlyArray<Event.Any>,
-> = Events extends readonly [] ? Inputs<From>["event"] : Aggregate.Inst<Events[number]>;
+> = Events extends readonly [] ? Inputs<From>["event"] : Aggregate.InstanceOf<Events[number]>;
 
 /**
  * Where an input is delivered and what handlers receive alongside it.
@@ -236,7 +235,7 @@ export interface Definition<
    */
   readonly emit?: {
     readonly [K in HandlerKey<From>]?: Routed<
-      EmitFn<StateType<S>, Key, InputFor<From, K>, Aggregate.Inst<Events[number]>>
+      EmitFn<StateType<S>, Key, InputFor<From, K>, Aggregate.InstanceOf<Events[number]>>
     >;
   };
   /** Values derived from state when read. */
@@ -257,6 +256,16 @@ export interface Entry<S, E, Id = string> {
   readonly state: S | null;
   /** `id` is the view key, `stream` is `View/key`, `seq` counts the key's events. */
   readonly envelope: Aggregate.Envelope<Id>;
+}
+
+/**
+ * A key's state and the cursor it is valid at: the `seq` of the last event
+ * the key had emitted when the state was read (`"0"` before any).
+ */
+export interface Snapshot<S> {
+  readonly state: S | null;
+  /** Pass as `after` to `events` to receive every later entry, once. */
+  readonly cursor: string;
 }
 
 /**
@@ -289,6 +298,19 @@ export interface Host<S, Key extends Key.Any, E> {
       readonly timeout?: Duration.Input;
     },
   ) => Effect.Effect<Option.Option<S>, ConsistencyTimeout>;
+  /**
+   * Read the current state of a key together with its cursor: the `seq` of
+   * the last event the key emitted when the state was read. Pass the cursor
+   * to `events` as `after` to follow every later change once.
+   */
+  readonly snapshot: (
+    key: Key.RefOf<Key>,
+    options?: {
+      /** Wait until the view has applied this write (a command's `stream` and `version`). */
+      readonly atLeast?: { readonly stream: string; readonly version: number };
+      readonly timeout?: Duration.Input;
+    },
+  ) => Effect.Effect<Snapshot<S>, ConsistencyTimeout>;
   /** Wait until a key's state matches a filter. */
   readonly waitFor: (
     key: Key.RefOf<Key>,
@@ -448,6 +470,10 @@ export const make = <
     static readonly State = definition.state;
     /** Derived values, computed from a state when read. */
     static readonly computed = definition.computed ?? {};
+    /** Apply one input to one key's state, as the server's view does. */
+    static evolve(state: unknown, input: LocalViewInput) {
+      return evolveView({ definition }, state, input);
+    }
   } as unknown as ViewClass<
     Name,
     Definition<From, Key, S, Events, Computed, Ms, Rejects>,
@@ -457,6 +483,27 @@ export const make = <
     ComputedFns<StateType<S>, Computed>,
     Output<From, Events>
   >;
+};
+
+/** One source input, with the source's state optional (aggregates attach none). */
+type LocalSourceInput<I> = I extends {
+  readonly name: infer N;
+  readonly event: infer E;
+  readonly source: infer R;
+  readonly state: infer S;
+}
+  ? { readonly name: N; readonly event: E; readonly source: R; readonly state?: S }
+  : never;
+
+/** What {@link ViewClass.evolve} applies: a source input, its envelope, and the key. */
+export type LocalInput<Def, Key extends Key.Any> = (Def extends {
+  readonly from: infer From extends ReadonlyArray<unknown>;
+}
+  ? LocalSourceInput<Inputs<From>>
+  : never) & {
+  readonly envelope: Aggregate.Envelope;
+  /** The key to update: defaults to what `keyOf` returns, or to the source. */
+  readonly key?: Key.RefOf<Key>;
 };
 
 /**
@@ -478,6 +525,28 @@ export interface ViewClass<
   readonly State: S;
   /** Derived values, computed from a state when read. */
   readonly computed: Computed;
+  /**
+   * Apply one input (an event of a source) to one key's state, with this
+   * view's own `keyOf` and `evolve`: the state the server's view will hold
+   * after it. Use it with the events of `Aggregate.predict` to show a view's
+   * next state before the server answers. `key` defaults to what `keyOf`
+   * returns, or to the source; it is required for a view with routes.
+   *
+   * **Example:** The next balance of a predicted withdrawal
+   * ```typescript
+   * const next = outcome.events.reduce(
+   *   (state, event, i) =>
+   *     AccountSummary.evolve(state, {
+   *       name: "Account",
+   *       event,
+   *       source: Account.ref(id),
+   *       envelope: outcome.envelopes[i],
+   *     }),
+   *   summary,
+   * );
+   * ```
+   */
+  evolve(state: St | null, input: LocalInput<Def, Key>): St | null;
   readonly "~state": St;
   readonly "~events": Out;
 }

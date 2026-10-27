@@ -58,12 +58,12 @@ type Aggregates<E extends Entry> = Exclude<E, Command.Any | View.Any | DomainStr
 // ---------------------------------------------------------------- client types
 
 type ContractOf<D> = D extends Read.AnyContract ? D : never;
-type RejectsOf<D> = NonNullable<ContractOf<D>["rejects"]>[number];
+type RejectionOf<D> = Aggregate.InstanceOf<NonNullable<ContractOf<D>["rejects"]>[number]>;
 type MiddlewareOf<D> = NonNullable<ContractOf<D>["middleware"]>;
 
 /** Everything a read can fail with: the declared rejections, the middleware's errors, transport. */
 export type ReadError<D> =
-  | Aggregate.Inst<RejectsOf<D>>
+  | RejectionOf<D>
   | Middleware.Errors<MiddlewareOf<D>>
   | RpcClientError.RpcClientError;
 
@@ -81,7 +81,7 @@ export interface ViewClient<V extends View.Any> {
       readonly atLeast?: { readonly stream: string; readonly version: number };
       readonly where?: Filter<View.StateOf<V>>;
     },
-  ) => Effect.Effect<View.StateOf<V> | null, ReadError<V["definition"]>>;
+  ) => Effect.Effect<View.StateOf<V> | null, ReadError<V["definition"]> | View.ConsistencyTimeout>;
   /** The key's state, then every change. Ends with a rejection when `validate` stops allowing it. */
   readonly watch: (
     key: Key.IdOf<View.KeyOf<V>>,
@@ -102,6 +102,8 @@ export interface ViewClient<V extends View.Any> {
   readonly list: (
     key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
+      /** Wait until the view has applied this write (a command's `stream` and `version`). */
+      readonly atLeast?: { readonly stream: string; readonly version: number };
       readonly where?: Filter<View.EventOf<V>>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
@@ -109,7 +111,23 @@ export interface ViewClient<V extends View.Any> {
     },
   ) => Effect.Effect<
     View.Page<View.Entry<View.StateOf<V>, View.EventOf<V>, Key.IdOf<View.KeyOf<V>>>>,
-    ReadError<V["definition"]>
+    ReadError<V["definition"]> | View.ConsistencyTimeout
+  >;
+  /**
+   * The key's state and the cursor it is valid at, read together. Render the
+   * state, then follow `events(key, { after: cursor })`: every later change
+   * arrives once, and none is missed.
+   */
+  readonly snapshot: (
+    key: Key.IdOf<View.KeyOf<V>>,
+    options?: CallOptions & {
+      /** Wait until the view has applied this write (a command's `stream` and `version`). */
+      readonly atLeast?: { readonly stream: string; readonly version: number };
+      readonly where?: Filter<View.StateOf<V>>;
+    },
+  ) => Effect.Effect<
+    View.Snapshot<View.StateOf<V>>,
+    ReadError<V["definition"]> | View.ConsistencyTimeout
   >;
 }
 
@@ -124,7 +142,7 @@ export interface StreamClient<S extends DomainStream.Any> {
     },
   ) => Effect.Effect<
     DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>> | null,
-    ReadError<S["definition"]>
+    ReadError<S["definition"]> | View.ConsistencyTimeout
   >;
   /** The key's latest entry, then each new one. Ends with a rejection when `validate` stops allowing it. */
   readonly watch: (
@@ -431,7 +449,6 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
           host.peek(refOf(id)).pipe(Effect.orDie, Effect.map(Option.getOrNull));
         handlers[`${name}.peek`] = effect(rpcs.get, ({ key: id, atLeast }) =>
           host.peek(refOf(id), { atLeast }).pipe(
-            Effect.orDie,
             Effect.flatMap((found) => {
               const entry = Option.getOrNull(found);
               return check("get", refOf(id))(entry).pipe(Effect.as(entry));
@@ -481,7 +498,6 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
           state !== null && matches(where as Filter<unknown> | undefined, state) ? state : null;
         handlers[`${name}.get`] = effect(rpcs.get, ({ key: id, atLeast, where }) =>
           host.query(refOf(id), { atLeast }).pipe(
-            Effect.orDie,
             Effect.flatMap((found) => {
               const state = Option.getOrNull(found);
               return check("get", refOf(id))(state).pipe(Effect.as(visible(state, where)));
@@ -508,19 +524,32 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
               ),
             ),
         );
-        handlers[`${name}.list`] = effect(rpcs.list!, ({ key: id, where, order, take, after }) =>
-          host.query(refOf(id)).pipe(
-            Effect.orDie,
-            Effect.flatMap((found) => check("list", refOf(id))(Option.getOrNull(found))),
-            Effect.andThen(
-              host.list(refOf(id), {
-                where: where as Filter<unknown> | undefined,
-                order,
-                take,
-                after: after === undefined ? undefined : String(after),
-              }),
+        handlers[`${name}.snapshot`] = effect(rpcs.snapshot!, ({ key: id, atLeast, where }) =>
+          host
+            .snapshot(refOf(id), { atLeast })
+            .pipe(
+              Effect.flatMap(({ state, cursor }) =>
+                check(
+                  "get",
+                  refOf(id),
+                )(state).pipe(Effect.as({ state: visible(state, where), cursor })),
+              ),
             ),
-          ),
+        );
+        handlers[`${name}.list`] = effect(
+          rpcs.list!,
+          ({ key: id, atLeast, where, order, take, after }) =>
+            host.query(refOf(id), { atLeast }).pipe(
+              Effect.flatMap((found) => check("list", refOf(id))(Option.getOrNull(found))),
+              Effect.andThen(
+                host.list(refOf(id), {
+                  where: where as Filter<unknown> | undefined,
+                  order,
+                  take,
+                  after: after === undefined ? undefined : String(after),
+                }),
+              ),
+            ),
         );
         continue;
       }
@@ -713,7 +742,13 @@ const nest = (entries: ReadonlyArray<Entry>, flat: Flat): unknown => {
       };
     client[name] =
       entry.kind === "View"
-        ? { get: call("get"), watch: call("watch"), events: call("events"), list: call("list") }
+        ? {
+            get: call("get"),
+            watch: call("watch"),
+            events: call("events"),
+            list: call("list"),
+            snapshot: call("snapshot"),
+          }
         : entry.kind === "Stream"
           ? { peek: call("peek"), watch: call("watch"), events: call("events"), list: call("list") }
           : { get: call("get"), watch: call("watch"), events: call("events") };
@@ -1108,7 +1143,7 @@ export const protocolWebSocket = (
 /** The Schema of a union of rejection classes; `Schema.Never` when there are none. */
 type RejectionUnion<R> = [R] extends [never]
   ? typeof Schema.Never
-  : Schema.Codec<Aggregate.Inst<R>, Schema.Codec.Encoded<R>>;
+  : Schema.Codec<Aggregate.InstanceOf<R>, Schema.Codec.Encoded<R>>;
 
 /**
  * Any Api class. Use it to write code that works with every Api, such as a

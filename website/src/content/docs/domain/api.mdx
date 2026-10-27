@@ -46,7 +46,7 @@ const { reply } = yield* bank.DepositMoney({ target: accountId, amount: 500 });
 
 ### Views
 
-A view becomes a namespace with four reads: `get` for the current state, `watch` for the state and every change, `events` for its emitted events, history first, and `list` for a page of them. `get` also takes `atLeast`, to read your own write. Its middleware and `validate` decide who may read which key, on every read and on every change while a client watches.
+A view becomes a namespace with five reads: `get` for the current state, `watch` for the state and every change, `events` for its emitted events, history first, `list` for a page of them, and `snapshot` for the state with the cursor it is valid at. `get`, `list` and `snapshot` also take `atLeast`, to read your own write, and fail with `ConsistencyTimeout` if the view hasn't applied it within 10 seconds. Its middleware and `validate` decide who may read which key, on every read and on every change while a client watches.
 
 ```typescript title="packages/server/test/apiEntries.ts"
 const summary = yield* bank.AccountSummary.get(accountId);
