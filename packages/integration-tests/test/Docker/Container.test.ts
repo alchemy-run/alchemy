@@ -816,6 +816,43 @@ describe(
       }),
     );
 
+    test.provider("limits memory and hardens the runtime", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const deploy = (memory: string) =>
+          stack.deploy(
+            Docker.Container("hardened-container", {
+              ...sleeper,
+              memory,
+              memorySwap: memory,
+              readOnly: true,
+              noNewPrivileges: true,
+              user: "1234:1234",
+            }),
+          );
+
+        const first = yield* deploy("64m");
+        const info = yield* docker.container.inspect(first.name);
+        expect(info.HostConfig.Memory).toBe(64 * 1024 * 1024);
+        expect(info.HostConfig.MemorySwap).toBe(64 * 1024 * 1024);
+        expect(info.HostConfig.ReadonlyRootfs).toBe(true);
+        expect(info.HostConfig.SecurityOpt).toContain("no-new-privileges");
+        expect(info.Config.User).toBe("1234:1234");
+        expect(yield* exec(first.name, "id", "-u")).toBe("1234");
+        expect(yield* exec(first.name, "grep", "NoNewPrivs", "/proc/self/status")).toMatch(
+          /NoNewPrivs:\s+1/,
+        );
+        const denied = yield* exec(first.name, "touch", "/alchemy-write").pipe(Effect.flip);
+        expect(denied._tag).toBe("PlatformError");
+
+        // Unchanged props keep the container; a new limit replaces it.
+        const same = yield* deploy("64m");
+        expect(same.id).toBe(first.id);
+        const replaced = yield* deploy("128m");
+        expect(replaced.id).not.toBe(first.id);
+      }),
+    );
+
     const invalidOptions: Array<[string, Partial<Docker.ContainerProps>]> = [
       [
         "ports",

@@ -119,6 +119,15 @@ healthcheck intervals take Effect `Duration` strings like
 `"5 seconds"`, and `start: true` actually runs the container
 (the default creates it stopped).
 
+To limit and harden a container, set `memory`, `readOnly`,
+`noNewPrivileges`, and `user`. `memory` takes Docker's byte suffixes
+(`"512m"`, `"2g"`). If the container goes over it, the kernel kills a
+process inside the container instead of starving the host.
+`readOnly: true` mounts the root filesystem read-only, so every
+writable path must be a volume. `noNewPrivileges: true` stops
+processes from gaining privileges through setuid binaries. Changing
+any of these replaces the container.
+
 ## Read the bound ports
 
 ```typescript
