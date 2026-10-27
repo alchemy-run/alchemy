@@ -2,18 +2,38 @@ import * as Effect from "effect/Effect";
 import * as RpcServer from "./RpcServer.ts";
 import { SESSION_ENV_PARAM } from "./RpcServerEnvironment.ts";
 import type { ServerRpcSession } from "./RpcServerSession.ts";
+import { isAuthorizedRpcRequest } from "./RpcToken.ts";
+
+const HOSTNAME = "127.0.0.1";
 
 export const RpcServerBun = RpcServer.layerServer(
-  Effect.fn(function* ({ parentConnected, parentDisconnected, createRpcSession }) {
+  Effect.fn(function* ({ token, parentConnected, parentDisconnected, createRpcSession }) {
     const server = yield* Effect.sync(() =>
       Bun.serve<
         | { type: "session"; session: ServerRpcSession<any> }
         | { type: "pending"; sessionEnv: string | undefined }
         | { type: "parent" }
       >({
+        // Without an explicit hostname Bun listens on every interface (while
+        // `server.hostname` still reports "localhost").
+        hostname: HOSTNAME,
         port: 0,
         fetch: (request, server) => {
           const url = new URL(request.url);
+          if (
+            !isAuthorizedRpcRequest(
+              {
+                url: request.url,
+                headers: {
+                  host: request.headers.get("host"),
+                  origin: request.headers.get("origin"),
+                },
+              },
+              { token, host: `${HOSTNAME}:${server.port}` },
+            )
+          ) {
+            return new Response("Unauthorized", { status: 401 });
+          }
           if (
             server.upgrade(request, {
               data:
@@ -68,7 +88,7 @@ export const RpcServerBun = RpcServer.layerServer(
     );
     yield* Effect.addFinalizer(() => Effect.sync(() => server.stop(true)));
     return {
-      url: `ws://${server.hostname}:${server.port}`,
+      url: `ws://${HOSTNAME}:${server.port}`,
     };
   }),
 );

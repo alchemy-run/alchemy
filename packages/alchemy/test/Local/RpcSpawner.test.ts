@@ -1,3 +1,4 @@
+import * as os from "node:os";
 import { describe, expect, it } from "@alchemy.run/test";
 import { newWebSocketRpcSession, type RpcStub } from "capnweb";
 import * as Duration from "effect/Duration";
@@ -20,6 +21,7 @@ import {
   parseSidecarLogLine,
   type RpcSpawnPayload,
 } from "@/Local/RpcSpawner.ts";
+import { RPC_TOKEN_PARAM, rpcUrlPath } from "@/Local/RpcToken.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import {
   assertPidExited,
@@ -127,6 +129,64 @@ describe(
       { timeout: 60_000 },
     );
 
+    it.live(
+      "refuses spawner requests without the run's token or from a browser",
+      () =>
+        Effect.gen(function* () {
+          const url = yield* RpcSpawner.useSync((spawner) => spawner.url);
+          const payload = samplePayload(FIXTURE_TS_URL);
+          const tokenless = new URL(url);
+          tokenless.searchParams.delete(RPC_TOKEN_PARAM);
+          expect((yield* postRaw(tokenless.toString(), payload)).status).toBe(401);
+          const forged = new URL(url);
+          forged.searchParams.set(RPC_TOKEN_PARAM, "forged");
+          expect((yield* postRaw(forged.toString(), payload)).status).toBe(401);
+          // A web page can learn nothing about the URL, but it can try.
+          const client = yield* HttpClient.HttpClient;
+          const fromPage = yield* client
+            .execute(
+              HttpClientRequest.post(url).pipe(
+                HttpClientRequest.setHeader("origin", "https://evil.example"),
+                HttpClientRequest.setBody(
+                  HttpBody.text(JSON.stringify(payload), "application/json"),
+                ),
+              ),
+            )
+            .pipe(Effect.orDie);
+          expect(fromPage.status).toBe(401);
+          const logs = yield* client
+            .get(rpcUrlPath(tokenless.toString(), LOGS_PATH))
+            .pipe(Effect.orDie);
+          expect(logs.status).toBe(401);
+        }).pipe(Effect.provide(services)),
+      { timeout: 60_000 },
+    );
+
+    it.live(
+      "sidecars accept only token-bearing loopback connections",
+      () =>
+        Effect.gen(function* () {
+          const url = yield* RpcSpawner.useSync((spawner) => spawner.url);
+          const wsUrl = new URL(yield* post(url, samplePayload(FIXTURE_TS_URL)));
+          expect(wsUrl.hostname).toBe("127.0.0.1");
+          expect(yield* canOpenWebSocket(wsUrl)).toBe(true);
+          const tokenless = new URL(wsUrl);
+          tokenless.searchParams.delete(RPC_TOKEN_PARAM);
+          expect(yield* canOpenWebSocket(tokenless)).toBe(false);
+          expect(yield* canOpenWebSocket(rpcUrlPath(tokenless.toString(), "/parent"))).toBe(false);
+          // Not reachable through any other interface (the Bun server used
+          // to listen on all of them).
+          for (const address of Object.values(os.networkInterfaces())
+            .flat()
+            .filter((info) => info?.family === "IPv4" && !info.internal)) {
+            const lan = new URL(wsUrl);
+            lan.hostname = address!.address;
+            expect(yield* canOpenWebSocket(lan)).toBe(false);
+          }
+        }).pipe(Effect.provide(services)),
+      { timeout: 60_000 },
+    );
+
     it(
       "client parser ignores heartbeat frames",
       () => {
@@ -141,7 +201,7 @@ describe(
         Effect.gen(function* () {
           const url = yield* RpcSpawner.useSync((spawner) => spawner.url);
           const client = yield* HttpClient.HttpClient;
-          const response = yield* client.get(new URL(LOGS_PATH, url).toString());
+          const response = yield* client.get(rpcUrlPath(url, LOGS_PATH));
           const frames = yield* response.stream.pipe(
             Stream.decodeText,
             Stream.splitLines,
@@ -242,7 +302,7 @@ describe(
             if (r.status !== 200) {
               return { unusable: true } as const;
             }
-            const usable = yield* canOpenWebSocket(new URL("/parent", r.body));
+            const usable = yield* canOpenWebSocket(rpcUrlPath(r.body, "/parent"));
             return { unusable: !usable } as const;
           }).pipe(
             Effect.flatMap((r) =>
@@ -266,7 +326,7 @@ describe(
           // Subscribe BEFORE spawning (headers received = subscription
           // registered server-side) — with a subscriber connected, the
           // spawner must route sidecar output here instead of its console.
-          const response = yield* client.get(new URL(LOGS_PATH, url).toString());
+          const response = yield* client.get(rpcUrlPath(url, LOGS_PATH));
           const collector = yield* response.stream.pipe(
             Stream.decodeText,
             Stream.splitLines,
@@ -340,7 +400,7 @@ const withEchoHandlers = <A>(
   use: (handlers: Pick<EchoClient, "echo" | "env">) => Effect.Effect<A>,
 ): Effect.Effect<A, Error> =>
   Effect.gen(function* () {
-    yield* openWebSocket(new URL("/parent", rpcUrl));
+    yield* openWebSocket(rpcUrlPath(rpcUrl, "/parent"));
     // Sessions carry their stack environment (real clients — the
     // RpcProviderProxy — always send one; a session without it is an error).
     const sessionUrl = new URL(rpcUrl);

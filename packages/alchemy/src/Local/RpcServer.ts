@@ -22,6 +22,7 @@ import {
   type ServerRpcSession,
   type ServerWebSocketLike,
 } from "./RpcServerSession.ts";
+import { makeRpcToken, withRpcToken } from "./RpcToken.ts";
 
 /**
  * A service that exposes one or more resource providers over RPC.
@@ -346,11 +347,16 @@ export const launch = (providers: ProviderLayer | ProviderGroupLoader) =>
 
 /**
  * Constructs an `RpcServer` layer using the given server implementation.
- * @param serve - A function that spawns a websocket server and returns its URL.
+ * @param serve - A function that spawns a loopback websocket server and returns its URL.
  * @returns An `RpcServer` layer.
  */
 export const layerServer = (
   serve: (handlers: {
+    /**
+     * The per-run secret every connection must present (see `RpcToken.ts`).
+     * The server refuses an upgrade without it before creating a session.
+     */
+    token: string;
     /**
      * Creates a new RPC session over the given websocket. `sessionEnv` is
      * the raw {@link SessionEnvironment} JSON from the websocket URL's
@@ -372,7 +378,9 @@ export const layerServer = (
       const providers = yield* SessionProviders;
       const connected = yield* Deferred.make<void>();
       const disconnected = yield* Deferred.make<void>();
+      const token = makeRpcToken();
       const { url } = yield* serve({
+        token,
         createRpcSession: (ws, sessionEnv) => {
           const lease: SessionLease = { closed: false, calls: new Set() };
           let testOwned = false;
@@ -404,7 +412,9 @@ export const layerServer = (
         parentConnected: () => Deferred.doneUnsafe(connected, Effect.void),
         parentDisconnected: () => Deferred.doneUnsafe(disconnected, Effect.void),
       });
-      yield* Console.log(`<ALCHEMY_RPC_ADDRESS>${url}</ALCHEMY_RPC_ADDRESS>`);
+      // Only the spawner reads this (the child's stdout is piped to it), so
+      // the token reaches exactly the process that started the server.
+      yield* Console.log(`<ALCHEMY_RPC_ADDRESS>${withRpcToken(url, token)}</ALCHEMY_RPC_ADDRESS>`);
       yield* Deferred.await(connected).pipe(Effect.timeout("10 seconds")); // TODO(john): should the timeout be shorter?
       yield* Deferred.await(disconnected);
       return yield* Effect.interrupt;
