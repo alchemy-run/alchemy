@@ -4,6 +4,7 @@ import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { PlatformError } from "effect/PlatformError";
@@ -80,7 +81,7 @@ import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
 import { hashInput } from "./Util/sha256.ts";
 
 export type AppliedPlan<P extends Plan> = {
-  [id in keyof P["resources"]]: P["resources"][id] extends Delete | undefined | never
+  [id in keyof P["resources"]]: P["resources"][id] extends Delete | undefined
     ? never
     : Simplify<P["resources"][id]["resource"]["attr"]>;
 };
@@ -608,7 +609,9 @@ const failureMessage = (cause: Cause.Cause<unknown>): string | undefined => {
     const message =
       Predicate.hasProperty(error, "message") && typeof error.message === "string"
         ? error.message
-        : String(error);
+        : typeof error === "string"
+          ? error
+          : Formatter.format(error);
     const line = message.split("\n", 1)[0]!;
     return tag !== undefined && !line.includes(tag) ? `${tag}: ${line}` : line;
   }
@@ -1510,7 +1513,7 @@ const executeNode = (
       return;
     }
 
-    return yield* Effect.die(`Unknown action: ${node.action}`);
+    return yield* Effect.die(`Unknown action: ${(node as { action: string }).action}`);
   }).pipe(
     Effect.catchCause((cause) =>
       // Record the failure, propagate it to any downstream resources waiting on

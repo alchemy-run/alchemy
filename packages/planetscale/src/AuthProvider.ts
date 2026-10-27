@@ -467,10 +467,8 @@ export const PlanetscaleAuth = AuthProviderLayer<
         Clock.currentTimeMillis,
       ]).pipe(
         Effect.map(([creds, now]): ProviderDetails => {
-          const sourceStr =
-            "details" in creds.source && creds.source.details
-              ? `${creds.source.type} - ${creds.source.details}`
-              : creds.source.type;
+          const source: PlanetscaleResolvedCredentials["source"] = creds.source;
+          const sourceStr = source.details ? `${source.type} - ${source.details}` : source.type;
           return Match.value(creds).pipe(
             Match.when({ type: "apiToken" }, (c) => ({
               lines: [

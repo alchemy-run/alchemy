@@ -206,7 +206,9 @@ const dialConnector = Effect.fn(function* (options: { project: string; instance:
           ? tls.checkServerIdentity(dnsName.replace(/\.$/, ""), cert)
           : cert.subject.CN === legacyName
             ? undefined
-            : new Error(`server certificate names '${cert.subject.CN}', expected '${legacyName}'`),
+            : new Error(
+                `server certificate names '${[cert.subject.CN].flat().join(", ")}', expected '${legacyName}'`,
+              ),
     });
     const fail = (cause: Error) => {
       socket.destroy();

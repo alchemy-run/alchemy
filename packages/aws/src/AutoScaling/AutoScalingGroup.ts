@@ -292,7 +292,8 @@ export const AutoScalingGroupProvider = () =>
         return {
           LaunchTemplateId: spec.launchTemplateId as string | undefined,
           LaunchTemplateName: spec.launchTemplateName as string | undefined,
-          Version: spec.version === undefined ? "$Default" : String(spec.version),
+          Version:
+            spec.version === undefined ? "$Default" : String(spec.version as string | number),
         };
       };
 

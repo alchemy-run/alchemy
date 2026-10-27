@@ -559,7 +559,7 @@ type ObservedPolicy = {
 type RawPolicy = {
   id?: string | null;
   name?: string | null;
-  decision?: PolicyDecision | null | string;
+  decision?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 } & { [K in (typeof PRESERVED_FIELDS)[number]]?: unknown };

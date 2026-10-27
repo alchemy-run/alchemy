@@ -305,7 +305,7 @@ export const makeBucketState = (options: BucketStateOptions) =>
               );
               if (reclaimed === undefined) {
                 cursor.lost = true;
-                return yield* Effect.fail(lostError(stack, stage));
+                return yield* lostError(stack, stage);
               }
               cursor.version = reclaimed;
               return;

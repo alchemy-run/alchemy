@@ -362,10 +362,16 @@ const toLanRequest = (lan: MagicSiteAclLan): AclLanRequest => ({
   subnets: lan.subnets,
 });
 
+const byString = (x: string | number, y: string | number) => {
+  const a = String(x);
+  const b = String(y);
+  return a < b ? -1 : a > b ? 1 : 0;
+};
+
 const sameList = (
   a: readonly (string | number)[] | null | undefined,
   b: readonly (string | number)[] | undefined,
-): boolean => [...(a ?? [])].sort().join(",") === [...(b ?? [])].sort().join(",");
+): boolean => [...(a ?? [])].sort(byString).join(",") === [...(b ?? [])].sort(byString).join(",");
 
 const lanDirty = (observed: ObservedAclLan | null | undefined, desired: AclLanRequest): boolean =>
   (observed?.lanId ?? undefined) !== desired.lanId ||

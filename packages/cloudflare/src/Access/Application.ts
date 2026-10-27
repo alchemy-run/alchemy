@@ -1028,7 +1028,7 @@ const narrowApp = (raw: {
   id?: string | null;
   aud?: string | null;
   name?: string | null;
-  type?: ApplicationType | null | string;
+  type?: string | null;
   domain?: string | null;
   destinations?: ReadonlyArray<unknown> | null;
   oauthConfiguration?: RawOAuthConfiguration | null;

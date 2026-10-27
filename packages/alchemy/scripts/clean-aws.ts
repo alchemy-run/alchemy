@@ -280,7 +280,8 @@ const deleteNatGateways = Effect.gen(function* () {
 
   yield* Effect.forEach(
     ids,
-    (id) => ignoreFailure(`NAT gateway ${id}`, ec2.deleteNatGateway({ NatGatewayId: id } as any)),
+    (id) =>
+      ignoreFailure(`NAT gateway ${String(id)}`, ec2.deleteNatGateway({ NatGatewayId: id } as any)),
     { concurrency: 1, discard: true },
   );
 

@@ -339,7 +339,7 @@ const aggregateObject = (kit: AggregateKit) =>
     return Effect.gen(function* () {
       const outbox = yield* queue<Delivery>("outbox", kit.deliver);
       const currentMeta = state.storage
-        .get<{ state: Json | null; version: number }>("meta")
+        .get<{ state: Json; version: number }>("meta")
         .pipe(Effect.map((meta) => meta ?? { state: null, version: 0 }));
       const eventsAfter = (after: number) =>
         state.storage
@@ -351,7 +351,7 @@ const aggregateObject = (kit: AggregateKit) =>
           const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
           if (duplicate) return { sent: duplicate, kick: false };
           const current = (yield* state.storage.get<{
-            state: Json | null;
+            state: Json;
             version: number;
           }>("meta")) ?? {
             state: null,
@@ -895,9 +895,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
               // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
               changes: (id) =>
                 Stream.fromEffectSchedule(
-                  unwrapDefects<{ state: Json | null; version: number }>(
-                    namespace.getByName(id).state(),
-                  ),
+                  unwrapDefects<{ state: Json; version: number }>(namespace.getByName(id).state()),
                   POLL,
                 ).pipe(Stream.changesWith((a, b) => a.version === b.version)),
               tail: (id, from) =>

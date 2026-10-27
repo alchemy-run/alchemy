@@ -157,7 +157,7 @@ async function main() {
   const options = {
     width: OG_DEFAULT_W,
     height: OG_DEFAULT_H,
-    fonts: await brandFonts,
+    fonts: brandFonts,
     emoji: "from-font" as const,
   };
   await writeFile(path.join(publicDir, "og-default.svg"), await renderSvg(card, options));

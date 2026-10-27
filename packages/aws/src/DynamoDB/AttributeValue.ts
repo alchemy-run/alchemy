@@ -165,7 +165,6 @@ type ValueType =
   | "M"
   | "NULL"
   | "N"
-  | "M"
   | "S"
   | "SS"
   | "BS"

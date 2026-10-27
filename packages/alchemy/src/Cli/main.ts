@@ -107,7 +107,7 @@ const commands = await Promise.all(
   commandMetadata.map(([name, description]) =>
     loadEveryCommand || name === requestedCommand
       ? loadCommand(name)
-      : placeholderCommand(name, description),
+      : Promise.resolve(placeholderCommand(name, description)),
   ),
 );
 

@@ -35,6 +35,7 @@ import { physicalInstanceName } from "./internal/EnvName.ts";
 import type { ObservedConnectionRecord } from "./internal/Observed.ts";
 import { PrismaPaginationError } from "./internal/Pagination.ts";
 import {
+  concreteIdOf,
   concreteIdsChanged,
   isInputObject,
   isPrismaDevId,
@@ -512,9 +513,7 @@ const ProviderLive = () =>
         reconcile: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
           const databaseId = yield* resolveDatabaseId(news.database);
           const name = yield* validateConnectionName(news.name ?? id);
-          const connectionId = isPrismaDevId(output?.connectionId)
-            ? undefined
-            : output?.connectionId;
+          const connectionId = concreteIdOf(output?.connectionId);
           let connection: ObservedConnectionRecord | undefined = connectionId
             ? yield* getConnection({ id: connectionId }).pipe(
                 Effect.map((response) => response.data),

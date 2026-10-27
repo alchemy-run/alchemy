@@ -100,7 +100,7 @@ export const UsagePlanKeyProvider = () =>
               keyId: news.keyId as string,
               keyType: news.keyType ?? "API_KEY",
             });
-            yield* session.note(`Linked key ${news.keyId} to usage plan ${news.usagePlanId}`);
+            yield* session.note(`Linked key ${keyId} to usage plan ${usagePlanId}`);
             observed = yield* ag.getUsagePlanKey({
               usagePlanId,
               keyId: created.id ?? keyId,

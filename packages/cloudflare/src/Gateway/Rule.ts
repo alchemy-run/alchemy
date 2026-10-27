@@ -431,7 +431,7 @@ const undefArr = <T>(
 const narrowRule = (raw: {
   id?: string | null;
   name?: string | null;
-  action?: RuleAction | null | string;
+  action?: string | null;
   filters?: ReadonlyArray<RuleFilter | null> | null;
   traffic?: string | null;
   identity?: string | null;

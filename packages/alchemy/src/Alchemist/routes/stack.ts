@@ -118,7 +118,7 @@ export function plan(input: FilteredPlanInput) {
 }
 
 const planStack = Effect.fn("Alchemist.stack.plan")(function* (input: FilteredPlanInput) {
-  type Output = StackModuleOutput<unknown> | undefined;
+  type Output = StackModuleOutput<unknown>;
   if (
     input.operation === "destroy" &&
     (input.include !== undefined || input.exclude !== undefined)

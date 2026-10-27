@@ -95,7 +95,11 @@ const canonical = (value: unknown): unknown => {
     if (items.length === 0) return undefined;
     const allScalar = items.every((item) => item === undefined || typeof item !== "object");
     return allScalar
-      ? [...items].sort((left, right) => String(left).localeCompare(String(right)))
+      ? [...items].sort((left, right) =>
+          String(left as string | number | boolean).localeCompare(
+            String(right as string | number | boolean),
+          ),
+        )
       : items;
   }
   if (typeof value === "object") {

@@ -159,7 +159,7 @@ export const Version = Object.assign(
     Provider: VersionResource.Provider,
     Self: VersionResource.Self,
     Aliases: VersionResource.Aliases,
-    ref: VersionResource.ref as VersionClass["ref"],
+    ref: ((id, options) => VersionResource.ref(id, options)) as VersionClass["ref"],
   },
 ) as unknown as VersionClass;
 

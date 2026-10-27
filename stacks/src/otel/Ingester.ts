@@ -75,7 +75,7 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
         if (otlp) {
           const tokenRaw = yield* tokenValue.pipe(Effect.map(Redacted.value));
           const token = Redacted.isRedacted(tokenRaw)
-            ? Redacted.value(tokenRaw)
+            ? String(Redacted.value(tokenRaw))
             : (tokenRaw as string);
 
           const body = yield* request.arrayBuffer;

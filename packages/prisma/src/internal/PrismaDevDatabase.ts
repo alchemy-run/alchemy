@@ -270,7 +270,7 @@ export const ensurePrismaDevDatabase = Effect.fn(function* (
   const config: DatabaseDev = dev ?? {};
   if (config.provider !== undefined && config.provider !== "@prisma/dev") {
     return yield* Effect.fail(
-      new Error(`Unsupported Prisma local database provider ${config.provider}`),
+      new Error(`Unsupported Prisma local database provider ${String(config.provider)}`),
     );
   }
   const migrateTimeoutSeconds = config.migrateTimeoutSeconds ?? 900;

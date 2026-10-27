@@ -22,7 +22,7 @@ import { RootPolicyType as OrganizationsRootPolicyType } from "./RootPolicyType.
 import type { TrustedServiceAccess } from "./TrustedServiceAccess.ts";
 import { TrustedServiceAccess as OrganizationsTrustedServiceAccess } from "./TrustedServiceAccess.ts";
 
-export type TenantTargetKey = "root" | string;
+export type TenantTargetKey = string;
 
 export interface TenantAccountSpec extends Omit<AccountProps, "parentId" | "name" | "email"> {
   /** Stable key identifying the account within the tenant (used in logical IDs and `targetKeys`). */
@@ -517,7 +517,7 @@ const createTenantIdentityCenter = Effect.fn(function* ({
 
     const key =
       assignmentSpec.key ??
-      `${assignmentSpec.permissionSetKey}-${assignmentSpec.accountKey}-${assignmentSpec.groupKey ?? principalId}`;
+      `${assignmentSpec.permissionSetKey}-${assignmentSpec.accountKey}-${assignmentSpec.groupKey ?? assignmentSpec.principalId}`;
 
     assignments[key] = yield* IdentityCenter.AccountAssignment(
       `${id}${toLogicalIdSegment(key)}Assignment`,

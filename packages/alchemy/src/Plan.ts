@@ -1908,7 +1908,7 @@ const makePlan = <A>(
         if (excluded && (bindingEvidence || incompleteHistory)) {
           return yield* Effect.die(
             new UnsafeSelectionBoundary({
-              message: `Cannot replace or collect old generations of '${fqn}' while '${excluded[0]}' is unselected. ${bindingEvidence ? `Historical binding-cycle dependencies recorded on '${bindingEvidence}'` : `Historical dependencies missing from '${incompleteHistory}'`} cannot be proven safe; run a full deployment.`,
+              message: `Cannot replace or collect old generations of '${fqn}' while '${String(excluded[0])}' is unselected. ${bindingEvidence ? `Historical binding-cycle dependencies recorded on '${bindingEvidence}'` : `Historical dependencies missing from '${incompleteHistory}'`} cannot be proven safe; run a full deployment.`,
             }),
           );
         }
@@ -1932,7 +1932,7 @@ const makePlan = <A>(
               new UnsafeSelectionBoundary({
                 message: `Cannot reconcile '${fqn}' with incomplete historical downstream metadata while persisted nodes are unselected: ${excludedRows
                   .map(([id]) => id)
-                  .sort()
+                  .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
                   .join(", ")}. Select them or run a full deployment.`,
               }),
             );
@@ -1965,7 +1965,7 @@ const makePlan = <A>(
             new UnsafeSelectionBoundary({
               message: `Cannot discard the last historical binding evidence while persisted nodes are unselected: ${excludedRows
                 .map(([fqn]) => fqn)
-                .sort()
+                .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
                 .join(", ")}. Select them or run a full deployment.`,
             }),
           );

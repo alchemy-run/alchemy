@@ -1475,7 +1475,7 @@ interface ManagedSgPort {
  */
 const managedSgIngress = (
   staticPorts: ManagedSgPort[],
-  dynamicPort: number | unknown | undefined,
+  dynamicPort: unknown,
 ): SecurityGroupRuleData[] => {
   const rulesOf = (entries: ManagedSgPort[]): SecurityGroupRuleData[] => {
     const seen = new Set<string>();

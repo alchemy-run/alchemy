@@ -194,7 +194,7 @@ export const make = (
         const instances = new Map<
           string,
           {
-            state: Json | null;
+            state: Json;
             version: number;
             readonly receipts: Map<string, SendResult>;
             /** Ids cancelled and not scheduled again since. */

@@ -39,7 +39,7 @@ export const AccessLive = Layer.effect(
     );
     const login = (domain: string) =>
       ChildProcess.make("cloudflared", ["access", "login", domain]).pipe(
-        spawner.spawn,
+        (command) => spawner.spawn(command),
         Effect.flatMap((process) => Stream.runCollect(process.stdout)),
         Effect.mapError((error) =>
           AccessError.make({

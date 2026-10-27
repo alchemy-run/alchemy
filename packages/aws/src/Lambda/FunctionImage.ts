@@ -209,7 +209,7 @@ export const functionImagePlatform = (architecture: "x86_64" | "arm64") => {
   if (architecture === "arm64") {
     return "linux/arm64";
   }
-  throw new Error(`Unsupported Lambda image architecture: ${architecture}`);
+  throw new Error(`Unsupported Lambda image architecture: ${architecture as string}`);
 };
 
 const hashDecodedFunctionImageBuild = Effect.fn(function* (

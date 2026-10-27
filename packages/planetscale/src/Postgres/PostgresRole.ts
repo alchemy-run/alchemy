@@ -292,7 +292,7 @@ export const PostgresRoleProvider = () =>
       //    once on create; on an observe-hit we re-use the cached
       //    plaintext from output (which is why adoption requires
       //    pre-existing state — see `read`).
-      let live: planetscale.GetRoleOutput | planetscale.CreateRoleOutput;
+      let live: planetscale.GetRoleOutput;
       let plaintext: Redacted.Redacted<string>;
       if (observed) {
         live = observed;
