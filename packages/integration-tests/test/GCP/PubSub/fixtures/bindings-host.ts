@@ -1,5 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { serveProbes } from "../../bindingHost.ts";
@@ -182,9 +183,9 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
         modifySubscriptionPushConfig: modifyPushConfig({ body: { pushConfig: {} } }),
         detachSubscription: detachSubscription(),
         getSnapshot: getSnapshot(),
-        schemaRevisions: Effect.gen(function* () {
+        // One request per step, so a slow or failing step names itself.
+        schemaCommit: Effect.gen(function* () {
           const before = yield* listSchemaRevisions();
-          const original = before.schemas?.[0]?.revisionId ?? "";
           const committed = yield* commitSchema({
             body: {
               schema: {
@@ -194,17 +195,22 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
               },
             },
           });
-          const rolledBack = yield* rollbackSchema({ body: { revisionId: original } });
-          const deleted = yield* deleteSchemaRevision({ revisionId: committed.revisionId ?? "" });
-          const after = yield* listSchemaRevisions();
           return {
-            original,
+            original: before.schemas?.at(-1)?.revisionId,
             committed: committed.revisionId,
-            rolledBackDefinition: rolledBack.definition,
-            deleted: deleted.revisionId,
-            remaining: (after.schemas ?? []).map((schema) => schema.revisionId),
           };
         }),
+        schemaRollback: Effect.gen(function* () {
+          const request = yield* HttpServerRequest;
+          const revisionId = new URL(request.url, "http://host").searchParams.get("revision") ?? "";
+          return yield* rollbackSchema({ body: { revisionId } });
+        }),
+        schemaDeleteRevision: Effect.gen(function* () {
+          const request = yield* HttpServerRequest;
+          const revisionId = new URL(request.url, "http://host").searchParams.get("revision") ?? "";
+          return yield* deleteSchemaRevision({ revisionId });
+        }),
+        schemaListRevisions: listSchemaRevisions(),
         validateInvalid: validate({
           encoding: "JSON",
           message: Buffer.from(JSON.stringify({ wrong: 1 })).toString("base64"),

@@ -77,6 +77,12 @@ interface ServiceConfig {
    * `{ "attribute": "topic", "iamKind": "pubsub.topic" }`.
    */
   grantOn?: Record<string, { attribute: string; iamKind?: string }>;
+  /**
+   * Method id → why the permission is only honoured on the project (it goes
+   * into the binding's JSDoc). The role is granted on the project instead
+   * of the bound resource.
+   */
+  projectGrant?: Record<string, string>;
 }
 
 // ============ Discovery ============
@@ -169,6 +175,7 @@ interface Variant {
   children: [string, string][];
   suffix?: [string, string];
   grantOn?: { attribute: string; iamKind?: string };
+  projectGrant?: string;
   permission: string;
   role: string;
   types: OperationTypes;
@@ -320,6 +327,7 @@ const classify = (options: {
       children,
       suffix: config.suffix?.[id],
       grantOn: config.grantOn?.[id],
+      projectGrant: config.projectGrant?.[id],
       permission,
       role: roles[permission]!,
       types,
@@ -399,7 +407,7 @@ export type ${binding.name}Shape = (
  * ${binding.description.replace(/\*\//g, "*\\/") || `Runtime binding for \`${first.methodId}\`.`}
  *
  * Bind it to a ${resourceDocs} and provide {@link ${binding.name}Http}. The
- * host gets ${grants} on ${first.grantOn ? `the resource the bound one names in \`${first.grantOn.attribute}\`` : "the bound resource"}.
+ * host gets ${grants} on ${first.projectGrant ? `the project: ${first.projectGrant}` : first.grantOn ? `the resource the bound one names in \`${first.grantOn.attribute}\`` : "the bound resource"}.
  *
  * ### Usage
  * **Example:** Call \`${first.methodId.split(".").slice(-2).join(".")}\`
@@ -424,7 +432,7 @@ const emitHttp = (service: string, config: ServiceConfig, binding: Binding) => {
   const variants = binding.variants.map((v) => {
     const resource = config.resources[v.resource]!;
     const type = resource.type ?? `GCP.${service}.${v.resource}`;
-    const iamKind = v.grantOn ? v.grantOn.iamKind : resource.iamKind;
+    const iamKind = v.projectGrant ? undefined : v.grantOn ? v.grantOn.iamKind : resource.iamKind;
     const iam = iamKind ? `{ role: "${v.role}", on: "${iamKind}" }` : `{ role: "${v.role}" }`;
     const children =
       (v.children.length

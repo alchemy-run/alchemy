@@ -20,7 +20,7 @@ export const DeleteSchemaRevisionHttp = Layer.effect(
         operation: pubsub.deleteRevisionProjectsSchemas,
         param: "name",
         suffix: ["@", "revisionId"],
-        iam: { role: "roles/pubsub.editor", on: "pubsub.schema" },
+        iam: { role: "roles/pubsub.editor" },
       },
     ],
   }),

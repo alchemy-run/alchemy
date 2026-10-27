@@ -299,11 +299,12 @@ describe(
             });
             // schemas.validateMessage is authorized on the parent project
             // (a viewer grant on the schema alone answers 403).
+            // (DeleteSchemaRevision adds its own project-level editor grant.)
             expect(
               (policy.bindings ?? [])
                 .filter((binding) => (binding.members ?? []).includes(member))
                 .map((binding) => [binding.role, binding.condition]),
-            ).toEqual([["roles/pubsub.viewer", undefined]]);
+            ).toContainEqual(["roles/pubsub.viewer", undefined]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:pubsub", "live"],
@@ -411,18 +412,35 @@ describe(
         "commit, roll back and delete a revision, granted on the schema only",
         (_stack) =>
           Effect.gen(function* () {
-            const out = yield* expectProbe<{
-              original: string;
-              committed: string;
-              rolledBackDefinition: string;
-              deleted: string;
-              remaining: string[];
-            }>(baseUrl, "schemaRevisions");
-            expect(out.committed).not.toEqual(out.original);
-            expect(out.rolledBackDefinition).not.toEqual(COMMITTED_DEFINITION);
-            expect(out.deleted).toEqual(out.committed);
-            expect(out.remaining).not.toContain(out.committed);
-            expect(out.remaining).toContain(out.original);
+            const step = <A>(route: string) =>
+              expectProbe<A>(baseUrl, route).pipe(Effect.timeout("90 seconds"));
+            const { original, committed } = yield* step<{ original: string; committed: string }>(
+              "schemaCommit",
+            );
+            expect(committed).not.toEqual(original);
+            const rolledBack = yield* step<{ definition?: string }>(
+              `schemaRollback?revision=${original}`,
+            );
+            expect(rolledBack.definition).not.toEqual(COMMITTED_DEFINITION);
+            const deleted = yield* step<{ revisionId?: string }>(
+              `schemaDeleteRevision?revision=${committed}`,
+            );
+            expect(deleted.revisionId).toEqual(committed);
+            const listed = yield* step<{ schemas?: { revisionId?: string }[] }>(
+              "schemaListRevisions",
+            );
+            const remaining = (listed.schemas ?? []).map((schema) => schema.revisionId);
+            expect(remaining).not.toContain(committed);
+            expect(remaining).toContain(original);
+
+            // A revision isn't covered by the schema's IAM policy, so
+            // DeleteSchemaRevision is granted editor on the project.
+            const { project } = yield* GcpEnvironment.current;
+            const projectPolicy = yield* resourcemanager.getIamPolicyProjects({
+              resource: `projects/${project}`,
+              body: { options: { requestedPolicyVersion: 3 } },
+            });
+            expect(rolesOf(projectPolicy, member)).toContain("roles/pubsub.editor");
             const policy = yield* pubsub.getIamPolicyProjectsSchemas({
               resource: names.genSchema,
             });

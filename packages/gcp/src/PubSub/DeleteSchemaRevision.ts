@@ -29,7 +29,7 @@ export type DeleteSchemaRevisionShape = (
  * Deletes a specific schema revision.
  *
  * Bind it to a {@link Schema} and provide {@link DeleteSchemaRevisionHttp}. The
- * host gets `roles/pubsub.editor` on the bound resource.
+ * host gets `roles/pubsub.editor` on the project: a revision (`schema@revision`) is not covered by the schema's own IAM policy.
  *
  * ### Usage
  * **Example:** Call `schemas.deleteRevision`
