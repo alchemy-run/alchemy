@@ -33,6 +33,13 @@ export const Approve = Workflow.make("Approve", {
   idempotencyKey: ({ id }) => id,
 });
 
+/** Waits for approval, then sleeps before it finishes. */
+export const Hold = Workflow.make("Hold", {
+  payload: { id: Schema.String, seconds: Schema.Number },
+  success: Schema.String,
+  idempotencyKey: ({ id }) => id,
+});
+
 /** Reserves, then charges; a declined charge releases the reservation. */
 export const Checkout = Workflow.make("Checkout", {
   payload: { id: Schema.String, decline: Schema.Boolean },
@@ -105,6 +112,25 @@ export const ApproveLive = Workflows.layer(
   }),
 );
 
+export const HoldLive = Workflows.layer(
+  Hold,
+  Effect.gen(function* () {
+    const record = yield* Recorder;
+    return Effect.fn(function* ({ id, seconds }) {
+      yield* Activity.make({ name: "requested", execute: record(id, "requested") });
+      const by = yield* DurableDeferred.await(Approval);
+      yield* Activity.make({ name: "approved", execute: record(id, `approved:${by}`) });
+      yield* DurableClock.sleep({
+        name: "hold",
+        duration: `${seconds} seconds`,
+        inMemoryThreshold: 0,
+      });
+      yield* Activity.make({ name: "released", execute: record(id, "released") });
+      return "released";
+    });
+  }),
+);
+
 export const CheckoutLive = Workflows.layer(
   Checkout,
   Effect.gen(function* () {
@@ -143,6 +169,7 @@ export const WorkflowsLive = Layer.mergeAll(
   GreetLive,
   NapLive,
   ApproveLive,
+  HoldLive,
   CheckoutLive,
   ParentLive,
 );
