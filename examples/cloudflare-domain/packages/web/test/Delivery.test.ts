@@ -38,7 +38,7 @@ it.live("retries only the unknown intent with its original id and queues the res
     expect(ids).toEqual(["page:0", "page:0", "page:0", "page:0"]);
     expect(result.outcomes).toEqual([
       { commandId: "page:0", result: "Queued", reason: Option.none() },
-      { commandId: "page:1", result: "Rejected", reason: Option.some("NotOpen") },
+      { commandId: "page:1", result: "Queued", reason: Option.none() },
     ]);
   }).pipe(Effect.provide(Client)),
 );

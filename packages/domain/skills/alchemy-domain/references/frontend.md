@@ -1,10 +1,10 @@
-# foldkit frontends
+# Foldkit frontends
 
-foldkit is event-driven like the domain. The app's Commands send domain commands, its Subscriptions turn live view reads into Messages, and `update` folds Messages into the Model. The domain package's Api gives the browser a typed client: no hand-written fetch code, no duplicated schemas.
+Foldkit is event-driven like the domain. The app's Commands send domain commands, its Subscriptions turn live view reads into Messages, and `update` folds Messages into the Model. The domain package's Api gives the browser a typed client: no hand-written fetch code, no duplicated schemas.
 
 ## The Api client as a resource
 
-Build the client once, for the app's life, and give it to foldkit as a resource. Sign in first, so the browser carries an `HttpOnly`, `SameSite=Strict` session cookie on the same origin, including on every WebSocket upgrade.
+Build the client once, for the app's life, and give it to Foldkit as a resource. Sign in first, so the browser carries an `HttpOnly`, `SameSite=Strict` session cookie on the same origin, including on every WebSocket upgrade.
 
 ```ts
 // packages/web/src/entry.ts
@@ -37,64 +37,70 @@ Runtime.run(
 );
 ```
 
-More: [Integrate with foldkit: Give the app its client](https://alchemy.run/domain/foldkit#provide-the-client-and-headers).
+More: [Integrate with Foldkit: Provide the client and headers](https://alchemy.run/domain/foldkit#provide-the-client-and-headers).
 
-## Commands call domain commands
+## Derive the Commands
+
+Use the optional `@alchemy.run/domain/Foldkit` subpath with Foldkit 0.169 or later.
 
 ```ts
-// packages/web/src/Bank.ts
-export const Register = Command.define("Register", {
-  args: { customerId: CustomerId },
-  messages: [Message.SucceededCommand, Message.FailedCommand],
-  execute: ({ customerId }) =>
-    Effect.gen(function* () {
-      const bank = yield* CustomerApi.Client;
-      yield* bank.RegisterCustomer(customerId, { name: customerId, username: Username.make(customerId) });
-      return Message.SucceededCommand();
-    }).pipe(Effect.catch((error) => Effect.succeed(Message.FailedCommand({ reason: error._tag })))),
+import * as DomainFoldkit from "@alchemy.run/domain/Foldkit";
+import { Command, Subscription } from "foldkit";
+import * as Option from "effect/Option";
+
+const BankCommands = DomainFoldkit.commands(CustomerApi);
+
+const send = BankCommands.DepositMoney({
+  target: model.accountId,
+  input: { amount: 1_000 },
+  commandId: allocation.commandId,
 });
+const command = Command.mapMessage(send, (result) => Message.ReceivedBankResult({ result }));
 ```
 
-Every typed rejection arrives as a tagged error, so `update` can show exactly why something was refused.
+Allocate ids with `DomainFoldkit.next(model.commandIds)` and store the returned state with `modifyFields`. Declare `ReceivedBankResult` with `{ result: BankCommands.Message }`. Match the result through `BankCommands.Message.match`: `SucceededDepositMoney` carries the reply and receipt; `FailedDepositMoney` carries `Rejected`, `Denied`, or `Unknown`. Preserve Rejection and middleware error fields. Retry `Unknown` with the original id because the write may have committed. Command defects also produce `Unknown`.
 
-To keep a rejection in a Message or the Model, use `CustomerApi.rejections`: one Schema for every rejection the Api's commands declare, decoding to the rejection classes. A helper for every Api takes `A extends Domain.Api.Any` and reads `api.commands`.
+More: [Integrate with Foldkit: Derive the Commands](https://alchemy.run/domain/foldkit#derive-the-commands), [Send a command from update](https://alchemy.run/domain/foldkit#send-a-command-from-update).
 
-More: [Integrate with foldkit: Send domain commands from foldkit commands](https://alchemy.run/domain/foldkit#derive-the-commands).
-
-## Subscriptions watch views
+## Follow a View's state
 
 ```ts
-export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) => ({
-  summary: entry(
-    { accountId: AccountId, online: Schema.Boolean },
-    {
-      modelToDependencies: (model) => ({ accountId: model.accountId, online: model.online }),
-      dependenciesToStream: ({ accountId, online }) =>
-        online
-          ? Stream.unwrap(Effect.gen(function* () {
-              const bank = yield* CustomerApi.Client;
-              return bank.AccountSummary.watch(accountId);
-            })).pipe(
-              Stream.map(({ state }) => Message.GotBalance({ balance: state?.balance ?? null })),
-              Stream.catch((error) => Stream.succeed(Message.FailedWatch({ reason: error._tag }))),
-            )
-          : Stream.empty,
-    },
-  ),
+const subscriptions = Subscription.make<Model, Message, Bank>()(() => ({
+  summary: DomainFoldkit.watchView(CustomerApi, "AccountSummary", {
+    key: (model: Model) => model.accountId,
+    isEnabled: (model) => model.online,
+    toMessage: ({ state, cursor }): Message => Message.ReceivedBalance({
+      balance: Option.map(state, (summary) => summary.balance),
+      cursor,
+    }),
+    onFailure: (error): Message => Message.FailedWatchSummary({ reason: error._tag }),
+    onDefect: (): Message => Message.FailedWatchSummary({ reason: "Read defect" }),
+  }),
+  statement: DomainFoldkit.viewEvents(CustomerApi, "Statement", {
+    key: (model: Model) => model.accountId,
+    cursor: (model) => model.statementCursor,
+    isEnabled: (model) => model.online,
+    onEntry: ({ event, envelope }): Message => Message.ReceivedLine({
+      commandId: envelope.commandId,
+      line: event,
+      cursor: envelope.seq,
+    }),
+    onCaughtUp: (cursor): Message => Message.CaughtUpStatement({ cursor }),
+    onFailure: (error): Message => Message.FailedReadStatement({ reason: error._tag }),
+    onDefect: (): Message => Message.FailedReadStatement({ reason: "Read defect" }),
+  }),
 }));
 ```
 
-Watch state with `View.watch(key)`, and watch emitted events with `View.events(key)` (e.g. statement lines). A failed `validate` ends the watch with its rejection.
+Store absent state and the event cursor with `Option`. Apply each line and its cursor in one update. Cursor changes do not restart the feed. `onFailure` handles typed read failures; `onDefect` receives unexpected read Causes. Interruption ends the read without a Message. Mark the feed live after `CaughtUpStatement`.
 
-`watch` sends `{ state, cursor }`; `events` sends the history, a `CaughtUp { cursor }` frame (`Domain.Read.isCaughtUp(frame)`), then live entries. Show the feed as live once `CaughtUp` arrives, drop it with `Stream.filter(Domain.Read.isEvent)`, and pass a cursor as `after` to resume with nothing twice. Aggregates and streams read the same way.
+Decode snapshot Flags with `DomainFoldkit.decodeSnapshotFlags`. Use `watchView` for current state and `viewEvents` for output entries and command confirmation.
 
-To show data at first paint, read `View.snapshot(key)` (on the server, or in `init`): it gives `{ state, cursor }` from one read. Start the feed with `View.events(key, { after: cursor })`, so a write between the two reads arrives once and none is missed.
-
-More: [Integrate with foldkit: Watch views with subscriptions](https://alchemy.run/domain/foldkit#follow-a-views-state).
+More: [Integrate with Foldkit: Follow a View's state](https://alchemy.run/domain/foldkit#follow-a-views-state), [Seed the first paint](https://alchemy.run/domain/foldkit#seed-the-first-paint), [Optimistic updates: Resume the feed](https://alchemy.run/domain/optimistic-updates#resume-the-feed).
 
 ## Tracing from the browser
 
-foldkit wraps every Command in a span, and Api calls carry the trace to the server (live reads too). Put a tracer in `resources` that exports to the app's own origin, and collect it in the server Worker with `Telemetry.relay`, which forwards it with the server's credentials:
+Foldkit wraps every Command in a span, and Api calls carry the trace to the server (live reads too). Put a tracer in `resources` that exports to the app's own origin, and collect it in the server Worker with `Telemetry.relay`, which forwards it with the server's credentials:
 
 ```ts
 // packages/web/src/entry.ts
@@ -141,10 +147,10 @@ export default {
 };
 ```
 
-More: [Integrate with foldkit: Build and host it](https://alchemy.run/domain/foldkit#test-and-host-the-app).
+More: [Integrate with Foldkit: Test and host the app](https://alchemy.run/domain/foldkit#test-and-host-the-app).
 
 ## Testing the app
 
-Test `update` and the Commands with foldkit stories (`foldkit/story`) in `packages/web/test`. They need no server.
+Test `update` and the Commands with Foldkit stories (`foldkit/story`) in `packages/web/test`. They need no server.
 
-More: [Integrate with foldkit: Test the app's update](https://alchemy.run/domain/foldkit#test-and-host-the-app).
+More: [Integrate with Foldkit: Test and host the app](https://alchemy.run/domain/foldkit#test-and-host-the-app).
