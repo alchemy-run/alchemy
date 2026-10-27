@@ -259,6 +259,63 @@ describe.sequential(
   },
 );
 
+/**
+ * Stacks of `Alchemy.Random` resources: they live only in state, so these
+ * cases measure the engine and the store at sizes a Stack of cloud
+ * resources would take far longer (and cost more) to reach.
+ */
+const SIZES = [1_000, 5_000, 10_000];
+
+const randomStack = <S extends Layer.Layer<State, never, StackServices>>(
+  name: string,
+  state: S,
+  size: number,
+) => {
+  const options = { providers: AWS.providers(), state };
+  return {
+    harness: Test.make(options),
+    stack: Alchemy.Stack(
+      name,
+      options,
+      Effect.gen(function* () {
+        const randoms = yield* Effect.forEach(
+          Array.from({ length: size }, (_, i) => i),
+          (i) => Alchemy.Random(`Random${i}`),
+          { concurrency: "unbounded" },
+        );
+        return { count: randoms.length };
+      }),
+    ),
+  };
+};
+
+describe.sequential("large Stacks", { tags }, () => {
+  for (const size of SIZES) {
+    const large = [
+      { backend: "s3", ...randomStack(`StateBenchS3x${size}`, AWS.state(), size) },
+      {
+        backend: "dynamodb",
+        ...randomStack(`StateBenchDynamoDBx${size}`, AWS.dynamoDBState(), size),
+      },
+      { backend: "local", ...randomStack(`StateBenchLocalx${size}`, Alchemy.localState(), size) },
+    ];
+    for (const { backend, harness, stack } of large) {
+      harness.test.skipIf(!!process.env.FAST)(
+        `${size} resources deploy, redeploy and destroy on the ${backend} store`,
+        Effect.gen(function* () {
+          const suite = `Stack of ${size} resources`;
+          yield* harness.destroy(stack);
+          const fresh = yield* time(suite, backend, "fresh deploy", harness.deploy(stack));
+          expect(fresh.count).toBe(size);
+          yield* time(suite, backend, "unchanged redeploy", harness.deploy(stack));
+          yield* time(suite, backend, "destroy", harness.destroy(stack));
+        }),
+        { timeout: 3_600_000 },
+      );
+    }
+  }
+});
+
 /** One table per suite: a step per row, a store per column. */
 const report = () => {
   const lines: string[] = ["# State store benchmark", ""];
