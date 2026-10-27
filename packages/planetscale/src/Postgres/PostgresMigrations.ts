@@ -1,35 +1,18 @@
 import {
-  makePgMigrationExecutor,
   runMigrations,
+  withPgExecutor,
   type NormalizedMigrationsInput,
+  type SqlExecutor,
   type StampedMigrationsState,
 } from "@alchemy.run/sql/Migrations";
-import { readSqlFile } from "@alchemy.run/sql/SqlFile";
+import { stripSslQueryParams } from "@alchemy.run/sql/PostgresDriver";
+import { applySqlImports } from "@alchemy.run/sql/SqlFile";
 import * as ps from "@distilled.cloud/planetscale";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import type { Client } from "pg";
-
-// `pg` is an optional peer dependency — loaded lazily so importing the
-// Planetscale provider never requires the driver unless migrations run.
-const importPg = () =>
-  import("pg").catch((cause) => {
-    throw new Error(
-      "Failed to load the 'pg' driver. Install the optional peer dependency 'pg' to run Planetscale Postgres migrations.",
-      { cause },
-    );
-  });
 
 const MIGRATION_ROLE_TTL_SECONDS = 600;
-
-export class PostgresMigrationError extends Data.TaggedError(
-  "Planetscale::PostgresMigrationError",
-)<{
-  message: string;
-  cause?: unknown;
-}> {}
 
 export interface PostgresMigrationTarget {
   organization: string;
@@ -49,67 +32,36 @@ export const runPostgresMigrations = (
   runMigrations({
     input,
     stamped,
-    withExecutor: (apply) =>
-      withPostgresClient(target, (client) => apply(makePgMigrationExecutor(client))),
+    withExecutor: (apply) => withPostgresExecutor(target, apply),
   });
 
+/** Apply `importFiles`, each once and again only when it changes. */
 export const runPostgresImports = (
   target: PostgresMigrationTarget,
   importFiles: ReadonlyArray<string>,
   rootDir: string,
   previous: Record<string, string>,
 ) =>
-  Effect.gen(function* () {
-    const hashes: Record<string, string> = { ...previous };
-    for (const filePath of importFiles) {
-      const file = yield* readSqlFile(rootDir, filePath);
-      if (previous[filePath] === file.hash) {
-        hashes[filePath] = file.hash;
-        continue;
-      }
-      yield* runPostgresSql(target, file.sql);
-      hashes[filePath] = file.hash;
-    }
-    const tracked = new Set(importFiles);
-    for (const key of Object.keys(hashes)) {
-      if (!tracked.has(key)) delete hashes[key];
-    }
-    return hashes;
+  applySqlImports({
+    importFiles,
+    rootDir,
+    previous,
+    apply: (file) =>
+      withPostgresExecutor(target, (executor) => executor.query(file.sql)).pipe(Effect.asVoid),
   });
 
-const runPostgresSql = (target: PostgresMigrationTarget, sql: string) =>
-  withPostgresClient(target, (client) => pgExec(client, sql));
-
-const withPostgresClient = <A, E, R>(
+/** A verified-TLS `pg` session as a short-lived migration role. */
+const withPostgresExecutor = <A, E, R>(
   target: PostgresMigrationTarget,
-  use: (client: Client) => Effect.Effect<A, E, R>,
+  use: (executor: SqlExecutor) => Effect.Effect<A, E, R>,
 ) =>
   withTemporaryPostgresRole(target, (role) =>
-    Effect.acquireUseRelease(
-      Effect.gen(function* () {
-        const { Client } = yield* Effect.tryPromise({
-          try: importPg,
-          catch: toMigrationError,
-        });
-        const client = yield* Effect.sync(
-          () =>
-            new Client({
-              connectionString: role.connectionUrl.pipe(Redacted.value, stripPgSslQueryParams),
-              ssl: { rejectUnauthorized: true },
-            }),
-        );
-        yield* Effect.tryPromise({
-          try: () => client.connect(),
-          catch: toMigrationError,
-        });
-        return client;
-      }),
+    withPgExecutor(
+      {
+        connectionString: role.connectionUrl.pipe(Redacted.value, stripSslQueryParams),
+        ssl: { rejectUnauthorized: true },
+      },
       use,
-      (client) =>
-        Effect.tryPromise({
-          try: () => client.end(),
-          catch: toMigrationError,
-        }).pipe(Effect.ignore),
     ),
   );
 
@@ -168,26 +120,3 @@ const withTemporaryPostgresRole = <A, E, R>(
           ),
         ),
   );
-
-const pgExec = (client: Client, sql: string, values?: ReadonlyArray<unknown>) =>
-  Effect.tryPromise({
-    try: () => client.query(sql, values as Array<unknown>).then(() => undefined),
-    catch: toMigrationError,
-  });
-
-const toMigrationError = (cause: unknown) =>
-  new PostgresMigrationError({
-    message: cause instanceof Error ? cause.message : String(cause),
-    cause,
-  });
-
-const stripPgSslQueryParams = (uri: string): string => {
-  try {
-    const url = new URL(uri);
-    url.searchParams.delete("sslmode");
-    url.searchParams.delete("channel_binding");
-    return url.toString();
-  } catch {
-    return uri;
-  }
-};
