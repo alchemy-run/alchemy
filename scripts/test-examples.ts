@@ -29,6 +29,7 @@ class ExitWith extends Data.TaggedError("ExitWith")<{ readonly code: number }> {
 }
 
 const examples = [
+  "./examples/entire-review-agent",
   "./examples/cloudflare-dev",
   "./examples/cloudflare-worker",
   "./examples/cloudflare-worker-async",

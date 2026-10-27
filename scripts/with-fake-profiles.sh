@@ -21,6 +21,8 @@ export AXIOM_TOKEN=alchemy-fake-local-axiom-token
 export AXIOM_API_KEY="$AXIOM_TOKEN"
 export AXIOM_ORG_ID=alchemy-local
 
+export ENTIRE_TOKEN=alchemy-fake-local-entire-token
+
 export CLOUDFLARE_ACCOUNT_ID=00000000000000000000000000000000
 export CLOUDFLARE_API_TOKEN=alchemy-fake-local-cloudflare-token
 export CLOUDFLARE_API_KEY=alchemy-fake-local-cloudflare-key

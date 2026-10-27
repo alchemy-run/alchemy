@@ -93,6 +93,7 @@ examples/cloudflare-worker/src/scratch.ts
 !packages/github/src/globals.d.ts
 !packages/stripe/src/globals.d.ts
 !packages/hetzner/src/globals.d.ts
+!packages/entire/src/globals.d.ts
 !packages/neon/src/globals.d.ts
 !packages/railway/src/globals.d.ts
 

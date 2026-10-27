@@ -7,6 +7,7 @@
     "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/axiom": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/entire": "workspace:*",
     "@alchemy.run/fly": "workspace:*",
     "@alchemy.run/gcp": "workspace:*",
     "@alchemy.run/github": "workspace:*",

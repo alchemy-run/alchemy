@@ -559,6 +559,14 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Entire",
+    intro:
+      "The Git forge for agent-human collaboration as Stack resources — projects, repositories, branch rules, review agents, and CI service accounts.",
+    pages: {
+      slugs: ["entire/index", "entire/setup"],
+    },
+  },
+  {
     heading: "GitHub",
     intro:
       "Repos, secrets, variables, and repository event sources as Stack resources; the CI/CD guides live under Guides and each cloud's tutorial part 5.",

@@ -1,0 +1,104 @@
+---
+title: Entire
+description: Entire projects, repositories, agents, and CI identities as resources — the Git forge for agent-human collaboration, declared in code.
+---
+
+[Entire](https://entire.com) is a Git forge built for coding agents. It
+hosts repositories, records the agent sessions behind each commit, and
+runs review agents on every Change. With alchemy, the forge's setup is
+code: projects, repositories, branch rules, agents, and the CI
+identities that push to them sit in one Stack.
+
+New here? [Set up credentials](/entire/setup) first.
+
+## Projects and repositories
+
+A `Project` holds repositories, agents, and environments. A `Repo` is a
+Git repository inside it:
+
+```typescript
+const project = yield* Entire.Project("app", {});
+const repo = yield* Entire.Repo("api", { projectId: project.id });
+```
+
+Branch rules and the trail and runner settings are props of the
+repository. Leave one out and its current value is kept:
+
+```typescript
+const repo = yield* Entire.Repo("api", {
+  projectId: project.id,
+  branchProtection: [{ ref: "HEAD", serverSideMergeOnly: true }],
+  runnersEnabled: true,
+  autoRunOnPush: true,
+});
+```
+
+## Agents
+
+An `Agent` runs Claude Code or Codex against the project's repositories,
+in an `Environment` sandbox. Its runs use the model-provider key set in
+the repository's `secrets`:
+
+```typescript
+const repo = yield* Entire.Repo("api", {
+  projectId: project.id,
+  runnersEnabled: true,
+  secrets: {
+    api_key_anthropic: yield* Config.redacted("ANTHROPIC_API_KEY"),
+  },
+});
+
+const sandbox = yield* Entire.Environment("sandbox", {
+  projectId: project.id,
+  autoStopMinutes: 30,
+});
+
+yield* Entire.Agent("reviewer", {
+  projectId: project.id,
+  harness: "claude",
+  instructions: "Review {{branch}} against {{base_branch}} for security issues.",
+  environmentId: sandbox.id,
+  repositoryIds: [repo.id],
+  trigger: { branches: ["**"], when: "ready" },
+  enabled: true,
+});
+```
+
+## CI identities
+
+An `Org` owns `ServiceAccount`s. An `OidcBinding` lets a GitHub Actions
+workflow sign in as one, and a `ServiceAccountGrant` gives it a role:
+
+```typescript
+const org = yield* Entire.Org("acme", { name: "acme" });
+const ci = yield* Entire.ServiceAccount("ci", { orgId: org.id });
+
+yield* Entire.OidcBinding("ci-github", {
+  accountId: ci.accountId,
+  provider: "github-actions",
+  attributeFilter: { repository: "acme/api", ref: "refs/heads/main" },
+});
+
+yield* Entire.ServiceAccountGrant("ci-pushes", {
+  accountId: ci.accountId,
+  resourceType: "repo",
+  resourceId: repo.id,
+  role: "writer",
+});
+```
+
+## Out of scope
+
+Entire has no labels, so alchemy recognises its resources by stored ID
+and `alchemy nuke` lists none of them. These parts of the API are not
+resources:
+
+- **Runtime bindings.** Entire trusts a fixed list of OIDC issuers
+  (GitHub Actions, Buildkite, Depot) and issues no API keys, so a Worker
+  or Lambda has no credential to call Entire with.
+- **Trails, reviews, sessions, checkpoints, search, and memory.** These
+  are records agents and people create while working, not configuration.
+  Use `@distilled.cloud/entire` directly.
+- **Billing**, account deletion, onboarding, and preferences.
+- **Plugin installations and GitHub mirrors**, which need a GitHub App
+  installation that is approved in the browser.

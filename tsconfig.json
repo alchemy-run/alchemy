@@ -27,6 +27,9 @@
       "path": "./submodules/distilled/packages/axiom/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/entire/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/neon/tsconfig.json"
     },
     {
@@ -98,6 +101,9 @@
     },
     {
       "path": "./packages/axiom/tsconfig.json"
+    },
+    {
+      "path": "./packages/entire/tsconfig.json"
     },
     {
       "path": "./packages/doppler/tsconfig.json"
@@ -580,6 +586,7 @@
     {
       "path": "./examples/monorepo-multi-stack/tsconfig.json"
     },
+    { "path": "./examples/entire-review-agent/tsconfig.json" },
     { "path": "./examples/neon/tsconfig.json" },
     { "path": "./examples/neon-website-astro/tsconfig.json" },
     { "path": "./examples/neon-website-foldkit/tsconfig.json" },

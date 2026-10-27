@@ -45,6 +45,7 @@ function providersSidebarEntry() {
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
+      { label: "Entire", link: "/entire" },
       { label: "GitHub", link: "/github" },
       { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
@@ -1645,6 +1646,14 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Axiom"),
+          ],
+        },
+        {
+          label: "Entire",
+          items: [
+            { label: "Overview", link: "/entire" },
+            { label: "Setup", link: "/entire/setup" },
+            providerResourcesEntry("Entire"),
           ],
         },
         {

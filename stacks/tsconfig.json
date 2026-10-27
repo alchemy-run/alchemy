@@ -12,6 +12,7 @@
     { "path": "../packages/aws/tsconfig.json" },
     { "path": "../packages/axiom/tsconfig.json" },
     { "path": "../packages/cloudflare/tsconfig.json" },
+    { "path": "../packages/entire/tsconfig.json" },
     { "path": "../packages/fly/tsconfig.json" },
     { "path": "../packages/gcp/tsconfig.json" },
     { "path": "../packages/github/tsconfig.json" },
