@@ -105,7 +105,7 @@ describe(
       );
     });
 
-    describe("GetQueue / PauseQueue / ResumeQueue / PurgeQueue", () => {
+    describe("GetQueue / PauseQueue / ResumeQueue", () => {
       test.provider(
         "reads and flips the queue's state as the host, granted on the queue only",
         (_stack) =>
@@ -119,15 +119,12 @@ describe(
             expect(paused.state).toEqual("PAUSED");
             const live = yield* cloudtasks.getProjectsLocationsQueues({ name: genQueueName });
             expect(live.state).toEqual("PAUSED");
-
-            const purged = yield* expectProbe<cloudtasks.Queue>(baseUrl, "purgeQueue");
-            expect(purged.purgeTime).toBeDefined();
           }),
         live,
       );
     });
 
-    describe("BufferTask / BatchCreateTasks / ListQueueTasks / GetQueueTask / RunQueueTask / DeleteQueueTask / BatchDeleteTasks", () => {
+    describe("BufferTask / BatchCreateTasks / ListQueueTasks / GetQueueTask / RunQueueTask / DeleteQueueTask / BatchDeleteTasks / PurgeQueue", () => {
       test.provider(
         "creates, reads, runs and deletes tasks as the host, granted on the queue only",
         (_stack) =>
@@ -171,6 +168,10 @@ describe(
               .getProjectsLocationsQueuesTasks({ name: taskName(b!) })
               .pipe(Effect.flip);
             expect(gone._tag).toEqual("NotFound");
+
+            // Last: a purge also drops tasks created up to a minute after it.
+            const purged = yield* expectProbe<cloudtasks.Queue>(baseUrl, "purgeQueue");
+            expect(purged.purgeTime).toBeDefined();
 
             expect(yield* queueRoles(genQueueName)).toEqual([
               "roles/cloudtasks.enqueuer",
