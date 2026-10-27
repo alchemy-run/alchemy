@@ -6,7 +6,7 @@ import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import BigQueryConnectionBindingsHost, { Cloud } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -33,7 +33,7 @@ const projectGrantsOf = (account: string) =>
       }));
   });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "BigQueryConnection Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:bigqueryconnection", "provider:gcp:run", "live"],

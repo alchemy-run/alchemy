@@ -16,7 +16,6 @@ import {
   rewriteLoopbackHosts,
   toPullRef,
 } from "../Docker.ts";
-import { isDockerAvailable } from "./helpers/docker.ts";
 
 const PINNED =
   "cloudflare/proxy-everything:3cb1195@sha256:0ef6716c52430096900b150d84a3302057d6cd2319dae7987128c85d0733e3c8";
@@ -470,7 +469,7 @@ layer(
 const docker = (...args: string[]) =>
   Effect.sync(() => execFileSync(process.env.DOCKER_BIN ?? "docker", args, { encoding: "utf8" }));
 
-it.live.skipIf(!isDockerAvailable())(
+it.live(
   "pulls an unprepared image again after a failed container create",
   () => {
     // Unresolvable registry: the first on-demand pull must fail.

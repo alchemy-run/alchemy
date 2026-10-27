@@ -34,7 +34,7 @@ export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
 
 /** Take money out of an account, within the balance and the daily limit. */
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-  target: AccountId,                       // the aggregate id it targets
+  target: AccountId,                       // the id schema of its aggregate, exactly
   middleware: [Session, MfaChallenge],     // authenticate; provide context to decide
   input: { amount: Cents },
   events: [MoneyWithdrawn],                // every event it may record
@@ -159,7 +159,7 @@ keyOf: {
 emit: { TransferRequested: { out: moved("out"), in: moved("in") } },
 ```
 
-A view keyed by a different aggregate than its source uses `keyOf`, returning `undefined` to skip. Add derived fields with `computed: { total: (v) => ... }`.
+A view keyed by a different aggregate than its source uses `keyOf`, returning `undefined` to skip. A view about something with no aggregate of its own (an org) takes a string Schema as `key` (`key: OrgId`); its `keyOf` returns the value, and reads take the value (`watch(orgId)`). Policies, projections and streams take a Schema `key` the same way (`Domain.Key.Any` is either). Don't declare an empty aggregate only to key something. Add derived fields with `computed: { total: (v) => ... }`.
 
 ## Policy
 
@@ -182,7 +182,7 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
 );
 ```
 
-The handler receives `{ key, source, event, envelope, state }` (`state` for a view source). It must handle every rejection. A policy has no session, so it provides context itself: `.pipe(Effect.provideService(CurrentActor, system("FraudReview")))`. To send a command later, durably, use `transfers.schedule(ref, new ExpireTransfer(), { after: "24 hours" })`. Only commands that never reject can be scheduled.
+The handler receives `{ key, source, event, envelope, state }` (`state` for a view source). It must handle every rejection. A policy has no session, so it provides context itself: `.pipe(Effect.provideService(CurrentActor, system("FraudReview")))`. To send a command later, durably, use `transfers.schedule(ref, new ExpireTransfer(), { after: "24 hours" })`. Only commands that never reject can be scheduled. `schedule` returns a `ScheduleReceipt` (`{ commandId, at }`). To cancel one that no longer applies, call `transfers.unschedule(ref, commandId)` with a known `commandId` or the receipt's. Both fail with `AlreadyExecuted` when the instance already handled a command with that id; `unschedule` also fails with `AlreadyCancelled` (cancelled before) or `NotScheduled` (never scheduled). A policy catches the ones it expects with `Effect.catchTag([...], ...)`, since a redelivery finds its expiry already cancelled. A policy cancels after the event is recorded, so the command can still fire first: keep the guard in `decide`.
 
 ## Saga
 
@@ -246,7 +246,7 @@ export const SiftFraudCheck = FraudCheck.toLayer(
 );
 ```
 
-Use it with `const fraud = yield* FraudCheck` in a policy or saga `toLayer`, then call `fraud.score({...})`. Declare typed errors per operation with `error:`. In a story, systems in `stub` are faked and the story answers their calls; the others run for real from a Layer you provide, and the story asserts what each call sent and returned. See [testing.md](testing.md).
+Use it with `const fraud = yield* FraudCheck` in a policy or saga `toLayer`, then call `fraud.score({...})`. Declare typed errors per operation with `error:`: one schema, or a list (`error: [RefundDeclined, CardFrozen]`) when the vendor can refuse in several ways. In a story, systems in `stub` are faked and the story answers their calls; the others run for real from a Layer you provide, and the story asserts what each call sent and returned. See [testing.md](testing.md).
 
 ## Projection and its port
 
@@ -309,7 +309,7 @@ export class CustomerApi extends Domain.Api(
 ) {}
 ```
 
-Clients call commands as methods (`bank.WithdrawMoney({ target, amount }, { headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A stream has `peek`, `watch`, `events` and `list`. Each Api entry authorizes itself.
+Clients call commands as methods (`bank.WithdrawMoney({ target, amount }, { headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. Each Api entry authorizes itself.
 
 ## Model
 

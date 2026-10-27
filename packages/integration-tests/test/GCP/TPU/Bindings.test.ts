@@ -5,7 +5,7 @@ import * as tpu from "@distilled.cloud/gcp/tpu_v2";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import TpuBindingsHost, { QueuedTrainer, Trainer } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -41,7 +41,7 @@ const projectRoles = () =>
       ),
     );
 
-describe.skipIf(!dockerAvailable || !runLifecycle)(
+describe.skipIf(!runLifecycle)(
   "TPU Bindings",
   { tags: ["provider:gcp", "provider:gcp:tpu", "provider:gcp:run", "live"] },
   () => {
