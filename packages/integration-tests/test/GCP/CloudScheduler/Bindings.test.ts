@@ -25,8 +25,9 @@ let jobs: { paused: string; resumed: string; run: string };
 /**
  * The host's project-level roles. Cloud Scheduler has no per-job IAM
  * policy: Pause/Resume grant `roles/cloudscheduler.admin` (the only
- * predefined role with `jobs.pause`/`jobs.enable`) and Run grants
- * `roles/cloudscheduler.jobRunner`, all on the project.
+ * predefined role with `jobs.pause`/`jobs.enable`), Run grants
+ * `roles/cloudscheduler.jobRunner` and Get grants
+ * `roles/cloudscheduler.viewer`, all on the project.
  */
 const expectProjectGrants = Effect.gen(function* () {
   const policy = yield* crm.getIamPolicyProjects({
@@ -40,6 +41,7 @@ const expectProjectGrants = Effect.gen(function* () {
   expect(roles).toEqual([
     { role: "roles/cloudscheduler.admin", condition: undefined },
     { role: "roles/cloudscheduler.jobRunner", condition: undefined },
+    { role: "roles/cloudscheduler.viewer", condition: undefined },
   ]);
 });
 
@@ -134,6 +136,22 @@ describe(
               }),
             );
             expect(after.lastAttemptTime).toBeDefined();
+            yield* expectProjectGrants;
+          }),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudscheduler", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("GetJob", () => {
+      test.provider(
+        "reads the job as the host's service account",
+        (_stack) =>
+          Effect.gen(function* () {
+            const job = yield* expectProbe<scheduler.Job>(baseUrl, "getJob");
+            expect(job).toMatchObject({ name: jobs.paused, schedule: "0 0 1 1 *" });
             yield* expectProjectGrants;
           }),
         {

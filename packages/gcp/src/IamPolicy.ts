@@ -83,6 +83,8 @@ export type GcpIamResourceKind =
   | "dataproc.cluster"
   | "iam.serviceAccount"
   | "kms.cryptoKey"
+  | "kms.importJob"
+  | "kms.keyRing"
   | "ml.model"
   | "privateca.caPool"
   | "pubsub.schema"
@@ -309,6 +311,14 @@ const TARGETS: Record<GcpIamResourceKind, (name: string) => IamPolicyTarget> = {
   "kms.cryptoKey": queryStyle(
     kms.getIamPolicyProjectsLocationsKeyRingsCryptoKeys,
     kms.setIamPolicyProjectsLocationsKeyRingsCryptoKeys,
+  ),
+  "kms.importJob": queryStyle(
+    kms.getIamPolicyProjectsLocationsKeyRingsImportJobs,
+    kms.setIamPolicyProjectsLocationsKeyRingsImportJobs,
+  ),
+  "kms.keyRing": queryStyle(
+    kms.getIamPolicyProjectsLocationsKeyRings,
+    kms.setIamPolicyProjectsLocationsKeyRings,
   ),
   "ml.model": queryStyle(ml.getIamPolicyProjectsModels, ml.setIamPolicyProjectsModels),
   "privateca.caPool": queryStyle(

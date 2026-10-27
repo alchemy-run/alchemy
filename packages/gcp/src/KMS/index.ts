@@ -7,3 +7,4 @@ export * from "./EncryptHttp.ts";
 export * from "./ImportJob.ts";
 export * from "./KeyRing.ts";
 export * from "./SingleTenantHsmInstanceProposal.ts";
+export * from "./generated.ts";

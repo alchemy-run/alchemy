@@ -27,17 +27,20 @@ export default class SchedulerBindingsHost extends GCP.Function<SchedulerBinding
     const pauseJob = yield* GCP.CloudScheduler.PauseJob(PausedJob);
     const resumeJob = yield* GCP.CloudScheduler.ResumeJob(ResumedJob);
     const runJob = yield* GCP.CloudScheduler.RunJob(RunJobTarget);
+    const getJob = yield* GCP.CloudScheduler.GetJob(PausedJob);
 
     return {
       fetch: serveProbes({
         pause: pauseJob(),
         resume: resumeJob(),
         run: runJob(),
+        getJob: getJob(),
       }),
     };
   }).pipe(
     Effect.provide(GCP.CloudScheduler.PauseJobHttp),
     Effect.provide(GCP.CloudScheduler.ResumeJobHttp),
     Effect.provide(GCP.CloudScheduler.RunJobHttp),
+    Effect.provide(GCP.CloudScheduler.GetJobHttp),
   ),
 ) {}

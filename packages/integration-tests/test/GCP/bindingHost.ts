@@ -67,6 +67,12 @@ export const serveProbes = (routes: Record<string, Probe>) =>
     return yield* HttpServerResponse.json(outcome);
   });
 
+/** A probe's query parameter: `/probe/runTask?task=a` → `probeParam("task")` is `"a"`. */
+export const probeParam = Effect.fn(function* (key: string) {
+  const request = yield* HttpServerRequest;
+  return new URL(request.url, "http://host").searchParams.get(key) ?? "";
+});
+
 class ProbeNotReady extends Data.TaggedError("ProbeNotReady")<{
   readonly reason: string;
 }> {

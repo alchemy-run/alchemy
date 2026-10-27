@@ -54,14 +54,32 @@ interface ResourceConfig {
   type?: string;
 }
 
-interface ServiceConfig {
+interface ApiConfig {
+  /** Discovery doc in distilled's spec mirror, e.g. `pubsub-v1`. */
   discovery: string;
+  /** Distilled module, e.g. `pubsub_v1`. */
   module: string;
   /** Distilled import path segment; `unstable/` for unstable services. */
   unstable?: boolean;
+  /**
+   * Prefix of the API's IAM permissions when it isn't the discovery name:
+   * `workflowexecutions` methods check `workflows.*` permissions.
+   */
+  permissionService?: string;
+}
+
+interface ServiceConfig extends Partial<ApiConfig> {
+  /** More discovery docs whose methods bind to this service's resources. */
+  apis?: ApiConfig[];
   resources: Record<string, ResourceConfig>;
   /** Method id → IAM permission. */
   permissions?: Record<string, string>;
+  /**
+   * Permission → role, where `roles.json`'s smallest role is a poor fit:
+   * `artifactregistry.repositories.get` is smallest in a migration role
+   * that also reads Cloud Storage.
+   */
+  roles?: Record<string, string>;
   /** Derived binding name → name to use. */
   names?: Record<string, string>;
   /** Method id → reason it is not a binding. */
@@ -122,7 +140,11 @@ const functionName = (name: string, path: string[]) =>
 
 /** `^projects/[^/]+/topics/[^/]+$` → `["projects", "*", "topics", "*"]`. */
 const patternSegments = (pattern: string): string[] | undefined => {
-  const body = pattern.replace(/^\^/, "").replace(/\$$/, "").replaceAll("[^/]+", "*");
+  const body = pattern
+    .replace(/^\^/, "")
+    .replace(/\$$/, "")
+    .replaceAll("[^/]+", "*")
+    .replace(/\.\*$/, "*");
   const segments = body.split("/");
   return segments.every((s) => s === "*" || /^[a-zA-Z][a-zA-Z0-9]*$/.test(s))
     ? segments
@@ -169,6 +191,7 @@ const requiredMembers = (source: string, name: string): string[] => {
 
 interface Variant {
   resource: string; // config key
+  api: Api;
   methodId: string;
   fn: string;
   param: string;
@@ -194,22 +217,32 @@ interface Classified {
   reason?: string;
 }
 
-const classify = (options: {
-  service: string;
-  config: ServiceConfig;
+interface Api extends ApiConfig {
+  /** Import alias, e.g. `pubsub`. */
+  ns: string;
+  importPath: string;
   doc: DiscoveryResource & { name: string };
   moduleSource: string;
+}
+
+const classify = (options: {
+  config: ServiceConfig;
+  api: Api;
   covered: Set<string>;
   roles: Record<string, string>;
+  bindings: Map<string, Binding>;
 }) => {
-  const { config, doc, moduleSource, covered, roles } = options;
+  const { config, api, covered, bindings } = options;
+  const roles = { ...options.roles, ...config.roles };
+  const { doc, moduleSource } = api;
+  const permissionService = api.permissionService ?? doc.name;
   const resources = Object.entries(config.resources).map(([key, value]) => ({
     key,
     ...value,
     segments: value.pattern.split("/"),
   }));
   const results: Classified[] = [];
-  const bindings = new Map<string, Binding>();
+  const ownCollections = new Set(resources.map((r) => r.segments.at(-2)));
   const methods = collectMethods(doc, [], []);
   // A method and its `locations` twin are one binding: if a hand-written
   // binding calls either, both are covered.
@@ -274,7 +307,11 @@ const classify = (options: {
       children.push([extra[i]!, singular(extra[i]!)]);
     }
     const ownCollection = resource.segments.at(-2);
-    if (LIFECYCLE_VERBS.has(verb) && children.length === 0 && cols.at(-1) === ownCollection) {
+    if (
+      (LIFECYCLE_VERBS.has(verb) && children.length === 0 && cols.at(-1) === ownCollection) ||
+      // Creating a child that is itself a configured resource is its provider's job.
+      (verb === "create" && ownCollections.has(cols.at(-1)))
+    ) {
       results.push({ id, kind: "lifecycle" });
       continue;
     }
@@ -282,7 +319,7 @@ const classify = (options: {
     const permission =
       config.permissions?.[id] ??
       [verb === "patch" ? "update" : verb, verb]
-        .flatMap((v) => [...scoped].reverse().map((c) => `${doc.name}.${c}.${v}`))
+        .flatMap((v) => [...scoped].reverse().map((c) => `${permissionService}.${c}.${v}`))
         .find((p) => roles[p] !== undefined);
     if (permission === undefined || roles[permission] === undefined) {
       results.push({ id, kind: "needs-permission", reason: permission });
@@ -294,13 +331,18 @@ const classify = (options: {
       continue;
     }
     // `get` on [secrets, versions] → GetSecretVersion; `list` keeps the
-    // plural. A multi-word verb gets the resource noun after its first word
-    // unless it already names it: deleteRevision → DeleteSchemaRevision,
-    // rotateSecret → RotateSecret.
+    // plural. Nouns start at the bound resource's collection, and a noun the
+    // next one repeats is dropped: [cryptoKeys, cryptoKeyVersions] →
+    // CryptoKeyVersion. A multi-word verb gets the resource noun after its
+    // first word unless it already names it: deleteRevision →
+    // DeleteSchemaRevision, rotateSecret → RotateSecret.
     const words = verb.split(/(?=[A-Z])/);
-    const nouns = scoped.map((c, i) =>
-      verb === "list" && i === scoped.length - 1 ? capitalize(c) : capitalize(singular(c)),
-    );
+    const named = scoped.slice(Math.max(0, scoped.indexOf(ownCollection!)));
+    const nouns = named
+      .map((c, i) =>
+        verb === "list" && i === named.length - 1 ? capitalize(c) : capitalize(singular(c)),
+      )
+      .filter((n, i, all) => !(all[i + 1] ?? "").startsWith(n));
     const resourceNoun = capitalize(singular(scoped.at(-1) ?? ""));
     const derived =
       words.length === 1
@@ -321,6 +363,7 @@ const classify = (options: {
     }
     binding.variants.push({
       resource: resource.key,
+      api,
       methodId: id,
       fn,
       param: target.param,
@@ -342,7 +385,7 @@ const classify = (options: {
         Number(a.methodId.includes(".locations.")) - Number(b.methodId.includes(".locations.")),
     );
   }
-  return { results, bindings: [...bindings.values()].sort((a, b) => a.name.localeCompare(b.name)) };
+  return results;
 };
 
 // ============ Emit ============
@@ -350,15 +393,14 @@ const classify = (options: {
 const HEADER = (service: string) =>
   `// @generated by scripts/generate-gcp-bindings.ts from packages/gcp/bindings/${service}.json. Do not edit.\n`;
 
-const emitContract = (
-  service: string,
-  config: ServiceConfig,
-  binding: Binding,
-  moduleSource: string,
-) => {
-  const ns = config.module.replace(/_v.*$/, "");
-  const importPath = `@distilled.cloud/gcp/${config.unstable ? "unstable/" : ""}${config.module}`;
+const apiImports = (binding: Binding, type: boolean) =>
+  [...new Map(binding.variants.map((v) => [v.api.ns, v.api.importPath])).entries()]
+    .map(([ns, path]) => `import ${type ? "type " : ""}* as ${ns} from "${path}";`)
+    .join("\n");
+
+const emitContract = (service: string, binding: Binding) => {
   const first = binding.variants[0]!;
+  const moduleSource = first.api.moduleSource;
   const resourceTypes = [...new Set(binding.variants.map((v) => v.resource))];
   const childFields = [
     ...first.children.map(([, field]) => field),
@@ -381,19 +423,19 @@ const emitContract = (
   const childType = fieldDocs.length
     ? ` {\n${fieldDocs.map(([f, doc]) => `  /** ${doc} */\n  ${f}: string;`).join("\n")}\n}`
     : " {}";
-  const responses = [...new Set(binding.variants.map((v) => `${ns}.${v.types.response}`))];
-  const errors = [...new Set(binding.variants.map((v) => `${ns}.${v.types.error}`))];
+  const responses = [...new Set(binding.variants.map((v) => `${v.api.ns}.${v.types.response}`))];
+  const errors = [...new Set(binding.variants.map((v) => `${v.api.ns}.${v.types.error}`))];
   const resourceDocs = resourceTypes.map((r) => `{@link ${r}}`).join(" or ");
   const variable = binding.name[0]!.toLowerCase() + binding.name.slice(1);
   const grants = [...new Set(binding.variants.map((v) => `\`${v.role}\``))].join(", ");
-  return `${HEADER(service)}import type * as ${ns} from "${importPath}";
+  return `${HEADER(service)}${apiImports(binding, true)}
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 ${resourceTypes.map((r) => `import type { ${r} } from "./${r}.ts";`).join("\n")}
 
 export interface ${binding.name}Request
-  extends Omit<${ns}.${first.types.request}, ${omitted.map((o) => `"${o}"`).join(" | ")}>${childType}
+  extends Omit<${first.api.ns}.${first.types.request}, ${omitted.map((o) => `"${o}"`).join(" | ")}>${childType}
 
 export type ${binding.name}Shape = (
   resource: ${resourceTypes.join(" | ")},
@@ -413,7 +455,7 @@ export type ${binding.name}Shape = (
  * **Example:** Call \`${first.methodId.split(".").slice(-2).join(".")}\`
  * \`\`\`typescript
  * const ${variable} = yield* GCP.${service}.${binding.name}(${resourceTypes[0]![0]!.toLowerCase() + resourceTypes[0]!.slice(1)});
- * const response = yield* ${variable}(${optional ? "" : childFields.length ? `{ ${childFields.map((f) => `${f}: "..."`).join(", ")} }` : "{ /* request */ }"});
+ * const response = yield* ${variable}(${optional ? "" : `{ ${[...childFields.map((f) => `${f}: "..."`), ...required.map((f) => `${f}: ${f === "body" ? "{}" : `"..."`}`)].join(", ")} }`});
  * \`\`\`
  *
  * @binding
@@ -427,8 +469,6 @@ export const ${binding.name} = Binding.Service<${binding.name}>("GCP.${service}.
 };
 
 const emitHttp = (service: string, config: ServiceConfig, binding: Binding) => {
-  const ns = config.module.replace(/_v.*$/, "");
-  const importPath = `@distilled.cloud/gcp/${config.unstable ? "unstable/" : ""}${config.module}`;
   const variants = binding.variants.map((v) => {
     const resource = config.resources[v.resource]!;
     const type = resource.type ?? `GCP.${service}.${v.resource}`;
@@ -442,12 +482,12 @@ const emitHttp = (service: string, config: ServiceConfig, binding: Binding) => {
       (v.grantOn ? `\n      grantOn: "${v.grantOn.attribute}",` : "");
     return `    {
       resource: "${type}",
-      operation: ${ns}.${v.fn},
+      operation: ${v.api.ns}.${v.fn},
       param: "${v.param}",${children}
       iam: ${iam},
     },`;
   });
-  return `${HEADER(service)}import * as ${ns} from "${importPath}";
+  return `${HEADER(service)}${apiImports(binding, false)}
 import * as Layer from "effect/Layer";
 import { makeGcpBinding } from "../HttpBinding.ts";
 import { ${binding.name}, type ${binding.name}Shape } from "./${binding.name}.ts";
@@ -482,25 +522,39 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
     yield* fs.readFileString(path.join(bindingsDir, `${service}.json`)),
   ) as ServiceConfig;
   const roles = JSON.parse(yield* fs.readFileString(path.join(bindingsDir, "roles.json")));
-  const doc = JSON.parse(
-    yield* fs.readFileString(
-      path.join(distilled, "specs/spec-mirror-gcp/specs", `${config.discovery}.json`),
-    ),
-  );
-  const moduleSource = yield* fs.readFileString(
-    path.join(
-      distilled,
-      "src",
-      config.unstable ? "unstable-services" : "services",
-      `${config.module}.ts`,
-    ),
-  );
+  const apiConfigs = [
+    ...(config.discovery && config.module ? [config as ApiConfig] : []),
+    ...(config.apis ?? []),
+  ];
+  const apis: Api[] = [];
+  for (const api of apiConfigs) {
+    const doc = JSON.parse(
+      yield* fs.readFileString(
+        path.join(distilled, "specs/spec-mirror-gcp/specs", `${api.discovery}.json`),
+      ),
+    );
+    const moduleSource = yield* fs.readFileString(
+      path.join(
+        distilled,
+        "src",
+        api.unstable ? "unstable-services" : "services",
+        `${api.module}.ts`,
+      ),
+    );
+    apis.push({
+      ...api,
+      ns: api.module.replace(/_v.*$/, ""),
+      importPath: `@distilled.cloud/gcp/${api.unstable ? "unstable/" : ""}${api.module}`,
+      doc,
+      moduleSource,
+    });
+  }
 
-  // Operations a hand-written binding already calls, and the files they live in.
+  // Operations a hand-written binding already calls, per distilled module,
+  // whatever alias the file imports it under.
   const files = yield* fs.readDirectory(serviceDir);
   const generated = new Set<string>();
-  const covered = new Set<string>();
-  const ns = config.module.replace(/_v.*$/, "");
+  const covered = new Map<string, Set<string>>(apis.map((a) => [a.module, new Set()]));
   for (const file of files.filter((f) => f.endsWith(".ts"))) {
     const source = yield* fs.readFileString(path.join(serviceDir, file));
     if (source.startsWith("// @generated by scripts/generate-gcp-bindings.ts")) {
@@ -509,10 +563,20 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
     }
     // Only binding implementations count; resource providers call lifecycle ops.
     if (!file.endsWith("Http.ts")) continue;
-    for (const m of source.matchAll(new RegExp(`\\b${ns}\\.(\\w+)\\b`, "g"))) covered.add(m[1]!);
+    for (const imp of source.matchAll(
+      /import \* as (\w+) from "@distilled\.cloud\/gcp\/(?:unstable\/)?(\w+)"/g,
+    )) {
+      const ops = covered.get(imp[2]!);
+      if (ops === undefined) continue;
+      for (const m of source.matchAll(new RegExp(`\\b${imp[1]}\\.(\\w+)\\b`, "g"))) ops.add(m[1]!);
+    }
   }
 
-  const { results, bindings } = classify({ service, config, doc, moduleSource, covered, roles });
+  const bindingMap = new Map<string, Binding>();
+  const results = apis.flatMap((api) =>
+    classify({ config, api, covered: covered.get(api.module)!, roles, bindings: bindingMap }),
+  );
+  const bindings = [...bindingMap.values()].sort((a, b) => a.name.localeCompare(b.name));
   const counts: Record<string, number> = {};
   for (const r of results) counts[r.kind] = (counts[r.kind] ?? 0) + 1;
   yield* Console.log(
@@ -546,7 +610,7 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
     }
     yield* fs.writeFileString(
       path.join(serviceDir, `${binding.name}.ts`),
-      emitContract(service, config, binding, moduleSource),
+      emitContract(service, binding),
     );
     yield* fs.writeFileString(
       path.join(serviceDir, `${binding.name}Http.ts`),

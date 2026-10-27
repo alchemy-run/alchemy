@@ -6,3 +6,4 @@ export * from "./ResumeJobHttp.ts";
 export * from "./RunJob.ts";
 export * from "./RunJobHttp.ts";
 export * from "./ScheduleEventSource.ts";
+export * from "./generated.ts";
