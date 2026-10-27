@@ -183,6 +183,15 @@ INSERT INTO Users (UserId, Name, Email) VALUES (1, 'it\\'s; me', 'me@example.com
     interleaved: `CREATE TABLE A (Id INT64 NOT NULL) PRIMARY KEY (Id);
 INSERT INTO A (Id) VALUES (1);
 CREATE TABLE B (Id INT64 NOT NULL) PRIMARY KEY (Id);`,
+    // The second statement names a primary key column that doesn't exist.
+    broken: `CREATE TABLE C (Id INT64 NOT NULL) PRIMARY KEY (Id);
+CREATE TABLE D (Id INT64 NOT NULL) PRIMARY KEY (Missing);`,
+    fixed: `CREATE TABLE C (Id INT64 NOT NULL) PRIMARY KEY (Id);
+CREATE TABLE D (Id INT64 NOT NULL) PRIMARY KEY (Id);`,
+    // UserId 1 already exists.
+    duplicate: "INSERT INTO Users (UserId, Name) VALUES (1, 'again')",
+    tables:
+      "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '' AND TABLE_NAME IN ('C', 'D') ORDER BY TABLE_NAME",
     applied: "SELECT name FROM alchemy_migrations ORDER BY name",
     seeded: "SELECT Name, Email FROM Users",
   },
@@ -199,6 +208,13 @@ INSERT INTO users (user_id, name, email) VALUES (1, 'it''s; me', 'me@example.com
     interleaved: `CREATE TABLE a (id bigint NOT NULL PRIMARY KEY);
 INSERT INTO a (id) VALUES (1);
 CREATE TABLE b (id bigint NOT NULL PRIMARY KEY);`,
+    broken: `CREATE TABLE c (id bigint NOT NULL PRIMARY KEY);
+CREATE TABLE d (id bigint NOT NULL, PRIMARY KEY (missing));`,
+    fixed: `CREATE TABLE c (id bigint NOT NULL PRIMARY KEY);
+CREATE TABLE d (id bigint NOT NULL PRIMARY KEY);`,
+    duplicate: "INSERT INTO users (user_id, name) VALUES (1, 'again')",
+    tables:
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('c', 'd') ORDER BY table_name",
     applied: "SELECT name FROM alchemy_migrations ORDER BY name",
     seeded: "SELECT name, email FROM users",
   },
@@ -265,6 +281,44 @@ for (const testCase of migrationsCases) {
         expect(yield* querySpanner(updated.name, testCase.applied)).toEqual([
           ["0001_users.sql"],
           ["0002_email.sql"],
+        ]);
+        yield* fs.remove(path.join(dir, "0003_interleaved.sql"));
+
+        // A statement fails after an earlier one applied: the deploy fails,
+        // the migration stays unrecorded, and redeploying the same file
+        // fails on the statement again rather than on a stale operation.
+        yield* add("0003_tables.sql", testCase.broken);
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const failed = yield* stack.deploy(program).pipe(Effect.flip);
+          expect(String(failed)).toContain("Spanner DDL");
+          expect(String(failed)).not.toContain("already exists");
+        }
+        expect(yield* querySpanner(updated.name, testCase.applied)).toEqual([
+          ["0001_users.sql"],
+          ["0002_email.sql"],
+        ]);
+
+        // Fixing the statement resumes after the one already applied.
+        yield* add("0003_tables.sql", testCase.fixed);
+        yield* stack.deploy(program);
+        expect(yield* querySpanner(updated.name, testCase.tables)).toEqual([
+          [testCase.dialect === "POSTGRESQL" ? "c" : "C"],
+          [testCase.dialect === "POSTGRESQL" ? "d" : "D"],
+        ]);
+        expect(yield* querySpanner(updated.name, testCase.applied)).toEqual([
+          ["0001_users.sql"],
+          ["0002_email.sql"],
+          ["0003_tables.sql"],
+        ]);
+
+        // Failing trailing DML records nothing.
+        yield* add("0004_duplicate.sql", testCase.duplicate);
+        const duplicate = yield* stack.deploy(program).pipe(Effect.flip);
+        expect(String(duplicate)).toContain("Spanner DML");
+        expect(yield* querySpanner(updated.name, testCase.applied)).toEqual([
+          ["0001_users.sql"],
+          ["0002_email.sql"],
+          ["0003_tables.sql"],
         ]);
 
         yield* stack.destroy();

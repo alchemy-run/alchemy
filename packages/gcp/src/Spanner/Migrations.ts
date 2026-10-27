@@ -9,6 +9,7 @@ import {
 } from "@alchemy.run/sql/Migrations";
 import * as spanner from "@distilled.cloud/gcp/spanner_v1";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import { waitForOperation } from "../Operation.ts";
 
 /**
@@ -122,13 +123,20 @@ const toMigrationError =
       cause,
     });
 
+/** Attempts per DDL statement whose earlier operations failed. */
+const MAX_DDL_ATTEMPTS = 20;
+
 /**
  * Spanner as a {@link SqlExecutor} over one session. Spanner cannot commit
  * DDL with DML, so DDL runs as `updateDdl` operations and each migration's
- * trailing DML commits in one transaction with its bookkeeping row. A
- * migration's DDL operations are named after the migration, so a deploy
- * that crashed mid-migration waits for the operation it already started
- * instead of running the DDL twice.
+ * trailing DML commits in one transaction with its bookkeeping row.
+ *
+ * A migration's DDL runs one statement per operation, named after the
+ * migration, the statement's position, and its text. A deploy after a
+ * crash finds the operations it already started and waits for them
+ * instead of rerunning their statements; after a failed statement is
+ * fixed, the statements before it are found applied and only the fixed
+ * one runs.
  */
 const makeSpannerExecutor = Effect.fn(function* (options: {
   database: string;
@@ -158,15 +166,43 @@ const makeSpannerExecutor = Effect.fn(function* (options: {
       ),
     );
 
-  const runDdl = (statements: ReadonlyArray<string>, operationId?: string) =>
-    updateDdl({ database, body: { statements: [...statements], operationId } }).pipe(
-      Effect.catchTag("DdlOperationIdExists", () =>
-        // A previous deploy started this operation; wait for its outcome.
-        getOperation({ name: `${database}/operations/${operationId}` }),
-      ),
+  const runDdl = (statements: ReadonlyArray<string>) =>
+    updateDdl({ database, body: { statements: [...statements] } }).pipe(
       Effect.mapError(toMigrationError(`Spanner DDL on ${database}`)),
       Effect.flatMap(awaitDdl),
     );
+
+  /**
+   * Run one DDL statement exactly once under deterministic operation ids
+   * `{base}_0`, `{base}_1`, …: an operation a previous deploy started is
+   * awaited, not resubmitted. A single statement applies atomically, so an
+   * earlier attempt that failed changed nothing and the next attempt id
+   * runs it again; a failure of this deploy's own attempt fails the deploy.
+   */
+  const runDdlOnce = (statement: string, base: string) =>
+    Effect.gen(function* () {
+      for (let attempt = 0; attempt < MAX_DDL_ATTEMPTS; attempt++) {
+        const operationId = `${base}_${attempt}`;
+        const submitted = yield* updateDdl({
+          database,
+          body: { statements: [statement], operationId },
+        }).pipe(
+          Effect.map((operation) => ({ operation, replayed: false })),
+          Effect.catchTag("DdlOperationIdExists", () =>
+            getOperation({ name: `${database}/operations/${operationId}` }).pipe(
+              Effect.map((operation) => ({ operation, replayed: true })),
+            ),
+          ),
+          Effect.mapError(toMigrationError(`Spanner DDL on ${database}`)),
+        );
+        const outcome = yield* Effect.result(awaitDdl(submitted.operation));
+        if (Result.isSuccess(outcome)) return;
+        if (!submitted.replayed) return yield* outcome.failure;
+      }
+      return yield* new MigrationError({
+        message: `Spanner DDL on ${database} failed ${MAX_DDL_ATTEMPTS} times: ${statement}`,
+      });
+    });
 
   const runDml = (statements: ReadonlyArray<string>) =>
     Effect.gen(function* () {
@@ -204,10 +240,10 @@ const makeSpannerExecutor = Effect.fn(function* (options: {
       { discard: true },
     );
 
-  const operationIdOf = (record: MigrationRecord, group: number) =>
+  const operationBaseOf = (record: MigrationRecord, index: number, statement: string) =>
     Effect.sync(
       () =>
-        `alchemy_${crypto.createHash("sha256").update(`${record.name}\n${record.hash}`).digest("hex").slice(0, 32)}_${group}`,
+        `alchemy_${crypto.createHash("sha256").update(`${record.name}\n${index}\n${statement}`).digest("hex").slice(0, 32)}`,
     );
 
   return {
@@ -238,8 +274,12 @@ const makeSpannerExecutor = Effect.fn(function* (options: {
             message: `Spanner migration ${record.name} runs DML between DDL statements. Spanner can't commit DDL and DML together, so put the DML after the migration's DDL or in its own migration.`,
           });
         }
-        for (const [index, group] of groups.entries()) {
-          if (group.ddl) yield* runDdl(group.statements, yield* operationIdOf(record, index));
+        let index = 0;
+        for (const group of groups) {
+          if (!group.ddl) continue;
+          for (const statement of group.statements) {
+            yield* runDdlOnce(statement, yield* operationBaseOf(record, index++, statement));
+          }
         }
         // The trailing DML commits with the bookkeeping row: exactly once.
         const trailing = groups.at(-1);

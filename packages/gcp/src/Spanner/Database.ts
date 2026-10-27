@@ -71,12 +71,13 @@ export type DatabaseProps = {
    * output. Only pending migrations run; editing or removing an applied
    * file fails the deploy. Works on both dialects.
    *
-   * Spanner can't commit DDL and DML together: a migration's DDL runs as
-   * schema operations named after the migration (a deploy that crashed
-   * mid-migration waits for the operation it started instead of running
-   * it twice), and its trailing DML commits with the bookkeeping row. DML
-   * between DDL statements fails the deploy; split it into its own
-   * migration. Bookkeeping lives in the `alchemy_migrations` table
+   * Spanner can't commit DDL and DML together. A migration's DDL runs one
+   * statement per schema operation, each named after the migration and
+   * the statement: a deploy after a crash waits for the operations it
+   * started instead of rerunning them, and after a failed statement is
+   * fixed only that statement and the ones after it run. Its trailing DML
+   * commits with the bookkeeping row. DML between DDL statements fails the
+   * deploy; split it into its own migration. Bookkeeping lives in the `alchemy_migrations` table
    * (Spanner names can't start with `_`).
    */
   migrations?: MigrationsInput;
