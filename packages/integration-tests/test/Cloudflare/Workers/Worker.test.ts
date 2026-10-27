@@ -38,6 +38,8 @@ import {
 import type { Counter, Meter } from "./fixtures/do-counter-worker.ts";
 import InitConfigWorker from "./fixtures/init-config-worker.ts";
 import InternalWorker from "./fixtures/internal-worker.ts";
+import OldCompatEffectWorker from "./fixtures/old-compat-effect-worker.ts";
+import TerminalEffectWorker from "./fixtures/terminal-effect-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 const { test: devTest } = Test.make({ providers: Cloudflare.providers(), dev: true });
@@ -1553,6 +1555,44 @@ describe.concurrent(
         }).pipe(logLevel),
       { tags: ["live"] },
     );
+
+    // `process.stdin` is undefined on compatibility dates before Node.js
+    // process v2, so an Effect Worker's platform services must not read it
+    // while the Worker starts.
+    for (const [label, worker, dev] of [
+      ["live", test, false],
+      ["dev", devTest, true],
+    ] as const) {
+      worker.provider(
+        `Effect Worker serves on a compatibility date without process.stdin (${label})`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const deployed = yield* stack.deploy(OldCompatEffectWorker);
+            yield* expectUrlContains(deployed.url!, "Hello from an old compatibility date", {
+              label: `old compatibility date (${label})`,
+            });
+            yield* stack.destroy();
+          }).pipe(logLevel),
+        { tags: [dev ? "local" : "live"] },
+      );
+
+      // ...while on later dates, where `process.stdin` exists, handlers
+      // still get the `Terminal` service.
+      worker.provider(
+        `Effect Worker on a current compatibility date still provides Terminal (${label})`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const deployed = yield* stack.deploy(TerminalEffectWorker);
+            yield* expectUrlContains(deployed.url!, "Terminal provided (number)", {
+              label: `Terminal on a current compatibility date (${label})`,
+            });
+            yield* stack.destroy();
+          }).pipe(logLevel),
+        { tags: [dev ? "local" : "live"] },
+      );
+    }
 
     // #745 regression: metadata-only edits (compatibility flags, observability,
     // placement, limits, logpush, env literals, ...) never touch the
