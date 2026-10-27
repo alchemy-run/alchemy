@@ -1,5 +1,7 @@
 # Breaking requirements into building blocks
 
+Docs: [What is Domain-Driven Design?](https://alchemy.run/domain/what-is-ddd), [Domain Model](https://alchemy.run/domain/model).
+
 Work from the language of the business. Write the requirements as sentences, then mark each one.
 
 ## 1. List the facts

@@ -1,5 +1,7 @@
 # Building blocks
 
+Docs: [Command](https://alchemy.run/domain/command), [Event](https://alchemy.run/domain/event), [Aggregate](https://alchemy.run/domain/aggregate), [View](https://alchemy.run/domain/view), [Projection](https://alchemy.run/domain/projection), [Stream](https://alchemy.run/domain/stream), [Policy](https://alchemy.run/domain/policy), [Saga](https://alchemy.run/domain/saga), [External System](https://alchemy.run/domain/external-system), [Api](https://alchemy.run/domain/api), [Sessions and middleware](https://alchemy.run/domain/sessions), [Views as security boundaries](https://alchemy.run/domain/view-security), [Unique values](https://alchemy.run/domain/unique-values), [Deadlines](https://alchemy.run/domain/deadlines).
+
 Templates for every block, taken from `examples/cloudflare-domain`. Every class is a `Domain.<Noun>(name, definition)`; extend it as `class X extends Domain.<Noun>(...) {}`.
 
 ## Id and values
@@ -125,7 +127,7 @@ export const SessionLive = Layer.succeed(Session, (effect, { headers }) =>
 
 A `RequestContext` has a schema, so its value travels with the command to the aggregate's Durable Object. A `decide` that reads `CurrentActor` won't type-check for a command without the middleware that provides it.
 
-The middleware's server half asks your auth library who is signed in, such as better-auth's `auth.getSession(headers)`. See website `domain/better-auth` and `examples/cloudflare-domain-better-auth`.
+The middleware's server half asks your auth library who is signed in, such as better-auth's `auth.getSession(headers)`. See [Sign in with better-auth](https://alchemy.run/domain/better-auth) and `examples/cloudflare-domain-better-auth`.
 
 ## View
 

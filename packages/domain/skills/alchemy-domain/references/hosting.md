@@ -1,5 +1,7 @@
 # Hosting on Cloudflare with alchemy
 
+Docs: [Cloudflare](https://alchemy.run/domain/cloudflare), [Observability](https://alchemy.run/domain/observability).
+
 The server package hosts the model in a Cloudflare Worker. `DomainCloudflare.DurableObjects` declares one Durable Object class per aggregate, view, policy, projection and stream while the Worker builds. It also runs sagas on `Cloudflare.Workflows.DurableObjectEngine`. Each aggregate instance is one Durable Object: one writer, which commits its events, state, idempotency receipt and outbox in a single transaction.
 
 ```ts

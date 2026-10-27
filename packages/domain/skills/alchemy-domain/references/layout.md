@@ -1,5 +1,7 @@
 # Monorepo layout
 
+Docs: [Project layout](https://alchemy.run/domain/project-layout).
+
 ```text
 my-app/
   package.json            workspace root: deploy scripts, the stack

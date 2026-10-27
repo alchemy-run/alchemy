@@ -7,7 +7,7 @@ description: Build backends with @alchemy.run/domain (domain-driven design on Ef
 
 `@alchemy.run/domain` models a backend as typed messages and pure state transitions. Commands are decided by aggregates, which record events. Views fold events into read models. Policies react to events. Sagas run long processes. Projections write outside the model. The same model runs in memory for tests and on Cloudflare Durable Objects in production.
 
-Docs: https://alchemy.run/domain. A complete reference project: `examples/cloudflare-domain` in the alchemy repo (a bank with a foldkit app).
+Docs: https://alchemy.run/domain, with every page listed in https://alchemy.run/llms.txt. Each reference file below links the pages it summarizes. A complete reference project: `examples/cloudflare-domain` in the alchemy repo (a bank with a foldkit app).
 
 ## Workflow
 

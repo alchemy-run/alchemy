@@ -1,5 +1,7 @@
 # foldkit frontends
 
+Docs: [Integrate with foldkit](https://alchemy.run/domain/foldkit), [Optimistic updates](https://alchemy.run/domain/optimistic-updates), [Offline and local first](https://alchemy.run/domain/local-first).
+
 foldkit is event-driven like the domain. The app's Commands send domain commands, its Subscriptions turn live view reads into Messages, and `update` folds Messages into the Model. The domain package's Api gives the browser a typed client: no hand-written fetch code, no duplicated schemas.
 
 ## The Api client as a resource
