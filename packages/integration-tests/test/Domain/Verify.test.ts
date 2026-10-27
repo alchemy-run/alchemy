@@ -68,6 +68,15 @@ class Received extends Domain.View("Received", {
   state: Schema.Struct({ total: Schema.Number }),
   evolve: { Sent: (s, e) => ({ total: (s?.total ?? 0) + e.amount }) },
 }) {}
+// Keyed by a branch id rather than an aggregate: a wallet's events name no branch.
+const BranchId = Schema.String.pipe(Schema.brand("BranchId"));
+class BranchTotals extends Domain.View("BranchTotals", {
+  from: [Wallet],
+  key: BranchId,
+  state: Schema.Struct({ total: Schema.Number }),
+  initial: { total: 0 },
+  evolve: { Deposited: (s, e) => ({ total: s.total + e.amount }) },
+}) {}
 class AlsoCards extends Domain.Projection("AlsoCards", {
   from: [Wallet],
   key: Wallet,
@@ -76,7 +85,7 @@ class AlsoCards extends Domain.Projection("AlsoCards", {
 }) {}
 class Broken extends Domain.Model("Broken", {
   aggregates: [Wallet, Payment],
-  views: [Received],
+  views: [Received, BranchTotals],
   projections: [WalletCards, AlsoCards],
   streams: [WalletCard],
 }) {}
@@ -107,6 +116,7 @@ describe("Domain verify", () => {
     expect(Domain.verify(Broken).map((problem) => problem.message)).toEqual([
       "Received declares state without initial",
       "Received consumes 'Sent' from Payment, which is not keyed by Wallet: add keyOf.Sent",
+      "BranchTotals consumes 'Deposited' from Wallet, which is not keyed by its key schema: add keyOf.Deposited",
       "WalletCard has two writers, WalletCards and AlsoCards: a stream key has exactly one",
     ]);
   });

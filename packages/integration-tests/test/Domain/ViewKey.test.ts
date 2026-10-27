@@ -156,24 +156,4 @@ describe("Domain view keyed by a schema", () => {
       expect(entries.map((entry) => entry.event.open)).toEqual([1]);
     }).pipe(Effect.scoped, Effect.provide(Tours.layer(Layer.empty).pipe(Layer.provide(InMemory)))),
   );
-
-  it("a schema-keyed view needs keyOf for a source keyed by something else", () => {
-    class Unrouted extends Domain.View("Unrouted", {
-      from: [Tour],
-      key: OrgId,
-      state: Schema.Struct({ n: Schema.Number }),
-      initial: { n: 0 },
-      evolve: { TourBooked: (s) => ({ n: s.n + 1 }) },
-    }) {}
-    class Broken extends Domain.Model("Broken", { aggregates: [Tour], views: [Unrouted] }) {}
-    const exit = Effect.runSyncExit(
-      Layer.build(Broken.layer(Layer.empty)).pipe(
-        Effect.scoped,
-        Effect.provide(InMemory),
-      ) as Effect.Effect<unknown>,
-    );
-    expect(String(exit)).toContain(
-      "Unrouted consumes 'TourBooked' from Tour, which is not keyed by its key schema: add keyOf.TourBooked",
-    );
-  });
 });
