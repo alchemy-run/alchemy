@@ -328,6 +328,35 @@ after it. Use the Output rather than writing the name out: the name
 comes from the Container's id or its `name` prop. The Container has to
 be in the same `containers` list.
 
+A listed Container can wait for another listed Container the same way:
+
+```typescript
+const web = yield* GCP.Run.Container("Web", {
+  image: "docker.io/library/nginx:1.27-alpine",
+  port: 80,
+  startupProbe: { tcpSocket: {} },
+});
+const cache = yield* GCP.Run.Container("Cache", {
+  image: "docker.io/library/redis:7-alpine",
+  port: 6379,
+  startupProbe: { tcpSocket: {} },
+  dependsOn: [web.name],
+});
+const proxy = yield* GCP.Run.Service("Proxy", {
+  template: {
+    containers: [
+      { image: proxyImage, ports: [{ containerPort: 8080 }], dependsOn: [cache.name] },
+      cache,
+      web,
+    ],
+  },
+});
+```
+
+```text
+web ✓ → cache ✓ → proxy ✓ → requests
+```
+
 ## Destroy
 
 `alchemy destroy` deletes the service, its image repository, and the

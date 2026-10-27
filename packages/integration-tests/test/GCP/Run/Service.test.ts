@@ -24,6 +24,7 @@ import BoundRedisService from "./fixtures/service-redis.ts";
 import SidecarService from "./fixtures/service-sidecar.ts";
 import UnboundContainerService from "./fixtures/service-unbound-container.ts";
 import BoundService from "./fixtures/service.ts";
+import { Static } from "./fixtures/sidecars.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -424,6 +425,52 @@ test.provider(
       const { service: solo } = yield* deploy(false);
       const soloRevision = yield* latestRevision(solo);
       expect(soloRevision.containers?.length).toEqual(1);
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(service.name)).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 900_000 },
+);
+
+test.provider(
+  "a listed Container can depend on another listed Container's name",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const service = yield* stack.deploy(
+        Effect.gen(function* () {
+          const web = yield* Static;
+          const cache = yield* GCP.Run.Container("Cache", {
+            image: "docker.io/library/redis:7-alpine",
+            port: 6379,
+            startupProbe: { tcpSocket: {}, periodSeconds: 2, failureThreshold: 30 },
+            dependsOn: [web.name],
+          });
+          return yield* GCP.Run.Service("ListedContainers", {
+            location: "us-central1",
+            template: {
+              containers: [
+                {
+                  image: HELLO_IMAGE,
+                  ports: [{ name: "http1", containerPort: 8080 }],
+                  dependsOn: [cache.name],
+                },
+                cache,
+                web,
+              ],
+            },
+          });
+        }),
+      );
+
+      // The names resolve, so the revision starts static → cache → the ingress.
+      const revision = yield* latestRevision(service);
+      const byName = new Map((revision.containers ?? []).map((c) => [c.name ?? "", c]));
+      expect(revision.containers?.length).toEqual(3);
+      expect(revision.containers?.[0]?.dependsOn).toEqual(["cache"]);
+      expect(byName.get("cache")?.dependsOn).toEqual(["static"]);
+      expect(byName.get("static")?.dependsOn ?? []).toEqual([]);
 
       yield* stack.destroy();
       expect(yield* waitUntilGone(service.name)).toEqual("gone");
