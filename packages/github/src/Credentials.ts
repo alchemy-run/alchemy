@@ -1,17 +1,11 @@
 import { Octokit } from "@octokit/rest";
-import { AuthError } from "alchemy/Auth/AuthProvider";
-import {
-  deferUntilFirstUse,
-  orDieCredentialsUnavailable,
-  resolveProviderConfig,
-} from "alchemy/Auth/Resolve";
+import { lazyCredentials } from "alchemy/Auth/Resolve";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import {
   GITHUB_AUTH_PROVIDER_NAME,
-  type GitHubAuthConfig,
   type GitHubResolvedCredentials,
   readEnvCredentials,
 } from "./AuthProvider.ts";
@@ -113,28 +107,10 @@ export const fromAuthProvider = (options?: { readonly baseUrl?: string }) =>
         options?.baseUrl !== undefined
           ? { baseUrl: yield* normalizeGitHubBaseUrl(options.baseUrl) }
           : undefined;
-      // Defer profile lookup and credential resolution until first use, so
-      // building the provider layers never requires a configured profile.
-      const resolve = yield* resolveProviderConfig<GitHubAuthConfig, GitHubResolvedCredentials>(
+      return yield* lazyCredentials<GitHubResolvedCredentials>()(
         GITHUB_AUTH_PROVIDER_NAME,
-      ).pipe(
-        Effect.flatMap(({ profileName, resolve }) =>
-          resolve.pipe(
-            Effect.map((creds) =>
-              make(creds.token, fixedBaseUrl !== undefined ? fixedBaseUrl.baseUrl : creds.baseUrl),
-            ),
-            Effect.mapError((e) =>
-              AuthError.make({
-                message: `Failed to resolve GitHub credentials from ${profileName === undefined ? "the CI environment" : `profile '${profileName}'`}: ${(e as { message?: string }).message ?? String(e)}`,
-              }),
-            ),
-          ),
-        ),
-        deferUntilFirstUse,
-      );
-      return yield* resolve.pipe(
-        orDieCredentialsUnavailable(GITHUB_AUTH_PROVIDER_NAME),
-        Effect.cached,
-      );
+        (creds) =>
+          make(creds.token, fixedBaseUrl !== undefined ? fixedBaseUrl.baseUrl : creds.baseUrl),
+      ).pipe(Effect.map(Effect.orDie));
     }).pipe(Effect.orDie),
   );

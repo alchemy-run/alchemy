@@ -70,7 +70,10 @@
       "path": "./packages/cloudflare-test-tools/tsconfig.json"
     },
     {
-      "path": "./tsconfig.scripts.json"
+      "path": "./scripts/tsconfig.json"
+    },
+    {
+      "path": "./stacks/tsconfig.json"
     },
     {
       "path": "./packages/alchemy-test/tsconfig.json"
