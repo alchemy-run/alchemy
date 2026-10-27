@@ -173,6 +173,14 @@ export declare namespace Api {
   export type AggregateClient<A extends AggregateModule.Any> = ApiModule.AggregateClient<A>;
   /** Everything a read can fail with. */
   export type ReadError<D> = ApiModule.ReadError<D>;
+  /** Any Api class, for code that works with every Api. */
+  export type Any = ApiModule.Any;
+  /** The command classes an Api exposes. */
+  export type CommandsOf<A extends ApiModule.Any> = ApiModule.CommandsOf<A>;
+  /** The rejection classes the commands of an Api declare. */
+  export type RejectionsOf<A extends ApiModule.Any> = ApiModule.RejectionsOf<A>;
+  /** The client an Api's `Client` service gives. */
+  export type ClientOf<A extends ApiModule.Any> = ApiModule.ClientOf<A>;
 }
 /** The public surface of a domain for one client. See {@link ApiModule.make}. */
 export const Api = ApiModule.make;
