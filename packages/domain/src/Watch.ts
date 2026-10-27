@@ -8,6 +8,7 @@ import type * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
 import { type Filter, matches } from "./Filter.ts";
 import { decodeEnvelope, type Kernel } from "./Kernel.ts";
+import * as Key from "./Key.ts";
 import type {
   Json,
   Push,
@@ -83,7 +84,7 @@ interface Item {
 const encode = (
   entry: View.Any | Aggregate.Any | DomainStream.Any,
   subscription: Subscription,
-  ref: Aggregate.Ref,
+  ref: unknown,
   items: ReadonlyArray<Item>,
   cursor: number,
 ): Effect.Effect<Push> =>
@@ -161,7 +162,7 @@ export const viewPush =
     entries: ReadonlyArray<ViewEntry>,
   ): Effect.Effect<Push> =>
     Effect.suspend(() => {
-      const ref = { aggregate: view.definition.key.aggregateName, id: key } as Aggregate.Ref;
+      const ref = Key.refOf(view.definition.key, key);
       if (subscription.mode === "watch") {
         if (snapshot.version <= subscription.cursor) {
           return Effect.succeed({ messages: [], subscription, done: false });
@@ -238,7 +239,7 @@ export const streamPush =
     latest: StreamEntry | undefined,
   ): Effect.Effect<Push> =>
     Effect.suspend(() => {
-      const ref = { aggregate: stream.definition.key.aggregateName, id: key } as Aggregate.Ref;
+      const ref = Key.refOf(stream.definition.key, key);
       if (subscription.mode === "watch") {
         if (meta.seq <= subscription.cursor) {
           return Effect.succeed({ messages: [], subscription, done: false });

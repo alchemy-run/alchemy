@@ -1,6 +1,7 @@
 import { Endpoint } from "@distilled.cloud/aws";
 import * as Region from "@distilled.cloud/aws/Region";
 import * as sfn from "@distilled.cloud/aws/sfn";
+import type { SourceError } from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeStateMachineArnHttpBinding } from "./BindingHttp.ts";
@@ -16,9 +17,10 @@ import { StartSyncExecution } from "./StartSyncExecution.ts";
  */
 const startSyncExecutionOnSyncEndpoint = Effect.gen(function* () {
   const regionEffect = yield* Region.Region;
-  const syncStatesEndpoint: Effect.Effect<string | undefined> = Effect.map(
-    regionEffect,
-    (region) => `https://sync-states.${region}.amazonaws.com`,
+  // No region: no pin; the call itself then fails with MissingRegion.
+  const syncStatesEndpoint: Effect.Effect<string | undefined, SourceError> = regionEffect.pipe(
+    Effect.map((region): string | undefined => `https://sync-states.${region}.amazonaws.com`),
+    Effect.catchTag("Alchemy::AWS::MissingRegion", () => Effect.succeed(undefined)),
   );
   const op = yield* sfn.startSyncExecution;
   // The endpoint must be pinned per call, not around the yield: the

@@ -8,7 +8,7 @@ import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import DataPipelinesBindingsHost, { BindBatch } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -43,7 +43,7 @@ const expectedProjectRoles = [
 ];
 
 // RunPipeline must run before StopPipeline archives the pipeline.
-describe.skipIf(!dockerAvailable)(
+describe(
   "DataPipelines Bindings",
   {
     sequential: true,

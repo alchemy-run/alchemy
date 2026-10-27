@@ -1,5 +1,4 @@
 import { describe, expect } from "bun:test";
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
 import * as Alchemy from "alchemy";
 import * as Test from "alchemy/Test/Bun";
@@ -44,11 +43,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Alchemy.localState(),
 });
 
-// The image is built locally, so the whole suite needs Docker.
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-
-describe.skipIf(!dockerAvailable)("gcp-website-nextjs", () => {
+describe("gcp-website-nextjs", () => {
   // The first deploy runs `next build`, builds and pushes the image
   // (installing `next` into it), and rolls out Cloud Run.
   const stack = beforeAll(deploy(Stack).pipe(Effect.tap(Console.log)), {

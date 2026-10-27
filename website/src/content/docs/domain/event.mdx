@@ -54,12 +54,12 @@ The aggregate turns each event into its next state with `evolve`. This is where 
 ```typescript title="src/Account.aggregate.ts"
 evolve: {
   AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-  MoneyDeposited: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
-  MoneyWithdrawn: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
+  MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
+  MoneyWithdrawn: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
 },
 ```
 
-`evolve` can't refuse an event. It already happened, and only `decide` gets to say no. If an event arrives in a state where it makes no sense, like a deposit to an account that was never opened, that's a bug in `decide`, so `mustBeOpen` throws and the whole command rolls back. See [Aggregate](/domain/aggregate#apply-events-with-evolve).
+`evolve` can't refuse an event. It already happened, and only `decide` gets to say no. `decide` returns a typed rejection such as `NotOpen` before it records a deposit to an account that isn't open, so `evolve` only has to cover every state. See [Aggregate](/domain/aggregate#apply-events-with-evolve).
 
 ## The envelope
 

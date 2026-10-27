@@ -51,7 +51,7 @@ A Resource Provider implements the following Lifecycle Operations:
 
 First-class sibling repositories we maintain live in `submodules/`:
 
-- `submodules/distilled` — generated Effect SDKs (workspace packages). Initialized by `git submodule update --init`.
+- `submodules/distilled` — generated Effect SDKs (workspace packages). Initialized by `git submodule update --init`. In a linked Alchemy worktree, the `post-checkout` hook (`scripts/bootstrap-distilled.mjs`) adds it as a worktree of the primary checkout's distilled and clones unchanged files from there, so on APFS, btrfs or XFS it shares their disk blocks (about 1.1 GB saved per worktree). `ALCHEMY_DISTILLED_CLONE=0` writes a full copy instead.
 - `submodules/floci` — our fork of the local AWS emulator. Skipped by default; fetch with `git submodule update --init --checkout -- submodules/floci`.
 
 Each Service's Resources follow the same pattern. Resource contract and provider are co-located in the same file. Each Capability lives in its own file(s) named after the capability and access level (`Binding.Service` contract + the `*Binding` / `*Http` implementations).
@@ -766,6 +766,7 @@ Choose the deployment-based pattern that fits the behavior under test:
 
 Keep regression cases in the relevant existing resource or binding suite. A Worker lifecycle feature belongs in `test/Cloudflare/Workers/Worker.test.ts`; binding fixtures belong beside their owning suite in `fixtures/`.
 
+- Assume Docker is installed. Never `skipIf`-gate a test on Docker availability; a missing daemon fails the test.
 - Start and end `test.provider` cases with `stack.destroy()`. Fixture suites deploy in `beforeAll` and destroy in `afterAll`. Use deterministic resource identities and verify deletion through the cloud API.
 - Exercise create, update, redeploy, and removal through the stack. **Do not mock HTTP or SDK responses, invoke provider lifecycle methods directly, or call extracted reconciliation helpers as a substitute for a deployment.**
 - Verify the resulting cloud state through distilled and exercise the deployed runtime when relevant. Use real SDK calls on test-owned resources to establish out-of-band state or verify API update semantics. Keep provider behavior assertions driven by `stack.deploy`.
@@ -1141,6 +1142,7 @@ Additional flags beyond vitest:
 | ----------------- | ------- | ------------------------------------------------------------- |
 | `-t <regex>`      | —       | Test-name pattern (regex, like bun/vitest) tested against the full nested title (`file > describes > name`), so any fragment matches regardless of nesting. An invalid regex degrades to a literal substring instead of erroring. Remember to escape regex metacharacters when filtering literally: `-t "create \(default\)"` |
 | `--profile <name>` | —      | Sets `ALCHEMY_PROFILE` before any test module is imported. Use `--profile testing` for live-cloud suites instead of an `ALCHEMY_PROFILE=testing` env prefix |
+| `--stage <name>`  | —       | Sets `ALCHEMY_TEST_STAGE` before any test module is imported, replacing `Test.make`'s default `test_$USER` stage for the run (e.g. one stage per git worktree) |
 | `--fast`          | off     | Sets `FAST=1` before imports — suites `skipIf(process.env.FAST)` their slow tests (long-provisioning resources, smoke tests). Replaces the `FAST=1` env prefix |
 | `--timeout <ms>`  | 120000  | Default per-test timeout                                      |
 | `--retry <n>`     | 2       | Re-runs of a failing test body (use `--retry 0` when debugging) |
@@ -1160,7 +1162,7 @@ Runner semantics to know:
 
 - Everything runs in ONE bun process: files run concurrently (respecting `describe.sequential`), imports of all test files happen up-front (they must be lazy and pure — registration only, no top-level side effects beyond `Test.make`/`describe`/`test`).
 - Tests that mutate process-global state (e.g. `process.env.PATH`, `process.chdir`, `globalThis.__ALCHEMY_RUNTIME__`) must pass `{ exclusive: true }` in the test options to take the whole-process write lock. Tests that only contend for a shared cloud resource (an account singleton, a quota) pass a label instead — `{ exclusive: "aws:ses-account" }` serializes them with other holders of that label while the rest of the run continues. The same option works on `beforeAll`/`afterAll` hooks.
-- The harness (`@alchemy.run/test` package) provides `describe`, `it`/`test` (incl. `it.effect`/`it.live`), hooks, `layer`, `expect`, and `assert` — the codemod `scripts/codemod-alchemy-test.ts` migrates vitest imports and is idempotent.
+- The harness (`@alchemy.run/test` package) provides `describe`, `it`/`test` (incl. `it.effect`/`it.live`), hooks, `layer`, `expect`, and `assert`.
 - The runner runs in plain bun, so distilled resolves from `src/*.ts` via the `bun` export condition — a regenerated service is test-visible immediately, no `lib/` rebuild required.
 
 ## The convergence loop: nuke → test → census → fix-fleet
@@ -1169,7 +1171,7 @@ Ironing out the AWS suite is an iterative loop, driven by a coordinator, that te
 
 Each iteration:
 
-0. **Clean slate** — first run `aws sso login` (the alchemy `testing` profile and the raw `aws` CLI ride the same SSO session; an expired token mid-round breaks the pipeline with auth errors — only escalate to a human if the login doesn't complete automatically). Then `pnpm nuke --yes` (deletes every alchemy-tagged cloud resource; `scripts/nuke.sh` already spares state buckets, SSO roles, and AWS-managed singletons) then `pnpm alchemy state delete Nuke --config ./stacks/nuke.ts --profile testing --recursive`. Never overlap nuke with a running suite. Plain `pnpm clear:state` lacks the profile and dies on expired Cloudflare OAuth; nuke without `--yes` hangs on an interactive confirm in non-interactive shells.
+0. **Clean slate** — first run `aws sso login` (the alchemy `testing` profile and the raw `aws` CLI ride the same SSO session; an expired token mid-round breaks the pipeline with auth errors — only escalate to a human if the login doesn't complete automatically). Then `pnpm nuke --yes` (deletes every alchemy-tagged cloud resource; `scripts/nuke.sh` already spares state buckets, SSO roles, and AWS-managed singletons) then `pnpm -C stacks alchemy state delete Nuke --config ./src/nuke.ts --profile testing --recursive`. Never overlap nuke with a running suite. Plain `pnpm clear:state` lacks the profile and dies on expired Cloudflare OAuth; nuke without `--yes` hangs on an interactive confirm in non-interactive shells.
 1. **Full suite, bounded** — `pnpm test:integration test/AWS --profile testing`. The runner defaults to `--concurrency 32`; NEVER override it to `unbounded` on a full-suite run: all ~775 files' `beforeAll` deploys start at once, the event loop saturates, and hundreds of fake 0ms `beforeAll TimeoutError` failures drown the real signal (heap is ~8.5 GB regardless of N — the constraint is CPU, not memory). Target ≤10 min wall-clock, hard cap 128; measured 32 → ~21 min clean. The saturation tell is `beforeAll` failures at 0ms; real failures fail slow. If the cap can't reach 10 min, the residual is individual slow files — skipIf-gate them per the speed doctrine.
 2. **Leak census** — `pnpm nuke --dry-run` after the suite; diff against the pre-suite baseline. Worklist = **failed services ∪ leaking services** (a service can pass green and still leak). Leave the leaked resources LIVE as forensic evidence for the fix agents; carry-over holdouts that survive repeated nuke passes (stuck deletes) go on the worklist too — their delete path is the bug.
 3. **Fix-fleet workflow** — one agent per service on the worklist (account-singleton services — CloudTrail, Config, SecurityHub, GuardDuty, ControlTower, IdentityCenter — run as a sequential chain; everything else fans out). Each agent gets its exact failures, its leak inventory, and this root-cause priority: **provider bug > distilled patch > test fix** — never paper over a provider leak in the test. Each agent runs ONLY its own suite (`pnpm test:integration test/AWS/{Service} --profile testing`), audits its tests for non-deterministic names (rely on PhysicalName auto-naming; random data in message payloads/idempotency tokens is fine), verifies zero orphans from its service via out-of-band distilled list/describe calls, and reports a structured result. Agents never run tsc/build and never run the account-wide nuke.

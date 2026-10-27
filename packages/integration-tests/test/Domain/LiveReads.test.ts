@@ -59,7 +59,7 @@ class Counters extends Domain.Model("Counters", {
 class CounterApi extends Domain.Api("CounterApi", Increment, Counter, Totals, Bumps) {}
 
 const Hosted = Counters.layer(BumpWriterLive).pipe(Layer.provideMerge(InMemory));
-const InProcess = Layer.effect(CounterApi.Client, CounterApi.testClient).pipe(
+const InProcess = Layer.effect(CounterApi.Client, CounterApi.clientInProcess).pipe(
   Layer.provideMerge(Hosted),
 );
 const Wire = CounterApi.layerClient.pipe(

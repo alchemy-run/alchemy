@@ -7,7 +7,7 @@ import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { callProbe, dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { callProbe, expectProbe } from "../bindingHost.ts";
 import AIPlatformBindingsHost, {
   Agent,
   Browser,
@@ -65,7 +65,7 @@ const expectProjectGrants = Effect.gen(function* () {
   expect(yield* projectGrantsOf(hostAccount)).toEqual(PROJECT_GRANTS);
 });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "AIPlatform Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:aiplatform", "provider:gcp:run", "live"],

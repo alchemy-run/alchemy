@@ -35,11 +35,13 @@ layer(NodeServices.layer)("dispatch asset configuration serialization", (it) => 
               },
             },
           };
-          const request = buildRequest({
-            input,
-            inputAst: putDispatchNamespaceScript.input.ast,
-            baseUrl: "https://api.cloudflare.com/client/v4",
-          });
+          const request = Effect.runSync(
+            buildRequest({
+              input,
+              inputAst: putDispatchNamespaceScript.input.ast,
+              baseUrl: "https://api.cloudflare.com/client/v4",
+            }),
+          );
           const form = (request.body as { formData: FormData }).formData;
           expect(JSON.parse(form.get("metadata") as string)).toEqual({
             main_module: "index.js",
