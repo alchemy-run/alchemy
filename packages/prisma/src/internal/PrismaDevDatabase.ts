@@ -1,4 +1,5 @@
 import type { Server, ServerOptions } from "@prisma/dev";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -30,8 +31,16 @@ const servers = new Map<string, PrismaDevDatabaseEntry>();
 const startMutex = Semaphore.makeUnsafe(1);
 const MIGRATION_OUTPUT_LIMIT_BYTES = 1024 * 1024;
 
+export class PrismaDevDatabaseError extends Data.TaggedError("PrismaDevDatabaseError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 const toError = (message: string) => (cause: unknown) =>
-  cause instanceof Error ? cause : new Error(`${message}: ${String(cause)}`);
+  new PrismaDevDatabaseError({
+    message: cause instanceof Error ? cause.message : `${message}: ${String(cause)}`,
+    cause,
+  });
 
 const importPrismaDev = Effect.tryPromise({
   try: () => import("@prisma/dev"),
@@ -315,7 +324,7 @@ export const ensurePrismaDevDatabase = Effect.fn(function* (
           ),
         );
       }
-      return yield* Effect.fail(attrsResult.failure);
+      return yield* attrsResult.failure;
     }
     const attrs = attrsResult.success;
     entry = {

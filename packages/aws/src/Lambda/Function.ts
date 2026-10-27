@@ -3256,18 +3256,18 @@ export const FunctionProvider = () =>
             })
             .pipe(
               Effect.flatMap((policies) =>
-                Effect.all(
+                Effect.forEach(
                   // The log-group guard stays until the function is deleted.
-                  (policies.PolicyNames ?? [])
-                    .filter((policyName) => policyName !== logGroupGuardPolicyName)
-                    .map((policyName) =>
-                      iam
-                        .deleteRolePolicy({
-                          RoleName: output.roleName,
-                          PolicyName: policyName,
-                        })
-                        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
-                    ),
+                  (policies.PolicyNames ?? []).filter(
+                    (policyName) => policyName !== logGroupGuardPolicyName,
+                  ),
+                  (policyName) =>
+                    iam
+                      .deleteRolePolicy({
+                        RoleName: output.roleName,
+                        PolicyName: policyName,
+                      })
+                      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
                 ),
               ),
               Effect.catchTag("NoSuchEntityException", () => Effect.void),
@@ -3279,15 +3279,13 @@ export const FunctionProvider = () =>
             })
             .pipe(
               Effect.flatMap((policies) =>
-                Effect.all(
-                  (policies.AttachedPolicies ?? []).map((policy) =>
-                    iam
-                      .detachRolePolicy({
-                        RoleName: output.roleName,
-                        PolicyArn: policy.PolicyArn!,
-                      })
-                      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
-                  ),
+                Effect.forEach(policies.AttachedPolicies ?? [], (policy) =>
+                  iam
+                    .detachRolePolicy({
+                      RoleName: output.roleName,
+                      PolicyArn: policy.PolicyArn!,
+                    })
+                    .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
                 ),
               ),
               Effect.catchTag("NoSuchEntityException", () => Effect.void),

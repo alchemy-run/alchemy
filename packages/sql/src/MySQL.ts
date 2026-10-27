@@ -2,6 +2,7 @@ import * as MysqlClient from "@effect/sql-mysql2/MysqlClient";
 import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
 import { proxyChain } from "alchemy/Util/proxy-chain";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -20,6 +21,12 @@ export type MySQLConfig<E = never, R = never> = Omit<MysqlClient.MysqlClientConf
 const isWorkerd = () =>
   (globalThis as { navigator?: { userAgent?: string } }).navigator?.userAgent ===
     "Cloudflare-Workers" || "WebSocketPair" in globalThis;
+
+/** A MySQL connection url that could not be parsed. */
+export class MySQLUrlError extends Data.TaggedError("MySQLUrlError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 // Query-string params are JSON-parsed into poolConfig entries (mysql2's own
 // URI convention), so `mysql://...?ssl={"rejectUnauthorized":true}` works.
@@ -46,9 +53,10 @@ const parseMySQLUrl = (url: Redacted.Redacted<string>) =>
       };
     },
     catch: (cause) =>
-      new Error(
-        `SQL.MySQL: failed to parse connection url: ${cause instanceof Error ? cause.message : String(cause)}`,
-      ),
+      new MySQLUrlError({
+        message: `SQL.MySQL: failed to parse connection url: ${cause instanceof Error ? cause.message : String(cause)}`,
+        cause,
+      }),
   }).pipe(Effect.orDie);
 
 /**

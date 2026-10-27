@@ -9,6 +9,7 @@ import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { sha256Object } from "alchemy/Util/sha256";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
@@ -279,6 +280,13 @@ const attrsFrom = (
   createdAt: deployment.createdAt,
 });
 
+export class InvalidArtifactUploadUrlError extends Data.TaggedError(
+  "InvalidArtifactUploadUrlError",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface ReadUploadArtifactInput {
   artifact?: string | Uint8Array;
   artifactPath?: string;
@@ -434,7 +442,11 @@ export const uploadArtifact = (
           throw new Error("invalid upload URL");
         }
       },
-      catch: () => new Error("Prisma artifact upload URL must be credential-free HTTPS."),
+      catch: (cause) =>
+        new InvalidArtifactUploadUrlError({
+          message: "Prisma artifact upload URL must be credential-free HTTPS.",
+          cause,
+        }),
     });
     yield* executeArtifactUpload(uploadUrl, artifact, contentType);
   });

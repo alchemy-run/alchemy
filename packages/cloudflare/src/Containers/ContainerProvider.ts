@@ -348,7 +348,7 @@ export const LiveContainerProvider = () =>
             imageRef,
           });
         }
-        return yield* Schema.decodeUnknownEffect(RegistryDigest)(
+        return yield* Schema.decodeEffect(RegistryDigest)(
           response.headers["docker-content-digest"],
         ).pipe(
           Effect.mapError((cause) =>

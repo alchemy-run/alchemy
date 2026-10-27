@@ -106,16 +106,14 @@ const make = Effect.fn(function* (spawnerUrl: string) {
           ),
         );
       }
-      let websocketUrl: URL;
-      try {
-        websocketUrl = new URL(body);
-      } catch {
+      if (!URL.canParse(body)) {
         return yield* Effect.fail(
           new Error(
             `RPC spawner POST ${spawnerUrl} did not return a websocket URL (got ${JSON.stringify(body.slice(0, 200))})`,
           ),
         );
       }
+      const websocketUrl = new URL(body);
       if (websocketUrl.protocol !== "ws:" && websocketUrl.protocol !== "wss:") {
         return yield* Effect.fail(
           new Error(
@@ -239,8 +237,9 @@ const make = Effect.fn(function* (spawnerUrl: string) {
         let connection = current.connection;
         if (connection === undefined) {
           const open = getSession(environment);
+          const context = yield* Effect.context();
           connection = {
-            pending: Effect.runPromise(
+            pending: Effect.runPromiseWith(context)(
               current.testOwned ? open.pipe(Effect.timeout("30 seconds")) : open,
             ),
           };

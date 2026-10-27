@@ -237,7 +237,7 @@ export const hashFunctionImageBuild = Effect.fn(function* (
   source: FunctionDockerImageSource,
   architecture: "x86_64" | "arm64",
 ) {
-  const decoded = yield* Schema.decodeUnknownEffect(FunctionDockerImageSourceSchema)(source);
+  const decoded = yield* Schema.decodeEffect(FunctionDockerImageSourceSchema)(source);
   return yield* hashDecodedFunctionImageBuild(decoded, architecture);
 });
 

@@ -64,7 +64,7 @@ export const toAttributeValue: (
     };
   } else if (Array.isArray(value)) {
     return {
-      L: yield* Effect.all(value.map(toAttributeValue)),
+      L: yield* Effect.forEach(value, toAttributeValue),
     };
   } else if (value instanceof Set) {
     const setType = getType(value);
@@ -74,7 +74,7 @@ export const toAttributeValue: (
       };
     } else if (Array.isArray(setType)) {
       return {
-        L: yield* Effect.all(setType.map(toAttributeValue)),
+        L: yield* Effect.forEach(setType, toAttributeValue),
       };
     } else if (setType === "SS") {
       return {
@@ -90,7 +90,7 @@ export const toAttributeValue: (
       };
     } else {
       return {
-        L: yield* Effect.all(Array.from(value.values()).map(toAttributeValue)),
+        L: yield* Effect.forEach(Array.from(value.values()), toAttributeValue),
       };
     }
   } else if (Buffer.isBuffer(value)) {
@@ -112,10 +112,8 @@ export const toAttributeValue: (
   } else if (typeof value === "object") {
     return {
       M: Object.fromEntries(
-        yield* Effect.all(
-          Object.entries(value).map(([key, value]) =>
-            toAttributeValue(value).pipe(Effect.map((value) => [key, value])),
-          ),
+        yield* Effect.forEach(Object.entries(value), ([key, value]) =>
+          toAttributeValue(value).pipe(Effect.map((value) => [key, value])),
         ),
       ),
     };

@@ -209,9 +209,7 @@ export const fromExecutionContext = (
       const context = yield* Effect.context<R>();
       // Register the promise with workerd un-awaited — waitUntil extends the
       // invocation's lifetime without blocking the response.
-      yield* Effect.sync(() =>
-        ctx.waitUntil(Effect.runPromise(effect.pipe(Effect.provide(context)))),
-      );
+      yield* Effect.sync(() => ctx.waitUntil(Effect.runPromiseWith(context)(effect)));
     }),
   passThroughOnException: () => Effect.sync(() => ctx.passThroughOnException()),
   cache: {

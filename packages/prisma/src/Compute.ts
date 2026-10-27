@@ -33,6 +33,7 @@ import type { ProcessContext, ProcessServices } from "alchemy/Runtime/Process";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { sha256Object } from "alchemy/Util/sha256";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -807,7 +808,7 @@ export const Compute: Platform<
               );
               return yield* Effect.never;
             }
-          }).pipe(Effect.catch((error: unknown) => Effect.die(error))),
+          }),
         );
       });
 
@@ -862,15 +863,15 @@ export const Compute: Platform<
       run,
       serve,
       exports: Effect.sync(() => ({
-        default: Effect.all(
-          runners.map((effect) =>
+        default: Effect.forEach(
+          [...runners],
+          (effect) =>
             Effect.forever(
               effect.pipe(
                 Effect.tapError((error) => Effect.logError(error)),
                 Effect.ignore,
               ),
             ),
-          ),
           { concurrency: "unbounded" },
         ),
       })),
@@ -1366,6 +1367,11 @@ const isAutoBuild = (build: ComputeProps["build"]): build is "auto" | ComputeAut
 const isStaticBuild = (build: ComputeProps["build"]): build is ComputeStaticBuild =>
   typeof build === "object" && build !== null && "type" in build && build.type === "static";
 
+export class ComputePackageJsonError extends Data.TaggedError("ComputePackageJsonError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 const readPackageMain = Effect.fn(function* (directory: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -1382,9 +1388,10 @@ const readPackageMain = Effect.fn(function* (directory: string) {
       return typeof parsed.main === "string" ? parsed.main : undefined;
     },
     catch: (cause) =>
-      new Error(
-        `Failed to parse package.json in ${directory}: ${cause instanceof Error ? cause.message : String(cause)}`,
-      ),
+      new ComputePackageJsonError({
+        message: `Failed to parse package.json in ${directory}: ${cause instanceof Error ? cause.message : String(cause)}`,
+        cause,
+      }),
   });
 });
 

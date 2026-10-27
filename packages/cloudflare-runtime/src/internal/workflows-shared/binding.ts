@@ -602,7 +602,7 @@ export class WorkflowBinding extends WorkerEntrypoint<Env> {
     // the deprecated array form retains create()'s option validation behavior.
     for (const instanceOptions of batch) {
       if (!isLegacyBatch) {
-        const validation = Schema.decodeUnknownResult(workflowInstanceCreateOptionsSchema)(
+        const validation = Schema.decodeResult(workflowInstanceCreateOptionsSchema)(
           instanceOptions,
         );
         if (Result.isFailure(validation)) {

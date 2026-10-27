@@ -415,11 +415,12 @@ const watchResolved =
         Effect.gen(function* () {
           // Hold a build permit until the watcher's initial build settles.
           yield* buildPermits.take(1);
+          const context = yield* Effect.context();
           let initialBuildSettled = false;
           const settleInitialBuild = () => {
             if (initialBuildSettled) return;
             initialBuildSettled = true;
-            Effect.runFork(buildPermits.release(1));
+            Effect.runForkWith(context)(buildPermits.release(1));
           };
           const watcher = yield* Effect.promise(() => createWatcher(settleInitialBuild)).pipe(
             Effect.onError(() => Effect.sync(settleInitialBuild)),

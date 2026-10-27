@@ -4,6 +4,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
@@ -466,6 +467,11 @@ const findByExpiry = (zoneId: string, expiresAtMs: number) =>
  * wrapped in `Effect.try` so a malformed PEM surfaces as a typed failure
  * instead of a thrown exception.
  */
+class CertificateParseError extends Data.TaggedError("CertificateParseError")<{
+  message: string;
+  cause?: unknown;
+}> {}
+
 const parseCertificate = (pem: string) =>
   Effect.try({
     try: () => {
@@ -473,10 +479,10 @@ const parseCertificate = (pem: string) =>
       return { expiresAtMs: Date.parse(x509.validTo) };
     },
     catch: (cause) =>
-      new Error(
-        `failed to parse certificate PEM: ${cause instanceof Error ? cause.message : String(cause)}`,
-        { cause },
-      ),
+      new CertificateParseError({
+        message: `failed to parse certificate PEM: ${cause instanceof Error ? cause.message : String(cause)}`,
+        cause,
+      }),
   });
 
 /**

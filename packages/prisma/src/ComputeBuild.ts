@@ -1,4 +1,5 @@
 import * as ByteSize from "effect/ByteSize";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -10,6 +11,11 @@ import * as Redacted from "effect/Redacted";
 import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { normalizeEntrypoint } from "./ComputeArchive.ts";
+
+export class ComputeBuildError extends Data.TaggedError("ComputeBuildError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 // `@vercel/nft` is an optional peer dependency — loaded lazily so importing
 // the Prisma provider never requires it unless a NestJS artifact is traced.
@@ -872,9 +878,13 @@ const stageTracedNestjsArtifact = Effect.fn(function* (options: {
         .then(({ nodeFileTrace }) => nodeFileTrace([entry], { base: sourceRoot }))
         .then((result) => Array.from(result.fileList)),
     catch: (cause) =>
-      cause instanceof Error
-        ? cause
-        : new Error(`Failed to trace NestJS artifact: ${String(cause)}`),
+      new ComputeBuildError({
+        message:
+          cause instanceof Error
+            ? cause.message
+            : `Failed to trace NestJS artifact: ${String(cause)}`,
+        cause,
+      }),
   });
 
   const sortedFiles = fileList.sort((a, b) => a.localeCompare(b));
@@ -1266,9 +1276,10 @@ const readPackageJson = Effect.fn(function* (appPath: string) {
   return yield* Effect.try({
     try: () => JSON.parse(text) as Record<string, unknown>,
     catch: (cause) =>
-      new Error(
-        `Failed to parse package.json in ${appPath}: ${cause instanceof Error ? cause.message : String(cause)}`,
-      ),
+      new ComputeBuildError({
+        message: `Failed to parse package.json in ${appPath}: ${cause instanceof Error ? cause.message : String(cause)}`,
+        cause,
+      }),
   });
 });
 
@@ -1299,7 +1310,11 @@ const parseTsconfigOutDir = Effect.fn(function* (content: string) {
       JSON.parse(stripJsonComments(content)) as {
         compilerOptions?: { outDir?: unknown };
       },
-    catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+    catch: (cause) =>
+      new ComputeBuildError({
+        message: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      }),
   }).pipe(Effect.orElseSucceed(() => undefined));
   const outDir = parsed?.compilerOptions?.outDir;
   return typeof outDir === "string" ? normalizeRelativePath(outDir) : undefined;
@@ -1317,7 +1332,11 @@ const readJsonObjectFile = Effect.fn(function* (directory: string, fileName: str
       const parsed = JSON.parse(text) as unknown;
       return isRecord(parsed) ? parsed : undefined;
     },
-    catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+    catch: (cause) =>
+      new ComputeBuildError({
+        message: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      }),
   }).pipe(Effect.orElseSucceed(() => undefined));
 });
 

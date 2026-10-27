@@ -49,6 +49,12 @@ export class KubernetesApiError extends Data.TaggedError("KubernetesApiError")<{
   }
 }
 
+/** An object ref that cannot be mapped to a REST path (e.g. a namespaced kind without a namespace). */
+export class KubernetesObjectPathError extends Data.TaggedError("KubernetesObjectPathError")<{
+  message: string;
+  cause?: unknown;
+}> {}
+
 const fieldManager = "alchemy";
 
 /** Deadline for auth-header minting and for each HTTP attempt. */
@@ -310,7 +316,11 @@ const buildPath = Effect.fn(function* ({
   const spec = yield* resolveKindSpec({ transport, input: object });
   return yield* Effect.try({
     try: () => buildKubernetesObjectPathWithSpec(object, spec),
-    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    catch: (error) =>
+      new KubernetesObjectPathError({
+        message: error instanceof Error ? error.message : String(error),
+        cause: error,
+      }),
   });
 });
 

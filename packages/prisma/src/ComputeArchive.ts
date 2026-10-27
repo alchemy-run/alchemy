@@ -1,5 +1,6 @@
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import { isPathWithin } from "alchemy/Util/isPathWithin";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -113,6 +114,11 @@ interface ArchiveBudget {
   entries: number;
 }
 
+export class ComputeArchiveOptionsError extends Data.TaggedError("ComputeArchiveOptionsError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 type ArchiveError = PlatformError | Error;
 type ArchiveRequirements = FileSystem.FileSystem | Path.Path;
 
@@ -189,7 +195,11 @@ const createComputeArchiveFile = Effect.fn(function* (
       maxFileBytes: boundedLimit("maxFileBytes", maxFileBytes, MAX_FILE_BYTES),
       maxEntries: boundedLimit("maxEntries", maxEntries, MAX_ENTRIES),
     }),
-    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    catch: (error) =>
+      new ComputeArchiveOptionsError({
+        message: error instanceof Error ? error.message : String(error),
+        cause: error,
+      }),
   });
   const budget: ArchiveBudget = {
     ...validated,

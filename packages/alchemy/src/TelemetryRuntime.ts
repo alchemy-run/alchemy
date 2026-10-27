@@ -198,8 +198,9 @@ const fanoutClient = (
           return effect;
         }
         return Effect.gen(function* () {
-          const results = yield* Effect.all(
-            targets.map((target) =>
+          const results = yield* Effect.forEach(
+            targets,
+            (target) =>
               Effect.result(
                 base.execute(
                   request.pipe(
@@ -208,7 +209,6 @@ const fanoutClient = (
                   ),
                 ),
               ),
-            ),
             { concurrency: "unbounded" },
           );
           const healthy = results.find(
