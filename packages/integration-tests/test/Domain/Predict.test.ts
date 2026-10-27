@@ -1,6 +1,7 @@
 import * as Domain from "@alchemy.run/domain";
 import * as InMemory from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -143,6 +144,24 @@ class Bank extends Domain.Model("Bank", {
   views: [Balance, Flows],
 }) {}
 
+// A decide that waits on something asynchronous, and one that breaks its declaration.
+class Waited extends Domain.Event("Waited") {}
+class Wait extends Domain.Command("Wait", { target: Schema.String, events: [Waited] }) {}
+class Stray extends Domain.Command("Stray", { target: Schema.String, events: [Waited] }) {}
+class Later extends Domain.Aggregate("Later", {
+  id: Schema.String,
+  state: Schema.Struct({}),
+  initial: {},
+  commands: [Wait, Stray],
+  decide: {
+    Wait: () => Effect.promise(() => Promise.resolve([new Waited()])),
+    Stray: () => [new Frozen({ by: "nobody" })] as never,
+  },
+  evolve: { Waited: (s) => s },
+}) {}
+
+class Strays extends Domain.Model("Strays", { aggregates: [Later] }) {}
+
 const NOW = 1_800_000_000_000;
 const Hosted = Bank.layer(Layer.empty).pipe(
   Layer.provide(Layer.suspend(() => InMemory.make({ now: () => NOW }).layer)),
@@ -216,7 +235,7 @@ describe("Domain Aggregate.predict", () => {
     Effect.sync(() => {
       const state = Account.definition.initial;
       const unknown = Account.predict(state, new Freeze(), { id: "a-1", now });
-      expect(unknown._tag).toBe("NeedsContext");
+      expect(unknown._tag).toBe("Unpredictable");
 
       const operator = (name: string) => ({
         id: "a-1",
@@ -231,6 +250,45 @@ describe("Domain Aggregate.predict", () => {
       expect(refused._tag).toBe("Rejected");
       if (refused._tag === "Rejected") expect(refused.rejection).toBeInstanceOf(NotAnOperator);
     }),
+  );
+
+  it.effect("a decide that suspends cannot be predicted, and does not hang", () =>
+    Effect.sync(() => {
+      const local = Later.predict({}, new Wait(), { id: "l-1", now });
+      expect(local._tag).toBe("Unpredictable");
+    }),
+  );
+
+  it.effect("an undeclared event cannot be predicted: the cause holds a DefinitionError", () =>
+    Effect.sync(() => {
+      const local = Later.predict({}, new Stray(), { id: "l-1", now });
+      expect(local._tag).toBe("Unpredictable");
+      if (local._tag !== "Unpredictable") return;
+      expect(Cause.squash(local.cause)).toMatchObject({
+        _tag: "DefinitionError",
+        message: "Later.decide.Stray returned 'Frozen', which Stray does not declare in events",
+      });
+    }),
+  );
+
+  it.live("the server dies on the same undeclared event", () =>
+    Effect.gen(function* () {
+      const later = yield* Later;
+      const exit = yield* later.send(Later.ref("l-1"), new Stray()).pipe(Effect.exit);
+      expect(exit._tag).toBe("Failure");
+      if (exit._tag !== "Failure") return;
+      expect(Cause.hasDies(exit.cause)).toBe(true);
+      expect(Cause.squash(exit.cause)).toMatchObject({
+        _tag: "DefinitionError",
+        message: "Later.decide.Stray returned 'Frozen', which Stray does not declare in events",
+      });
+    }).pipe(
+      Effect.provide(
+        Strays.layer(Layer.empty).pipe(
+          Layer.provide(Layer.suspend(() => InMemory.make({ now: () => NOW }).layer)),
+        ),
+      ),
+    ),
   );
 
   it.effect("predictable marks commands whose decide needs no context", () =>
@@ -317,7 +375,7 @@ class Peek extends Domain.Command("Peek", {
   middleware: [OperatorSession],
   predictable: true,
 }) {}
-export class Unpredictable extends Domain.Aggregate("Unpredictable", {
+export class Peeking extends Domain.Aggregate("Peeking", {
   id: Schema.String,
   state: Schema.Struct({}),
   initial: {},

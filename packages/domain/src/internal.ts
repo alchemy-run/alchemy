@@ -60,10 +60,11 @@ export const settle = (exit: Exit.Exit<unknown, unknown>): Settled => {
 /** A decision, judged against the command's declaration. @internal */
 export type Judged =
   | { readonly _tag: "Accepted"; readonly events: ReadonlyArray<{ readonly _tag: string }> }
-  | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } };
+  | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } }
+  | { readonly _tag: "Undeclared"; readonly error: DefinitionError };
 
 /**
- * Judge a settled decision: the events to commit, or the rejection. Throws a
+ * Judge a settled decision: the events to commit, the rejection, or the
  * {@link DefinitionError} for an event or rejection the command does not
  * declare.
  *
@@ -81,17 +82,23 @@ export const judge = (
   if (!Array.isArray(decision)) {
     const rejection = decision as { readonly _tag: string };
     if (!command.rejects.some((r) => r.tag === rejection?._tag)) {
-      throw new DefinitionError(
-        `${aggregateName}.decide.${command.tag} returned '${rejection?._tag}', which ${command.tag} does not declare in rejects`,
-      );
+      return {
+        _tag: "Undeclared",
+        error: new DefinitionError(
+          `${aggregateName}.decide.${command.tag} returned '${rejection?._tag}', which ${command.tag} does not declare in rejects`,
+        ),
+      };
     }
     return { _tag: "Rejected", rejection };
   }
   for (const event of decision as ReadonlyArray<{ readonly _tag: string }>) {
     if (!command.events.some((e) => e.tag === event._tag)) {
-      throw new DefinitionError(
-        `${aggregateName}.decide.${command.tag} returned '${event._tag}', which ${command.tag} does not declare in events`,
-      );
+      return {
+        _tag: "Undeclared",
+        error: new DefinitionError(
+          `${aggregateName}.decide.${command.tag} returned '${event._tag}', which ${command.tag} does not declare in events`,
+        ),
+      };
     }
   }
   return { _tag: "Accepted", events: decision };

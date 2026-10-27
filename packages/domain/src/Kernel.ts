@@ -719,10 +719,8 @@ const build = (
               return yield* Effect.failCause(settled.cause as Cause.Cause<never>);
             decision = settled.decision;
           }
-          const judged = yield* Effect.try({
-            try: () => judge(aggregate.aggregateName, command.cls, decision),
-            catch: (error) => error,
-          }).pipe(Effect.orDie);
+          const judged = judge(aggregate.aggregateName, command.cls, decision);
+          if (judged._tag === "Undeclared") return yield* Effect.die(judged.error);
           if (judged._tag === "Rejected") {
             const rejection = judged.rejection;
             const codec = codecs.rejections.get(rejection._tag)!;

@@ -1,5 +1,5 @@
 import { CurrentActivity } from "alchemy/WorkflowEncoding";
-import type * as Cause from "effect/Cause";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import type * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
@@ -345,8 +345,10 @@ export interface PredictOptions<Id = string> {
 /**
  * What the aggregate would do with a command, decided locally: the events it
  * would record and the state after them, the rejection it would return, or
- * `NeedsContext` when `decide` needs something the caller did not give (a
- * service its command's middleware provides). `cause` says what was missing.
+ * `Unpredictable` when only the server can tell. `cause` says why: `decide`
+ * read a service the caller did not give, waited on something asynchronous,
+ * or broke its command's declaration (a `DefinitionError`, which the server
+ * dies on).
  */
 export type Prediction<State, Ev, Rej, Id = string> =
   | {
@@ -357,7 +359,7 @@ export type Prediction<State, Ev, Rej, Id = string> =
       readonly state: State;
     }
   | { readonly _tag: "Rejected"; readonly rejection: Rej }
-  | { readonly _tag: "NeedsContext"; readonly cause: Cause.Cause<unknown> };
+  | { readonly _tag: "Unpredictable"; readonly cause: Cause.Cause<unknown> };
 
 /**
  * Run an aggregate's own `decide` and `evolve` for one command, without a
@@ -365,13 +367,9 @@ export type Prediction<State, Ev, Rej, Id = string> =
  * for the same state, id and time. Use it to show a command's outcome before
  * the server answers.
  *
- * `decide` returns a rejection as a value, and a rejection is an Effect (a
- * `YieldableError`). So an effectful decision runs here synchronously, as the
- * kernel runs it: a pure rejection fails with itself, a `decide` that reads a
- * missing service gives `NeedsContext`.
- *
- * Throws a `DefinitionError` when `decide` returns an event or rejection the
- * command does not declare (the server dies on it too).
+ * An effectful decision runs here synchronously, as the kernel runs it: a
+ * rejection fails with itself, and a `decide` that reads a missing service or
+ * suspends gives `Unpredictable`. `predict` never throws.
  */
 export const predict = (
   aggregate: Any,
@@ -385,7 +383,12 @@ export const predict = (
     | ((state: unknown, command: unknown, ctx: DecideContext<unknown>) => unknown)
     | undefined;
   if (!cls || !decide) {
-    throw new DefinitionError(`${aggregate.aggregateName} does not handle '${command._tag}'`);
+    return {
+      _tag: "Unpredictable",
+      cause: Cause.die(
+        new DefinitionError(`${aggregate.aggregateName} does not handle '${command._tag}'`),
+      ),
+    };
   }
   let decision = decide(state, command, { id: options.id, now: options.now });
   if (Effect.isEffect(decision)) {
@@ -397,10 +400,12 @@ export const predict = (
         ),
       ),
     );
-    if (settled._tag === "Failed") return { _tag: "NeedsContext", cause: settled.cause };
+    if (settled._tag === "Failed") return { _tag: "Unpredictable", cause: settled.cause };
     decision = settled.decision;
   }
   const judged = judge(aggregate.aggregateName, cls, decision);
+  if (judged._tag === "Undeclared")
+    return { _tag: "Unpredictable", cause: Cause.die(judged.error) };
   if (judged._tag === "Rejected") return judged;
   const version = options.version ?? 0;
   const commandId = options.commandId ?? "";
