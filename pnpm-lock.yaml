@@ -783,7 +783,7 @@ overrides:
   rolldown: 1.2.13
   glob@<11: ^13.0.6
 
-pnpmfileChecksum: sha256-ZR+EePdNPtPmfrxwBEFhocmgEqPh5QhSV2MMQstzKHQ=
+pnpmfileChecksum: sha256-hOUOGIkOdaSznqpGW2l2edqwXa8aByua1z6Sm0LAu2M=
 
 patchedDependencies:
   '@astrojs/starlight@0.42.0': 3ea8686c3055e8d097b5afa93dcf9e16ebfbebbf006e7493ad5df38e6edbfd19
