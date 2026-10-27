@@ -22,6 +22,7 @@ import { Connection, ConnectionProvider } from "./Connection.ts";
 import { CustomDomain, CustomDomainProvider } from "./CustomDomain.ts";
 import { Database, DatabaseProvider } from "./Database.ts";
 import { Deployment, DeploymentProvider } from "./Deployment.ts";
+import { DomainVerification, DomainVerificationProvider } from "./DomainVerification.ts";
 import { EnvironmentVariable, EnvironmentVariableProvider } from "./EnvironmentVariable.ts";
 import * as Credentials from "./internal/Credentials.ts";
 import { PrismaHttpClientLive, PrismaUploadClientLive } from "./internal/HttpClient.ts";
@@ -205,6 +206,7 @@ export const providers = () =>
       App,
       Deployment,
       CustomDomain,
+      DomainVerification,
       EnvironmentVariable,
       SourceRepository,
       Contract,
@@ -225,6 +227,7 @@ export const providers = () =>
         AppProvider(),
         DeploymentProvider(),
         CustomDomainProvider(),
+        DomainVerificationProvider(),
         EnvironmentVariableProvider(),
         SourceRepositoryProvider(),
         ContractProvider(),

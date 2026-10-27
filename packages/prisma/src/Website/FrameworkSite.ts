@@ -1,6 +1,7 @@
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import type { MemoOptions } from "alchemy/Command/Memo";
 import * as DNS from "alchemy/DNS/Adapter";
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { ProviderModePolicy } from "alchemy/ProviderMode";
 import type { ResourceLike } from "alchemy/Resource";
@@ -10,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { Compute, type ComputeProps } from "../Compute.ts";
 import { CustomDomain } from "../CustomDomain.ts";
+import { DomainVerification } from "../DomainVerification.ts";
 import { Project } from "../Project.ts";
 import type { Providers } from "../Providers.ts";
 import type { PrismaRegionId } from "../Types.ts";
@@ -178,25 +180,44 @@ export const deployWebsite = Effect.fn(function* (
     },
   });
   const domainName = websiteDomainName(props.domain);
-  // Prisma verifies the CNAME when the domain is registered, so the record
-  // must exist first: the CustomDomain's hostname depends on it.
-  const routing =
+  // Prisma verifies the CNAME and the workspace's ownership TXT when the
+  // domain is registered, so both records must exist first: the
+  // CustomDomain's hostname depends on them.
+  const dns =
     domainName && typeof props.domain === "object" && props.domain.dns
-      ? yield* (yield* DNS.resolve(props.domain.dns)).alias("DomainAlias", {
-          name: domainName,
-          target: {
-            hostname: Output.map(compute.appEndpointDomain, switchboardTarget) as unknown as string,
-          },
-        })
+      ? yield* DNS.resolve(props.domain.dns)
+      : undefined;
+  const published =
+    dns && domainName
+      ? [
+          yield* dns.alias("DomainAlias", {
+            name: domainName,
+            target: {
+              hostname: Output.map(
+                compute.appEndpointDomain,
+                switchboardTarget,
+              ) as unknown as string,
+            },
+          }),
+          yield* dns.records("DomainOwnership", {
+            records: Output.map(
+              (yield* DomainVerification("DomainVerification", {
+                app: compute,
+                hostname: domainName,
+              })).recordValue,
+              (value) => [{ name: `_prisma-verification.${domainName}`, type: "TXT", value }],
+            ) as unknown as Input<DNS.DnsRecord[]>,
+          }),
+        ]
       : undefined;
   const domain = domainName
     ? yield* CustomDomain("Domain", {
         app: compute,
         hostname:
-          routing === undefined
+          published === undefined
             ? domainName
             : (Output.map(
-                Output.of(routing as ResourceLike),
+                Output.all(...published.map((record) => Output.of(record as ResourceLike))),
                 () => domainName,
               ) as unknown as string),
       })
