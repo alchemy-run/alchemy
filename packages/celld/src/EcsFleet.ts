@@ -399,6 +399,18 @@ export const composeEcsFleet = (
           ? {
               public: true,
               domain: ingress.domain,
+              // With a domain, plain HTTP redirects to its HTTPS listener.
+              ...(ingress.domain
+                ? {
+                    rules: [
+                      { listen: "80/http" as const, redirect: "443/https" as const },
+                      {
+                        listen: "443/https" as const,
+                        forward: `${CELLD_PUBLIC_PORT}/http` as const,
+                      },
+                    ],
+                  }
+                : {}),
             }
           : undefined,
         healthCheckPath: ingress ? CELLD_HEALTH_PATH : undefined,
