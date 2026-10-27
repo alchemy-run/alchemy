@@ -60,7 +60,6 @@ export const Model = Schema.Struct({
   balance: Schema.Option(Schema.Number),
   summaryCursor: Schema.Option(Schema.Number),
   statementCursor: Schema.Option(Schema.Number),
-  statementRestart: Schema.Number,
   feedState: Schema.Literals(["CatchingUp", "Live", "Failed"]),
   lines: Schema.Array(Line),
   error: Schema.Option(Schema.String),
@@ -369,7 +368,6 @@ export const init = (flags: Flags): Update.Return<Model, Message, Bank> => {
     ),
     summaryCursor: Option.map(summary, (snapshot) => snapshot.cursor),
     statementCursor: Option.none(),
-    statementRestart: 0,
     feedState: "CatchingUp",
     lines: flags.intents
       .map((intent) =>
@@ -407,7 +405,6 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
     key: (model: Model) => model.accountId,
     cursor: (model) => model.statementCursor,
     isEnabled: (model) => model.online,
-    restartKey: (model) => model.statementRestart,
     onEntry: ({ event, envelope }): Message =>
       Message.ReceivedLine({ commandId: envelope.commandId, line: event, cursor: envelope.seq }),
     onCaughtUp: (cursor): Message => Message.CaughtUpStatement({ cursor }),

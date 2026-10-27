@@ -33,7 +33,6 @@ const account: Model = {
   commandIds: { session: "s", sent: 0 },
   summaryCursor: Option.none(),
   statementCursor: Option.none(),
-  statementRestart: 0,
   feedState: "Live",
   online: true,
   balance: Option.some(5_000),

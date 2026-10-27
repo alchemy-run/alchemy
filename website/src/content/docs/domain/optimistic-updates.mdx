@@ -83,7 +83,6 @@ const subscriptions = Subscription.make<Model, typeof Message.Type, typeof Custo
     key: (model: Model) => model.accountId,
     cursor: (model) => model.statementCursor,
     isEnabled: (model) => model.online,
-    restartKey: (model) => model.statementRestart,
     onEntry: (entry): typeof Message.Type => Message.ReceivedStatementLine({
       commandId: entry.envelope.commandId,
       line: entry.event,
@@ -96,11 +95,9 @@ const subscriptions = Subscription.make<Model, typeof Message.Type, typeof Custo
 }));
 ```
 
-The app's Model stores `statementCursor: Schema.Option(Schema.Number)`, `statementRestart: Schema.Number`, and `online: Schema.Boolean`. Apply the line and cursor in the same update. Handle `CaughtUpStatement` by recording its cursor and marking the feed live.
 
 A restart reads the latest Model cursor and passes it as `after`. Cursor changes leave the stream alive. The adapter drops entries at or below the applied cursor. A filtered feed can skip sequence numbers, so the adapter does not count gaps.
 
-If a cursor from Flags fails, clear the seeded state and cursor. Increment `statementRestart` to restart without `after`. Attempt this fallback once. Show later failures through the app's error state. Domain does not distinguish a stale cursor from other read errors.
 
 The adapter does not reduce entries into state. Use `watchView` for the current View state. Use this event feed to confirm intents or build the app's display list.
 
