@@ -5,11 +5,11 @@ description: Connect Alchemy to AWS with SSO, console login, stored access keys,
 
 import PackageManagers from "../../../components/PackageManagers.astro";
 
-export const pkgs = `alchemy@latest effect @effect/platform-bun @effect/platform-node`;
+export const pkgs = `alchemy@latest @alchemy.run/aws@latest effect @effect/platform-bun @effect/platform-node`;
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) or Node.js 22+
+- [Bun](https://bun.sh) or Node.js 24.11.1+
 - An AWS account and an IAM identity with permission to create
   the resources you plan to deploy
 

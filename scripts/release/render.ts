@@ -1,7 +1,8 @@
 /**
- * Custom markdown renderer for changelogithub-parsed commits.
+ * Markdown renderer for the commits parsed by `changelog.ts`.
  *
- * Mirrors the output of changelogithub's built-in generator but groups
+ * Mirrors the output of changelogithub's built-in generator (which this
+ * repo used to depend on) but groups
  * conventional-commit scopes hierarchically by splitting on `/`. For
  * example commits like `fix(aws/lambda): ...`, `fix(aws/s3): ...` and
  * `fix(aws): ...` render as nested categories under a shared `**aws**`
@@ -11,16 +12,19 @@
  * `&nbsp;` spacing) is kept byte-compatible with changelogithub so output
  * for single-segment scopes is identical to the upstream renderer.
  */
-import type { ChangelogOptions, Commit } from "changelogithub";
+import type { Commit } from "./changelog.ts";
 
-export type RenderConfig = Required<
-  Pick<
-    ChangelogOptions,
-    "titles" | "types" | "capitalize" | "emoji" | "baseUrl" | "repo" | "from" | "to"
-  >
-> & {
+export interface RenderConfig {
+  titles: { breakingChanges?: string };
+  types: Record<string, { title: string }>;
+  capitalize: boolean;
+  emoji: boolean;
+  baseUrl: string;
+  repo: string;
+  from: string;
+  to: string;
   scopeMap?: Record<string, string>;
-};
+}
 
 const emojisRE =
   /([\u2700-\u27BF\uE000-\uF8FF\u2011-\u26FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDD10-\uDDFF])/g;
@@ -144,11 +148,7 @@ function formatTitle(name: string, config: RenderConfig): string {
 function formatLine(commit: Commit, config: RenderConfig): string {
   const prRefs = formatReferences(commit.references, config, "issues");
   const hashRefs = formatReferences(commit.references, config, "hash");
-  const authorNames = [
-    ...new Set(
-      (commit.resolvedAuthors ?? []).map((a) => (a.login ? `@${a.login}` : `**${a.name}**`)),
-    ),
-  ];
+  const authorNames = [...new Set(commit.resolvedAuthors.map((a) => `**${a.name}**`))];
   const authors = joinWithAnd(authorNames).trim();
   const authorStr = authors ? `by ${authors}` : "";
   let refs = [authorStr, prRefs, hashRefs].filter((s) => s && s.trim()).join(" ");

@@ -1,6 +1,6 @@
+import * as Kubernetes from "@alchemy.run/kubernetes";
 import * as Alchemy from "alchemy";
 import { Stage } from "alchemy";
-import * as Kubernetes from "alchemy/Kubernetes";
 import * as Effect from "effect/Effect";
 import HealthCheck from "./src/HealthCheck.ts";
 import { Cluster, Web } from "./src/infra.ts";

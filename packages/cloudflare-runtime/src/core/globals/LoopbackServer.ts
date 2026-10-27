@@ -50,7 +50,7 @@ export const LoopbackServerLive = Layer.effect(
         if (!secretHeader) {
           return writeErrorResponse(
             res,
-            new SystemError({
+            SystemError.make({
               subtag: "BadRequest",
               message: `The "${LoopbackServerHeaders.SECRET}" header is required.`,
             }),
@@ -59,7 +59,7 @@ export const LoopbackServerLive = Layer.effect(
         } else if (!targetHeader) {
           return writeErrorResponse(
             res,
-            new SystemError({
+            SystemError.make({
               subtag: "BadRequest",
               message: `The "${LoopbackServerHeaders.TARGET}" header is required.`,
             }),
@@ -68,7 +68,7 @@ export const LoopbackServerLive = Layer.effect(
         } else if (!timingSafeEqual(secretHeader, secret)) {
           return writeErrorResponse(
             res,
-            new SystemError({
+            SystemError.make({
               subtag: "Unauthorized",
               message: "Unauthorized",
             }),
@@ -81,7 +81,7 @@ export const LoopbackServerLive = Layer.effect(
         if (route._tag === "None") {
           return writeErrorResponse(
             res,
-            new SystemError({
+            SystemError.make({
               subtag: "NotFound",
               message: `The route "${targetHeader}" is not found.`,
             }),
@@ -96,7 +96,7 @@ export const LoopbackServerLive = Layer.effect(
             res,
             isRuntimeError(error)
               ? error
-              : new SystemError({
+              : SystemError.make({
                   subtag: "InternalServerError",
                   message: "Internal Server Error",
                   cause: error,

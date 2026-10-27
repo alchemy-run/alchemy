@@ -51,6 +51,24 @@ export class OwnedBySomeoneElse extends Data.TaggedError("OwnedBySomeoneElse")<{
 }> {}
 
 /**
+ * Engine-raised failure produced when a delete-first replacement in a
+ * dependency cycle must delete its previous generation before its new
+ * identity is known: precreate runs on unresolved props, and a provider
+ * without `observe`, or whose `observe` reports {@link Unresolved}, cannot
+ * check ownership first. Refusing before the delete keeps the
+ * previous generation; re-run with `--adopt` (or `adopt(true)`) to accept
+ * whatever the identity resolves to.
+ */
+export class UnverifiableReplacement extends Data.TaggedError("UnverifiableReplacement")<{
+  /** A human-readable description of why the replacement was refused. */
+  message: string;
+  /** The Resource Type (e.g. `AWS.Lambda.Function`). */
+  resourceType?: string;
+  /** The logical ID of the refused resource. */
+  logicalId?: string;
+}> {}
+
+/**
  * Private symbol used to brand attribute objects returned by `read` as
  * "exists in cloud, but not owned by this stack/stage/logical-id".
  *
@@ -108,6 +126,25 @@ export const Unowned: {
       typeof value === "object" && value !== null && (value as any)[UnownedTag] === true,
   },
 );
+
+/**
+ * A provider's `observe` answer when the identity `precreate` would claim
+ * depends on props that have not resolved yet, so nothing can be checked.
+ * Unlike `undefined`, it does not report the identity as absent: the engine
+ * checks the resolved identity before `reconcile` claims it, and refuses a
+ * delete-first replacement that would delete its previous generation first.
+ *
+ * ```ts
+ * observe: Effect.fn(function* ({ id, news }) {
+ *   if (!isResolved(news.namespace)) return Unresolved;
+ *   // ...
+ * }),
+ * ```
+ *
+ * `precreate` must not write to an identity it cannot resolve.
+ */
+export const Unresolved: unique symbol = Symbol("alchemy/Unresolved");
+export type Unresolved = typeof Unresolved;
 
 /**
  * Strip the {@link Unowned} brand from an attributes object before persisting

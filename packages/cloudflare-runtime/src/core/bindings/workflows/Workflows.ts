@@ -12,7 +12,7 @@ const WorkflowsWrappedBindingWorker = {
     loadInternalWorker("#cloudflare-runtime-core-worker/bindings/workflows/wrapped-binding.worker"),
 };
 import * as Storage from "../../globals/Storage.ts";
-import { DEFAULT_COMPATIBILITY_DATE, SERVICE_USER_WORKER } from "../../internal/constants.ts";
+import { SERVICE_USER_WORKER } from "../../internal/constants.ts";
 import {
   formatExtensionModule,
   formatInternalWorkerModules,
@@ -41,7 +41,7 @@ export const WorkflowsLive = Layer.effect(
     const makeStorageService = Effect.gen(function* () {
       const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
       if (!storageDiskPath) {
-        return yield* new ConfigError({
+        return yield* ConfigError.make({
           subtag: "Workflows",
           message: "Cannot configure workflows persistence: the Storage service has no disk path.",
           hint: "Configure a disk-backed storage layer (`Storage.layerDisk` or `Storage.layerTemp`).",
@@ -49,15 +49,14 @@ export const WorkflowsLive = Layer.effect(
       }
       const persistPath = path.join(storageDiskPath, "workflows");
       yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new ConfigError({
-              subtag: "Workflows",
-              message: `Failed to create workflows persistence directory "${persistPath}": ${cause.message}`,
-              hint: "Ensure the storage directory is writable.",
-              detail: { persistPath },
-              cause,
-            }),
+        Effect.mapError((cause) =>
+          ConfigError.make({
+            subtag: "Workflows",
+            message: `Failed to create workflows persistence directory "${persistPath}": ${cause.message}`,
+            hint: "Ensure the storage directory is writable.",
+            detail: { persistPath },
+            cause,
+          }),
         ),
       );
       return {
@@ -83,6 +82,7 @@ export const WorkflowsLive = Layer.effect(
             services.push(
               makeEngineService({
                 workflow,
+                compatibilityDate: ctx.worker.compatibilityDate,
                 compatibilityFlags: ctx.worker.compatibilityFlags,
                 modules: bindingModules,
               }),
@@ -119,19 +119,50 @@ export const WorkflowsLive = Layer.effect(
   }),
 );
 
+const WORKFLOWS_ENGINE_COMPATIBILITY_DATE = "2024-10-22";
+
+/**
+ * Engine behavior that workerd ties to the user Worker's compatibility date.
+ * The engine runs on an older date, so a flag the user's date enables is
+ * passed explicitly, unless the user opted out with its off flag.
+ */
+const WORKFLOWS_ENGINE_DATED_FLAGS = [
+  {
+    flag: "workflows_preserve_non_retryable_error_message",
+    off: "workflows_replace_non_retryable_error_message",
+    date: "2026-05-14",
+  },
+];
+
 const makeEngineService = ({
   workflow,
+  compatibilityDate,
   compatibilityFlags,
   modules,
 }: {
   workflow: Workflow;
+  compatibilityDate: string | undefined;
   compatibilityFlags: ReadonlyArray<string> | undefined;
   modules: Array<WorkerdConfig.Worker_Module>;
 }): WorkerdConfig.Service => ({
   name: `workflows:${workflow.workflowName}`,
   worker: {
-    compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
-    compatibilityFlags: ["experimental", ...(compatibilityFlags ?? [])],
+    // Miniflare's engine date. The user Worker's flags are passed through, so
+    // this must predate every flag a user may set: on the internal default
+    // date, `nodejs_compat` is on by default and workerd rejects it.
+    compatibilityDate: WORKFLOWS_ENGINE_COMPATIBILITY_DATE,
+    compatibilityFlags: [
+      ...new Set([
+        "experimental",
+        ...(compatibilityFlags ?? []),
+        ...WORKFLOWS_ENGINE_DATED_FLAGS.filter(
+          ({ off, date }) =>
+            compatibilityDate !== undefined &&
+            compatibilityDate >= date &&
+            !compatibilityFlags?.includes(off),
+        ).map(({ flag }) => flag),
+      ]),
+    ],
     modules,
     durableObjectNamespaces: [
       {
@@ -222,7 +253,7 @@ export const local = ({
       );
       if (!workflow) {
         return Effect.fail(
-          new ConfigError({
+          ConfigError.make({
             subtag: "WorkflowNotFound",
             message: `Workflow ${workflowName} not found`,
             hint: `Make sure the workflow ${workflowName} is defined in the worker config`,
@@ -235,7 +266,7 @@ export const local = ({
       }
       if (workflow.className !== className) {
         return Effect.fail(
-          new ConfigError({
+          ConfigError.make({
             subtag: "WorkflowClassNameMismatch",
             message: `Workflow ${workflowName} has class name "${workflow.className}" but "${className}" was provided`,
           }),

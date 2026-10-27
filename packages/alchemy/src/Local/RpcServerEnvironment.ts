@@ -59,10 +59,9 @@ export const layer = (
     ProfileStoreLive,
     CredentialsStoreLive,
     Layer.succeed(AuthProviders, {}),
-    ConfigProvider.layer(
-      loadConfigProvider(Option.fromNullishOr(environment.envFile)).pipe(
-        Effect.map((base) => withProfileOverride(base, environment.profile)),
-      ),
+    loadConfigProvider(Option.fromNullishOr(environment.envFile)).pipe(
+      Effect.map((base) => withProfileOverride(base, environment.profile)),
+      ConfigProvider.layer,
     ),
     Layer.succeed(AlchemyContext, environment.alchemyContext),
     Layer.succeed(Stack, {

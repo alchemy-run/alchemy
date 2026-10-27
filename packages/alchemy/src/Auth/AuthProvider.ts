@@ -1,4 +1,5 @@
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -107,7 +108,7 @@ export const EnvironmentVariable = Schema.Struct({
    * precedence order after {@link name} (e.g. `AWS_DEFAULT_REGION` for
    * `AWS_REGION`).
    */
-  alternatives: Schema.optional(Schema.Array(Schema.String)),
+  alternatives: Schema.String.pipe(Schema.Array, Schema.optional),
 });
 
 export type EnvironmentVariable = typeof EnvironmentVariable.Type;
@@ -344,6 +345,14 @@ export const AuthProvider =
       const ctx = Context.omit(Interaction)(
         yield* Effect.context<FileSystem.FileSystem | Path.Path | R | ImplReq>(),
       ) as Context.Context<FileSystem.FileSystem | Path.Path | R | ImplReq>;
+      // `read` and `readEnvironment` resolve credentials for a caller that
+      // has already chosen its ConfigProvider (`resolveProviderConfig`
+      // checks `presentEnvironment` under it), so they read through that
+      // one, not the one ambient at REGISTRATION. The profile-command
+      // methods keep the snapshot: they run under the process environment,
+      // and `--env-file` reaches them only through it.
+      // SAFETY: as above, the assertion only restores the pre-omit type.
+      const resolveCtx = Context.omit(ConfigProvider.ConfigProvider)(ctx) as typeof ctx;
       const providers = yield* AuthProviders;
       const service = yield* Effect.isEffect(impl) ? impl : Effect.succeed(impl);
       // Validate the declared environment contract at registration so a
@@ -352,7 +361,9 @@ export const AuthProvider =
       const environment =
         service.environment === undefined
           ? []
-          : Schema.decodeUnknownSync(EnvironmentVariables)(service.environment);
+          : yield* Schema.decodeUnknownEffect(EnvironmentVariables)(service.environment).pipe(
+              Effect.orDie,
+            );
       if (service.readEnvironment !== undefined && environment.length === 0) {
         return yield* Effect.die(
           `AuthProvider '${name}' implements readEnvironment but does not ` +
@@ -424,25 +435,22 @@ export const AuthProvider =
           withProfileCredentialsLock(
             profileName,
             service.read(profileName, config, updateConfig),
-          ).pipe(Effect.provideContext(ctx)),
-        readEnvironment: service.readEnvironment?.pipe(Effect.provideContext(ctx)),
+          ).pipe(Effect.provideContext(resolveCtx)),
+        readEnvironment: service.readEnvironment?.pipe(Effect.provideContext(resolveCtx)),
         environment,
         configSchema: service.configSchema,
         decodeConfig: (profileName, config) =>
-          Effect.gen(function* () {
-            return yield* Schema.decodeUnknownEffect(service.configSchema)(config).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new AuthError({
-                    message:
-                      `Stored ${name} configuration in profile '${profileName}' is not valid ` +
-                      `for this version of alchemy. ` +
-                      `${reconfigureHint(name, profileName)}`,
-                    cause,
-                  }),
-              ),
-            );
-          }),
+          Schema.decodeUnknownEffect(service.configSchema)(config).pipe(
+            Effect.mapError((cause) =>
+              AuthError.make({
+                message:
+                  `Stored ${name} configuration in profile '${profileName}' is not valid ` +
+                  `for this version of alchemy. ` +
+                  `${reconfigureHint(name, profileName)}`,
+                cause,
+              }),
+            ),
+          ),
       };
 
       providers[name] = provider;
@@ -478,8 +486,8 @@ export const getAuthProvider = <
   AuthProviders.use((registry) =>
     registry[name] == null
       ? Effect.fail(
-          new AuthError({
-            message: `AuthProvider '${name}' is not registered. Make sure its layer has been provided.`,
+          AuthError.make({
+            message: `AuthProvider '${name}' is not registered. Install the package that provides it.`,
           }),
         )
       : Effect.succeed(

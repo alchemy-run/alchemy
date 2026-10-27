@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 /**
  * THE plan renderer. Every surface that shows a plan tree — `alchemy plan`
@@ -21,7 +22,7 @@ import { useMemo, useSyncExternalStore } from "@alchemy.run/sigil/react";
 import type { JSX, ReactNode } from "react";
 import type { Plan as AlchemyPlan } from "../../../Plan.ts";
 import type { ApplyStatus } from "../../../Report.ts";
-import { theme } from "../../CliKit/index.ts";
+import { theme } from "../../../Util/Theme.ts";
 import { formatElapsed } from "../../Format.ts";
 import { formatModeNote } from "../../ModeTag.ts";
 import type { ActionVerb, PlanSummaryCounts } from "../../NamespaceTree.ts";

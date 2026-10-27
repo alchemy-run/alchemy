@@ -6,7 +6,7 @@ import {
   INIT_PATH,
   REQUEST_EXPORT_TYPES_EVENT,
 } from "./constants.shared.ts";
-import { stripInternalEnv, type Env } from "./env.worker.ts";
+import { getEntryEnvironment, stripInternalEnv, type Env } from "./env.worker.ts";
 
 declare global {
   // This global variable is accessed by `@vitejs/plugin-rsc`
@@ -77,8 +77,8 @@ const runInModuleRunner = <T>(env: Env, callback: () => Promise<T>): Promise<T> 
  */
 export async function getWorkerEntryExport<T>(env: Env, exportName: string): Promise<T> {
   const module = await globalThis.__VITE_ENVIRONMENT_RUNNER_IMPORT__(
-    env.__DISTILLED_ENVIRONMENT__.environmentName,
-    env.__DISTILLED_ENVIRONMENT__.entryId,
+    getEntryEnvironment().environmentName,
+    getEntryEnvironment().entryId,
   );
 
   const exportValue =
@@ -89,7 +89,7 @@ export async function getWorkerEntryExport<T>(env: Env, exportName: string): Pro
 
   if (!exportValue) {
     throw new Error(
-      `"${env.__DISTILLED_ENVIRONMENT__.entryName}" does not define a "${exportName}" export.`,
+      `"${getEntryEnvironment().entryName}" does not define a "${exportName}" export.`,
     );
   }
 
@@ -146,7 +146,7 @@ export class ModuleRunnerDO extends DurableObject<Env> {
    * import runs here rather than being driven from user code.
    */
   private async reportExportTypes(environmentName: string): Promise<void> {
-    const { entryId, exportTypesId } = this.env.__DISTILLED_ENVIRONMENT__;
+    const { entryId, exportTypesId } = getEntryEnvironment();
     let data: unknown;
     try {
       // Both imports run inside this object's IoContext, so they can go
@@ -225,9 +225,8 @@ export class ModuleRunnerDO extends DurableObject<Env> {
           // Wrap dynamic imports to route deferred dynamic imports
           // through the DO's IoContext.
           const originalDynamicImport = context[ssrDynamicImportKey];
-          context[ssrDynamicImportKey] = (dep) => {
-            return runInModuleRunner(env, () => originalDynamicImport(dep));
-          };
+          context[ssrDynamicImportKey] = (dep) =>
+            runInModuleRunner(env, () => originalDynamicImport(dep));
 
           // The trailing newline ensures a `//` comment on the last line of
           // `transformed` (e.g. a sourceMappingURL comment preserved by
@@ -271,6 +270,7 @@ function isRequestExportTypes(data: string | ArrayBuffer): boolean {
   }
 }
 
+// oxlint-disable-next-line effecttsgo/extends-native-error -- plain workerd script (no Effect); thrown to the Vite module runner
 class NotInitializedError extends Error {
   constructor(environmentName: string) {
     super(

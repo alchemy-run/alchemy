@@ -5,6 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
 import { parseAllDocuments, parse as parseYaml } from "yaml";
 import { exec } from "../Util/exec.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
@@ -193,7 +194,7 @@ export function normalizeInstallTargets(
     const root = parsePackageRoot(dep);
     if (root === undefined) {
       return Effect.fail(
-        new BundleError({
+        BundleError.make({
           message: `Invalid package name '${dep}' in build.install. Use a package root like 'sharp', not a subpath or bare specifier.`,
         }),
       );
@@ -387,7 +388,7 @@ const runNpmInstall = (
     Effect.scoped,
     Effect.mapError((cause) => {
       const message = cause instanceof Error ? cause.message : String(cause);
-      return new BundleError({
+      return BundleError.make({
         message: message.includes("ENOENT")
           ? "Failed to run 'npm install' for build.install: 'npm' was not found on PATH. build.install shells out to npm (even in Bun/pnpm projects), so Node.js/npm must be installed."
           : `Failed to run 'npm install' for build.install: ${message}`,
@@ -398,7 +399,7 @@ const runNpmInstall = (
       exitCode === 0
         ? Effect.void
         : Effect.fail(
-            new BundleError({
+            BundleError.make({
               message: `npm install for build.install failed with exit code ${exitCode}: ${stderr}`,
             }),
           ),
@@ -418,7 +419,7 @@ const printBunBinaryLockfile = (
     Effect.scoped,
     Effect.mapError((cause) => {
       const message = cause instanceof Error ? cause.message : String(cause);
-      return new BundleError({
+      return BundleError.make({
         message: message.includes("ENOENT")
           ? `Failed to inspect legacy Bun lockfile '${lockfilePath}': 'bun' was not found on PATH. Reading a binary bun.lockb shells out to bun; install Bun or migrate to the text-based bun.lock format.`
           : `Failed to inspect legacy Bun lockfile '${lockfilePath}'`,
@@ -429,7 +430,7 @@ const printBunBinaryLockfile = (
       exitCode === 0
         ? Effect.succeed(stdout)
         : Effect.fail(
-            new BundleError({
+            BundleError.make({
               message: `Failed to inspect legacy Bun lockfile '${lockfilePath}': bun exited with code ${exitCode}: ${stderr}`,
             }),
           ),
@@ -444,18 +445,17 @@ const readSourcePackageJson = (cwd: string) =>
     return yield* Effect.try({
       try: () => JSON.parse(content) as PackageJson,
       catch: (cause) =>
-        new BundleError({
+        BundleError.make({
           message: `Failed to parse package.json for Lambda externals from '${cwd}'`,
           cause,
         }),
     });
   }).pipe(
-    Effect.mapError(
-      (cause) =>
-        new BundleError({
-          message: `Failed to read package.json for Lambda externals from '${cwd}'`,
-          cause,
-        }),
+    Effect.mapError((cause) =>
+      BundleError.make({
+        message: `Failed to read package.json for Lambda externals from '${cwd}'`,
+        cause,
+      }),
     ),
   );
 
@@ -481,11 +481,9 @@ const resolveInstallVersion = (
 
     for (const prefix of incompatibleVersionPrefixes) {
       if (version.startsWith(prefix)) {
-        return yield* Effect.fail(
-          new BundleError({
-            message: `External package '${packageName}' uses '${version}', which cannot be installed in an isolated Lambda artifact. Pin an npm-compatible version in package.json or build.install.`,
-          }),
-        );
+        return yield* BundleError.make({
+          message: `External package '${packageName}' uses '${version}', which cannot be installed in an isolated Lambda artifact. Pin an npm-compatible version in package.json or build.install.`,
+        });
       }
     }
 
@@ -525,12 +523,11 @@ const pinInstallVersionsFromLockfile = (options: {
       lockfileName === "bun.lockb"
         ? yield* printBunBinaryLockfile(options.lockfilePath)
         : yield* fs.readFileString(options.lockfilePath).pipe(
-            Effect.mapError(
-              (cause) =>
-                new BundleError({
-                  message: `Failed to read package-manager lockfile for Lambda externals from '${options.cwd}'`,
-                  cause,
-                }),
+            Effect.mapError((cause) =>
+              BundleError.make({
+                message: `Failed to read package-manager lockfile for Lambda externals from '${options.cwd}'`,
+                cause,
+              }),
             ),
           );
     const plan = yield* Effect.try({
@@ -548,7 +545,7 @@ const pinInstallVersionsFromLockfile = (options: {
           ),
         }),
       catch: (cause) =>
-        new BundleError({
+        BundleError.make({
           message: `Failed to resolve locked Lambda package versions from '${options.lockfilePath}'`,
           cause,
         }),
@@ -556,11 +553,9 @@ const pinInstallVersionsFromLockfile = (options: {
 
     for (const packageName of candidates) {
       if (plan.resolved[packageName] === undefined) {
-        return yield* Effect.fail(
-          new BundleError({
-            message: `Could not resolve a locked version for '${packageName}' from '${options.lockfilePath}'. Pin an exact npm-compatible version in build.install or refresh the package-manager lockfile.`,
-          }),
-        );
+        return yield* BundleError.make({
+          message: `Could not resolve a locked version for '${packageName}' from '${options.lockfilePath}'. Pin an exact npm-compatible version in build.install or refresh the package-manager lockfile.`,
+        });
       }
     }
 
@@ -1264,8 +1259,8 @@ const parseYarnV1Lockfile = (content: string): JsonRecord => {
 const stripYarnQuotes = (value: string): string =>
   value.startsWith('"') && value.endsWith('"') && value.length >= 2 ? value.slice(1, -1) : value;
 
-const parseYarnEntries = (content: string): ReadonlyArray<YarnLockEntry> => {
-  return Object.entries(parseYarnLockfile(content)).flatMap(
+const parseYarnEntries = (content: string): ReadonlyArray<YarnLockEntry> =>
+  Object.entries(parseYarnLockfile(content)).flatMap(
     ([selectorList, value]): ReadonlyArray<YarnLockEntry> => {
       if (selectorList === "__metadata") return [];
       const entry = asRecord(value);
@@ -1287,7 +1282,6 @@ const parseYarnEntries = (content: string): ReadonlyArray<YarnLockEntry> => {
       ];
     },
   );
-};
 
 const findYarnEntry = (
   entries: ReadonlyArray<YarnLockEntry>,
@@ -1443,11 +1437,9 @@ const resolveCatalogVersion = (cwd: string, packageName: string, version: string
       const workspace = parseYaml(content) as CatalogSource;
       const resolved = resolveCatalogEntry(packageName, version, workspace);
       if (resolved === undefined) {
-        return yield* Effect.fail(
-          new BundleError({
-            message: `Could not resolve catalog version for '${packageName}' (${version}) from ${workspacePath}. Pin an npm-compatible version explicitly.`,
-          }),
-        );
+        return yield* BundleError.make({
+          message: `Could not resolve catalog version for '${packageName}' (${version}) from ${workspacePath}. Pin an npm-compatible version explicitly.`,
+        });
       }
       return resolved;
     }
@@ -1457,11 +1449,9 @@ const resolveCatalogVersion = (cwd: string, packageName: string, version: string
       return bunResolved;
     }
 
-    return yield* Effect.fail(
-      new BundleError({
-        message: `Could not resolve catalog version for '${packageName}' (${version}): no pnpm-workspace.yaml or Bun catalog found. Pin an npm-compatible version explicitly.`,
-      }),
-    );
+    return yield* BundleError.make({
+      message: `Could not resolve catalog version for '${packageName}' (${version}): no pnpm-workspace.yaml or Bun catalog found. Pin an npm-compatible version explicitly.`,
+    });
   });
 
 const findUp = (
@@ -1504,12 +1494,11 @@ const readNearestLockfileFingerprint = (
       hash: yield* sha256(content),
     };
   }).pipe(
-    Effect.mapError(
-      (cause) =>
-        new BundleError({
-          message: `Failed to read package-manager lockfile for Lambda externals from '${cwd}'`,
-          cause,
-        }),
+    Effect.mapError((cause) =>
+      BundleError.make({
+        message: `Failed to read package-manager lockfile for Lambda externals from '${cwd}'`,
+        cause,
+      }),
     ),
   );
 
@@ -1527,11 +1516,9 @@ const resolveBunCatalogVersion = (cwd: string, packageName: string, version: str
         if (source !== undefined) {
           const resolved = resolveCatalogEntry(packageName, version, source);
           if (resolved === undefined) {
-            return yield* Effect.fail(
-              new BundleError({
-                message: `Could not resolve catalog version for '${packageName}' (${version}) from ${packagePath}. Pin an npm-compatible version explicitly.`,
-              }),
-            );
+            return yield* BundleError.make({
+              message: `Could not resolve catalog version for '${packageName}' (${version}) from ${packagePath}. Pin an npm-compatible version explicitly.`,
+            });
           }
           return resolved;
         }
@@ -1596,7 +1583,7 @@ const readArtifactFiles = (directory: string) =>
       const absolutePath = path.join(directory, relativePath);
       const linkTarget = yield* fs
         .readLink(absolutePath)
-        .pipe(Effect.catch(() => Effect.succeed(undefined)));
+        .pipe(Effect.orElseSucceed(() => undefined));
       if (linkTarget !== undefined) {
         files.push({
           path: relativePath.replaceAll("\\", "/"),
@@ -1615,19 +1602,18 @@ const readArtifactFiles = (directory: string) =>
     }
     return files;
   }).pipe(
-    Effect.mapError(
-      (cause) =>
-        new BundleError({
-          message: "Failed to read installed Lambda external packages",
-          cause,
-        }),
+    Effect.mapError((cause) =>
+      BundleError.make({
+        message: "Failed to read installed Lambda external packages",
+        cause,
+      }),
     ),
   );
 
 function toBundleError(cause: unknown): BundleError {
-  return cause instanceof BundleError
+  return Schema.is(BundleError)(cause)
     ? cause
-    : new BundleError({
+    : BundleError.make({
         message: cause instanceof Error ? cause.message : String(cause),
         cause,
       });

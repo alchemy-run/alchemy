@@ -388,7 +388,7 @@ export const make: (
         // instead of being silently replaced.
         const conflict = findPresetConflict(nuxt.options._layers, target.nitroPreset);
         if (conflict !== undefined) {
-          return yield* Effect.fail(fail(presetConflictMessage(conflict, target.nitroPreset)));
+          return yield* fail(presetConflictMessage(conflict, target.nitroPreset));
         }
 
         // Registered BEFORE nuxt.ready(): nitro:config fires while ready()
@@ -527,9 +527,7 @@ export const make: (
 
       const server = nuxt.server;
       if (server === undefined || typeof server.listen !== "function") {
-        return yield* Effect.fail(
-          fail("The loaded Nuxt instance exposes no dev server (`nuxt.server.listen`)"),
-        );
+        return yield* fail("The loaded Nuxt instance exposes no dev server (`nuxt.server.listen`)");
       }
       // `nuxt.server.listen` is listhen-backed. listhen hunts upward from
       // 3000 when NO port is given — colliding with (or IPv6-shadowing)
@@ -559,7 +557,7 @@ export const make: (
       );
       const url = listener.url;
       if (url === undefined) {
-        return yield* Effect.fail(fail("Could not determine the dev server URL"));
+        return yield* fail("Could not determine the dev server URL");
       }
 
       // The initial dev build — same flow as `nuxi dev` (which awaits
@@ -639,14 +637,12 @@ export const readNitroOutput = (
       prefix: "server",
     }).pipe(Effect.mapError((error) => fail(error.message, error.cause)));
     if (modules.length === 0) {
-      return yield* Effect.fail(
-        fail(`The Nuxt build produced no server modules in ${dirs.serverDir}`),
-      );
+      return yield* fail(`The Nuxt build produced no server modules in ${dirs.serverDir}`);
     }
     const serverModules = FrameworkCore.sortServerModules(modules, SERVER_ENTRY_NAME);
     if (serverModules[0]?.name !== SERVER_ENTRY_NAME) {
-      return yield* Effect.fail(
-        fail(`The Nuxt build produced no "${SERVER_ENTRY_NAME}" entry in ${dirs.serverDir}`),
+      return yield* fail(
+        `The Nuxt build produced no "${SERVER_ENTRY_NAME}" entry in ${dirs.serverDir}`,
       );
     }
     return {

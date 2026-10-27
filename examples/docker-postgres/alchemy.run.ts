@@ -1,5 +1,5 @@
+import * as Docker from "@alchemy.run/docker";
 import * as Alchemy from "alchemy";
-import * as Docker from "alchemy/Docker";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

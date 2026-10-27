@@ -23,6 +23,7 @@ import {
   profilesDirPath,
   rootDir,
 } from "./Paths.ts";
+import * as V0 from "./ProfileMigrationV0.ts";
 
 export {
   configFilePath,
@@ -110,34 +111,6 @@ export interface ProfileSelection {
   readonly source: "configuration" | "default";
 }
 
-/** Only the released v0 centralized layout is migrated. */
-const V0ManifestSchema = Schema.StructWithRest(
-  Schema.Struct({
-    version: Schema.Literal(0),
-    profiles: Schema.Record(Schema.String, Schema.Unknown),
-  }),
-  [Schema.Record(Schema.String, Schema.Unknown)],
-);
-
-const LEGACY_CREDENTIAL_KEYS: Record<string, string | Record<string, string>> = {
-  AWS: "aws-stored",
-  Axiom: "axiom-stored",
-  Cloudflare: "cloudflare-stored",
-  Fly: "fly-stored",
-  GitHub: "github-stored",
-  Hetzner: "hetzner-stored",
-  Neon: "neon-stored",
-  Planetscale: {
-    stored: "planetscale-stored",
-    oauth: "planetscale-oauth",
-  },
-  Prisma: "prisma-stored",
-  Railway: {
-    stored: "railway-stored",
-    oauth: "railway-oauth",
-  },
-};
-
 export class ProfileError extends Schema.TaggedError<ProfileError>()("ProfileError", {
   message: Schema.String,
   cause: Schema.optional(Schema.Defect()),
@@ -173,18 +146,18 @@ export const createProfileHint = (name?: string) =>
   );
 
 const profileNotFound = Effect.fn(function* (name: string) {
-  return new ProfileError({
+  return ProfileError.make({
     message: `Profile '${name}' does not exist. ${yield* createProfileHint(name)}`,
   });
 });
 
 export const cannotDeleteDefaultProfile = () =>
-  new ProfileError({
+  ProfileError.make({
     message: `Cannot delete the built-in '${DEFAULT_PROFILE_NAME}' profile.`,
   });
 
 export const cannotRenameDefaultProfile = () =>
-  new ProfileError({
+  ProfileError.make({
     message: `Cannot rename the built-in '${DEFAULT_PROFILE_NAME}' profile.`,
   });
 
@@ -194,7 +167,7 @@ export const validateProfileName = (name: string): Effect.Effect<string, Profile
   PROFILE_NAME_PATTERN.test(name)
     ? Effect.succeed(name)
     : Effect.fail(
-        new ProfileError({
+        ProfileError.make({
           message:
             `Invalid profile name '${name}'. Profile names must start with an ASCII letter or number, ` +
             "contain only letters, numbers, '.', '_' or '-', and be at most 64 characters.",
@@ -205,7 +178,7 @@ const validateProviderName = (name: string): Effect.Effect<string, ProfileError>
   PROFILE_NAME_PATTERN.test(name)
     ? Effect.succeed(name)
     : Effect.fail(
-        new ProfileError({
+        ProfileError.make({
           message: `Invalid provider id '${name}'. Provider ids must be safe as filenames.`,
         }),
       );
@@ -264,12 +237,11 @@ export const ProfileStoreLive = Layer.effect(
     const decodeJson = (file: string) =>
       fs.readFileString(file).pipe(
         Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))),
-        Effect.mapError(
-          (cause) =>
-            new ProfileError({
-              message: `Could not parse '${file}'.`,
-              cause,
-            }),
+        Effect.mapError((cause) =>
+          ProfileError.make({
+            message: `Could not parse '${file}'.`,
+            cause,
+          }),
         ),
       );
 
@@ -321,37 +293,18 @@ export const ProfileStoreLive = Layer.effect(
 
     const readLegacyProviderValues = (profile: string, provider: string, values: ProviderConfig) =>
       Effect.gen(function* () {
-        // Cloudflare's released OAuth grant is obsolete, but its stored API
-        // token and global API key formats still map exactly to the new
-        // provider-owned values schema.
-        if (provider === "Cloudflare" && values.method !== "stored") {
-          return { method: "oauth" };
-        }
-        const configuredKey = LEGACY_CREDENTIAL_KEYS[provider];
-        const key =
-          typeof configuredKey === "string"
-            ? configuredKey
-            : values.method === undefined
-              ? undefined
-              : configuredKey?.[values.method];
-        if (key === undefined) return values;
+        const plan = V0.planSidecar(provider, values);
+        if (plan._tag === "Inline") return plan.values;
 
-        const candidates = [key];
-        // The earliest GitHub sidecar used this shorter filename.
-        if (provider === "GitHub") candidates.push("gh-stored");
-        // The earliest Cloudflare sidecar used this shorter filename.
-        if (provider === "Cloudflare") candidates.push("cf-stored");
         let credentialFile: string | undefined;
-        for (const candidate of candidates) {
+        for (const candidate of plan.candidates) {
           const file = pathService.join(profileCredentialsDirPath(profile), `${candidate}.json`);
           if (yield* fs.exists(file)) {
             credentialFile = file;
             break;
           }
         }
-        if (credentialFile === undefined) {
-          return provider === "Cloudflare" ? {} : values;
-        }
+        if (credentialFile === undefined) return plan.fallback;
 
         const decoded = yield* Effect.result(
           decodeJson(credentialFile).pipe(
@@ -363,30 +316,9 @@ export const ProfileStoreLive = Layer.effect(
             `Could not decode legacy credentials from '${credentialFile}'; migrating the manifest values and preserving the sidecar in the v0 backup.`,
             decoded.failure,
           );
-          return provider === "Cloudflare" ? {} : values;
+          return plan.fallback;
         }
-        const credential = decoded.success;
-        const { type: _type, ...inline } = credential;
-        const normalizedInline =
-          provider === "Axiom" && inline.apiToken !== undefined
-            ? (({ apiToken, ...rest }) => ({ ...rest, token: apiToken }))(inline)
-            : inline;
-        const { storageKey: _storageKey, ...manifestValues } = values;
-        const migrated: ProviderConfig = {
-          ...manifestValues,
-          ...normalizedInline,
-        };
-        if (provider !== "Cloudflare") return migrated;
-        return migrated.credentialType === "apiKey" &&
-          typeof migrated.apiKey === "string" &&
-          typeof migrated.email === "string" &&
-          typeof migrated.accountId === "string"
-          ? migrated
-          : migrated.credentialType === "apiToken" &&
-              typeof migrated.apiToken === "string" &&
-              typeof migrated.accountId === "string"
-            ? migrated
-            : {};
+        return V0.mergeSidecar(provider, values, decoded.success);
       });
 
     /** Expand the released v0 store and preserve every original file. */
@@ -408,7 +340,7 @@ export const ProfileStoreLive = Layer.effect(
           // not need a compatibility path. Leave them untouched.
           if (Option.isSome(header) && header.value.version !== 0) return;
           const storedResult = yield* Effect.result(
-            Schema.decodeUnknownEffect(V0ManifestSchema)(jsonResult.success),
+            Schema.decodeUnknownEffect(V0.V0ManifestSchema)(jsonResult.success),
           );
           if (Result.isFailure(storedResult)) {
             yield* backupInvalidProfileFile(legacy, storedResult.failure);
@@ -447,10 +379,11 @@ export const ProfileStoreLive = Layer.effect(
                 Schema.decodeUnknownEffect(ProviderConfigSchema)(rawValues),
               );
               if (Result.isFailure(valuesResult)) {
-                if (provider === "Cloudflare") {
+                const fallback = V0.undecodableValues(provider);
+                if (fallback !== undefined) {
                   const target = profileProviderFilePath(name, provider);
                   if (!(yield* fs.exists(target))) {
-                    yield* writeProviderFile(name, provider, {});
+                    yield* writeProviderFile(name, provider, fallback);
                   }
                   continue;
                 }
@@ -490,21 +423,18 @@ export const ProfileStoreLive = Layer.effect(
         const fullPath = pathService.join(profileDirPath(profile), file);
         const json = yield* decodeJson(fullPath);
         const document = yield* Schema.decodeUnknownEffect(ProviderProfileFileSchema)(json).pipe(
-          Effect.mapError(
-            (cause) =>
-              new ProfileError({
-                message: `Invalid provider profile at '${fullPath}'.`,
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            ProfileError.make({
+              message: `Invalid provider profile at '${fullPath}'.`,
+              cause,
+            }),
           ),
         );
         const filenameProvider = file.slice(0, -".json".length);
         if (document.provider.toLowerCase() !== filenameProvider) {
-          return yield* Effect.fail(
-            new ProfileError({
-              message: `Provider '${document.provider}' in '${fullPath}' does not match lowercase filename '${filenameProvider}'.`,
-            }),
-          );
+          return yield* ProfileError.make({
+            message: `Provider '${document.provider}' in '${fullPath}' does not match lowercase filename '${filenameProvider}'.`,
+          });
         }
         return document;
       });
@@ -540,7 +470,7 @@ export const ProfileStoreLive = Layer.effect(
 
     const getProfile = (name: string) =>
       validateProfileName(name).pipe(
-        Effect.flatMap(() => readManifest),
+        Effect.andThen(readManifest),
         Effect.map((manifest) => manifest.profiles[name]),
       );
 
@@ -562,11 +492,9 @@ export const ProfileStoreLive = Layer.effect(
               Effect.gen(function* () {
                 const existing = (yield* readManifest).profiles[name];
                 if (existing !== undefined) {
-                  return yield* Effect.fail(
-                    new ProfileError({
-                      message: `Profile '${name}' already exists.`,
-                    }),
-                  );
+                  return yield* ProfileError.make({
+                    message: `Profile '${name}' already exists.`,
+                  });
                 }
                 yield* fs.makeDirectory(profileDirPath(name), {
                   recursive: true,
@@ -581,7 +509,7 @@ export const ProfileStoreLive = Layer.effect(
     const renameProfile = (name: string, newName: string) =>
       Effect.gen(function* () {
         if (name === DEFAULT_PROFILE_NAME) {
-          return yield* Effect.fail(cannotRenameDefaultProfile());
+          return yield* cannotRenameDefaultProfile();
         }
         yield* validateProfileName(name);
         yield* validateProfileName(newName);
@@ -591,18 +519,14 @@ export const ProfileStoreLive = Layer.effect(
             Effect.gen(function* () {
               const manifest = yield* readManifest;
               if (manifest.profiles[name] === undefined) {
-                return yield* Effect.fail(
-                  new ProfileError({
-                    message: `Profile '${name}' does not exist.`,
-                  }),
-                );
+                return yield* ProfileError.make({
+                  message: `Profile '${name}' does not exist.`,
+                });
               }
               if (manifest.profiles[newName] !== undefined) {
-                return yield* Effect.fail(
-                  new ProfileError({
-                    message: `Profile '${newName}' already exists.`,
-                  }),
-                );
+                return yield* ProfileError.make({
+                  message: `Profile '${newName}' already exists.`,
+                });
               }
               yield* fs.rename(profileDirPath(name), profileDirPath(newName));
               const oldCredentials = profileCredentialsDirPath(name);
@@ -617,12 +541,11 @@ export const ProfileStoreLive = Layer.effect(
     const current: Effect.Effect<ProfileSelection, ProfileError | PlatformError> = Effect.gen(
       function* () {
         const configured = yield* Config.option(ALCHEMY_PROFILE).pipe(
-          Effect.mapError(
-            (cause) =>
-              new ProfileError({
-                message: "Could not resolve ALCHEMY_PROFILE.",
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            ProfileError.make({
+              message: "Could not resolve ALCHEMY_PROFILE.",
+              cause,
+            }),
           ),
         );
         if (Option.isSome(configured)) {
@@ -685,7 +608,7 @@ export const ProfileStoreLive = Layer.effect(
       Effect.gen(function* () {
         yield* validateProfileName(name);
         if (name === DEFAULT_PROFILE_NAME) {
-          return yield* Effect.fail(cannotDeleteDefaultProfile());
+          return yield* cannotDeleteDefaultProfile();
         }
         return yield* provideLockServices(
           withLock(
@@ -715,22 +638,18 @@ export const ProfileStoreLive = Layer.effect(
           return yield* auth.decodeConfig(profileName, stored);
         }
         if (yield* SuppressMissingProviderConfig) {
-          return yield* Effect.fail(
-            new MissingProviderConfig({
-              provider: auth.name,
-              profileName,
-              message: `Provider '${auth.name}' is not configured in profile '${profileName}'.`,
-            }),
-          );
+          return yield* MissingProviderConfig.make({
+            provider: auth.name,
+            profileName,
+            message: `Provider '${auth.name}' is not configured in profile '${profileName}'.`,
+          });
         }
         const command = yield* profileCommandHint(
           `alchemy profile edit --profile ${profileName} --add ${auth.name}`,
         );
-        return yield* Effect.fail(
-          new AuthError({
-            message: `Provider '${auth.name}' is not configured in profile '${profileName}'. Run \`${command}\`.`,
-          }),
-        );
+        return yield* AuthError.make({
+          message: `Provider '${auth.name}' is not configured in profile '${profileName}'. Run \`${command}\`.`,
+        });
       });
 
     return {
