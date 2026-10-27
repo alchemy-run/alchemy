@@ -24,8 +24,6 @@ export interface Any extends Schema.Top {
   readonly kind: "Command";
   readonly tag: string;
   readonly target: TargetSchema;
-  /** The command's input fields. */
-  readonly input: Fields;
   readonly events: ReadonlyArray<Event.Any>;
   readonly rejects: ReadonlyArray<Rejection.Any>;
   readonly reply: Schema.Top | undefined;
@@ -47,21 +45,11 @@ export type ReplySchema<Reply extends Fields | undefined> = Reply extends Fields
   ? Schema.Struct<Reply>
   : undefined;
 
-/** The payload fields a command's input may not declare: the payload uses them itself. */
-export type ReservedField = "target" | "commandId";
-
-/**
- * An input with no {@link ReservedField}: each reserved field it declares is
- * `never`, so declaring one is a type error at that field.
- */
-export type Input<F extends Fields> = F & {
-  readonly [K in Extract<keyof F, ReservedField>]: never;
-};
-
 /** What a client sends: the target, an optional idempotency key, and the input. */
-export type PayloadFields<Target extends TargetSchema, F extends Fields> = F & {
+export type PayloadFields<Target extends TargetSchema, F extends Fields> = {
   readonly target: Target;
   readonly commandId: Schema.optional<typeof Schema.String>;
+  readonly input: Schema.Struct<F>;
 };
 
 /** What a client receives: the reply and the position of the committed events. */
@@ -101,8 +89,6 @@ export interface CommandClass<
   readonly kind: "Command";
   readonly tag: Tag;
   readonly target: Target;
-  /** The command's input fields. */
-  readonly input: F;
   readonly events: Events;
   readonly rejects: Rejects;
   readonly reply: Reply;
@@ -134,7 +120,6 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
     static readonly kind = "Command" as const;
     static readonly tag = tag;
     static readonly target = options.target;
-    static readonly input = options.input ?? {};
     static readonly events = options.events ?? [];
     static readonly rejects = options.rejects ?? [];
     static readonly reply = options.reply ? Schema.Struct(options.reply) : undefined;
@@ -203,7 +188,7 @@ const build = (tag: string, options: Options, rpc: Rpc.Any): unknown => {
  *
  * **Example:** An idempotent send through an Api
  * ```typescript
- * const receipt = yield* bank.WithdrawMoney({ target: accountId, amount: 2_000, commandId: requestId });
+ * const receipt = yield* bank.WithdrawMoney(accountId, { amount: 2_000 }, { commandId: requestId });
  * ```
  *
  * @primitive
@@ -221,8 +206,8 @@ export const make = <
   options: {
     /** The id schema of the aggregate this command addresses. */
     readonly target: Target;
-    /** The command's fields. `target` and `commandId` are taken by its payload. */
-    readonly input?: Input<F>;
+    /** The command's fields. */
+    readonly input?: F;
     /**
      * Middleware that guards the command when an Api exposes it, in order.
      * What it provides is what `decide` may read.
@@ -254,9 +239,9 @@ export const make = <
   const rejects = options.rejects ?? [];
   const rpc = Rpc.make(tag, {
     payload: {
-      ...options.input,
       target: options.target,
       commandId: Schema.optional(Schema.String),
+      input: Schema.Struct(options.input ?? {}),
     },
     success: Schema.Struct({
       reply: options.reply ? Schema.Struct(options.reply) : Schema.Void,

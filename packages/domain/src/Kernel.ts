@@ -261,15 +261,6 @@ const build = (
     const commands = new Map<string, { cls: Command.Any; codec: JsonCodec; reply?: JsonCodec }>();
     const rejections = new Map<string, JsonCodec>();
     for (const command of def.commands) {
-      // The payload carries the target and the idempotency key beside the
-      // input, so an input field with either name never reaches `decide`.
-      for (const field of ["target", "commandId"] satisfies Array<Command.ReservedField>) {
-        if (field in command.input) {
-          problem(
-            `${command.tag} declares the input field '${field}', which its payload uses itself`,
-          );
-        }
-      }
       commands.set(command.tag, {
         cls: command,
         codec: jsonCodec(command),
