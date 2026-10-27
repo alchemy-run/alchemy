@@ -26,9 +26,10 @@ import {
   isDeleteRequested,
   lastSegment,
   projectIdFromOperation,
-  resolveParent,
+  normalizeHierarchyParent,
   resourceNameFromOperation,
   sameHierarchyParent,
+  tryResolveParent,
   waitForOperation,
   waitForCreate,
 } from "./internal.ts";
@@ -43,7 +44,8 @@ export type ProjectProps = {
   projectId?: string;
   /**
    * Parent `organizations/{org}` or `folders/{folder}`. Defaults to the
-   * current project's parent. Changing parent moves the project.
+   * current project's parent; when the current project has none, the
+   * project is created standalone. Changing parent moves the project.
    */
   parent?: string;
   /**
@@ -66,8 +68,8 @@ export type Project = Resource<
     name: string;
     /** User-assigned project id. */
     projectId: string;
-    /** Parent `organizations/{org}` or `folders/{folder}`. */
-    parent: string;
+    /** Parent `organizations/{org}` or `folders/{folder}`; `undefined` when standalone. */
+    parent: string | undefined;
     /** User-assigned display name. */
     displayName: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
@@ -112,6 +114,17 @@ export type Project = Resource<
  *   parent: "folders/123456789",
  *   displayName: "Sandbox",
  *   labels: { env: "test" },
+ * });
+ * ```
+ *
+ * **Example:** Standalone project without an organization or folder
+ * ```typescript
+ * // With no `parent`, the project lands under the current project's
+ * // organization or folder. When the current project has none, it is
+ * // created standalone and `parent` is `undefined`. Google only lets user
+ * // credentials create standalone projects, not service accounts.
+ * const project = yield* GCP.ResourceManager.Project("Sandbox", {
+ *   displayName: "Sandbox",
  * });
  * ```
  *
@@ -187,7 +200,7 @@ const sanitizeDisplayName = (value: string | undefined, fallback: string) => {
 const toAttrs = (project: resourcemanager.Project) => ({
   name: project.name ?? "",
   projectId: project.projectId ?? lastSegment(project.name ?? ""),
-  parent: project.parent ?? "",
+  parent: project.parent || undefined,
   displayName: project.displayName,
   labels: userLabels(project.labels),
   state: project.state,
@@ -255,6 +268,21 @@ const ensureActive = (project: resourcemanager.Project) =>
     return yield* waitUntilExists(project.name, project.projectId ?? lastSegment(project.name));
   });
 
+// Unlike folders, a project may be standalone (no organization or folder).
+// No parent omits `parent` on create and never moves the project. A deployed
+// project keeps the parent it has, so a standalone one stays out of the
+// current project's hierarchy.
+const resolveProjectParent = Effect.fn(function* (
+  explicit: string | undefined,
+  output: { readonly parent: string | undefined } | undefined,
+) {
+  if (explicit) return normalizeHierarchyParent(explicit);
+  if (output !== undefined) {
+    return output.parent ? normalizeHierarchyParent(output.parent) : undefined;
+  }
+  return yield* tryResolveParent();
+});
+
 export const ProjectProvider = () =>
   Provider.succeed(Project, {
     stables: ["name", "projectId", "createTime"],
@@ -297,7 +325,7 @@ export const ProjectProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const projectId = yield* toProjectId(id, news.projectId, output?.projectId);
-      const parent = yield* resolveParent(news.parent, output?.parent);
+      const parent = yield* resolveProjectParent(news.parent, output);
       const displayName = sanitizeDisplayName(news.displayName, projectId);
       const desiredLabels = {
         ...toLabels(news.labels),
@@ -357,7 +385,7 @@ export const ProjectProvider = () =>
 
       if (
         current.parent !== undefined &&
-        parent.length > 0 &&
+        parent !== undefined &&
         !sameHierarchyParent(current.parent, parent)
       ) {
         const operation = yield* resourcemanager.moveProjects({
