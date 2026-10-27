@@ -64,6 +64,23 @@ test.provider(
 
       const media = yield* makeObjectMedia;
       const [done] = yield* attempts(ok, 1);
+      if (done === undefined) {
+        // Say why: each task's last dispatch status.
+        const { tasks = [] } = yield* cloudtasks.listProjectsLocationsQueuesTasks({
+          parent: out.queue,
+          responseView: "FULL",
+        });
+        return yield* Effect.die(
+          new Error(
+            `no task reached the worker: ${JSON.stringify(
+              tasks.map((task) => ({
+                dispatchCount: task.dispatchCount,
+                lastAttempt: task.lastAttempt,
+              })),
+            )}`,
+          ),
+        );
+      }
       const object = yield* media.download({ bucket: out.bucket, object: done!.name! });
       expect(JSON.parse(new TextDecoder().decode(object.body))).toMatchObject({
         body: ok,
