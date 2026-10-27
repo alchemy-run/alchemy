@@ -1260,10 +1260,79 @@ describe.concurrent(
       { tags: ["live"], timeout: 180_000 },
     );
 
+    // #2540: a cyclic Worker whose namespace is still unresolved precreates a
+    // stub that claims nothing. Its script must be checked once the namespace
+    // resolves, before reconcile uploads over a foreign script there.
+    test.provider(
+      "a cyclic Worker refuses a foreign script in a namespace that resolves during apply",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* stack.destroy();
+          const namespaceName = scriptName(stack, "late-ns");
+          const name = scriptName(stack, "late-user");
+          const namespace = Cloudflare.WorkersForPlatforms.DispatchNamespace("LateNamespace", {
+            name: namespaceName,
+          });
+          yield* stack.deploy(namespace);
+          yield* stack.deploy(
+            Effect.gen(function* () {
+              yield* namespace;
+              return yield* Cloudflare.Worker("LateOriginal", {
+                main,
+                name,
+                namespace: namespaceName,
+              });
+            }),
+          );
+          const restore = yield* forget(stack, "LateOriginal");
+          const request = { accountId, dispatchNamespace: namespaceName, scriptName: name };
+          const before = yield* wfp.getDispatchNamespaceScript(request);
+
+          const program = Effect.gen(function* () {
+            const ns = yield* namespace;
+            const kv = yield* Cloudflare.KV.Namespace("LateKv");
+            const worker = yield* Cloudflare.Worker("LateDifferent", {
+              main,
+              name,
+              // Resolves only once `LateKv` is created, after the cycle precreates.
+              namespace: Output.all(ns.name, kv.namespaceId).pipe(Output.map(([name]) => name)),
+              workersDev: false,
+              env: { KV: kv },
+            });
+            yield* worker.bind`SELF_NAME`({
+              bindings: [{ type: "plain_text", name: "SELF_NAME", text: worker.workerName }],
+            });
+            return worker;
+          });
+          const error = yield* stack.deploy(program).pipe(Effect.flip);
+          expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "LateDifferent" });
+          expect((yield* wfp.getDispatchNamespaceScript(request)).modifiedOn).toBe(
+            before.modifiedOn,
+          );
+          const checkpoint = yield* Effect.gen(function* () {
+            const state = yield* yield* State;
+            return yield* state.get({
+              stack: stack.name,
+              stage: stack.stage,
+              fqn: "LateDifferent",
+            });
+          }).pipe(Effect.provide(stack.state));
+          // The stub claimed nothing, so a retry checks the script again.
+          expect(checkpoint?.status).toBe("creating");
+          if (isResourceState(checkpoint)) expect(checkpoint.attr).toBeUndefined();
+
+          // Remember the original before the namespace goes, so destroy deletes its script first.
+          yield* restore;
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 180_000 },
+    );
+
     // #2533: a cyclic dispatch-namespace Worker precreates a stub that uploads
-    // nothing. Its namespace is still unresolved, so the stub records none.
-    // When the upload then fails, destroy must not read that as an
-    // account-level Worker and delete the same-name script there.
+    // nothing. Its namespace is still unresolved, so the checkpoint keeps no
+    // stub (#2540). When the upload then fails, destroy must not read that as
+    // an account-level Worker and delete the same-name script there.
     test.provider(
       "destroy preserves the account Worker after an interrupted dispatch precreate",
       (stack) =>
@@ -1307,8 +1376,7 @@ describe.concurrent(
             expect(checkpoint).toMatchObject({ status: "creating" });
             if (!isResourceState(checkpoint))
               return yield* Effect.die("Missing resource checkpoint");
-            expect(checkpoint.attr).toMatchObject({ workerId: "" });
-            expect(checkpoint.attr?.namespace).toBeUndefined();
+            expect(checkpoint.attr).toBeUndefined();
             expect(yield* deployments()).toEqual(before);
 
             yield* stack.destroy();
