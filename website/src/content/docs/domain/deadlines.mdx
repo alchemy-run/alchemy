@@ -109,7 +109,7 @@ So an approved transfer ignores its expiry, and an expired transfer rejects a la
 
 ## Cancel it
 
-When the deadline no longer applies, cancel it instead of guarding against it when it fires. Schedule the command with a command id you can name again, and unschedule it by that id:
+When the deadline no longer applies, cancel it. Schedule the command with a command id you can name again, and unschedule it by that id:
 
 ```typescript
 // when the waiting starts
@@ -123,6 +123,8 @@ yield* transfers.unschedule(source, `expire:${source.id}`);
 ```
 
 Unscheduling is durable, like scheduling. It does nothing when the command already fired or was never scheduled, so a policy can call it again on a redelivery. A cancelled command never fires, even when a story's clock passes its time.
+
+A policy cancels after the approval is recorded, so the expiry can still arrive in between. Keep the guard in `decide`; cancelling saves the stale command, it doesn't replace the guard.
 
 ## Test it with the clock
 
