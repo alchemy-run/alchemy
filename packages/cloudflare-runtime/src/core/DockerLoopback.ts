@@ -31,7 +31,22 @@ const unixServers = new Map<number, NodeNet.Server>();
  */
 export const usesUnixSocketLoopback = () => process.platform === "linux";
 
-export const loopbackSocketDir = () => NodePath.join(NodeOs.tmpdir(), "alchemy-dev-loopback");
+let socketDir: string | undefined;
+
+/**
+ * This process's socket directory, created on first use. `mkdtemp` makes a
+ * fresh, owner-only (0700) directory: a fixed path under the shared /tmp
+ * could be pre-created by another local user, who could then swap a socket
+ * or plant a symlink for the forwarder script.
+ */
+export const loopbackSocketDir = () => {
+  if (socketDir === undefined) {
+    const dir = NodeFs.mkdtempSync(NodePath.join(NodeOs.tmpdir(), "alchemy-dev-loopback-"));
+    socketDir = dir;
+    process.once("exit", () => NodeFs.rmSync(dir, { recursive: true, force: true }));
+  }
+  return socketDir;
+};
 
 const addPort = (ports: Set<number>, raw: string) => {
   const port = Number(raw);
@@ -163,9 +178,7 @@ export const ensureLoopbackUnixSockets = (ports: readonly number[]) => {
   if (!usesUnixSocketLoopback()) return;
   const unique = [...new Set(ports.filter((port) => Number.isInteger(port) && port > 0))];
   if (unique.length === 0) return;
-  const dir = loopbackSocketDir();
-  NodeFs.mkdirSync(dir, { recursive: true });
-  writeForwarderScript(dir);
+  writeForwarderScript(loopbackSocketDir());
   for (const port of unique) {
     if (unixServers.has(port)) continue;
     const sock = socketPathFor(port);
@@ -190,11 +203,10 @@ export const closeLoopbackUnixSockets = () => {
   for (const [port, server] of unixServers) {
     unixServers.delete(port);
     server.close();
-    try {
-      NodeFs.unlinkSync(socketPathFor(port));
-    } catch {
-      // already gone
-    }
+  }
+  if (socketDir !== undefined) {
+    NodeFs.rmSync(socketDir, { recursive: true, force: true });
+    socketDir = undefined;
   }
 };
 

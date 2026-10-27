@@ -23,7 +23,7 @@ import * as RuntimeServices from "../core/RuntimeServices.ts";
 import { PlatformServices } from "../Platform.ts";
 import type { ExportTypes } from "../rolldown/export-types.ts";
 import { EXPORT_TYPES_MODULE_ID } from "../rolldown/export-types.ts";
-import { MODULE_REFERENCE_REGEX } from "../rolldown/plugins/index.ts";
+import { isReferencedModulePath, MODULE_REFERENCE_REGEX } from "../rolldown/plugins/index.ts";
 const ModuleRunnerWorker = {
   worker: () =>
     loadInternalWorker("#cloudflare-runtime-vite-worker/module-runner/module-runner.worker"),
@@ -94,7 +94,8 @@ const closeScope = async (scope: Scope.Closeable) => {
   await Effect.runPromiseExit(Scope.closeUnsafe(scope, Exit.void) ?? Effect.void);
 };
 
-const makeModuleFallbackService = Effect.gen(function* () {
+/** @internal exported for tests */
+export const makeModuleFallbackService = Effect.gen(function* () {
   const server = NodeHttp.createServer(async (req, res) => {
     try {
       const request = await parseModuleFallbackRequest(req);
@@ -116,6 +117,13 @@ const makeModuleFallbackService = Effect.gen(function* () {
       if (!moduleType || !modulePath) {
         res.writeHead(400, { "Content-Type": "text/plain" });
         res.end(`Invalid module type or path: ${match[0]}`);
+        return;
+      }
+      // The server is unauthenticated (workerd is its only intended client),
+      // so it reads only files this process resolved as module references.
+      if (!isReferencedModulePath(modulePath)) {
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end(`Module not found: ${modulePath}`);
         return;
       }
 

@@ -1,5 +1,7 @@
 import * as NodeFs from "node:fs";
 import * as NodeNet from "node:net";
+import * as NodeOs from "node:os";
+import * as NodePath from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import {
   closeLoopbackUnixSockets,
@@ -64,6 +66,20 @@ describe("DockerLoopback", () => {
       expect(sidecarLoopbackBinds([5432])).toEqual([]);
     }
   });
+
+  it.skipIf(process.platform === "win32")(
+    "keeps sockets in a private per-process directory, not a shared /tmp path",
+    () => {
+      const dir = loopbackSocketDir();
+      expect(dir).not.toBe(NodePath.join(NodeOs.tmpdir(), "alchemy-dev-loopback"));
+      const stat = NodeFs.lstatSync(dir);
+      expect(stat.isDirectory()).toBe(true);
+      expect(stat.mode & 0o777).toBe(0o700);
+      expect(loopbackSocketDir()).toBe(dir);
+      closeLoopbackUnixSockets();
+      expect(NodeFs.existsSync(dir)).toBe(false);
+    },
+  );
 
   it("merges sidecar HostConfig without duplicating ExtraHosts", () => {
     const extra = sidecarLoopbackExtraHost();
