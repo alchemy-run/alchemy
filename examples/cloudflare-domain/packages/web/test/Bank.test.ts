@@ -2,14 +2,17 @@ import { AccountId } from "@bank/domain/Account/Account.id";
 import { StatementLine } from "@bank/domain/Account/Statement.view";
 import { CustomerId } from "@bank/domain/Customer/Customer.id";
 import { expect, test } from "@effect/vitest";
-import * as Story from "foldkit/story";
+import * as Array from "effect/Array";
+import * as Option from "effect/Option";
+import { Command, given, message, model, story } from "foldkit/story";
+import { modifyFields } from "foldkit/struct";
 import {
   Deliver,
   init,
   type Line,
   Message,
   type Model,
-  Register,
+  BankCommands,
   SaveIntents,
   shownBalance,
   update,
@@ -19,31 +22,37 @@ const earlier: Line = {
   commandId: "earlier",
   kind: "deposit",
   amount: 5_000,
-  balance: 5_000,
-  ack: "confirmed",
-  reason: null,
+  balance: Option.some(5_000),
+  ack: "Confirmed",
+  reason: Option.none(),
 };
 
 const account: Model = {
   customerId: CustomerId.make("c-1"),
   accountId: AccountId.make("c-1-main"),
-  session: "s",
-  sent: 0,
+  commandIds: { session: "s", sent: 0 },
+  summaryCursor: Option.none(),
+  statementCursor: Option.none(),
+  statementRestart: 0,
+  feedState: "Live",
   online: true,
-  balance: 5_000,
+  balance: Option.some(5_000),
   lines: [earlier],
-  error: null,
+  error: Option.none(),
 };
 
-const saved = Story.Command.resolve(SaveIntents, Message.SavedIntents());
+const saved = Command.resolve(SaveIntents, Message.CompletedSaveIntents());
 
 const accepted = (commandId: string) =>
-  Message.Delivered({ outcomes: [{ commandId, result: "accepted", reason: null }] });
+  Message.CompletedDeliver({
+    outcomes: [{ commandId, result: "Accepted", reason: Option.none() }],
+  });
 
 const deposited = (commandId: string, balance: number) =>
-  Message.GotLine({
+  Message.ReceivedLine({
     commandId,
-    line: new StatementLine({ kind: "deposit", amount: 1_000, balance }),
+    line: StatementLine.make({ kind: "deposit", amount: 1_000, balance }),
+    cursor: 1,
   });
 
 const acks = (model: Model) => model.lines.map((l) => [l.commandId, l.ack]);
@@ -51,166 +60,193 @@ const acks = (model: Model) => model.lines.map((l) => [l.commandId, l.ack]);
 // VARIANT 1: online, with optimistic UI.
 
 test("a deposit shows at once as pending; its event confirms it", () =>
-  Story.story(
+  story(
     update,
-    Story.given(account),
-    Story.message(Message.ClickedDeposit()),
+    given(account),
+    message(Message.ClickedDeposit()),
     saved,
-    Story.model((model) => {
-      expect(model.lines[0]).toMatchObject({ commandId: "s:0", ack: "pending", balance: null });
-      expect(shownBalance(model)).toBe(6_000);
+    model((model) => {
+      expect(Option.getOrThrow(Array.head(model.lines))).toMatchObject({
+        commandId: "s:0",
+        ack: "Pending",
+        balance: Option.none(),
+      });
+      expect(shownBalance(model)).toEqual(Option.some(6_000));
     }),
-    Story.Command.resolve(Deliver, accepted("s:0")),
+    Command.resolve(Deliver, accepted("s:0")),
     saved,
     // Accepted is not acknowledged: still pending until the statement says so.
-    Story.model((model) => expect(model.lines[0]!.ack).toBe("pending")),
-    Story.message(deposited("s:0", 6_000)),
+    model((model) => expect(Option.getOrThrow(Array.head(model.lines)).ack).toBe("Pending")),
+    message(deposited("s:0", 6_000)),
     saved,
-    Story.model((model) => {
+    model((model) => {
       expect(acks(model)).toEqual([
-        ["s:0", "confirmed"],
-        ["earlier", "confirmed"],
+        ["s:0", "Confirmed"],
+        ["earlier", "Confirmed"],
       ]);
-      expect(shownBalance(model)).toBe(6_000);
+      expect(shownBalance(model)).toEqual(Option.some(6_000));
     }),
   ));
 
 test("the event can arrive before the reply; the reply changes nothing", () =>
-  Story.story(
+  story(
     update,
     // The deposit is in flight: its line is pending, its reply not yet back.
-    Story.given({
-      ...account,
-      sent: 1,
-      lines: [
-        { ...earlier, commandId: "s:0", amount: 1_000, balance: null, ack: "pending" },
-        earlier,
-      ],
-    }),
-    Story.message(deposited("s:0", 6_000)),
+    given(
+      modifyFields(account, {
+        commandIds: () => ({ session: "s", sent: 1 }),
+        lines: () => [
+          { ...earlier, commandId: "s:0", amount: 1_000, balance: Option.none(), ack: "Pending" },
+          earlier,
+        ],
+      }),
+    ),
+    message(deposited("s:0", 6_000)),
     saved,
-    Story.message(accepted("s:0")),
+    message(accepted("s:0")),
     saved,
-    Story.model((model) => {
-      expect(model.lines[0]).toMatchObject({ commandId: "s:0", ack: "confirmed", balance: 6_000 });
-      expect(shownBalance(model)).toBe(6_000);
+    model((model) => {
+      expect(Option.getOrThrow(Array.head(model.lines))).toMatchObject({
+        commandId: "s:0",
+        ack: "Confirmed",
+        balance: Option.some(6_000),
+      });
+      expect(shownBalance(model)).toEqual(Option.some(6_000));
     }),
   ));
 
 test("a rejected withdrawal is marked rejected and no longer moves the balance", () =>
-  Story.story(
+  story(
     update,
-    Story.given(account),
-    Story.message(Message.ClickedWithdraw()),
+    given(account),
+    message(Message.ClickedWithdraw()),
     saved,
-    Story.model((model) => expect(shownBalance(model)).toBe(4_000)),
-    Story.Command.resolve(
+    model((model) => expect(shownBalance(model)).toEqual(Option.some(4_000))),
+    Command.resolve(
       Deliver,
-      Message.Delivered({
-        outcomes: [{ commandId: "s:0", result: "rejected", reason: "InsufficientFunds" }],
+      Message.CompletedDeliver({
+        outcomes: [
+          { commandId: "s:0", result: "Rejected", reason: Option.some("InsufficientFunds") },
+        ],
       }),
     ),
     saved,
-    Story.model((model) => {
-      expect(model.lines[0]).toMatchObject({ ack: "rejected", reason: "InsufficientFunds" });
-      expect(shownBalance(model)).toBe(5_000);
+    model((model) => {
+      expect(Option.getOrThrow(Array.head(model.lines))).toMatchObject({
+        ack: "Rejected",
+        reason: Option.some("InsufficientFunds"),
+      });
+      expect(shownBalance(model)).toEqual(Option.some(5_000));
     }),
   ));
 
 test("an event this browser did not ask for lands below its unacknowledged lines", () =>
-  Story.story(
+  story(
     update,
-    Story.given(account),
-    Story.message(Message.ClickedDeposit()),
+    given(account),
+    message(Message.ClickedDeposit()),
     saved,
-    Story.Command.resolve(Deliver, accepted("s:0")),
+    Command.resolve(Deliver, accepted("s:0")),
     saved,
     // A transfer arrives from elsewhere while the deposit is in flight.
-    Story.message(
-      Message.GotLine({
+    message(
+      Message.ReceivedLine({
         commandId: "transfer-t-1",
-        line: new StatementLine({ kind: "transfer-in", amount: 2_000, balance: 7_000 }),
+        line: StatementLine.make({ kind: "transfer-in", amount: 2_000, balance: 7_000 }),
+        cursor: 1,
       }),
     ),
     saved,
-    Story.model((model) => {
+    model((model) => {
       expect(acks(model)).toEqual([
-        ["s:0", "pending"],
-        ["transfer-t-1", "confirmed"],
-        ["earlier", "confirmed"],
+        ["s:0", "Pending"],
+        ["transfer-t-1", "Confirmed"],
+        ["earlier", "Confirmed"],
       ]);
-      expect(shownBalance(model)).toBe(8_000);
+      expect(shownBalance(model)).toEqual(Option.some(8_000));
     }),
   ));
 
 // VARIANT 2: offline-capable, recording intents.
 
 test("offline, a deposit is queued; back online, it is sent and confirmed", () =>
-  Story.story(
+  story(
     update,
-    Story.given({ ...account, online: false }),
+    given(modifyFields(account, { online: () => false })),
     // Nothing is sent while offline: the intent is only kept.
-    Story.message(Message.ClickedDeposit()),
+    message(Message.ClickedDeposit()),
     saved,
-    Story.model((model) => {
-      expect(model.lines[0]).toMatchObject({ commandId: "s:0", ack: "queued" });
-      expect(shownBalance(model)).toBe(6_000);
+    model((model) => {
+      expect(Option.getOrThrow(Array.head(model.lines))).toMatchObject({
+        commandId: "s:0",
+        ack: "Queued",
+      });
+      expect(shownBalance(model)).toEqual(Option.some(6_000));
     }),
-    Story.message(Message.WentOnline()),
-    Story.model((model) => expect(model.lines[0]!.ack).toBe("pending")),
-    Story.Command.resolve(Deliver, accepted("s:0")),
+    message(Message.WentOnline()),
+    model((model) => expect(Option.getOrThrow(Array.head(model.lines)).ack).toBe("Pending")),
+    Command.resolve(Deliver, accepted("s:0")),
     saved,
-    Story.message(deposited("s:0", 6_000)),
+    message(deposited("s:0", 6_000)),
     saved,
-    Story.model((model) => expect(model.lines[0]).toMatchObject({ ack: "confirmed" })),
+    model((model) =>
+      expect(Option.getOrThrow(Array.head(model.lines))).toMatchObject({ ack: "Confirmed" }),
+    ),
   ));
 
 test("a send that cannot reach the server is queued, and so is everything after it", () =>
-  Story.story(
+  story(
     update,
-    Story.given(account),
-    Story.message(Message.ClickedDeposit()),
+    given(account),
+    message(Message.ClickedDeposit()),
     saved,
-    Story.Command.resolve(
+    Command.resolve(
       Deliver,
-      Message.Delivered({ outcomes: [{ commandId: "s:0", result: "queued", reason: null }] }),
+      Message.CompletedDeliver({
+        outcomes: [{ commandId: "s:0", result: "Queued", reason: Option.none() }],
+      }),
     ),
     saved,
     // A later withdrawal waits behind the queued deposit instead of overtaking it.
-    Story.message(Message.ClickedWithdraw()),
+    message(Message.ClickedWithdraw()),
     saved,
-    Story.model((model) =>
+    model((model) =>
       expect(acks(model)).toEqual([
-        ["s:1", "queued"],
-        ["s:0", "queued"],
-        ["earlier", "confirmed"],
+        ["s:1", "Queued"],
+        ["s:0", "Queued"],
+        ["earlier", "Confirmed"],
       ]),
     ),
   ));
 
 test("a queued withdrawal the account refuses on sync stops counting", () =>
-  Story.story(
+  story(
     update,
-    Story.given({ ...account, online: false }),
-    Story.message(Message.ClickedWithdraw()),
+    given(modifyFields(account, { online: () => false })),
+    message(Message.ClickedWithdraw()),
     saved,
-    Story.model((model) => expect(shownBalance(model)).toBe(4_000)),
-    Story.message(Message.WentOnline()),
-    Story.Command.resolve(
+    model((model) => expect(shownBalance(model)).toEqual(Option.some(4_000))),
+    message(Message.WentOnline()),
+    Command.resolve(
       Deliver,
-      Message.Delivered({
-        outcomes: [{ commandId: "s:0", result: "rejected", reason: "InsufficientFunds" }],
+      Message.CompletedDeliver({
+        outcomes: [
+          { commandId: "s:0", result: "Rejected", reason: Option.some("InsufficientFunds") },
+        ],
       }),
     ),
     saved,
-    Story.model((model) => {
-      expect(model.lines[0]).toMatchObject({ ack: "rejected", reason: "InsufficientFunds" });
-      expect(shownBalance(model)).toBe(5_000);
+    model((model) => {
+      expect(Option.getOrThrow(Array.head(model.lines))).toMatchObject({
+        ack: "Rejected",
+        reason: Option.some("InsufficientFunds"),
+      });
+      expect(shownBalance(model)).toEqual(Option.some(5_000));
     }),
   ));
 
 test("intents from an earlier page load are sent, oldest first, when the app boots", () => {
-  const { model, commands } = init({
+  const bankInit = init({
     customerId: CustomerId.make("c-1"),
     session: "next",
     online: true,
@@ -219,42 +255,95 @@ test("intents from an earlier page load are sent, oldest first, when the app boo
       { commandId: "old:1", kind: "withdrawal", amount: 500 },
     ],
   });
-  expect(acks(model)).toEqual([
-    ["old:1", "pending"],
-    ["old:0", "pending"],
+  expect(acks(bankInit.model)).toEqual([
+    ["old:1", "Pending"],
+    ["old:0", "Pending"],
   ]);
-  expect(commands).toHaveLength(1);
+  expect(bankInit.commands).toHaveLength(1);
 });
 
 test("an intent the server already applied is confirmed by the statement's history", () =>
-  Story.story(
+  story(
     update,
-    Story.given({
-      ...account,
-      lines: [
-        { ...earlier, commandId: "old:0", amount: 1_000, balance: null, ack: "pending" },
-        earlier,
-      ],
-    }),
+    given(
+      modifyFields(account, {
+        lines: () => [
+          { ...earlier, commandId: "old:0", amount: 1_000, balance: Option.none(), ack: "Pending" },
+          earlier,
+        ],
+      }),
+    ),
     // The statement replays history; the earlier page load's deposit is in it.
-    Story.message(deposited("old:0", 6_000)),
+    message(deposited("old:0", 6_000)),
     saved,
     // Its resend is answered from the account's stored receipt: no second deposit.
-    Story.message(accepted("old:0")),
+    message(accepted("old:0")),
     saved,
-    Story.model((model) => {
-      expect(model.lines[0]).toMatchObject({ commandId: "old:0", ack: "confirmed" });
-      expect(shownBalance(model)).toBe(6_000);
+    model((model) => {
+      expect(Option.getOrThrow(Array.head(model.lines))).toMatchObject({
+        commandId: "old:0",
+        ack: "Confirmed",
+      });
+      expect(shownBalance(model)).toEqual(Option.some(6_000));
     }),
   ));
 
 test("a new customer opens their account; it appears through the subscription", () =>
-  Story.story(
+  story(
     update,
-    Story.given({ ...account, balance: null, lines: [] }),
-    Story.message(Message.ClickedRegister()),
-    Story.Command.resolve(Register, Message.SucceededCommand()),
-    Story.model((model) => expect(model.balance).toBeNull()),
-    Story.message(Message.GotBalance({ balance: 0 })),
-    Story.model((model) => expect(model.balance).toBe(0)),
+    given(modifyFields(account, { balance: () => Option.none(), lines: () => [] })),
+    message(Message.ClickedRegister()),
+    Command.resolve(
+      BankCommands.RegisterCustomer,
+      BankCommands.Message.SucceededRegisterCustomer({
+        commandId: "s:0",
+        reply: undefined,
+        receipt: { stream: "Customer/c-1", version: 1 },
+      }),
+    ),
+    model((model) => expect(model.balance).toEqual(Option.none())),
+    message(Message.ReceivedBalance({ balance: Option.some(0), cursor: 1 })),
+    model((model) => expect(model.balance).toEqual(Option.some(0))),
   ));
+
+test("a denied intent is saved and blocks later intents until authentication", () =>
+  story(
+    update,
+    given(account),
+    message(Message.ClickedWithdraw()),
+    saved,
+    Command.resolve(
+      Deliver,
+      Message.CompletedDeliver({
+        outcomes: [{ commandId: "s:0", result: "Denied", reason: Option.some("MfaRequired") }],
+      }),
+    ),
+    saved,
+    message(Message.ClickedDeposit()),
+    saved,
+    model((model) =>
+      expect(acks(model)).toEqual([
+        ["s:1", "Queued"],
+        ["s:0", "Denied"],
+        ["earlier", "Confirmed"],
+      ]),
+    ),
+  ));
+
+test("stale snapshot Flags fall back to empty state", () => {
+  const bankInit = init({
+    customerId: account.customerId,
+    session: "fresh",
+    online: false,
+    intents: [],
+    summary: { state: { oldBalance: 1 }, cursor: 2 },
+  });
+  expect(bankInit.model.balance).toEqual(Option.none());
+  expect(bankInit.model.summaryCursor).toEqual(Option.none());
+});
+
+test("a caught-up marker records the cursor and live status", () => {
+  const caughtUp = update(account, Message.CaughtUpStatement({ cursor: 5 }));
+  expect(caughtUp.model.statementCursor).toEqual(Option.some(5));
+  expect(caughtUp.model.feedState).toBe("Live");
+});
