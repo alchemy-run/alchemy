@@ -1,4 +1,5 @@
 import type * as Aggregate from "@alchemy.run/domain/Aggregate";
+import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "@alchemy.run/domain/Aggregate";
 import { isAfter, mergeCheckpoints } from "@alchemy.run/domain/InMemory";
 import { captureContext } from "@alchemy.run/domain/internal";
 import {
@@ -869,10 +870,41 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
             return {
               send: (id, command, meta) =>
                 unwrapDefects(namespace.getByName(id).send(id, command, meta)),
+              // The object answers with a tag (RPC loses typed failures); fail with it here.
               schedule: (id, command, meta, due) =>
-                unwrapDefects(namespace.getByName(id).schedule(id, command, meta, due)),
+                unwrapDefects<"Scheduled" | "AlreadyExecuted">(
+                  namespace.getByName(id).schedule(id, command, meta, due),
+                ).pipe(
+                  Effect.flatMap((outcome) =>
+                    outcome === "AlreadyExecuted"
+                      ? Effect.fail(
+                          new AlreadyExecuted({
+                            aggregate: aggregate.aggregateName,
+                            id,
+                            commandId: meta.commandId,
+                          }),
+                        )
+                      : Effect.void,
+                  ),
+                ),
               unschedule: (id, commandId) =>
-                unwrapDefects(namespace.getByName(id).unschedule(commandId)),
+                unwrapDefects<
+                  "Cancelled" | "AlreadyCancelled" | "AlreadyExecuted" | "NotScheduled"
+                >(namespace.getByName(id).unschedule(commandId)).pipe(
+                  Effect.flatMap(
+                    (
+                      outcome,
+                    ): Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled> => {
+                      const fields = { aggregate: aggregate.aggregateName, id, commandId };
+                      if (outcome === "AlreadyExecuted")
+                        return Effect.fail(new AlreadyExecuted(fields));
+                      if (outcome === "AlreadyCancelled")
+                        return Effect.fail(new AlreadyCancelled(fields));
+                      if (outcome === "NotScheduled") return Effect.fail(new NotScheduled(fields));
+                      return Effect.void;
+                    },
+                  ),
+                ),
               state: (id) => unwrapDefects(namespace.getByName(id).state()),
               // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
               changes: (id) =>

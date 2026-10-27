@@ -150,16 +150,6 @@ export type SendResult =
   | { readonly _tag: "Rejected"; readonly rejection: Json }
   | { readonly _tag: "Accepted"; readonly receipt: ReceiptJson };
 
-/** Result of {@link AggregateStore.schedule}. */
-export type ScheduleResult = "Scheduled" | "AlreadyExecuted";
-
-/** Result of {@link AggregateStore.unschedule}. */
-export type UnscheduleResult =
-  | "Cancelled"
-  | "AlreadyCancelled"
-  | "AlreadyExecuted"
-  | "NotScheduled";
-
 /**
  * The kernel for one aggregate type, handed to a platform.
  */
@@ -225,24 +215,30 @@ export interface AggregateStore {
    * Send a command to one instance when it is due, durably (it survives
    * restarts) and at least once. Replaces a pending one with the same
    * `commandId`. Rejections are impossible: only non-rejecting commands are
-   * scheduled. `AlreadyExecuted` when the instance already has a receipt for
-   * `commandId`, so the command would never run.
+   * scheduled. Fails with `AlreadyExecuted` when the instance already has a
+   * receipt for `commandId`, so the command would never run.
    */
   readonly schedule: (
     id: string,
     command: Json,
     meta: Aggregate.SendMeta,
     due: Aggregate.Due,
-  ) => Effect.Effect<ScheduleResult>;
+  ) => Effect.Effect<void, Aggregate.AlreadyExecuted>;
   /**
    * Cancel the pending scheduled command with this `commandId` on one
-   * instance, durably, and remember the cancel. Once this returns
-   * `Cancelled`, the command never runs, even one already due. Otherwise:
-   * `AlreadyExecuted` when the instance has a receipt for `commandId`,
-   * `AlreadyCancelled` when it was cancelled before (and not scheduled
-   * again since), `NotScheduled` when it was never scheduled.
+   * instance, durably, and remember the cancel. Once this succeeds, the
+   * command never runs, even one already due. Fails with `AlreadyExecuted`
+   * when the instance has a receipt for `commandId`, `AlreadyCancelled` when
+   * it was cancelled before (and not scheduled again since), and
+   * `NotScheduled` when it was never scheduled.
    */
-  readonly unschedule: (id: string, commandId: string) => Effect.Effect<UnscheduleResult>;
+  readonly unschedule: (
+    id: string,
+    commandId: string,
+  ) => Effect.Effect<
+    void,
+    Aggregate.AlreadyExecuted | Aggregate.AlreadyCancelled | Aggregate.NotScheduled
+  >;
   /** Read the stored state of an instance. */
   readonly state: (
     id: string,

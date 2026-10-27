@@ -494,7 +494,7 @@ const aggregateClient = (
       Effect.gen(function* () {
         // The command runs later, so its span links back here rather than continuing this trace.
         const { id, meta } = yield* metaFor(target, command, options, true);
-        const result = yield* store.schedule(
+        yield* store.schedule(
           id,
           kernel.encodeCommand(aggregate, command),
           meta,
@@ -502,12 +502,6 @@ const aggregateClient = (
             ? { at: DateTime.toEpochMillis(options.at) }
             : { afterMillis: Duration.toMillis(Duration.fromInputUnsafe(options.after)) },
         );
-        if (result === "AlreadyExecuted")
-          return yield* new Aggregate.AlreadyExecuted({
-            aggregate: aggregate.aggregateName,
-            id,
-            commandId: meta.commandId,
-          });
       }).pipe(
         Effect.withSpan(
           `Domain.schedule ${aggregate.aggregateName}.${command._tag}`,
@@ -515,14 +509,7 @@ const aggregateClient = (
         ),
       ),
     unschedule: (target, commandId) =>
-      Effect.gen(function* () {
-        const id = Aggregate.targetId(target);
-        const result = yield* store.unschedule(id, commandId);
-        const fields = { aggregate: aggregate.aggregateName, id, commandId };
-        if (result === "AlreadyExecuted") return yield* new Aggregate.AlreadyExecuted(fields);
-        if (result === "AlreadyCancelled") return yield* new Aggregate.AlreadyCancelled(fields);
-        if (result === "NotScheduled") return yield* new Aggregate.NotScheduled(fields);
-      }).pipe(
+      store.unschedule(Aggregate.targetId(target), commandId).pipe(
         Effect.withSpan(`Domain.unschedule ${aggregate.aggregateName}`, {
           ...spanOptions(target),
           attributes: { ...spanOptions(target).attributes, "domain.command_id": commandId },

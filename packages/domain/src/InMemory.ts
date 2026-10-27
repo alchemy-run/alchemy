@@ -5,6 +5,7 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { WorkflowEngine } from "effect/workflow";
 import type * as Aggregate from "./Aggregate.ts";
+import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "./Aggregate.ts";
 import * as InMemoryWorkflows from "./InMemoryWorkflows.ts";
 import {
   type Accepted,
@@ -17,7 +18,6 @@ import {
   type StoredEvent,
   type StreamEntry,
   type StreamMeta,
-  type UnscheduleResult,
   type ViewEntry,
   type ViewSnapshot,
 } from "./Platform.ts";
@@ -265,26 +265,31 @@ export const make = (
           schedule: (id, command, meta, due) =>
             lock.withPermits(1)(
               Effect.suspend(() => {
-                if (executed(id, meta.commandId)) return Effect.succeed("AlreadyExecuted" as const);
+                const fields = { aggregate: kit.name, id, commandId: meta.commandId };
+                if (executed(id, meta.commandId)) return Effect.fail(new AlreadyExecuted(fields));
                 instance(id).cancelled.delete(meta.commandId);
                 return timer(
                   `${kit.name}/${id}/${meta.commandId}`,
                   "at" in due ? due.at : now() + due.afterMillis,
                   commit(id, command, meta).pipe(Effect.asVoid),
                   lock.withPermits(1),
-                ).pipe(Effect.as("Scheduled" as const));
+                );
               }),
             ),
           unschedule: (id, commandId) =>
             lock.withPermits(1)(
-              Effect.sync((): UnscheduleResult => {
-                if (executed(id, commandId)) return "AlreadyExecuted";
-                const { cancelled } = instance(id);
-                if (cancelled.has(commandId)) return "AlreadyCancelled";
-                if (!timers.delete(`${kit.name}/${id}/${commandId}`)) return "NotScheduled";
-                cancelled.add(commandId);
-                return "Cancelled";
-              }),
+              Effect.suspend(
+                (): Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled> => {
+                  const fields = { aggregate: kit.name, id, commandId };
+                  if (executed(id, commandId)) return Effect.fail(new AlreadyExecuted(fields));
+                  const { cancelled } = instance(id);
+                  if (cancelled.has(commandId)) return Effect.fail(new AlreadyCancelled(fields));
+                  if (!timers.delete(`${kit.name}/${id}/${commandId}`))
+                    return Effect.fail(new NotScheduled(fields));
+                  cancelled.add(commandId);
+                  return Effect.void;
+                },
+              ),
             ),
           state: (id) =>
             Effect.sync(() => ({ state: instance(id).state, version: instance(id).version })),
