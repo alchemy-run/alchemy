@@ -39,6 +39,8 @@ export interface HostComposeResult {
     readonly managementUrl?: Input<string>;
     /** IAM-only private runner; no Function URL or peer credentials are persisted. */
     readonly managementFunctionArn?: Input<string>;
+    /** Queue (and on-demand launch settings) of a runner hosted as an ECS task. */
+    readonly managementQueue?: Input<unknown>;
     /** Attach only to the trusted private management runner, never to Worker callers. */
     readonly managementSecurityGroupIds?: Input<string[]>;
     /** Network subnets used by fleet nodes and Worker callers. */

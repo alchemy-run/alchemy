@@ -4,7 +4,6 @@ import { expect } from "@alchemy.run/test";
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecs from "@distilled.cloud/aws/ecs";
-import * as lambda from "@distilled.cloud/aws/lambda";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
@@ -20,14 +19,15 @@ const options = {
     Celld.EcsFleet({
       capacity: { type: "ec2", instanceType: "m7i.large" },
       containerRuntime: "runsc",
+      management: "service",
     }),
   ),
 };
 const { test } = Test.make(options);
 const stack = Core.scratchStack(options, "CelldEc2Live", import.meta.url);
 
-// Cold EC2 hosts, the private NLB and the management Lambda's ENIs take
-// several minutes to provision; the leading destroy drains a previous run.
+// Cold EC2 hosts and the private NLB take several minutes to provision; the
+// leading destroy drains a previous run.
 test.skipIf(!!process.env.FAST)(
   "dedicated EC2 Celld publishes through private management and executes a fenced runsc container",
   Core.withProviders(
@@ -107,14 +107,27 @@ test.skipIf(!!process.env.FAST)(
         expect(instance.InstanceType).toBe("m7i.large");
         expect(instance.Architecture).toBe("x86_64");
       }
-      const runner = yield* lambda.getFunctionConfiguration({
-        FunctionName: host.managementFunctionArn,
+      // The management runner is an always-on Fargate task in the
+      // management security group, reached through its queue.
+      expect(host.managementFunctionArn).toBeUndefined();
+      expect(host.managementQueue?.launch).toBeUndefined();
+      const fargate = yield* ecs.listTasks({
+        cluster: host.clusterArn,
+        launchType: "FARGATE",
+        desiredStatus: "RUNNING",
       });
-      expect(runner.VpcConfig?.SecurityGroupIds).toEqual(host.managementSecurityGroupIds);
-      const functionUrl = yield* lambda
-        .getFunctionUrlConfig({ FunctionName: host.managementFunctionArn })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
-      expect(functionUrl).toBeUndefined();
+      expect(fargate.taskArns).toHaveLength(1);
+      const runners = yield* ecs.describeTasks({
+        cluster: host.clusterArn,
+        tasks: fargate.taskArns!,
+      });
+      const eni = runners.tasks?.[0]?.attachments
+        ?.find((attachment) => attachment.type === "ElasticNetworkInterface")
+        ?.details?.find((detail) => detail.name === "networkInterfaceId")?.value;
+      const interfaces = yield* ec2.describeNetworkInterfaces({ NetworkInterfaceIds: [eni!] });
+      expect(interfaces.NetworkInterfaces?.[0]?.Groups?.map((group) => group.GroupId)).toEqual(
+        host.managementSecurityGroupIds,
+      );
       const http = yield* HttpClient.HttpClient;
       const body = yield* http.get(deployed.url).pipe(
         Effect.flatMap((response) =>

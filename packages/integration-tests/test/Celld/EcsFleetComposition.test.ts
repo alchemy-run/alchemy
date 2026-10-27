@@ -120,8 +120,9 @@ describe(
                 ? {
                     capacity: { type: "ec2", instanceType: "m7i.large" },
                     containerRuntime: "runsc",
+                    management: "lambda",
                   }
-                : {},
+                : { management: "lambda" },
               () => Effect.succeed(instance),
               () =>
                 Effect.succeed({
@@ -260,13 +261,13 @@ describe(
     }
 
     it.effect(
-      "places the default management runner on private subnets after their S3 endpoint and associations",
+      "places a Lambda management runner on private subnets after their S3 endpoint and associations",
       () =>
         Effect.gen(function* () {
           const stack = yield* Stack;
           yield* composeEcsFleet(
             Effect.succeed("us-east-1"),
-            {},
+            { management: "lambda" },
             () => Effect.succeed(instance),
             () => Effect.die("Generated networks must not inspect existing routes"),
           )({ id: "Cells", props: {} });
@@ -318,6 +319,75 @@ describe(
         ),
       { tags: ["unit", "local"] },
     );
+
+    for (const management of ["task", "service"] as const) {
+      it.effect(
+        `hosts the ${management} management runner as a Fargate task in the management security group`,
+        () =>
+          Effect.gen(function* () {
+            const stack = yield* Stack;
+            const host = yield* composeEcsFleet(
+              Effect.succeed("us-east-1"),
+              management === "task" ? {} : { management },
+              () => Effect.succeed(instance),
+              () => Effect.succeed({ routeTables: [], endpoints: [] }),
+            )({ id: "Cells", props: { vpc } });
+            const resources = stack.resources;
+            expect(resources["Cells/Management"]).toBeUndefined();
+            expect(host.hostState?.managementFunctionArn).toBeUndefined();
+            const queue = host.hostState?.managementQueue as {
+              queueUrl: unknown;
+              launch?: { subnetIds: unknown; securityGroupIds: unknown };
+            };
+            expect(Output.resolveUpstream(queue.queueUrl)["Cells/ManagementQueue"]).toBe(
+              resources["Cells/ManagementQueue"],
+            );
+            const runner = resources["Cells/ManagementRunner"]!;
+            expect(runner.Props.runtimePlatform.cpuArchitecture).toBe("ARM64");
+            const bindings = stack.bindings["Cells/ManagementRunner"]!;
+            const env = Object.assign({}, ...bindings.map((binding) => binding.data.env ?? {}));
+            expect(env.CELLD_MANAGEMENT_MINIMUM_NODES).toBe("2");
+            expect(env.CELLD_MANAGEMENT_IDLE_SECONDS).toBe(management === "task" ? "300" : "0");
+            expect(
+              Output.resolveUpstream(env.CELLD_MANAGEMENT_QUEUE_URL)["Cells/ManagementQueue"],
+            ).toBe(resources["Cells/ManagementQueue"]);
+            const statements = bindings.flatMap((binding) => binding.data.policyStatements ?? []);
+            expect(statements.map((statement) => statement.Action)).toEqual([
+              ["s3:GetObject"],
+              ["s3:ListBucket"],
+              ["s3:GetObject", "s3:PutObject"],
+              ["sqs:ReceiveMessage", "sqs:DeleteMessage"],
+            ]);
+            expect(resources["Cells/Bucket"]!.Props.lifecycleRules).toEqual([
+              expect.objectContaining({
+                Filter: { Prefix: "alchemy/management/v1/requests/" },
+              }),
+            ]);
+            if (management === "task") {
+              expect(resources["Cells/ManagementService"]).toBeUndefined();
+              expect(queue.launch?.subnetIds).toEqual(vpc.subnetIds);
+              expect(Object.keys(Output.resolveUpstream(queue.launch?.securityGroupIds))).toEqual([
+                "Cells/ManagementSecurityGroup",
+              ]);
+            } else {
+              expect(queue.launch).toBeUndefined();
+              const service = resources["Cells/ManagementService"]!;
+              expect(service.Props.desiredCount).toBe(1);
+              expect(service.Props.launchType).toBe("FARGATE");
+              expect(service.Props.assignPublicIp).toBe(true);
+              expect(Object.keys(Output.resolveUpstream(service.Props.securityGroups))).toEqual([
+                "Cells/ManagementSecurityGroup",
+              ]);
+              expect(
+                Output.resolveUpstream(service.Props.task.taskDefinitionArn)[
+                  "Cells/ManagementRunner"
+                ],
+              ).toBe(runner);
+            }
+          }).pipe(Effect.provide(environment())),
+        { tags: ["unit", "local"] },
+      );
+    }
 
     it.effect(
       "sizes child-container reservations against whole-host capacity with OS headroom",

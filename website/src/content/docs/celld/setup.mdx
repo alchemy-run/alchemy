@@ -130,6 +130,23 @@ through APIs and activates the selected revision; application requests go to
 the declared entrypoint. Background and service Workers belong in
 `Application.workers` and must use the same fleet.
 
+## Choose where management runs
+
+Deploys reach the nodes' private operator listener through a management runner
+inside the fleet's network. By default it is a Fargate task that starts with
+the first management call of a deploy and stops after five idle minutes, so
+nothing runs between deploys.
+
+Keep it running to skip that first call's cold start:
+
+```ts
+Celld.EcsFleet({ management: "service" });
+```
+
+`management: "lambda"` runs it as a VPC Lambda instead. Calls never wait for
+it to start, but AWS releases a VPC Lambda's network interfaces slowly, so
+destroying the fleet takes around 20 minutes.
+
 ## Upgrade an existing fleet
 
 Releases within the Celld 0.6 series upgrade with a rolling deployment: set
