@@ -139,6 +139,8 @@ Story.call(Payments.refund, { settlementId: "st_1" }),
 Story.fail(Payments.refund, new RefundDeclined({ reason: "card-closed" })),
 ```
 
+When the operation declares several errors, `fail` takes any one of them, so a story can test each branch.
+
 `Story.die` fails a call with a defect instead, as when the connection to the vendor breaks:
 
 ```typescript
