@@ -12,6 +12,7 @@ export * from "./RunJob.ts";
 export * from "./RunJobHttp.ts";
 export * from "./Service.ts";
 export * from "./WorkerPool.ts";
+export { QueueEventSource } from "./QueueEventSource.ts";
 export { TopicEventSource } from "./TopicEventSource.ts";
 export * from "./TopicPullEventSource.ts";
 export { ScheduleEventSource } from "./ScheduleEventSource.ts";

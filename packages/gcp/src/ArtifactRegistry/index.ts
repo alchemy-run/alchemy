@@ -5,3 +5,5 @@ export * from "./RepositoriesPackagesTag.ts";
 export * from "./RepositoriesRule.ts";
 export * from "./Repository.ts";
 export * from "./generated.ts";
+export * from "./RepositoryEventSource.ts";
+export * from "./RepositoryEventSourceLive.ts";
