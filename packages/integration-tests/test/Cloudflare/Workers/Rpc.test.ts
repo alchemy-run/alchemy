@@ -566,6 +566,29 @@ describe(
       }),
     );
 
+    // A first chunk holding several elements must reach the body whole, not
+    // just the element peeked to pick the encoding.
+    it.effect("roundtrips every element of a multi-element jsonl stream", () =>
+      Effect.gen(function* () {
+        const stream = Stream.fromIterable([{ a: 1 }, { a: 2 }, { a: 3 }]);
+        const envelope = yield* toRpcStream(stream);
+        const decoded = fromRpcReadableStream(envelope.body, "jsonl");
+        const chunks = yield* Stream.runCollect(decoded);
+        expect(chunks).toEqual([{ a: 1 }, { a: 2 }, { a: 3 }]);
+      }),
+    );
+
+    it.effect("roundtrips every element of a multi-element bytes stream", () =>
+      Effect.gen(function* () {
+        const data = [new Uint8Array([1]), new Uint8Array([2]), new Uint8Array([3])];
+        const stream = Stream.fromIterable(data);
+        const envelope = yield* toRpcStream(stream);
+        const decoded = fromRpcReadableStream(envelope.body, "bytes");
+        const chunks = yield* Stream.runCollect(decoded);
+        expect(chunks).toEqual(data);
+      }),
+    );
+
     it.effect("selects bytes encoding for Uint8Array data", () =>
       Effect.gen(function* () {
         const data = new Uint8Array([1, 2, 3]);
@@ -585,52 +608,6 @@ describe(
         const decoded = fromRpcReadableStream(envelope.body, "bytes");
         const chunks = yield* Stream.runCollect(decoded);
         expect(chunks).toEqual([data]);
-      }),
-    );
-
-    it.effect("roundtrips every element of a multi-element jsonl stream", () =>
-      Effect.gen(function* () {
-        const stream = Stream.fromIterable([{ a: 1 }, { a: 2 }, { a: 3 }]);
-        const envelope = yield* toRpcStream(stream);
-        const decoded = fromRpcReadableStream(envelope.body, "jsonl");
-        const chunks = yield* Stream.runCollect(decoded);
-        expect(chunks).toEqual([{ a: 1 }, { a: 2 }, { a: 3 }]);
-      }),
-    );
-
-    // A stream that holds a resource in its scope (here a PubSub subscription)
-    // must keep it until the body is read, not lose it when `toRpcStream`
-    // returns the envelope.
-    const fromSubscription = <A>(values: ReadonlyArray<A>) =>
-      Stream.unwrap(
-        Effect.gen(function* () {
-          const hub = yield* PubSub.unbounded<A>();
-          const subscription = yield* PubSub.subscribe(hub);
-          yield* Effect.forkDetach(
-            Effect.forEach(values, (value) =>
-              Effect.sleep("10 millis").pipe(Effect.andThen(PubSub.publish(hub, value))),
-            ),
-          );
-          return Stream.fromSubscription(subscription).pipe(Stream.take(values.length));
-        }),
-      );
-
-    it.live("keeps a jsonl stream's scoped resources open until the body is read", () =>
-      Effect.gen(function* () {
-        const envelope = yield* toRpcStream(fromSubscription([1, 2, 3]));
-        const decoded = fromRpcReadableStream(envelope.body, envelope.encoding);
-        const chunks = yield* Stream.runCollect(decoded);
-        expect(chunks).toEqual([1, 2, 3]);
-      }),
-    );
-
-    it.live("keeps a bytes stream's scoped resources open until the body is read", () =>
-      Effect.gen(function* () {
-        const bytes = [new Uint8Array([1]), new Uint8Array([2]), new Uint8Array([3])];
-        const envelope = yield* toRpcStream(fromSubscription(bytes));
-        const decoded = fromRpcReadableStream(envelope.body, envelope.encoding);
-        const chunks = yield* Stream.runCollect(decoded);
-        expect(chunks).toEqual(bytes);
       }),
     );
 

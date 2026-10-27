@@ -6,7 +6,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as Pull from "effect/Pull";
+import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
@@ -317,7 +317,6 @@ export const toRpcStream = (stream: Stream.Stream<any, any, any>) =>
 
       const body = Option.isSome(head) ? rest.pipe(Stream.prepend([head.value])) : rest;
 
-    if (first !== undefined && first[0] instanceof Uint8Array) {
       return {
         _tag: StreamTag,
         encoding: "jsonl",
