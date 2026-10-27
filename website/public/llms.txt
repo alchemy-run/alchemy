@@ -889,7 +889,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Stream](https://alchemy.run/domain/stream) — How a stream keeps a keyed, append-only log that a projection writes and clients read through an Api, with its latest entry as the current value.
 - [Policy](https://alchemy.run/domain/policy) — How a policy reacts to events with commands and calls to outside systems, and how to make it safe to run more than once.
 - [Saga](https://alchemy.run/domain/saga) — A process that spans several aggregates and takes time, run step by step as an Effect workflow, with steps that undo earlier ones when a later one fails.
-- [External System](https://alchemy.run/domain/external-system) — Declare the outside systems your model calls, implement them with Layers, and turn their events into commands.
+- [External System](https://alchemy.run/domain/external-system) — Declare the outside systems your model calls in the model's own language, implement them with Layers, and turn their events into commands.
 - [Api](https://alchemy.run/domain/api) — How an Api publishes a model to one kind of client, how it's served, and how a typed client calls it.
 - [Story](https://alchemy.run/domain/story) — A specification you can run. Given some history, when a command is sent, then these events are recorded.
 - [Testing a model](https://alchemy.run/domain/testing-models) — Test your model's rules, views, policies and deadlines with stories that run it in memory.
