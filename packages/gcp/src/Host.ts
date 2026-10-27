@@ -15,6 +15,7 @@ import {
   type GcpIamResourceKind,
   type IamCondition,
 } from "./IamPolicy.ts";
+import type { BoundContainer } from "./Run/Container.ts";
 import { parseServiceAccountKey } from "./Token.ts";
 
 export type { GcpIamResourceKind } from "./IamPolicy.ts";
@@ -68,6 +69,11 @@ export type GcpHostBinding = {
    * Unix sockets under `/cloudsql` (Cloud Run services only).
    */
   cloudSqlInstances?: string[];
+  /**
+   * Sidecar containers to add to the host's revision (Cloud Run services
+   * and containers only); see `GCP.Run.bindContainer`.
+   */
+  containers?: BoundContainer[];
 };
 
 /**
@@ -151,6 +157,22 @@ export const ALCHEMY_HOST_SA_DISPLAY_NAME = "alchemy-host";
 
 const serviceAccountName = (project: string, email: string) =>
   `projects/${project}/serviceAccounts/${email}`;
+
+/**
+ * The numeric unique ID of a host's runtime service account: the `sub` of
+ * the Google ID tokens it fetches, which AWS roles trust. A just-created
+ * account can read as missing for a few seconds.
+ */
+export const serviceAccountUniqueId = (email: string) =>
+  iam.getProjectsServiceAccounts({ name: `projects/-/serviceAccounts/${email}` }).pipe(
+    Effect.retry({
+      while: (error) => error._tag === "NotFound",
+      times: 8,
+      schedule: Schedule.spaced("2 seconds"),
+    }),
+    Effect.map((account) => account.uniqueId),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 /**
  * Let the deploying principal and the serverless robots `actAs` the host

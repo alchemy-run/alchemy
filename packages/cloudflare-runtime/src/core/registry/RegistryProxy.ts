@@ -19,7 +19,11 @@ import { PluginContext } from "../PluginContext.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
 import * as WorkerdConfig from "../workerd/Config.ts";
 import * as Registry from "./Registry.ts";
-import type { ResolvedTargetMap, Subscriber } from "./RegistryTypes.shared.ts";
+import {
+  HEADER_REGISTRY_UPDATE_SECRET,
+  type ResolvedTargetMap,
+  type Subscriber,
+} from "./RegistryTypes.shared.ts";
 
 export class RegistryProxy extends Plugin.Service<
   RegistryProxy,
@@ -50,6 +54,7 @@ type ServiceDesignatorFromSubscriber<T extends Subscriber> = T extends {
   : WorkerdConfig.ServiceDesignator;
 
 const SERVICE_REGISTRY_PROXY = "cloudflare-runtime:registry-proxy";
+
 const SOCKET_REGISTRY_PROXY = "registry-proxy-socket";
 const SOCKET_DEBUG_PORT = "debug-port";
 
@@ -73,6 +78,9 @@ export const RegistryProxyLive = Layer.effect(
               defaultDurableObjectUniqueKey(worker.name, namespace.className),
           })) ?? [];
         const subscribed: Array<Subscriber> = [];
+        // The proxy's update socket is reachable by any local process, so
+        // pushes must prove they came from the process that owns the proxy.
+        const updateSecret = NodeCrypto.randomBytes(32).toString("hex");
 
         return {
           defer: Effect.gen(function* () {
@@ -98,6 +106,10 @@ export const RegistryProxyLive = Layer.effect(
                   {
                     name: "REGISTRY_DEBUG_PORT",
                     workerdDebugPort: WorkerdConfig.kVoid,
+                  },
+                  {
+                    name: "REGISTRY_UPDATE_SECRET",
+                    data: new TextEncoder().encode(updateSecret),
                   },
                 ],
                 durableObjectStorage: { inMemory: WorkerdConfig.kVoid },
@@ -168,6 +180,7 @@ export const RegistryProxyLive = Layer.effect(
                   const update = (targets: ResolvedTargetMap) =>
                     HttpClient.filterStatusOk(http)
                       .post(`http://127.0.0.1:${proxyPort}/`, {
+                        headers: { [HEADER_REGISTRY_UPDATE_SECRET]: updateSecret },
                         body: HttpBody.jsonUnsafe(targets),
                       })
                       .pipe(
@@ -249,18 +262,8 @@ const buildWorkerModules = async (
   const worker = await RegistryProxyWorker.worker();
   const main = [
     `import { makeExternalDurableObject, Target } from "./${worker.main}";`,
-    `export { ExternalService, ExternalWorkflow, ExternalQueueConsumer } from "./${worker.main}";`,
+    `export { default, ExternalService, ExternalWorkflow, ExternalQueueConsumer } from "./${worker.main}";`,
     `Target.set(${JSON.stringify(targets)});`,
-    `export default {`,
-    `  async fetch(request) {`,
-    `    if (request.method === "POST") {`,
-    `      const data = await request.json();`,
-    `      Target.set(data);`,
-    `      return new Response("ok");`,
-    `    }`,
-    `    return new Response("not found", { status: 404 });`,
-    `  }`,
-    `};`,
     ...durableObjects.map(
       (subscriber) =>
         `export const ${externalDurableObjectClassName(subscriber.scriptName, subscriber.className)} = makeExternalDurableObject(${JSON.stringify(subscriber)});`,

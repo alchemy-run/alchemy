@@ -13,7 +13,7 @@ export const database = Effect.gen(function* () {
     edition: "ENTERPRISE",
     tier: "db-f1-micro",
     availabilityType: "ZONAL",
-    backupEnabled: false,
+    backup: { enabled: false },
     dataApiAccess: true,
   });
   const db = yield* GCP.SQL.Database("App", {

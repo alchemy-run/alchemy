@@ -59,6 +59,7 @@ describe("proxyRequestHeaders", () => {
       false,
       "https://public.example",
     ],
+    [{ host: "localhost:5173", "x-forwarded-proto": "HTTPS" }, false, "https://localhost:5173"],
   ])("signs the original URL including protocol and port", (headers, encrypted, origin) => {
     const result = proxyRequestHeaders(
       {

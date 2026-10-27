@@ -262,10 +262,13 @@ export const Redis: typeof RedisResource = Object.assign(
   RedisResource,
 );
 
+// Re-export from the defining module, not the `@alchemy.run/redis` barrel:
+// rolldown's lazyBarrel rejects an unused re-export from an `export *` barrel
+// (https://github.com/rolldown/rolldown/issues/11344).
 export {
   CommandError as RedisCommandError,
   UrlMissing as RedisUrlMissing,
-} from "@alchemy.run/redis";
+} from "@alchemy.run/redis/Errors";
 
 export class RedisNotCreated extends Data.TaggedError("Railway.RedisNotCreated")<{
   name: string;
@@ -532,11 +535,14 @@ const toAttrs = (input: {
   deploymentStatus: input.instance?.latestDeployment?.status,
 });
 
+// Re-export from the defining module, not the `@alchemy.run/redis` barrel:
+// rolldown's lazyBarrel rejects an unused re-export from an `export *` barrel
+// (https://github.com/rolldown/rolldown/issues/11344).
 export {
   command as redisCommand,
   connectionUrl as redisConnectionUrl,
   run as runRedisCommand,
-} from "@alchemy.run/redis";
+} from "@alchemy.run/redis/Protocol";
 
 export const RedisProvider = () =>
   Provider.succeed(Redis, {
