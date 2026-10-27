@@ -11,7 +11,7 @@ This chapter starts with why the model keeps outside systems at arm's length, th
 
 ## Keep the outside world at the edge
 
-Every vendor has its own language. A payment processor talks about payment intents, charges, balance transactions and webhooks. A fraud vendor talks about risk signals and decision codes. None of those words are the bank's. If they leak into the model, the model starts speaking two languages, and changing vendor means rewriting rules.
+Every vendor has its own language. A payment processor talks about payment intents, charges, balance transactions and webhooks. A fraud vendor talks about risk signals and decision codes. None of those words belong to your model. If they leak into the model, the model starts speaking two languages, and changing vendor means rewriting rules.
 
 DDD's answer is a translation layer at the edge, sometimes called an **anti-corruption layer**. The model says what it needs in its own terms: "refund this settlement", "score this withdrawal". A small adapter outside the model turns that into whatever the vendor's API wants, and turns the vendor's answer back into the model's terms.
 
@@ -30,7 +30,7 @@ DDD's answer is a translation layer at the edge, sometimes called an **anti-corr
   caption="The model depends on the declaration. Production and tests plug in different implementations."
 />
 
-A `Domain.ExternalSystem` is that edge, written down. It names the calls the model makes and nothing else. The bank declares two: `FraudCheck` and `Payments`.
+A `Domain.ExternalSystem` is that edge, written down. It names the calls the model makes and nothing else. The example bank declares two: `FraudCheck` and `Payments`.
 
 It works in the other direction too. News from outside, like a webhook saying a payment settled, crosses the same edge and becomes a command in the model's language.
 
@@ -47,7 +47,7 @@ export class Payments extends Domain.ExternalSystem("Payments", {
 }) {}
 ```
 
-Name each call after what the model wants done, not after the vendor endpoint that does it. `refund` is a request the bank understands. `createRefundForPaymentIntent` would be Stripe's language leaking in.
+Name each call after what the model wants done, not after the vendor endpoint that does it. `refund` is a request in the model's own language. `createRefundForPaymentIntent` would be Stripe's language leaking in.
 
 Keep the arguments and results to what the model uses. The fraud check returns a risk score, because that's all the fraud policy decides on; the dozens of other fields the vendor sends stay in the adapter.
 
@@ -128,7 +128,7 @@ Provide the adapters where you host the model, next to the platform: see [Domain
 
 ## Turn outside events into commands
 
-Money arrives from Stripe as webhook events. Each successful payment becomes a `RecordSettlement`, in the bank's words. It reports a fact that already happened outside the model, so it declares no rejections.
+Money arrives from Stripe as webhook events. Each successful payment becomes a `RecordSettlement`, in the model's words. It reports a fact that already happened outside the model, so it declares no rejections.
 
 ```typescript title="packages/domain/src/Account/RecordSettlement.command.ts"
 export class RecordSettlement extends Domain.Command("RecordSettlement", {
@@ -140,7 +140,7 @@ export class RecordSettlement extends Domain.Command("RecordSettlement", {
 
 The account can't refuse money that has already settled, so it records what the settlement means for it. An open account records `SettlementReceived` with its new balance. A closed one records `SettlementOnClosedAccount`, and `SettlementRefund` sends the money back.
 
-The webhook handler is the adapter for this direction. It receives each event, checks its signature, picks out what the bank cares about, and sends the command:
+The webhook handler is the adapter for this direction. It receives each event, checks its signature, picks out what the model cares about, and sends the command:
 
 ```typescript title="packages/server/src/Settlement/StripeSettlements.ts"
 Effect.fn(function* (event) {

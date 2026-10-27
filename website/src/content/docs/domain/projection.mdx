@@ -11,7 +11,7 @@ It shares the view's routing and ordering, and differs from a [policy](/domain/p
 
 ## When a view isn't the right store
 
-A view answers one question about one key, and the model serves it. That covers most screens. Some questions don't fit that shape. An accountant wants every money movement across every account this quarter, filtered by amount and sorted by date. A search box wants to find a customer by any part of their name. A data team wants the bank's history in their warehouse. Each needs a store built for its kind of query, a SQL table, a search index, a warehouse, and each is a store you run.
+A view answers one question about one key, and the model serves it. That covers most screens. Some questions don't fit that shape. An accountant wants every money movement across every account this quarter, filtered by amount and sorted by date. A search box wants to find a customer by any part of their name. A data team wants the whole history in their warehouse. Each needs a store built for its kind of query, a SQL table, a search index, a warehouse, and each is a store you run.
 
 A projection is how events reach a store like that. It's still a read model in the CQRS sense: built from events, and never the source of truth. If the table is lost or its schema changes, you empty it and replay the projection over the history to build it again.
 
@@ -34,7 +34,7 @@ Reach for a view first. Reach for a projection when the query needs a store a vi
 
 ## Declare what it consumes
 
-A projection names its sources, the key that partitions it, and the events it consumes. The bank's ledger records every money movement on an account.
+A projection names its sources, the key that partitions it, and the events it consumes. In the example bank, a ledger records every money movement on an account.
 
 ```typescript title="packages/domain/src/Ledger/Ledger.projection.ts"
 export class Ledger extends Domain.Projection("Ledger", {
@@ -204,7 +204,7 @@ export const ledgerAfterWithdrawal = Effect.fn(function* (accountId: AccountId) 
 
 ## Serve it yourself
 
-A projection's store is yours, so its API is too. The bank serves the ledger from a plain route on its Worker, authorizing the caller itself.
+A projection's store is yours, so its API is too. The example bank serves the ledger from a plain route on its Worker, authorizing the caller itself.
 
 ```typescript title="packages/server/src/BankWorker.ts"
 const summary = yield* summaries.query(Account.ref(accountId)).pipe(Effect.orDie);
