@@ -1,6 +1,6 @@
+import * as Drizzle from "@alchemy.run/drizzle";
+import * as GCP from "@alchemy.run/gcp";
 import * as Alchemy from "alchemy";
-import * as Drizzle from "alchemy/Drizzle";
-import * as GCP from "alchemy/GCP";
 import * as Effect from "effect/Effect";
 
 export const database = Effect.gen(function* () {
@@ -13,7 +13,7 @@ export const database = Effect.gen(function* () {
     edition: "ENTERPRISE",
     tier: "db-f1-micro",
     availabilityType: "ZONAL",
-    backupEnabled: false,
+    backup: { enabled: false },
     dataApiAccess: true,
   });
   const db = yield* GCP.SQL.Database("App", {
@@ -31,10 +31,9 @@ export const database = Effect.gen(function* () {
     deletionPolicy: "ABANDON",
   });
   // The Data API only accepts regional secrets in the instance's region.
-  const passwordSecret = yield* GCP.SecretManager.LocationsSecret(
-    "AppPassword",
-    { location: instance.region },
-  );
+  const passwordSecret = yield* GCP.SecretManager.LocationsSecret("AppPassword", {
+    location: instance.region,
+  });
 
   // drizzle-kit regenerates ./migrations whenever src/schema.ts changes.
   const schema = yield* Drizzle.Schema("Schema", {

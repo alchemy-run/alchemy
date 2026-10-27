@@ -1,5 +1,14 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import {
+  constants,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
 
 // Git hooks export repository-specific variables. Do not pass those through to
@@ -18,8 +27,32 @@ function git(args, cwd) {
     cwd,
     env,
     encoding: "utf8",
+    // ls-tree and ls-files of a distilled checkout run to several MB.
+    maxBuffer: 256 * 1024 * 1024,
     stdio: ["ignore", "pipe", "inherit"],
   }).trim();
+}
+
+// Parallel checkouts (several `git worktree add` at once) run this hook
+// concurrently against the same shared config files. Retry briefly when another
+// hook holds a lock instead of failing the checkout.
+function gitLocked(args, cwd) {
+  for (let attempt = 1; ; attempt++) {
+    const result = spawnSync("git", args, { cwd, env, encoding: "utf8" });
+    if (result.status === 0) return result.stdout.trim();
+    const locked = /could not lock|Unable to create '.*\.lock'/.test(result.stderr);
+    if (!locked || attempt === 50) {
+      process.stderr.write(result.stderr);
+      throw new Error(`Command failed: git ${args.join(" ")}`);
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+  }
+}
+
+// Skip the write, and its lock, when the value is already set.
+function setConfig(file, key, value, cwd) {
+  if (tryGit(["config", "--file", file, "--get", key], cwd) === value) return;
+  gitLocked(["config", "--file", file, key, value], cwd);
 }
 
 function tryGit(args, cwd) {
@@ -31,27 +64,16 @@ export function bootstrap(root, previousHead) {
   const checkout = resolve(root, "submodules/distilled");
   // Use the index, just like `git submodule update`, including a staged pin.
   const pin = git(["rev-parse", ":submodules/distilled"], root);
-  const commonDir = git(
-    ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-    root,
-  );
-  const gitDir = git(
-    ["rev-parse", "--path-format=absolute", "--git-dir"],
-    root,
-  );
+  const commonDir = git(["rev-parse", "--path-format=absolute", "--git-common-dir"], root);
+  const gitDir = git(["rev-parse", "--path-format=absolute", "--git-dir"], root);
   const mainRoot = git(["worktree", "list", "--porcelain", "-z"], root)
     .split("\0")[0]
     .slice("worktree ".length);
   if (previousHead !== undefined) isolateWorktreeConfig(mainRoot);
 
   if (existsSync(resolve(checkout, ".git"))) {
-    if (
-      realpathSync(git(["rev-parse", "--show-toplevel"], checkout)) !==
-      realpathSync(checkout)
-    ) {
-      throw new Error(
-        `Cannot bootstrap distilled: invalid checkout at ${checkout}`,
-      );
+    if (realpathSync(git(["rev-parse", "--show-toplevel"], checkout)) !== realpathSync(checkout)) {
+      throw new Error(`Cannot bootstrap distilled: invalid checkout at ${checkout}`);
     }
     const current = git(["rev-parse", "HEAD"], checkout);
     if (current === pin) return;
@@ -77,23 +99,11 @@ export function bootstrap(root, previousHead) {
   }
 
   if (existsSync(checkout) && readdirSync(checkout).length !== 0) {
-    throw new Error(
-      `Cannot bootstrap distilled: ${checkout} is nonempty but has no .git entry`,
-    );
+    throw new Error(`Cannot bootstrap distilled: ${checkout} is nonempty but has no .git entry`);
   }
 
   if (gitDir === commonDir) {
-    git(
-      [
-        "submodule",
-        "update",
-        "--init",
-        "--checkout",
-        "--",
-        "submodules/distilled",
-      ],
-      root,
-    );
+    git(["submodule", "update", "--init", "--checkout", "--", "submodules/distilled"], root);
     if (previousHead !== undefined) isolateWorktreeConfig(mainRoot);
     return;
   }
@@ -107,9 +117,73 @@ export function bootstrap(root, previousHead) {
   // The destination was checked above: it is missing or empty. One --force
   // replaces only its stale registration; Git still refuses locked worktrees
   // (overriding a lock would require --force twice). Do not prune other entries.
-  git(["worktree", "add", "--force", "--detach", checkout, pin], mainCheckout);
+  git(["worktree", "add", "--force", "--detach", "--no-checkout", checkout, pin], mainCheckout);
   isolateWorktreeConfig(mainRoot);
-  git(["submodule", "init", "--", "submodules/distilled"], root);
+  populate(mainCheckout, checkout, pin);
+  gitLocked(["submodule", "init", "--", "submodules/distilled"], root);
+}
+
+// Errors that mean "this filesystem cannot clone files": fall back to writing them.
+const NO_CLONE = new Set(["ENOTSUP", "EOPNOTSUPP", "EXDEV", "EINVAL", "ENOSYS"]);
+
+/**
+ * Fill a `--no-checkout` distilled worktree with the files at `pin`.
+ *
+ * A distilled checkout is about 1.1 GB, and every Alchemy worktree gets one.
+ * On a copy-on-write filesystem (APFS on macOS, btrfs, XFS) a file can be
+ * cloned: the copy shares the original's blocks until one of them changes. So
+ * every file whose content at `pin` matches the primary checkout's clean copy
+ * is cloned from it, which costs a few megabytes in total; Git writes the rest.
+ * On other filesystems the first clone fails and Git writes every file, as a
+ * plain `git worktree add` would. Set ALCHEMY_DISTILLED_CLONE=0 to skip cloning.
+ */
+function populate(mainCheckout, checkout, pin) {
+  if (env.ALCHEMY_DISTILLED_CLONE !== "0") cloneUnchanged(mainCheckout, checkout, pin);
+  git(["reset", "--quiet", "--mixed", pin], checkout);
+  // Hash the cloned files once so they count as clean, then let Git write
+  // every file that is still missing or different.
+  tryGit(["update-index", "-q", "--refresh"], checkout);
+  const stale = git(["diff", "--name-only", "-z"], checkout);
+  if (stale !== "") {
+    execFileSync("git", ["checkout", "--quiet", "--pathspec-from-file=-", "--pathspec-file-nul"], {
+      cwd: checkout,
+      env,
+      input: stale,
+      stdio: ["pipe", "inherit", "inherit"],
+    });
+  }
+}
+
+function cloneUnchanged(mainCheckout, checkout, pin) {
+  // The primary checkout's index, minus files with uncommitted changes.
+  const dirty = new Set(
+    git(["status", "--porcelain=v1", "-z", "--untracked-files=no", "--no-renames"], mainCheckout)
+      .split("\0")
+      .filter(Boolean)
+      .map((entry) => entry.slice(3)),
+  );
+  const indexed = new Map();
+  for (const entry of git(["ls-files", "--stage", "-z"], mainCheckout).split("\0")) {
+    const [meta, path] = entry.split("\t");
+    const [mode, oid, stage] = (meta ?? "").split(" ");
+    if (path && stage === "0" && mode !== "120000" && mode !== "160000" && !dirty.has(path)) {
+      indexed.set(path, oid);
+    }
+  }
+  for (const entry of git(["ls-tree", "-r", "-z", "--full-tree", pin], checkout).split("\0")) {
+    const [meta, path] = entry.split("\t");
+    const oid = (meta ?? "").split(" ")[2];
+    if (!path || indexed.get(path) !== oid) continue;
+    const target = resolve(checkout, path);
+    mkdirSync(dirname(target), { recursive: true });
+    try {
+      copyFileSync(resolve(mainCheckout, path), target, constants.COPYFILE_FICLONE_FORCE);
+    } catch (error) {
+      rmSync(target, { force: true });
+      if (NO_CLONE.has(error.code)) return;
+      throw error;
+    }
+  }
 }
 
 function isolateWorktreeConfig(mainRoot) {
@@ -118,14 +192,9 @@ function isolateWorktreeConfig(mainRoot) {
 
   // Resolve the gitfile without opening the repository: its core.worktree may
   // already point at a removed Alchemy worktree, preventing normal Git commands.
-  const commonDir = resolve(
-    checkout,
-    git(["rev-parse", "--resolve-git-dir", ".git"], checkout),
-  );
+  const commonDir = resolve(checkout, git(["rev-parse", "--resolve-git-dir", ".git"], checkout));
   if (existsSync(resolve(commonDir, "commondir"))) {
-    throw new Error(
-      "The primary distilled checkout must not be a linked worktree",
-    );
+    throw new Error("The primary distilled checkout must not be a linked worktree");
   }
   const configs = [[commonDir, checkout]];
   const worktrees = resolve(commonDir, "worktrees");
@@ -140,28 +209,13 @@ function isolateWorktreeConfig(mainRoot) {
   // ones. Submodule sync/update can write core.worktree to the shared config;
   // explicit per-worktree overrides prevent that from redirecting any checkout.
   for (const [admin, path] of configs) {
-    git(
-      [
-        "config",
-        "--file",
-        resolve(admin, "config.worktree"),
-        "core.worktree",
-        path,
-      ],
-      mainRoot,
-    );
+    setConfig(resolve(admin, "config.worktree"), "core.worktree", path, mainRoot);
   }
   const config = resolve(commonDir, "config");
-  git(
-    ["config", "--file", config, "extensions.worktreeConfig", "true"],
-    mainRoot,
-  );
+  setConfig(config, "extensions.worktreeConfig", "true", mainRoot);
   // New worktrees must not inherit a path before their override is installed.
-  if (
-    tryGit(["config", "--file", config, "--get", "core.worktree"], mainRoot) !==
-    undefined
-  ) {
-    git(["config", "--file", config, "--unset-all", "core.worktree"], mainRoot);
+  if (tryGit(["config", "--file", config, "--get", "core.worktree"], mainRoot) !== undefined) {
+    gitLocked(["config", "--file", config, "--unset-all", "core.worktree"], mainRoot);
   }
 }
 
@@ -176,8 +230,5 @@ function ensureCommit(checkout, pin) {
 // Run only for post-checkout branch/worktree checkouts, not file checkouts.
 // Hook arguments are old HEAD, new HEAD, and the branch-checkout flag.
 if (import.meta.main && process.argv[4] === "1") {
-  bootstrap(
-    resolve(import.meta.dirname, ".."),
-    process.argv[2],
-  );
+  bootstrap(resolve(import.meta.dirname, ".."), process.argv[2]);
 }
