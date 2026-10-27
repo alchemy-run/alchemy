@@ -170,10 +170,20 @@ function cloneUnchanged(mainCheckout, checkout, pin) {
       indexed.set(path, oid);
     }
   }
+  const unchanged = [];
   for (const entry of git(["ls-tree", "-r", "-z", "--full-tree", pin], checkout).split("\0")) {
     const [meta, path] = entry.split("\t");
     const oid = (meta ?? "").split(" ")[2];
-    if (!path || indexed.get(path) !== oid) continue;
+    if (path && indexed.get(path) === oid) unchanged.push(path);
+  }
+  if (process.platform === "darwin") cloneWithCp(mainCheckout, checkout, unchanged);
+  else cloneWithFiclone(mainCheckout, checkout, unchanged);
+}
+
+// Linux (btrfs, XFS): the FICLONE ioctl. The first failure that means "this
+// filesystem cannot clone" stops cloning; Git then writes every file.
+function cloneWithFiclone(mainCheckout, checkout, paths) {
+  for (const path of paths) {
     const target = resolve(checkout, path);
     mkdirSync(dirname(target), { recursive: true });
     try {
@@ -182,6 +192,29 @@ function cloneUnchanged(mainCheckout, checkout, pin) {
       rmSync(target, { force: true });
       if (NO_CLONE.has(error.code)) return;
       throw error;
+    }
+  }
+}
+
+// macOS (APFS): Node cannot clone here (COPYFILE_FICLONE_FORCE fails with
+// ENOSYS, and COPYFILE_FICLONE writes a full copy), so use `cp -c`, which
+// calls clonefile(2). One cp per target directory, a few hundred files each.
+// Where clonefile is unsupported, cp makes a plain copy. A failed cp stops
+// cloning; Git rewrites anything missing or different afterwards.
+function cloneWithCp(mainCheckout, checkout, paths) {
+  const byDir = new Map();
+  for (const path of paths) {
+    const dir = dirname(path);
+    if (!byDir.has(dir)) byDir.set(dir, []);
+    byDir.get(dir).push(path);
+  }
+  for (const [dir, files] of byDir) {
+    const target = resolve(checkout, dir);
+    mkdirSync(target, { recursive: true });
+    for (let i = 0; i < files.length; i += 500) {
+      const sources = files.slice(i, i + 500).map((path) => resolve(mainCheckout, path));
+      const result = spawnSync("cp", ["-c", ...sources, `${target}/`], { stdio: "ignore" });
+      if (result.status !== 0) return;
     }
   }
 }
