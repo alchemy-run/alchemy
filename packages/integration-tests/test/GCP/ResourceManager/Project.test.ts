@@ -95,7 +95,7 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           return yield* GCP.ResourceManager.Project("Sandbox", {
             displayName: "Sandbox",
-            labels: { env: "test" },
+            labels: { env: "test", team: "infra" },
           });
         }),
       );
@@ -104,7 +104,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.projectId).toEqual(expect.any(String));
       expect(created.projectId.length).toBeGreaterThanOrEqual(6);
       expect(created.displayName).toEqual("Sandbox");
-      expect(created.labels).toMatchObject({ env: "test" });
+      expect(created.labels).toEqual({ env: "test", team: "infra" });
       expect(created.state).toEqual("ACTIVE");
 
       const fetched = yield* resourcemanager.getProjects({
@@ -129,7 +129,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(updated.name).toEqual(created.name);
       expect(updated.projectId).toEqual(created.projectId);
       expect(updated.displayName).toEqual("Sandbox prod");
-      expect(updated.labels).toMatchObject({ env: "prod" });
+      expect(updated.labels).toEqual({ env: "prod" });
       expect(updated.createTime).toEqual(created.createTime);
 
       const fetchedUpdate = yield* resourcemanager.getProjects({
@@ -137,6 +137,8 @@ test.provider.skipIf(!runLifecycle)(
       });
       expect(fetchedUpdate.displayName).toEqual("Sandbox prod");
       expect(fetchedUpdate.labels?.env).toEqual("prod");
+      expect(fetchedUpdate.labels?.team).toBeUndefined();
+      expect(fetchedUpdate.labels?.["alchemy-id"]).toEqual(expect.any(String));
 
       yield* stack.destroy();
 

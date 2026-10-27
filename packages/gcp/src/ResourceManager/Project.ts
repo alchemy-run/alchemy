@@ -1,4 +1,5 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as resourcemanagerV1 from "@distilled.cloud/gcp/unstable/cloudresourcemanager_v1";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -343,23 +344,14 @@ export const ProjectProvider = () =>
       const displayChanged = (current.displayName ?? "") !== displayName;
 
       if (labelsChanged || displayChanged) {
-        const mask = [
-          labelsChanged ? "labels" : undefined,
-          displayChanged ? "displayName" : undefined,
-        ]
-          .filter((field): field is string => field !== undefined)
-          .join(",");
-        const operation = yield* resourcemanager.patchProjects({
-          name: current.name ?? name,
-          updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            displayName,
-            labels: desiredLabels,
-            etag: current.etag,
-          },
+        // v3 `projects.patch` merges labels, so it can never remove one.
+        // v1 `projects.update` replaces them (v1 calls the display name `name`).
+        const id = current.projectId ?? projectId;
+        const observed = yield* resourcemanagerV1.getProjects({ projectId: id });
+        yield* resourcemanagerV1.updateProjects({
+          projectId: id,
+          body: { ...observed, name: displayName, labels: desiredLabels },
         });
-        yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name, projectId);
       }
 
