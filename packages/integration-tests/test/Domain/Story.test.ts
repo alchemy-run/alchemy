@@ -1,4 +1,5 @@
 import * as Domain from "@alchemy.run/domain";
+import { errorSchema } from "@alchemy.run/domain/ExternalSystem";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { type Step, Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
@@ -977,6 +978,16 @@ describe("Domain Story: an operation with several errors", () => {
       Story.then(d1, new CodeRequested({ code: "1234" }), new CodeOutcome({ outcome: "set k_1" })),
     ),
   );
+
+  it("reads every form of a declared error as one schema", () => {
+    const declared = [new LockOffline(), new CodeTaken({ code: "1234" })];
+    for (const spec of [Keypad.ops.setCode, UnionKeypad.ops.setCode]) {
+      const is = Schema.is(errorSchema(spec));
+      expect(declared.map((error) => is(error))).toEqual([true, true]);
+      expect(is(new LockJammed())).toBe(false);
+    }
+    expect(Schema.is(errorSchema({}))(new LockOffline())).toBe(false);
+  });
 
   it.effect("a real call fails with either declared error", () =>
     Story.make(Doors, { layer: SetCodeOnLockLive })(

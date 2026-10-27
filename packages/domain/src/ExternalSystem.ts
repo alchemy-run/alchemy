@@ -233,3 +233,16 @@ export const successSchema = (spec: OpSpec): Schema.Top =>
     : "ast" in (spec.success as object)
       ? (spec.success as Schema.Top)
       : Schema.Struct(spec.success as Fields);
+
+/**
+ * The schema of an operation's declared `error`: the schema itself, a
+ * `Schema.Union` of a list, or `Schema.Never` when it declares none.
+ *
+ * @internal
+ */
+export const errorSchema = (spec: OpSpec): Schema.Top =>
+  spec.error === undefined
+    ? Schema.Never
+    : Array.isArray(spec.error)
+      ? Schema.Union(spec.error as ReadonlyArray<Schema.Top>)
+      : (spec.error as Schema.Top);
