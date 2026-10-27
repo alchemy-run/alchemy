@@ -336,7 +336,12 @@ describe(
               "listTopicSnapshots",
             );
             expect(snapshots.snapshots).toContain(names.genSnapshot);
-            expect(yield* topicRoles(names.genTopic)).toEqual(["roles/pubsub.viewer"]);
+            // Viewer for these reads; editor for DetachSubscription, which is
+            // authorized on the subscription's topic.
+            expect(yield* topicRoles(names.genTopic)).toEqual([
+              "roles/pubsub.editor",
+              "roles/pubsub.viewer",
+            ]);
           }),
         live,
       );
@@ -368,7 +373,7 @@ describe(
 
     describe("DetachSubscription", () => {
       test.provider(
-        "detaches the subscription from its topic",
+        "detaches the subscription, granted editor on its topic",
         (_stack) =>
           Effect.gen(function* () {
             yield* expectProbe(baseUrl, "detachSubscription");
@@ -376,6 +381,7 @@ describe(
               subscription: names.detachInbox,
             });
             expect(live.detached).toBe(true);
+            expect(yield* subscriptionRoles(names.detachInbox)).toEqual([]);
           }),
         live,
       );

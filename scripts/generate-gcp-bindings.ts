@@ -71,6 +71,12 @@ interface ServiceConfig {
    * targets like `projects/p/schemas/s@<revisionId>`.
    */
   suffix?: Record<string, [string, string]>;
+  /**
+   * Method id → the attribute of the bound resource naming what the
+   * permission is checked on, and that resource's IAM kind:
+   * `{ "attribute": "topic", "iamKind": "pubsub.topic" }`.
+   */
+  grantOn?: Record<string, { attribute: string; iamKind?: string }>;
 }
 
 // ============ Discovery ============
@@ -162,6 +168,7 @@ interface Variant {
   param: string;
   children: [string, string][];
   suffix?: [string, string];
+  grantOn?: { attribute: string; iamKind?: string };
   permission: string;
   role: string;
   types: OperationTypes;
@@ -312,6 +319,7 @@ const classify = (options: {
       param: target.param,
       children,
       suffix: config.suffix?.[id],
+      grantOn: config.grantOn?.[id],
       permission,
       role: roles[permission]!,
       types,
@@ -391,7 +399,7 @@ export type ${binding.name}Shape = (
  * ${binding.description.replace(/\*\//g, "*\\/") || `Runtime binding for \`${first.methodId}\`.`}
  *
  * Bind it to a ${resourceDocs} and provide {@link ${binding.name}Http}. The
- * host gets ${grants} on the bound resource.
+ * host gets ${grants} on ${first.grantOn ? `the resource the bound one names in \`${first.grantOn.attribute}\`` : "the bound resource"}.
  *
  * ### Usage
  * **Example:** Call \`${first.methodId.split(".").slice(-2).join(".")}\`
@@ -416,13 +424,14 @@ const emitHttp = (service: string, config: ServiceConfig, binding: Binding) => {
   const variants = binding.variants.map((v) => {
     const resource = config.resources[v.resource]!;
     const type = resource.type ?? `GCP.${service}.${v.resource}`;
-    const iam = resource.iamKind
-      ? `{ role: "${v.role}", on: "${resource.iamKind}" }`
-      : `{ role: "${v.role}" }`;
+    const iamKind = v.grantOn ? v.grantOn.iamKind : resource.iamKind;
+    const iam = iamKind ? `{ role: "${v.role}", on: "${iamKind}" }` : `{ role: "${v.role}" }`;
     const children =
       (v.children.length
         ? `\n      children: [${v.children.map(([c, f]) => `["${c}", "${f}"]`).join(", ")}],`
-        : "") + (v.suffix ? `\n      suffix: ["${v.suffix[0]}", "${v.suffix[1]}"],` : "");
+        : "") +
+      (v.suffix ? `\n      suffix: ["${v.suffix[0]}", "${v.suffix[1]}"],` : "") +
+      (v.grantOn ? `\n      grantOn: "${v.grantOn.attribute}",` : "");
     return `    {
       resource: "${type}",
       operation: ${ns}.${v.fn},

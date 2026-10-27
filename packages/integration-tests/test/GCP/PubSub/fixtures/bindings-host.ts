@@ -184,7 +184,13 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
           const before = yield* listSchemaRevisions();
           const original = before.schemas?.[0]?.revisionId ?? "";
           const committed = yield* commitSchema({
-            body: { schema: { type: "AVRO", definition: COMMITTED_DEFINITION } },
+            body: {
+              schema: {
+                name: before.schemas?.[0]?.name ?? "",
+                type: "AVRO",
+                definition: COMMITTED_DEFINITION,
+              },
+            },
           });
           const rolledBack = yield* rollbackSchema({ body: { revisionId: original } });
           const deleted = yield* deleteSchemaRevision({ revisionId: committed.revisionId ?? "" });

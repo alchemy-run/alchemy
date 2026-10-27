@@ -114,6 +114,11 @@ export interface GcpBindingVariant {
   /** IAM the host gets on the bound resource. */
   readonly iam: BindingIam;
   /**
+   * Grant on another resource the bound one names, through this attribute:
+   * detaching a subscription is authorized on its `topic`.
+   */
+  readonly grantOn?: string;
+  /**
    * Child segments under the bound resource, as `[collection, field]`:
    * `[["versions", "version"]]` turns a bound secret and
    * `{ version: "3" }` into `…/secrets/s/versions/3`.
@@ -149,10 +154,11 @@ export const makeGcpBinding = <Shape>(options: {
       );
       const variant = options.variants[index]!;
       const run = runs[index] as (input: unknown) => Effect.Effect<unknown, unknown>;
-      const resourceName = (resource as unknown as { name: Output.Output<string, never> }).name;
+      const attributes = resource as unknown as Record<string, Output.Output<string, never>>;
+      const resourceName = attributes.name!;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${resource})`({
-          iam: [grantFor(variant.iam, resourceName)],
+          iam: [grantFor(variant.iam, attributes[variant.grantOn ?? "name"]!)],
         });
       }
       const name = yield* resourceName;

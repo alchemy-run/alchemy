@@ -33,5 +33,11 @@
   "skip": {},
   "suffix": {
     "pubsub.projects.schemas.deleteRevision": ["@", "revisionId"]
+  },
+  "grantOn": {
+    "pubsub.projects.subscriptions.detach": {
+      "attribute": "topic",
+      "iamKind": "pubsub.topic"
+    }
   }
 }

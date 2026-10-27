@@ -26,7 +26,7 @@ export type DetachSubscriptionShape = (
  * Detaches a subscription from this topic.
  *
  * Bind it to a {@link Subscription} and provide {@link DetachSubscriptionHttp}. The
- * host gets `roles/pubsub.editor` on the bound resource.
+ * host gets `roles/pubsub.editor` on the resource the bound one names in `topic`.
  *
  * ### Usage
  * **Example:** Call `subscriptions.detach`
