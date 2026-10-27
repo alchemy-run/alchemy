@@ -4,6 +4,7 @@ import { InMemory } from "@alchemy.run/domain/InMemory";
 import { type Step, Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Headers from "effect/http/Headers";
@@ -650,7 +651,7 @@ describe("Domain Story", () => {
       // A snapshot is judged like a get, and its filter narrows the same way.
       expect(yield* client.Totals.snapshot("c-1", { ...sam, atLeast })).toEqual({
         state: { total: 3 },
-        cursor: "1",
+        cursor: 1,
       });
       expect(
         (yield* client.Totals.snapshot("c-1", { ...sam, where: { total: { gt: 10 } } })).state,
@@ -679,10 +680,14 @@ describe("Domain Story", () => {
       );
       yield* Effect.sleep("20 millis");
       yield* counters.send(c1, new Increment({ by: 2 }));
-      expect(yield* Fiber.join(totals)).toEqual([{ total: 3 }, { total: 5 }]);
-      expect((yield* Fiber.join(states)).map((s) => s.total)).toEqual([3, 5]);
+      expect(yield* Fiber.join(totals)).toEqual([
+        { state: { total: 3 }, cursor: 1 },
+        { state: { total: 5 }, cursor: 2 },
+      ]);
+      expect((yield* Fiber.join(states)).map(({ state }) => state.total)).toEqual([3, 5]);
 
       const events = yield* client.Counter.events("c-1", sam).pipe(
+        Stream.filter(Domain.Read.isEvent),
         Stream.take(2),
         Stream.runCollect,
       );
@@ -904,6 +909,38 @@ describe("Domain Story", () => {
       Story.when(c1, new Increment({ by: 1 })),
       Story.then(c1, new Incremented({ by: 1, total: 1 })),
       Story.clock("2025-06-01T00:00:00Z"),
+    ),
+  );
+
+  it.effect("advance moves the clock forward by a duration", () =>
+    story(
+      Story.when(c1, new Cap()),
+      Story.then(c1, new Capped()),
+      Story.advance("59 minutes"),
+      Story.then(c1),
+      Story.advance(Duration.minutes(1)),
+      Story.then(c1, new Reminded()),
+      Story.clock("2026-01-01T01:00:00Z"),
+    ),
+  );
+
+  it.effect("advance by a negative duration fails", () =>
+    story(Story.advance("-1 hour")).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.reason).toBe("Advance: the clock only moves forward, not by -1h");
+        expect(failure.message).toContain("  ✗ 1 Advance    -1h");
+      }),
+    ),
+  );
+
+  it.effect("advance by something that is not a duration fails", () =>
+    story(Story.advance("Infinity")).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.reason).toBe("Advance: Infinity is not a duration");
+        expect(failure.message).toContain("  ✗ 1 Advance    Infinity");
+      }),
     ),
   );
 

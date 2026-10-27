@@ -82,6 +82,8 @@ export const Subscription = Schema.Struct({
   cursor: Schema.Number,
   /** Set when the read was refused before reaching the key: the encoded `Exit` to send. */
   refused: Schema.optionalKey(Schema.Unknown),
+  /** `events` only: set once the `CaughtUp` frame after the read's history was sent. */
+  caughtUpSent: Schema.optionalKey(Schema.Boolean),
 });
 export type Subscription = typeof Subscription.Type;
 

@@ -3,6 +3,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -130,6 +131,7 @@ export type Step =
         | { readonly _tag: "Died" };
     }
   | { readonly _tag: "Clock"; readonly at: string | number | DateTime.DateTime }
+  | { readonly _tag: "Advance"; readonly by: Duration.Input }
   | {
       readonly _tag: "Signal";
       readonly saga: Saga.Any;
@@ -314,6 +316,9 @@ const died: {
 /** Move the clock: later commands are stamped with it, and scheduled commands now due fire. */
 const clock = (at: string | number | DateTime.DateTime): Step => ({ _tag: "Clock", at });
 
+/** Move the clock forward by a duration, like `"1 day"`: the same as `clock` at the current time plus `by`. */
+const advance = (by: Duration.Input): Step => ({ _tag: "Advance", by });
+
 type SagaClientOf<S> = S extends Context.Key<any, infer C> ? C : never;
 type SagaKeyOf<S> =
   SagaClientOf<S> extends Saga.Client<infer K, any, any, any> ? K | { readonly id: K } : never;
@@ -417,9 +422,18 @@ const clockMillis = (at: string | number | DateTime.DateTime) =>
       ? Date.parse(at)
       : DateTime.toEpochMillis(at);
 
+/** An `advance` step's duration; `undefined` for an input that is not a finite duration. */
+const advanceDuration = (by: Duration.Input) =>
+  Option.getOrUndefined(Option.filter(Duration.fromInput(by), Duration.isFinite));
+
 /** A one-line summary of a step, before it runs. */
 const describeStep = (s: Step): string => {
   switch (s._tag) {
+    case "Advance": {
+      const by = advanceDuration(s.by);
+      if (by === undefined) return String(s.by);
+      return `${Duration.isNegative(by) ? "" : "+"}${Duration.format(by)}`;
+    }
     case "Clock": {
       const at = clockMillis(s.at);
       return Number.isNaN(at) ? String(s.at) : new Date(at).toISOString();
@@ -778,6 +792,16 @@ const make =
               }
               clockState.now = at;
               // Scheduled commands that are now due fire, and their policies run.
+              yield* settle(step);
+              break;
+            }
+            case "Advance": {
+              const by = advanceDuration(s.by);
+              if (by === undefined) return yield* fail(`${String(s.by)} is not a duration`);
+              if (Duration.isNegative(by)) {
+                return yield* fail(`the clock only moves forward, not by ${Duration.format(by)}`);
+              }
+              clockState.now += Duration.toMillis(by);
               yield* settle(step);
               break;
             }
@@ -1246,6 +1270,7 @@ const make =
  * Story.call(FraudCheck.score, { accountId: account.id, amount: 60_000 }),
  * Story.succeed(FraudCheck.score, { risk: 0.95 }),
  * Story.clock("2026-01-02T09:00:00Z"),
+ * Story.advance("1 day"),
  * ```
  *
  * **Example:** Name calls when several are waiting
@@ -1307,6 +1332,7 @@ export const Story = {
   failed,
   died,
   clock,
+  advance,
   provide,
   signal,
   saga,

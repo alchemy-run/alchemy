@@ -96,24 +96,40 @@ describe("Domain Api over the wire", () => {
       const local = yield* BankApi.clientInProcess;
       yield* bank.Deposit({ target: "w-1", amount: 5, commandId: "deposit-1" });
 
-      const [wallet] = yield* bank.Wallet.events("w-1").pipe(Stream.take(1), Stream.runCollect);
+      const [wallet] = yield* bank.Wallet.events("w-1").pipe(
+        Stream.filter(Domain.Read.isEvent),
+        Stream.take(1),
+        Stream.runCollect,
+      );
       expect(wallet!.envelope).toMatchObject({
         commandId: "deposit-1",
         correlationId: "deposit-1",
       });
 
       // The policy's command has its own id, and carries the deposit's correlation id.
-      const [booked] = yield* bank.Ledger.events("main").pipe(Stream.take(1), Stream.runCollect);
+      const [booked] = yield* bank.Ledger.events("main").pipe(
+        Stream.filter(Domain.Read.isEvent),
+        Stream.take(1),
+        Stream.runCollect,
+      );
       expect(booked!.envelope.commandId).not.toBe("deposit-1");
       expect(booked!.envelope.correlationId).toBe("deposit-1");
 
-      const [entry] = yield* bank.Bookings.events("main").pipe(Stream.take(1), Stream.runCollect);
+      const [entry] = yield* bank.Bookings.events("main").pipe(
+        Stream.filter(Domain.Read.isEvent),
+        Stream.take(1),
+        Stream.runCollect,
+      );
       expect(entry!.envelope.correlationId).toBe("deposit-1");
       const page = yield* bank.Bookings.list("main");
       expect(page.entries[0]!.envelope.correlationId).toBe("deposit-1");
 
       // The wire gives what the in-process client gives.
-      const [direct] = yield* local.Ledger.events("main").pipe(Stream.take(1), Stream.runCollect);
+      const [direct] = yield* local.Ledger.events("main").pipe(
+        Stream.filter(Domain.Read.isEvent),
+        Stream.take(1),
+        Stream.runCollect,
+      );
       expect(booked!.envelope).toEqual(direct!.envelope);
     }).pipe(Effect.scoped, Effect.provide(Wire)),
   );
