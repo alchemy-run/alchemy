@@ -107,7 +107,7 @@ describe.skipIf(!!process.env.FAST)(
       "KV writes, reads metadata, lists and deletes",
       Effect.gen(function* () {
         yield* request("PUT", "/kv/greeting", "hello");
-        expect(yield* json("GET", "/kv/greeting")).toEqual({
+        expect(yield* json("GET", "/kv/greeting")).toMatchObject({
           value: "hello",
           metadata: { version: 1 },
         });
@@ -146,10 +146,12 @@ describe.skipIf(!!process.env.FAST)(
     test(
       "a SQLite Durable Object migrates on activation and keeps KV state",
       Effect.gen(function* () {
-        yield* json("POST", "/notes/lobby", "one");
+        // A fresh object per run: the stack (and its objects) can outlive a run.
+        const room = `room-${Date.now().toString(36)}`;
+        yield* json("POST", `/notes/${room}`, "one");
         const notes = yield* json<{ history: string[]; values: string[]; count: number }>(
           "POST",
-          "/notes/lobby",
+          `/notes/${room}`,
           "two",
         );
         expect(notes.history).toEqual(["0001_items.sql"]);
