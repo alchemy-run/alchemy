@@ -196,38 +196,22 @@ export class MfaChallenge extends RpcMiddleware.Service<MfaChallenge>()("Bank/Mf
 
 ## Authenticate another service
 
-A backend service that calls the Api has no session. It signs each request with a secret it shares with the Api, and middleware checks the signature. That keeps service calls on the Api, typed and guarded like every other call, with no hand-written routes.
+A backend service that calls the Api has no session. It signs each request with a secret it shares with the Api, and middleware checks the signature. Service calls stay on the Api, typed and guarded like every other call.
 
-Declare who is calling, and the middleware. `requiredForClient: true` makes every client provide the signing half, so an unsigned client doesn't type-check.
-
-```typescript
-// packages/domain/src/ServiceAuth.middleware.ts
-import * as Domain from "@alchemy.run/domain";
-import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
-import * as Schema from "effect/Schema";
-
-/** Which service sent the request, and the nonce it signed. */
-export class Caller extends Domain.RequestContext<Caller>()(
-  "Bank/Caller",
-  Schema.Struct({ service: Schema.String, nonce: Schema.String }),
-) {}
-
-export class BadSignature extends Domain.Rejection("BadSignature") {}
-
-/** Authenticates a request another service signed. Its client signs every call. */
-export class ServiceAuth extends RpcMiddleware.Service<ServiceAuth, { provides: Caller }>()(
-  "Bank/ServiceAuth",
-  { error: BadSignature, requiredForClient: true },
-) {}
-```
-
-Both halves sign the same text: the RPC's tag, a timestamp, a nonce, and the payload as the RPC's own schema encodes it. Middleware sees each request's payload on both sides, so the signature covers one request. Don't sign the HTTP body: one NDJSON body can carry several requests.
+Both sides sign the same text: the RPC's tag, the calling service, a timestamp, a nonce, and the payload as the RPC's own schema encodes it. Don't sign the HTTP body: one NDJSON body can carry several requests.
 
 ```typescript
 // packages/domain/src/ServiceAuth.signature.ts
 import * as Effect from "effect/Effect";
 import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
+
+/** What a signature covers, besides the RPC and its payload. */
+export interface Signed {
+  readonly service: string;
+  readonly timestamp: string;
+  readonly nonce: string;
+}
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 const hmacKey = (secret: string) =>
@@ -236,14 +220,13 @@ const hmacKey = (secret: string) =>
     "verify",
   ]);
 
-export const signedText = (
-  rpc: Rpc.AnyWithProps,
-  payload: unknown,
-  timestamp: string,
-  nonce: string,
-) =>
-  Schema.encodeUnknownEffect(Schema.toCodecJson(rpc.payloadSchema as Schema.Codec<unknown>))(payload).pipe(
-    Effect.map((json) => [rpc._tag, timestamp, nonce, JSON.stringify(json)].join("\n")),
+export const signedText = (rpc: Rpc.AnyWithProps, payload: unknown, signed: Signed) =>
+  Schema.encodeUnknownEffect(Schema.toCodecJson(rpc.payloadSchema as Schema.Codec<unknown>))(
+    payload,
+  ).pipe(
+    Effect.map((json) =>
+      [rpc._tag, signed.service, signed.timestamp, signed.nonce, JSON.stringify(json)].join("\n"),
+    ),
     Effect.orDie,
   );
 
@@ -262,34 +245,74 @@ export const verify = (secret: string, text: string, signature: string) =>
   });
 ```
 
-The calling service signs every request:
+Declare who is calling, the middleware, and its client half. `requiredForClient: true` makes every client provide the signing half, so an unsigned client doesn't type-check.
 
 ```typescript
 // packages/domain/src/ServiceAuth.middleware.ts
+import * as Domain from "@alchemy.run/domain";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as Headers from "effect/http/Headers";
+import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
+import * as Schema from "effect/Schema";
+import { sign, signedText } from "./ServiceAuth.signature.ts";
+
+/** Which service sent the request, and the nonce it signed. */
+export class Caller extends Domain.RequestContext<Caller>()(
+  "Bank/Caller",
+  Schema.Struct({ service: Schema.String, nonce: Schema.String }),
+) {}
+
+/** The request isn't signed by a service the Api knows. */
+export class BadSignature extends Schema.TaggedError<BadSignature>()("BadSignature", {}) {}
+
+/** Authenticates a request another service signed. Its client signs every call. */
+export class ServiceAuth extends RpcMiddleware.Service<ServiceAuth, { provides: Caller }>()(
+  "Bank/ServiceAuth",
+  { error: BadSignature, requiredForClient: true },
+) {}
+
+/** Client side: sign every call as `service`. */
 export const serviceAuthClient = (service: string, secret: string) =>
   RpcMiddleware.layerClient(ServiceAuth, ({ rpc, request, next }) =>
     Effect.gen(function* () {
       const timestamp = String(yield* Clock.currentTimeMillis);
       const nonce = crypto.randomUUID();
-      const signature = yield* sign(secret, yield* signedText(rpc, request.payload, timestamp, nonce));
+      const text = yield* signedText(rpc, request.payload, { service, timestamp, nonce });
       return yield* next({
         ...request,
         headers: Headers.setAll(request.headers, {
           "x-service": service,
           "x-timestamp": timestamp,
           "x-nonce": nonce,
-          "x-signature": signature,
+          "x-signature": yield* sign(secret, text),
         }),
       });
     }),
   );
 ```
 
-The Worker checks it. It refuses an unknown service, an old timestamp, a wrong signature and a nonce it has seen, and provides the `Caller`:
+The Worker checks each request. It refuses an unknown service, a timestamp more than five minutes off, a wrong signature, and a nonce it has seen, then provides the `Caller`. It remembers a nonce until its signature expires, so a request can't be replayed while it's still valid.
 
 ```typescript
 // packages/server/src/ServiceAuth.ts
+import { BadSignature, Caller, ServiceAuth } from "@bank/domain/ServiceAuth.middleware";
+import { signedText, verify } from "@bank/domain/ServiceAuth.signature";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Headers from "effect/http/Headers";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+
+/** How far a signature's timestamp may be from the Worker's clock, either way. */
 const MAX_AGE_MS = 5 * 60_000;
+
+/** Nonces already used. `claim` records one until `until`, or returns `false` if it's there. */
+export class NonceStore extends Context.Service<
+  NonceStore,
+  { readonly claim: (nonce: string, until: number) => Effect.Effect<boolean> }
+>()("Bank/NonceStore") {}
 
 export const ServiceAuthLive = (secrets: Readonly<Record<string, string>>) =>
   Layer.effect(
@@ -303,30 +326,85 @@ export const ServiceAuthLive = (secrets: Readonly<Record<string, string>>) =>
           const timestamp = header("x-timestamp");
           const nonce = header("x-nonce");
           const signature = header("x-signature");
-          const secret = service === undefined ? undefined : secrets[service];
+          // Own keys only: `secrets["constructor"]` is a function anyone can sign with.
+          const secret =
+            service !== undefined && Object.hasOwn(secrets, service) ? secrets[service] : undefined;
           if (!service || !secret || !timestamp || !nonce || !signature) {
             return yield* new BadSignature();
           }
-          const now = yield* Clock.currentTimeMillis;
-          if (!(Math.abs(now - Number(timestamp)) <= MAX_AGE_MS)) return yield* new BadSignature();
-          const text = yield* signedText(rpc, payload, timestamp, nonce);
+          const sentAt = Number(timestamp);
+          if (!(Math.abs((yield* Clock.currentTimeMillis) - sentAt) <= MAX_AGE_MS)) {
+            return yield* new BadSignature();
+          }
+          const text = yield* signedText(rpc, payload, { service, timestamp, nonce });
           if (!(yield* verify(secret, text, signature))) return yield* new BadSignature();
-          if (!(yield* nonces.claim(nonce, MAX_AGE_MS))) return yield* new BadSignature();
+          if (!(yield* nonces.claim(nonce, sentAt + MAX_AGE_MS))) return yield* new BadSignature();
           return yield* Effect.provideService(effect, Caller, { service, nonce });
         });
     }),
   );
 ```
 
-`NonceStore` is yours: `claim` records a nonce for `MAX_AGE_MS` and returns `false` if it was already there. Keep it where every Worker instance sees it, like a KV namespace or a Durable Object. Read each service's secret from a secret binding or `Config.redacted`, not from code.
+Keep `NonceStore` in a Durable Object. Every Worker instance must see the same nonces, and `claim` must check and record in one step: in an eventually consistent store like KV, two copies of a request can both pass. Give each calling service its own secret, and read the secrets from secret bindings or `Config.Redacted`, not from code.
 
-List `ServiceAuth` on the commands and reads other services may use, and the calling service connects with its client half:
+List `ServiceAuth` on the commands and reads other services may use. A payroll service pays salaries into accounts, and `decide` reads the `Caller` to record which service paid:
 
 ```typescript
-// the billing service
-const LedgerConnection = LedgerApi.layerClient.pipe(
-  Layer.provide(Domain.protocolHttp("https://bank.example.com/internal")),
-  Layer.provide(Layer.mergeAll(FetchHttpClient.layer, serviceAuthClient("billing", secret))),
+// packages/domain/src/Account/PaySalary.command.ts
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { Cents } from "../Money.ts";
+import { ServiceAuth } from "../ServiceAuth.middleware.ts";
+import { AccountId } from "./Account.id.ts";
+import { NotOpen } from "./NotOpen.rejection.ts";
+
+export class SalaryPaid extends Domain.Event("SalaryPaid", {
+  amount: Cents,
+  paidBy: Schema.String,
+}) {}
+
+/** Another service pays a salary into an account. */
+export class PaySalary extends Domain.Command("PaySalary", {
+  target: AccountId,
+  middleware: [ServiceAuth],
+  input: { amount: Cents },
+  events: [SalaryPaid],
+  rejects: [NotOpen],
+}) {}
+```
+
+```typescript
+// packages/domain/src/InternalApi.api.ts
+import * as Domain from "@alchemy.run/domain";
+import { PaySalary } from "./Account/PaySalary.command.ts";
+
+/** What other services reach, signed with `ServiceAuth`. */
+export class InternalApi extends Domain.Api("InternalApi", PaySalary) {}
+```
+
+The calling service connects with the client half and its secret:
+
+```typescript
+// payroll/src/InternalApi.client.ts
+import * as Domain from "@alchemy.run/domain";
+import { InternalApi } from "@bank/domain/InternalApi.api";
+import { serviceAuthClient } from "@bank/domain/ServiceAuth.middleware";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+
+export const InternalApiClient = Layer.unwrap(
+  Effect.gen(function* () {
+    const secret = yield* Config.Redacted("BANK_SERVICE_SECRET");
+    return InternalApi.layerClient.pipe(
+      Layer.provide(Domain.protocolHttp("https://bank.example.com/internal")),
+      Layer.provide(
+        Layer.mergeAll(FetchHttpClient.layer, serviceAuthClient("payroll", Redacted.value(secret))),
+      ),
+    );
+  }),
 );
 ```
 

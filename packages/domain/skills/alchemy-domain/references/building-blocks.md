@@ -129,14 +129,14 @@ Another service calls the Api through middleware too, never through hand-written
 
 ```ts
 // what both sides sign: one request, not the HTTP body (an NDJSON body may carry several)
-const signedText = (rpc: Rpc.AnyWithProps, payload: unknown, timestamp: string, nonce: string) =>
+const signedText = (rpc: Rpc.AnyWithProps, payload: unknown, s: { service: string; timestamp: string; nonce: string }) =>
   Schema.encodeUnknownEffect(Schema.toCodecJson(rpc.payloadSchema as Schema.Codec<unknown>))(payload).pipe(
-    Effect.map((json) => [rpc._tag, timestamp, nonce, JSON.stringify(json)].join("\n")),
+    Effect.map((json) => [rpc._tag, s.service, s.timestamp, s.nonce, JSON.stringify(json)].join("\n")),
     Effect.orDie,
   );
-// client: RpcMiddleware.layerClient(ServiceAuth, ({ rpc, request, next }) => sign signedText(rpc, request.payload, ...) into headers)
-// server: (effect, { rpc, payload, headers }) => check age, HMAC (crypto.subtle.verify), unseen nonce; provideService(effect, Caller, ...)
 ```
+
+The client (`RpcMiddleware.layerClient`) sends `x-service`, `x-timestamp`, `x-nonce` and the HMAC as `x-signature`. The server looks the secret up with `Object.hasOwn` (a plain `secrets[service]` finds `constructor`), refuses a timestamp more than five minutes off, verifies with `crypto.subtle.verify` (constant time), then claims the nonce in a Durable Object until `timestamp + maxAge`, so a request can't be replayed while it's valid.
 
 Full recipe: website `domain/sessions` ("Authenticate another service").
 
