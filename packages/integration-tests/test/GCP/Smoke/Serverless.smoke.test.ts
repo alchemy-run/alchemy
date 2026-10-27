@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
 import { decodeFields } from "@alchemy.run/gcp/Firestore/Values";
 import { describe, expect } from "@alchemy.run/test";
@@ -40,15 +39,7 @@ const sharedStack = Core.scratchStack(
   "test/GCP/Smoke/Serverless.smoke.test.ts",
 );
 
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
-
-const skip = !!process.env.FAST || !dockerAvailable;
+const skip = !!process.env.FAST;
 
 interface StackOutputs {
   url: string;

@@ -45,7 +45,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
-import { dockerAvailable, FLOCI_ENDPOINT, rawS3GetObject } from "../Local/fixtures/raw.ts";
+import { FLOCI_ENDPOINT, rawS3GetObject } from "../Local/fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -69,7 +69,7 @@ const flociContext = Layer.mergeAll(
   ),
 );
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "dev deploys a Function into floci with a reachable URL and hot reload",
   (stack) =>
     Effect.gen(function* () {
@@ -279,7 +279,7 @@ test.provider.skipIf(!dockerAvailable)(
   { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 540_000 },
 );
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "SQS -> dev Function (bundle: false) -> S3 event pumping in the emulator",
   (stack) =>
     Effect.gen(function* () {
@@ -366,7 +366,7 @@ test.provider.skipIf(!dockerAvailable)(
   },
 );
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "logging.retention creates the log group with its policy before the first invoke",
   (stack) =>
     Effect.gen(function* () {
