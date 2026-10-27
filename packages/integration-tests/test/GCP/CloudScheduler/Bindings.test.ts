@@ -6,7 +6,7 @@ import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import SchedulerBindingsHost, {
   PausedJob,
   ResumedJob,
@@ -45,7 +45,7 @@ const expectProjectGrants = Effect.gen(function* () {
 
 const getJob = (name: string) => scheduler.getProjectsLocationsJobs({ name });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "CloudScheduler Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:cloudscheduler", "provider:gcp:run", "live"],

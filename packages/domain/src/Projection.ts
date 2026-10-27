@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Event from "./Event.ts";
+import type * as Key from "./Key.ts";
 import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
 
@@ -12,13 +13,13 @@ import type * as View from "./View.ts";
  * One input a projection's handler receives: an event, the key it was routed
  * to, and where it came from.
  */
-export interface Input<Key extends Aggregate.Any, S, E> {
+export interface Input<Key extends Key.Any, S, E> {
   /** The key this input was routed to. */
-  readonly key: Aggregate.Ref<Key>;
+  readonly key: Key.RefOf<Key>;
   /** The route named in `keyOf` that brought it here, if any. */
   readonly route: string | undefined;
-  /** The aggregate or view instance the event came from. */
-  readonly source: Aggregate.Ref<View.SourceKey<S>>;
+  /** The aggregate or view instance the event came from (a view key's value for a Schema-keyed view). */
+  readonly source: Key.RefOf<View.SourceKey<S>>;
   readonly event: E;
   readonly envelope: Aggregate.Envelope;
   /** For a view source: the view's state after the event. */
@@ -65,7 +66,7 @@ export interface Any extends Context.Key<unknown, unknown> {
   readonly projectionName: string;
   readonly definition: {
     readonly from: ReadonlyArray<View.Source>;
-    readonly key: Aggregate.Any;
+    readonly key: Key.Any;
     readonly keyOf?: { readonly [key: string]: unknown };
     readonly on: ReadonlyArray<Event.Any>;
     readonly writes?: ReadonlyArray<DomainStream.Any>;
@@ -78,7 +79,7 @@ export interface Any extends Context.Key<unknown, unknown> {
 export type InputOf<P extends Any> = Input<
   P["definition"]["key"],
   Sources<P["definition"]["from"]>,
-  Aggregate.Inst<P["definition"]["on"][number]>
+  Aggregate.InstanceOf<P["definition"]["on"][number]>
 >;
 
 /** The requirement identifier of a projection class. */
@@ -126,21 +127,23 @@ export interface ProgressKey<Name extends string> {
  */
 export interface Definition<
   From extends ReadonlyArray<View.Source>,
-  Key extends Aggregate.Any,
+  Key extends Key.Any,
   On extends ReadonlyArray<Event.Any>,
   Writes extends ReadonlyArray<DomainStream.Any>,
 > {
   /** The aggregates and views whose events it consumes. */
   readonly from: From;
   /**
-   * The aggregate whose refs partition it: inputs for one key are handled in
-   * order, one key at a time; keys run in parallel.
+   * What partitions it: an aggregate, whose refs are its keys, or a string
+   * Schema, whose values are. Inputs for one key are handled in order, one
+   * key at a time; keys run in parallel.
    */
   readonly key: Key;
   /**
    * Which key each input goes to, by event tag or source name. May be omitted
-   * for a source keyed by the same aggregate. Return an object of named routes
-   * to send one event to several keys.
+   * for a source keyed by the same aggregate or Schema. Return a ref (an
+   * aggregate key) or a value (a Schema key), or an object of named routes to
+   * send one event to several keys.
    */
   readonly keyOf?: {
     readonly [K in View.HandlerKey<From>]?: View.Routed<View.KeyFn<Key, View.InputFor<From, K>>>;
@@ -205,14 +208,14 @@ export interface Definition<
 export const make = <
   const Name extends string,
   const From extends ReadonlyArray<View.Source>,
-  Key extends Aggregate.Any,
+  Key extends Key.Any,
   const On extends ReadonlyArray<Event.Any>,
   const Writes extends ReadonlyArray<DomainStream.Any> = readonly [],
 >(
   name: Name,
   definition: Definition<From, Key, On, Writes>,
 ): ProjectionClass<Name, From, Key, On, Writes> => {
-  type I = Input<Key, Sources<From>, Aggregate.Inst<On[number]>>;
+  type I = Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>;
   const Tag = Context.Service<ProjectionKey<Name>, Implementation<I>>()(
     `alchemy/Domain/Projection/${name}`,
   );
@@ -248,13 +251,13 @@ export const make = <
 export interface ProjectionClass<
   Name extends string,
   From extends ReadonlyArray<View.Source>,
-  Key extends Aggregate.Any,
+  Key extends Key.Any,
   On extends ReadonlyArray<Event.Any>,
   Writes extends ReadonlyArray<DomainStream.Any>,
 > extends Context.ServiceClass<
   ProjectionKey<Name>,
   string,
-  Implementation<Input<Key, Sources<From>, Aggregate.Inst<On[number]>>>
+  Implementation<Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>>
 > {
   readonly kind: "Projection";
   readonly projectionName: Name;
@@ -274,7 +277,11 @@ export interface ProjectionClass<
    * `options` tune how it runs, such as batching.
    */
   toLayer<E, R>(
-    build: Effect.Effect<Handler<Input<Key, Sources<From>, Aggregate.Inst<On[number]>>>, E, R>,
+    build: Effect.Effect<
+      Handler<Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>>,
+      E,
+      R
+    >,
     options?: Options,
   ): Layer.Layer<ProjectionKey<Name>, E, R>;
 }

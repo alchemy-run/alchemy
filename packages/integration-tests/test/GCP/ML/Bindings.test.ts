@@ -4,7 +4,7 @@ import * as ml from "@distilled.cloud/gcp/ml_v1";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import { runLifecycle, runVersionLifecycle } from "./common.ts";
 import MlBindingsHost, { Classifier, V1 } from "./fixtures/bindings-host.ts";
 
@@ -30,7 +30,7 @@ const expectModelGrant = Effect.gen(function* () {
 });
 
 // ml.googleapis.com is deprecated; see ./common.ts for the gates.
-describe.skipIf(!dockerAvailable || !runLifecycle)(
+describe.skipIf(!runLifecycle)(
   "ML Bindings",
   { tags: ["provider:gcp", "provider:gcp:ml", "provider:gcp:run", "live"] },
   () => {
