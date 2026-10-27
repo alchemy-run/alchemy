@@ -24,7 +24,7 @@ export class BoundContainerUnavailable extends Data.TaggedError(
 }
 
 /**
- * Client for a container bound with {@link BindContainer}: its RPC
+ * Client for a container bound with {@link bindContainer}: its RPC
  * methods, plus `fetch` for its HTTP routes.
  */
 export type ContainerClient<Shape> = Omit<Shape, "fetch" | "run"> & {
@@ -41,7 +41,7 @@ export type ContainerClient<Shape> = Omit<Shape, "fetch" | "run"> & {
   >;
 };
 
-/** A port of a container bound with {@link BindPort}. */
+/** A port of a container bound with {@link bindPort}. */
 export interface PortClient {
   /** Always `localhost`: sidecars share the instance's network. */
   host: "localhost";
@@ -102,7 +102,7 @@ const bindSidecar = <Shape, Req>(
         : target;
       const host = yield* Binding.Host;
       if (isRunHost(host)) {
-        yield* host.bind`GCP.Run.BindContainer(${container})`({
+        yield* host.bind`GCP.Run.bindContainer(${container})`({
           env: { [key]: container.port },
           containers: [
             {
@@ -158,7 +158,7 @@ const bindSidecar = <Shape, Req>(
  *   "Api",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     const worker = yield* GCP.Run.BindContainer(Worker);
+ *     const worker = yield* GCP.Run.bindContainer(Worker);
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const greeting = yield* worker.greet("sam");
@@ -187,7 +187,7 @@ const bindSidecar = <Shape, Req>(
  *   "Worker",
  *   { main: import.meta.url, port: 3000 },
  *   Effect.gen(function* () {
- *     const cache = yield* GCP.Run.BindPort(Cache, 6379);
+ *     const cache = yield* GCP.Run.bindPort(Cache, 6379);
  *     return { ping: () => Effect.succeed(cache.url) };
  *   }),
  * ) {}
@@ -197,7 +197,7 @@ const bindSidecar = <Shape, Req>(
  * @binding
  * @product Run
  */
-export const BindContainer = <Shape = {}, Req = never>(
+export const bindContainer = <Shape = {}, Req = never>(
   target: Bindable<Shape, Req>,
 ): Effect.Effect<ContainerClient<Shape>, never, Req | HttpClient.HttpClient> =>
   Effect.gen(function* () {
@@ -223,7 +223,7 @@ export const BindContainer = <Shape = {}, Req = never>(
 /**
  * Run a {@link Container} as a sidecar and reach one of its ports
  * directly — for a protocol other than HTTP, such as Redis or Postgres.
- * See {@link BindContainer}.
+ * See {@link bindContainer}.
  *
  * ### Binding a port
  * **Example:** A Redis sidecar
@@ -235,14 +235,14 @@ export const BindContainer = <Shape = {}, Req = never>(
  * });
  *
  * // inside the service's Effect
- * const cache = yield* GCP.Run.BindPort(Cache, 6379);
+ * const cache = yield* GCP.Run.bindPort(Cache, 6379);
  * // cache.url === "http://localhost:6379"; connect with `redis://localhost:${cache.port}`
  * ```
  *
  * @binding
  * @product Run
  */
-export const BindPort = <Req = never>(
+export const bindPort = <Req = never>(
   target: Bindable<unknown, Req>,
   port: number,
 ): Effect.Effect<PortClient, never, Req | HttpClient.HttpClient> =>

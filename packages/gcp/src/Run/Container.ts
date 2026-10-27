@@ -110,7 +110,7 @@ export type ContainerShape = Main<ContainerServices>;
 /**
  * A container that runs next to a Cloud Run service's main container, in
  * the same instance. Bind it from the service with
- * {@link BindContainer} (typed RPC and `fetch`) or {@link BindPort} (a raw
+ * {@link bindContainer} (typed RPC and `fetch`) or {@link bindPort} (a raw
  * port): binding adds it to the service's revision and holds the service
  * back until the container passes its startup probe.
  *

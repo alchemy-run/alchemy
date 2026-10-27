@@ -21,7 +21,7 @@ export default class Worker extends GCP.Run.Container<Worker>()(
   Effect.gen(function* () {
     const tweets = yield* Tweets;
     const publish = yield* GCP.PubSub.Publish(tweets);
-    const web = yield* GCP.Run.BindPort(Static, 80);
+    const web = yield* GCP.Run.bindPort(Static, 80);
 
     return {
       greet: (name: string) => Effect.succeed(`hello ${name}`),

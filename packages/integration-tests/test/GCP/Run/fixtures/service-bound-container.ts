@@ -20,7 +20,7 @@ export default class BoundContainerService extends GCP.Run.Service<BoundContaine
     startupProbe: { httpGet: { path: "/health" }, periodSeconds: 2, failureThreshold: 30 },
   },
   Effect.gen(function* () {
-    const worker = yield* GCP.Run.BindContainer(Worker);
+    const worker = yield* GCP.Run.bindContainer(Worker);
 
     return {
       fetch: Effect.gen(function* () {

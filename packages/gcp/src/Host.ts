@@ -71,7 +71,7 @@ export type GcpHostBinding = {
   cloudSqlInstances?: string[];
   /**
    * Sidecar containers to add to the host's revision (Cloud Run services
-   * and containers only); see `GCP.Run.BindContainer`.
+   * and containers only); see `GCP.Run.bindContainer`.
    */
   containers?: BoundContainer[];
 };
