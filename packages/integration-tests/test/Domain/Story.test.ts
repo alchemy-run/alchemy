@@ -225,7 +225,9 @@ const RemindWhenCappedLive = RemindWhenCapped.toLayer(
   Effect.gen(function* () {
     const counters = yield* Counter;
     return Effect.fn(function* ({ source }) {
-      yield* counters.schedule(source, new Remind(), { after: "1 hour" });
+      yield* counters
+        .schedule(source, new Remind(), { after: "1 hour" })
+        .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
     });
   }),
 );
@@ -595,7 +597,7 @@ describe("Domain Story", () => {
   it.live("an Api exposes a command; its middleware provides the context", () =>
     Effect.gen(function* () {
       class CounterApi extends Domain.Api("CounterApi", ResetCounter) {}
-      const client = yield* CounterApi.testClient;
+      const client = yield* CounterApi.clientInProcess;
       const counters = yield* Counter;
       yield* counters.send(c1, new Increment({ by: 3 }));
       const reset = yield* client.ResetCounter(
@@ -632,7 +634,7 @@ describe("Domain Story", () => {
   it.live("an Api exposes views and aggregates; validate judges every read", () =>
     Effect.gen(function* () {
       class CounterApi extends Domain.Api("CounterApi", ResetCounter, Totals, Counter) {}
-      const client = yield* CounterApi.testClient;
+      const client = yield* CounterApi.clientInProcess;
       const counters = yield* Counter;
       const sam = { headers: Headers.fromInput({ "x-operator": "sam" }) };
       const guest = { headers: Headers.fromInput({ "x-operator": "guest" }) };
@@ -645,6 +647,20 @@ describe("Domain Story", () => {
         yield* client.Totals.get("c-1", { ...sam, atLeast, where: { total: { gt: 10 } } }),
       ).toBeNull();
       expect((yield* client.Totals.get("c-1", guest).pipe(Effect.flip))._tag).toBe("NotAnOperator");
+      // A snapshot is judged like a get, and its filter narrows the same way.
+      expect(yield* client.Totals.snapshot("c-1", { ...sam, atLeast })).toEqual({
+        state: { total: 3 },
+        cursor: "1",
+      });
+      expect(
+        (yield* client.Totals.snapshot("c-1", { ...sam, where: { total: { gt: 10 } } })).state,
+      ).toBeNull();
+      expect((yield* client.Totals.snapshot("c-1", guest).pipe(Effect.flip))._tag).toBe(
+        "NotAnOperator",
+      );
+      expect((yield* client.Totals.list("c-1", guest).pipe(Effect.flip))._tag).toBe(
+        "NotAnOperator",
+      );
       expect(yield* client.Counter.get("c-1", sam)).toEqual({ total: 3, capped: false });
       expect((yield* client.Counter.get("c-1", guest).pipe(Effect.flip))._tag).toBe(
         "NotAnOperator",

@@ -13,6 +13,7 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Queue from "effect/Queue";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcClientError from "effect/rpc/RpcClientError";
@@ -21,7 +22,6 @@ import * as RpcMessage from "effect/rpc/RpcMessage";
 import type * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
-import * as RpcTest from "effect/rpc/RpcTest";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
@@ -58,12 +58,12 @@ type Aggregates<E extends Entry> = Exclude<E, Command.Any | View.Any | DomainStr
 // ---------------------------------------------------------------- client types
 
 type ContractOf<D> = D extends Read.AnyContract ? D : never;
-type RejectsOf<D> = NonNullable<ContractOf<D>["rejects"]>[number];
+type RejectionOf<D> = Aggregate.InstanceOf<NonNullable<ContractOf<D>["rejects"]>[number]>;
 type MiddlewareOf<D> = NonNullable<ContractOf<D>["middleware"]>;
 
 /** Everything a read can fail with: the declared rejections, the middleware's errors, transport. */
 export type ReadError<D> =
-  | Aggregate.Inst<RejectsOf<D>>
+  | RejectionOf<D>
   | Middleware.Errors<MiddlewareOf<D>>
   | RpcClientError.RpcClientError;
 
@@ -81,7 +81,7 @@ export interface ViewClient<V extends View.Any> {
       readonly atLeast?: { readonly stream: string; readonly version: number };
       readonly where?: Filter<View.StateOf<V>>;
     },
-  ) => Effect.Effect<View.StateOf<V> | null, ReadError<V["definition"]>>;
+  ) => Effect.Effect<View.StateOf<V> | null, ReadError<V["definition"]> | View.ConsistencyTimeout>;
   /** The key's state, then every change. Ends with a rejection when `validate` stops allowing it. */
   readonly watch: (
     key: Key.IdOf<View.KeyOf<V>>,
@@ -102,6 +102,8 @@ export interface ViewClient<V extends View.Any> {
   readonly list: (
     key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
+      /** Wait until the view has applied this write (a command's `stream` and `version`). */
+      readonly atLeast?: { readonly stream: string; readonly version: number };
       readonly where?: Filter<View.EventOf<V>>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
@@ -109,7 +111,23 @@ export interface ViewClient<V extends View.Any> {
     },
   ) => Effect.Effect<
     View.Page<View.Entry<View.StateOf<V>, View.EventOf<V>, Key.IdOf<View.KeyOf<V>>>>,
-    ReadError<V["definition"]>
+    ReadError<V["definition"]> | View.ConsistencyTimeout
+  >;
+  /**
+   * The key's state and the cursor it is valid at, read together. Render the
+   * state, then follow `events(key, { after: cursor })`: every later change
+   * arrives once, and none is missed.
+   */
+  readonly snapshot: (
+    key: Key.IdOf<View.KeyOf<V>>,
+    options?: CallOptions & {
+      /** Wait until the view has applied this write (a command's `stream` and `version`). */
+      readonly atLeast?: { readonly stream: string; readonly version: number };
+      readonly where?: Filter<View.StateOf<V>>;
+    },
+  ) => Effect.Effect<
+    View.Snapshot<View.StateOf<V>>,
+    ReadError<V["definition"]> | View.ConsistencyTimeout
   >;
 }
 
@@ -124,7 +142,7 @@ export interface StreamClient<S extends DomainStream.Any> {
     },
   ) => Effect.Effect<
     DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>> | null,
-    ReadError<S["definition"]>
+    ReadError<S["definition"]> | View.ConsistencyTimeout
   >;
   /** The key's latest entry, then each new one. Ends with a rejection when `validate` stops allowing it. */
   readonly watch: (
@@ -248,7 +266,10 @@ export interface ApiClass<
       ? M
       : "Middleware that provides services is declared on each command, view or aggregate",
   ): ApiClass<Name, Entries>;
-  /** A typed client. Provide a protocol: {@link protocolWebSocket} or {@link protocolHttp}. */
+  /**
+   * A typed client. Provide a protocol: {@link protocolHttp},
+   * {@link protocolWebSocket} or {@link protocolInProcess}.
+   */
   readonly client: Effect.Effect<
     ApiClient<Entries[number]>,
     never,
@@ -262,14 +283,45 @@ export interface ApiClass<
     never,
     RpcClient.Protocol | MiddlewareClients<Entries>
   >;
-  /**
-   * An in-process client wired straight to the handlers, for tests. Server
-   * middleware runs, so principals are provided by swapping middleware Layers.
-   */
-  readonly testClient: Effect.Effect<
+  /** {@link client} over {@link protocolHttp}. */
+  readonly clientHttp: (
+    url: string,
+  ) => Effect.Effect<
+    ApiClient<Entries[number]>,
+    never,
+    Scope.Scope | HttpClient.HttpClient | MiddlewareClients<Entries>
+  >;
+  /** {@link layerClient} over {@link protocolHttp}. */
+  readonly layerClientHttp: (
+    url: string,
+  ) => Layer.Layer<ClientKey<Name>, never, HttpClient.HttpClient | MiddlewareClients<Entries>>;
+  /** {@link client} over {@link protocolWebSocket}. */
+  readonly clientWebSocket: (
+    url: string,
+  ) => Effect.Effect<
+    ApiClient<Entries[number]>,
+    never,
+    Scope.Scope | HttpClient.HttpClient | Socket.WebSocketConstructor | MiddlewareClients<Entries>
+  >;
+  /** {@link layerClient} over {@link protocolWebSocket}. */
+  readonly layerClientWebSocket: (
+    url: string,
+  ) => Layer.Layer<
+    ClientKey<Name>,
+    never,
+    HttpClient.HttpClient | Socket.WebSocketConstructor | MiddlewareClients<Entries>
+  >;
+  /** {@link client} over {@link protocolInProcess}. In a Worker, build it per request. */
+  readonly clientInProcess: Effect.Effect<
     ApiClient<Entries[number]>,
     never,
     Scope.Scope | Model.Internals | MiddlewareServices<Entries> | MiddlewareClients<Entries>
+  >;
+  /** {@link layerClient} over {@link protocolInProcess}. */
+  readonly layerClientInProcess: Layer.Layer<
+    ClientKey<Name>,
+    never,
+    Model.Internals | MiddlewareServices<Entries> | MiddlewareClients<Entries>
   >;
 }
 
@@ -397,7 +449,6 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
           host.peek(refOf(id)).pipe(Effect.orDie, Effect.map(Option.getOrNull));
         handlers[`${name}.peek`] = effect(rpcs.get, ({ key: id, atLeast }) =>
           host.peek(refOf(id), { atLeast }).pipe(
-            Effect.orDie,
             Effect.flatMap((found) => {
               const entry = Option.getOrNull(found);
               return check("get", refOf(id))(entry).pipe(Effect.as(entry));
@@ -447,7 +498,6 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
           state !== null && matches(where as Filter<unknown> | undefined, state) ? state : null;
         handlers[`${name}.get`] = effect(rpcs.get, ({ key: id, atLeast, where }) =>
           host.query(refOf(id), { atLeast }).pipe(
-            Effect.orDie,
             Effect.flatMap((found) => {
               const state = Option.getOrNull(found);
               return check("get", refOf(id))(state).pipe(Effect.as(visible(state, where)));
@@ -474,19 +524,32 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
               ),
             ),
         );
-        handlers[`${name}.list`] = effect(rpcs.list!, ({ key: id, where, order, take, after }) =>
-          host.query(refOf(id)).pipe(
-            Effect.orDie,
-            Effect.flatMap((found) => check("list", refOf(id))(Option.getOrNull(found))),
-            Effect.andThen(
-              host.list(refOf(id), {
-                where: where as Filter<unknown> | undefined,
-                order,
-                take,
-                after: after === undefined ? undefined : String(after),
-              }),
+        handlers[`${name}.snapshot`] = effect(rpcs.snapshot!, ({ key: id, atLeast, where }) =>
+          host
+            .snapshot(refOf(id), { atLeast })
+            .pipe(
+              Effect.flatMap(({ state, cursor }) =>
+                check(
+                  "get",
+                  refOf(id),
+                )(state).pipe(Effect.as({ state: visible(state, where), cursor })),
+              ),
             ),
-          ),
+        );
+        handlers[`${name}.list`] = effect(
+          rpcs.list!,
+          ({ key: id, atLeast, where, order, take, after }) =>
+            host.query(refOf(id), { atLeast }).pipe(
+              Effect.flatMap((found) => check("list", refOf(id))(Option.getOrNull(found))),
+              Effect.andThen(
+                host.list(refOf(id), {
+                  where: where as Filter<unknown> | undefined,
+                  order,
+                  take,
+                  after: after === undefined ? undefined : String(after),
+                }),
+              ),
+            ),
         );
         continue;
       }
@@ -679,13 +742,90 @@ const nest = (entries: ReadonlyArray<Entry>, flat: Flat): unknown => {
       };
     client[name] =
       entry.kind === "View"
-        ? { get: call("get"), watch: call("watch"), events: call("events"), list: call("list") }
+        ? {
+            get: call("get"),
+            watch: call("watch"),
+            events: call("events"),
+            list: call("list"),
+            snapshot: call("snapshot"),
+          }
         : entry.kind === "Stream"
           ? { peek: call("peek"), watch: call("watch"), events: call("events"), list: call("list") }
           : { get: call("get"), watch: call("watch"), events: call("events") };
   }
   return client;
 };
+
+/**
+ * Serves an Api in the caller's process and connects a client to it. Messages
+ * are encoded as on the wire but never leave memory.
+ */
+const makeProtocolInProcess = (
+  entries: ReadonlyArray<Entry>,
+  group: RpcGroup.RpcGroup<Rpc.Any>,
+): Layer.Layer<RpcClient.Protocol, never, Model.Internals> =>
+  Layer.effect(
+    RpcClient.Protocol,
+    Effect.gen(function* () {
+      const codecFor = Schema.toCodecJson as RpcSerialization.CodecFor;
+      const disconnects = yield* Queue.unbounded<number>();
+      const clientIds = new Set<number>();
+      let toServer = (_: number, __: RpcMessage.FromClientEncoded): Effect.Effect<void> =>
+        Effect.void;
+      let toClient = (_: number, __: RpcMessage.FromServerEncoded): Effect.Effect<void> =>
+        Effect.void;
+      const server = yield* RpcServer.Protocol.make((write) => {
+        toServer = write;
+        return Effect.succeed({
+          disconnects,
+          send: (clientId: number, response: RpcMessage.FromServerEncoded) =>
+            toClient(clientId, response),
+          end: () => Effect.void,
+          clientIds: Effect.sync(() => new Set(clientIds) as ReadonlySet<number>),
+          initialMessage: Effect.succeedNone,
+          supportsAck: true,
+          supportsTransferables: false,
+          supportsSpanPropagation: true,
+          supportsNotifications: false,
+          codecFor,
+        });
+      });
+      const protocol = yield* RpcClient.Protocol.make((write) => {
+        toClient = write;
+        return Effect.succeed({
+          send: (clientId: number, request: RpcMessage.FromClientEncoded) =>
+            toServer(clientId, request),
+          supportsAck: true,
+          supportsTransferables: false,
+          codecFor,
+        });
+      });
+      const handlers = yield* handlersOf(entries);
+      // The middleware services in the caller's scope run for every request.
+      yield* RpcServer.make(group).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(RpcServer.Protocol, server),
+            group.toLayer(handlers as never) as Layer.Layer<never>,
+          ),
+        ),
+        Effect.forkScoped,
+      );
+      return RpcClient.Protocol.of({
+        ...protocol,
+        run: (clientId, write) =>
+          Effect.suspend(() => {
+            clientIds.add(clientId);
+            return protocol.run(clientId, write);
+          }).pipe(
+            Effect.onExit(() => {
+              clientIds.delete(clientId);
+              return Queue.offer(disconnects, clientId);
+            }),
+          ),
+      });
+    }),
+  );
 
 // A class so `class BankApi extends Domain.Api(...) {}` works.
 const build = (
@@ -719,6 +859,11 @@ const build = (
     }) as unknown as HttpEffect;
     return { fetch };
   });
+  // The client for the life of the caller's scope, over the given protocol.
+  const clientOver = <R>(protocol: Layer.Layer<RpcClient.Protocol, never, R>) =>
+    Effect.flatMap(Layer.build(protocol), (context) => Effect.provide(client, context));
+  const layerClient = Layer.effect(Client, client);
+  const inProcess = makeProtocolInProcess(entries, group);
   return Object.assign(
     class {},
     // The class is an Effect: `yield* MyApi` serves it.
@@ -734,14 +879,14 @@ const build = (
         build(name, entries, group.middleware(middleware) as unknown as RpcGroup.RpcGroup<Rpc.Any>),
       client,
       Client,
-      layerClient: Layer.effect(Client, client),
-      testClient: Effect.gen(function* () {
-        const handlers = yield* handlersOf(entries);
-        const flat = yield* RpcTest.makeClient(group).pipe(
-          Effect.provide(group.toLayer(handlers as never)),
-        );
-        return nest(entries, flat as unknown as Flat);
-      }),
+      layerClient,
+      clientHttp: (url: string) => clientOver(protocolHttp(url)),
+      layerClientHttp: (url: string) => layerClient.pipe(Layer.provide(protocolHttp(url))),
+      clientWebSocket: (url: string) => clientOver(protocolWebSocket(url)),
+      layerClientWebSocket: (url: string) =>
+        layerClient.pipe(Layer.provide(protocolWebSocket(url))),
+      clientInProcess: clientOver(inProcess),
+      layerClientInProcess: layerClient.pipe(Layer.provide(inProcess)),
     },
   );
 };
@@ -751,7 +896,9 @@ const build = (
  * send, and the views and aggregates (with a `read` contract) it may read.
  * Nothing in an Api needs a handler. The class is an Effect: `yield* MyApi`
  * gives a Worker its `fetch`. Call it with a typed client over
- * `Domain.protocolWebSocket` or `Domain.protocolHttp`.
+ * `Domain.protocolHttp`, `Domain.protocolWebSocket` or
+ * `Domain.protocolInProcess`, or with `clientHttp`, `clientWebSocket` or
+ * `clientInProcess`, which provide them.
  *
  * ### Declaring an Api
  * **Example:** What customers may reach
@@ -810,6 +957,20 @@ const build = (
  * );
  * ```
  *
+ * ### Calling it in process
+ * `clientInProcess` serves the Api in the caller's process, through every
+ * entry's middleware, with nothing sent over a network. Code that has
+ * already authenticated its caller provides a middleware Layer that trusts it.
+ *
+ * **Example:** A webhook that deposits as the system
+ * ```typescript
+ * const asSystem = Layer.succeed(Session, (effect) =>
+ *   Effect.provideService(effect, CurrentActor, system("payments-webhook")),
+ * );
+ * const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem));
+ * yield* bank.DepositMoney({ target: accountId, amount: 1_000 });
+ * ```
+ *
  * @primitive
  */
 export const make = <const Name extends string, const Entries extends ReadonlyArray<Entry>>(
@@ -832,6 +993,18 @@ export const protocolHttp = (
   url: string,
 ): Layer.Layer<RpcClient.Protocol, never, HttpClient.HttpClient> =>
   RpcClient.layerProtocolHttp({ url }).pipe(Layer.provide(RpcSerialization.layerNdjson));
+
+/**
+ * The protocol for a client in the same process as the model. It serves the
+ * Api right there: every entry's middleware runs, from the middleware Layers
+ * in scope, and nothing leaves memory. Requires the hosted Domain, like
+ * serving the Api.
+ * In a Worker, build it per request.
+ */
+export const protocolInProcess = <Name extends string, Entries extends ReadonlyArray<Entry>>(
+  api: ApiClass<Name, Entries>,
+): Layer.Layer<RpcClient.Protocol, never, Model.Internals | MiddlewareServices<Entries>> =>
+  makeProtocolInProcess(api.entries, api.group);
 
 /** A frame of a live read: an Effect RPC message, plus the cursor to resume from. */
 type LiveFrame = RpcMessage.FromServerEncoded & { readonly cursor?: number };
@@ -970,7 +1143,7 @@ export const protocolWebSocket = (
 /** The Schema of a union of rejection classes; `Schema.Never` when there are none. */
 type RejectionUnion<R> = [R] extends [never]
   ? typeof Schema.Never
-  : Schema.Codec<Aggregate.Inst<R>, Schema.Codec.Encoded<R>>;
+  : Schema.Codec<Aggregate.InstanceOf<R>, Schema.Codec.Encoded<R>>;
 
 /**
  * Any Api class. Use it to write code that works with every Api, such as a

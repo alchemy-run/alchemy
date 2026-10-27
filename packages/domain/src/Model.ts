@@ -495,7 +495,7 @@ const aggregateClient = (
       Effect.gen(function* () {
         // The command runs later, so its span links back here rather than continuing this trace.
         const { id, meta } = yield* metaFor(target, command, options, true);
-        yield* store.schedule(
+        const at = yield* store.schedule(
           id,
           kernel.encodeCommand(aggregate, command),
           meta,
@@ -503,11 +503,19 @@ const aggregateClient = (
             ? { at: DateTime.toEpochMillis(options.at) }
             : { afterMillis: Duration.toMillis(Duration.fromInputUnsafe(options.after)) },
         );
+        return { commandId: meta.commandId, at: DateTime.makeUnsafe(at) };
       }).pipe(
         Effect.withSpan(
           `Domain.schedule ${aggregate.aggregateName}.${command._tag}`,
           spanOptions(target),
         ),
+      ),
+    unschedule: (target, commandId) =>
+      store.unschedule(Aggregate.targetId(target), commandId).pipe(
+        Effect.withSpan(`Domain.unschedule ${aggregate.aggregateName}`, {
+          ...spanOptions(target),
+          attributes: { ...spanOptions(target).attributes, "domain.command_id": commandId },
+        }),
       ),
     state: (target) =>
       store
@@ -569,36 +577,53 @@ const viewHost = (
         },
       ),
     );
-  return {
-    query: (key, options) => {
-      const read = store.read(Aggregate.targetId(key));
-      const atLeast = options?.atLeast;
-      if (!atLeast)
-        return read.pipe(Effect.map((snapshot) => decodeSnapshot(kernel, view, snapshot)));
-      return read.pipe(
-        Effect.flatMap((snapshot) =>
-          (snapshot.checkpoints[atLeast.stream] ?? 0) >= atLeast.version
-            ? Effect.succeed(snapshot)
-            : Effect.fail("stale" as const),
-        ),
-        Effect.retry({
-          schedule: Schedule.spaced("25 millis"),
-          times: Math.ceil(
-            Duration.toMillis(Duration.fromInputUnsafe(options?.timeout ?? "10 seconds")) / 25,
-          ),
-        }),
-        Effect.map((snapshot) => decodeSnapshot(kernel, view, snapshot)),
-        Effect.mapError(
-          () =>
-            new View.ConsistencyTimeout({
-              view: view.viewName,
-              key: Aggregate.targetId(key),
-              stream: atLeast.stream,
-              version: atLeast.version,
-            }),
-        ),
-      );
+  /** The stored snapshot of a key, once it has applied `atLeast` (if given). */
+  const readAtLeast = (
+    id: string,
+    options?: {
+      readonly atLeast?: { readonly stream: string; readonly version: number };
+      readonly timeout?: Duration.Input;
     },
+  ) => {
+    const read = store.read(id);
+    const atLeast = options?.atLeast;
+    if (!atLeast) return read;
+    return read.pipe(
+      Effect.flatMap((snapshot) =>
+        (snapshot.checkpoints[atLeast.stream] ?? 0) >= atLeast.version
+          ? Effect.succeed(snapshot)
+          : Effect.fail("stale" as const),
+      ),
+      Effect.retry({
+        schedule: Schedule.spaced("25 millis"),
+        times: Math.ceil(
+          Duration.toMillis(Duration.fromInputUnsafe(options?.timeout ?? "10 seconds")) / 25,
+        ),
+      }),
+      Effect.mapError(
+        () =>
+          new View.ConsistencyTimeout({
+            view: view.viewName,
+            key: id,
+            stream: atLeast.stream,
+            version: atLeast.version,
+          }),
+      ),
+    );
+  };
+  return {
+    query: (key, options) =>
+      readAtLeast(Aggregate.targetId(key), options).pipe(
+        Effect.map((snapshot) => decodeSnapshot(kernel, view, snapshot)),
+      ),
+    // State and seq come from one stored snapshot, so the cursor matches the state.
+    snapshot: (key, options) =>
+      readAtLeast(Aggregate.targetId(key), options).pipe(
+        Effect.map((snapshot) => ({
+          state: Option.getOrNull(decodeSnapshot(kernel, view, snapshot)),
+          cursor: String(snapshot.seq),
+        })),
+      ),
     waitFor: (key, where, options) =>
       watch(key, { where }).pipe(
         Stream.filter(Option.isSome),
