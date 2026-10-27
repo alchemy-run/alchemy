@@ -1,6 +1,6 @@
 # Design: a Foldkit adapter for Domain
 
-Status: implementation in progress in PR #2700. Design and code share this branch; each adapter feature has its own commit.
+Status: v1 implemented in PR #2700. Design and code share this branch. Each adapter feature has its own commit.
 
 ## The problem
 
@@ -107,11 +107,12 @@ Headers such as an MFA code go through a client Layer or a config seam. They are
 ```ts
 watchView(CustomerApi, "AccountSummary", {
   key: (model) => model.accountId,
-  toMessage: (snapshot) => Message.ReceivedSummary({ snapshot }),
+  toMessage: (snapshot): Message => Message.ReceivedSummary({ snapshot }),
+  onFailure: (error): Message => Message.FailedWatchSummary({ reason: error._tag }),
 })
 ```
 
-A Subscription entry on `watch`. The app passes its own Message, so the app names the fact. `state: null` arrives as `Option.none()`. The cursor goes into the Model with the state. A key change restarts the stream; a new cursor does not (`keepAliveEquivalence`, `packages/foldkit/src/subscription/subscription.ts:56` on `main`). A restart reads a fresh Snapshot. A middleware or `validate` failure becomes a Message.
+A Subscription entry on `watch`. The app passes its own Message, so the app names the fact. `state: null` arrives as `Option.none()`. The cursor goes into the Model with the state. `onFailure` maps a read failure to an app Message. `isEnabled` can stop the stream while offline. A key change restarts the stream; a new cursor does not (`keepAliveEquivalence`, `packages/foldkit/src/subscription/subscription.ts:56` on `main`). A restart reads a fresh Snapshot. A middleware or `validate` failure becomes a Message.
 
 This is the state source. Not every state change has an output event: the Kernel can evolve a View's state and emit nothing (for example `AccountOpened` in `Statement`), so state never comes from `events`.
 
@@ -121,12 +122,15 @@ This is the state source. Not every state change has an output event: the Kernel
 viewEvents(CustomerApi, "Statement", {
   key: (model) => model.accountId,
   cursor: (model) => model.statementCursor,
-  onEntry: (entry) => Message.ReceivedStatementLine({ entry }),
-  onCaughtUp: (cursor) => Message.CaughtUpStatement({ cursor }),
+  onEntry: (entry): Message => Message.ReceivedStatementLine({ entry }),
+  onCaughtUp: (cursor): Message => Message.CaughtUpStatement({ cursor }),
+  onFailure: (error): Message => Message.FailedReadStatement({ reason: error._tag }),
 })
 ```
 
-A Subscription entry on `events(key, { after: cursor })`:
+A Subscription entry on `events(key, { after: cursor })`. The Model cursor is `Option<number>`: `None` starts without `after`. Optional `isEnabled` controls connectivity, and `restartKey` requests a new stream for the same key.
+
+The feed:
 
 - On a restart (offline, key change), it reads the last applied cursor from the Model (`readDependencies`) and resumes after it.
 - It drops entries at or below the cursor, so a resume never applies an entry twice.
@@ -164,23 +168,25 @@ Each needs its own design first.
 
 ## PR sequence
 
-Each PR is under about 500 lines of source, with its own tests.
+PR #2700 holds the design, implementation, tests, guides, and bank example. It stays open for review and Foldkit version updates. Each commit has one reviewable change:
 
-| # | Repo | Content | Size |
-| --- | --- | --- | --- |
-| 1 | Alchemy | This design | 150 to 250 |
-| 2 | Alchemy | `commands(Api)`, `CommandIds`, failure union, header seam, declaration tests | 350 to 500 |
-| 3 | Alchemy | `watchView` | 250 to 450 |
-| 4 | Alchemy | `viewEvents` | 350 to 500 |
-| 5 | Alchemy | `SnapshotFlags`, stale-Flags fallback, server render in the bank | 250 to 450 |
-| 6 | Alchemy | `foldkit.mdx`, `optimistic-updates.mdx`, bank example, one PR each. The bank keeps its offline queue on top of `Unknown`. | under 500 each |
-| 7 | Foldkit | After #1655 merges: handler-Layer variant, then #1785 split into `encodeKey` (XS) and LiveQuery core (M) | later |
+| Step | Commit scope | Content |
+| --- | --- | --- |
+| 1 | Domain | `commands(Api)`, result Messages, failure classification, `CommandIds`, header service, declaration tests, optional peer |
+| 2 | Domain | `watchView`, Option state, snapshots and enabled/key lifecycle |
+| 3 | Domain | `viewEvents`, Model cursor resume, duplicate filtering and `CaughtUp` |
+| 4 | Domain | `SnapshotFlags`, decode fallback and explicit `restartKey` for a failed seeded cursor |
+| 5 | Website | Adapter guides and explicit confirmation by `commandId` |
+| 6 | Bank example | Adapter Commands and Subscriptions, offline queue, retry on `Unknown` |
+| 7 | Domain design | Public subpath, implementation details and review status |
+
+A change found in review adds another commit to this PR. Blocks, LiveQuery, trace fixtures, and a generic optimistic helper need separate designs and are outside v1.
 
 ## Alternatives considered
 
 - **The adapter in Foldkit.** Foldkit would depend on Domain, and every Domain client change would need a Foldkit release.
 - **The adapter in foldkit-plus.** It ties Domain users to a contract layer that does not exist yet.
-- **One PR with design, adapter, guides, and example.** One large PR makes each requested change cost more.
+- **Separate design and implementation PRs.** This work uses one long-lived PR so review, implementation, and version updates share one history. Commits provide the review boundaries.
 - **`View.evolve` over `events` entries.** A type mismatch: `evolve` takes source events, entries are output events with the state already applied.
 - **State from `events`.** Some state changes emit no event.
 - **A `Pending` that confirms when the count of entries with a `commandId` reaches the predicted count.** The two counts measure different things.
@@ -190,7 +196,7 @@ Each PR is under about 500 lines of source, with its own tests.
 ## Open questions
 
 1. Does the Domain maintainer want an adapter subpath at all? Evidence needed: a reply on alchemy#2590 or on the design PR.
-2. `Middleware.Errors` has no single Schema union, and alchemy#2591 reports that it resolves to `never`. `Denied` needs one union per Api or a tagged fallback.
-3. Does every View output envelope carry the source command's `commandId` on every path, including the stored one? Evidence needed: one `Domain.InMemory` test.
-4. Bundle size per piece, measured in the bank example. The PoC measured 175 kB gzip in total, with no breakdown.
+2. Resolved for this adapter: each command exposes its middleware error Schemas. The adapter builds the runtime union from them and maps the error types per command. It does not use `Middleware.Errors`.
+3. The InMemory adapter test confirms that stored View entries preserve their source `commandId`. Other stores use the same envelope contract.
+4. The migrated bank client builds to about 147 kB gzip with Foldkit 0.169.0. A per-helper bundle breakdown has not been measured.
 5. Should a later optimistic design use client-side `predict` at all, or a server-side dry run?
