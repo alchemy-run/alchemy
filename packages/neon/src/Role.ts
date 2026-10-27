@@ -140,13 +140,21 @@ export const RoleProvider = () =>
         };
       }
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       if (!output && !olds?.branch && !olds?.project) return undefined;
       const scope = output ?? (yield* resolveBranchScope(olds!));
       const roleName = output?.roleName ?? (yield* createRoleName(id, olds?.name));
       const role = yield* observeRole(scope, roleName);
       if (!role) return undefined;
       if (output) return toAttributes(scope, role, output.password);
+      // The generation a delete-first replacement is about to free.
+      if (
+        previous?.projectId === scope.projectId &&
+        previous.branchId === scope.branchId &&
+        previous.roleName === role.name
+      ) {
+        return toAttributes(scope, role, previous.password);
+      }
       // Only an explicit name can collide with a role this stack did not create.
       const attrs = toAttributes(scope, role, yield* revealPassword(scope, role));
       return olds?.name !== undefined ? Unowned(attrs) : attrs;

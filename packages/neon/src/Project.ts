@@ -296,7 +296,7 @@ export const ProjectProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       if (output?.projectId) {
         return yield* getProject({ project_id: output.projectId }).pipe(
           Effect.flatMap(({ project }) => hydrateProjectAttributes(project, output)),
@@ -317,6 +317,8 @@ export const ProjectProvider = () =>
         migrationsDir: (olds && migrationsInputOf(olds))?.dir,
         migrationsTable: (olds && migrationsInputOf(olds))?.table,
       });
+      // The generation a delete-first replacement is about to free is ours.
+      if (attrs && attrs.projectId === previous?.projectId) return attrs;
       return attrs && Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {
