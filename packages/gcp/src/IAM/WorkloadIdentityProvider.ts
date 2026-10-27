@@ -159,7 +159,7 @@ export const WorkloadIdentityProvider = Resource<WorkloadIdentityProvider>(
 
 export class WorkloadIdentityProviderNotResolved extends Data.TaggedError(
   "GCP.IAM.WorkloadIdentityProviderNotResolved",
-)<{ name: string }> {}
+)<{ resourceName: string }> {}
 
 const providerName = (project: string, poolId: string, providerId: string) =>
   `projects/${project}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`;
@@ -319,7 +319,7 @@ export const WorkloadIdentityProviderProvider = () =>
       current = yield* getProvider(name).pipe(
         Effect.flatMap((provider) =>
           provider === undefined || provider.state !== "ACTIVE"
-            ? Effect.fail(new WorkloadIdentityProviderNotResolved({ name }))
+            ? Effect.fail(new WorkloadIdentityProviderNotResolved({ resourceName: name }))
             : Effect.succeed(provider),
         ),
         Effect.retry({

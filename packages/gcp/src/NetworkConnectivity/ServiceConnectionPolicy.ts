@@ -401,7 +401,7 @@ export const ServiceConnectionPolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NetworkConnectivityNotResolved({ name });
+        return yield* new NetworkConnectivityNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

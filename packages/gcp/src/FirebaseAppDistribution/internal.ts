@@ -13,7 +13,7 @@ export const MIN_GROUP_ID = 4;
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.FirebaseAppDistribution.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {

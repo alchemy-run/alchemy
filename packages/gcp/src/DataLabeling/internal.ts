@@ -24,7 +24,7 @@ export const MAX_EVALUATION_DESCRIPTION_LENGTH = 25_000;
 export const MAX_FEEDBACK_BODY_LENGTH = 10_000;
 
 export class DatalabelingPending extends Data.TaggedError("GCP.DataLabeling.Pending")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -266,7 +266,7 @@ export const waitForVisible = <A, E, R>(get: Effect.Effect<A | undefined, E, R>)
   get.pipe(
     Effect.filterOrFail(
       (value): value is A => value !== undefined,
-      () => new DatalabelingPending({ name: "" }),
+      () => new DatalabelingPending({ resourceName: "" }),
     ),
     Effect.retry({
       while: (error) => error instanceof DatalabelingPending,

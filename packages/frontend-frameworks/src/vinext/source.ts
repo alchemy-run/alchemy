@@ -46,7 +46,7 @@ import {
   DEFAULT_WORKER_ENTRY,
   makeVinextPluginOptions,
 } from "./cloudflare.ts";
-import { resolveVinextRoot, runVinextPrerenderIfConfigured } from "./Prerender.ts";
+import { runVinextPrerenderIfConfigured } from "./Prerender.ts";
 import { VINEXT_CACHE_BINDING, VINEXT_KV_CACHE_BINDING } from "./PrerenderCache.ts";
 
 const PROVIDER = "@alchemy.run/frontend-frameworks/vinext/source";

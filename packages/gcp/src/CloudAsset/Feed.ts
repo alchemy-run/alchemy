@@ -182,7 +182,7 @@ export type Feed = Resource<
 export const Feed = Resource<Feed>("GCP.CloudAsset.Feed");
 
 export class FeedNotResolved extends Data.TaggedError("GCP.CloudAsset.FeedNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, feedId: string) => `${parent}/feeds/${feedId}`;
@@ -326,7 +326,7 @@ export const FeedProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FeedNotResolved({ name });
+        return yield* new FeedNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

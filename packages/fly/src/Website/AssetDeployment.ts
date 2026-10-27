@@ -95,7 +95,7 @@ const scopeOf = (bucket: Bucket) =>
       endpoint === undefined
     ) {
       return yield* new TigrisCredentialsMissing({
-        name: bucketName ?? bucket.LogicalId,
+        resourceName: bucketName ?? bucket.LogicalId,
       });
     }
     return { bucketName, accessKeyId, secretAccessKey, endpoint, region };

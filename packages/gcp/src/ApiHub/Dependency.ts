@@ -253,7 +253,7 @@ export const DependencyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name });
+        return yield* new ApihubNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

@@ -184,17 +184,17 @@ export type Workflow = Resource<
 export const Workflow = Resource<Workflow>("GCP.Workflows.Workflow");
 
 export class WorkflowNotResolved extends Data.TaggedError("GCP.Workflows.WorkflowNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 /** The deployed workflow is in state `UNAVAILABLE` (see `stateError`). */
 export class WorkflowUnavailable extends Data.TaggedError("GCP.Workflows.WorkflowUnavailable")<{
-  name: string;
+  resourceName: string;
   message: string;
 }> {}
 
 export class WorkflowStillExists extends Data.TaggedError("GCP.Workflows.WorkflowStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -317,19 +317,19 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (workflow): workflow is workflows.Workflow => workflow !== undefined,
-      () => new WorkflowNotResolved({ name }),
+      () => new WorkflowNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (workflow) => workflow.state !== "UNAVAILABLE",
       (workflow) =>
         new WorkflowUnavailable({
-          name,
+          resourceName: name,
           message: workflow.stateError?.details ?? "workflow is UNAVAILABLE",
         }),
     ),
     Effect.filterOrFail(
       (workflow) => workflow.state === "ACTIVE" || workflow.state === undefined,
-      () => new WorkflowNotResolved({ name }),
+      () => new WorkflowNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Workflows.WorkflowNotResolved",
@@ -341,7 +341,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((workflow) =>
-      workflow === undefined ? Effect.void : Effect.fail(new WorkflowStillExists({ name })),
+      workflow === undefined
+        ? Effect.void
+        : Effect.fail(new WorkflowStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Workflows.WorkflowStillExists",
@@ -440,7 +442,7 @@ export const WorkflowProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new WorkflowNotResolved({ name });
+        return yield* new WorkflowNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -501,7 +503,7 @@ export const WorkflowProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new WorkflowNotResolved({ name });
+        return yield* new WorkflowNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

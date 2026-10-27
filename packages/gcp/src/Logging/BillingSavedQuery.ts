@@ -186,7 +186,7 @@ export const BillingSavedQuery = Resource<BillingSavedQuery>("GCP.Logging.Billin
 export class BillingSavedQueryNotResolved extends Data.TaggedError(
   "GCP.Logging.BillingSavedQueryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (billingAccountId: string, location: string, savedQueryId: string) =>
@@ -352,7 +352,7 @@ export const BillingSavedQueryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BillingSavedQueryNotResolved({ name });
+        return yield* new BillingSavedQueryNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

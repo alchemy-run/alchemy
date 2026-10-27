@@ -161,7 +161,7 @@ export const OrganizationsSecurityHealthAnalyticsSettingsCustomModule =
 export class OrganizationsSecurityHealthAnalyticsSettingsCustomModuleNotResolved extends Data.TaggedError(
   "GCP.SecurityCenter.OrganizationsSecurityHealthAnalyticsSettingsCustomModuleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, moduleId: string) =>
@@ -328,7 +328,7 @@ export const OrganizationsSecurityHealthAnalyticsSettingsCustomModuleProvider = 
 
       if (current === undefined) {
         return yield* new OrganizationsSecurityHealthAnalyticsSettingsCustomModuleNotResolved({
-          name: name || parent,
+          resourceName: name || parent,
         });
       }
 

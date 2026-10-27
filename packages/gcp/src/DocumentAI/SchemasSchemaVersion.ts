@@ -16,7 +16,6 @@ import {
   hasAlchemyLabelMap,
   listProjectSchemas,
   listSchemaVersionsAt,
-  locationParent,
   normalizeLocation,
   parseResourceName,
   replaceOnIdentity,
@@ -274,7 +273,7 @@ export const SchemasSchemaVersionProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: hinted || `${schema}/schemaVersions`,
+          resourceName: hinted || `${schema}/schemaVersions`,
         });
       }
 

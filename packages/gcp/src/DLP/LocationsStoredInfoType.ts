@@ -139,7 +139,7 @@ export const LocationsStoredInfoType = Resource<LocationsStoredInfoType>(
 export class LocationsStoredInfoTypeNotResolved extends Data.TaggedError(
   "GCP.DLP.LocationsStoredInfoTypeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, storedInfoTypeId: string) =>
@@ -267,7 +267,7 @@ export const LocationsStoredInfoTypeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LocationsStoredInfoTypeNotResolved({ name });
+        return yield* new LocationsStoredInfoTypeNotResolved({ resourceName: name });
       }
 
       const observed = current.currentVersion?.config;

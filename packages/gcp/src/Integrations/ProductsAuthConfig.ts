@@ -145,7 +145,7 @@ export const ProductsAuthConfig = Resource<ProductsAuthConfig>(
 export class ProductsAuthConfigNotResolved extends Data.TaggedError(
   "GCP.Integrations.ProductsAuthConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_CREDENTIAL_TYPE: CredentialType = "USERNAME_AND_PASSWORD";
@@ -296,7 +296,7 @@ export const ProductsAuthConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ProductsAuthConfigNotResolved({ name });
+        return yield* new ProductsAuthConfigNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

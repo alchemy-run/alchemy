@@ -115,7 +115,7 @@ export const InboundOidcSsoProfile = Resource<InboundOidcSsoProfile>(
 export class InboundOidcSsoProfileNotResolved extends Data.TaggedError(
   "GCP.CloudIdentity.InboundOidcSsoProfileNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const rpOf = (rp: cloudidentity.OidcRpConfig | undefined) => {
@@ -223,7 +223,7 @@ export const InboundOidcSsoProfileProvider = () =>
 
       if (current === undefined) {
         return yield* new InboundOidcSsoProfileNotResolved({
-          name: output?.name ?? displayName,
+          resourceName: output?.name ?? displayName,
         });
       }
 

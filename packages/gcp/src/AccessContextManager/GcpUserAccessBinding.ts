@@ -140,7 +140,7 @@ export const GcpUserAccessBinding = Resource<GcpUserAccessBinding>(
 export class GcpUserAccessBindingNotResolved extends Data.TaggedError(
   "GCP.AccessContextManager.GcpUserAccessBindingNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (binding: acm.GcpUserAccessBinding): GcpUserAccessBinding["Attributes"] => {
@@ -287,7 +287,7 @@ export const GcpUserAccessBindingProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new GcpUserAccessBindingNotResolved({
-          name: output?.name ?? `${organization}/${news.groupKey}`,
+          resourceName: output?.name ?? `${organization}/${news.groupKey}`,
         });
       }
 
@@ -330,7 +330,7 @@ export const GcpUserAccessBindingProvider = () =>
 
       if (current === undefined) {
         return yield* new GcpUserAccessBindingNotResolved({
-          name: output?.name ?? `${organization}/${news.groupKey}`,
+          resourceName: output?.name ?? `${organization}/${news.groupKey}`,
         });
       }
 

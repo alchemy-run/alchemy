@@ -140,7 +140,7 @@ export type ValidationError =
 
 export class AssetTooLargeError extends Data.TaggedError("AssetTooLargeError")<{
   message: string;
-  name: string;
+  assetPath: string;
   size: number;
 }> {}
 
@@ -157,7 +157,7 @@ export class AssetNotFoundError extends Data.TaggedError("AssetNotFoundError")<{
 
 export class FailedToReadAssetError extends Data.TaggedError("FailedToReadAssetError")<{
   message: string;
-  name: string;
+  assetPath: string;
   cause: PlatformError;
 }> {}
 
@@ -330,7 +330,7 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
       if (size > MAX_ASSET_SIZE) {
         return yield* new AssetTooLargeError({
           message: `Asset ${name} is too large (the maximum size is ${MAX_ASSET_SIZE / 1024 / 1024} MB; this asset is ${size / 1024 / 1024} MB)`,
-          name,
+          assetPath: name,
           size,
         });
       }
@@ -497,7 +497,7 @@ export const uploadAssets = Effect.fn(function* (
             (error) =>
               new FailedToReadAssetError({
                 message: `Failed to read asset ${name}: ${error.message}`,
-                name,
+                assetPath: name,
                 cause: error,
               }),
           ),

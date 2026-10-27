@@ -225,7 +225,7 @@ export type Redis = Resource<
 export const Redis = Resource<Redis>("Fly.Redis");
 
 export class RedisNotCreated extends Data.TaggedError("Fly.RedisNotCreated")<{
-  name: string;
+  resourceName: string;
   errorMessage?: string;
 }> {}
 
@@ -488,7 +488,7 @@ const waitUntilReady = (id: string, name: string) =>
         if (failedStatus(row.status)) {
           return Effect.fail(
             new RedisNotCreated({
-              name: row.name ?? name,
+              resourceName: row.name ?? name,
               errorMessage: row.errorMessage ?? row.status ?? undefined,
             }),
           );
@@ -738,7 +738,7 @@ export const RedisProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RedisNotCreated({ name });
+        return yield* new RedisNotCreated({ resourceName: name });
       }
 
       if (pendingStatus(current.status)) {
@@ -747,7 +747,7 @@ export const RedisProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RedisNotCreated({ name });
+        return yield* new RedisNotCreated({ resourceName: name });
       }
 
       const observedOptions = recordOf(current.options);

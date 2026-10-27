@@ -252,7 +252,7 @@ export const ServicesServiceLevelObjective = Resource<ServicesServiceLevelObject
 export class ServicesServiceLevelObjectiveNotResolved extends Data.TaggedError(
   "GCP.Monitoring.ServicesServiceLevelObjectiveNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const SERVICES = "/services/";
@@ -546,7 +546,7 @@ export const ServicesServiceLevelObjectiveProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ServicesServiceLevelObjectiveNotResolved({ name });
+        return yield* new ServicesServiceLevelObjectiveNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;

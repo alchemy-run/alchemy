@@ -51,7 +51,7 @@ export class DialogflowOperationPending extends Data.TaggedError(
 }> {}
 
 export class DialogflowStillExists extends Data.TaggedError("GCP.Dialogflow.ResourceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -532,7 +532,7 @@ export const waitForOperation = (
   );
 
 export class DialogflowNotYetReadable extends Data.TaggedError("GCP.Dialogflow.NotYetReadable")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 /** Some Dialogflow creates are not readable for a few seconds afterwards. */
@@ -543,7 +543,7 @@ export const waitUntilReadable = <A, E extends { readonly _tag: string }, R>(
   get(name).pipe(
     Effect.flatMap((value) =>
       value === undefined
-        ? Effect.fail(new DialogflowNotYetReadable({ name }))
+        ? Effect.fail(new DialogflowNotYetReadable({ resourceName: name }))
         : Effect.succeed(value),
     ),
     Effect.retry({
@@ -559,7 +559,9 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get(name).pipe(
     Effect.flatMap((value) =>
-      value === undefined ? Effect.void : Effect.fail(new DialogflowStillExists({ name })),
+      value === undefined
+        ? Effect.void
+        : Effect.fail(new DialogflowStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dialogflow.ResourceStillExists",

@@ -15,19 +15,19 @@ export const MAX_NAME_LENGTH = 63;
 export class ParameterNotResolved extends Data.TaggedError(
   "GCP.ParameterManager.ParameterNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ParameterVersionNotResolved extends Data.TaggedError(
   "GCP.ParameterManager.ParameterVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ParameterVersionPayloadRequired extends Data.TaggedError(
   "GCP.ParameterManager.ParameterVersionPayloadRequired",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {

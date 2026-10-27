@@ -232,7 +232,7 @@ export type CryptoKey = Resource<
 export const CryptoKey = Resource<CryptoKey>("GCP.KMS.CryptoKey");
 
 export class CryptoKeyNotResolved extends Data.TaggedError("GCP.KMS.CryptoKeyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CryptoKeyOperationFailed extends Data.TaggedError("GCP.KMS.CryptoKeyOperationFailed")<{
@@ -241,7 +241,7 @@ export class CryptoKeyOperationFailed extends Data.TaggedError("GCP.KMS.CryptoKe
 }> {}
 
 export class CryptoKeyVersionPending extends Data.TaggedError("GCP.KMS.CryptoKeyVersionPending")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
@@ -525,7 +525,7 @@ const waitPrimaryReady = (
         CryptoKeyNotResolved | CryptoKeyOperationFailed | CryptoKeyVersionPending
       > => {
         if (key === undefined) {
-          return Effect.fail(new CryptoKeyNotResolved({ name }));
+          return Effect.fail(new CryptoKeyNotResolved({ resourceName: name }));
         }
         const state = key.primary?.state;
         if (state === undefined || state === "ENABLED") {
@@ -541,7 +541,7 @@ const waitPrimaryReady = (
         }
         return Effect.fail(
           new CryptoKeyVersionPending({
-            name,
+            resourceName: name,
             state,
           }),
         );
@@ -857,7 +857,7 @@ export const CryptoKeyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CryptoKeyNotResolved({ name });
+        return yield* new CryptoKeyNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

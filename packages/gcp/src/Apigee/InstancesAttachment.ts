@@ -78,7 +78,7 @@ export const InstancesAttachment = Resource<InstancesAttachment>("GCP.Apigee.Ins
 export class InstancesAttachmentNotResolved extends Data.TaggedError(
   "GCP.Apigee.InstancesAttachmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const instanceIdOf = (instance: string) => lastSegment(instance);
@@ -230,7 +230,7 @@ export const InstancesAttachmentProvider = () =>
         const found = yield* findByEnvironment(parent, news.environment, organization, instanceId);
         if (found === undefined) {
           return yield* new InstancesAttachmentNotResolved({
-            name: `${parent}/attachments/${news.environment}`,
+            resourceName: `${parent}/attachments/${news.environment}`,
           });
         }
         return found;

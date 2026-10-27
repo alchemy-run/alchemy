@@ -171,11 +171,11 @@ export const DatabasesCollectionGroupsIndex = Resource<DatabasesCollectionGroups
 );
 
 export class IndexNotResolved extends Data.TaggedError("GCP.Firestore.IndexNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class IndexStillExists extends Data.TaggedError("GCP.Firestore.IndexStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const normalizeEnum = (value: string | undefined, fallback: string) => {
@@ -321,7 +321,7 @@ const resolveCreatedIndexName = (
     }
     const match = (yield* listOnParent(parent)).find((index) => matchesDesired(index, news));
     if (match?.name !== undefined) return match.name;
-    return yield* new IndexNotResolved({ name: `${parent}/indexes` });
+    return yield* new IndexNotResolved({ resourceName: `${parent}/indexes` });
   }).pipe(
     Effect.retry({
       while: (error) => error._tag === "GCP.Firestore.IndexNotResolved",
@@ -333,7 +333,7 @@ const resolveCreatedIndexName = (
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((index) =>
-      index ? Effect.succeed(index) : Effect.fail(new IndexNotResolved({ name })),
+      index ? Effect.succeed(index) : Effect.fail(new IndexNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Firestore.IndexNotResolved",
@@ -346,7 +346,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (index) => index === undefined,
-      () => new IndexStillExists({ name }),
+      () => new IndexStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Firestore.IndexStillExists",
@@ -446,7 +446,7 @@ export const DatabasesCollectionGroupsIndexProvider = () =>
       }
 
       if (current === undefined || current.name === undefined) {
-        return yield* new IndexNotResolved({ name: `${parent}/indexes` });
+        return yield* new IndexNotResolved({ resourceName: `${parent}/indexes` });
       }
 
       return toAttrs(current, env.project);

@@ -140,7 +140,7 @@ export const GoldengateConnectionAssignment = Resource<GoldengateConnectionAssig
 const mergedProperties = (
   news: GoldengateConnectionAssignmentProps,
 ): GoldengateConnectionAssignmentPropertiesInput => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   goldengateConnection: news.goldengateConnection ?? news.properties?.goldengateConnection,
   goldengateDeployment: news.goldengateDeployment ?? news.properties?.goldengateDeployment,
 });
@@ -312,7 +312,7 @@ export const GoldengateConnectionAssignmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(

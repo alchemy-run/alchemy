@@ -149,7 +149,7 @@ export const SettingsDatasource = Resource<SettingsDatasource>(
 export class SettingsDatasourceNotResolved extends Data.TaggedError(
   "GCP.CloudSearch.SettingsDatasourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (source: cloudsearch.DataSource, project: string) => {
@@ -268,7 +268,7 @@ export const SettingsDatasourceProvider = () =>
 
       if (current === undefined) {
         return yield* new SettingsDatasourceNotResolved({
-          name: name || displayName,
+          resourceName: name || displayName,
         });
       }
 

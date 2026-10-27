@@ -172,7 +172,6 @@ async function main() {
     }),
   );
 
-  // eslint-disable-next-line no-console
   console.log(
     "[brand] wrote favicon[-{light,dark}].svg, favicon.png, favicon-{16,32}[-dark].png, apple-touch-icon.png, icon-512[-dark].png, alchemy-logo-{light,dark}.svg, alchemy-logo-{light,dark}-bg.png (2048px), alchemy-logo-512-white-bg.png (2048px), alchemy-logo-mono.svg, alchemy-logo-mono-bg.png (2048px), og-default.{svg,png}",
   );

@@ -631,6 +631,7 @@ const renderReport = (
 
 const encodeInstance = (value: { readonly _tag: string }): unknown => {
   const schema = (value as any).constructor as Schema.Top;
+  // oxlint-disable-next-line effecttsgo/schema-sync -- encodes a value for a sync story report
   return Schema.encodeUnknownSync(Schema.toCodecJson(schema as any) as any)(value);
 };
 
@@ -1456,11 +1457,11 @@ const make =
 // The steps live on this object rather than as module exports: a module that
 // exports `then` is "thenable", and loaders that await module namespaces
 // would hang on it.
-// oxlint-disable-next-line unicorn/no-thenable -- `Story.then` is the given/when/then vocabulary
 export const Story = {
   make,
   given,
   when,
+  // oxlint-disable-next-line unicorn/no-thenable -- `then` is the given/when/then vocabulary
   then,
   rejected,
   replied,

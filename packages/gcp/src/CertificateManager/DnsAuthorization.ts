@@ -168,13 +168,13 @@ export const DnsAuthorization = Resource<DnsAuthorization>(
 export class DnsAuthorizationNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.DnsAuthorizationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DnsAuthorizationStillExists extends Data.TaggedError(
   "GCP.CertificateManager.DnsAuthorizationStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -271,7 +271,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((auth) =>
-      auth ? Effect.succeed(auth) : Effect.fail(new DnsAuthorizationNotResolved({ name })),
+      auth
+        ? Effect.succeed(auth)
+        : Effect.fail(new DnsAuthorizationNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.DnsAuthorizationNotResolved",
@@ -283,7 +285,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((auth) =>
-      auth === undefined ? Effect.void : Effect.fail(new DnsAuthorizationStillExists({ name })),
+      auth === undefined
+        ? Effect.void
+        : Effect.fail(new DnsAuthorizationStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.DnsAuthorizationStillExists",
@@ -416,7 +420,7 @@ export const DnsAuthorizationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DnsAuthorizationNotResolved({ name });
+        return yield* new DnsAuthorizationNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

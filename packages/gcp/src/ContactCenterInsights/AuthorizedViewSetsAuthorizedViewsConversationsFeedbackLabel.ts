@@ -128,7 +128,7 @@ export const AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel =
 export class AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const qaOf = (
@@ -252,7 +252,7 @@ export const AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelProvider
 
       if (current === undefined) {
         return yield* new AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

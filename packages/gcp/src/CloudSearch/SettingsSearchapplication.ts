@@ -170,7 +170,7 @@ export const SettingsSearchapplication = Resource<SettingsSearchapplication>(
 export class SettingsSearchapplicationNotResolved extends Data.TaggedError(
   "GCP.CloudSearch.SettingsSearchapplicationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (app: cloudsearch.SearchApplication, project: string) => {
@@ -290,7 +290,7 @@ export const SettingsSearchapplicationProvider = () =>
 
       if (current === undefined) {
         return yield* new SettingsSearchapplicationNotResolved({
-          name: name || displayName,
+          resourceName: name || displayName,
         });
       }
 

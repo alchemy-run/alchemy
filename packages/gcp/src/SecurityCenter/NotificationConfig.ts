@@ -117,7 +117,7 @@ export const NotificationConfig = Resource<NotificationConfig>(
 export class NotificationConfigNotResolved extends Data.TaggedError(
   "GCP.SecurityCenter.NotificationConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, configId: string) =>
@@ -209,7 +209,7 @@ export const NotificationConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NotificationConfigNotResolved({ name });
+        return yield* new NotificationConfigNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

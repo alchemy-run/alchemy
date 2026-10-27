@@ -113,7 +113,7 @@ export const AgentsFlowsVersion = Resource<AgentsFlowsVersion>("GCP.Dialogflow.A
 export class AgentsFlowsVersionNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsFlowsVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (version: dialogflow.GoogleCloudDialogflowCxV3Version, project: string) => {
@@ -274,7 +274,7 @@ export const AgentsFlowsVersionProvider = () =>
 
       if (current === undefined) {
         return yield* new AgentsFlowsVersionNotResolved({
-          name: output?.name ?? `${flow}/versions/${news.versionId ?? "unknown"}`,
+          resourceName: output?.name ?? `${flow}/versions/${news.versionId ?? "unknown"}`,
         });
       }
 

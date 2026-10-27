@@ -131,7 +131,7 @@ export type Study = Resource<
 export const Study = Resource<Study>("GCP.AIPlatform.Study");
 
 export class StudyNotResolved extends Data.TaggedError("GCP.AIPlatform.StudyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toStudySpec = (spec: StudySpec): aiplatform.GoogleCloudAiplatformV1StudySpec => ({
@@ -308,7 +308,7 @@ export const StudyProvider = () =>
 
       if (current === undefined) {
         return yield* new StudyNotResolved({
-          name: output?.name ?? `${parent}/studies/-`,
+          resourceName: output?.name ?? `${parent}/studies/-`,
         });
       }
 

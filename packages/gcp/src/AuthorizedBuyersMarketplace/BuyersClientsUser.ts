@@ -124,7 +124,7 @@ export class BuyersClientsUserNotResolved extends Data.TaggedError(
   "GCP.AuthorizedBuyersMarketplace.BuyersClientsUserNotResolved",
 )<{
   parent: string;
-  name: string;
+  resourceName: string;
 }> {}
 
 const getByName = (name: string) =>
@@ -223,7 +223,7 @@ export const BuyersClientsUserProvider = () =>
       if (current === undefined) {
         return yield* new BuyersClientsUserNotResolved({
           parent,
-          name: name || email,
+          resourceName: name || email,
         });
       }
 

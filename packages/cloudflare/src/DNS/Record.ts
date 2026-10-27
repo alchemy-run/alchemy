@@ -510,7 +510,7 @@ interface RecordMatch {
  */
 export class AmbiguousDnsRecordError extends Data.TaggedError("AmbiguousDnsRecordError")<{
   readonly zoneId: string;
-  readonly name: string;
+  readonly recordName: string;
   readonly type: RecordType;
   readonly candidates: ReadonlyArray<{
     readonly id?: string;
@@ -567,7 +567,7 @@ const findByNameType = (
         if (narrowed.length === 0) return undefined;
         return yield* new AmbiguousDnsRecordError({
           zoneId,
-          name,
+          recordName: name,
           type,
           candidates: candidates.map((r) => ({
             id: r.id,

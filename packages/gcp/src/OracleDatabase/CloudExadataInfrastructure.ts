@@ -173,7 +173,7 @@ export const CloudExadataInfrastructure = Resource<CloudExadataInfrastructure>(
 const mergedProperties = (
   news: CloudExadataInfrastructureProps,
 ): CloudExadataInfrastructurePropertiesInput => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   shape: news.shape ?? news.properties?.shape,
   computeCount: news.computeCount ?? news.properties?.computeCount,
   storageCount: news.storageCount ?? news.properties?.storageCount,
@@ -338,7 +338,7 @@ export const CloudExadataInfrastructureProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(

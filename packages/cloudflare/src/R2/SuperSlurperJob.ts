@@ -316,7 +316,7 @@ const findInHistory = Effect.fn(function* (identity: { accountId: string; jobId:
     if (job) return job;
     if (page.result.length === 0) return undefined;
     const ids = page.result.flatMap((item) => (item.id ? [item.id] : []));
-    if (ids.length === 0 || ids.every((id) => seen.has(id))) {
+    if (ids.every((id) => seen.has(id))) {
       return yield* Effect.fail(new Error("Super Slurper job history pagination did not advance"));
     }
     for (const id of ids) seen.add(id);

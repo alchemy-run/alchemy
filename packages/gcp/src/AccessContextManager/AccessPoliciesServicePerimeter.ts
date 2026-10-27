@@ -164,7 +164,7 @@ export const AccessPoliciesServicePerimeter = Resource<AccessPoliciesServicePeri
 export class AccessPoliciesServicePerimeterNotResolved extends Data.TaggedError(
   "GCP.AccessContextManager.AccessPoliciesServicePerimeterNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_TYPE = "PERIMETER_TYPE_REGULAR";
@@ -312,7 +312,7 @@ export const AccessPoliciesServicePerimeterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AccessPoliciesServicePerimeterNotResolved({ name });
+        return yield* new AccessPoliciesServicePerimeterNotResolved({ resourceName: name });
       }
 
       const titleChanged = (current.title ?? "") !== desiredTitle;
@@ -348,7 +348,7 @@ export const AccessPoliciesServicePerimeterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AccessPoliciesServicePerimeterNotResolved({ name });
+        return yield* new AccessPoliciesServicePerimeterNotResolved({ resourceName: name });
       }
 
       return toAttrs(current);

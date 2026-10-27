@@ -163,7 +163,7 @@ export const CryptoKeyVersion = Resource<CryptoKeyVersion>("GCP.KMS.CryptoKeyVer
 export class CryptoKeyVersionNotResolved extends Data.TaggedError(
   "GCP.KMS.CryptoKeyVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CryptoKeyVersionOperationFailed extends Data.TaggedError(
@@ -174,7 +174,7 @@ export class CryptoKeyVersionOperationFailed extends Data.TaggedError(
 }> {}
 
 export class CryptoKeyVersionNotReady extends Data.TaggedError("GCP.KMS.CryptoKeyVersionNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
@@ -432,7 +432,7 @@ const waitReady = (
         CryptoKeyVersionNotResolved | CryptoKeyVersionOperationFailed | CryptoKeyVersionNotReady
       > => {
         if (version === undefined) {
-          return Effect.fail(new CryptoKeyVersionNotResolved({ name }));
+          return Effect.fail(new CryptoKeyVersionNotResolved({ resourceName: name }));
         }
         const state = version.state;
         if (
@@ -462,7 +462,7 @@ const waitReady = (
         }
         return Effect.fail(
           new CryptoKeyVersionNotReady({
-            name,
+            resourceName: name,
             state: state ?? "PENDING_GENERATION",
           }),
         );
@@ -687,7 +687,7 @@ export const CryptoKeyVersionProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new CryptoKeyVersionNotResolved({
-          name: name ?? resourceName(parent.parent, "unknown"),
+          resourceName: name ?? resourceName(parent.parent, "unknown"),
         });
       }
 

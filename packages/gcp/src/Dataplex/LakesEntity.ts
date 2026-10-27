@@ -217,7 +217,7 @@ export const LakesEntity = Resource<LakesEntity>("GCP.Dataplex.LakesEntity");
 export class LakesEntityNotResolved extends Data.TaggedError(
   "GCP.Dataplex.LakesEntityNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_TYPE = "TABLE";
@@ -388,7 +388,7 @@ export const LakesEntityProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LakesEntityNotResolved({ name });
+        return yield* new LakesEntityNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== (description ?? "");

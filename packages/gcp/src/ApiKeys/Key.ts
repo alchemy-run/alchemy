@@ -216,11 +216,11 @@ export type Key = Resource<
 export const Key = Resource<Key>("GCP.ApiKeys.Key");
 
 export class KeyNotResolved extends Data.TaggedError("GCP.ApiKeys.KeyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class KeyStillExists extends Data.TaggedError("GCP.ApiKeys.KeyStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -381,7 +381,9 @@ const toAttrsLive = (key: apikeys.V2Key, project: string) =>
 const waitUntilActive = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((key) =>
-      key && !isDeleted(key) ? Effect.succeed(key) : Effect.fail(new KeyNotResolved({ name })),
+      key && !isDeleted(key)
+        ? Effect.succeed(key)
+        : Effect.fail(new KeyNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ApiKeys.KeyNotResolved",
@@ -393,7 +395,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((key) =>
-      key === undefined || isDeleted(key) ? Effect.void : Effect.fail(new KeyStillExists({ name })),
+      key === undefined || isDeleted(key)
+        ? Effect.void
+        : Effect.fail(new KeyStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ApiKeys.KeyStillExists",
@@ -514,7 +518,7 @@ export const KeyProvider = () =>
       }
 
       if (current === undefined || isDeleted(current)) {
-        return yield* new KeyNotResolved({ name });
+        return yield* new KeyNotResolved({ resourceName: name });
       }
 
       const observedAnnotations = tagRecord(current.annotations);

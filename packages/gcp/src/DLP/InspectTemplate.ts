@@ -122,7 +122,7 @@ export const InspectTemplate = Resource<InspectTemplate>("GCP.DLP.InspectTemplat
 export class InspectTemplateNotResolved extends Data.TaggedError(
   "GCP.DLP.InspectTemplateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, templateId: string) =>
@@ -222,7 +222,7 @@ export const InspectTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InspectTemplateNotResolved({ name });
+        return yield* new InspectTemplateNotResolved({ resourceName: name });
       }
 
       const displayChanged = !sameText(current.displayName, news.displayName);

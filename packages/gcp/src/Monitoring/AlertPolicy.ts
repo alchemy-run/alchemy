@@ -418,7 +418,7 @@ export const AlertPolicy = Resource<AlertPolicy>("GCP.Monitoring.AlertPolicy");
 export class AlertPolicyNotResolved extends Data.TaggedError(
   "GCP.Monitoring.AlertPolicyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -685,7 +685,7 @@ export const AlertPolicyProvider = () =>
 
       if (current === undefined) {
         return yield* new AlertPolicyNotResolved({
-          name: output?.name ?? displayName,
+          resourceName: output?.name ?? displayName,
         });
       }
 

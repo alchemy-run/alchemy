@@ -142,7 +142,7 @@ export const defaultInappListings = (
   title: string,
   defaultLanguage: string,
 ): androidpublisher.InAppProductListingMap => {
-  const next = { ...(listings ?? {}) };
+  const next = { ...listings };
   const current = next[defaultLanguage] ?? { title };
   next[defaultLanguage] = { ...current, title: current.title ?? title };
   return next;

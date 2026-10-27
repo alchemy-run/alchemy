@@ -133,7 +133,7 @@ export const TensorboardsExperimentsRunsTimeSery = TensorboardsExperimentsRunsTi
 export class TensorboardsExperimentsRunsTimeSeriesNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.TensorboardsExperimentsRunsTimeSeriesNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_VALUE_TYPE = "SCALAR";
@@ -337,7 +337,7 @@ export const TensorboardsExperimentsRunsTimeSeriesProvider = () =>
 
       if (current === undefined) {
         return yield* new TensorboardsExperimentsRunsTimeSeriesNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

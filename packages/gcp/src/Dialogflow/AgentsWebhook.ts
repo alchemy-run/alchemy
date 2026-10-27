@@ -209,7 +209,7 @@ export const AgentsWebhook = Resource<AgentsWebhook>("GCP.Dialogflow.AgentsWebho
 export class AgentsWebhookNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsWebhookNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (agent: string, webhookId: string) => `${agent}/webhooks/${webhookId}`;
@@ -402,7 +402,7 @@ export const AgentsWebhookProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentsWebhookNotResolved({ name });
+        return yield* new AgentsWebhookNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

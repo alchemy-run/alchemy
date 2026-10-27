@@ -113,7 +113,7 @@ export type Group = Resource<
 export const Group = Resource<Group>("GCP.Monitoring.Group");
 
 export class GroupNotResolved extends Data.TaggedError("GCP.Monitoring.GroupNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toDisplayName = (id: string, displayName: string | undefined, existing?: string) =>
@@ -254,7 +254,7 @@ export const GroupProvider = () =>
 
       if (current === undefined) {
         return yield* new GroupNotResolved({
-          name: output?.name ?? displayName,
+          resourceName: output?.name ?? displayName,
         });
       }
 

@@ -141,13 +141,13 @@ export const FeatureGroup = Resource<FeatureGroup>("GCP.AIPlatform.FeatureGroup"
 export class FeatureGroupNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeatureGroupNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FeatureGroupStillExists extends Data.TaggedError(
   "GCP.AIPlatform.FeatureGroupStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, groupId: string) =>
@@ -215,7 +215,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((group) =>
-      group ? Effect.succeed(group) : Effect.fail(new FeatureGroupNotResolved({ name })),
+      group
+        ? Effect.succeed(group)
+        : Effect.fail(new FeatureGroupNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureGroupNotResolved",
@@ -227,7 +229,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((group) =>
-      group === undefined ? Effect.void : Effect.fail(new FeatureGroupStillExists({ name })),
+      group === undefined
+        ? Effect.void
+        : Effect.fail(new FeatureGroupStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureGroupStillExists",
@@ -334,7 +338,7 @@ export const FeatureGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FeatureGroupNotResolved({ name });
+        return yield* new FeatureGroupNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

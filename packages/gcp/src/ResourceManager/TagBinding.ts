@@ -99,7 +99,7 @@ export class TagBindingNotResolved extends Data.TaggedError(
 export class TagBindingStillExists extends Data.TaggedError(
   "GCP.ResourceManager.TagBindingStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -269,7 +269,7 @@ const waitUntilGone = (
         ? Effect.void
         : Effect.fail(
             new TagBindingStillExists({
-              name: binding.name ?? name ?? "",
+              resourceName: binding.name ?? name ?? "",
             }),
           ),
     ),

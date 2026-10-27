@@ -234,10 +234,12 @@ const waitUntilSettled = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((current) => {
       if (current === undefined) {
-        return Effect.fail(new SecuritypostureNotResolved({ name }));
+        return Effect.fail(new SecuritypostureNotResolved({ resourceName: name }));
       }
       if (isBusy(current)) {
-        return Effect.fail(new SecuritypostureNotResolved({ name: `${name}:${current.state}` }));
+        return Effect.fail(
+          new SecuritypostureNotResolved({ resourceName: `${name}:${current.state}` }),
+        );
       }
       return Effect.succeed(current);
     }),
@@ -377,7 +379,7 @@ export const PostureDeploymentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecuritypostureNotResolved({ name });
+        return yield* new SecuritypostureNotResolved({ resourceName: name });
       }
 
       const postureChanged = !sameText(current.postureId, news.postureId);

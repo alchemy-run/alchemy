@@ -156,7 +156,7 @@ export const FolderSavedQuery = Resource<FolderSavedQuery>("GCP.Logging.FolderSa
 export class FolderSavedQueryNotResolved extends Data.TaggedError(
   "GCP.Logging.FolderSavedQueryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, location: string, savedQueryId: string) =>
@@ -286,7 +286,7 @@ export const FolderSavedQueryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FolderSavedQueryNotResolved({ name });
+        return yield* new FolderSavedQueryNotResolved({ resourceName: name });
       }
 
       const displayNameChanged = (current.displayName ?? "") !== news.displayName;

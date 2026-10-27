@@ -122,13 +122,13 @@ export const EvaluationItem = Resource<EvaluationItem>("GCP.AIPlatform.Evaluatio
 export class EvaluationItemNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.EvaluationItemNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class EvaluationItemStillExists extends Data.TaggedError(
   "GCP.AIPlatform.EvaluationItemStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, itemId: string) =>
@@ -187,7 +187,9 @@ const findOwned = (id: string, project: string, location?: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((item) =>
-      item === undefined ? Effect.void : Effect.fail(new EvaluationItemStillExists({ name })),
+      item === undefined
+        ? Effect.void
+        : Effect.fail(new EvaluationItemStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.EvaluationItemStillExists",
@@ -279,7 +281,7 @@ export const EvaluationItemProvider = () =>
 
       if (current === undefined) {
         return yield* new EvaluationItemNotResolved({
-          name: name ?? displayName,
+          resourceName: name ?? displayName,
         });
       }
 

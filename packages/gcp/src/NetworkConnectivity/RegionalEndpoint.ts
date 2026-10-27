@@ -345,7 +345,7 @@ export const RegionalEndpointProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NetworkConnectivityNotResolved({ name });
+        return yield* new NetworkConnectivityNotResolved({ resourceName: name });
       }
 
       current = yield* getByName(current.name ?? name).pipe(
@@ -355,7 +355,7 @@ export const RegionalEndpointProvider = () =>
             (value.pscForwardingRule !== undefined ||
               value.address !== undefined ||
               value.ipAddress !== undefined),
-          () => new NetworkConnectivityNotResolved({ name }),
+          () => new NetworkConnectivityNotResolved({ resourceName: name }),
         ),
         Effect.retry({
           while: (error) => error._tag === "GCP.NetworkConnectivity.NotResolved",

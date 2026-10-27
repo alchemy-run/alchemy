@@ -129,7 +129,7 @@ export type Process = Resource<
 export const Process = Resource<Process>("GCP.DataLineage.Process");
 
 export class ProcessNotResolved extends Data.TaggedError("GCP.DataLineage.ProcessNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, processId: string) =>
@@ -245,7 +245,7 @@ export const ProcessProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ProcessNotResolved({ name });
+        return yield* new ProcessNotResolved({ resourceName: name });
       }
 
       const resolvedName = current.name ?? name;

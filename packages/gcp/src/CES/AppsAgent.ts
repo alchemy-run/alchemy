@@ -155,7 +155,7 @@ export type AppsAgent = Resource<
 export const AppsAgent = Resource<AppsAgent>("GCP.CES.AppsAgent");
 
 export class AppsAgentNotResolved extends Data.TaggedError("GCP.CES.AppsAgentNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (app: string, agentId: string) => `${app}/agents/${agentId}`;
@@ -280,7 +280,7 @@ export const AppsAgentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppsAgentNotResolved({ name });
+        return yield* new AppsAgentNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

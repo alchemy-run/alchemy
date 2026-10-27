@@ -122,7 +122,7 @@ export const LocationsDeidentifyTemplate = Resource<LocationsDeidentifyTemplate>
 export class LocationsDeidentifyTemplateNotResolved extends Data.TaggedError(
   "GCP.DLP.LocationsDeidentifyTemplateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, templateId: string) =>
@@ -227,7 +227,7 @@ export const LocationsDeidentifyTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LocationsDeidentifyTemplateNotResolved({ name });
+        return yield* new LocationsDeidentifyTemplateNotResolved({ resourceName: name });
       }
 
       const displayChanged = !sameText(current.displayName, news.displayName);

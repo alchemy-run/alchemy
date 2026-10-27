@@ -199,7 +199,7 @@ export const toGroupKeyId = (
   });
 
 export const typeLabels = (labels: Record<string, string> | undefined): Record<string, string> => {
-  const next = { ...(labels ?? {}) };
+  const next = { ...labels };
   if (Object.keys(next).length === 0) {
     next[DISCUSSION_FORUM_LABEL] = "";
   }

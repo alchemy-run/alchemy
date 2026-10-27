@@ -125,7 +125,7 @@ export type Document = Resource<
 export const Document = Resource<Document>("GCP.Firestore.Document");
 
 export class DocumentNotResolved extends Data.TaggedError("GCP.Firestore.DocumentNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const databaseIdOf = (value: string | undefined, project: string) => {
@@ -185,7 +185,7 @@ const userFields = (fields: firestore.ValueMap | undefined): Record<string, Docu
 };
 
 const desiredFields = (news: DocumentProps): firestore.ValueMap => ({
-  ...(news.fields ?? {}),
+  ...news.fields,
 });
 
 const jsonOf = (value: unknown) => JSON.stringify(value ?? null);
@@ -301,7 +301,7 @@ export const DocumentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DocumentNotResolved({ name });
+        return yield* new DocumentNotResolved({ resourceName: name });
       }
 
       if (jsonOf(current.fields) !== jsonOf(fields)) {

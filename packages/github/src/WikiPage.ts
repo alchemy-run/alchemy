@@ -264,6 +264,7 @@ const pageNameFor = (title: string) =>
     if (
       title.trim() !== title ||
       title.length === 0 ||
+      // oxlint-disable-next-line no-control-regex -- rejects control characters on purpose
       /[\x00-\x1f\x7f/\\]/.test(title) ||
       title === "." ||
       title === ".."

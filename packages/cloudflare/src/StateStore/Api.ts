@@ -112,15 +112,14 @@ const failed =
   <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, StateStoreFailure, R> =>
     effect.pipe(
       Effect.tapError((error) => Effect.logError(`State store ${operation} failed`, error)),
-      Effect.mapError(
-        (error) =>
-          new StateStoreFailure({
-            operation,
-            reason:
-              typeof error === "object" && error !== null && "_tag" in error
-                ? String(error._tag)
-                : "UnknownError",
-          }),
+      Effect.mapError((error) =>
+        StateStoreFailure.make({
+          operation,
+          reason:
+            typeof error === "object" && error !== null && "_tag" in error
+              ? String(error._tag)
+              : "UnknownError",
+        }),
       ),
     );
 

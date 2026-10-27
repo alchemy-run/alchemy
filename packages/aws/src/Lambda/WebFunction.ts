@@ -1,7 +1,6 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as iam from "@distilled.cloud/aws/iam";
-import * as lambdacore from "@distilled.cloud/aws/lambda-core";
 import * as LambdaWeb from "@distilled.cloud/aws/lambda-web";
 import type { Region } from "@distilled.cloud/aws/Region";
 import { Unowned } from "alchemy/AdoptPolicy";

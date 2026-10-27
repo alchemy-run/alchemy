@@ -17,7 +17,7 @@ import { readTranslateTags, syncTranslateTags } from "./internal.ts";
  * malformed input file or an S3 URI the caller cannot read.
  */
 export class ParallelDataFailed extends Data.TaggedError("ParallelDataFailed")<{
-  readonly name: string;
+  readonly resourceName: string;
   readonly message: string | undefined;
 }> {}
 
@@ -26,7 +26,7 @@ export class ParallelDataFailed extends Data.TaggedError("ParallelDataFailed")<{
  * polling window.
  */
 export class ParallelDataNotConverged extends Data.TaggedError("ParallelDataNotConverged")<{
-  readonly name: string;
+  readonly resourceName: string;
   readonly status: string | undefined;
 }> {}
 
@@ -163,10 +163,10 @@ export const ParallelDataProvider = () =>
         );
         const props = final?.ParallelDataProperties;
         if (props?.Status === "FAILED") {
-          return yield* new ParallelDataFailed({ name, message: props.Message });
+          return yield* new ParallelDataFailed({ resourceName: name, message: props.Message });
         }
         if (props?.Status !== "ACTIVE") {
-          return yield* new ParallelDataNotConverged({ name, status: props?.Status });
+          return yield* new ParallelDataNotConverged({ resourceName: name, status: props?.Status });
         }
         return props;
       });

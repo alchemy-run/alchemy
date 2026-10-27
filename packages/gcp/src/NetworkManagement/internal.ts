@@ -17,17 +17,17 @@ export const MAX_CONNECTIVITY_TEST_ID_LENGTH = 40;
 export class NetworkmanagementNotResolved extends Data.TaggedError(
   "GCP.NetworkManagement.NotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class NetworkmanagementStillExists extends Data.TaggedError(
   "GCP.NetworkManagement.StillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class NetworkmanagementFailed extends Data.TaggedError("GCP.NetworkManagement.Failed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -223,7 +223,9 @@ export const waitForOperation = (
 export const waitUntilPresent = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value ? Effect.succeed(value) : Effect.fail(new NetworkmanagementNotResolved({ name })),
+      value
+        ? Effect.succeed(value)
+        : Effect.fail(new NetworkmanagementNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error instanceof NetworkmanagementNotResolved,
@@ -235,7 +237,9 @@ export const waitUntilPresent = <A, E, R>(get: Effect.Effect<A | undefined, E, R
 export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined ? Effect.void : Effect.fail(new NetworkmanagementStillExists({ name })),
+      value === undefined
+        ? Effect.void
+        : Effect.fail(new NetworkmanagementStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error instanceof NetworkmanagementStillExists,
@@ -255,15 +259,15 @@ export const waitUntilReady = <A extends { state?: string }, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is A => value !== undefined,
-      () => new NetworkmanagementNotResolved({ name }),
+      () => new NetworkmanagementNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (value) => !FAILED_STATES.has(value.state ?? ""),
-      (value) => new NetworkmanagementFailed({ name, state: value.state }),
+      (value) => new NetworkmanagementFailed({ resourceName: name, state: value.state }),
     ),
     Effect.filterOrFail(
       (value) => !PENDING_STATES.has(value.state ?? ""),
-      () => new NetworkmanagementNotResolved({ name }),
+      () => new NetworkmanagementNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof NetworkmanagementNotResolved,

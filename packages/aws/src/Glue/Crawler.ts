@@ -370,6 +370,7 @@ export const CrawlerProvider = () =>
           // Crawler teardown first; the early returns only skip the
           // crawler steps so the log reap below still runs on a retried
           // delete whose crawler is already gone.
+          // oxlint-disable-next-line effecttsgo/nested-effect-gen-yield -- scopes the early returns
           yield* Effect.gen(function* () {
             let crawler = yield* observe(name);
             if (crawler === undefined) return;

@@ -212,6 +212,7 @@ export const lazyCredentials = <Resolved, E = CredentialsUnavailable>() =>
     const cached = yield* cacheUntilExpiry(resolve, options?.expiresAt ?? (() => undefined));
     // SAFETY: E is only the SDK channel the CredentialsUnavailable fails
     // through; the engine matches its tag around every provider call.
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- see SAFETY above
     return cached.pipe(Effect.map(toClient)) as Effect.Effect<A, E>;
   });
 

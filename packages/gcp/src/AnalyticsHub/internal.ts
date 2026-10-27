@@ -16,7 +16,7 @@ export const LIST_LOCATIONS = ["us-central1", "US", "EU"] as const;
 export class AnalyticshubNotResolved extends Data.TaggedError(
   "GCP.AnalyticsHub.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {

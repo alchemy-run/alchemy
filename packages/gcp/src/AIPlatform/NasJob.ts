@@ -126,11 +126,11 @@ export type NasJob = Resource<
 export const NasJob = Resource<NasJob>("GCP.AIPlatform.NasJob");
 
 export class NasJobNotResolved extends Data.TaggedError("GCP.AIPlatform.NasJobNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class NasJobStillExists extends Data.TaggedError("GCP.AIPlatform.NasJobStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (job: aiplatform.GoogleCloudAiplatformV1NasJob, project: string) => {
@@ -173,7 +173,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (job) => job === undefined,
-      () => new NasJobStillExists({ name }),
+      () => new NasJobStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -265,7 +265,7 @@ export const NasJobProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new NasJobNotResolved({
-          name: output?.name ?? `${location}/nasJobs`,
+          resourceName: output?.name ?? `${location}/nasJobs`,
         });
       }
 

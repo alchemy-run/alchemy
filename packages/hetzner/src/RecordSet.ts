@@ -219,13 +219,13 @@ export type RecordSet = Resource<
 export const RecordSet = Resource<RecordSet>("Hetzner.RecordSet");
 
 export class RecordSetZoneMissing extends Data.TaggedError("Hetzner.RecordSetZoneMissing")<{
-  name: string;
+  recordName: string;
   type: string;
 }> {}
 
 class RecordSetStillExists extends Data.TaggedError("RecordSetStillExists")<{
   zoneId: number;
-  name: string;
+  recordName: string;
   type: string;
 }> {}
 
@@ -392,7 +392,7 @@ export const RecordSetProvider = () =>
       const name = yield* resolveName(id, news, output);
       const type = normalizeType(news.type);
       if (zoneId === undefined) {
-        return yield* new RecordSetZoneMissing({ name, type });
+        return yield* new RecordSetZoneMissing({ recordName: name, type });
       }
 
       const desiredRecords = sortRecords(news.records);
@@ -441,7 +441,7 @@ export const RecordSetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RecordSetZoneMissing({ name, type });
+        return yield* new RecordSetZoneMissing({ recordName: name, type });
       }
 
       const zoneRef = String(zoneId);
@@ -534,7 +534,9 @@ export const RecordSetProvider = () =>
 
       yield* getRrset(zoneId, name, type).pipe(
         Effect.flatMap((rrset) =>
-          rrset === undefined ? Effect.void : new RecordSetStillExists({ zoneId, name, type }),
+          rrset === undefined
+            ? Effect.void
+            : new RecordSetStillExists({ zoneId, recordName: name, type }),
         ),
         Effect.retry({
           while: (e) => e._tag === "RecordSetStillExists",

@@ -201,7 +201,7 @@ export type App = Resource<
 export const App = Resource<App>("GCP.CES.App");
 
 export class AppNotResolved extends Data.TaggedError("GCP.CES.AppNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, appId: string) =>
@@ -345,7 +345,7 @@ export const AppProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppNotResolved({ name });
+        return yield* new AppNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

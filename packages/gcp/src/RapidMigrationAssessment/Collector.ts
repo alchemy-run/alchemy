@@ -340,7 +340,7 @@ export const CollectorProvider = () =>
         observed = yield* waitUntilExists(getByName(name), name);
       }
 
-      let current = observed ?? (yield* new ResourceNotResolved({ name }));
+      let current = observed ?? (yield* new ResourceNotResolved({ resourceName: name }));
       current = yield* waitUntilReady(
         getByName(current.name ?? name),
         current.name ?? name,

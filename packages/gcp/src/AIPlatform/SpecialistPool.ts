@@ -94,7 +94,7 @@ export const SpecialistPool = Resource<SpecialistPool>("GCP.AIPlatform.Specialis
 export class SpecialistPoolNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.SpecialistPoolNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const sorted = (values: readonly string[] | undefined) =>
@@ -129,7 +129,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool ? Effect.succeed(pool) : Effect.fail(new SpecialistPoolNotResolved({ name })),
+      pool
+        ? Effect.succeed(pool)
+        : Effect.fail(new SpecialistPoolNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.SpecialistPoolNotResolved",
@@ -237,7 +239,7 @@ export const SpecialistPoolProvider = () =>
 
       if (current === undefined) {
         return yield* new SpecialistPoolNotResolved({
-          name: output?.name ?? `${parent}/specialistPools/-`,
+          resourceName: output?.name ?? `${parent}/specialistPools/-`,
         });
       }
 

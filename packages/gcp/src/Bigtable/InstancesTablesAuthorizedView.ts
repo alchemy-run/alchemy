@@ -143,13 +143,13 @@ export const InstancesTablesAuthorizedView = Resource<InstancesTablesAuthorizedV
 export class AuthorizedViewNotResolved extends Data.TaggedError(
   "GCP.Bigtable.AuthorizedViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class AuthorizedViewStillExists extends Data.TaggedError(
   "GCP.Bigtable.AuthorizedViewStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toId = (id: string, authorizedViewId: string | undefined, existing?: string) =>
@@ -218,7 +218,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view ? Effect.succeed(view) : Effect.fail(new AuthorizedViewNotResolved({ name })),
+      view
+        ? Effect.succeed(view)
+        : Effect.fail(new AuthorizedViewNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.AuthorizedViewNotResolved",
@@ -230,7 +232,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view === undefined ? Effect.void : Effect.fail(new AuthorizedViewStillExists({ name })),
+      view === undefined
+        ? Effect.void
+        : Effect.fail(new AuthorizedViewStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.AuthorizedViewStillExists",
@@ -374,7 +378,7 @@ export const InstancesTablesAuthorizedViewProvider = () =>
         yield* waitForOperation(patched);
         current = yield* getByName(name);
         if (current === undefined) {
-          return yield* new AuthorizedViewNotResolved({ name });
+          return yield* new AuthorizedViewNotResolved({ resourceName: name });
         }
       }
 

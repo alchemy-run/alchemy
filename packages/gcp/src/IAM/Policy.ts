@@ -160,7 +160,7 @@ export type Policy = Resource<
 export const Policy = Resource<Policy>("GCP.IAM.Policy");
 
 export class PolicyNotResolved extends Data.TaggedError("GCP.IAM.PolicyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_RULE: PolicyRule = {
@@ -321,7 +321,7 @@ export const PolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observed = tagRecord(current.annotations);

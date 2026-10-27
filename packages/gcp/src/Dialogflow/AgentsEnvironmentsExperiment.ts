@@ -139,7 +139,7 @@ export const AgentsEnvironmentsExperiment = Resource<AgentsEnvironmentsExperimen
 export class AgentsEnvironmentsExperimentNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsEnvironmentsExperimentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const definitionOf = (
@@ -294,7 +294,8 @@ export const AgentsEnvironmentsExperimentProvider = () =>
 
       if (current === undefined) {
         return yield* new AgentsEnvironmentsExperimentNotResolved({
-          name: output?.name ?? `${environment}/experiments/${news.experimentId ?? "unknown"}`,
+          resourceName:
+            output?.name ?? `${environment}/experiments/${news.experimentId ?? "unknown"}`,
         });
       }
 

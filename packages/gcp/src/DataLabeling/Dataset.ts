@@ -105,7 +105,7 @@ export type Dataset = Resource<
 export const Dataset = Resource<Dataset>("GCP.DataLabeling.Dataset");
 
 export class DatasetNotResolved extends Data.TaggedError("GCP.DataLabeling.DatasetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, datasetId: string) =>
@@ -214,7 +214,7 @@ export const DatasetProvider = () =>
 
       if (current === undefined) {
         return yield* new DatasetNotResolved({
-          name: name || projectParent(env.project),
+          resourceName: name || projectParent(env.project),
         });
       }
 

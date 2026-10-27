@@ -411,7 +411,7 @@ export const AutomatedDnsRecordProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NetworkConnectivityNotResolved({ name });
+        return yield* new NetworkConnectivityNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);

@@ -385,18 +385,13 @@ const toWireBusinessProfile = (
 const toWireController = (controller: AccountController): CreateAccountRequestController => ({
   ...(controller.fees !== undefined
     ? {
-        fees: {
-          ...(controller.fees.payer !== undefined ? { payer: controller.fees.payer } : {}),
-        },
+        fees: controller.fees.payer !== undefined ? { payer: controller.fees.payer } : {},
       }
     : {}),
   ...(controller.losses !== undefined
     ? {
-        losses: {
-          ...(controller.losses.payments !== undefined
-            ? { payments: controller.losses.payments }
-            : {}),
-        },
+        losses:
+          controller.losses.payments !== undefined ? { payments: controller.losses.payments } : {},
       }
     : {}),
   ...(controller.requirementCollection !== undefined
@@ -404,11 +399,10 @@ const toWireController = (controller: AccountController): CreateAccountRequestCo
     : {}),
   ...(controller.stripeDashboard !== undefined
     ? {
-        stripe_dashboard: {
-          ...(controller.stripeDashboard.type !== undefined
+        stripe_dashboard:
+          controller.stripeDashboard.type !== undefined
             ? { type: controller.stripeDashboard.type }
-            : {}),
-        },
+            : {},
       }
     : {}),
 });

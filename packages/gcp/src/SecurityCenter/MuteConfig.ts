@@ -119,7 +119,7 @@ export const MuteConfig = Resource<MuteConfig>("GCP.SecurityCenter.MuteConfig");
 export class MuteConfigNotResolved extends Data.TaggedError(
   "GCP.SecurityCenter.MuteConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, muteConfigId: string) =>
@@ -218,7 +218,7 @@ export const MuteConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MuteConfigNotResolved({ name });
+        return yield* new MuteConfigNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

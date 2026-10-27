@@ -198,7 +198,7 @@ export const SingleTenantHsmInstanceProposal = Resource<SingleTenantHsmInstanceP
 export class SingleTenantHsmInstanceProposalNotResolved extends Data.TaggedError(
   "GCP.KMS.SingleTenantHsmInstanceProposalNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SingleTenantHsmInstanceProposalOperationFailed extends Data.TaggedError(
@@ -211,7 +211,7 @@ export class SingleTenantHsmInstanceProposalOperationFailed extends Data.TaggedE
 export class SingleTenantHsmInstanceProposalPending extends Data.TaggedError(
   "GCP.KMS.SingleTenantHsmInstanceProposalPending",
 )<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
@@ -470,12 +470,14 @@ const waitReady = (
         SingleTenantHsmInstanceProposalNotResolved | SingleTenantHsmInstanceProposalPending
       > => {
         if (proposal === undefined) {
-          return Effect.fail(new SingleTenantHsmInstanceProposalNotResolved({ name }));
+          return Effect.fail(
+            new SingleTenantHsmInstanceProposalNotResolved({ resourceName: name }),
+          );
         }
         if (proposal.state === "CREATING") {
           return Effect.fail(
             new SingleTenantHsmInstanceProposalPending({
-              name,
+              resourceName: name,
               state: proposal.state,
             }),
           );
@@ -631,7 +633,7 @@ export const SingleTenantHsmInstanceProposalProvider = () =>
 
       if (current === undefined) {
         return yield* new SingleTenantHsmInstanceProposalNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

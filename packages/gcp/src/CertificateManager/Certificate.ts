@@ -241,13 +241,13 @@ export const Certificate = Resource<Certificate>("GCP.CertificateManager.Certifi
 export class CertificateNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.CertificateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateStillExists extends Data.TaggedError(
   "GCP.CertificateManager.CertificateStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -422,7 +422,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cert) =>
-      cert ? Effect.succeed(cert) : Effect.fail(new CertificateNotResolved({ name })),
+      cert ? Effect.succeed(cert) : Effect.fail(new CertificateNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.CertificateNotResolved",
@@ -434,7 +434,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cert) =>
-      cert === undefined ? Effect.void : Effect.fail(new CertificateStillExists({ name })),
+      cert === undefined
+        ? Effect.void
+        : Effect.fail(new CertificateStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.CertificateStillExists",
@@ -656,7 +658,7 @@ export const CertificateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CertificateNotResolved({ name });
+        return yield* new CertificateNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

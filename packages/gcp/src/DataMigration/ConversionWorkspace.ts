@@ -324,7 +324,7 @@ export const ConversionWorkspaceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedDisplay = current.displayName ?? "";

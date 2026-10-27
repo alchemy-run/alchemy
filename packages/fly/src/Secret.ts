@@ -207,7 +207,7 @@ export const Secret: typeof SecretResource = Object.assign(
 
 export class SecretNotCreated extends Data.TaggedError("Fly.SecretNotCreated")<{
   appName: string;
-  name: string;
+  secretName: string;
 }> {}
 
 export class SecretAppRequired extends Data.TaggedError("Fly.SecretAppRequired")<{
@@ -360,7 +360,7 @@ export const SecretProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecretNotCreated({ appName, name });
+        return yield* new SecretNotCreated({ appName, secretName: name });
       }
 
       // Sync — skip if we just created. Prefer observed digest vs hash of

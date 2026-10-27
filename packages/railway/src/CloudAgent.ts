@@ -177,7 +177,7 @@ export type CloudAgent = Resource<
 export const CloudAgent = Resource<CloudAgent>("Railway.CloudAgent");
 
 export class CloudAgentNotCreated extends Data.TaggedError("Railway.CloudAgentNotCreated")<{
-  name: string;
+  resourceName: string;
   environmentId: string;
 }> {}
 
@@ -385,7 +385,7 @@ export const CloudAgentProvider = () =>
       }
 
       if (current === undefined || isGone(current)) {
-        return yield* new CloudAgentNotCreated({ name, environmentId });
+        return yield* new CloudAgentNotCreated({ resourceName: name, environmentId });
       }
 
       return toAttrs(current, { name, environmentId, projectId });

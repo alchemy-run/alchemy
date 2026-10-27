@@ -110,7 +110,7 @@ export const TagValue = Resource<TagValue>("GCP.ResourceManager.TagValue");
 export class TagValueNotResolved extends Data.TaggedError(
   "GCP.ResourceManager.TagValueNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TagValueParentRequired extends Data.TaggedError(
@@ -122,7 +122,7 @@ export class TagValueParentRequired extends Data.TaggedError(
 export class TagValueStillExists extends Data.TaggedError(
   "GCP.ResourceManager.TagValueStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -202,7 +202,7 @@ const nameFromOperation = (operation: crm.Operation): string | undefined => {
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((value) =>
-      value ? Effect.succeed(value) : Effect.fail(new TagValueNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new TagValueNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.TagValueNotResolved",
@@ -216,7 +216,7 @@ const waitUntilFound = (parent: string, shortName: string) =>
     Effect.flatMap((value) =>
       value !== undefined
         ? Effect.succeed(value)
-        : Effect.fail(new TagValueNotResolved({ name: `${parent}/${shortName}` })),
+        : Effect.fail(new TagValueNotResolved({ resourceName: `${parent}/${shortName}` })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.TagValueNotResolved",
@@ -228,7 +228,9 @@ const waitUntilFound = (parent: string, shortName: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((value) =>
-      value === undefined ? Effect.void : Effect.fail(new TagValueStillExists({ name })),
+      value === undefined
+        ? Effect.void
+        : Effect.fail(new TagValueStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.TagValueStillExists",
@@ -317,7 +319,7 @@ export const TagValueProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new TagValueNotResolved({
-          name: `${parent}/${shortName}`,
+          resourceName: `${parent}/${shortName}`,
         });
       }
 

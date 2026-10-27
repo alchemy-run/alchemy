@@ -102,7 +102,7 @@ export const AuthorizedViewSet = Resource<AuthorizedViewSet>(
 export class AuthorizedViewSetNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.AuthorizedViewSetNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, authorizedViewSetId: string) =>
@@ -216,7 +216,7 @@ export const AuthorizedViewSetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AuthorizedViewSetNotResolved({ name });
+        return yield* new AuthorizedViewSetNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

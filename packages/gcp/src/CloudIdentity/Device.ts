@@ -132,7 +132,7 @@ export type Device = Resource<
 export const Device = Resource<Device>("GCP.CloudIdentity.Device");
 
 export class DeviceNotResolved extends Data.TaggedError("GCP.CloudIdentity.DeviceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_DEVICE_TYPE = "LINUX";
@@ -275,7 +275,7 @@ export const DeviceProvider = () =>
 
       if (current === undefined) {
         return yield* new DeviceNotResolved({
-          name: output?.name ?? serialNumber,
+          resourceName: output?.name ?? serialNumber,
         });
       }
 

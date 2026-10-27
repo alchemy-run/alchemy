@@ -153,7 +153,7 @@ export const SchemaRegistriesContextsSubjectsVersion =
 export class SchemaRegistriesContextsSubjectsVersionNotResolved extends Data.TaggedError(
   "GCP.ManagedKafka.SchemaRegistriesContextsSubjectsVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const registryOf = (value: string, project: string, location: string) =>
@@ -413,7 +413,7 @@ export const SchemaRegistriesContextsSubjectsVersionProvider = () =>
 
       if (current === undefined) {
         return yield* new SchemaRegistriesContextsSubjectsVersionNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

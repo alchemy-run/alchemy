@@ -136,7 +136,7 @@ export const OnlineEvaluator = Resource<OnlineEvaluator>("GCP.AIPlatform.OnlineE
 export class OnlineEvaluatorNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.OnlineEvaluatorNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const defaultConfig = (
@@ -175,7 +175,7 @@ const waitUntilExists = (name: string) =>
     Effect.filterOrFail(
       (evaluator): evaluator is aiplatform.GoogleCloudAiplatformV1OnlineEvaluator =>
         evaluator !== undefined,
-      () => new AiPlatformNotResolved({ name }),
+      () => new AiPlatformNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.NotResolved",
@@ -188,7 +188,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (evaluator) => evaluator === undefined,
-      () => new AiPlatformStillExists({ name }),
+      () => new AiPlatformStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -299,7 +299,7 @@ export const OnlineEvaluatorProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new OnlineEvaluatorNotResolved({
-          name: output?.name ?? parent,
+          resourceName: output?.name ?? parent,
         });
       }
 
@@ -330,7 +330,7 @@ export const OnlineEvaluatorProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OnlineEvaluatorNotResolved({ name: observedName });
+        return yield* new OnlineEvaluatorNotResolved({ resourceName: observedName });
       }
       return toAttrs(current, env.project);
     }),

@@ -17,7 +17,7 @@ export const MAX_DISPLAY_NAME = 63;
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.FirebaseAppCheck.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {

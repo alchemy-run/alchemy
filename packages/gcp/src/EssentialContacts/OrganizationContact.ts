@@ -140,7 +140,7 @@ export const OrganizationContact = Resource<OrganizationContact>(
 export class OrganizationContactNotResolved extends Data.TaggedError(
   "GCP.EssentialContacts.OrganizationContactNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const getByName = (name: string) =>
@@ -273,7 +273,7 @@ export const OrganizationContactProvider = () =>
 
       if (current === undefined) {
         return yield* new OrganizationContactNotResolved({
-          name: output?.name ?? `${parent}/contacts`,
+          resourceName: output?.name ?? `${parent}/contacts`,
         });
       }
 

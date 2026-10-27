@@ -340,7 +340,7 @@ export const PostureProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecuritypostureNotResolved({ name });
+        return yield* new SecuritypostureNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = !sameText(current.description, desired.description);

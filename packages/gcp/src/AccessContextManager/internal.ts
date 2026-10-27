@@ -14,11 +14,11 @@ export const MAX_DESCRIPTION_LENGTH = 1024;
 export const MAX_RESOURCE_ID_LENGTH = 50;
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.AccessContextManager.NotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError("GCP.AccessContextManager.StillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class OrganizationRequired extends Data.TaggedError(
@@ -299,7 +299,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value ? Effect.succeed(value) : Effect.fail(new ResourceNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new ResourceNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AccessContextManager.NotResolved",
@@ -314,7 +314,9 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined ? Effect.void : Effect.fail(new ResourceStillExists({ name })),
+      value === undefined
+        ? Effect.void
+        : Effect.fail(new ResourceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AccessContextManager.StillExists",

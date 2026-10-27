@@ -61,9 +61,11 @@ export const deleteConnectorAndRole = (connectorId: string, session: ScopedPlanS
     const connector = yield* getConnector(connectorId);
     if (connector === undefined) return;
     yield* lambdacore.deleteNetworkConnector({ Identifier: connector.Id }).pipe(
-      Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-      // Another endpoint of the same deploy is already deleting it.
-      Effect.catchTag("ResourceConflictException", () => Effect.void),
+      // Conflict: another endpoint of the same deploy is already deleting it.
+      Effect.catchTag(
+        ["ResourceNotFoundException", "ResourceConflictException"],
+        () => Effect.void,
+      ),
     );
     yield* waitForDeleted(connector.Id, session);
     // Only the role Alchemy made for this connector (it shares the name).
@@ -117,9 +119,8 @@ export const releaseEgressConnector = Effect.fn(function* ({
         functionName,
         revisionId: revision.revisionId,
       }).pipe(
-        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-        // Started serving again in the meantime: leave it.
-        Effect.catchTag("ConflictException", () => Effect.void),
+        // Conflict: started serving again in the meantime, so leave it.
+        Effect.catchTag(["ResourceNotFoundException", "ConflictException"], () => Effect.void),
       );
     }
   }

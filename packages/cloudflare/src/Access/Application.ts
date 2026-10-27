@@ -691,12 +691,10 @@ export const ApplicationProvider = () =>
         observed = yield* observeById(accountId, knownId);
       }
       if (!observed && news.applicationId !== undefined) {
-        return yield* Effect.fail(
-          new DeclaredApplicationNotFound({
-            applicationId: news.applicationId,
-            message: `Cloudflare Access application ${news.applicationId} does not exist`,
-          }),
-        );
+        return yield* new DeclaredApplicationNotFound({
+          applicationId: news.applicationId,
+          message: `Cloudflare Access application ${news.applicationId} does not exist`,
+        });
       }
       if (!observed && news.type === "warp") {
         // Warp is a singleton per account — reuse any existing app.

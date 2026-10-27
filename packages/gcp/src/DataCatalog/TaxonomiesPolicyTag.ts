@@ -261,7 +261,7 @@ export const TaxonomiesPolicyTagProvider = () =>
 
       if (current === undefined) {
         return yield* new DatacatalogNotResolved({
-          name: output?.name ?? `${taxonomy}/policyTags`,
+          resourceName: output?.name ?? `${taxonomy}/policyTags`,
         });
       }
 

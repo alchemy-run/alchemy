@@ -602,13 +602,12 @@ const toWireFeatures = (
             : {}),
           ...(features.subscriptionUpdate.scheduleAtPeriodEnd !== undefined
             ? {
-                schedule_at_period_end: {
-                  ...(features.subscriptionUpdate.scheduleAtPeriodEnd.conditions !== undefined
+                schedule_at_period_end:
+                  features.subscriptionUpdate.scheduleAtPeriodEnd.conditions !== undefined
                     ? {
                         conditions: features.subscriptionUpdate.scheduleAtPeriodEnd.conditions,
                       }
-                    : {}),
-                },
+                    : {},
               }
             : {}),
           ...(features.subscriptionUpdate.trialUpdateBehavior !== undefined

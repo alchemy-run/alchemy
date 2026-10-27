@@ -90,7 +90,7 @@ export const ConversationsAnalyses = Resource<ConversationsAnalyses>(
 export class ConversationsAnalysesNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.ConversationsAnalysesNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toSelector = (
@@ -144,7 +144,7 @@ const waitUntilExists = (name: string) =>
     Effect.flatMap((analysis) =>
       analysis
         ? Effect.succeed(analysis)
-        : Effect.fail(new ConversationsAnalysesNotResolved({ name })),
+        : Effect.fail(new ConversationsAnalysesNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ContactCenterInsights.ConversationsAnalysesNotResolved",
@@ -244,7 +244,7 @@ export const ConversationsAnalysesProvider = () =>
 
       if (current === undefined) {
         return yield* new ConversationsAnalysesNotResolved({
-          name: output?.name ?? `${news.parent}/analyses/-`,
+          resourceName: output?.name ?? `${news.parent}/analyses/-`,
         });
       }
 

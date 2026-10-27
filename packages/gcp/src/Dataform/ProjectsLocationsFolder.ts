@@ -110,7 +110,7 @@ export const ProjectsLocationsFolder = Resource<ProjectsLocationsFolder>(
 export class ProjectsLocationsFolderNotResolved extends Data.TaggedError(
   "GCP.Dataform.ProjectsLocationsFolderNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (folder: dataform.Folder, project: string, region: string) => {
@@ -225,7 +225,7 @@ export const ProjectsLocationsFolderProvider = () =>
 
       if (current === undefined) {
         return yield* new ProjectsLocationsFolderNotResolved({
-          name: output?.name ?? locationParent(env.project, location),
+          resourceName: output?.name ?? locationParent(env.project, location),
         });
       }
 

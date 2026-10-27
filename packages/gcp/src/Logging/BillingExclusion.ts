@@ -126,7 +126,7 @@ export const BillingExclusion = Resource<BillingExclusion>("GCP.Logging.BillingE
 export class BillingExclusionNotResolved extends Data.TaggedError(
   "GCP.Logging.BillingExclusionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (billingAccountId: string, exclusionId: string) =>
@@ -248,7 +248,7 @@ export const BillingExclusionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BillingExclusionNotResolved({ name });
+        return yield* new BillingExclusionNotResolved({ resourceName: name });
       }
 
       const desiredDisabled = news.disabled === true;

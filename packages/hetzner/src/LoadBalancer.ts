@@ -459,7 +459,7 @@ type CloudLoadBalancer =
   | ListLoadBalancersResponseLoadBalancersItem;
 
 export class LoadBalancerNotCreated extends Data.TaggedError("Hetzner.LoadBalancerNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const asAlgorithm = (value: string): LoadBalancerAlgorithm =>
@@ -1411,7 +1411,7 @@ export const LoadBalancerProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LoadBalancerNotCreated({ name });
+        return yield* new LoadBalancerNotCreated({ resourceName: name });
       }
 
       current = yield* syncMetadata({

@@ -122,7 +122,7 @@ export const DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessage =
 export class DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessageNotResolved extends Data.TaggedError(
   "GCP.DataLabeling.DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessageNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceNameOf = (parent: string, feedbackMessageId: string) =>
@@ -267,7 +267,7 @@ export const DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessageProvider = (
 
       if (current === undefined) {
         return yield* new DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessageNotResolved({
-          name: name || parent,
+          resourceName: name || parent,
         });
       }
 

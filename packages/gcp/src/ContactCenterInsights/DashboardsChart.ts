@@ -157,7 +157,7 @@ export const DashboardsChart = Resource<DashboardsChart>(
 export class DashboardsChartNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.DashboardsChartNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, chartId: string) => `${parent}/charts/${chartId}`;
@@ -309,7 +309,7 @@ export const DashboardsChartProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DashboardsChartNotResolved({ name });
+        return yield* new DashboardsChartNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;

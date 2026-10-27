@@ -106,13 +106,13 @@ export const DatasetsDatasetVersion = Resource<DatasetsDatasetVersion>(
 export class DatasetsDatasetVersionNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.DatasetsDatasetVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DatasetsDatasetVersionStillExists extends Data.TaggedError(
   "GCP.AIPlatform.DatasetsDatasetVersionStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parentDataset = (name: string) => {
@@ -232,7 +232,7 @@ const waitUntilExists = (name: string) =>
     Effect.flatMap((version) =>
       version
         ? Effect.succeed(version)
-        : Effect.fail(new DatasetsDatasetVersionNotResolved({ name })),
+        : Effect.fail(new DatasetsDatasetVersionNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.DatasetsDatasetVersionNotResolved",
@@ -246,7 +246,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((version) =>
       version === undefined
         ? Effect.void
-        : Effect.fail(new DatasetsDatasetVersionStillExists({ name })),
+        : Effect.fail(new DatasetsDatasetVersionStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.DatasetsDatasetVersionStillExists",
@@ -327,7 +327,7 @@ export const DatasetsDatasetVersionProvider = () =>
 
       if (current === undefined) {
         return yield* new DatasetsDatasetVersionNotResolved({
-          name: output?.name ?? `${news.dataset}/datasetVersions/-`,
+          resourceName: output?.name ?? `${news.dataset}/datasetVersions/-`,
         });
       }
 

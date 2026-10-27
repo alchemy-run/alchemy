@@ -120,7 +120,7 @@ export const AgentsFlowsPage = Resource<AgentsFlowsPage>("GCP.Dialogflow.AgentsF
 export class AgentsFlowsPageNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsFlowsPageNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (page: dialogflow.GoogleCloudDialogflowCxV3Page, project: string) => {
@@ -247,7 +247,7 @@ export const AgentsFlowsPageProvider = () =>
 
       if (current === undefined) {
         return yield* new AgentsFlowsPageNotResolved({
-          name: output?.name ?? `${flow}/pages/${news.pageId ?? "unknown"}`,
+          resourceName: output?.name ?? `${flow}/pages/${news.pageId ?? "unknown"}`,
         });
       }
 

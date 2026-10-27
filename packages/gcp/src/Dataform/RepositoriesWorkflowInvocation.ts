@@ -121,7 +121,7 @@ export const RepositoriesWorkflowInvocation = Resource<RepositoriesWorkflowInvoc
 export class RepositoriesWorkflowInvocationNotResolved extends Data.TaggedError(
   "GCP.Dataform.RepositoriesWorkflowInvocationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (invocation: dataform.WorkflowInvocation, project: string, region: string) => {
@@ -200,7 +200,7 @@ export const RepositoriesWorkflowInvocationProvider = () =>
       });
     }),
 
-    read: Effect.fn(function* ({ olds, output }) {
+    read: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
       const existing = yield* getByName(output?.name ?? "");
       if (existing === undefined) return undefined;
@@ -239,7 +239,7 @@ export const RepositoriesWorkflowInvocationProvider = () =>
 
       if (current === undefined) {
         return yield* new RepositoriesWorkflowInvocationNotResolved({
-          name: output?.name ?? `${repository}/workflowInvocations`,
+          resourceName: output?.name ?? `${repository}/workflowInvocations`,
         });
       }
 

@@ -180,7 +180,7 @@ export const DataPolicy = Resource<DataPolicy>("GCP.BigQueryDataPolicy.DataPolic
 export class DataPolicyNotResolved extends Data.TaggedError(
   "GCP.BigQueryDataPolicy.DataPolicyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toMasking = (policy: bqdp.DataMaskingPolicy | undefined): DataMaskingPolicy | undefined => {
@@ -273,7 +273,7 @@ const patchPolicy = (name: string, updateMask: string, body: bqdp.DataPolicy) =>
   Effect.gen(function* () {
     const latest = yield* getByName(name);
     if (latest === undefined) {
-      return yield* new DataPolicyNotResolved({ name });
+      return yield* new DataPolicyNotResolved({ resourceName: name });
     }
     return yield* bqdp.patchProjectsLocationsDataPolicies({
       name,
@@ -368,7 +368,7 @@ export const DataPolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataPolicyNotResolved({ name });
+        return yield* new DataPolicyNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

@@ -95,7 +95,7 @@ export const AgentsPlaybooksVersion = Resource<AgentsPlaybooksVersion>(
 export class AgentsPlaybooksVersionNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsPlaybooksVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (playbook: string, versionId: string) => `${playbook}/versions/${versionId}`;
@@ -240,7 +240,7 @@ export const AgentsPlaybooksVersionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentsPlaybooksVersionNotResolved({ name });
+        return yield* new AgentsPlaybooksVersionNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, playbook);

@@ -142,13 +142,13 @@ export const HyperparameterTuningJob = Resource<HyperparameterTuningJob>(
 export class HyperparameterTuningJobNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.HyperparameterTuningJobNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class HyperparameterTuningJobStillExists extends Data.TaggedError(
   "GCP.AIPlatform.HyperparameterTuningJobStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -199,7 +199,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (job) => job === undefined,
-      () => new HyperparameterTuningJobStillExists({ name }),
+      () => new HyperparameterTuningJobStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -303,7 +303,7 @@ export const HyperparameterTuningJobProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new HyperparameterTuningJobNotResolved({
-          name: output?.name ?? `${location}/hyperparameterTuningJobs`,
+          resourceName: output?.name ?? `${location}/hyperparameterTuningJobs`,
         });
       }
 

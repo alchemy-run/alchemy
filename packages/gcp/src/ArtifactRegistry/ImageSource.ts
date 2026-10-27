@@ -558,8 +558,7 @@ export const makeImageSource = Effect.gen(function* () {
   });
 
   const resolve = Effect.fn(function* (options: ArtifactRegistryResolveOptions) {
-    const { id, source, repositoryName, session, location } = options;
-    const platform = options.platform ?? "linux/amd64";
+    const { id, source, repositoryName, location } = options;
     const kind = imageSourceKind(source);
     if (kind === undefined) {
       return yield* Effect.die(

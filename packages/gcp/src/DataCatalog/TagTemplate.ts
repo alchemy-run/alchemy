@@ -366,7 +366,7 @@ export const TagTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatacatalogNotResolved({ name });
+        return yield* new DatacatalogNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

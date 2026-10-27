@@ -253,7 +253,7 @@ export type Service = Resource<
 export const Service = Resource<Service>("GCP.Monitoring.Service");
 
 export class ServiceNotResolved extends Data.TaggedError("GCP.Monitoring.ServiceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export type IdentifierKind =
@@ -528,7 +528,7 @@ export const ServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ServiceNotResolved({ name });
+        return yield* new ServiceNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;

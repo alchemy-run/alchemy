@@ -127,7 +127,7 @@ export const AppsDeployment = Resource<AppsDeployment>("GCP.CES.AppsDeployment")
 export class AppsDeploymentNotResolved extends Data.TaggedError(
   "GCP.CES.AppsDeploymentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (app: string, deploymentId: string) => `${app}/deployments/${deploymentId}`;
@@ -239,7 +239,7 @@ export const AppsDeploymentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppsDeploymentNotResolved({ name });
+        return yield* new AppsDeploymentNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

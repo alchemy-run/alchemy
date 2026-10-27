@@ -327,7 +327,7 @@ export type Server = Resource<
 export const Server = Resource<Server>("Hetzner.Server");
 
 export class ServerNotResolved extends Data.TaggedError("Hetzner.ServerNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 /**
@@ -335,7 +335,7 @@ export class ServerNotResolved extends Data.TaggedError("Hetzner.ServerNotResolv
  * `userData`) exceeds Hetzner's 32 KiB user-data limit.
  */
 export class ServerUserDataTooLarge extends Data.TaggedError("Hetzner.ServerUserDataTooLarge")<{
-  name: string;
+  resourceName: string;
   bytes: number;
   limit: number;
 }> {}
@@ -531,7 +531,7 @@ const buildUserData = Effect.fn(function* (input: { name: string; userData: stri
   const bytes = yield* Effect.sync(() => Buffer.byteLength(doc, "utf8"));
   if (bytes > MAX_USER_DATA_BYTES) {
     return yield* new ServerUserDataTooLarge({
-      name: input.name,
+      resourceName: input.name,
       bytes,
       limit: MAX_USER_DATA_BYTES,
     });
@@ -985,7 +985,7 @@ export const ServerProvider = () =>
         } else {
           const hit = yield* getByName(name);
           if (hit === undefined) {
-            return yield* new ServerNotResolved({ name });
+            return yield* new ServerNotResolved({ resourceName: name });
           }
           current = yield* waitUntilReady(hit.id);
         }

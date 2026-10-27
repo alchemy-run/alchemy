@@ -139,7 +139,7 @@ export const Dashboard = Resource<Dashboard>("GCP.ContactCenterInsights.Dashboar
 export class DashboardNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.DashboardNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, dashboardId: string) => `${parent}/dashboards/${dashboardId}`;
@@ -275,7 +275,7 @@ export const DashboardProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DashboardNotResolved({ name });
+        return yield* new DashboardNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;

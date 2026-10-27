@@ -221,7 +221,7 @@ export const FolderNotificationConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecuritycenterNotResolved({ name });
+        return yield* new SecuritycenterNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

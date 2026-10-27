@@ -178,7 +178,7 @@ export const Environment: typeof EnvironmentResource = Object.assign(
 );
 
 export class EnvironmentNotCreated extends Data.TaggedError("Railway.EnvironmentNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -338,7 +338,7 @@ export const EnvironmentProvider = () =>
       }
 
       if (current === undefined || isGone(current)) {
-        return yield* new EnvironmentNotCreated({ name, projectId });
+        return yield* new EnvironmentNotCreated({ resourceName: name, projectId });
       }
 
       if (current.name !== name) {

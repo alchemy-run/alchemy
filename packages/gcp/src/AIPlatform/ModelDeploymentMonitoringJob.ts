@@ -165,13 +165,13 @@ export const ModelDeploymentMonitoringJob = Resource<ModelDeploymentMonitoringJo
 export class ModelDeploymentMonitoringJobNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.ModelDeploymentMonitoringJobNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ModelDeploymentMonitoringJobStillExists extends Data.TaggedError(
   "GCP.AIPlatform.ModelDeploymentMonitoringJobStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -224,7 +224,7 @@ const waitUntilExists = (name: string) =>
     Effect.filterOrFail(
       (job): job is aiplatform.GoogleCloudAiplatformV1ModelDeploymentMonitoringJob =>
         job !== undefined,
-      () => new ModelDeploymentMonitoringJobNotResolved({ name }),
+      () => new ModelDeploymentMonitoringJobNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.ModelDeploymentMonitoringJobNotResolved",
@@ -237,7 +237,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (job) => job === undefined,
-      () => new ModelDeploymentMonitoringJobStillExists({ name }),
+      () => new ModelDeploymentMonitoringJobStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -347,7 +347,7 @@ export const ModelDeploymentMonitoringJobProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new ModelDeploymentMonitoringJobNotResolved({
-          name: output?.name ?? `${location}/modelDeploymentMonitoringJobs`,
+          resourceName: output?.name ?? `${location}/modelDeploymentMonitoringJobs`,
         });
       }
 

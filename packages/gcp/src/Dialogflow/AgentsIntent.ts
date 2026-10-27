@@ -199,7 +199,7 @@ export const AgentsIntent = Resource<AgentsIntent>("GCP.Dialogflow.AgentsIntent"
 export class AgentsIntentNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsIntentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (agent: string, intentId: string) => `${agent}/intents/${intentId}`;
@@ -384,7 +384,7 @@ export const AgentsIntentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentsIntentNotResolved({ name });
+        return yield* new AgentsIntentNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

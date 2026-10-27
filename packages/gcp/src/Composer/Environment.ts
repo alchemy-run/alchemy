@@ -241,23 +241,23 @@ export const Environment = Resource<Environment>("GCP.Composer.Environment");
 export class EnvironmentNotResolved extends Data.TaggedError(
   "GCP.Composer.EnvironmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class EnvironmentNotReady extends Data.TaggedError("GCP.Composer.EnvironmentNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class EnvironmentFailed extends Data.TaggedError("GCP.Composer.EnvironmentFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class EnvironmentStillExists extends Data.TaggedError(
   "GCP.Composer.EnvironmentStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -503,13 +503,13 @@ const waitUntilRunning = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (environment): environment is composer.Environment => environment !== undefined,
-      () => new EnvironmentNotResolved({ name }),
+      () => new EnvironmentNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (environment) => environment.state !== "ERROR",
       (environment) =>
         new EnvironmentFailed({
-          name,
+          resourceName: name,
           state: environment.state,
         }),
     ),
@@ -517,7 +517,7 @@ const waitUntilRunning = (name: string) =>
       (environment) => environment.state === "RUNNING",
       (environment) =>
         new EnvironmentNotReady({
-          name,
+          resourceName: name,
           state: environment.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -533,7 +533,9 @@ const waitUntilRunning = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((environment) =>
-      environment === undefined ? Effect.void : Effect.fail(new EnvironmentStillExists({ name })),
+      environment === undefined
+        ? Effect.void
+        : Effect.fail(new EnvironmentStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Composer.EnvironmentStillExists",
@@ -900,12 +902,12 @@ export const EnvironmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentNotResolved({ name });
+        return yield* new EnvironmentNotResolved({ resourceName: name });
       }
 
       if (current.state === "ERROR") {
         return yield* new EnvironmentFailed({
-          name,
+          resourceName: name,
           state: current.state,
         });
       }

@@ -157,7 +157,7 @@ export const AgentsTool = Resource<AgentsTool>("GCP.Dialogflow.AgentsTool");
 export class AgentsToolNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsToolNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_FUNCTION_SPEC: ToolFunctionSpec = {
@@ -341,7 +341,7 @@ export const AgentsToolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentsToolNotResolved({ name });
+        return yield* new AgentsToolNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

@@ -148,18 +148,18 @@ export const InstanceConfig = Resource<InstanceConfig>("GCP.Spanner.InstanceConf
 export class InstanceConfigNotResolved extends Data.TaggedError(
   "GCP.Spanner.InstanceConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstanceConfigNotReady extends Data.TaggedError("GCP.Spanner.InstanceConfigNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstanceConfigStillExists extends Data.TaggedError(
   "GCP.Spanner.InstanceConfigStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstanceConfigNoOptionalReplicas extends Data.TaggedError(
@@ -225,7 +225,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((config) =>
-      config ? Effect.succeed(config) : Effect.fail(new InstanceConfigNotResolved({ name })),
+      config
+        ? Effect.succeed(config)
+        : Effect.fail(new InstanceConfigNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.InstanceConfigNotResolved",
@@ -241,13 +243,13 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (config): config is spanner.InstanceConfig => config !== undefined,
-      () => new InstanceConfigNotResolved({ name }),
+      () => new InstanceConfigNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (config) => isReady(config),
       (config) =>
         new InstanceConfigNotReady({
-          name,
+          resourceName: name,
           state: config.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -263,7 +265,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((config) =>
-      config === undefined ? Effect.void : Effect.fail(new InstanceConfigStillExists({ name })),
+      config === undefined
+        ? Effect.void
+        : Effect.fail(new InstanceConfigStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.InstanceConfigStillExists",

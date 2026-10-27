@@ -224,11 +224,11 @@ export type Endpoint = Resource<
 export const Endpoint = Resource<Endpoint>("GCP.AIPlatform.Endpoint");
 
 export class EndpointNotResolved extends Data.TaggedError("GCP.AIPlatform.EndpointNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class EndpointStillExists extends Data.TaggedError("GCP.AIPlatform.EndpointStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, endpointId: string) =>
@@ -372,7 +372,9 @@ const getSettled = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((endpoint) =>
-      endpoint ? Effect.succeed(endpoint) : Effect.fail(new EndpointNotResolved({ name })),
+      endpoint
+        ? Effect.succeed(endpoint)
+        : Effect.fail(new EndpointNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.EndpointNotResolved",
@@ -384,7 +386,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((endpoint) =>
-      endpoint === undefined ? Effect.void : Effect.fail(new EndpointStillExists({ name })),
+      endpoint === undefined
+        ? Effect.void
+        : Effect.fail(new EndpointStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.EndpointStillExists",
@@ -517,7 +521,7 @@ export const EndpointProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EndpointNotResolved({ name });
+        return yield* new EndpointNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

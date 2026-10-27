@@ -142,13 +142,13 @@ export const MetadataStoresArtifact = Resource<MetadataStoresArtifact>(
 export class MetadataStoresArtifactNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.MetadataStoresArtifactNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MetadataStoresArtifactStillExists extends Data.TaggedError(
   "GCP.AIPlatform.MetadataStoresArtifactStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parentOf = (name: string) => {
@@ -206,7 +206,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (artifact) => artifact === undefined,
-      () => new MetadataStoresArtifactStillExists({ name }),
+      () => new MetadataStoresArtifactStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -308,7 +308,7 @@ export const MetadataStoresArtifactProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MetadataStoresArtifactNotResolved({ name });
+        return yield* new MetadataStoresArtifactNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== (news.description ?? "");

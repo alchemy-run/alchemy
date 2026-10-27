@@ -241,7 +241,7 @@ export const OrganizationsLocationsConnectionProvider = () =>
 
       if (current === undefined) {
         return yield* new DlpNotResolved({
-          name: `${parent}/connections/${cloudSql.connectionName ?? "unknown"}`,
+          resourceName: `${parent}/connections/${cloudSql.connectionName ?? "unknown"}`,
         });
       }
 

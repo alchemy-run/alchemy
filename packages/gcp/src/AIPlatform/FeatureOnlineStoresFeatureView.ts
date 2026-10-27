@@ -207,13 +207,13 @@ export const FeatureOnlineStoresFeatureView = Resource<FeatureOnlineStoresFeatur
 export class FeatureOnlineStoresFeatureViewNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeatureOnlineStoresFeatureViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FeatureOnlineStoresFeatureViewStillExists extends Data.TaggedError(
   "GCP.AIPlatform.FeatureOnlineStoresFeatureViewStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parentOf = (project: string, location: string, store: string) =>
@@ -257,7 +257,7 @@ const waitUntilExists = (name: string) =>
     Effect.flatMap((view) =>
       view
         ? Effect.succeed(view)
-        : Effect.fail(new FeatureOnlineStoresFeatureViewNotResolved({ name })),
+        : Effect.fail(new FeatureOnlineStoresFeatureViewNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureOnlineStoresFeatureViewNotResolved",
@@ -271,7 +271,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((view) =>
       view === undefined
         ? Effect.void
-        : Effect.fail(new FeatureOnlineStoresFeatureViewStillExists({ name })),
+        : Effect.fail(new FeatureOnlineStoresFeatureViewStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureOnlineStoresFeatureViewStillExists",
@@ -412,7 +412,7 @@ export const FeatureOnlineStoresFeatureViewProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FeatureOnlineStoresFeatureViewNotResolved({ name });
+        return yield* new FeatureOnlineStoresFeatureViewNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

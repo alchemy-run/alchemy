@@ -199,7 +199,7 @@ export type FolderSink = Resource<
 export const FolderSink = Resource<FolderSink>("GCP.Logging.FolderSink");
 
 export class FolderSinkNotResolved extends Data.TaggedError("GCP.Logging.FolderSinkNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, sinkId: string) => `${parent}/sinks/${sinkId}`;
@@ -331,7 +331,7 @@ export const FolderSinkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FolderSinkNotResolved({ name });
+        return yield* new FolderSinkNotResolved({ resourceName: name });
       }
 
       const desiredDisabled = news.disabled === true;

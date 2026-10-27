@@ -149,7 +149,7 @@ export const LocationsDlpJob = Resource<LocationsDlpJob>("GCP.DLP.LocationsDlpJo
 export class LocationsDlpJobNotResolved extends Data.TaggedError(
   "GCP.DLP.LocationsDlpJobNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, jobId: string, risk = false) =>
@@ -351,7 +351,7 @@ export const LocationsDlpJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LocationsDlpJobNotResolved({ name });
+        return yield* new LocationsDlpJobNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

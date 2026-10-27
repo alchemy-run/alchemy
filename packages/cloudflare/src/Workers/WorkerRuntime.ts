@@ -249,33 +249,28 @@ export const deferredExecutionContext: WorkerExecutionContextService = {
     throw new Error("WorkerExecutionContext.raw is only available inside a request handler");
   },
   waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- defers to the live per-event context the bridge provides via RuntimeContext
     liveExecutionContext.pipe(Effect.flatMap((live) => live.waitUntil(effect))) as Effect.Effect<
       void,
       never,
       R | RuntimeContext
     >,
   passThroughOnException: () =>
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- defers to the live per-event context the bridge provides via RuntimeContext
     liveExecutionContext.pipe(
       Effect.flatMap((live) => live.passThroughOnException()),
     ) as Effect.Effect<void, never, RuntimeContext>,
   cache: {
     purge: (options) =>
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- defers to the live per-event context the bridge provides via RuntimeContext
       liveExecutionContext.pipe(
         Effect.flatMap((live) => live.cache.purge(options)),
       ) as Effect.Effect<cf.CachePurgeResult, CachePurgeError, RuntimeContext>,
   },
   exports: makeEntrypointExports(
     (name, options) =>
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- defers to the live per-event context the bridge provides via RuntimeContext
       liveExecutionContext.pipe(
         Effect.flatMap((live) => live.exports[name](options)),
       ) as Effect.Effect<Fetcher, EntrypointUnavailableError, RuntimeContext>,
   ),
   get props() {
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- defers to the live per-event context the bridge provides via RuntimeContext
     return liveExecutionContext.pipe(Effect.flatMap((live) => live.props)) as Effect.Effect<
       Record<string, unknown>,
       never,
@@ -285,7 +280,6 @@ export const deferredExecutionContext: WorkerExecutionContextService = {
   // A getter so this module-level literal doesn't eagerly reference
   // `liveExecutionContext` before its declaration below.
   get access() {
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- defers to the live per-event context the bridge provides via RuntimeContext
     return liveExecutionContext.pipe(Effect.flatMap((live) => live.access)) as Effect.Effect<
       WorkerExecutionContextAccess | undefined,
       never,

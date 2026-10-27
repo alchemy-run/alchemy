@@ -154,7 +154,7 @@ export const CachedContent = Resource<CachedContent>("GCP.AIPlatform.CachedConte
 export class CachedContentNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.CachedContentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toContents = (
@@ -255,7 +255,7 @@ export const CachedContentProvider = () =>
       return { action: "replace" as const, deleteFirst: true };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, output }) {
       const env = yield* GcpEnvironment.current;
       const existing = yield* findOwned(id, env.project, env.region, output?.name);
       if (existing === undefined) return undefined;
@@ -315,7 +315,7 @@ export const CachedContentProvider = () =>
 
       if (current === undefined) {
         return yield* new CachedContentNotResolved({
-          name: output?.name ?? parentOf(env.project, location),
+          resourceName: output?.name ?? parentOf(env.project, location),
         });
       }
 

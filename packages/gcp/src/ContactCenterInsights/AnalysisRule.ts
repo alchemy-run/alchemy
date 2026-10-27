@@ -163,7 +163,7 @@ export const AnalysisRule = Resource<AnalysisRule>("GCP.ContactCenterInsights.An
 export class AnalysisRuleNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.AnalysisRuleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, analysisRuleId: string) =>
@@ -324,7 +324,7 @@ export const AnalysisRuleProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AnalysisRuleNotResolved({ name });
+        return yield* new AnalysisRuleNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

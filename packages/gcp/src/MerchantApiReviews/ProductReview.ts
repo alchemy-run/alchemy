@@ -229,7 +229,7 @@ export const ProductReview = Resource<ProductReview>("GCP.MerchantApiReviews.Pro
 export class ProductReviewNotResolved extends Data.TaggedError(
   "GCP.MerchantApiReviews.ProductReviewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const hasProductIdentifier = (attrs: ProductReviewAttributesProps | undefined) =>
@@ -460,7 +460,7 @@ export const ProductReviewProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ProductReviewNotResolved({ name });
+        return yield* new ProductReviewNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, account, dataSource);

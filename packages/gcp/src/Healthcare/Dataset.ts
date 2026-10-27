@@ -95,7 +95,7 @@ export type Dataset = Resource<
 export const Dataset = Resource<Dataset>("GCP.Healthcare.Dataset");
 
 export class DatasetNotResolved extends Data.TaggedError("GCP.Healthcare.DatasetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, datasetId: string) =>
@@ -190,7 +190,7 @@ export const DatasetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatasetNotResolved({ name });
+        return yield* new DatasetNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

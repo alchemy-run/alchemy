@@ -136,7 +136,7 @@ export const EnvironmentsApisRevisionsDebugsession =
 export class EnvironmentsApisRevisionsDebugsessionNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsApisRevisionsDebugsessionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const revisionParent = (
@@ -197,20 +197,6 @@ const getByName = (name: string) =>
           name,
         }),
       );
-
-const listAtRevision = (parent: string) =>
-  parent.length === 0
-    ? Effect.succeed([] as apigee.GoogleCloudApigeeV1Session[])
-    : apigee.listOrganizationsEnvironmentsApisRevisionsDebugsessions
-        .pages({ parent, pageSize: 100 })
-        .pipe(
-          Stream.flatMap((page) => Stream.fromIterable(page.sessions ?? [])),
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-            Effect.succeed([] as apigee.GoogleCloudApigeeV1Session[]),
-          ),
-        );
 
 const listOrgApis = (organizationId: string) =>
   emptyOnMissing(
@@ -380,7 +366,7 @@ export const EnvironmentsApisRevisionsDebugsessionProvider = () =>
 
       if (current === undefined) {
         return yield* new EnvironmentsApisRevisionsDebugsessionNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

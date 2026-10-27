@@ -313,7 +313,7 @@ export const Workload = Resource<Workload>("GCP.AssuredWorkloads.Workload");
 export class WorkloadNotResolved extends Data.TaggedError(
   "GCP.AssuredWorkloads.WorkloadNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -520,7 +520,7 @@ export const WorkloadProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new WorkloadNotResolved({
-          name: output?.name ?? parent,
+          resourceName: output?.name ?? parent,
         });
       }
 
@@ -568,7 +568,7 @@ export const WorkloadProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new WorkloadNotResolved({ name });
+        return yield* new WorkloadNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);

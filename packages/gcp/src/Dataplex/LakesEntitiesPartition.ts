@@ -88,7 +88,7 @@ export const LakesEntitiesPartition = Resource<LakesEntitiesPartition>(
 export class LakesEntitiesPartitionNotResolved extends Data.TaggedError(
   "GCP.Dataplex.LakesEntitiesPartitionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const encodeValue = (value: string) => encodeURIComponent(encodeURIComponent(value));
@@ -222,7 +222,7 @@ export const LakesEntitiesPartitionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LakesEntitiesPartitionNotResolved({ name });
+        return yield* new LakesEntitiesPartitionNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, entity);

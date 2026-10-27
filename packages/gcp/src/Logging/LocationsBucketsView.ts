@@ -121,7 +121,7 @@ export const LocationsBucketsView = Resource<LocationsBucketsView>(
 export class LocationsBucketsViewNotResolved extends Data.TaggedError(
   "GCP.Logging.LocationsBucketsViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (bucketName: string, viewId: string) => `${bucketName}/views/${viewId}`;
@@ -230,7 +230,7 @@ export const LocationsBucketsViewProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LocationsBucketsViewNotResolved({ name });
+        return yield* new LocationsBucketsViewNotResolved({ resourceName: name });
       }
 
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");

@@ -193,13 +193,13 @@ export const CollectionsDataStore = Resource<CollectionsDataStore>(
 export class CollectionsDataStoreNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CollectionsDataStoreStillExists extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoreStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const verticalOf = (value: string | undefined) => value ?? "GENERIC";
@@ -237,7 +237,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store ? Effect.succeed(store) : Effect.fail(new CollectionsDataStoreNotResolved({ name })),
+      store
+        ? Effect.succeed(store)
+        : Effect.fail(new CollectionsDataStoreNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsDataStoreNotResolved",
@@ -251,7 +253,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((store) =>
       store === undefined
         ? Effect.void
-        : Effect.fail(new CollectionsDataStoreStillExists({ name })),
+        : Effect.fail(new CollectionsDataStoreStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsDataStoreStillExists",
@@ -369,7 +371,7 @@ export const CollectionsDataStoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CollectionsDataStoreNotResolved({ name });
+        return yield* new CollectionsDataStoreNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;

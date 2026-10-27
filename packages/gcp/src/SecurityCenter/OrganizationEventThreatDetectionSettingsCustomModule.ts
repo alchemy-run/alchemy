@@ -267,7 +267,7 @@ export const OrganizationEventThreatDetectionSettingsCustomModuleProvider = () =
 
       if (current === undefined) {
         return yield* new SecuritycenterNotResolved({
-          name: `${parent}/customModules`,
+          resourceName: `${parent}/customModules`,
         });
       }
 

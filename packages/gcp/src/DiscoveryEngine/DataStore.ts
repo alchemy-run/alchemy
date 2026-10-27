@@ -160,13 +160,13 @@ export const DataStore = Resource<DataStore>("GCP.DiscoveryEngine.DataStore");
 export class DataStoreNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DataStoreStillExists extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoreStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, dataStoreId: string) =>
@@ -212,7 +212,7 @@ const toAttrs = (store: discoveryengine.GoogleCloudDiscoveryengineV1DataStore, p
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store ? Effect.succeed(store) : Effect.fail(new DataStoreNotResolved({ name })),
+      store ? Effect.succeed(store) : Effect.fail(new DataStoreNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.DiscoveryEngine.DataStoreNotResolved",
@@ -224,7 +224,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store === undefined ? Effect.void : Effect.fail(new DataStoreStillExists({ name })),
+      store === undefined
+        ? Effect.void
+        : Effect.fail(new DataStoreStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.DiscoveryEngine.DataStoreStillExists",
@@ -335,7 +337,7 @@ export const DataStoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataStoreNotResolved({ name: fallbackName });
+        return yield* new DataStoreNotResolved({ resourceName: fallbackName });
       }
 
       const name = current.name ?? fallbackName;

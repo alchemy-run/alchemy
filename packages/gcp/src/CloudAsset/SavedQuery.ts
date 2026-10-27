@@ -152,7 +152,7 @@ export const SavedQuery = Resource<SavedQuery>("GCP.CloudAsset.SavedQuery");
 export class SavedQueryNotResolved extends Data.TaggedError(
   "GCP.CloudAsset.SavedQueryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, savedQueryId: string) =>
@@ -273,7 +273,7 @@ export const SavedQueryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SavedQueryNotResolved({ name });
+        return yield* new SavedQueryNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

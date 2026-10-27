@@ -166,13 +166,13 @@ export const FeatureOnlineStore = Resource<FeatureOnlineStore>("GCP.AIPlatform.F
 export class FeatureOnlineStoreNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeatureOnlineStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FeatureOnlineStoreStillExists extends Data.TaggedError(
   "GCP.AIPlatform.FeatureOnlineStoreStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, storeId: string) =>
@@ -253,7 +253,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store ? Effect.succeed(store) : Effect.fail(new FeatureOnlineStoreNotResolved({ name })),
+      store
+        ? Effect.succeed(store)
+        : Effect.fail(new FeatureOnlineStoreNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureOnlineStoreNotResolved",
@@ -265,7 +267,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store === undefined ? Effect.void : Effect.fail(new FeatureOnlineStoreStillExists({ name })),
+      store === undefined
+        ? Effect.void
+        : Effect.fail(new FeatureOnlineStoreStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureOnlineStoreStillExists",
@@ -283,11 +287,11 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (store): store is aiplatform.GoogleCloudAiplatformV1FeatureOnlineStore => store !== undefined,
-      () => new FeatureOnlineStoreNotResolved({ name }),
+      () => new FeatureOnlineStoreNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (store) => isReady(store.state),
-      () => new FeatureOnlineStoreNotResolved({ name }),
+      () => new FeatureOnlineStoreNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureOnlineStoreNotResolved",
@@ -408,7 +412,7 @@ export const FeatureOnlineStoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FeatureOnlineStoreNotResolved({ name });
+        return yield* new FeatureOnlineStoreNotResolved({ resourceName: name });
       }
 
       if (!isReady(current.state)) {

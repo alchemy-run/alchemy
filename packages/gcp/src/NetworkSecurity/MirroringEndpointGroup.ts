@@ -170,20 +170,20 @@ export const MirroringEndpointGroup = Resource<MirroringEndpointGroup>(
 export class MirroringEndpointGroupNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringEndpointGroupNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MirroringEndpointGroupFailed extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringEndpointGroupFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class MirroringEndpointGroupStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringEndpointGroupStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const isPendingState = (state: string | undefined) =>
@@ -239,15 +239,15 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (group): group is networksecurity.MirroringEndpointGroup => group !== undefined,
-      () => new MirroringEndpointGroupNotResolved({ name }),
+      () => new MirroringEndpointGroupNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (group) => group.state !== "DELETE_FAILED",
-      (group) => new MirroringEndpointGroupFailed({ name, state: group.state }),
+      (group) => new MirroringEndpointGroupFailed({ resourceName: name, state: group.state }),
     ),
     Effect.filterOrFail(
       (group) => !isPendingState(group.state),
-      () => new MirroringEndpointGroupNotResolved({ name }),
+      () => new MirroringEndpointGroupNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.MirroringEndpointGroupNotResolved",
@@ -261,7 +261,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((group) =>
       group === undefined
         ? Effect.void
-        : Effect.fail(new MirroringEndpointGroupStillExists({ name })),
+        : Effect.fail(new MirroringEndpointGroupStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.MirroringEndpointGroupStillExists",
@@ -389,7 +389,7 @@ export const MirroringEndpointGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MirroringEndpointGroupNotResolved({ name });
+        return yield* new MirroringEndpointGroupNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

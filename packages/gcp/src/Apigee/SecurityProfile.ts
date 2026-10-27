@@ -158,7 +158,7 @@ export const SecurityProfile = Resource<SecurityProfile>("GCP.Apigee.SecurityPro
 export class SecurityProfileNotResolved extends Data.TaggedError(
   "GCP.Apigee.SecurityProfileNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_PROFILE_CONFIG: ProfileConfig = {
@@ -337,7 +337,7 @@ export const SecurityProfileProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecurityProfileNotResolved({ name });
+        return yield* new SecurityProfileNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

@@ -5,7 +5,6 @@ import * as Rpc from "effect/rpc/Rpc";
 import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
 import type * as Aggregate from "./Aggregate.ts";
-import * as Command from "./Command.ts";
 import { type Filter, matches } from "./Filter.ts";
 import { decodeEnvelope, type Kernel } from "./Kernel.ts";
 import * as Key from "./Key.ts";

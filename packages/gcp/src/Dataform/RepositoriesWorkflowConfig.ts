@@ -169,7 +169,7 @@ export const RepositoriesWorkflowConfig = Resource<RepositoriesWorkflowConfig>(
 export class RepositoriesWorkflowConfigNotResolved extends Data.TaggedError(
   "GCP.Dataform.RepositoriesWorkflowConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (repository: string, workflowConfigId: string) =>
@@ -315,7 +315,7 @@ export const RepositoriesWorkflowConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RepositoriesWorkflowConfigNotResolved({ name });
+        return yield* new RepositoriesWorkflowConfigNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

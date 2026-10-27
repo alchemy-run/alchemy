@@ -177,7 +177,7 @@ export const CatalogsServingConfig = Resource<CatalogsServingConfig>(
 export class CatalogsServingConfigNotResolved extends Data.TaggedError(
   "GCP.Retail.CatalogsServingConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const defaultSolutionTypes = ["SOLUTION_TYPE_SEARCH"] as const;
@@ -330,7 +330,7 @@ export const CatalogsServingConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CatalogsServingConfigNotResolved({ name });
+        return yield* new CatalogsServingConfigNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;

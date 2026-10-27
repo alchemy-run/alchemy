@@ -219,7 +219,7 @@ const retryWhileAccessPointPropagates = <A, E extends { _tag: string }, R>(
  * poisons the owning bucket's delete with `BucketHasAccessPointsAttached`).
  */
 class AccessPointNotYetDeleted extends Data.TaggedError("AccessPointNotYetDeleted")<{
-  readonly name: string;
+  readonly resourceName: string;
 }> {}
 
 /**
@@ -426,7 +426,9 @@ export const AccessPointProvider = () =>
                 live === undefined
                   ? Effect.void
                   : deleteOnce.pipe(
-                      Effect.flatMap(() => Effect.fail(new AccessPointNotYetDeleted({ name }))),
+                      Effect.flatMap(() =>
+                        Effect.fail(new AccessPointNotYetDeleted({ resourceName: name })),
+                      ),
                     ),
               ),
             ),

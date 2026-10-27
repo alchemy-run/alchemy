@@ -279,7 +279,7 @@ export const RepositoriesIssueProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: name || repository,
+          resourceName: name || repository,
         });
       }
 

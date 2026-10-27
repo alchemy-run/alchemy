@@ -87,7 +87,7 @@ export type Keyvaluemap = Resource<
 export const Keyvaluemap = Resource<Keyvaluemap>("GCP.Apigee.Keyvaluemap");
 
 export class KeyvaluemapNotResolved extends Data.TaggedError("GCP.Apigee.KeyvaluemapNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, mapId: string) =>
@@ -204,7 +204,7 @@ export const KeyvaluemapProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new KeyvaluemapNotResolved({ name });
+        return yield* new KeyvaluemapNotResolved({ resourceName: name });
       }
 
       const currentName = current.name?.includes("/") ? current.name : name;

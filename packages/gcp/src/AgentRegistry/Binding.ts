@@ -175,7 +175,7 @@ export type Binding = Resource<
 export const Binding = Resource<Binding>("GCP.AgentRegistry.Binding");
 
 export class BindingNotResolved extends Data.TaggedError("GCP.AgentRegistry.BindingNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const COLLECTION = "bindings";
@@ -329,7 +329,7 @@ export const BindingProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BindingNotResolved({ name });
+        return yield* new BindingNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

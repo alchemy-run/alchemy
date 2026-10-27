@@ -130,13 +130,13 @@ export const MetadataStoresContext = Resource<MetadataStoresContext>(
 export class MetadataStoresContextNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.MetadataStoresContextNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MetadataStoresContextStillExists extends Data.TaggedError(
   "GCP.AIPlatform.MetadataStoresContextStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parentOf = (name: string) => {
@@ -193,7 +193,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (context) => context === undefined,
-      () => new MetadataStoresContextStillExists({ name }),
+      () => new MetadataStoresContextStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -292,7 +292,7 @@ export const MetadataStoresContextProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MetadataStoresContextNotResolved({ name });
+        return yield* new MetadataStoresContextNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== (news.description ?? "");

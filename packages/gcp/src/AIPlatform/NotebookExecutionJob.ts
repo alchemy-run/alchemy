@@ -183,7 +183,7 @@ export const NotebookExecutionJob = Resource<NotebookExecutionJob>(
 export class NotebookExecutionJobNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.NotebookExecutionJobNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, id: string) =>
@@ -217,7 +217,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (job): job is aiplatform.GoogleCloudAiplatformV1NotebookExecutionJob => job !== undefined,
-      () => new AiPlatformNotResolved({ name }),
+      () => new AiPlatformNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.NotResolved",
@@ -230,7 +230,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (job) => job === undefined,
-      () => new AiPlatformStillExists({ name }),
+      () => new AiPlatformStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -356,7 +356,7 @@ export const NotebookExecutionJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NotebookExecutionJobNotResolved({ name });
+        return yield* new NotebookExecutionJobNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

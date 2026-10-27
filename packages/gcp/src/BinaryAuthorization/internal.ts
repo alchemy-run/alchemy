@@ -14,7 +14,7 @@ export const LIST_PLATFORMS = ["gke", "cloudRun"] as const;
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.BinaryAuthorization.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {

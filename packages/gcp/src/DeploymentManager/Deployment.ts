@@ -335,7 +335,7 @@ export const DeploymentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name: deploymentId });
+        return yield* new ResourceNotResolved({ resourceName: deploymentId });
       }
 
       const name = current.name ?? deploymentId;
@@ -383,7 +383,7 @@ export const DeploymentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, deletePolicy);

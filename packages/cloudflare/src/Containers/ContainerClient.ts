@@ -419,15 +419,13 @@ export const fromContainer = (
     }).pipe(
       Effect.timeout(READINESS_PROBE_TIMEOUT),
       Effect.asVoid,
-      Effect.catch((cause) =>
-        Effect.fail(
-          container.running
-            ? new ContainerError({ message: `Container port ${port} is not ready`, cause })
-            : new ContainerCrashedError({
-                message: `Container exited while waiting for port ${port}`,
-                cause,
-              }),
-        ),
+      Effect.mapError((cause) =>
+        container.running
+          ? new ContainerError({ message: `Container port ${port} is not ready`, cause })
+          : new ContainerCrashedError({
+              message: `Container exited while waiting for port ${port}`,
+              cause,
+            }),
       ),
     );
 

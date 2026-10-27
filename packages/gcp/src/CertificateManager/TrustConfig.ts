@@ -197,13 +197,13 @@ export const TrustConfig = Resource<TrustConfig>("GCP.CertificateManager.TrustCo
 export class TrustConfigNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.TrustConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TrustConfigStillExists extends Data.TaggedError(
   "GCP.CertificateManager.TrustConfigStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -344,7 +344,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((config) =>
-      config ? Effect.succeed(config) : Effect.fail(new TrustConfigNotResolved({ name })),
+      config
+        ? Effect.succeed(config)
+        : Effect.fail(new TrustConfigNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.TrustConfigNotResolved",
@@ -356,7 +358,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((config) =>
-      config === undefined ? Effect.void : Effect.fail(new TrustConfigStillExists({ name })),
+      config === undefined
+        ? Effect.void
+        : Effect.fail(new TrustConfigStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.TrustConfigStillExists",
@@ -476,7 +480,7 @@ export const TrustConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TrustConfigNotResolved({ name });
+        return yield* new TrustConfigNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

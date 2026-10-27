@@ -132,7 +132,7 @@ export const BackendBucket = Resource<BackendBucket>("GCP.Compute.BackendBucket"
 export class BackendBucketNotResolved extends Data.TaggedError(
   "GCP.Compute.BackendBucketNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const rfc1035 = (name: string): string => {
@@ -320,7 +320,7 @@ export const BackendBucketProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BackendBucketNotResolved({ name });
+        return yield* new BackendBucketNotResolved({ resourceName: name });
       }
 
       const observedDescription = current.description ?? "";
@@ -360,7 +360,7 @@ export const BackendBucketProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BackendBucketNotResolved({ name });
+        return yield* new BackendBucketNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

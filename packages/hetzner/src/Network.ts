@@ -23,7 +23,7 @@ import {
 import type { Providers } from "./Providers.ts";
 
 export class NetworkNotCreated extends Data.TaggedError("Hetzner.NetworkNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export type NetworkSubnetType = "cloud" | "server" | "vswitch";
@@ -561,7 +561,7 @@ export const NetworkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NetworkNotCreated({ name });
+        return yield* new NetworkNotCreated({ resourceName: name });
       }
 
       // Sync each mutable aspect from observed cloud state, not `olds`.

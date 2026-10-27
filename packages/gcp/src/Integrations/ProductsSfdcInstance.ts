@@ -132,7 +132,7 @@ export const ProductsSfdcInstance = Resource<ProductsSfdcInstance>(
 export class ProductsSfdcInstanceNotResolved extends Data.TaggedError(
   "GCP.Integrations.ProductsSfdcInstanceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, product: string, sfdcInstanceId: string) =>
@@ -276,7 +276,7 @@ export const ProductsSfdcInstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ProductsSfdcInstanceNotResolved({ name });
+        return yield* new ProductsSfdcInstanceNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

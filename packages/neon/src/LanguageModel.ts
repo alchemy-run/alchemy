@@ -295,11 +295,9 @@ const httpError = (
     if (status === 429) {
       const seconds = Number(response.headers["retry-after"]);
       return yield* error(
-        AiError.RateLimitError.make({
-          ...(Number.isFinite(seconds) && seconds >= 0
-            ? { retryAfter: Duration.seconds(seconds) }
-            : {}),
-        }),
+        AiError.RateLimitError.make(
+          Number.isFinite(seconds) && seconds >= 0 ? { retryAfter: Duration.seconds(seconds) } : {},
+        ),
       );
     }
     if (status >= 500)

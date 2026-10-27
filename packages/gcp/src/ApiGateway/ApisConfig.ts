@@ -287,7 +287,7 @@ export const ApisConfigProvider = () =>
 
       if ((current.state ?? "").toUpperCase() === "FAILED") {
         return yield* new ResourceFailed({
-          name: current.name ?? name,
+          resourceName: current.name ?? name,
           state: current.state ?? "FAILED",
         });
       }
@@ -312,7 +312,7 @@ export const ApisConfigProvider = () =>
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
         if ((current.state ?? "").toUpperCase() === "FAILED") {
           return yield* new ResourceFailed({
-            name: current.name ?? name,
+            resourceName: current.name ?? name,
             state: current.state ?? "FAILED",
           });
         }

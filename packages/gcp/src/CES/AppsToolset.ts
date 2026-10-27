@@ -148,7 +148,7 @@ export type AppsToolset = Resource<
 export const AppsToolset = Resource<AppsToolset>("GCP.CES.AppsToolset");
 
 export class AppsToolsetNotResolved extends Data.TaggedError("GCP.CES.AppsToolsetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (app: string, toolsetId: string) => `${app}/toolsets/${toolsetId}`;
@@ -275,7 +275,7 @@ export const AppsToolsetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppsToolsetNotResolved({ name });
+        return yield* new AppsToolsetNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

@@ -251,7 +251,7 @@ export type Bucket = Resource<
 export const Bucket = Resource<Bucket>("Fly.Bucket");
 
 export class BucketNotCreated extends Data.TaggedError("Fly.BucketNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BucketOrgMissing extends Data.TaggedError("Fly.BucketOrgMissing")<{
@@ -259,13 +259,13 @@ export class BucketOrgMissing extends Data.TaggedError("Fly.BucketOrgMissing")<{
 }> {}
 
 export class BucketProvisionFailed extends Data.TaggedError("Fly.BucketProvisionFailed")<{
-  name: string;
+  resourceName: string;
   status: string | undefined;
   errorMessage: string | undefined;
 }> {}
 
 class BucketPending extends Data.TaggedError("Fly.BucketPending")<{
-  name: string;
+  resourceName: string;
   status: string;
 }> {}
 
@@ -465,20 +465,22 @@ const waitUntilReady = (name: string, addOnId: string) =>
         addOn,
       ): Effect.Effect<AddOnsResponseEdgesItemNode, BucketPending | BucketProvisionFailed> => {
         if (addOn === undefined) {
-          return Effect.fail(new BucketPending({ name, status: "missing" }));
+          return Effect.fail(new BucketPending({ resourceName: name, status: "missing" }));
         }
         const status = addOn.status ?? undefined;
         if (failedStatus(status)) {
           return Effect.fail(
             new BucketProvisionFailed({
-              name,
+              resourceName: name,
               status,
               errorMessage: addOn.errorMessage ?? undefined,
             }),
           );
         }
         if (pendingStatus(status)) {
-          return Effect.fail(new BucketPending({ name, status: status ?? "creating" }));
+          return Effect.fail(
+            new BucketPending({ resourceName: name, status: status ?? "creating" }),
+          );
         }
         return Effect.succeed(addOn);
       },
@@ -506,7 +508,7 @@ const waitUntilGone = (addOnId: string, name: string) =>
       (yield* findById(addOnId)) ?? (name.length > 0 ? yield* findByName(name) : undefined);
     if (still !== undefined) {
       return yield* new BucketPending({
-        name,
+        resourceName: name,
         status: still.status ?? "deleting",
       });
     }
@@ -650,13 +652,13 @@ export const BucketProvider = () =>
       }
 
       if (current === undefined || current.id.length === 0) {
-        return yield* new BucketNotCreated({ name });
+        return yield* new BucketNotCreated({ resourceName: name });
       }
 
       const status = current.status ?? undefined;
       if (failedStatus(status)) {
         return yield* new BucketProvisionFailed({
-          name,
+          resourceName: name,
           status,
           errorMessage: current.errorMessage ?? undefined,
         });
@@ -749,7 +751,7 @@ const requireBucketSecrets = Effect.fn(function* (appName: string, values: Recor
   ];
   if (required.some((key) => !values[key]?.trim())) {
     return yield* new TigrisCredentialsMissing({
-      name: values.BUCKET_NAME || appName,
+      resourceName: values.BUCKET_NAME || appName,
     });
   }
 });
@@ -820,7 +822,7 @@ const findAttachedBucket = (input: { id?: string; name: string }) =>
           : undefined;
     if (listed === undefined) {
       return yield* new BucketPending({
-        name: input.name || input.id || "",
+        resourceName: input.name || input.id || "",
         status: "missing",
       });
     }

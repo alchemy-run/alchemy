@@ -143,7 +143,7 @@ export const packEnvValueKeepRedacted = (value: unknown): string | Redacted.Reda
   Redacted.isRedacted(value) ? value.pipe(packEnvValue, Redacted.make) : packEnvValue(value);
 
 // Only JSON's four whitespace characters may precede a valid JSON value.
-const possibleJson = /^[\x20\t\r\n]*["{\[0-9tfn-]/;
+const possibleJson = /^[\x20\t\r\n]*["{[0-9tfn-]/;
 
 /**
  * Parse an env-var string produced by {@link packEnvValue} back into its

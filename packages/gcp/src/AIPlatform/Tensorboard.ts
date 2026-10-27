@@ -117,7 +117,7 @@ export const Tensorboard = Resource<Tensorboard>("GCP.AIPlatform.Tensorboard");
 export class TensorboardNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.TensorboardNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -155,7 +155,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((board) =>
-      board ? Effect.succeed(board) : Effect.fail(new TensorboardNotResolved({ name })),
+      board
+        ? Effect.succeed(board)
+        : Effect.fail(new TensorboardNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.TensorboardNotResolved",
@@ -278,7 +280,7 @@ export const TensorboardProvider = () =>
 
       if (current === undefined) {
         return yield* new TensorboardNotResolved({
-          name: output?.name ?? `${parent}/tensorboards/-`,
+          resourceName: output?.name ?? `${parent}/tensorboards/-`,
         });
       }
 

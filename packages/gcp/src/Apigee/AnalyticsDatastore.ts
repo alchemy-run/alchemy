@@ -127,7 +127,7 @@ export const AnalyticsDatastore = Resource<AnalyticsDatastore>("GCP.Apigee.Analy
 export class AnalyticsDatastoreNotResolved extends Data.TaggedError(
   "GCP.Apigee.AnalyticsDatastoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, datastoreId: string) =>
@@ -259,7 +259,7 @@ export const AnalyticsDatastoreProvider = () =>
 
       if (current === undefined) {
         return yield* new AnalyticsDatastoreNotResolved({
-          name: output?.name ?? orgParent(organizationId),
+          resourceName: output?.name ?? orgParent(organizationId),
         });
       }
 

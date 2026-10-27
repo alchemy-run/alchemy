@@ -271,7 +271,7 @@ export {
 } from "@alchemy.run/redis/Errors";
 
 export class RedisNotCreated extends Data.TaggedError("Railway.RedisNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -690,7 +690,7 @@ export const RedisProvider = () =>
       }
 
       if (current === undefined || isGoneService(current)) {
-        return yield* new RedisNotCreated({ name, projectId });
+        return yield* new RedisNotCreated({ resourceName: name, projectId });
       }
 
       if (current.name !== name) {

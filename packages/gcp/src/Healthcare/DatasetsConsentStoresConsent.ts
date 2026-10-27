@@ -143,7 +143,7 @@ export const DatasetsConsentStoresConsent = Resource<DatasetsConsentStoresConsen
 export class DatasetsConsentStoresConsentNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsConsentStoresConsentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_STATE = "DRAFT";
@@ -266,7 +266,7 @@ export const DatasetsConsentStoresConsentProvider = () =>
 
       if (current === undefined) {
         return yield* new DatasetsConsentStoresConsentNotResolved({
-          name: consentStore,
+          resourceName: consentStore,
         });
       }
 

@@ -127,7 +127,7 @@ export const CollectionsEnginesAssistant = Resource<CollectionsEnginesAssistant>
 export class CollectionsEnginesAssistantNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEnginesAssistantNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (engine: string, assistantId: string) => `${engine}/assistants/${assistantId}`;
@@ -221,7 +221,7 @@ export const CollectionsEnginesAssistantProvider = () =>
 
       if (current === undefined) {
         return yield* new CollectionsEnginesAssistantNotResolved({
-          name: fallbackName,
+          resourceName: fallbackName,
         });
       }
 

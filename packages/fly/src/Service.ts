@@ -1059,7 +1059,7 @@ export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRu
   });
 
 export class ServiceNotCreated extends Data.TaggedError("Fly.ServiceNotCreated")<{
-  name: string;
+  resourceName: string;
   appName: string;
 }> {}
 
@@ -1229,9 +1229,6 @@ const configDrifted = (
     !sameStatics(config?.statics, desired.statics)
   );
 };
-
-const portsOf = (services: FlyMachineService[] | undefined) =>
-  (services ?? []).flatMap((service) => service.ports ?? []);
 
 const withPort = (base: string, port: number, standard: number) =>
   port === standard ? base : `${base}:${port}`;
@@ -1582,7 +1579,7 @@ export const ServiceProvider = () =>
         stables: ["appName"],
         nuke: { dependsOn: ["Fly.App"] },
 
-        diff: Effect.fn(function* ({ id, news, output }) {
+        diff: Effect.fn(function* ({ news, output }) {
           if (news === undefined) return;
           const shape = news as Partial<Pick<ServiceProps, "app" | "public" | "network">>;
           const ownsApp = shape.app === undefined;
@@ -1836,7 +1833,9 @@ export const ServiceProvider = () =>
               buildConfig({ image: imageRef, guest, env, services, mounts, metadata, statics }),
           }).pipe(
             Effect.catchTag("Fly.ReplicaNotCreated", (error) =>
-              Effect.fail(new ServiceNotCreated({ name: error.name, appName: error.appName })),
+              Effect.fail(
+                new ServiceNotCreated({ resourceName: error.resourceName, appName: error.appName }),
+              ),
             ),
           );
           return toAttrs(set, codeHash, {

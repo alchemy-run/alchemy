@@ -28,7 +28,7 @@ const RESERVED_SHORT_NAMES = new Set([
 ]);
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.CloudSearch.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -291,7 +291,7 @@ export const waitUntilExists = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceNotResolved,

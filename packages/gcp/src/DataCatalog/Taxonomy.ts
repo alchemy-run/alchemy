@@ -248,7 +248,7 @@ export const TaxonomyProvider = () =>
 
       if (current === undefined) {
         return yield* new DatacatalogNotResolved({
-          name: output?.name ?? `${parent}/taxonomies`,
+          resourceName: output?.name ?? `${parent}/taxonomies`,
         });
       }
 

@@ -25,7 +25,6 @@ import {
   waitForStoredInfoTypeReady,
 } from "./internal.ts";
 
-type StoredInfoTypeConfig = dlp.GooglePrivacyDlpV2StoredInfoTypeConfig;
 type StoredInfoTypeRegex = dlp.GooglePrivacyDlpV2Regex;
 type StoredInfoTypeDictionary = dlp.GooglePrivacyDlpV2Dictionary;
 type StoredInfoTypeLargeCustomDictionary = dlp.GooglePrivacyDlpV2LargeCustomDictionaryConfig;
@@ -141,7 +140,7 @@ export const OrganizationStoredInfoType = Resource<OrganizationStoredInfoType>(
 export class OrganizationStoredInfoTypeNotResolved extends Data.TaggedError(
   "GCP.DLP.OrganizationStoredInfoTypeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, storedInfoTypeId: string) =>
@@ -278,7 +277,7 @@ export const OrganizationStoredInfoTypeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OrganizationStoredInfoTypeNotResolved({ name });
+        return yield* new OrganizationStoredInfoTypeNotResolved({ resourceName: name });
       }
 
       const observed = current.currentVersion?.config;

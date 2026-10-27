@@ -150,7 +150,7 @@ export const RegionBackendBucket = Resource<RegionBackendBucket>("GCP.Compute.Re
 export class RegionBackendBucketNotResolved extends Data.TaggedError(
   "GCP.Compute.RegionBackendBucketNotResolved",
 )<{
-  name: string;
+  resourceName: string;
   region: string;
 }> {}
 
@@ -201,7 +201,7 @@ const awaitResource = (project: string, region: string, name: string) =>
     Effect.flatMap((bucket) =>
       bucket !== undefined
         ? Effect.succeed(bucket)
-        : Effect.fail(new RegionBackendBucketNotResolved({ name, region })),
+        : Effect.fail(new RegionBackendBucketNotResolved({ resourceName: name, region })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.RegionBackendBucketNotResolved",
@@ -319,7 +319,7 @@ export const RegionBackendBucketProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RegionBackendBucketNotResolved({ name, region });
+        return yield* new RegionBackendBucketNotResolved({ resourceName: name, region });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

@@ -108,7 +108,7 @@ export {
 } from "./local-context.ts";
 
 export class ServiceNotCreated extends Data.TaggedError("Railway.ServiceNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -1135,7 +1135,7 @@ export const ServiceProvider = () =>
           }
 
           if (current === undefined || isGoneService(current)) {
-            return yield* new ServiceNotCreated({ name, projectId });
+            return yield* new ServiceNotCreated({ resourceName: name, projectId });
           }
 
           if (current.name !== name) {

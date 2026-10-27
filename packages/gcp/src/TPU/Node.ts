@@ -653,7 +653,7 @@ export const NodeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const state = (current.state ?? "").toUpperCase();
@@ -667,7 +667,7 @@ export const NodeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -720,7 +720,7 @@ export const NodeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

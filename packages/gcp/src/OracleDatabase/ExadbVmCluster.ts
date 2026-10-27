@@ -202,7 +202,7 @@ export type ExadbVmCluster = Resource<
 export const ExadbVmCluster = Resource<ExadbVmCluster>("GCP.OracleDatabase.ExadbVmCluster");
 
 const mergedProperties = (news: ExadbVmClusterProps): ExadbVmClusterPropertiesInput => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   nodeCount: news.nodeCount ?? news.properties?.nodeCount,
   gridImageId: news.gridImageId ?? news.properties?.gridImageId,
   hostnamePrefix: news.hostnamePrefix ?? news.properties?.hostnamePrefix,
@@ -392,7 +392,7 @@ export const ExadbVmClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(

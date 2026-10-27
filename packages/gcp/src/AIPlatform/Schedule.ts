@@ -188,7 +188,7 @@ export type Schedule = Resource<
 export const Schedule = Resource<Schedule>("GCP.AIPlatform.Schedule");
 
 export class ScheduleNotResolved extends Data.TaggedError("GCP.AIPlatform.ScheduleNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (schedule: aiplatform.GoogleCloudAiplatformV1Schedule, project: string) => {
@@ -373,7 +373,7 @@ export const ScheduleProvider = () =>
 
       if (current === undefined) {
         return yield* new ScheduleNotResolved({
-          name: output?.name ?? `${parent}/schedules/-`,
+          resourceName: output?.name ?? `${parent}/schedules/-`,
         });
       }
 

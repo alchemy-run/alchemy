@@ -325,7 +325,7 @@ export const TransferConfig = Resource<TransferConfig>("GCP.BigQueryDataTransfer
 export class TransferConfigNotResolved extends Data.TaggedError(
   "GCP.BigQueryDataTransfer.TransferConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -670,7 +670,7 @@ export const TransferConfigProvider = () =>
 
       if (current === undefined) {
         return yield* new TransferConfigNotResolved({
-          name: `${parent}/transferConfigs`,
+          resourceName: `${parent}/transferConfigs`,
         });
       }
 

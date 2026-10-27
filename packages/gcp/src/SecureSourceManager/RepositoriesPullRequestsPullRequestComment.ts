@@ -440,7 +440,7 @@ export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: name || pullRequest,
+          resourceName: name || pullRequest,
         });
       }
 

@@ -131,7 +131,7 @@ export const AgentsSessionsEntityType = Resource<AgentsSessionsEntityType>(
 export class AgentsSessionsEntityTypeNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsSessionsEntityTypeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_ENTITY_TYPE = "sys.color";
@@ -288,7 +288,7 @@ export const AgentsSessionsEntityTypeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentsSessionsEntityTypeNotResolved({ name });
+        return yield* new AgentsSessionsEntityTypeNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

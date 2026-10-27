@@ -200,11 +200,11 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (endpoint): endpoint is networksecurity.FirewallEndpoint => endpoint !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (endpoint) => !isPendingState(endpoint.state),
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.ResourceNotResolved",
@@ -363,7 +363,7 @@ export const OrganizationsFirewallEndpointProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

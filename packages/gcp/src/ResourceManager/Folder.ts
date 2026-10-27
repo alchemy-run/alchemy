@@ -98,16 +98,16 @@ export type Folder = Resource<
 export const Folder = Resource<Folder>("GCP.ResourceManager.Folder");
 
 export class FolderNotResolved extends Data.TaggedError("GCP.ResourceManager.FolderNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FolderStillExists extends Data.TaggedError("GCP.ResourceManager.FolderStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const sanitizeDisplayName = (value: string) => {
   let next = value
-    .replace(/[^a-zA-Z0-9_ \-]/g, "-")
+    .replace(/[^a-zA-Z0-9_ -]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
   if (next.length > FOLDER_DISPLAY_MAX) {
@@ -185,7 +185,7 @@ const waitUntilExists = (resourceName: string | undefined, parent: string, displ
       (folder): folder is resourcemanager.Folder => folder !== undefined,
       () =>
         new FolderNotResolved({
-          name: resourceName ?? `${parent}/${displayName}`,
+          resourceName: resourceName ?? `${parent}/${displayName}`,
         }),
     ),
     Effect.retry({
@@ -200,7 +200,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((folder) =>
       folder === undefined || isDeleteRequested(folder.state)
         ? Effect.void
-        : Effect.fail(new FolderStillExists({ name })),
+        : Effect.fail(new FolderStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.FolderStillExists",
@@ -273,7 +273,7 @@ export const FolderProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new FolderNotResolved({
-          name: output?.name ?? `${parent}/${displayName}`,
+          resourceName: output?.name ?? `${parent}/${displayName}`,
         });
       }
 
@@ -305,7 +305,7 @@ export const FolderProvider = () =>
 
       if (current === undefined) {
         return yield* new FolderNotResolved({
-          name: output?.name ?? `${parent}/${displayName}`,
+          resourceName: output?.name ?? `${parent}/${displayName}`,
         });
       }
 

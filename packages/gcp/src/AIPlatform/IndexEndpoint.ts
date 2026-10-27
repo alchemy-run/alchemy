@@ -132,13 +132,13 @@ export const IndexEndpoint = Resource<IndexEndpoint>("GCP.AIPlatform.IndexEndpoi
 export class IndexEndpointNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.IndexEndpointNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class IndexEndpointStillExists extends Data.TaggedError(
   "GCP.AIPlatform.IndexEndpointStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (endpoint: aiplatform.GoogleCloudAiplatformV1IndexEndpoint, project: string) => {
@@ -204,7 +204,7 @@ const waitUntilExists = (name: string) =>
     Effect.filterOrFail(
       (endpoint): endpoint is aiplatform.GoogleCloudAiplatformV1IndexEndpoint =>
         endpoint !== undefined,
-      () => new IndexEndpointNotResolved({ name }),
+      () => new IndexEndpointNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.IndexEndpointNotResolved",
@@ -217,7 +217,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (endpoint) => endpoint === undefined,
-      () => new IndexEndpointStillExists({ name }),
+      () => new IndexEndpointStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -323,7 +323,7 @@ export const IndexEndpointProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new IndexEndpointNotResolved({
-          name: output?.name ?? `${location}/indexEndpoints`,
+          resourceName: output?.name ?? `${location}/indexEndpoints`,
         });
       }
 

@@ -135,13 +135,13 @@ export const ReasoningEngine = Resource<ReasoningEngine>("GCP.AIPlatform.Reasoni
 export class ReasoningEngineNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.ReasoningEngineNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ReasoningEngineStillExists extends Data.TaggedError(
   "GCP.AIPlatform.ReasoningEngineStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, reasoningEngineId: string) =>
@@ -206,7 +206,9 @@ const findOwned = (id: string, parent: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((engine) =>
-      engine === undefined ? Effect.void : Effect.fail(new ReasoningEngineStillExists({ name })),
+      engine === undefined
+        ? Effect.void
+        : Effect.fail(new ReasoningEngineStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.ReasoningEngineStillExists",
@@ -321,7 +323,7 @@ export const ReasoningEngineProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new ReasoningEngineNotResolved({
-          name: output?.name ?? parent,
+          resourceName: output?.name ?? parent,
         });
       }
 
@@ -359,7 +361,7 @@ export const ReasoningEngineProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ReasoningEngineNotResolved({ name: observedName });
+        return yield* new ReasoningEngineNotResolved({ resourceName: observedName });
       }
       return toAttrs(current, env.project);
     }),

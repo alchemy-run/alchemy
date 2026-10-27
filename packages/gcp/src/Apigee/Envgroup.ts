@@ -90,7 +90,7 @@ export type Envgroup = Resource<
 export const Envgroup = Resource<Envgroup>("GCP.Apigee.Envgroup");
 
 export class EnvgroupNotResolved extends Data.TaggedError("GCP.Apigee.EnvgroupNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, envgroupId: string) =>
@@ -176,7 +176,7 @@ export const EnvgroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvgroupNotResolved({ name });
+        return yield* new EnvgroupNotResolved({ resourceName: name });
       }
 
       if (!sameStringList(current.hostnames, desiredHostnames)) {

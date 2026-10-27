@@ -139,7 +139,7 @@ export const SfdcInstance = Resource<SfdcInstance>("GCP.Integrations.SfdcInstanc
 export class SfdcInstanceNotResolved extends Data.TaggedError(
   "GCP.Integrations.SfdcInstanceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, sfdcInstanceId: string) =>
@@ -258,7 +258,7 @@ export const SfdcInstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SfdcInstanceNotResolved({ name });
+        return yield* new SfdcInstanceNotResolved({ resourceName: name });
       }
 
       const currentName = withProjectId(current.name ?? name, env.project);

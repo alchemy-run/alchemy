@@ -225,7 +225,7 @@ export const VolumesSnapshotProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: name.length > 0 ? name : `${volume}/snapshots`,
+          resourceName: name.length > 0 ? name : `${volume}/snapshots`,
         });
       }
 

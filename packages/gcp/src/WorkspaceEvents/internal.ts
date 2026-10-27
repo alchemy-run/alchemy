@@ -6,12 +6,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import {
-  alchemyLabelKeys,
-  createInternalLabels,
-  hasAlchemyLabels,
-  sanitizeLabelValue,
-} from "../Labels.ts";
+import { alchemyLabelKeys, createInternalLabels, sanitizeLabelValue } from "../Labels.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const SUBSCRIPTION_PREFIX = "subscriptions/";
@@ -52,13 +47,13 @@ export const LIST_EVENT_TYPES = [
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.WorkspaceEvents.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError(
   "GCP.WorkspaceEvents.ResourceStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -302,7 +297,7 @@ export const waitUntilExists = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceNotResolved,
@@ -318,7 +313,7 @@ export const waitUntilGone = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceStillExists,

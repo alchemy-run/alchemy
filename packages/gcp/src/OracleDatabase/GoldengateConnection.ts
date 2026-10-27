@@ -145,7 +145,7 @@ export const GoldengateConnection = Resource<GoldengateConnection>(
 const mergedProperties = (
   news: GoldengateConnectionProps,
 ): oracle.GoldengateConnectionProperties => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   connectionType: news.connectionType ?? news.properties?.connectionType,
   displayName: news.displayName ?? news.properties?.displayName,
   description: news.description ?? news.properties?.description,
@@ -292,7 +292,7 @@ export const GoldengateConnectionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(

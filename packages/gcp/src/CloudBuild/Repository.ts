@@ -148,13 +148,13 @@ export const Repository = Resource<Repository>("GCP.CloudBuild.Repository");
 export class RepositoryNotResolved extends Data.TaggedError(
   "GCP.CloudBuild.RepositoryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class RepositoryStillExists extends Data.TaggedError(
   "GCP.CloudBuild.RepositoryStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -330,7 +330,9 @@ const waitForOperation = (operation: cloudbuild.Operation, options?: { notFoundO
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((repository) =>
-      repository ? Effect.succeed(repository) : Effect.fail(new RepositoryNotResolved({ name })),
+      repository
+        ? Effect.succeed(repository)
+        : Effect.fail(new RepositoryNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudBuild.RepositoryNotResolved",
@@ -342,7 +344,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((repository) =>
-      repository === undefined ? Effect.void : Effect.fail(new RepositoryStillExists({ name })),
+      repository === undefined
+        ? Effect.void
+        : Effect.fail(new RepositoryStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudBuild.RepositoryStillExists",
@@ -525,7 +529,7 @@ export const RepositoryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RepositoryNotResolved({ name });
+        return yield* new RepositoryNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

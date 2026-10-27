@@ -306,7 +306,7 @@ export const AuthProviderProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AuthProviderNotResolved({ name });
+        return yield* new AuthProviderNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;

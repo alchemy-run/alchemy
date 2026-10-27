@@ -122,7 +122,7 @@ export const AgentsEnvironment = Resource<AgentsEnvironment>("GCP.Dialogflow.Age
 export class AgentsEnvironmentNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsEnvironmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const configsOf = (
@@ -277,7 +277,7 @@ export const AgentsEnvironmentProvider = () =>
 
       if (current === undefined) {
         return yield* new AgentsEnvironmentNotResolved({
-          name: output?.name ?? `${agent}/environments/${news.environmentId ?? "unknown"}`,
+          resourceName: output?.name ?? `${agent}/environments/${news.environmentId ?? "unknown"}`,
         });
       }
 

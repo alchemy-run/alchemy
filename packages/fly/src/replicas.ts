@@ -42,7 +42,7 @@ const waitBackoff = Schedule.exponential("500 millis");
 const SERVICE_CHECK_NAME_PREFIX = "servicecheck-";
 
 export class ReplicaNotCreated extends Data.TaggedError("Fly.ReplicaNotCreated")<{
-  name: string;
+  resourceName: string;
   appName: string;
 }> {}
 
@@ -1163,7 +1163,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
       );
       const volumeId = volume?.id;
       if (volumeId === undefined) {
-        return yield* new ReplicaNotCreated({ name, appName: input.appName });
+        return yield* new ReplicaNotCreated({ resourceName: name, appName: input.appName });
       }
       usedVolumeIds.add(volumeId);
       mounts.push({ volume: volumeId, path: group.disk.path });
@@ -1200,11 +1200,11 @@ const reconcileLeasedReplicas = Effect.fn(function* (
           ),
         ));
       if (current === undefined || current.id === undefined) {
-        return yield* new ReplicaNotCreated({ name, appName: input.appName });
+        return yield* new ReplicaNotCreated({ resourceName: name, appName: input.appName });
       }
       const observed = (yield* leaseSnapshot(input.appName, [current], leases))[0];
       if (!observed || input.configDrifted(observed, { mounts, metadata })) {
-        return yield* new ReplicaNotCreated({ name, appName: input.appName });
+        return yield* new ReplicaNotCreated({ resourceName: name, appName: input.appName });
       }
       current = observed;
     } else if (
@@ -1243,7 +1243,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
             !sameChecks(observed.config?.checks, config.checks) ||
             !sameStopConfig(observed.config?.stop_config, config.stop_config)
           )
-            return yield* new ReplicaNotCreated({ appName: input.appName, name });
+            return yield* new ReplicaNotCreated({ appName: input.appName, resourceName: name });
           return observed;
         }).pipe(
           Effect.retry({

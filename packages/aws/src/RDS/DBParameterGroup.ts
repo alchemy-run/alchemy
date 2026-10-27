@@ -136,7 +136,7 @@ const retryWhileParameterGroupBusy = <A, E extends { _tag: string }, R>(
   });
 
 class DBParameterGroupNotSettled extends Data.TaggedError("DBParameterGroupNotSettled")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const DBParameterGroupProvider = () =>
@@ -403,7 +403,7 @@ export const DBParameterGroupProvider = () =>
               const observed = toManagedParameterRecord(parameters, desiredParameters);
               return deepEqual(desiredParameters, observed)
                 ? Effect.succeed(observed)
-                : Effect.fail(new DBParameterGroupNotSettled({ name }));
+                : Effect.fail(new DBParameterGroupNotSettled({ resourceName: name }));
             }),
             Effect.retry({
               while: (error) => error._tag === "DBParameterGroupNotSettled",

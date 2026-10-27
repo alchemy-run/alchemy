@@ -144,7 +144,7 @@ export const AutoLabelingRule = Resource<AutoLabelingRule>(
 export class AutoLabelingRuleNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.AutoLabelingRuleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_LABEL_KEY_TYPE = "LABEL_KEY_TYPE_CUSTOM";
@@ -283,7 +283,7 @@ export const AutoLabelingRuleProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AutoLabelingRuleNotResolved({ name });
+        return yield* new AutoLabelingRuleNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

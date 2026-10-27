@@ -417,7 +417,7 @@ export const IssuingCardholder = Resource<IssuingCardholder>("Stripe.IssuingCard
 export class IssuingCardholderNotResolved extends Data.TaggedError(
   "Stripe.IssuingCardholderNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 type IssuingCardholderAttributes = IssuingCardholder["Attributes"];
@@ -537,11 +537,8 @@ const toWireSpendingControls = (
     : {}),
 });
 
-const toWireCompany = (
-  company: IssuingCardholderCompany,
-): CreateIssuingCardholderRequestCompany => ({
-  ...(company.taxId !== undefined ? { tax_id: company.taxId } : {}),
-});
+const toWireCompany = (company: IssuingCardholderCompany): CreateIssuingCardholderRequestCompany =>
+  company.taxId !== undefined ? { tax_id: company.taxId } : {};
 
 const toWireIndividual = (
   individual: IssuingCardholderIndividual,
@@ -777,7 +774,7 @@ export const IssuingCardholderProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new IssuingCardholderNotResolved({ name: news.name });
+        return yield* new IssuingCardholderNotResolved({ resourceName: news.name });
       }
 
       const observedMetadata = tagRecord(current.metadata);

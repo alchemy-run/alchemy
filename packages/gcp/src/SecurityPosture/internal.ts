@@ -19,13 +19,13 @@ export const MAX_ID_LENGTH = 63;
 export class SecuritypostureNotResolved extends Data.TaggedError(
   "GCP.SecurityPosture.NotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SecuritypostureStillExists extends Data.TaggedError(
   "GCP.SecurityPosture.StillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class OrganizationNotResolved extends Data.TaggedError(
@@ -223,7 +223,7 @@ export const waitUntilExists = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,
-      () => new SecuritypostureNotResolved({ name }),
+      () => new SecuritypostureNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof SecuritypostureNotResolved,
@@ -239,7 +239,7 @@ export const waitUntilGone = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new SecuritypostureStillExists({ name }),
+      () => new SecuritypostureStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof SecuritypostureStillExists,

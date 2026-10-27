@@ -126,7 +126,7 @@ export const SecurityFeedback = Resource<SecurityFeedback>("GCP.Apigee.SecurityF
 export class SecurityFeedbackNotResolved extends Data.TaggedError(
   "GCP.Apigee.SecurityFeedbackNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, feedbackId: string) =>
@@ -279,7 +279,7 @@ export const SecurityFeedbackProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecurityFeedbackNotResolved({ name });
+        return yield* new SecurityFeedbackNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== (news.displayName ?? "");

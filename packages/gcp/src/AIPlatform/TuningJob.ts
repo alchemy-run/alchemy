@@ -130,7 +130,7 @@ export type TuningJob = Resource<
 export const TuningJob = Resource<TuningJob>("GCP.AIPlatform.TuningJob");
 
 export class TuningJobNotResolved extends Data.TaggedError("GCP.AIPlatform.TuningJobNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toDisplayName = (id: string, existing?: string) =>
@@ -212,7 +212,7 @@ const cancelJob = (name: string) =>
           (job) =>
             job === undefined ||
             isJobTerminal(typeof job.state === "string" ? job.state : undefined),
-          () => new TuningJobNotResolved({ name }),
+          () => new TuningJobNotResolved({ resourceName: name }),
         ),
         Effect.retry({
           while: (error) => error._tag === "GCP.AIPlatform.TuningJobNotResolved",
@@ -242,7 +242,7 @@ export const TuningJobProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, output }) {
       const env = yield* GcpEnvironment.current;
       const existing = yield* findOwned(id, env.project, env.region, output?.name);
       if (existing === undefined) return undefined;
@@ -296,7 +296,7 @@ export const TuningJobProvider = () =>
 
       if (current === undefined) {
         return yield* new TuningJobNotResolved({
-          name: output?.name ?? parentOf(env.project, location),
+          resourceName: output?.name ?? parentOf(env.project, location),
         });
       }
 

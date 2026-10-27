@@ -3,7 +3,6 @@ import type { Input } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import { Certificate } from "../ACM/Certificate.ts";
 import { Distribution } from "../CloudFront/Distribution.ts";
 import { Invalidation } from "../CloudFront/Invalidation.ts";
 import {

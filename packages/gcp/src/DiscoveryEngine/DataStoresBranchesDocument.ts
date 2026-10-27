@@ -156,7 +156,7 @@ export const DataStoresBranchesDocument = Resource<DataStoresBranchesDocument>(
 export class DataStoresBranchesDocumentNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresBranchesDocumentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const branchParent = (dataStore: string, branch: string) => `${dataStore}/branches/${branch}`;
@@ -283,7 +283,7 @@ export const DataStoresBranchesDocumentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataStoresBranchesDocumentNotResolved({ name });
+        return yield* new DataStoresBranchesDocumentNotResolved({ resourceName: name });
       }
 
       const jsonChanged = fingerprint(current.jsonData) !== fingerprint(jsonData);

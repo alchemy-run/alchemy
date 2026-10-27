@@ -154,11 +154,11 @@ export type Table = Resource<
 export const Table = Resource<Table>("GCP.Bigtable.Table");
 
 export class TableNotResolved extends Data.TaggedError("GCP.Bigtable.TableNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TableStillExists extends Data.TaggedError("GCP.Bigtable.TableStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_GRANULARITY = "MILLIS";
@@ -215,7 +215,7 @@ const getByName = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((table) =>
-      table === undefined ? Effect.void : Effect.fail(new TableStillExists({ name })),
+      table === undefined ? Effect.void : Effect.fail(new TableStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.TableStillExists",
@@ -380,7 +380,7 @@ export const TableProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TableNotResolved({ name });
+        return yield* new TableNotResolved({ resourceName: name });
       }
 
       if (families !== undefined) {
@@ -432,7 +432,7 @@ export const TableProvider = () =>
         yield* waitForOperation(patched);
         current = yield* getByName(name);
         if (current === undefined) {
-          return yield* new TableNotResolved({ name });
+          return yield* new TableNotResolved({ resourceName: name });
         }
       }
 

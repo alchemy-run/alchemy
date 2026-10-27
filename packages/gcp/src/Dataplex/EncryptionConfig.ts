@@ -209,7 +209,7 @@ export const EncryptionConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataplexNotResolved({ name });
+        return yield* new DataplexNotResolved({ resourceName: name });
       }
 
       const keyChanged = (current.key ?? "") !== (news.key ?? "");

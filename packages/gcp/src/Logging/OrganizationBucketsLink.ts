@@ -120,7 +120,7 @@ export const OrganizationBucketsLink = Resource<OrganizationBucketsLink>(
 export class OrganizationBucketsLinkNotResolved extends Data.TaggedError(
   "GCP.Logging.OrganizationBucketsLinkNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parseLinkName = (name: string) => {
@@ -188,13 +188,13 @@ const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const link = yield* getByName(name);
     if (isDeleted(link)) {
-      return yield* new OrganizationBucketsLinkNotResolved({ name });
+      return yield* new OrganizationBucketsLinkNotResolved({ resourceName: name });
     }
     if (link.lifecycleState === "FAILED") {
-      return yield* new OrganizationBucketsLinkNotResolved({ name });
+      return yield* new OrganizationBucketsLinkNotResolved({ resourceName: name });
     }
     if (isPending(link.lifecycleState)) {
-      return yield* new OrganizationBucketsLinkNotResolved({ name });
+      return yield* new OrganizationBucketsLinkNotResolved({ resourceName: name });
     }
     return link;
   }).pipe(
@@ -208,7 +208,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((link) =>
-      isDeleted(link) ? Effect.void : Effect.fail(new OrganizationBucketsLinkNotResolved({ name })),
+      isDeleted(link)
+        ? Effect.void
+        : Effect.fail(new OrganizationBucketsLinkNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.OrganizationBucketsLinkNotResolved",
@@ -335,7 +337,7 @@ export const OrganizationBucketsLinkProvider = () =>
       }
 
       if (isDeleted(current)) {
-        return yield* new OrganizationBucketsLinkNotResolved({ name });
+        return yield* new OrganizationBucketsLinkNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, bucket, env.project);

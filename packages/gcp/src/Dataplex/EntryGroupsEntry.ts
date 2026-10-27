@@ -406,7 +406,7 @@ export const EntryGroupsEntryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataplexNotResolved({ name });
+        return yield* new DataplexNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.entrySource?.labels);

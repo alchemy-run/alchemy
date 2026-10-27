@@ -166,7 +166,7 @@ export const AgentsEntityType = Resource<AgentsEntityType>("GCP.Dialogflow.Agent
 export class AgentsEntityTypeNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsEntityTypeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const entitiesOf = (
@@ -308,7 +308,7 @@ export const AgentsEntityTypeProvider = () =>
       if (current === undefined) {
         const name =
           output?.name ?? (news.entityTypeId ? `${agent}/entityTypes/${news.entityTypeId}` : agent);
-        return yield* new AgentsEntityTypeNotResolved({ name });
+        return yield* new AgentsEntityTypeNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? output?.name ?? "";

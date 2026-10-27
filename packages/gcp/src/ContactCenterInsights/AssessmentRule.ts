@@ -139,7 +139,7 @@ export const AssessmentRule = Resource<AssessmentRule>("GCP.ContactCenterInsight
 export class AssessmentRuleNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.AssessmentRuleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 // Assessment rule ids allow only `[A-Za-z0-9]{4,64}`, unlike the dashed
@@ -298,7 +298,7 @@ export const AssessmentRuleProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AssessmentRuleNotResolved({ name });
+        return yield* new AssessmentRuleNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

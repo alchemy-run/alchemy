@@ -14,7 +14,7 @@ export const MAX_ID_LENGTH = 63;
 export const MAX_ITEM_LENGTH = 100;
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.Speech.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const parseOwnershipMarker = (

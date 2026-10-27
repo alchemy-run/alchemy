@@ -165,7 +165,7 @@ export const ApimServiceExtension = Resource<ApimServiceExtension>(
 export class ApimServiceExtensionNotResolved extends Data.TaggedError(
   "GCP.Apigee.ApimServiceExtensionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, extensionId: string) =>
@@ -308,7 +308,7 @@ export const ApimServiceExtensionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApimServiceExtensionNotResolved({ name });
+        return yield* new ApimServiceExtensionNotResolved({ resourceName: name });
       }
 
       const needsUpdate =

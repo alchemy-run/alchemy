@@ -190,13 +190,13 @@ export const TlsInspectionPolicy = Resource<TlsInspectionPolicy>(
 export class TlsInspectionPolicyNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.TlsInspectionPolicyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TlsInspectionPolicyStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.TlsInspectionPolicyStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const caPoolName = (project: string, location: string, caPool: string) => {
@@ -241,7 +241,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((policy) =>
-      policy ? Effect.succeed(policy) : Effect.fail(new TlsInspectionPolicyNotResolved({ name })),
+      policy
+        ? Effect.succeed(policy)
+        : Effect.fail(new TlsInspectionPolicyNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.TlsInspectionPolicyNotResolved",
@@ -255,7 +257,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((policy) =>
       policy === undefined
         ? Effect.void
-        : Effect.fail(new TlsInspectionPolicyStillExists({ name })),
+        : Effect.fail(new TlsInspectionPolicyStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.TlsInspectionPolicyStillExists",
@@ -375,7 +377,7 @@ export const TlsInspectionPolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TlsInspectionPolicyNotResolved({ name });
+        return yield* new TlsInspectionPolicyNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

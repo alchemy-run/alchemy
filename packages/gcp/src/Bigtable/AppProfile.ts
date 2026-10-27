@@ -150,7 +150,7 @@ export type AppProfile = Resource<
 export const AppProfile = Resource<AppProfile>("GCP.Bigtable.AppProfile");
 
 export class AppProfileNotResolved extends Data.TaggedError("GCP.Bigtable.AppProfileNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_APP_PROFILE_ID = "default";
@@ -325,7 +325,7 @@ export const AppProfileProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppProfileNotResolved({ name });
+        return yield* new AppProfileNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (news.description ?? "") !== (current.description ?? "");
@@ -361,7 +361,7 @@ export const AppProfileProvider = () =>
         yield* waitForOperation(patched);
         current = yield* getByName(name);
         if (current === undefined) {
-          return yield* new AppProfileNotResolved({ name });
+          return yield* new AppProfileNotResolved({ resourceName: name });
         }
       }
 

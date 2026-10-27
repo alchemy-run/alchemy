@@ -107,7 +107,7 @@ export const RepositoriesWorkspace = Resource<RepositoriesWorkspace>(
 export class RepositoriesWorkspaceNotResolved extends Data.TaggedError(
   "GCP.Dataform.RepositoriesWorkspaceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (repository: string, workspaceId: string) =>
@@ -220,7 +220,7 @@ export const RepositoriesWorkspaceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RepositoriesWorkspaceNotResolved({ name });
+        return yield* new RepositoriesWorkspaceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);

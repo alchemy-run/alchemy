@@ -541,7 +541,7 @@ export const BlockchainNodeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       let latest = current;

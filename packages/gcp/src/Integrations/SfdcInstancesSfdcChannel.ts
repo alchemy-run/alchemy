@@ -141,7 +141,7 @@ export const SfdcInstancesSfdcChannel = Resource<SfdcInstancesSfdcChannel>(
 export class SfdcInstancesSfdcChannelNotResolved extends Data.TaggedError(
   "GCP.Integrations.SfdcInstancesSfdcChannelNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (sfdcInstance: string, sfdcChannelId: string) =>
@@ -273,7 +273,7 @@ export const SfdcInstancesSfdcChannelProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SfdcInstancesSfdcChannelNotResolved({ name });
+        return yield* new SfdcInstancesSfdcChannelNotResolved({ resourceName: name });
       }
 
       const currentName = withProjectId(current.name ?? name, env.project);

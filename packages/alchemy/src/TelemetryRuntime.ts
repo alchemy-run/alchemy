@@ -14,7 +14,6 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import type * as Scope from "effect/Scope";
 import { unpackEnvValue } from "./RuntimeContext.ts";
-import type { layer, layerOtlp } from "./Telemetry.ts";
 
 /**
  * The shape of the {@link Telemetry} reference: a Layer of telemetry

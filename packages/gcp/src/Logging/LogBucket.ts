@@ -173,11 +173,11 @@ export type LogBucket = Resource<
 export const LogBucket = Resource<LogBucket>("GCP.Logging.LogBucket");
 
 export class LogBucketNotResolved extends Data.TaggedError("GCP.Logging.LogBucketNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class LogBucketFailed extends Data.TaggedError("GCP.Logging.LogBucketFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -315,16 +315,16 @@ const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const bucket = yield* getByName(name);
     if (bucket === undefined || isDeleted(bucket)) {
-      return yield* new LogBucketNotResolved({ name });
+      return yield* new LogBucketNotResolved({ resourceName: name });
     }
     if (bucket.lifecycleState === "FAILED") {
       return yield* new LogBucketFailed({
-        name,
+        resourceName: name,
         state: bucket.lifecycleState,
       });
     }
     if (isPending(bucket.lifecycleState)) {
-      return yield* new LogBucketNotResolved({ name });
+      return yield* new LogBucketNotResolved({ resourceName: name });
     }
     return bucket;
   }).pipe(
@@ -338,7 +338,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bucket) =>
-      isDeleted(bucket) ? Effect.void : Effect.fail(new LogBucketNotResolved({ name })),
+      isDeleted(bucket)
+        ? Effect.void
+        : Effect.fail(new LogBucketNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.LogBucketNotResolved",
@@ -448,7 +450,7 @@ export const LogBucketProvider = () =>
       }
 
       if (isDeleted(current)) {
-        return yield* new LogBucketNotResolved({ name });
+        return yield* new LogBucketNotResolved({ resourceName: name });
       }
 
       const desiredLocked = news.locked === true;
@@ -534,7 +536,7 @@ export const LogBucketProvider = () =>
         Effect.flatMap((bucket) => {
           if (isDeleted(bucket)) return Effect.void;
           if (bucket !== undefined && isPending(bucket.lifecycleState)) {
-            return Effect.fail(new LogBucketNotResolved({ name }));
+            return Effect.fail(new LogBucketNotResolved({ resourceName: name }));
           }
           return Effect.void;
         }),

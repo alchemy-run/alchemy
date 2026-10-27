@@ -214,7 +214,7 @@ export const NotebookRuntimeTemplate = Resource<NotebookRuntimeTemplate>(
 export class NotebookRuntimeTemplateNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.NotebookRuntimeTemplateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, id: string) =>
@@ -252,7 +252,7 @@ const waitUntilExists = (name: string) =>
     Effect.filterOrFail(
       (template): template is aiplatform.GoogleCloudAiplatformV1NotebookRuntimeTemplate =>
         template !== undefined,
-      () => new AiPlatformNotResolved({ name }),
+      () => new AiPlatformNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.NotResolved",
@@ -265,7 +265,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (template) => template === undefined,
-      () => new AiPlatformStillExists({ name }),
+      () => new AiPlatformStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -398,7 +398,7 @@ export const NotebookRuntimeTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NotebookRuntimeTemplateNotResolved({ name });
+        return yield* new NotebookRuntimeTemplateNotResolved({ resourceName: name });
       }
 
       const observedName = current.name ?? name;

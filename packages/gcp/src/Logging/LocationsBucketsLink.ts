@@ -98,13 +98,13 @@ export const LocationsBucketsLink = Resource<LocationsBucketsLink>(
 export class LocationsBucketsLinkNotResolved extends Data.TaggedError(
   "GCP.Logging.LocationsBucketsLinkNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class LocationsBucketsLinkFailed extends Data.TaggedError(
   "GCP.Logging.LocationsBucketsLinkFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -139,16 +139,16 @@ const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const link = yield* getByName(name);
     if (link === undefined || isDeleted(link)) {
-      return yield* new LocationsBucketsLinkNotResolved({ name });
+      return yield* new LocationsBucketsLinkNotResolved({ resourceName: name });
     }
     if (link.lifecycleState === "FAILED") {
       return yield* new LocationsBucketsLinkFailed({
-        name,
+        resourceName: name,
         state: link.lifecycleState,
       });
     }
     if (isPending(link.lifecycleState)) {
-      return yield* new LocationsBucketsLinkNotResolved({ name });
+      return yield* new LocationsBucketsLinkNotResolved({ resourceName: name });
     }
     return link;
   }).pipe(
@@ -255,7 +255,7 @@ export const LocationsBucketsLinkProvider = () =>
       }
 
       if (isDeleted(current)) {
-        return yield* new LocationsBucketsLinkNotResolved({ name });
+        return yield* new LocationsBucketsLinkNotResolved({ resourceName: name });
       }
 
       if (isPending(current.lifecycleState)) {
@@ -275,7 +275,7 @@ export const LocationsBucketsLinkProvider = () =>
         Effect.flatMap((link) =>
           isDeleted(link)
             ? Effect.void
-            : Effect.fail(new LocationsBucketsLinkNotResolved({ name: output.name })),
+            : Effect.fail(new LocationsBucketsLinkNotResolved({ resourceName: output.name })),
         ),
         Effect.retry({
           while: (error) => error._tag === "GCP.Logging.LocationsBucketsLinkNotResolved",

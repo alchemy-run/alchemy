@@ -135,7 +135,7 @@ export const CollectionsEnginesServingConfig = Resource<CollectionsEnginesServin
 export class CollectionsEnginesServingConfigNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEnginesServingConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (engine: string, servingConfigId: string) =>
@@ -267,7 +267,7 @@ export const CollectionsEnginesServingConfigProvider = () =>
 
       if (current === undefined) {
         return yield* new CollectionsEnginesServingConfigNotResolved({
-          name: fallbackName,
+          resourceName: fallbackName,
         });
       }
 

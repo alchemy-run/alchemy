@@ -157,20 +157,20 @@ export const InterceptEndpointGroup = Resource<InterceptEndpointGroup>(
 export class InterceptEndpointGroupNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.InterceptEndpointGroupNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InterceptEndpointGroupFailed extends Data.TaggedError(
   "GCP.NetworkSecurity.InterceptEndpointGroupFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class InterceptEndpointGroupStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.InterceptEndpointGroupStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const isPendingState = (state: string | undefined) =>
@@ -227,15 +227,15 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (group): group is networksecurity.InterceptEndpointGroup => group !== undefined,
-      () => new InterceptEndpointGroupNotResolved({ name }),
+      () => new InterceptEndpointGroupNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (group) => group.state !== "DELETE_FAILED",
-      (group) => new InterceptEndpointGroupFailed({ name, state: group.state }),
+      (group) => new InterceptEndpointGroupFailed({ resourceName: name, state: group.state }),
     ),
     Effect.filterOrFail(
       (group) => !isPendingState(group.state),
-      () => new InterceptEndpointGroupNotResolved({ name }),
+      () => new InterceptEndpointGroupNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.InterceptEndpointGroupNotResolved",
@@ -249,7 +249,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((group) =>
       group === undefined
         ? Effect.void
-        : Effect.fail(new InterceptEndpointGroupStillExists({ name })),
+        : Effect.fail(new InterceptEndpointGroupStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.InterceptEndpointGroupStillExists",
@@ -371,7 +371,7 @@ export const InterceptEndpointGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InterceptEndpointGroupNotResolved({ name });
+        return yield* new InterceptEndpointGroupNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

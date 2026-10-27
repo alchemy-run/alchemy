@@ -129,7 +129,7 @@ export const AppgroupsApp = Resource<AppgroupsApp>("GCP.Apigee.AppgroupsApp");
 export class AppgroupsAppNotResolved extends Data.TaggedError(
   "GCP.Apigee.AppgroupsAppNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const groupParent = (organizationId: string, appgroup: string) =>
@@ -289,7 +289,7 @@ export const AppgroupsAppProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppgroupsAppNotResolved({ name });
+        return yield* new AppgroupsAppNotResolved({ resourceName: name });
       }
 
       const needsUpdate =

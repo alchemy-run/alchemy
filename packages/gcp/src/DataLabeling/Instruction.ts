@@ -158,7 +158,7 @@ export const Instruction = Resource<Instruction>("GCP.DataLabeling.Instruction")
 export class InstructionNotResolved extends Data.TaggedError(
   "GCP.DataLabeling.InstructionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, instructionId: string) =>
@@ -287,7 +287,7 @@ export const InstructionProvider = () =>
 
       if (current === undefined) {
         return yield* new InstructionNotResolved({
-          name: name || projectParent(env.project),
+          resourceName: name || projectParent(env.project),
         });
       }
 

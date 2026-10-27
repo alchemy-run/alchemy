@@ -176,7 +176,7 @@ export const CapacityCommitment = Resource<CapacityCommitment>(
 export class CapacityCommitmentNotResolved extends Data.TaggedError(
   "GCP.BigQueryReservation.CapacityCommitmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, capacityCommitmentId: string) =>
@@ -358,7 +358,7 @@ export const CapacityCommitmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CapacityCommitmentNotResolved({ name });
+        return yield* new CapacityCommitmentNotResolved({ resourceName: name });
       }
 
       const desiredPlan = normalizePlan(news.plan);

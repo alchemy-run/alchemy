@@ -123,7 +123,7 @@ export const CollectionsEnginesSession = Resource<CollectionsEnginesSession>(
 export class CollectionsEnginesSessionNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEnginesSessionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (engine: string, sessionId: string) => `${engine}/sessions/${sessionId}`;
@@ -216,7 +216,7 @@ export const CollectionsEnginesSessionProvider = () =>
 
       if (current === undefined) {
         return yield* new CollectionsEnginesSessionNotResolved({
-          name: fallbackName,
+          resourceName: fallbackName,
         });
       }
 

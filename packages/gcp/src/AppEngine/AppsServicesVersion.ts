@@ -219,7 +219,7 @@ export const AppsServicesVersion = Resource<AppsServicesVersion>(
 export class AppsServicesVersionNotResolved extends Data.TaggedError(
   "GCP.AppEngine.AppsServicesVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -418,7 +418,7 @@ export const AppsServicesVersionProvider = () =>
 
       if (current === undefined) {
         return yield* new AppsServicesVersionNotResolved({
-          name: `apps/${appsId}/services/${serviceId}/versions/${versionId}`,
+          resourceName: `apps/${appsId}/services/${serviceId}/versions/${versionId}`,
         });
       }
 

@@ -241,11 +241,11 @@ export const makeBucketState = (options: BucketStateOptions) =>
           const existing = yield* readLease(key);
           const stillHeld = existing === undefined || existing.record.expiresAt > now;
           if (stillHeld) {
-            return yield* Effect.fail(heldError(stack, stage));
+            return yield* heldError(stack, stage);
           }
           const replaced = yield* putLease(key, fresh, { ifVersion: existing.version });
           if (replaced === undefined) {
-            return yield* Effect.fail(heldError(stack, stage));
+            return yield* heldError(stack, stage);
           }
           version = replaced;
         }
@@ -286,11 +286,11 @@ export const makeBucketState = (options: BucketStateOptions) =>
           1,
         )(
           Effect.gen(function* () {
-            if (cursor.lost) return yield* Effect.fail(lostError(stack, stage));
+            if (cursor.lost) return yield* lostError(stack, stage);
             const existing = yield* readLease(key);
             if (existing === undefined || existing.record.token !== token) {
               cursor.lost = true;
-              return yield* Effect.fail(lostError(stack, stage));
+              return yield* lostError(stack, stage);
             }
             const observedAt = yield* Clock.currentTimeMillis;
             if (existing.record.expiresAt <= observedAt) {

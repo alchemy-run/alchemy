@@ -474,7 +474,7 @@ export const BackupPlanProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -484,7 +484,7 @@ export const BackupPlanProvider = () =>
         (item) => item.stateReason,
       );
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -523,7 +523,7 @@ export const BackupPlanProvider = () =>
           (item) => item.stateReason,
         );
         if (current === undefined) {
-          return yield* new ResourceNotResolved({ name });
+          return yield* new ResourceNotResolved({ resourceName: name });
         }
       }
 
