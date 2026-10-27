@@ -49,8 +49,15 @@ const readGcloud = (config: Omit<Extract<GcpAuthConfig, { method: "gcloud" }>, "
     return yield* auth.read("default", { method: "gcloud", ...config });
   });
 
-/** Runs `effect` with gcloud's config directory set to a fresh one holding `adc`. */
-const withGcloudConfig = <A, E, R>(adc: object | undefined, effect: Effect.Effect<A, E, R>) =>
+/**
+ * Runs `effect` with gcloud's config directory set to a fresh one holding
+ * `adc` and the named `configurations` (gcloud's INI properties files).
+ */
+const withGcloudConfig = <A, E, R>(
+  adc: object | undefined,
+  effect: Effect.Effect<A, E, R>,
+  configurations: Record<string, string> = {},
+) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -60,6 +67,10 @@ const withGcloudConfig = <A, E, R>(adc: object | undefined, effect: Effect.Effec
         path.join(dir, "application_default_credentials.json"),
         JSON.stringify(adc),
       );
+    }
+    yield* fs.makeDirectory(path.join(dir, "configurations"));
+    for (const [name, properties] of Object.entries(configurations)) {
+      yield* fs.writeFileString(path.join(dir, "configurations", `config_${name}`), properties);
     }
     return yield* effect.pipe(Effect.provide(testLayer({ CLOUDSDK_CONFIG: dir })));
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
@@ -109,6 +120,17 @@ describe("gcloud auth method", { tags: ["unit", "provider:gcp", "local"] }, () =
       expect(error.message).toContain("Unsupported gcloud credentials");
     }),
   );
+
+  it.effect("rejects a gcloud configuration that does not exist", () =>
+    Effect.gen(function* () {
+      const error = yield* withGcloudConfig(undefined, readGcloud({ configuration: "work" })).pipe(
+        Effect.flip,
+      );
+      expect(error._tag).toBe("AuthError");
+      expect(error.message).toContain("gcloud configuration 'work' does not exist");
+      expect(error.message).toContain("gcloud config configurations create work --no-activate");
+    }),
+  );
 });
 
 describe("gcloud auth method", { tags: ["provider:gcp", "live"] }, () => {
@@ -121,6 +143,21 @@ describe("gcloud auth method", { tags: ["provider:gcp", "live"] }, () => {
       Effect.map((error) => {
         expect(error._tag).toBe("NeedsReauth");
         expect(error.message).toContain("gcloud credentials need to be refreshed");
+      }),
+    ),
+  );
+});
+
+describe("gcloud configuration", { tags: ["provider:gcp", "live"] }, () => {
+  it.live("asks for a refresh when the configuration's account has no login", () =>
+    withGcloudConfig(undefined, readGcloud({ configuration: "work" }), {
+      work: "[core]\naccount = nobody@example.com\nproject = p\n",
+    }).pipe(
+      Effect.flip,
+      Effect.map((error) => {
+        expect(error._tag).toBe("NeedsReauth");
+        expect(error.message).toContain("gcloud configuration 'work' needs a login");
+        expect(error.message).toContain("alchemy profile refresh --profile default --provider GCP");
       }),
     ),
   );
@@ -152,6 +189,38 @@ describe.skipIf(!gcloudProject)(
         expect(response.status).toBe(200);
         const project = (yield* response.json) as { projectId: string };
         expect(project.projectId).toBe(gcloudProject);
+      }).pipe(Effect.provide(FetchHttpClient.layer)),
+    );
+  },
+);
+
+// Needs a named gcloud configuration with a login and a project on this
+// machine (`gcloud auth login --configuration=<name>`). Set
+// GCP_TEST_GCLOUD_CONFIGURATION to its name.
+const gcloudConfiguration = process.env.GCP_TEST_GCLOUD_CONFIGURATION;
+
+describe.skipIf(!gcloudConfiguration)(
+  "gcloud configuration with a real login",
+  { tags: ["provider:gcp", "live"] },
+  () => {
+    it.live("deploys as the configuration's account into its project", () =>
+      Effect.gen(function* () {
+        const credentials = yield* readGcloud({ configuration: gcloudConfiguration! }).pipe(
+          Effect.provide(testLayer({})),
+        );
+        expect(credentials.source.type).toBe("gcloud");
+        expect(credentials.source.details).toContain(`configuration ${gcloudConfiguration}`);
+        expect(credentials.expiresAt).toBeGreaterThan(Date.now());
+
+        const http = yield* HttpClient.HttpClient;
+        const response = yield* http.execute(
+          HttpClientRequest.get(
+            `https://cloudresourcemanager.googleapis.com/v3/projects/${credentials.project}`,
+          ).pipe(HttpClientRequest.bearerToken(Redacted.value(credentials.accessToken))),
+        );
+        expect(response.status).toBe(200);
+        const project = (yield* response.json) as { projectId: string };
+        expect(project.projectId).toBe(credentials.project);
       }).pipe(Effect.provide(FetchHttpClient.layer)),
     );
   },
