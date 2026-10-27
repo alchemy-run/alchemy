@@ -49,7 +49,7 @@ export interface DomainVerification extends Resource<
 
 /**
  * The `TXT` record that proves a Prisma workspace owns a hostname. Prisma
- * refuses a {@link CustomDomain} until the record is published.
+ * refuses a `Prisma.CustomDomain` until the record is published.
  *
  * Prisma only reveals the workspace token when it refuses a domain, so the
  * provider asks for one on a hostname no one can ever verify

@@ -40,6 +40,7 @@ const documentedResources = [
   "Connection",
   "CustomDomain",
   "Database",
+  "DomainVerification",
   "EnvironmentVariable",
   "Project",
   "SourceRepository",

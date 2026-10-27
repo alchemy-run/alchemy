@@ -95,8 +95,9 @@ export interface CustomDomain extends Resource<
  * Prisma verifies the hostname's `CNAME` to the app's regional switchboard
  * (`switchboard.{region}.prisma.build`, listed in `dnsRecords`) when the
  * domain is created, so publish it first. Prisma also requires a workspace
- * ownership `TXT` record on the hostname; until it exists, the deploy fails
- * with {@link PrismaDomainOwnershipRequired}, whose `recordName` and
+ * ownership `TXT` record on the hostname, which
+ * `Prisma.DomainVerification` reads; until it exists, the deploy fails with
+ * {@link PrismaDomainOwnershipRequired}, whose `recordName` and
  * `recordValue` name the record to publish. Creation then starts asynchronous
  * certificate provisioning; inspect `status`, `foundryStatus`, and
  * `failureReason` before routing production traffic.
@@ -115,16 +116,17 @@ export interface CustomDomain extends Resource<
  * ```
  *
  * ### Proving Ownership of a Hostname
- * **Example:** Publish the ownership record Prisma asks for
+ * **Example:** Publish the ownership record before the domain
  * ```typescript
- * // The first deploy fails with PrismaDomainOwnershipRequired:
- * //   Add a TXT record named _prisma-verification.api.example.com
- * //   with value prisma-verification=<token>
- * yield* Cloudflare.DNS.Record("api-domain-ownership", {
+ * const verification = yield* Prisma.DomainVerification("api-verification", {
+ *   app,
+ *   hostname: "api.example.com",
+ * });
+ * yield* Cloudflare.DNS.Record("api-verification-record", {
  *   zoneId,
- *   name: "_prisma-verification.api.example.com",
+ *   name: verification.recordName,
  *   type: "TXT",
- *   content: '"prisma-verification=<token>"',
+ *   content: verification.recordValue,
  * });
  * ```
  *

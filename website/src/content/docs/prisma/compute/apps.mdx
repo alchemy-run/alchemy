@@ -125,18 +125,25 @@ const domain = yield* Prisma.CustomDomain("api-domain", {
 });
 ```
 
-Prisma also asks the workspace to prove it owns the hostname. Until it
-does, the deploy fails with `PrismaDomainOwnershipRequired`, which names
-a `TXT` record to publish. Publish it, keep it, and redeploy:
+Prisma also asks the workspace to prove it owns the hostname with a
+`TXT` record. `Prisma.DomainVerification` reads the record to publish;
+publish it before the domain:
 
 ```typescript
-yield* Cloudflare.DNS.Record("api-domain-ownership", {
+const verification = yield* Prisma.DomainVerification("api-verification", {
+  app,
+  hostname: "api.example.com",
+});
+yield* Cloudflare.DNS.Record("api-verification-record", {
   zoneId,
-  name: "_prisma-verification.api.example.com",
+  name: verification.recordName,
   type: "TXT",
-  content: '"prisma-verification=<token from the error>"',
+  content: verification.recordValue,
 });
 ```
+
+Without it, the deploy fails with `PrismaDomainOwnershipRequired`,
+which names the record.
 
 Changing the hostname or app in place is intentionally rejected.
 Create a second domain, verify DNS and TLS, cut traffic over, and then

@@ -17,6 +17,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import { getDomain, getProject, getService } from "@distilled.cloud/prisma/management";
+import * as Output from "alchemy/Output";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -120,14 +121,9 @@ const ownershipRequiredIn = (errors: ReadonlyArray<unknown>) =>
     Predicate.isTagged(error, "PrismaDomainOwnershipRequired"),
   );
 
-/** The TXT record Prisma asked for, published as an ordinary stack resource. */
-const ownershipRecord = (zoneId: string, ownership: Prisma.PrismaDomainOwnershipRequired) =>
-  Cloudflare.DNS.Record("DomainOwnership", {
-    zoneId,
-    name: ownership.recordName,
-    type: "TXT",
-    content: `"${ownership.recordValue}"`,
-  });
+/** The app's regional switchboard, the CNAME target Prisma verifies. */
+const switchboardOf = (appEndpointDomain: string) =>
+  `switchboard${appEndpointDomain.slice(appEndpointDomain.indexOf("."))}`;
 
 test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
   "Cloudflare DNS publishes Prisma's records; the hostname activates and serves HTTPS",
@@ -141,27 +137,17 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
         entries: ["src", "build.sh"],
       });
 
-      const siteStack = (ownership?: Prisma.PrismaDomainOwnershipRequired) =>
-        Effect.gen(function* () {
-          if (ownership) yield* ownershipRecord(zoneId, ownership);
-          return yield* Prisma.Website.StaticSite("Site", {
-            cwd,
-            command: "bash build.sh",
-            shell: true,
-            outdir: "dist",
-            domain: { name: HOSTNAME, dns: Cloudflare.DNS.Adapter() },
-          });
-        });
-
-      // Prisma refuses the hostname until the workspace proves it owns it,
-      // and names the TXT record to publish.
-      const refused = yield* failureOf(stack.deploy(siteStack()));
-      const ownership = ownershipRequiredIn(refused.errors);
-      expect(ownership?.hostname).toBe(HOSTNAME);
-      expect(ownership?.recordName).toBe(`_prisma-verification.${HOSTNAME}`);
-      expect(ownership?.recordValue).toMatch(/^prisma-verification=[0-9a-f]{64}$/);
-
-      const site = yield* stack.deploy(siteStack(ownership));
+      // One deploy: the adapter publishes the routing CNAME and the
+      // workspace's ownership TXT before Prisma registers the hostname.
+      const site = yield* stack.deploy(
+        Prisma.Website.StaticSite("Site", {
+          cwd,
+          command: "bash build.sh",
+          shell: true,
+          outdir: "dist",
+          domain: { name: HOSTNAME, dns: Cloudflare.DNS.Adapter() },
+        }),
+      );
       expect(site.url).toBe(`https://${HOSTNAME}`);
       const domain = site.domain!;
       const projectId = typeof site.project === "string" ? site.project : site.project!.projectId;
@@ -178,10 +164,18 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
         ),
       ).toBe(true);
 
-      // Cloudflare holds exactly the records the CustomDomain reports, DNS-only.
-      const records = (yield* recordsUnder(zoneId)).filter(
-        (record) => trimDot(record.name) !== ownership!.recordName,
+      // ...and the ownership TXT Prisma requires, DNS-only like the rest.
+      const all = yield* recordsUnder(zoneId);
+      const ownership = all.filter(
+        (record) => trimDot(record.name) === `_prisma-verification.${HOSTNAME}`,
       );
+      expect(ownership.map((record) => record.type)).toEqual(["TXT"]);
+      expect(ownership[0]?.content?.replaceAll('"', "")).toMatch(
+        /^prisma-verification=[0-9a-f]{64}$/,
+      );
+
+      // Cloudflare holds exactly the records the CustomDomain reports, DNS-only.
+      const records = all.filter((record) => !ownership.includes(record));
       expect(
         byKey(
           records.map((record) => ({
@@ -199,7 +193,7 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
           })),
         ),
       );
-      expect(records.every((record) => record.proxied !== true)).toBe(true);
+      expect(all.every((record) => record.proxied !== true)).toBe(true);
 
       // ...and those are the records Prisma's live API reports.
       const registered = yield* getDomain({ domainId: domain.customDomainId });
@@ -313,10 +307,12 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
       // The Branch exists before the site resolves it by git name.
       yield* stack.deploy(branchStack);
 
-      const siteStack = (ownership?: Prisma.PrismaDomainOwnershipRequired) =>
+      // DNS outside the composite (`domain` is a plain hostname): publish
+      // the routing CNAME yourself and, once Prisma asks, the ownership TXT
+      // that Prisma.DomainVerification reads.
+      const siteStack = (verify: boolean) =>
         Effect.gen(function* () {
           const { project, branch } = yield* branchStack;
-          if (ownership) yield* ownershipRecord(zoneId, ownership);
           const site = yield* Prisma.Website.StaticSite("Site", {
             cwd,
             command: "bash build.sh",
@@ -324,17 +320,40 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
             outdir: "dist",
             project,
             branchGitName: "preview",
-            domain: { name: hostname, dns: Cloudflare.DNS.Adapter() },
+            domain: hostname,
           });
+          yield* Cloudflare.DNS.Record("DomainAlias", {
+            zoneId,
+            name: hostname,
+            type: "CNAME",
+            content: Output.map(site.compute!.appEndpointDomain, switchboardOf),
+            proxied: false,
+          });
+          if (verify) {
+            const verification = yield* Prisma.DomainVerification("DomainVerification", {
+              app: site.compute!,
+              hostname,
+            });
+            yield* Cloudflare.DNS.Record("DomainOwnership", {
+              zoneId,
+              name: verification.recordName,
+              type: "TXT",
+              content: verification.recordValue,
+            });
+          }
           return { project, branch, site };
         });
-      const refused = yield* failureOf(stack.deploy(siteStack()));
+
+      // Without the TXT record Prisma refuses the hostname, and the typed
+      // error names the record to publish.
+      const refused = yield* failureOf(stack.deploy(siteStack(false)));
       const ownership = ownershipRequiredIn(refused.errors);
+      expect(ownership?.hostname).toBe(hostname);
       expect(ownership?.recordName).toBe(`_prisma-verification.${hostname}`);
+      expect(ownership?.recordValue).toMatch(/^prisma-verification=[0-9a-f]{64}$/);
 
-      const { project, branch, site } = yield* stack.deploy(siteStack(ownership));
+      const { project, branch, site } = yield* stack.deploy(siteStack(true));
       const domain = site.domain!;
-
       expect(branch.isDefault).toBe(false);
       expect(domain.appId).toBe(site.compute!.appId);
       expect(domain.hostname).toBe(hostname);
