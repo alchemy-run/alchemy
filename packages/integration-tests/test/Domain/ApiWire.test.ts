@@ -84,7 +84,7 @@ describe("Domain Api over the wire", () => {
   it.live("an envelope keeps its command id and correlation id", () =>
     Effect.gen(function* () {
       const bank = yield* BankApi.client;
-      const local = yield* BankApi.testClient;
+      const local = yield* BankApi.clientInProcess;
       yield* bank.Deposit({ target: "w-1", amount: 5, commandId: "deposit-1" });
 
       const [wallet] = yield* bank.Wallet.events("w-1").pipe(Stream.take(1), Stream.runCollect);
