@@ -306,6 +306,22 @@ const hello = yield* GCP.Run.Service("Hello", {
 });
 ```
 
+A `GCP.Run.Container` can run next to the image. List it in
+`containers`; its bindings' roles go to the service's account and the
+sidecars it binds come along:
+
+```typescript
+const worker = yield* Worker;
+const proxy = yield* GCP.Run.Service("Proxy", {
+  template: {
+    containers: [
+      { image: proxyImage, ports: [{ containerPort: 8080 }], dependsOn: [worker.name] },
+      worker,
+    ],
+  },
+});
+```
+
 ## Destroy
 
 `alchemy destroy` deletes the service, its image repository, and the

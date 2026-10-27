@@ -530,6 +530,20 @@ export type ServiceShape = Main<ServiceServices>;
  * ```
  * The first container runs `main`; the rest deploy as sidecars.
  *
+ * **Example:** An image service with an Effect-native sidecar
+ * ```typescript
+ * const worker = yield* Worker; // a GCP.Run.Container
+ * const api = yield* GCP.Run.Service("api", {
+ *   template: {
+ *     containers: [
+ *       { image: proxyImage, ports: [{ containerPort: 8080 }], dependsOn: [worker.name] },
+ *       worker,
+ *     ],
+ *   },
+ * });
+ * ```
+ * A listed Container brings its bindings' roles and the sidecars it binds.
+ *
  * ### Effect-native Function with bindings
  * **Example:** Publish tweets to Pub/Sub, cache in Memorystore
  * ```typescript
