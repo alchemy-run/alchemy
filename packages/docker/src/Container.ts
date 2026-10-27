@@ -66,6 +66,57 @@ export interface ContainerProps {
   networkMode?: Container.NetworkMode;
   /** Linux capabilities to add, for example `SYS_ADMIN`. */
   capAdd?: string[];
+  /** Linux capabilities to drop, for example `["ALL"]`. */
+  capDrop?: string[];
+  /** Hard memory limit in Docker's byte-suffix format, e.g. `"512m"`. */
+  memory?: string;
+  /**
+   * Combined memory-plus-swap limit in Docker's byte-suffix format.
+   * Requires `memory`. Set to the same value to disable swap, or `"-1"`
+   * to allow unlimited swap (subject to the host).
+   */
+  memorySwap?: string;
+  /** Soft memory limit under contention, e.g. `"256m"`. */
+  memoryReservation?: string;
+  /** CPU quota, in cores (e.g. `0.5` limits to half a CPU). */
+  cpus?: number;
+  /** Maximum number of processes and threads in the container. */
+  pidsLimit?: number;
+  /** Mount the container's root filesystem read-only. Writable paths need a volume or tmpfs. */
+  readOnlyRootFs?: boolean;
+  /** Prevent processes from gaining additional privileges through exec. */
+  noNewPrivileges?: boolean;
+  /** Run Docker's init process to forward signals and reap child processes. */
+  init?: boolean;
+  /** Runtime user, e.g. `"1000:1000"` or `"app"`. Omit to keep the image's user. */
+  user?: string;
+  /**
+   * Seccomp JSON profile path on the Docker CLI host, or `"builtin"` to
+   * select Docker's default policy. `"unconfined"` explicitly disables it.
+   * Changes to a profile file's contents recreate the container.
+   */
+  seccompProfile?: string;
+  /**
+   * Name of a preloaded AppArmor profile, e.g. `"docker-default"`.
+   * Requires AppArmor support on the target host. `"unconfined"` disables it.
+   */
+  apparmorProfile?: string;
+  /** Docker user-namespace mode. `"host"` opts out of daemon user remapping. */
+  userns?: string;
+  /** Supplementary Linux group names or numeric GIDs. */
+  groupAdd?: string[];
+  /** Per-process resource limits. `-1` represents unlimited. */
+  ulimits?: Record<string, Container.Ulimit>;
+  /** Docker log driver, e.g. `"local"`, `"json-file"`, or `"none"`. */
+  logDriver?: string;
+  /** Driver-specific settings, such as `{ "max-size": "10m", "max-file": "3" }`. */
+  logOptions?: Record<string, string>;
+  /** Relative OOM score adjustment on Linux, from -1000 to 1000. */
+  oomScoreAdj?: number;
+  /** Stop signal, e.g. `"SIGTERM"` or `"SIGINT"`. */
+  stopSignal?: string;
+  /** Writable in-memory mounts, including size and POSIX mode controls. */
+  tmpfs?: Container.TmpfsMount[];
   /** Host devices to expose to the container. */
   devices?: Container.DeviceMapping[];
   /**
@@ -106,6 +157,20 @@ export declare namespace Container {
     containerPath: string;
     /** Mount read-only. @default false */
     readOnly?: boolean;
+  }
+  interface TmpfsMount {
+    /** Absolute mount target in the container, e.g. `"/tmp"`. */
+    path: string;
+    /** Docker byte-suffix size, e.g. `"32m"`. Omit for the engine default. */
+    size?: string;
+    /** POSIX mode as a number, e.g. `0o1777` for a sticky world-writable directory. */
+    mode?: number;
+  }
+  interface Ulimit {
+    /** Process soft limit. `-1` means unlimited. */
+    soft: number;
+    /** Process hard limit. `-1` means unlimited. */
+    hard: number;
   }
   interface NetworkMapping {
     /** Network name or ID. */
@@ -280,6 +345,39 @@ export interface Container extends Resource<
  * ```
  *
  * ### Runtime Options
+ * **Example:** Contain a background worker
+ * ```typescript
+ * const worker = yield* Docker.Container("worker", {
+ *   image: "oven/bun:1",
+ *   memory: "512m",
+ *   memorySwap: "512m",
+ *   memoryReservation: "256m",
+ *   cpus: 0.5,
+ *   pidsLimit: 128,
+ *   readOnlyRootFs: true,
+ *   capDrop: ["ALL"],
+ *   noNewPrivileges: true,
+ *   init: true,
+ *   user: "1000:1000",
+ *   tmpfs: [{ path: "/tmp", size: "32m", mode: 0o1777 }],
+ * });
+ * ```
+ *
+ * **Example:** Customize confinement, process limits, and log rotation
+ * ```typescript
+ * const api = yield* Docker.Container("api", {
+ *   image: "ghcr.io/acme/api:latest",
+ *   seccompProfile: "./security/api-seccomp.json", // client-side JSON; edits roll the container
+ *   apparmorProfile: "my-loaded-profile",          // must already be loaded on the host
+ *   groupAdd: ["1000"],
+ *   ulimits: { nofile: { soft: 1024, hard: 4096 } },
+ *   logDriver: "local",
+ *   logOptions: { "max-size": "10m", "max-file": "3" },
+ *   oomScoreAdj: 200,
+ *   stopSignal: "SIGTERM",
+ * });
+ * ```
+ *
  * **Example:** Share a donor container's network namespace
  * ```typescript
  * const donor = yield* Docker.Container("donor", { image: "redis:alpine" });
@@ -381,6 +479,14 @@ export const ContainerProvider = () =>
         return yield* sha256(digests.join("\n"));
       });
 
+      // Docker CLI loads seccomp profiles from client-side files at create
+      // time. Hash the contents as well as the path so policy edits are never
+      // silently ignored on subsequent deploys.
+      const seccompProfileDigest = Effect.fn(function* (profile: string | undefined) {
+        if (!isCustomSeccompProfile(profile)) return undefined;
+        return yield* fs.readFile(path.resolve(profile)).pipe(Effect.flatMap(sha256));
+      });
+
       // Without env files the hash input is unchanged from before they were
       // supported, so existing containers keep their label and are not rolled.
       const desiredConfigHash = Effect.fn(function* (
@@ -388,10 +494,12 @@ export const ContainerProvider = () =>
         news: ContainerProps,
       ) {
         const envFiles = yield* envFilesDigest(news.envFiles);
+        const seccompProfile = yield* seccompProfileDigest(news.seccompProfile);
         return yield* sha256Object({
           ...args,
           imageId: normalizeImageId(news.image),
           ...(envFiles === undefined ? {} : { envFiles }),
+          ...(seccompProfile === undefined ? {} : { seccompProfile }),
         });
       });
 
@@ -492,9 +600,9 @@ export const ContainerProvider = () =>
           ) {
             return { action: "update" as const };
           }
-          // Same env file paths, possibly new contents: compare against the
-          // hash stamped on the running container.
-          if (news.envFiles?.length) {
+          // File-backed inputs can change without changing their paths.
+          // Compare their digests against the live config hash.
+          if (news.envFiles?.length || isCustomSeccompProfile(news.seccompProfile)) {
             const live = yield* inspect(newArgs.name, dockerContextName(news.context));
             const applied = live?.Config.Labels?.[CREATE_CONFIG_HASH_LABEL];
             if (applied !== undefined && applied !== (yield* desiredConfigHash(newArgs, news))) {
@@ -538,7 +646,12 @@ export const ContainerProvider = () =>
                 !matchesLegacyConfig(live, args, news.image) ||
                 // Env file contents can't be compared without a label (e.g. an
                 // adopted container); recreate once so later edits are tracked.
-                (news.envFiles?.length ?? 0) > 0
+                (news.envFiles?.length ?? 0) > 0 ||
+                isCustomSeccompProfile(news.seccompProfile) ||
+                // A legacy/adopted container has no stamped config hash.
+                // Do not retain it without proof that the requested security
+                // restrictions were applied.
+                hasHardeningOptions(news)
               : live.Config.Labels[CREATE_CONFIG_HASH_LABEL] !== configHash);
           if (recreate) {
             yield* remove(live.Id, context);
@@ -634,6 +747,28 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
       "add-host": news.extraHosts,
       network: normalizeNetworkMode(news.networkMode),
       "cap-add": normalizeCapabilities(news.capAdd),
+      ...(news.capDrop?.length ? { "cap-drop": normalizeCapabilities(news.capDrop) } : {}),
+      ...(news.memory !== undefined ? { memory: news.memory } : {}),
+      ...(news.memorySwap !== undefined ? { "memory-swap": news.memorySwap } : {}),
+      ...(news.memoryReservation !== undefined
+        ? { "memory-reservation": news.memoryReservation }
+        : {}),
+      ...(news.cpus !== undefined ? { cpus: news.cpus } : {}),
+      ...(news.pidsLimit !== undefined ? { "pids-limit": news.pidsLimit } : {}),
+      ...(news.readOnlyRootFs ? { "read-only": true } : {}),
+      ...(normalizeSecurityOptions(news) ? { "security-opt": normalizeSecurityOptions(news) } : {}),
+      ...(news.userns !== undefined ? { userns: news.userns } : {}),
+      ...(news.groupAdd?.length ? { "group-add": normalizeGroups(news.groupAdd) } : {}),
+      ...(Object.keys(news.ulimits ?? {}).length ? { ulimit: normalizeUlimits(news.ulimits) } : {}),
+      ...(news.logDriver !== undefined ? { "log-driver": news.logDriver } : {}),
+      ...(Object.keys(news.logOptions ?? {}).length
+        ? { "log-opt": normalizeLogOptions(news.logOptions) }
+        : {}),
+      ...(news.oomScoreAdj !== undefined ? { "oom-score-adj": news.oomScoreAdj } : {}),
+      ...(news.stopSignal !== undefined ? { "stop-signal": news.stopSignal } : {}),
+      ...(news.init ? { init: true } : {}),
+      ...(news.user !== undefined ? { user: news.user } : {}),
+      ...(news.tmpfs?.length ? { tmpfs: normalizeTmpfs(news.tmpfs) } : {}),
       device: normalizeDevices(news.devices),
       restart: news.restart ?? "no",
       label: news.labels,
@@ -689,6 +824,64 @@ const normalizeCapabilities = (capAdd: string[] | undefined): string[] | undefin
   return [...new Set(capAdd.map((capability) => capability.trim()).filter(Boolean))].sort();
 };
 
+const isCustomSeccompProfile = (profile: string | undefined): profile is string =>
+  profile !== undefined && profile !== "builtin" && profile !== "unconfined";
+
+const normalizeSecurityOptions = (props: ContainerProps): string[] | undefined => {
+  const options = [
+    ...(props.noNewPrivileges ? ["no-new-privileges"] : []),
+    ...(props.seccompProfile ? [`seccomp=${props.seccompProfile}`] : []),
+    ...(props.apparmorProfile ? [`apparmor=${props.apparmorProfile}`] : []),
+  ];
+  return options.length ? options : undefined;
+};
+
+const normalizeGroups = (groups: string[]): string[] =>
+  [...new Set(groups.map((group) => group.trim()))].sort();
+
+const normalizeUlimits = (limits: ContainerProps["ulimits"]): string[] =>
+  Object.entries(limits ?? {})
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, { soft, hard }]) => `${name}=${soft}:${hard}`);
+
+const normalizeLogOptions = (options: ContainerProps["logOptions"]): string[] =>
+  Object.entries(options ?? {})
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, value]) => `${name}=${value}`);
+
+const normalizeTmpfs = (mounts: Container.TmpfsMount[]): string[] =>
+  [...mounts]
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .map(({ path, size, mode }) => {
+      const options = [
+        ...(size !== undefined ? [`size=${size}`] : []),
+        ...(mode !== undefined ? [`mode=${mode.toString(8)}`] : []),
+      ];
+      return options.length > 0 ? `${path}:${options.join(",")}` : path;
+    });
+
+const hasHardeningOptions = (props: ContainerProps): boolean =>
+  (props.capDrop?.length ?? 0) > 0 ||
+  props.memory !== undefined ||
+  props.memorySwap !== undefined ||
+  props.memoryReservation !== undefined ||
+  props.cpus !== undefined ||
+  props.pidsLimit !== undefined ||
+  props.readOnlyRootFs === true ||
+  props.noNewPrivileges === true ||
+  props.seccompProfile !== undefined ||
+  props.apparmorProfile !== undefined ||
+  props.userns !== undefined ||
+  (props.groupAdd?.length ?? 0) > 0 ||
+  Object.keys(props.ulimits ?? {}).length > 0 ||
+  props.logDriver !== undefined ||
+  Object.keys(props.logOptions ?? {}).length > 0 ||
+  props.oomScoreAdj !== undefined ||
+  props.stopSignal !== undefined ||
+  props.init === true ||
+  props.user !== undefined ||
+  (props.tmpfs?.length ?? 0) > 0;
+
 const normalizeDevices = (devices: Container.DeviceMapping[] | undefined): string[] | undefined => {
   if (!devices?.length) return undefined;
   const normalized = devices.map(
@@ -707,6 +900,100 @@ export class InvalidContainerOptions extends Data.TaggedError("InvalidContainerO
 }> {}
 
 const validateContainerOptions = (news: ContainerProps) => {
+  // The CLI formatter omits empty strings. Reject them instead of silently
+  // dropping user-specified resource and security restrictions.
+  for (const option of [
+    "memory",
+    "memorySwap",
+    "memoryReservation",
+    "user",
+    "seccompProfile",
+    "apparmorProfile",
+    "userns",
+    "logDriver",
+    "stopSignal",
+  ] as const) {
+    if (news[option] !== undefined && news[option].trim().length === 0) {
+      return Effect.fail(
+        new InvalidContainerOptions({
+          message: `Docker.Container ${option} cannot be empty`,
+        }),
+      );
+    }
+  }
+  if (news.capDrop?.some((capability) => capability.trim().length === 0)) {
+    return Effect.fail(
+      new InvalidContainerOptions({
+        message: "Docker.Container capDrop cannot contain empty capabilities",
+      }),
+    );
+  }
+  if (news.groupAdd?.some((group) => group.trim().length === 0)) {
+    return Effect.fail(
+      new InvalidContainerOptions({
+        message: "Docker.Container groupAdd cannot contain empty groups",
+      }),
+    );
+  }
+  for (const [name, limit] of Object.entries(news.ulimits ?? {})) {
+    if (
+      !/^[a-z][a-z0-9_-]*$/.test(name) ||
+      !Number.isSafeInteger(limit.soft) ||
+      !Number.isSafeInteger(limit.hard) ||
+      limit.soft < -1 ||
+      limit.hard < -1 ||
+      (limit.hard !== -1 && (limit.soft === -1 || limit.soft > limit.hard))
+    ) {
+      return Effect.fail(
+        new InvalidContainerOptions({
+          message: `Docker.Container ulimits contains an invalid soft/hard limit for ${name}`,
+        }),
+      );
+    }
+  }
+  for (const [name, value] of Object.entries(news.logOptions ?? {})) {
+    if (!name.trim() || name.includes("=") || !value.trim()) {
+      return Effect.fail(
+        new InvalidContainerOptions({
+          message: `Docker.Container logOptions contains an invalid option: ${name}`,
+        }),
+      );
+    }
+  }
+  if (
+    news.oomScoreAdj !== undefined &&
+    (!Number.isInteger(news.oomScoreAdj) || news.oomScoreAdj < -1000 || news.oomScoreAdj > 1000)
+  ) {
+    return Effect.fail(
+      new InvalidContainerOptions({
+        message: "Docker.Container oomScoreAdj must be an integer from -1000 to 1000",
+      }),
+    );
+  }
+  if (news.memorySwap !== undefined && news.memory === undefined) {
+    return Effect.fail(
+      new InvalidContainerOptions({
+        message: "Docker.Container memorySwap requires memory to be set",
+      }),
+    );
+  }
+  if (news.cpus !== undefined && (!Number.isFinite(news.cpus) || news.cpus <= 0)) {
+    return Effect.fail(
+      new InvalidContainerOptions({
+        message: "Docker.Container cpus must be a finite, positive number",
+      }),
+    );
+  }
+  if (
+    news.pidsLimit !== undefined &&
+    (!Number.isInteger(news.pidsLimit) || (news.pidsLimit <= 0 && news.pidsLimit !== -1))
+  ) {
+    return Effect.fail(
+      new InvalidContainerOptions({
+        message: "Docker.Container pidsLimit must be a positive integer or -1 (unlimited)",
+      }),
+    );
+  }
   if (
     isContainerNetworkMode(news.networkMode) &&
     ((news.ports?.length ?? 0) > 0 || (news.networks?.length ?? 0) > 0)
@@ -727,6 +1014,41 @@ const validateContainerOptions = (news: ContainerProps) => {
       );
     }
     targets.add(device.containerPath);
+  }
+  const tmpfsTargets = new Set<string>();
+  for (const mount of news.tmpfs ?? []) {
+    if (mount.size !== undefined && mount.size.trim().length === 0) {
+      return Effect.fail(
+        new InvalidContainerOptions({
+          message: `Docker.Container tmpfs size cannot be empty for ${mount.path}`,
+        }),
+      );
+    }
+    if (!mount.path.startsWith("/") || mount.path.includes(":") || mount.path.includes(",")) {
+      return Effect.fail(
+        new InvalidContainerOptions({
+          message: `Docker.Container tmpfs target must be an absolute path: ${mount.path}`,
+        }),
+      );
+    }
+    if (tmpfsTargets.has(mount.path)) {
+      return Effect.fail(
+        new InvalidContainerOptions({
+          message: `Docker.Container tmpfs contains duplicate target ${mount.path}`,
+        }),
+      );
+    }
+    if (
+      mount.mode !== undefined &&
+      (!Number.isInteger(mount.mode) || mount.mode < 0 || mount.mode > 0o7777)
+    ) {
+      return Effect.fail(
+        new InvalidContainerOptions({
+          message: `Docker.Container tmpfs mode is not a valid POSIX mode for ${mount.path}`,
+        }),
+      );
+    }
+    tmpfsTargets.add(mount.path);
   }
   return Effect.void;
 };

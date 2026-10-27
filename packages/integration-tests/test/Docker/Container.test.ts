@@ -15,6 +15,356 @@ import { findAvailablePort } from "./Runtime.ts";
 const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState(), adopt: true });
 
 test.provider(
+  "configures kernel profiles, namespaces, supplementary groups, ulimits and process operations",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const { stdout: securityOptions } = yield* docker.run([
+        "info",
+        "--format",
+        "{{json .SecurityOptions}}",
+      ]);
+      const apparmorProfile = securityOptions.includes("name=apparmor")
+        ? "docker-default"
+        : undefined;
+      const name = "alchemy-test-container-advanced-runtime";
+      const deploy = (maxFile: string) =>
+        Docker.Container("advanced-runtime", {
+          name,
+          image: "alpine:3.22",
+          seccompProfile: "builtin",
+          apparmorProfile,
+          userns: "host",
+          groupAdd: ["1234"],
+          ulimits: { nofile: { soft: 1024, hard: 2048 } },
+          logDriver: "json-file",
+          logOptions: { "max-file": maxFile, "max-size": "1m" },
+          oomScoreAdj: 200,
+          stopSignal: "SIGINT",
+          start: false,
+        });
+
+      const first = yield* stack.deploy(deploy("2"));
+      yield* Effect.addFinalizer(() => docker.container.remove(name, true).pipe(Effect.ignore));
+      const info = yield* docker.container.inspect(name);
+      expect(info.HostConfig.SecurityOpt).toContain("seccomp=builtin");
+      if (apparmorProfile !== undefined) {
+        expect(info.AppArmorProfile).toBe(apparmorProfile);
+      }
+      expect(info.HostConfig.UsernsMode).toBe("host");
+      expect(info.HostConfig.GroupAdd).toContain("1234");
+      expect(info.HostConfig.Ulimits).toEqual(
+        expect.arrayContaining([{ Name: "nofile", Soft: 1024, Hard: 2048 }]),
+      );
+      expect(info.HostConfig.LogConfig).toMatchObject({
+        Type: "json-file",
+        Config: { "max-file": "2", "max-size": "1m" },
+      });
+      expect(info.HostConfig.OomScoreAdj).toBe(200);
+      expect(info.Config.StopSignal).toBe("SIGINT");
+
+      expect((yield* stack.plan(deploy("2"))).resources["advanced-runtime"]?.action).toBe("noop");
+      expect((yield* stack.deploy(deploy("2"))).id).toBe(first.id);
+      expect((yield* stack.plan(deploy("3"))).resources["advanced-runtime"]?.action).toBe(
+        "replace",
+      );
+      const second = yield* stack.deploy(deploy("3"));
+      expect(second.id).not.toBe(first.id);
+      expect(
+        (yield* docker.container.inspect(name)).HostConfig.LogConfig?.Config?.["max-file"],
+      ).toBe("3");
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "replaces a container when a custom seccomp profile file changes",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const docker = yield* Docker.Docker;
+      const dir = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-docker-seccomp-profile-",
+      });
+      const profile = path.join(dir, "seccomp.json");
+      const writeProfile = (blockedSyscall: string) =>
+        fs.writeFileString(
+          profile,
+          JSON.stringify({
+            defaultAction: "SCMP_ACT_ALLOW",
+            syscalls: [{ names: [blockedSyscall], action: "SCMP_ACT_ERRNO" }],
+          }),
+        );
+      yield* writeProfile("getppid");
+      const name = "alchemy-test-container-file-seccomp";
+      const deploy = () =>
+        Docker.Container("file-seccomp", {
+          name,
+          image: "alpine:3.22",
+          seccompProfile: profile,
+          start: false,
+        });
+      const first = yield* stack.deploy(deploy());
+      yield* Effect.addFinalizer(() => docker.container.remove(name, true).pipe(Effect.ignore));
+      expect((yield* stack.plan(deploy())).resources["file-seccomp"]?.action).toBe("noop");
+      expect((yield* stack.deploy(deploy())).id).toBe(first.id);
+      yield* writeProfile("getuid");
+      expect((yield* stack.plan(deploy())).resources["file-seccomp"]?.action).toBe("update");
+      const second = yield* stack.deploy(deploy());
+      expect(second.id).not.toBe(first.id);
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "enforces container resource limits and security options across replacements",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const name = "alchemy-test-container-runtime-hardening";
+      const deploy = (pidsLimit: number) =>
+        Docker.Container("runtime-hardening", {
+          name,
+          image: "alpine:3.22",
+          memory: "256m",
+          memorySwap: "256m",
+          memoryReservation: "128m",
+          cpus: 0.5,
+          pidsLimit,
+          readOnlyRootFs: true,
+          capDrop: ["ALL"],
+          noNewPrivileges: true,
+          init: true,
+          user: "1234:1234",
+          tmpfs: [{ path: "/tmp", size: "32m", mode: 0o1777 }],
+          start: false,
+        });
+
+      const first = yield* stack.deploy(deploy(128));
+      yield* Effect.addFinalizer(() => docker.container.remove(name, true).pipe(Effect.ignore));
+      const inspect = yield* docker.container.inspect(name);
+      expect(inspect.HostConfig.Memory).toBe(268435456);
+      expect(inspect.HostConfig.MemorySwap).toBe(268435456);
+      expect(inspect.HostConfig.MemoryReservation).toBe(134217728);
+      expect(inspect.HostConfig.NanoCpus).toBe(500000000);
+      expect(inspect.HostConfig.PidsLimit).toBe(128);
+      expect(inspect.HostConfig.ReadonlyRootfs).toBe(true);
+      expect(inspect.HostConfig.CapDrop).toContain("ALL");
+      expect(
+        inspect.HostConfig.SecurityOpt?.some((opt) => opt.startsWith("no-new-privileges")),
+      ).toBe(true);
+      expect(inspect.HostConfig.Init).toBe(true);
+      expect(inspect.Config.User).toBe("1234:1234");
+      expect(inspect.HostConfig.Tmpfs?.["/tmp"]).toContain("size=32m");
+      expect(inspect.HostConfig.Tmpfs?.["/tmp"]).toContain("mode=1777");
+
+      const unchanged = yield* stack.plan(deploy(128));
+      expect(unchanged.resources["runtime-hardening"]?.action).toBe("noop");
+      expect((yield* stack.deploy(deploy(128))).id).toBe(first.id);
+
+      const changed = yield* stack.plan(deploy(256));
+      expect(changed.resources["runtime-hardening"]).toMatchObject({
+        action: "replace",
+        deleteFirst: true,
+      });
+      const second = yield* stack.deploy(deploy(256));
+      expect(second.id).not.toBe(first.id);
+      expect((yield* docker.container.inspect(name)).HostConfig.PidsLimit).toBe(256);
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "enforces unprivileged read-only execution while keeping tmpfs writable",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const name = "alchemy-test-container-unprivileged-exec";
+      const container = Docker.Container("unprivileged-exec", {
+        name,
+        image: "alpine:3.22",
+        command: ["sleep", "120"],
+        memory: "64m",
+        memorySwap: "64m",
+        readOnlyRootFs: true,
+        capDrop: ["ALL"],
+        noNewPrivileges: true,
+        init: true,
+        user: "1234:1234",
+        tmpfs: [{ path: "/tmp", mode: 0o1777 }],
+        start: true,
+      });
+      const deployed = yield* stack.deploy(container);
+      yield* Effect.addFinalizer(() => docker.container.remove(name, true).pipe(Effect.ignore));
+      expect(deployed.status).toBe("running");
+
+      const exec = (...command: string[]) => docker.run(["container", "exec", name, ...command]);
+      expect((yield* exec("id", "-u")).stdout).toBe("1234");
+      expect((yield* exec("grep", "NoNewPrivs", "/proc/self/status")).stdout).toMatch(
+        /NoNewPrivs:\s+1/,
+      );
+      expect((yield* exec("touch", "/alchemy-write").pipe(Effect.flip))._tag).toBe("PlatformError");
+      yield* exec("touch", "/tmp/alchemy-write");
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "recreates an adopted container before claiming its hardening settings",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const name = "alchemy-test-container-runtime-hardening-adopt";
+      yield* docker.container.remove(name, true).pipe(Effect.ignore);
+      const { stdout: foreignId } = yield* docker.run([
+        "container",
+        "create",
+        "--name",
+        name,
+        "alpine:3.22",
+      ]);
+      yield* Effect.addFinalizer(() => docker.container.remove(name, true).pipe(Effect.ignore));
+
+      const adopted = yield* stack.deploy(
+        Docker.Container("runtime-hardening-adopt", {
+          name,
+          image: "alpine:3.22",
+          capDrop: ["ALL"],
+          noNewPrivileges: true,
+          start: false,
+        }),
+      );
+      expect(adopted.id).not.toBe(foreignId.trim());
+      const inspected = yield* docker.container.inspect(name);
+      expect(inspected.HostConfig.CapDrop).toContain("ALL");
+      expect(
+        inspected.HostConfig.SecurityOpt?.some((opt) => opt.startsWith("no-new-privileges")),
+      ).toBe(true);
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "rejects invalid tmpfs targets before creating a Docker container",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const name = "alchemy-test-container-invalid-tmpfs";
+      const failure = yield* stack
+        .deploy(
+          Docker.Container("invalid-tmpfs", {
+            name,
+            image: "alpine:3.22",
+            tmpfs: [{ path: "tmp", size: "32m" }],
+            start: false,
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(String(failure)).toContain("tmpfs target must be an absolute path");
+      const present = yield* docker.container.inspect(name).pipe(
+        Effect.map(() => true),
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(false)),
+      );
+      expect(present).toBe(false);
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "rejects invalid or silently ignored container runtime restrictions",
+  (stack) =>
+    Effect.gen(function* () {
+      const invalid = [
+        {
+          id: "swap-without-memory",
+          props: { memorySwap: "128m" },
+          reason: "memorySwap requires memory",
+        },
+        {
+          id: "invalid-cpu-quota",
+          props: { cpus: 0 },
+          reason: "cpus must be a finite, positive number",
+        },
+        {
+          id: "invalid-pids-limit",
+          props: { pidsLimit: 0 },
+          reason: "pidsLimit must be a positive integer",
+        },
+        {
+          id: "empty-memory-limit",
+          props: { memory: "" },
+          reason: "memory cannot be empty",
+        },
+        {
+          id: "empty-user",
+          props: { user: " " },
+          reason: "user cannot be empty",
+        },
+        {
+          id: "empty-capability-drop",
+          props: { capDrop: ["  "] },
+          reason: "capDrop cannot contain empty capabilities",
+        },
+        {
+          id: "empty-tmpfs-size",
+          props: { tmpfs: [{ path: "/tmp", size: "" }] },
+          reason: "tmpfs size cannot be empty",
+        },
+        {
+          id: "empty-seccomp-profile",
+          props: { seccompProfile: " " },
+          reason: "seccompProfile cannot be empty",
+        },
+        {
+          id: "empty-apparmor-profile",
+          props: { apparmorProfile: "" },
+          reason: "apparmorProfile cannot be empty",
+        },
+        {
+          id: "invalid-supplementary-group",
+          props: { groupAdd: [" "] },
+          reason: "groupAdd cannot contain empty groups",
+        },
+        {
+          id: "inverted-ulimit",
+          props: { ulimits: { nofile: { soft: 2048, hard: 1024 } } },
+          reason: "ulimits contains an invalid soft/hard limit",
+        },
+        {
+          id: "invalid-log-option",
+          props: { logOptions: { "max-file": "" } },
+          reason: "logOptions contains an invalid option",
+        },
+        {
+          id: "invalid-oom-score",
+          props: { oomScoreAdj: 1001 },
+          reason: "oomScoreAdj must be an integer",
+        },
+      ];
+      for (const { id, props, reason } of invalid) {
+        const error = yield* stack
+          .deploy(
+            Docker.Container(id, {
+              image: "alpine:3.22",
+              ...props,
+              start: false,
+            }),
+          )
+          .pipe(Effect.flip);
+        expect(String(error)).toContain(reason);
+      }
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
   "renders Docker healthcheck arrays as a --health-cmd string",
   () =>
     Effect.sync(() => {
