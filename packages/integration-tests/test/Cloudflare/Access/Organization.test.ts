@@ -3,9 +3,13 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
+import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import { MinimumLogLevel } from "effect/References";
+import * as pathe from "pathe";
+import { expectUrlContains } from "../Utils/Http.ts";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
@@ -17,6 +21,9 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // Trust org, so they run by default; set CLOUDFLARE_TEST_ACCESS_ORG=0 to skip
 // them on an account whose org must not be touched.
 const skip = process.env.CLOUDFLARE_TEST_ACCESS_ORG === "0";
+
+const customPagesEntitled = !!process.env.CLOUDFLARE_TEST_ACCESS_CUSTOM_PAGES;
+const brandingDir = pathe.resolve(import.meta.dirname, "fixtures/branding");
 
 const resolveAuthDomain = (accountId: string) =>
   process.env.CLOUDFLARE_TEST_AUTH_DOMAIN
@@ -230,6 +237,61 @@ describe.sequential(
         expect(converged.mfaPivKeyRequirements ?? undefined).toBeUndefined();
         expect(converged.serviceTokenInactivity?.enabled ?? false).toEqual(false);
 
+        yield* stack.destroy();
+      }).pipe(restoringOrganization, logLevel),
+    );
+
+    // Branding lives in the repo: the logo is served by an assets-only
+    // Worker and the block page HTML is read from a file.
+    test.provider.skipIf(skip)("brands the login page from files in the repo", (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const authDomain = yield* resolveAuthDomain(accountId);
+        const original = yield* zeroTrust.listOrganizationsForAccount({ accountId });
+        const fs = yield* FileSystem.FileSystem;
+
+        const { org, logoUrl, forbiddenPageId } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const branding = yield* Cloudflare.Worker("Branding", {
+              assets: brandingDir + "/public",
+              workersDev: true,
+            });
+            // Access custom pages need an entitled account.
+            const forbidden = customPagesEntitled
+              ? yield* Cloudflare.Access.CustomPage("Forbidden", {
+                  type: "forbidden",
+                  customHtml: yield* fs.readFileString(brandingDir + "/forbidden.html"),
+                })
+              : undefined;
+            const org = yield* Cloudflare.Access.Organization("Org", {
+              authDomain,
+              name: original.name ?? authDomain,
+              loginDesign: {
+                logoPath: Output.interpolate`${branding.url}/logo.svg`,
+                backgroundColor: "#111111",
+                textColor: "#ffffff",
+              },
+              customPages: forbidden ? { forbidden: forbidden.customPageId } : undefined,
+            });
+            return {
+              org,
+              logoUrl: Output.interpolate`${branding.url}/logo.svg`,
+              forbiddenPageId: forbidden?.customPageId,
+            };
+          }),
+        );
+
+        const live = yield* zeroTrust.listOrganizationsForAccount({ accountId });
+        expect(live.loginDesign?.logoPath).toEqual(logoUrl);
+        expect(live.loginDesign?.backgroundColor).toEqual("#111111");
+        if (forbiddenPageId) {
+          expect(live.customPages?.forbidden).toEqual(forbiddenPageId);
+          expect(org.customPages?.forbidden).toEqual(forbiddenPageId);
+        }
+        yield* expectUrlContains(logoUrl, "alchemy-access-logo");
+
+        // Unset the custom page before destroy deletes it.
+        yield* zeroTrust.updateOrganizationForAccount(restorable(accountId, original));
         yield* stack.destroy();
       }).pipe(restoringOrganization, logLevel),
     );

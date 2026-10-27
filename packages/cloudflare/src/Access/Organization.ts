@@ -314,6 +314,32 @@ export type Organization = Resource<
  * });
  * ```
  *
+ * ### Branding the login page
+ * Keep the branding assets in your repo. An assets-only Worker serves the
+ * logo, and a custom page takes its HTML from a file.
+ *
+ * **Example:** Logo and block page from files
+ * ```typescript
+ * const fs = yield* FileSystem.FileSystem;
+ * const branding = yield* Cloudflare.Worker("Branding", {
+ *   assets: "./branding/public", // logo.svg
+ * });
+ * const forbidden = yield* Cloudflare.Access.CustomPage("Forbidden", {
+ *   type: "forbidden",
+ *   customHtml: yield* fs.readFileString("./branding/forbidden.html"),
+ * });
+ * const org = yield* Cloudflare.Access.Organization("Org", {
+ *   authDomain: "acme.cloudflareaccess.com",
+ *   loginDesign: {
+ *     logoPath: Output.interpolate`${branding.url}/logo.svg`,
+ *     backgroundColor: "#111111",
+ *     textColor: "#ffffff",
+ *     footerText: "Acme employees only",
+ *   },
+ *   customPages: { forbidden: forbidden.customPageId },
+ * });
+ * ```
+ *
  * ### Securing the organization
  * **Example:** Require MFA and deny unmatched requests
  * ```typescript
