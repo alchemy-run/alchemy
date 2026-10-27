@@ -1,5 +1,4 @@
 import { describe, expect } from "bun:test";
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
 import * as eventarc from "@distilled.cloud/gcp/eventarc_v1";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
@@ -25,17 +24,13 @@ const { getWhenReady } = Test;
 // the deploy uses, so the test runs against the configured profile.
 const GcpHttp = Layer.mergeAll(GCP.GcpAuth, GCP.fromAuthProvider(), FetchHttpClient.layer);
 
-// Both services are built from `main`, which needs a local image build.
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-
 const TRIGGER_PATH = "/__alchemy/eventarc/ordercreated";
 
 // Kept outside the handle so teardown can verify even after a failed test.
 let deployed: { project: string; auditorService: string; databaseName: string } | undefined;
 
 // Deploy, tests and destroy all sit behind the same Docker guard.
-describe.skipIf(!dockerAvailable)("gcp-eventarc-firestore", () => {
+describe("gcp-eventarc-firestore", () => {
   const stack = beforeAll(
     deploy(Stack).pipe(
       Effect.tap((outputs) =>

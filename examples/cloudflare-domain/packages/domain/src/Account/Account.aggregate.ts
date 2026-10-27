@@ -50,9 +50,12 @@ const AccountState = Schema.Union([
 ]);
 type AccountState = typeof AccountState.Type;
 
-// Lenses on the narrowed Open state: they cannot miss, so nothing is hidden.
-const balance = Optic.id<Open>().key("balance");
-const frozen = Optic.id<Open>().key("frozen");
+// Optics that focus on the Open account. decide refuses every command on an
+// account that is not open, so these events only follow an Open state; on any
+// other state an optic leaves it unchanged, which keeps evolve total.
+const open = Optic.id<AccountState>().tag("Open");
+const balance = open.key("balance");
+const frozen = open.key("frozen");
 
 // Authorization: customers may act on their own accounts; agents and the system on any.
 const openFor = (s: AccountState, actor: Actor): Open | NotOpen | NotOwner =>
@@ -68,11 +71,6 @@ const authorized = Effect.fn(function* (s: AccountState) {
   if (o._tag !== "Open") return yield* o;
   return o;
 });
-
-// decide refuses every command on an account that is not open, so these
-// events only follow an Open state. evolve is total: any other state is kept.
-const whenOpen = (s: AccountState, f: (o: Open) => AccountState): AccountState =>
-  s._tag === "Open" ? f(s) : s;
 
 const dayOf = (t: DateTime.Utc) => DateTime.formatIsoDate(t);
 
@@ -197,19 +195,19 @@ export class Account extends Domain.Aggregate("Account", {
       frozen: null,
       today: { day: "", withdrawn: 0 },
     }),
-    OwnerChanged: (s, e) => whenOpen(s, (o) => ({ ...o, customerId: e.customerId })),
-    MoneyDeposited: (s, e) => whenOpen(s, (o) => balance.replace(e.balanceAfter, o)),
-    TransferDebited: (s, e) => whenOpen(s, (o) => balance.replace(e.balanceAfter, o)),
-    TransferCredited: (s, e) => whenOpen(s, (o) => balance.replace(e.balanceAfter, o)),
-    TransferRefunded: (s, e) => whenOpen(s, (o) => balance.replace(e.balanceAfter, o)),
-    SettlementReceived: (s, e) => whenOpen(s, (o) => balance.replace(e.balanceAfter, o)),
+    OwnerChanged: (s, e) => open.modify((o) => ({ ...o, customerId: e.customerId }))(s),
+    MoneyDeposited: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    TransferDebited: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    TransferCredited: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    TransferRefunded: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    SettlementReceived: (s, e) => Optic.replace(s, balance, e.balanceAfter),
     MoneyWithdrawn: (s, e, { at }) =>
-      whenOpen(s, (o) => {
+      open.modify((o) => {
         const day = dayOf(at);
         const withdrawn = (o.today.day === day ? o.today.withdrawn : 0) + e.amount;
-        return { ...balance.replace(e.balanceAfter, o), today: { day, withdrawn } };
-      }),
-    AccountFrozen: (s, e) => whenOpen(s, (o) => frozen.replace(e.reason, o)),
+        return { ...o, balance: e.balanceAfter, today: { day, withdrawn } };
+      })(s),
+    AccountFrozen: (s, e) => Optic.replace(s, frozen, e.reason),
     AccountClosed: () => ({ _tag: "Closed" as const }),
     RefundStranded: (s) => s,
     SettlementOnClosedAccount: (s) => s,

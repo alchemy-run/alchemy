@@ -50,6 +50,11 @@ A rejection with no fields: `class NotOpen extends Domain.Rejection("NotOpen") {
 
 ```ts
 // Account/Account.aggregate.ts
+type Open = Extract<AccountState, { _tag: "Open" }>;
+
+// A shared rule: the narrowed state, or the rejection. Every decide handler starts from it.
+const openFor = (s: AccountState): Open | NotOpen => (s._tag === "Open" ? s : new NotOpen());
+
 export class Account extends Domain.Aggregate("Account", {
   id: AccountId,
   state: AccountState,                    // a Schema, usually a TaggedStruct union
@@ -58,25 +63,43 @@ export class Account extends Domain.Aggregate("Account", {
   decide: {
     OpenAccount: (s, cmd) =>
       s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
-    // Effect.fn when decide reads middleware context or the clock
+    DepositMoney: (s, cmd) => {
+      const o = openFor(s);
+      if (o._tag !== "Open") return o;
+      return [new MoneyDeposited({ amount: cmd.amount, balanceAfter: o.balance + cmd.amount })];
+    },
+    // Effect.fn when decide reads middleware context; fail with `return yield* rejection`
     WithdrawMoney: Effect.fn(function* (s, cmd, { now }) {
-      const actor = yield* CurrentActor;
-      if (s._tag !== "Open") return yield* new NotOpen();
-      if (cmd.amount > s.balance) return yield* new InsufficientFunds({ balance: s.balance });
-      return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })];
+      const o = openFor(s);
+      if (o._tag !== "Open") return yield* o;
+      if (o.owner !== (yield* CurrentActor).customerId) return yield* new NotOwner();
+      if (cmd.amount > o.balance) return yield* new InsufficientFunds({ balance: o.balance });
+      return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: o.balance - cmd.amount })];
     }),
   },
   evolve: {
     AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-    MoneyWithdrawn: (s, e) => ({ ...s, balance: e.balanceAfter }),
+    // decide already refused a closed account: keep any state the event can't follow
+    MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
+    MoneyWithdrawn: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
   },
-  reply: { WithdrawMoney: (s) => ({ balance: s.balance }) },
+  reply: { WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }) },
   // optional: let clients read/watch the aggregate through an Api
   read: { middleware: [Session], rejects: [NotOwner], validate: Effect.fn(function* (_req, s) { /* authorize */ }) },
 }) {}
 ```
 
-`decide` returns an array of events (`[]` for a no-op) or a rejection. `Aggregate.ref(id)` builds a reference for stories and views.
+`Aggregate.ref(id)` builds a reference for stories and views.
+
+### Patterns for decide, evolve and reply
+
+- **decide answers one of three ways.** Events when the command changes something; `[]` when the state already is what it asks for (freezing a frozen account); a declared rejection when it can't be done.
+- **Name shared rules as pure guards** that return the narrowed state or the rejection (`openFor`), and start each handler from one. In an `Effect.fn` handler, fail with `return yield* o`.
+- **Events carry the outcome**, not just the request (`balanceAfter`), so `evolve` copies it and never repeats a rule. Views and policies see the same numbers.
+- **decide reads time from `now`** (its third argument) and the actor from middleware context. Never `Date.now()`, `Clock` or randomness.
+- **evolve and reply are total and never fail.** decide already refused the command, so a handler keeps any state its event can't follow: `s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s`. An event that changes the stage returns the new state whole.
+- **Optics are an opt-in shorthand** for many handlers that repeat the same check. `const balance = Optic.id<State>().tag("Open").key("balance")` focuses on the Open state; `Optic.replace(s, balance, e.balanceAfter)` sets one field and `open.modify((o) => ({ ...o, ... }))(s)` several, leaving other states unchanged. The example bank uses them.
+- **A compensation never refuses.** A command that undoes another process's step (`RefundTransfer`) records a fact for every state (`TransferRefunded`, or `RefundStranded` when the account closed), so the saga that sent it has no refusal to handle.
 
 ## Request context and middleware
 
@@ -136,7 +159,7 @@ keyOf: {
 emit: { TransferRequested: { out: moved("out"), in: moved("in") } },
 ```
 
-A view keyed by a different aggregate than its source uses `keyOf`, returning `undefined` to skip. Add derived fields with `computed: { total: (v) => ... }`.
+A view keyed by a different aggregate than its source uses `keyOf`, returning `undefined` to skip. A view about something with no aggregate of its own (an org) takes a string Schema as `key` (`key: OrgId`); its `keyOf` returns the value, and reads take the value (`watch(orgId)`). Policies, projections and streams take a Schema `key` the same way (`Domain.Key.Any` is either). Don't declare an empty aggregate only to key something. Add derived fields with `computed: { total: (v) => ... }`.
 
 ## Policy
 
@@ -159,7 +182,7 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
 );
 ```
 
-The handler receives `{ key, source, event, envelope, state }` (`state` for a view source). It must handle every rejection. A policy has no session, so it provides context itself: `.pipe(Effect.provideService(CurrentActor, system("FraudReview")))`. To send a command later, durably, use `transfers.schedule(ref, new ExpireTransfer(), { after: "24 hours" })`. Only commands that never reject can be scheduled.
+The handler receives `{ key, source, event, envelope, state }` (`state` for a view source). It must handle every rejection. A policy has no session, so it provides context itself: `.pipe(Effect.provideService(CurrentActor, system("FraudReview")))`. To send a command later, durably, use `transfers.schedule(ref, new ExpireTransfer(), { after: "24 hours" })`. Only commands that never reject can be scheduled. `schedule` returns a `ScheduleReceipt` (`{ commandId, at }`). To cancel one that no longer applies, call `transfers.unschedule(ref, commandId)` with a known `commandId` or the receipt's. Both fail with `AlreadyExecuted` when the instance already handled a command with that id; `unschedule` also fails with `AlreadyCancelled` (cancelled before) or `NotScheduled` (never scheduled). A policy catches the ones it expects with `Effect.catchTag([...], ...)`, since a redelivery finds its expiry already cancelled. A policy cancels after the event is recorded, so the command can still fire first: keep the guard in `decide`.
 
 ## Saga
 
@@ -223,7 +246,7 @@ export const SiftFraudCheck = FraudCheck.toLayer(
 );
 ```
 
-Use it with `const fraud = yield* FraudCheck` in a policy or saga `toLayer`, then call `fraud.score({...})`. Declare typed errors per operation with `error:`. In a story, systems in `stub` are faked and the story answers their calls; the others run for real from a Layer you provide, and the story asserts what each call sent and returned. See [testing.md](testing.md).
+Use it with `const fraud = yield* FraudCheck` in a policy or saga `toLayer`, then call `fraud.score({...})`. Declare typed errors per operation with `error:`: one schema, or a list (`error: [RefundDeclined, CardFrozen]`) when the vendor can refuse in several ways. In a story, systems in `stub` are faked and the story answers their calls; the others run for real from a Layer you provide, and the story asserts what each call sent and returned. See [testing.md](testing.md).
 
 ## Projection and its port
 
@@ -286,7 +309,7 @@ export class CustomerApi extends Domain.Api(
 ) {}
 ```
 
-Clients call commands as methods (`bank.WithdrawMoney({ target, amount }, { headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A stream has `peek`, `watch`, `events` and `list`. Each Api entry authorizes itself.
+Clients call commands as methods (`bank.WithdrawMoney({ target, amount }, { headers })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. Each Api entry authorizes itself.
 
 ## Model
 

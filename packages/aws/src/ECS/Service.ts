@@ -2628,6 +2628,19 @@ const waitForServiceConvergence = (input: {
   );
 };
 
+/** Keep image resolution, drift detection and dev watching on the same inputs. */
+export const serviceImageInput = (props: ServiceProps) => {
+  const imageProps = props as ImageOwningServicePropsBase;
+  const source = props as ImageSourceLike;
+  return {
+    source,
+    platform: taskImagePlatform(imageProps.runtimePlatform),
+    port: imageProps.port,
+    isExternal: imageProps.isExternal,
+    bootstrap: makeBunBootstrap(source.handler ?? "default"),
+  };
+};
+
 export const ServiceProvider = () =>
   Provider.effect(
     Service,
@@ -2926,20 +2939,15 @@ export const ServiceProvider = () =>
           retention: news.logging?.retention,
         });
 
-        const source = news as ImageSourceLike;
         const resolved = yield* imageSource.resolve({
+          ...serviceImageInput(news),
           id,
-          source,
           repositoryName,
           repositoryUri:
             output?.repositoryUri && output.repositoryName === repositoryName
               ? output.repositoryUri
               : undefined,
           tags,
-          platform: taskImagePlatform(news.runtimePlatform),
-          port: news.port,
-          isExternal: news.isExternal,
-          bootstrap: makeBunBootstrap(source.handler ?? "default"),
           session,
         });
 
@@ -3137,15 +3145,7 @@ export const ServiceProvider = () =>
           // surface drift as an update; without this a bootstrap or code-only
           // change would silently no-op until `--force`.
           if (output?.code && taskRefOf(news) === undefined) {
-            const imageNews = news as ImageOwningServicePropsBase;
-            const source = news as ImageSourceLike;
-            const hash = yield* imageSource.hash({
-              source,
-              platform: taskImagePlatform(imageNews.runtimePlatform),
-              port: imageNews.port,
-              isExternal: imageNews.isExternal,
-              bootstrap: makeBunBootstrap(source.handler ?? "default"),
-            });
+            const hash = yield* imageSource.hash(serviceImageInput(news));
             if (hash !== undefined && hash !== output.code.hash) {
               return { action: "update" } as const;
             }
