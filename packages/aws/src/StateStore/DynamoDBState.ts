@@ -13,6 +13,7 @@ import {
 } from "alchemy/State/State";
 import { encodeState, reviveState } from "alchemy/State/StateEncoding";
 import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
+import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -79,6 +80,17 @@ const DEFAULT_OVERFLOW_THRESHOLD = 300 * 1024;
 
 /** Maximum number of requests DynamoDB accepts in one BatchWriteItem call. */
 const BATCH_WRITE_SIZE = 25;
+
+/** Maximum number of keys S3 accepts in one DeleteObjects call. */
+const S3_DELETE_BATCH_SIZE = 1000;
+
+/** Backoff for the writes a BatchWriteItem call leaves unprocessed. */
+const unprocessedBackoff = Schedule.exponential("200 millis").pipe(
+  Schedule.modifyDelay(({ duration }) =>
+    Effect.succeed(Duration.min(duration, Duration.seconds(5))),
+  ),
+  Schedule.upTo({ times: 8 }),
+);
 
 /** How long a lease stays valid without a refresh. */
 const LEASE_TTL_MS = 60_000;
@@ -446,27 +458,27 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
   const deleteItems = (keys: ReadonlyArray<{ PK: string; SK: string }>) =>
     use(({ table }) =>
       Effect.forEach(
-        Array.from({ length: Math.ceil(keys.length / BATCH_WRITE_SIZE) }, (_, i) =>
-          keys.slice(i * BATCH_WRITE_SIZE, (i + 1) * BATCH_WRITE_SIZE),
-        ),
+        Arr.chunksOf(keys, BATCH_WRITE_SIZE),
         (batch) =>
           Effect.gen(function* () {
             let requests: dynamodb.WriteRequest[] = batch.map((key) => ({
               DeleteRequest: { Key: { PK: S(key.PK), SK: S(key.SK) } },
             }));
-            for (let attempt = 0; requests.length > 0; attempt++) {
-              if (attempt > 0) {
-                if (attempt > 8) {
-                  return yield* new StateStoreError({
-                    message: `DynamoDB left ${requests.length} state deletes unprocessed`,
-                  });
-                }
-                yield* Effect.sleep(Duration.millis(Math.min(100 * 2 ** attempt, 5_000)));
-              }
+            yield* Effect.gen(function* () {
               const result = yield* dynamodb.batchWriteItem({
                 RequestItems: { [table]: requests },
               });
               requests = result.UnprocessedItems?.[table] ?? [];
+            }).pipe(
+              Effect.repeat({
+                schedule: unprocessedBackoff,
+                until: () => requests.length === 0,
+              }),
+            );
+            if (requests.length > 0) {
+              return yield* new StateStoreError({
+                message: `DynamoDB left ${requests.length} state deletes unprocessed`,
+              });
             }
           }),
         { discard: true },
@@ -751,9 +763,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
                 Effect.map((keys) => Array.from(keys)),
               );
             yield* Effect.forEach(
-              Array.from({ length: Math.ceil(objects.length / 1000) }, (_, i) =>
-                objects.slice(i * 1000, (i + 1) * 1000),
-              ),
+              Arr.chunksOf(objects, S3_DELETE_BATCH_SIZE),
               (batch) =>
                 s3.deleteObjects({
                   Bucket: bucket,
