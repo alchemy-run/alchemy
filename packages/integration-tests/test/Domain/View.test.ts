@@ -69,7 +69,7 @@ const snapshotThenFeed = Effect.gen(function* () {
   return { snapshot, entries, now };
 });
 
-describe("Domain View.snapshot", () => {
+describe("Domain View reads", () => {
   it.live("gives the state and the cursor it is valid at", () =>
     Effect.gen(function* () {
       const api = yield* CounterApi.Client;

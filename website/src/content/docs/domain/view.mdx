@@ -172,11 +172,23 @@ A `where` filter narrows any read, like only deposits over a threshold. A filter
 `snapshot` returns a key's state together with its `cursor`: the `seq` of the last event the key had emitted when that state was read. Render the state, then follow `events` from the cursor. Every change after the snapshot arrives once, and none is missed, even when it was written between the two reads:
 
 ```typescript
-const { state, cursor } = yield* bank.AccountSummary.snapshot(accountId);
-render(state);
-yield* bank.AccountSummary.events(accountId, { after: cursor }).pipe(
-  Stream.runForEach((entry) => render(entry.state)),
-);
+// packages/server/test/followSummary.ts
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import type { AccountId } from "@bank/domain/Account/Account.id";
+import type { CustomerClient } from "./flows.ts";
+
+export const followSummary = Effect.fn(function* (
+  bank: CustomerClient,
+  accountId: AccountId,
+  render: (balance: number | undefined) => Effect.Effect<void>,
+) {
+  const { state, cursor } = yield* bank.AccountSummary.snapshot(accountId);
+  yield* render(state?.balance);
+  yield* bank.AccountSummary.events(accountId, { after: cursor }).pipe(
+    Stream.runForEach((entry) => render(entry.state?.balance)),
+  );
+});
 ```
 
 A server can read the snapshot while it renders a page and send it with the page, so the browser shows data at once and starts its feed from the cursor. `snapshot` and `list` take `atLeast`, like `get`: pass a command's `stream` and `version` to wait until the view has applied it.
