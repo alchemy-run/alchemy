@@ -62,15 +62,17 @@ export const GenSnapshot = Effect.gen(function* () {
   const inbox = yield* GenInbox;
   return yield* GCP.PubSub.Snapshot("GenSnapshot", { subscription: inbox.name });
 });
-const avro = (fields: string[]) =>
-  JSON.stringify({
-    type: "record",
-    name: "Event",
-    fields: fields.map((name) => ({ name, type: "string" })),
-  });
-export const GenSchema = GCP.PubSub.Schema("GenSchema", { type: "AVRO", definition: avro(["id"]) });
-/** The revision `CommitSchema` adds to {@link GenSchema}. */
-export const COMMITTED_DEFINITION = avro(["id", "kind"]);
+const ID_FIELD = { name: "id", type: "string" };
+export const GenSchema = GCP.PubSub.Schema("GenSchema", {
+  type: "AVRO",
+  definition: JSON.stringify({ type: "record", name: "Event", fields: [ID_FIELD] }),
+});
+/** The revision `CommitSchema` adds to {@link GenSchema}: a compatible optional field. */
+export const COMMITTED_DEFINITION = JSON.stringify({
+  type: "record",
+  name: "Event",
+  fields: [ID_FIELD, { name: "kind", type: ["null", "string"], default: null }],
+});
 
 export const PUBLISH_PAYLOAD = "publish-binding";
 export const WRITE_PAYLOAD = "write-topic-binding";
