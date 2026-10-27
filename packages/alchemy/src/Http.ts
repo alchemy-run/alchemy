@@ -158,11 +158,6 @@ export const BunHttpServer = (serverOptions?: BunHttpServerOptions) =>
             const server = yield* BunHttpServerPlatform.make({
               port,
               hostname: serverOptions?.hostname ?? "0.0.0.0",
-              // Bun closes a request that sends nothing for 10s by default,
-              // cutting off any handler slower than that. The platform in
-              // front (Cloud Run, an ALB, App Runner) enforces its own
-              // request timeout, so the server shouldn't add one.
-              idleTimeout: 0,
             });
             yield* server.serve(safeHttpEffect(handler));
           }).pipe(Effect.orDie),
