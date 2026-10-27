@@ -6,7 +6,7 @@ import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { expectAuditEntry } from "../auditLogs.ts";
-import { expectProbe } from "../bindingHost.ts";
+import { callProbe, expectProbe } from "../bindingHost.ts";
 import BigtableBindingsHost, {
   AuditMarkers,
   Db,
@@ -167,8 +167,18 @@ describe.skipIf(!!process.env.FAST)(
             );
             expect(added.name).toEqual(genTableName);
             expect(Object.keys(added.columnFamilies ?? {}).sort()).toEqual(["cf", "extra"]);
-            const dropped = yield* expectProbe<{ columnFamilies?: object }>(baseUrl, "dropFamily");
-            expect(Object.keys(dropped.columnFamilies ?? {})).toEqual(["cf"]);
+            // The add is still applying for a few seconds ("concurrent modifications").
+            const dropped = yield* callProbe<{ columnFamilies?: object }>(
+              baseUrl,
+              "dropFamily",
+            ).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("5 seconds"),
+                until: (outcome) => outcome.ok,
+                times: 12,
+              }),
+            );
+            expect(dropped.ok && Object.keys(dropped.value.columnFamilies ?? {})).toEqual(["cf"]);
             expect(yield* expectProbe<string>(baseUrl, "undelete")).not.toEqual("succeeded");
             const children = yield* expectProbe<{
               missingAuthorizedView: string;
@@ -233,7 +243,18 @@ describe.skipIf(!!process.env.FAST)(
             );
             expect(restored.name).toContain(`${instanceName}/tables/${id}/`);
             // The copy blocks deleting the cluster on destroy: remove both out of band.
-            yield* bigtable.deleteProjectsInstancesClustersBackups({ name: copied.name! });
+            // The copy is a long-running operation: retry until it can be deleted.
+            yield* bigtable
+              .deleteProjectsInstancesClustersBackups({
+                name: `${instanceName}/clusters/cluster/backups/${id}`,
+              })
+              .pipe(
+                Effect.retry({
+                  while: (error) => error._tag === "BadRequest" || error._tag === "Conflict",
+                  schedule: Schedule.spaced("5 seconds"),
+                  times: 24,
+                }),
+              );
             yield* bigtable
               .deleteProjectsInstancesTables({ name: `${instanceName}/tables/${id}` })
               .pipe(
