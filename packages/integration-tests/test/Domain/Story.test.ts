@@ -281,6 +281,28 @@ describe("Domain Story", () => {
     ),
   );
 
+  it.effect("asserts part of an aggregate's state", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 2, total: 2 })),
+      Story.state(c1, { total: 2 }),
+      Story.state(c1, { total: 2, capped: false }),
+    ),
+  );
+
+  it.effect("a partial state that does not match fails", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 2, total: 2 })),
+      Story.state(c1, { total: 3 }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toContain(
+          'Counter/c-1\n  expected {"total":3}\n  actual   {"total":2,"capped":false}',
+        ),
+      ),
+    ),
+  );
+
   it.effect("asserts rejections", () =>
     story(
       Story.when(c1, new Increment({ by: 11 })),
