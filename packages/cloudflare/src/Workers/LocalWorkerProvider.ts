@@ -429,18 +429,17 @@ export const LocalWorkerProvider = () =>
         // Container (keyed by Container id); a fleet class has one image.
         // Build paths resolve against the stack's working directory here: a
         // Vite Worker's runtime runs in a child whose cwd is the site root.
-        const toRuntimeImage = (image: DevContainerImage) => ({
-          ...image,
-          ...("dockerfile" in image
-            ? image.context !== undefined
-              ? { context: path.resolve(runtimeBase, image.context) }
-              : { dockerfile: path.resolve(runtimeBase, image.dockerfile) }
-            : {}),
-          env: unwrapRedacted(image.env),
-          ...("buildSecrets" in image
-            ? { buildSecrets: unwrapRedacted(image.buildSecrets) }
-            : undefined),
-        });
+        const toRuntimeImage = (image: DevContainerImage) =>
+          "dockerfile" in image
+            ? {
+                ...image,
+                ...(image.context !== undefined
+                  ? { context: path.resolve(runtimeBase, image.context) }
+                  : { dockerfile: path.resolve(runtimeBase, image.dockerfile) }),
+                env: unwrapRedacted(image.env),
+                buildSecrets: unwrapRedacted(image.buildSecrets),
+              }
+            : { ...image, env: unwrapRedacted(image.env) };
         const exportMap = (props.exports ?? {}) as Record<string, unknown>;
         yield* assertBindingContainersOnAsyncClasses(
           containerRows,
