@@ -69,6 +69,7 @@ const publicExports = [
   "MAX_DEPLOYMENT_ARTIFACT_BYTES",
   "CustomDomain",
   "CustomDomainProvider",
+  "PrismaDomainOwnershipRequired",
   "EnvironmentVariable",
   "EnvironmentVariableProvider",
   "SourceRepository",
