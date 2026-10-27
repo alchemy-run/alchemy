@@ -93,12 +93,9 @@ test(
   },
 );
 
-// The Cloudflare API's service-binding schema does not carry `props` yet:
-// the distilled `workers` service drops the field at encode, so deployed
-// bindings deliver no ctx.props. Local dev already delivers them (see
-// WorkerEntrypoint.local.test.ts). Flip this on when the distilled patch
-// lands.
-test.skip(
+// `className` is a key the Cloudflare SDK's key dictionary renames, so its
+// arrival proves the upload sent the props as written.
+test(
   "props reach the named entrypoint's ctx.props",
   Effect.gen(function* () {
     const { callerUrl } = yield* stack;
@@ -107,6 +104,7 @@ test.skip(
     const res = yield* client.get(`${callerUrl}/props`).pipe(coldStartRetry);
     expect((yield* res.json) as Record<string, unknown>).toEqual({
       tenant: "acme",
+      className: "Acme",
     });
   }),
   {

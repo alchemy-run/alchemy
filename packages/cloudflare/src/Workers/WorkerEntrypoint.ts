@@ -18,12 +18,7 @@ export interface WorkerEntrypointOptions {
   /**
    * Properties exposed to the target entrypoint via workerd's
    * `ctx.props`. Values accept `Output` references and resolve at deploy
-   * time.
-   *
-   * Local dev (`alchemy dev`) delivers these today. On deployed Workers
-   * the Cloudflare API's binding schema does not carry `props` yet, so
-   * they are typed and plumbed but dropped at upload until the distilled
-   * `workers` service adds the field.
+   * time. Keys reach the entrypoint as written.
    */
   props?: Record<string, Input<unknown>>;
 }
