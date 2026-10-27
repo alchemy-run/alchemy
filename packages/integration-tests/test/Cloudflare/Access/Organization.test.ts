@@ -27,6 +27,35 @@ const resolveAuthDomain = (accountId: string) =>
           return org.authDomain!;
         }),
       );
+// The organization's settings as an update body, to restore it after a test.
+// `serviceTokenInactivity` is left out: Cloudflare rejects the observed
+// `{ enabled: false }` shape it returns.
+const restorable = (accountId: string, org: zeroTrust.ListOrganizationsResponse) => ({
+  accountId,
+  authDomain: org.authDomain ?? undefined,
+  name: org.name ?? undefined,
+  allowAuthenticateViaWarp: org.allowAuthenticateViaWarp ?? undefined,
+  autoRedirectToIdentity: org.autoRedirectToIdentity ?? undefined,
+  isUiReadOnly: org.isUiReadOnly ?? undefined,
+  sessionDuration: org.sessionDuration ?? undefined,
+  warpAuthSessionDuration: org.warpAuthSessionDuration ?? undefined,
+  userSeatExpirationInactiveTime: org.userSeatExpirationInactiveTime ?? undefined,
+  uiReadOnlyToggleReason: org.uiReadOnlyToggleReason ?? undefined,
+  denyUnmatchedRequests: org.denyUnmatchedRequests ?? undefined,
+  strictServiceTokenAuth: org.strictServiceTokenAuth ?? undefined,
+  mfaRequiredForAllApps: org.mfaRequiredForAllApps ?? undefined,
+  loginDesign: withoutNulls(org.loginDesign),
+  customPages: withoutNulls(org.customPages),
+  mfaConfig: withoutNulls(org.mfaConfig),
+});
+
+const withoutNulls = <T extends object>(value: T | null | undefined) =>
+  value
+    ? (Object.fromEntries(Object.entries(value).filter(([, v]) => v !== null)) as {
+        [K in keyof T]: Exclude<T[K], null>;
+      })
+    : undefined;
+
 // Both cases mutate the same account-wide Access organization singleton; run
 // them serially so they don't corrupt each other under the global concurrent
 // test config.
@@ -113,6 +142,57 @@ describe.sequential(
         );
 
         yield* stack.destroy();
+      }).pipe(logLevel),
+    );
+
+    // Cloudflare's org update is a full PUT: a field missing from the body is
+    // reset. Settings the stack does not declare must survive a deploy.
+    test.provider.skipIf(skip)("keeps undeclared settings when updating", (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const authDomain = yield* resolveAuthDomain(accountId);
+        const original = yield* zeroTrust.listOrganizationsForAccount({ accountId });
+        const name = original.name ?? authDomain;
+        const warp = !(original.allowAuthenticateViaWarp ?? false);
+
+        yield* Effect.gen(function* () {
+          // Non-default neighboring settings, set out of band.
+          yield* zeroTrust.updateOrganizationForAccount({
+            ...restorable(accountId, original),
+            sessionDuration: "13h",
+            warpAuthSessionDuration: "7h",
+            loginDesign: { footerText: "alchemy neighbor footer" },
+            mfaConfig: { allowedAuthenticators: ["totp"], sessionDuration: "5h" },
+          });
+
+          const org = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Access.Organization("Org", {
+                authDomain,
+                name,
+                allowAuthenticateViaWarp: warp,
+              });
+            }),
+          );
+          expect(org.allowAuthenticateViaWarp).toEqual(warp);
+
+          const live = yield* zeroTrust.listOrganizationsForAccount({ accountId });
+          expect(live.allowAuthenticateViaWarp).toEqual(warp);
+          expect(live.sessionDuration).toEqual("13h");
+          expect(live.warpAuthSessionDuration).toEqual("7h");
+          expect(live.loginDesign?.footerText).toEqual("alchemy neighbor footer");
+          expect(live.mfaConfig?.allowedAuthenticators).toEqual(["totp"]);
+          expect(live.mfaConfig?.sessionDuration).toEqual("5h");
+
+          yield* stack.destroy();
+        }).pipe(
+          // Put the account's organization back the way the test found it.
+          Effect.ensuring(
+            zeroTrust
+              .updateOrganizationForAccount(restorable(accountId, original))
+              .pipe(Effect.ignore),
+          ),
+        );
       }).pipe(logLevel),
     );
 

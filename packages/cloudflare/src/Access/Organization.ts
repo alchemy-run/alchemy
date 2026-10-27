@@ -1,16 +1,18 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import { stripNullFields } from "alchemy/Util/data";
 import * as Effect from "effect/Effect";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
- * Live settings the org PUT would otherwise reset when they are not declared
- * (Cloudflare asks for the full existing MFA configuration on every update).
- * They are sent back unchanged; declared props override them.
- * `serviceTokenInactivity` is left out: Cloudflare rejects the observed
- * `{ enabled: false }` shape (12062 invalid_org_config).
+ * Settings sent back unchanged on every update. Cloudflare's update is a full
+ * PUT: a field missing from the body is reset (Cloudflare asks for the full
+ * MFA configuration on every update), so settings the stack doesn't declare
+ * would otherwise be lost. Declared props override them.
+ * `serviceTokenInactivity` is left out: Cloudflare rejects the
+ * `{ enabled: false }` shape it returns (12062 invalid_org_config).
  */
 const PRESERVED = [
   "allowAuthenticateViaWarp",
@@ -18,6 +20,7 @@ const PRESERVED = [
   "customPages",
   "denyUnmatchedRequests",
   "denyUnmatchedRequestsExemptedZoneNames",
+  "disableEndUserAppCreation",
   "isUiReadOnly",
   "loginDesign",
   "mfaConfig",
@@ -27,27 +30,18 @@ const PRESERVED = [
   "strictServiceTokenAuth",
   "uiReadOnlyToggleReason",
   "userSeatExpirationInactiveTime",
+  "warp_auth_non_browser_401",
   "warpAuthSessionDuration",
-] as const;
+] as const satisfies ReadonlyArray<
+  keyof zeroTrust.ListOrganizationsResponse & keyof zeroTrust.UpdateOrganizationForAccountRequest
+>;
 
-const withoutNulls = (value: unknown): unknown =>
-  Array.isArray(value)
-    ? value
-    : value && typeof value === "object"
-      ? Object.fromEntries(
-          Object.entries(value)
-            .filter(([, v]) => v !== null && v !== undefined)
-            .map(([k, v]) => [k, withoutNulls(v)]),
-        )
-      : value;
-
-/** The observed, undeclared settings to send back on update. */
-export const preservedSettings = (observed: Record<string, unknown> | undefined) =>
-  withoutNulls(
+const preservedSettings = (observed: zeroTrust.ListOrganizationsResponse) =>
+  stripNullFields(
     Object.fromEntries(
-      PRESERVED.filter((key) => observed?.[key] != null).map((key) => [key, observed![key]]),
+      PRESERVED.filter((key) => observed[key] != null).map((key) => [key, observed[key]]),
     ),
-  ) as Partial<zeroTrust.UpdateOrganizationForAccountRequest>;
+  ) as Pick<zeroTrust.UpdateOrganizationForAccountRequest, (typeof PRESERVED)[number]>;
 
 export type OrganizationProps = {
   /**
@@ -311,7 +305,7 @@ export const OrganizationProvider = () =>
       // idempotent.
       const updated = yield* zeroTrust.updateOrganizationForAccount({
         accountId,
-        ...preservedSettings(observed as Record<string, unknown> | undefined),
+        ...preservedSettings(observed),
         authDomain: news.authDomain,
         name: desiredName,
         ...(news.sessionDuration !== undefined ? { sessionDuration: news.sessionDuration } : {}),
