@@ -1,8 +1,8 @@
 import * as GCP from "@alchemy.run/gcp";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as spanner from "@distilled.cloud/gcp/spanner_v1";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import { expectProbe } from "../bindingHost.ts";
 import SpannerBindingsHost, { App, Db, ITEMS_DDL, Schema } from "./fixtures/bindings-host.ts";

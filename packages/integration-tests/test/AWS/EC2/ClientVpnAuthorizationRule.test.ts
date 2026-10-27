@@ -2,10 +2,10 @@ import * as AWS from "@alchemy.run/aws";
 import { ClientVpnAuthorizationRule } from "@alchemy.run/aws/EC2/ClientVpnAuthorizationRule";
 import { ClientVpnEndpoint } from "@alchemy.run/aws/EC2/ClientVpnEndpoint";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Alchemy from "alchemy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import {
   assertClientVpnAuthorizationDeleted,

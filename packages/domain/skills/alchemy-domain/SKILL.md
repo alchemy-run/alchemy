@@ -7,7 +7,7 @@ description: Build backends with @alchemy.run/domain (domain-driven design on Ef
 
 `@alchemy.run/domain` models a backend as typed messages and pure state transitions. Commands are decided by aggregates, which record events. Views fold events into read models. Policies react to events. Sagas run long processes. Projections write outside the model. The same model runs in memory for tests and on Cloudflare Durable Objects in production.
 
-Docs: https://alchemy.run/domain. A complete reference project: `examples/cloudflare-domain` in the alchemy repo (a bank with a foldkit app).
+Docs: https://alchemy.run/domain, with every page listed in https://alchemy.run/llms.txt. Every section here and in the reference files ends with a More link to the docs page that covers it in depth. A complete reference project: `examples/cloudflare-domain` in the alchemy repo (a bank with a foldkit app).
 
 ## Workflow
 
@@ -19,6 +19,8 @@ Work in this order. Each step has a reference file with templates.
 4. **Specify behavior with stories** before and while you implement it. See [references/testing.md](references/testing.md).
 5. **Host the model** on Cloudflare from the server package, export its traces, and deploy with one alchemy stack. See [references/hosting.md](references/hosting.md).
 6. **Drive it from foldkit** in the web package. See [references/frontend.md](references/frontend.md).
+
+More: [Tutorial, part 1](https://alchemy.run/domain/tutorial/part-1).
 
 ## From requirements to building blocks
 
@@ -37,6 +39,8 @@ Read the requirements as a story of facts, and name each kind of thing you find:
 
 A rule that spans aggregates never becomes a cross-aggregate transaction. Give the invariant its own aggregate, keyed by what it protects (`UsernameClaim` keyed by username). Or reserve first and commit after, in a policy or saga, with a deadline for anything that waits.
 
+More: [What is Domain-Driven Design?](https://alchemy.run/domain/what-is-ddd), [Domain Model](https://alchemy.run/domain/model).
+
 ## Conventions
 
 - **One block per file, named `<Noun>.<kind>.ts`.** The kinds are `.aggregate`, `.command`, `.view`, `.policy`, `.saga`, `.projection`, `.stream`, `.external`, `.api` and `.model`. Plus `.middleware`, `.context` and `.rejection`. An aggregate's id lives in `<Aggregate>.id.ts` next to it. Plain values (`Money.ts`) and helpers keep plain names.
@@ -45,6 +49,8 @@ A rule that spans aggregates never becomes a cross-aggregate transaction. Give t
 - **Folders are subdomains** (`Account/`, `Transfer/`). The model, Apis, middleware and request context sit at the package root.
 - **The domain package imports only `@alchemy.run/domain` and `effect`.** Cloudflare, Stripe, databases and HTTP session handling belong to the server package.
 - **One domain package per model (bounded context).** A second model is a second domain package; one server can host several.
+
+More: [Project layout](https://alchemy.run/domain/project-layout).
 
 ## Rules that keep a model correct
 
@@ -59,6 +65,8 @@ A rule that spans aggregates never becomes a cross-aggregate transaction. Give t
 - Never `throw`. Fail with tagged errors (`Domain.Rejection`, `Schema.TaggedError`).
 - Tracing is automatic. Record payload values only through a declaration's `attributes`, or with `Effect.annotateCurrentSpan` in an effectful handler. Make secrets `Schema.Redacted`, so they never reach a trace or a log.
 - Test what the model does, through stories: events, replies, rejections, views and saga outcomes. Don't test a saga's internal steps.
+
+More: [Domain Model: The aggregate decides, and everything commits at once](https://alchemy.run/domain/model#the-aggregate-decides-and-everything-commits-at-once), [Cloudflare: Count on these guarantees](https://alchemy.run/domain/cloudflare#count-on-these-guarantees).
 
 ## Checklist for a change
 

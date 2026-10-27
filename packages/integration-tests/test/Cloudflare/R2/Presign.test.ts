@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { s3CredentialsPolicy } from "@alchemy.run/cloudflare/R2/S3CredentialsBinding";
 import { expect, it } from "@alchemy.run/test";
-import * as Test from "alchemy/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/http/HttpBody";

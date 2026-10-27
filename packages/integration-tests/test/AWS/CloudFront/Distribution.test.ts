@@ -9,12 +9,12 @@ import {
 import type { PolicyStatement } from "@alchemy.run/aws/IAM/Policy";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as LambdaWeb from "@distilled.cloud/aws/lambda-web";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

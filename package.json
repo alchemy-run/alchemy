@@ -67,6 +67,7 @@
   },
   "devDependencies": {
     "@alchemy.run/pkg": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@effect/tsgo": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",

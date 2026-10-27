@@ -1,6 +1,6 @@
 ---
 title: Test harness
-description: Reference for alchemy/Test — every helper, hook, and option exposed by Test.make, and how to run it with alchemy-test, bun test, or Vitest.
+description: Reference for @alchemy.run/test — every helper, hook, and option exposed by Test.make, and how to run it with alchemy-test, bun test, or Vitest.
 ---
 
 `Test.make` is the same Effect-aware harness on three runners:
@@ -285,25 +285,29 @@ see [Testing a Stack → Drive the live URL](/testing/testing-a-stack).
 
 ## Runners
 
-Each runner has its own adapter. The `Test.make` API is identical
-on all three; only the imports and the command change.
-
-### alchemy-test
-
 [`@alchemy.run/test`](https://www.npmjs.com/package/@alchemy.run/test)
-is the runner Alchemy's own suite uses. It runs every test file in
-one bun process with files and tests in flight at once, which suits
-slow tests that wait on real clouds.
+holds `Test.make` for every runner. Install it once, whichever runner
+you use:
 
 ```sh
 bun add -d @alchemy.run/test
 ```
 
-Import the harness from `alchemy/Test/Alchemy` and `expect` from
+Each runner has its own adapter in the package. The `Test.make` API
+is identical on all three; only the import and the command change.
+
+### alchemy-test
+
+`alchemy-test` is the runner Alchemy's own suite uses, and it ships
+in the same package. It runs every test file in one bun process with
+files and tests in flight at once, which suits slow tests that wait
+on real clouds.
+
+Import the harness from `@alchemy.run/test/Alchemy` and `expect` from
 `@alchemy.run/test`.
 
 ```typescript
-import * as Test from "alchemy/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { expect } from "@alchemy.run/test";
 ```
 
@@ -330,11 +334,11 @@ under `.alchemy/log/test/`, whose path is printed at the end. Add
 
 ### bun test
 
-Import the harness from `alchemy/Test/Bun` and `expect` from
+Import the harness from `@alchemy.run/test/Bun` and `expect` from
 `bun:test`.
 
 ```typescript
-import * as Test from "alchemy/Test/Bun";
+import * as Test from "@alchemy.run/test/Bun";
 import { expect } from "bun:test";
 ```
 
@@ -347,17 +351,17 @@ bun test test/integ.test.ts
 
 ### Vitest
 
-Install `@effect/vitest` next to `vitest`.
+Install `vitest` and `@effect/vitest` next to `@alchemy.run/test`.
 
 ```sh
-npm add -D vitest @effect/vitest
+npm add -D @alchemy.run/test vitest @effect/vitest
 ```
 
-Import the harness from `alchemy/Test/Vitest` and `expect` from
+Import the harness from `@alchemy.run/test/Vitest` and `expect` from
 `@effect/vitest`.
 
 ```typescript
-import * as Test from "alchemy/Test/Vitest";
+import * as Test from "@alchemy.run/test/Vitest";
 import { expect } from "@effect/vitest";
 ```
 

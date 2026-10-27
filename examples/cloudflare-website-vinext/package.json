@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/react": "catalog:",

@@ -31,7 +31,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
  * Discovery is tag-driven: every alchemy resource is branded with
  * `alchemy::stack` / `alchemy::stage` / `alchemy::id` (see src/Tags.ts
  * createInternalTags). Test suites deploy with stage `test_$USER` (the default
- * in packages/alchemy/src/Test/Core.ts), so we sweep everything tagged
+ * in packages/alchemy-test/src/Core.ts), so we sweep everything tagged
  * `alchemy::stage = test_$USER`.
  *
  * Primary discovery path: resourcegroupstaggingapi GetResources (regional).

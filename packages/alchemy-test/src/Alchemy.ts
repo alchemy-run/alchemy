@@ -1,5 +1,13 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 
+import type { AlchemyContext } from "alchemy/AlchemyContext";
+import type { CompiledStack, StackDefinition } from "alchemy/Stack";
+import type { Stage } from "alchemy/Stage";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
+import * as Core from "./Core.ts";
 /**
  * Test adapter for the `alchemy-test` runner (see `packages/alchemy-test`).
  *
@@ -19,15 +27,7 @@ import {
   optInTagsOf,
   timeoutOf,
   type TestOptions,
-} from "@alchemy.run/test";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Scope from "effect/Scope";
-import * as Semaphore from "effect/Semaphore";
-import type { AlchemyContext } from "../AlchemyContext.ts";
-import type { CompiledStack, StackDefinition } from "../Stack.ts";
-import type { Stage } from "../Stage.ts";
-import * as Core from "./Core.ts";
+} from "./index.ts";
 
 export {
   executeWhenReady,
@@ -121,7 +121,7 @@ const DEFAULT_TIMEOUT = 120_000;
  * the test file:
  *
  * ```ts
- * import * as Test from "@/Test/Alchemy";
+ * import * as Test from "@alchemy.run/test/Alchemy";
  * import * as Cloudflare from "@alchemy.run/cloudflare";
  *
  * const { test, deploy, destroy, beforeAll, afterAll } = Test.make({

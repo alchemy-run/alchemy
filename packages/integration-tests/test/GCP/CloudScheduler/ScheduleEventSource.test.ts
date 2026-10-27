@@ -1,8 +1,8 @@
 import * as GCP from "@alchemy.run/gcp";
 import { makeObjectMedia } from "@alchemy.run/gcp/Storage/ObjectMedia";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as scheduler from "@distilled.cloud/gcp/cloudscheduler_v1";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";

@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test";
 import * as GCP from "@alchemy.run/gcp";
+import * as Test from "@alchemy.run/test/Bun";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import * as run from "@distilled.cloud/gcp/run_v2";
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
