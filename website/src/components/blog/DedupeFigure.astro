@@ -11,19 +11,21 @@
  */
 ---
 
-<figure class="dd not-content" id="dd" aria-label="Partition refinement merging eleven shapes into seven schemas">
+<figure class="dd not-content" id="dd" aria-label="Partition refinement merging fifteen shapes into seven schemas">
   <div class="dd-top">
     <span class="dd-step" id="dd-step"></span>
     <span class="dd-count" id="dd-count"></span>
-    <button type="button" id="dd-replay">↻ Replay</button>
+    <button type="button" id="dd-pause" aria-pressed="false">❚❚ Pause</button>
   </div>
   <div class="dd-stage" id="dd-stage"></div>
+  <div class="dd-codehd">Generated code</div>
+  <pre class="dd-code" id="dd-code"></pre>
   <div class="dd-real">
     <span><b>Stripe</b> 12,529 → <b class="dd-to">2,720</b></span>
     <span><b>Cloudflare Workers</b> 2,643 → <b class="dd-to">491</b></span>
     <span><b>EC2</b> 3,851 → <b class="dd-to">2,553</b></span>
   </div>
-  <figcaption class="dd-cap">Made-up shapes · real numbers below</figcaption>
+  <figcaption class="dd-cap">Made-up shapes above · real services in this row</figcaption>
 </figure>
 
 <style is:global>
@@ -175,6 +177,52 @@
       opacity 0.3s,
       transform 0.3s;
   }
+  @media (max-width: 620px) {
+    .dd pre.dd-code.split {
+      column-count: 1;
+    }
+  }
+  .dd-codehd {
+    margin-top: 10px;
+    font: 600 11px var(--alc-font-mono);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--alc-fg-4);
+  }
+  .dd pre.dd-code {
+    margin: 4px 0 0;
+    padding: 6px 10px;
+    overflow-x: auto;
+    font: 11px/16px var(--alc-font-mono);
+    column-gap: 18px;
+    background: var(--alc-bg-elev-2);
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 8px;
+  }
+  .dd pre.dd-code.split {
+    column-count: 2;
+  }
+  .dd-code .ln {
+    display: block;
+    height: 16px;
+    overflow: hidden;
+    white-space: pre;
+    color: var(--alc-fg-2);
+    transition:
+      height 0.6s ease,
+      opacity 0.4s;
+  }
+  .dd-code .ln.gone {
+    height: 0;
+    opacity: 0;
+  }
+  .dd-code .nm {
+    color: var(--c);
+    font-weight: 700;
+  }
+  .dd-code .also {
+    color: var(--alc-accent-text);
+  }
   .dd-real {
     display: flex;
     flex-wrap: wrap;
@@ -233,6 +281,10 @@
     { id: "Quota", kind: "object", fields: [["id", "Count"]] },
     { id: "ZoneList", kind: "object", fields: [["item", "Zone"]] },
     { id: "TreeNode", kind: "object", fields: [["child", "TreeNode"]] },
+    { id: "Label", kind: "string", fields: [] },
+    { id: "Area", kind: "object", fields: [["id", "Label"]] },
+    { id: "AreaList", kind: "object", fields: [["item", "Area"]] },
+    { id: "Key", kind: "string", fields: [] },
   ];
   const BY = new Map(SHAPES.map((s) => [s.id, s]));
 
@@ -269,7 +321,7 @@
       map.get(k)!.push(s.id);
     }
     // Inside a group, keep a readable order.
-    const order = ["Code", "Name", "Count", "Region", "Zone", "Quota", "RegionList", "ZoneList", "QuotaList", "Node", "TreeNode"];
+    const order = ["Code", "Name", "Label", "Key", "Count", "Region", "Zone", "Area", "Quota", "RegionList", "ZoneList", "AreaList", "QuotaList", "Node", "TreeNode"];
     return keys.map((k, i) => ({ color: i, ids: map.get(k)!.sort((a, b) => order.indexOf(a) - order.indexOf(b)) }));
   }
   function groupOf(p: Partition) {
@@ -404,13 +456,44 @@
           ? `<b>${SHAPES.length}</b> shapes`
           : done
             ? `<b>${SHAPES.length}</b> shapes → <b>${groups}</b> schemas`
-            : `<b>${groups}</b> groups`;
+            : `<b>${SHAPES.length}</b> shapes`;
+    }
+
+    // Pause holds the timeline; nothing advances until resumed.
+    let paused = false;
+    const hold = async () => {
+      while (paused) await new Promise((r) => setTimeout(r, 120));
+    };
+
+    /** One `const` line per shape; at merge, duplicates collapse into their head. */
+    const SCHEMA = (s: Shape, name: (id: string) => string) =>
+      s.kind === "string"
+        ? "S.String"
+        : s.kind === "integer"
+          ? "S.Number"
+          : `S.Struct({ ${s.fields.map(([f, t]) => `${f}: ${name(t)}`).join(", ")} })`;
+    function renderCode(p: Partition | null, merged: Partition | null) {
+      const g = p ? groupOf(p) : null;
+      const color = (id: string) => (g ? PAL[p![g.get(id)!]!.color]! : "var(--alc-fg-1)");
+      const head = new Map<string, string>();
+      merged?.forEach((grp) => grp.ids.forEach((id) => head.set(id, grp.ids[0]!)));
+      const ORDER = byKind().flatMap((grp) => grp.ids);
+      $("code").classList.toggle("split", !merged);
+      $("code").innerHTML = ORDER.map((id) => {
+        const s = BY.get(id)!;
+        const isHead = !merged || head.get(id) === id;
+        const name = (t: string) => (merged ? head.get(t)! : t);
+        const also = merged && isHead ? merged.find((grp) => grp.ids[0] === id)!.ids.slice(1) : [];
+        return `<span class="ln${isHead ? "" : " gone"}" style="--c:${color(id)}">const <span class="nm">${id}</span> = ${SCHEMA(s, name)}${
+          also.length ? `<span class="also">  // also ${also.join(", ")}</span>` : ""
+        }</span>`;
+      }).join("");
     }
 
     let run = 0;
     async function play() {
       const me = ++run;
-      const live = async (ms: number) => (await wait(ms), me === run);
+      const live = async (ms: number) => (await wait(ms), await hold(), me === run);
       for (const el of card.values()) {
         el.classList.remove("odd", "gone");
         el.querySelectorAll(".dd-dot").forEach((d) => d.classList.remove("ping"));
@@ -418,32 +501,35 @@
       }
       $("stage").style.opacity = "1";
       layout(null);
-      step("11 shapes from a spec");
+      renderCode(null, null);
+      step(`${SHAPES.length} shapes from a spec`);
       count(null);
-      if (!(await live(1600))) return;
+      if (!(await live(1100))) return;
 
-      step("Group by kind and field names");
+      step("First guess: same kind and fields, same schema");
       layout(P1);
+      renderCode(P1, null);
       count(P1.length);
-      if (!(await live(1700))) return;
+      if (!(await live(1300))) return;
 
       let prev = P1;
       for (const [i, r] of ROUNDS.entries()) {
-        step(`Round ${i + 1}: do the dots match?`);
-        if (!(await live(900))) return;
+        step(`Pass ${i + 1}: split shapes whose fields point somewhere else`);
+        if (!(await live(500))) return;
         if (!r.moved.length) {
           $("stage")
             .querySelectorAll(".dd-cl")
             .forEach((b) => b.classList.add("stable"));
-          step("Nothing moved. Each box is one schema");
-          if (!(await live(1600))) return;
+          step(`Pass ${i + 1}: nothing splits, so each box is one schema`);
+          if (!(await live(1200))) return;
           break;
         }
         // Mark the cards whose dots differ from their box-mates.
         r.moved.forEach((id) => card.get(id)!.classList.add("odd"));
-        if (!(await live(1300))) return;
+        if (!(await live(900))) return;
         r.moved.forEach((id) => card.get(id)!.classList.remove("odd"));
         layout(r.p);
+        renderCode(r.p, null);
         count(r.p.length);
         // Ripple: dots that point at a card that just moved change color.
         const g0 = groupOf(prev);
@@ -458,11 +544,11 @@
             }
           });
         prev = r.p;
-        if (!(await live(1900))) return;
+        if (!(await live(1200))) return;
       }
 
       // Merge: each box becomes one card.
-      step("Merge");
+      step("Merge each box into one schema");
       const final = ROUNDS[ROUNDS.length - 1]!.p;
       for (const grp of final) grp.ids.slice(1).forEach((id) => card.get(id)!.classList.add("gone"));
       if (!(await live(350))) return;
@@ -480,13 +566,23 @@
         el.querySelectorAll(".dd-dot").forEach((d) => d.classList.remove("ping"));
       }
       layout(merged, false);
+      renderCode(final, final);
       $("stage").style.opacity = "1";
       count(final.length, true);
+      // Loop.
+      if (!(await live(4000))) return;
+      void play();
     }
 
-    $("replay").onclick = () => void play();
+    $("pause").onclick = () => {
+      paused = !paused;
+      const b = $("pause");
+      b.textContent = paused ? "▶ Play" : "❚❚ Pause";
+      b.setAttribute("aria-pressed", String(paused));
+    };
     layout(null);
-    step("11 shapes from a spec");
+    renderCode(null, null);
+    step(`${SHAPES.length} shapes from a spec`);
     count(null);
     const io = new IntersectionObserver(
       (es) => {

@@ -37,13 +37,13 @@
       <div class="lz-view lz-file" id="lz-fileview"><div class="lz-code" id="lz-right"></div></div>
     </section>
   </div>
-  <label class="lz-truth">
-    <input type="checkbox" id="lz-real" />
-    <span><b>I can handle the truth.</b> Show the real code: the stub, the slices and the index exactly as they ship, minified.</span>
-  </label>
   <div class="lz-bar">
     <button type="button" id="lz-prev">◀ Back</button>
     <div class="lz-dots" id="lz-dots"></div>
+    <label class="lz-truth" title="Show the stub, the slices and the index exactly as they ship, minified">
+      <input type="checkbox" id="lz-real" />
+      <span><b>I can handle the truth</b></span>
+    </label>
     <button type="button" class="lz-primary" id="lz-next">Next ▶</button>
   </div>
 </figure>
@@ -94,7 +94,7 @@
   }
 
   .lz-narr {
-    min-height: 6.6rem;
+    min-height: 5.4rem;
     padding: 13px 16px 10px;
     background: var(--lz-panel);
     border-bottom: 1px solid var(--lz-bd);
@@ -309,7 +309,7 @@
     left: 0;
   }
   .lz-memview {
-    height: calc(19 * var(--lz-lh) + 8px);
+    height: calc(13 * var(--lz-lh) + 8px);
   }
   .lz-file::after {
     position: absolute;
@@ -426,13 +426,12 @@
 
   .lz-truth {
     display: flex;
-    align-items: baseline;
-    gap: 8px;
+    align-items: center;
+    gap: 6px;
     margin: 0;
-    padding: 8px 14px;
     font-size: 12.5px;
+    white-space: nowrap;
     color: var(--lz-mut);
-    border-top: 1px solid var(--lz-bd);
     cursor: pointer;
   }
   .lz-truth input {
@@ -471,6 +470,16 @@
   .lz button:disabled {
     cursor: default;
     opacity: 0.4;
+  }
+  .lz-bar {
+    flex-wrap: wrap;
+  }
+  @media (max-width: 620px) {
+    .lz-truth {
+      order: 5;
+      flex-basis: 100%;
+      justify-content: center;
+    }
   }
   .lz-dots {
     display: flex;

@@ -1,0 +1,168 @@
+---
+/**
+ * `<ExperimentBranches />` — the experiment branches from the distilled
+ * optimization run, drawn as a git branch diagram. Positions are commits on
+ * the main thread's first-parent history (distilled perf/sdk-footprint,
+ * 56741e3f0..f6019b376, 105 commits). A branch ends in a merge if its tip is
+ * an ancestor of the final commit, and in an ✕ if it was dropped.
+ */
+interface Branch {
+  name: string;
+  fork: number;
+  end: number;
+  landed: boolean;
+  what: string;
+}
+const BRANCHES: Branch[] = [
+  { name: "aws-lite", fork: 77, end: 79, landed: true, what: "AWS on schema-lite" },
+  { name: "promise-core", fork: 77, end: 80, landed: true, what: "one-boundary calls" },
+  { name: "data-tables", fork: 77, end: 81, landed: true, what: "operations as data" },
+  { name: "aot-codecs", fork: 81, end: 87, landed: false, what: "precompiled codecs" },
+  { name: "cold-start", fork: 81, end: 89, landed: true, what: "precomputed endpoints" },
+  { name: "aws-fast", fork: 81, end: 91, landed: true, what: "one AWS request path" },
+  { name: "lazy-errors", fork: 93, end: 96, landed: true, what: "error classes as data" },
+  { name: "provider-heap", fork: 96, end: 100, landed: true, what: "shared data constants" },
+  { name: "export-floor", fork: 100, end: 102, landed: false, what: "a lazy-stub variant" },
+];
+
+const W = 600;
+const LABEL = 170;
+const MAIN_Y = 26;
+const LANE = 34;
+const TOP = 62;
+const H = TOP + BRANCHES.length * LANE + 6;
+// Commits 1..77 are squeezed into a short stretch; 77..105 get the room.
+const x = (i: number) =>
+  i <= 77 ? LABEL + 4 + (i / 77) * 60 : LABEL + 64 + ((i - 77) / (105 - 77)) * (W - LABEL - 64 - 14);
+const R = 9;
+const paths = BRANCHES.map((b, k) => {
+  const y = TOP + k * LANE;
+  const xf = x(b.fork);
+  const xe = x(b.end);
+  const out = `M${xf},${MAIN_Y} C${xf},${y - R} ${xf},${y} ${xf + R},${y} L${xe - (b.landed ? R : 0)},${y}`;
+  const back = b.landed ? ` C${xe},${y} ${xe},${y - R} ${xe},${MAIN_Y}` : "";
+  return { ...b, y, xf, xe, d: out + back };
+});
+const forks = [...new Set(BRANCHES.flatMap((b) => [b.fork, ...(b.landed ? [b.end] : [])]))];
+---
+
+<figure class="eb not-content" aria-label="Experiment branches: seven merged back into the main thread, two were dropped">
+  <div class="eb-scroll">
+    <svg viewBox={`0 0 ${W} ${H}`} role="img">
+      <text class="eb-lbl main" x={LABEL - 8} y={MAIN_Y + 4} text-anchor="end">main thread</text>
+      <line class="eb-main" x1={LABEL + 4} x2={W - 10} y1={MAIN_Y} y2={MAIN_Y} />
+      <text class="eb-early" x={LABEL + 34} y={MAIN_Y - 9} text-anchor="middle">76 commits</text>
+      {
+        paths.map((p) => (
+          <g class={p.landed ? "landed" : "dropped"}>
+            <text class="eb-lbl" x={LABEL - 8} y={p.y - 1} text-anchor="end">
+              {p.name}
+            </text>
+            <text class="eb-what" x={LABEL - 8} y={p.y + 12} text-anchor="end">
+              {p.what}
+            </text>
+            <path class="eb-br" d={p.d} />
+            {!p.landed && (
+              <text class="eb-x" x={p.xe + 3} y={p.y + 4} text-anchor="middle">
+                ✕
+              </text>
+            )}
+          </g>
+        ))
+      }
+      {forks.map((i) => <circle class="eb-dot" cx={x(i)} cy={MAIN_Y} r="4" />)}
+      <circle class="eb-dot end" cx={W - 10} cy={MAIN_Y} r="5" />
+    </svg>
+  </div>
+  <figcaption class="eb-cap">
+    <span><i class="landed"></i>merged</span>
+    <span><i class="dropped"></i>dropped</span>
+    <span class="eb-note">Each lane is one agent in its own worktree. Positions are commits on the main thread.</span>
+  </figcaption>
+</figure>
+
+<style is:global>
+  .eb {
+    margin: 2rem 0;
+    padding: 12px 14px 10px;
+    background: var(--alc-bg-elev-1);
+    border: 1px solid var(--alc-hairline-2);
+    border-radius: 12px;
+  }
+  .eb-scroll {
+    overflow-x: auto;
+  }
+  .eb svg {
+    display: block;
+    width: 100%;
+    min-width: 520px;
+    height: auto;
+  }
+  .eb-main {
+    stroke: var(--alc-fg-2);
+    stroke-width: 3;
+  }
+  .eb-dot {
+    fill: var(--alc-fg-2);
+    stroke: var(--alc-bg-elev-1);
+    stroke-width: 2;
+  }
+  .eb-dot.end {
+    fill: var(--alc-accent);
+  }
+  .eb-br {
+    fill: none;
+    stroke-width: 2.5;
+  }
+  .eb .landed .eb-br {
+    stroke: var(--alc-accent);
+  }
+  .eb .dropped .eb-br {
+    stroke: var(--alc-terracotta);
+    stroke-dasharray: 5 4;
+  }
+  .eb-lbl {
+    font: 600 12px var(--alc-font-mono);
+    fill: var(--alc-fg-1);
+  }
+  .eb .dropped .eb-lbl {
+    fill: var(--alc-fg-3);
+  }
+  .eb-lbl.main {
+    fill: var(--alc-fg-1);
+  }
+  .eb-what,
+  .eb-early {
+    font: 11px var(--alc-font-sans);
+    fill: var(--alc-fg-4);
+  }
+  .eb-x {
+    font: 700 13px var(--alc-font-sans);
+    fill: var(--alc-terracotta);
+  }
+  .eb-cap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--alc-fg-4);
+  }
+  .eb-cap i {
+    display: inline-block;
+    width: 14px;
+    height: 3px;
+    margin-right: 5px;
+    vertical-align: 3px;
+    border-radius: 2px;
+  }
+  .eb-cap i.landed {
+    background: var(--alc-accent);
+  }
+  .eb-cap i.dropped {
+    background: var(--alc-terracotta);
+  }
+  .eb-note {
+    flex-basis: 100%;
+  }
+</style>

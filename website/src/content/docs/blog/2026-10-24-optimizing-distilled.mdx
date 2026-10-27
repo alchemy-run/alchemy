@@ -11,6 +11,7 @@ import BenchChart from "../../../components/blog/bench/BenchChart.astro";
 import StubWalkthrough from "../../../components/blog/StubWalkthrough.astro";
 import DedupeFigure from "../../../components/blog/DedupeFigure.astro";
 import BarrelFigure from "../../../components/blog/BarrelFigure.astro";
+import ExperimentBranches from "../../../components/blog/ExperimentBranches.astro";
 
 Every Alchemy resource talks to its cloud through
 [distilled](https://distilled.cloud), our Effect-native SDKs covering
@@ -25,8 +26,8 @@ of AWS took 227 MB of memory.
 So we hillclimbed it. We built a benchmark for every SDK, put it on a
 dashboard, and pointed an agent at it with one job: make every number
 go down. It ran the benchmark after every change, kept what helped and
-dropped what didn't. Over 123 commits and 84 benchmark runs, 38 of
-them experiments, a single call's bundle shrank by a third and
+dropped what didn't. Over 123 commits and 84 benchmark runs, a
+single call's bundle shrank by a third and
 importing all of AWS went from 227 MB to 13.9 MB.
 
 <StatGrid
@@ -94,7 +95,7 @@ How we said it mattered. The louder and stranger our messages got,
 the bolder the ideas the agent came back with. Each section below
 opens with a real message from the thread, typos included.
 
-<BenchChart chart="bundle" />
+<BenchChart chart="memory" />
 
 ## The sane fixes
 
@@ -159,8 +160,9 @@ The EC2 bundle dropped from 137 KB to 75 KB.
 Every program that made an HTTP call kept about 15 KB gzip of Effect
 Schema, even ones that never validated anything, because of one rarely used class in
 Effect's HTTP client. Rolldown 1.2.5 and 1.2.6 failed to tree-shake
-it, and 1.2.7 fixed that. That one upgrade is the cliff in the bundle
-line above.
+it, and 1.2.7 fixed that. That one upgrade is the cliff in this chart:
+
+<BenchChart chart="bundle" />
 
 At this point the agent said the numbers looked good and suggested
 stopping. Every agent does this. It finds the safe wins, reports them,
@@ -235,11 +237,23 @@ line took longer to come down, for reasons the next section explains.
 
 ### Faster, smaller AWS signing
 
-AWS also signs every request. SigV4 used to take six async WebCrypto
-steps. It now uses synchronous hashing with keys prepared once,
-through the swappable `Crypto` service, and builds the canonical
-request without parsing URLs. A side-by-side check of 33,798 cases
+AWS also signs every request, and signing was the single most
+expensive part of an AWS call. SigV4 used to take six async WebCrypto
+steps, each one a promise round trip. Switching to synchronous hashing
+with `node:crypto` alone took S3 `listBuckets` from 352 µs to 149 µs
+of added latency, DynamoDB `listTables` from 218 µs to 103 µs and STS
+`getCallerIdentity` from 282 µs to 125 µs. Preparing keys once and
+building the canonical request without parsing URLs took the rest.
+S3 `listBuckets` now adds 19.4 µs. A side-by-side check of 33,798 cases
 across 24 AWS services gave identical requests and results.
+
+Synchronous hashing has a trade-off: it blocks the event loop while it
+runs. For a request, that's a few microseconds of hashing, less than
+one async round trip, which also costs a trip through the event loop
+and evicts whatever was in the CPU cache. A huge request body is where
+blocking would start to matter. The hashing goes through a swappable
+`Crypto` service, so runtimes without Node use WebCrypto, and you can
+plug in your own.
 
 We also pulled the signer out into its own small package,
 `@distilled.cloud/aws4signer`. Cloudflare R2 speaks the S3 API and
@@ -258,7 +272,7 @@ still carried Effect Schema, whether it validated anything or not. To
 fix that, we had to stop tuning distilled and start replacing parts of
 it.
 
-## Writing our own schema library
+## Experiments, and our own schema library
 
 > experiments should be radical shifts boiling the ocean; ambitious
 > sh\*t; agents are phenomenal and can do extreme things
@@ -295,10 +309,15 @@ branch:
 
 <BenchChart chart="experiments" />
 
-While a subagent worked on a big bet, the main thread kept
-landing small wins. 45% of our benchmark runs were experiments. The
-biggest one was replacing Effect Schema, and the dashed line at the
-bottom is the version that won.
+While a subagent worked on a big bet, the main thread kept landing
+small wins. 38 of our 84 benchmark runs were experiments. Some ideas
+took three or four experiments to try different implementations, and
+we kept the best one. These are the experiment branches from the run:
+
+<ExperimentBranches />
+
+The biggest experiment was replacing Effect Schema, and the dashed line
+at the bottom of the chart above is the version that won.
 
 ### Why Effect Schema had to go
 
@@ -320,7 +339,7 @@ and Cloudflare Workers. Stripe, after dedupe:
 | valibot | 20 MB | 0.2 MB | 25 | 6.0 KB |
 | zod/mini (before dedupe) | 114 MB | 0.7 MB | 40 | 9.3 KB |
 | TypeBox (before dedupe) | 14 MB | 1.9 MB | 206 | 27.9 KB |
-| Plain data + one validator | 2.3 MB | 0.17 MB | 13 | 4.6 KB |
+| **schema-lite (ours)** | 2.3 MB | 0.17 MB | 13 | 4.6 KB |
 
 Every library lost on at least one axis we cared about. Effect's own
 compilers didn't help either: the ahead-of-time compiler can't compile
@@ -398,43 +417,25 @@ responses through both implementations. The bytes were identical.
 
 ### Strict mode, and still faster than the official SDKs
 
-Official SDKs trust the API. If a response comes back with a missing
-field or a string where the spec promised a number, your code finds
-out later, usually as `undefined` somewhere it shouldn't be.
-
-That happens more than you'd think. Providers change their APIs
-without warning, smaller ones especially (*cough* Cloudflare *cough*).
-The request still succeeds, so there's no API error to catch. The bad
-data just flows into your app until something breaks far from the
-cause. For critical systems, that's the worst way to fail.
-
-Strict mode makes it a controlled failure: the call fails right away,
-with a typed error you can catch, retry or alert on. Turning it on is
-one line:
+Official SDKs trust the API. Providers change their APIs without
+warning, smaller ones especially (*cough* Cloudflare *cough*). The
+request still succeeds, so bad data flows into your app until
+something breaks far from the cause. Strict mode turns that into a
+controlled failure: a typed `ParseError` with the path to the bad
+field, right at the call. It's one line:
 
 ```ts
 program.pipe(Effect.provide(ResponseValidation.strict));
 ```
 
-A bad field then fails the call with a typed `ParseError` that
-includes the path to that field. Under schema-lite, each node
-compiles once into a small closure: a type check for `String`, a loop
-over the fields for `Objects`, and so on, cached per node. Checking a
-response is then one walk over the value.
+Under schema-lite, each node compiles once into a small checker, and
+the compiler itself only loads if you turn strict mode on. A test
+checks that it accepts and rejects exactly what Effect Schema does.
 
-A test compares this checker with Effect Schema on random schemas and
-values, and they accept and reject exactly the same inputs. The
-checker's compiler is itself built on first use, so if you never turn
-on strict mode, it never loads. On its own, this took the strict
-bundle from 52.8 KB to 38.9 KB.
-
-Strict mode isn't the only thing distilled pays for. **Every error is
-typed**, so each operation ships the full union of errors it can fail
-with, and we cover more failure cases than the official SDKs do. We
-kept both, and checked them against the official AWS SDK v3,
-`cloudflare` and `@google-cloud/storage` packages. Each side imports
-the way its users would: the official side imports one client
-package, and distilled imports the whole provider.
+Distilled also types **every error**, so each operation ships the full
+union of errors it can fail with. We kept both, and compared them with
+the official AWS SDK v3, `cloudflare` and `@google-cloud/storage`
+packages, each imported the way its users would:
 
 <BarChart
   title="Bundle size of one call (gzip)"
@@ -518,8 +519,8 @@ shaking at run time, inside Node, on code that was never bundled.
 
 Importing a service used to build every operation in it. EC2 has
 hundreds of operations and AWS about 19,500. Now each operation waits
-until someone calls it. In spirit, the published JavaScript looks like
-this:
+until someone calls it. We call this meta tree shaking. In spirit, the
+published JavaScript looks like this:
 
 ```js
 let built;
@@ -542,38 +543,20 @@ succeeds never builds one.
 
 ### Tree shaking at run time
 
-The Alchemy CLI doesn't bundle. At startup it imports every provider
-your app uses, then calls only a handful of their operations, so most
-of the code it loads is never used. Meta tree shaking moves the
-bundler's cut to the moment each operation is first called.
-
-Every service ships as two files. The **stub** is tiny: it exports the
-same names as the real service, but each one is an empty placeholder.
-This is the real start of the stub for Fly.io's `machines` service,
-exactly as it ships:
+A bundler drops unused code before you deploy. The Alchemy CLI doesn't
+bundle, so we do the same cut at run time instead. Every service ships
+as two files: a tiny **stub** that Node loads, and the **full module**,
+which stays on disk with an index at the end saying where each
+operation's bytes are and what it needs. This is the real start of the
+stub for Fly.io's `machines` service, exactly as it ships:
 
 ```js
 import{$L}from"../_bundle/lazy.js";
 const{o:$o,e:$e,E:$E}=/*@__PURE__*/$L("../services.full/machines.js","ooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",55605,7533);
 ```
 
-Yes, that's 99 `o`s, one per operation. No human would write this, and
-no human has to read it. In English, it says: "the real code lives in
-`services.full/machines.js`, its index starts at byte 55,605 and is
-7,533 bytes long, and every export is a placeholder until someone
-calls it."
-
-Both files ship in the package, but only the stub is loaded into
-memory when you import the service. The stub's loader also imports
-`sdk.js`, an 18.6 KB file of helpers (string and struct builders, HTTP
-traits, error types) that every Fly.io service shares. Operations refer
-to those helpers by name, so calling one never reads them again.
-
-The **full module** stays on disk. It's the normal service code, plus an index written
-as a comment at the very end of the file. The two numbers in the stub
-are the index's position and length. The index has one row per
-operation and per shared schema: where its bytes are, and which other
-entries it needs.
+Yes, that's 99 `o`s, one empty placeholder per operation. The two
+numbers say where the index is. The index looks like this:
 
 ```txt
 #    name           bytes          needs
@@ -582,11 +565,10 @@ entries it needs.
 110  __d6           48375..48982   8 sdk.js helpers, __d3, __d5, __d4, __d22
 ```
 
-That's the same dependency graph a bundler builds, written down so Node
-can follow it at run time. The first time you call a placeholder, the
-loader reads the index once, then reads just that operation's bytes
-from disk. It follows the `needs` column the same way, reading each
-shared schema the first time anything uses it.
+That's the dependency graph a bundler builds, written down for Node.
+The first call to a placeholder reads just that operation's bytes, then
+follows `needs` the same way. Helpers in `sdk.js` are already loaded
+with the stub, so they cost nothing.
 
 ### No `eval`, ever
 
@@ -627,9 +609,8 @@ Stubs load only when Node resolves with the `distilled-lazy` export
 condition (`node --conditions=distilled-lazy`). Plain Node and every
 bundler get the normal full module. The Alchemy CLI turns the
 condition on, and it's a big part of why Alchemy is now so much
-lighter.
-
-<BenchChart chart="memory" />
+lighter. It's built for our own tooling, and you probably shouldn't run
+it in production. But you can totally do it too, mannnnnnnn.
 
 ### Importing a whole provider
 
