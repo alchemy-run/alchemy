@@ -1,7 +1,7 @@
+import * as Foldkit from "@alchemy.run/domain/Foldkit";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import * as Foldkit from "../src/Foldkit.ts";
-import { CounterApi, CounterId, Limit, Unauthenticated } from "./Counter.ts";
+import { CounterApi, CounterId, Limit, Unauthenticated } from "./FoldkitCounter.ts";
 
 const Counter = Foldkit.commands(CounterApi);
 const target = CounterId.make("one");

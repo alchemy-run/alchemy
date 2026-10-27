@@ -1,4 +1,6 @@
-import { expect, it } from "@effect/vitest";
+import * as Domain from "@alchemy.run/domain";
+import * as Foldkit from "@alchemy.run/domain/Foldkit";
+import { expect, it } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -8,9 +10,7 @@ import * as Option from "effect/Option";
 import * as RpcClientError from "effect/rpc/RpcClientError";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as Foldkit from "../src/Foldkit.ts";
-import * as Domain from "../src/index.ts";
-import { Client, CounterApi, CounterId } from "./Counter.ts";
+import { Client, CounterApi, CounterId } from "./FoldkitCounter.ts";
 
 const Counter = Foldkit.commands(CounterApi);
 const target = CounterId.make("one");

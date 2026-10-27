@@ -1,8 +1,8 @@
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
-import * as Domain from "../src/index.ts";
 
 export const CounterId = Schema.String.pipe(Schema.brand("CounterId"));
 export class Limit extends Domain.Rejection("Limit", { amount: Schema.Number }) {}

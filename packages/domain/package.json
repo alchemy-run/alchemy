@@ -50,9 +50,7 @@
   },
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",
-    "build:package": "node scripts/build.ts",
-    "test": "vitest run",
-    "typecheck:test": "tsrs -p tsconfig.test.json"
+    "build:package": "node scripts/build.ts"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
