@@ -1,17 +1,15 @@
-import type { RestEndpointMethodTypes } from "@octokit/rest";
+import type * as Pulls from "@distilled.cloud/github/pulls";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { GitHubApiError } from "./ApiError.ts";
-import type { EndpointParameters } from "./EndpointParameters.ts";
 import type { Repository } from "./Repository.ts";
 
-export interface ListPullRequestFilesRequest extends EndpointParameters<
-  RestEndpointMethodTypes["pulls"]["listFiles"]["parameters"]
+export interface ListPullRequestFilesRequest extends Omit<
+  Pulls.ListFilesRequest,
+  "owner" | "repo"
 > {}
 
-export type ListPullRequestFilesResponse =
-  RestEndpointMethodTypes["pulls"]["listFiles"]["response"]["data"];
+export type ListPullRequestFilesResponse = Pulls.ListFilesResponse;
 
 /**
  * List one page of the files a pull request changes (`pulls.listFiles`), each
@@ -40,7 +38,7 @@ export interface ListPullRequestFiles extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListPullRequestFilesRequest,
-    ) => Effect.Effect<ListPullRequestFilesResponse, GitHubApiError, RuntimeContext>
+    ) => Effect.Effect<ListPullRequestFilesResponse, Pulls.ListFilesError, RuntimeContext>
   >
 > {}
 

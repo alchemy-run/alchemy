@@ -1,24 +1,16 @@
-import type { RestEndpointMethodTypes } from "@octokit/rest";
+import type * as Search from "@distilled.cloud/github/search";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { GitHubApiError } from "./ApiError.ts";
-import type { EndpointParameters } from "./EndpointParameters.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
  * GitHub search syntax without the repository qualifier; the binding adds
  * `repo:{owner}/{name}`.
  */
-export interface SearchIssuesRequest extends EndpointParameters<
-  RestEndpointMethodTypes["search"]["issuesAndPullRequests"]["parameters"],
-  "q"
-> {
-  q: string;
-}
+export interface SearchIssuesRequest extends Search.IssuesAndPullRequestsRequest {}
 
-export type SearchIssuesResponse =
-  RestEndpointMethodTypes["search"]["issuesAndPullRequests"]["response"]["data"];
+export type SearchIssuesResponse = Search.IssuesAndPullRequestsResponse;
 
 /**
  * Search issues and pull requests in the bound repository
@@ -46,7 +38,7 @@ export interface SearchIssues extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SearchIssuesRequest,
-    ) => Effect.Effect<SearchIssuesResponse, GitHubApiError, RuntimeContext>
+    ) => Effect.Effect<SearchIssuesResponse, Search.IssuesAndPullRequestsError, RuntimeContext>
   >
 > {}
 

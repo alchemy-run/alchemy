@@ -1,8 +1,10 @@
+import * as Repos from "@distilled.cloud/github/repos";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import * as Stream from "effect/Stream";
+import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface CollaboratorProps {
@@ -73,7 +75,7 @@ export interface Collaborator extends Resource<
  * actual removal by wrapping the resource in {@link destroy}() from
  * `alchemy/RemovalPolicy`.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied by
+ * Authentication is resolved via the GitHub `Credentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
  * `repo` scope (and `admin:repo` for removal when opted in via `destroy()`).
  *
@@ -143,95 +145,67 @@ export const CollaboratorProvider = () =>
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+    reconcile: Effect.fn(
+      function* ({ news }) {
+        // Ensure & Sync — PUT is idempotent; creates or updates permission
+        yield* Repos.addCollaborator({
+          owner: news.owner,
+          repo: news.repository,
+          username: news.username,
+          permission: news.permission ?? "push",
+        });
 
-      // Ensure & Sync — PUT is idempotent; creates or updates permission
-      yield* Effect.tryPromise({
-        try: async () => {
-          await octokit.rest.repos.addCollaborator({
-            owner: news.owner,
-            repo: news.repository,
-            username: news.username,
-            permission: news.permission ?? "push",
-          });
-        },
-        catch: (e) => e as Error,
-      });
-
-      return {
-        username: news.username,
-        permission: news.permission ?? "push",
-      };
-    }),
+        return {
+          username: news.username,
+          permission: news.permission ?? "push",
+        };
+      },
+      (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
+    ),
 
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
-
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
-
+      const repos = yield* Stream.runCollect(
+        Repos.listForAuthenticatedUser.items({ per_page: 100 }),
+      );
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          Effect.tryPromise({
-            try: async () => {
-              try {
-                const collaborators = await octokit.paginate(octokit.rest.repos.listCollaborators, {
-                  owner: repo.owner.login,
-                  repo: repo.name,
-                  per_page: 100,
-                });
-                return collaborators.map((collab: any) => ({
-                  username: collab.login,
-                  permission: collab.permissions?.admin
-                    ? "admin"
-                    : collab.permissions?.maintain
-                      ? "maintain"
-                      : collab.permissions?.push
-                        ? "push"
-                        : collab.permissions?.triage
-                          ? "triage"
-                          : "pull",
-                }));
-              } catch (error: any) {
-                if (error.status === 403 || error.status === 404) {
-                  return [];
-                }
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          }),
+          Stream.runCollect(
+            Repos.listCollaborators.items({
+              owner: repo.owner.login,
+              repo: repo.name,
+              per_page: 100,
+            }),
+          ).pipe(
+            Effect.map((collaborators) =>
+              collaborators.map((collab) => ({
+                username: collab.login,
+                permission: collab.permissions?.admin
+                  ? ("admin" as const)
+                  : collab.permissions?.maintain
+                    ? ("maintain" as const)
+                    : collab.permissions?.push
+                      ? ("push" as const)
+                      : collab.permissions?.triage
+                        ? ("triage" as const)
+                        : ("pull" as const),
+              })),
+            ),
+            Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
+          ),
         { concurrency: 10 },
       );
-
       return perRepo.flat();
     }),
 
-    delete: Effect.fn(function* ({ olds }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
-
-      yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            await octokit.rest.repos.removeCollaborator({
-              owner: olds.owner,
-              repo: olds.repository,
-              username: olds.username,
-            });
-          } catch (error: any) {
-            if (error.status !== 404) {
-              throw error;
-            }
-          }
-        },
-        catch: (e) => e as Error,
-      });
-    }),
+    delete: Effect.fn(
+      function* ({ olds }) {
+        yield* Repos.removeCollaborator({
+          owner: olds.owner,
+          repo: olds.repository,
+          username: olds.username,
+        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
   });

@@ -1,6 +1,10 @@
-import { Octokit } from "@octokit/rest";
+import type { ConfigError } from "@distilled.cloud/core/errors";
+import {
+  Credentials,
+  DEFAULT_API_BASE_URL,
+  type Config,
+} from "@distilled.cloud/github/Credentials";
 import { lazyCredentials } from "alchemy/Auth/Resolve";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -11,47 +15,29 @@ import {
 } from "./AuthProvider.ts";
 import { normalizeGitHubBaseUrl } from "./BaseUrl.ts";
 
-export interface GitHubCredentialsService {
-  readonly token: Redacted.Redacted<string>;
-  /**
-   * REST API base URL for GitHub Enterprise (e.g.
-   * `https://github.example.com/api/v3` for GitHub Enterprise Server, or
-   * `https://api.acme.ghe.com` for GitHub Enterprise Cloud with data
-   * residency). `undefined` targets github.com.
-   */
-  readonly baseUrl?: string;
-  /**
-   * Construct an Octokit for these credentials. Pass `override` to target a
-   * different host than the credentials' own `baseUrl` — `override.baseUrl`
-   * is used verbatim, including `undefined` for github.com (which is why the
-   * override is an object rather than an optional string: it distinguishes
-   * "no override" from "override to the github.com default").
-   */
-  readonly octokit: (override?: { baseUrl: string | undefined }) => Octokit;
-}
+export { Credentials } from "@distilled.cloud/github/Credentials";
 
-export class GitHubCredentials extends Context.Service<
-  GitHubCredentials,
-  Effect.Effect<GitHubCredentialsService>
->()("GitHub::Credentials") {
+declare module "@distilled.cloud/github/Credentials" {
   // Lets stack programs require it, e.g. an Action using a `GitHub.*Local` binding.
-  declare readonly kind: "Credentials";
+  interface Credentials {
+    readonly kind: "Credentials";
+  }
 }
 
-const make = (token: Redacted.Redacted<string>, baseUrl?: string): GitHubCredentialsService => ({
-  token,
-  baseUrl,
-  octokit: (override) => {
-    const url = override !== undefined ? override.baseUrl : baseUrl;
-    return new Octokit({
-      auth: Redacted.value(token),
-      ...(url !== undefined ? { baseUrl: url } : {}),
-    });
-  },
-});
+/** The User-Agent alchemy sends; GitHub rejects requests without one. */
+export const USER_AGENT = "alchemy";
 
 /**
- * Build a `GitHubCredentials` layer from a literal token. Useful for
+ * Distilled credentials for a token on a REST API base URL (`undefined`, from
+ * {@link normalizeGitHubBaseUrl}, is github.com).
+ */
+export const config = (
+  token: Redacted.Redacted<string>,
+  apiBaseUrl: string | undefined,
+): Config => ({ token, apiBaseUrl: apiBaseUrl ?? DEFAULT_API_BASE_URL, userAgent: USER_AGENT });
+
+/**
+ * Build a `Credentials` layer from a literal token. Useful for
  * tests or when callers already have a PAT in hand.
  *
  * Pass `baseUrl` to target a GitHub Enterprise instance. It accepts a
@@ -64,16 +50,16 @@ export const fromToken = (
   options?: { readonly baseUrl?: string },
 ) =>
   Layer.succeed(
-    GitHubCredentials,
+    Credentials,
     Effect.gen(function* () {
       const baseUrl =
         options?.baseUrl !== undefined ? yield* normalizeGitHubBaseUrl(options.baseUrl) : undefined;
-      return make(typeof token === "string" ? Redacted.make(token) : token, baseUrl);
+      return config(typeof token === "string" ? Redacted.make(token) : token, baseUrl);
     }).pipe(Effect.orDie),
   );
 
 /**
- * Build a `GitHubCredentials` layer that reads the token from
+ * Build a `Credentials` layer that reads the token from
  * `GITHUB_ACCESS_TOKEN` or `GITHUB_TOKEN` at layer build time.
  *
  * GitHub Enterprise is resolved from the environment too: `GITHUB_BASE_URL`,
@@ -83,15 +69,15 @@ export const fromToken = (
  */
 export const fromEnv = () =>
   Layer.succeed(
-    GitHubCredentials,
+    Credentials,
     readEnvCredentials().pipe(
-      Effect.map((creds) => make(creds.token, creds.baseUrl)),
+      Effect.map((creds) => config(creds.token, creds.baseUrl)),
       Effect.orDie,
     ),
   );
 
 /**
- * Build a `GitHubCredentials` layer that resolves a token via the
+ * Build a `Credentials` layer that resolves a token via the
  * Alchemy AuthProvider for the configured profile (defaults to
  * the current Alchemy profile).
  *
@@ -101,16 +87,16 @@ export const fromEnv = () =>
  */
 export const fromAuthProvider = (options?: { readonly baseUrl?: string }) =>
   Layer.effect(
-    GitHubCredentials,
+    Credentials,
     Effect.gen(function* () {
       const fixedBaseUrl =
         options?.baseUrl !== undefined
           ? { baseUrl: yield* normalizeGitHubBaseUrl(options.baseUrl) }
           : undefined;
-      return yield* lazyCredentials<GitHubResolvedCredentials>()(
+      return yield* lazyCredentials<GitHubResolvedCredentials, ConfigError>()(
         GITHUB_AUTH_PROVIDER_NAME,
         (creds) =>
-          make(creds.token, fixedBaseUrl !== undefined ? fixedBaseUrl.baseUrl : creds.baseUrl),
-      ).pipe(Effect.map(Effect.orDie));
+          config(creds.token, fixedBaseUrl !== undefined ? fixedBaseUrl.baseUrl : creds.baseUrl),
+      );
     }).pipe(Effect.orDie),
   );
