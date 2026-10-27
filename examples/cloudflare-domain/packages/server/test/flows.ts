@@ -29,6 +29,7 @@ export const register = Effect.fn(function* (
   yield* client.RegisterCustomer({ target: id, name, username: Username.make(username) });
   const accountId = mainAccountId(id);
   yield* client.CustomerDashboard.watch(id).pipe(
+    Stream.map(({ state }) => state),
     Stream.filter((dashboard) => dashboard !== null && accountId in dashboard.balances),
     Stream.runHead,
     Effect.timeout("20 seconds"),
@@ -56,6 +57,7 @@ export const transfer = Effect.fn(function* (
     mfa,
   );
   const settled = yield* client.TransferStatus.watch(transferId).pipe(
+    Stream.map(({ state }) => state),
     Stream.filter(
       (status) => status !== null && (status.completedAt !== null || status.failedReason !== null),
     ),

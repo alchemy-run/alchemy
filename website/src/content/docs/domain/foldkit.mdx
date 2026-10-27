@@ -107,7 +107,7 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
             return bank.AccountSummary.watch(accountId);
           }),
         ).pipe(
-          Stream.map((summary) => Message.GotBalance({ balance: summary?.balance ?? null })),
+          Stream.map(({ state }) => Message.GotBalance({ balance: state?.balance ?? null })),
           Stream.catch((error) => Stream.succeed(Message.Failed({ reason: error._tag }))),
         ),
     },

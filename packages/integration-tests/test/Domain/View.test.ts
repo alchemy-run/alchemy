@@ -75,6 +75,7 @@ const snapshotThenFeed = Effect.gen(function* () {
   yield* api.Increment({ target: "c-1", by: 2 });
   const last = yield* api.Increment({ target: "c-1", by: 3 });
   const entries = yield* api.Totals.events("c-1", { after: snapshot.cursor }).pipe(
+    Stream.filter(Domain.Read.isEvent),
     Stream.take(2),
     Stream.runCollect,
   );
@@ -88,21 +89,21 @@ describe("Domain View reads", () => {
   it.live("gives the state and the cursor it is valid at", () =>
     Effect.gen(function* () {
       const api = yield* CounterApi.Client;
-      expect(yield* api.Totals.snapshot("c-0")).toEqual({ state: null, cursor: "0" });
+      expect(yield* api.Totals.snapshot("c-0")).toEqual({ state: null, cursor: 0 });
       const receipt = yield* api.Increment({ target: "c-1", by: 4 });
       const snapshot = yield* api.Totals.snapshot("c-1", {
         atLeast: { stream: receipt.stream, version: receipt.version },
       });
       const page = yield* api.Totals.list("c-1", { order: "desc", take: 1 });
-      expect(snapshot).toEqual({ state: { total: 4 }, cursor: "1" });
-      expect(String(page.entries[0]!.envelope.seq)).toBe(snapshot.cursor);
+      expect(snapshot).toEqual({ state: { total: 4 }, cursor: 1 });
+      expect(page.entries[0]!.envelope.seq).toBe(snapshot.cursor);
     }).pipe(Effect.provide(InProcess)),
   );
 
   it.live("writes between the snapshot and the feed arrive once each", () =>
     Effect.gen(function* () {
       const { snapshot, entries, now } = yield* snapshotThenFeed;
-      expect(snapshot).toEqual({ state: { total: 1 }, cursor: "1" });
+      expect(snapshot).toEqual({ state: { total: 1 }, cursor: 1 });
       expect(entries.map((entry) => entry.envelope.seq)).toEqual([2, 3]);
       // The snapshot's state plus the feed is the current state: no gap, nothing twice.
       expect(entries.at(-1)!.state).toEqual(now);
@@ -115,7 +116,7 @@ describe("Domain View reads", () => {
   it.live("works over the wire", () =>
     Effect.gen(function* () {
       const { snapshot, entries } = yield* snapshotThenFeed;
-      expect(snapshot).toEqual({ state: { total: 1 }, cursor: "1" });
+      expect(snapshot).toEqual({ state: { total: 1 }, cursor: 1 });
       expect(entries.map((entry) => entry.envelope.seq)).toEqual([2, 3]);
     }).pipe(Effect.scoped, Effect.provide(Wire)),
   );

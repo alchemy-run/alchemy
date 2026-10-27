@@ -208,6 +208,7 @@ import type { CustomerClient } from "./flows.ts";
 
 export const followTransfer = Effect.fn(function* (bank: CustomerClient, transferId: string) {
   yield* bank.TransferStatus.watch(TransferId.make(transferId)).pipe(
+    Stream.map(({ state }) => state),
     Stream.takeUntil((status) => status?.completedAt !== null || status?.failedReason !== null),
     Stream.runForEach((status) =>
       Effect.log(status === null ? "pending" : TransferStatus.computed.status(status)),

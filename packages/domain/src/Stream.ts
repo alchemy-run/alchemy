@@ -100,7 +100,7 @@ export interface Host<Key extends Key.Any, E> {
       readonly where?: Filter<E>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
-      readonly after?: string;
+      readonly after?: number;
     },
   ) => Effect.Effect<Page<Entry<E, Key.IdOf<Key>>>>;
   /**
@@ -172,7 +172,9 @@ export interface StreamKey<Name extends string> {
  * **Example:** Through an Api
  * ```typescript
  * const latest = yield* bank.AccountCard.peek(accountId);
- * yield* bank.AccountCard.watch(accountId).pipe(Stream.runForEach((card) => Effect.log(card)));
+ * yield* bank.AccountCard.watch(accountId).pipe(
+ *   Stream.runForEach(({ state: card }) => Effect.log(card)),
+ * );
  * ```
  *
  * @primitive
