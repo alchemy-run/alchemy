@@ -79,6 +79,7 @@ export declare namespace Aggregate {
   export type Ref<A extends AggregateModule.Any = AggregateModule.Any> = AggregateModule.Ref<A>;
   /** What an accepted command returns: its stream, version, events and reply. */
   export type Receipt<Ev = unknown, Reply = unknown> = AggregateModule.Receipt<Ev, Reply>;
+  export type ScheduleReceipt = AggregateModule.ScheduleReceipt;
   /** Where an event sits: its instance, stream, sequence, time and command. */
   export type Envelope<Id = string> = AggregateModule.Envelope<Id>;
   export type SendOptions = AggregateModule.SendOptions;
@@ -88,6 +89,15 @@ export declare namespace Aggregate {
 }
 /** A consistency boundary that decides commands. See {@link AggregateModule.make}. */
 export const Aggregate = AggregateModule.make;
+/** A command with this id already ran, so it can't be scheduled or cancelled. */
+export const AlreadyExecuted = AggregateModule.AlreadyExecuted;
+export type AlreadyExecuted = AggregateModule.AlreadyExecuted;
+/** The scheduled command was already cancelled. */
+export const AlreadyCancelled = AggregateModule.AlreadyCancelled;
+export type AlreadyCancelled = AggregateModule.AlreadyCancelled;
+/** No command was scheduled with that id. */
+export const NotScheduled = AggregateModule.NotScheduled;
+export type NotScheduled = AggregateModule.NotScheduled;
 
 /**
  * What keys a view, policy, projection or stream: an aggregate (one instance

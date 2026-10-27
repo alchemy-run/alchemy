@@ -495,7 +495,7 @@ const aggregateClient = (
       Effect.gen(function* () {
         // The command runs later, so its span links back here rather than continuing this trace.
         const { id, meta } = yield* metaFor(target, command, options, true);
-        yield* store.schedule(
+        const at = yield* store.schedule(
           id,
           kernel.encodeCommand(aggregate, command),
           meta,
@@ -503,11 +503,19 @@ const aggregateClient = (
             ? { at: DateTime.toEpochMillis(options.at) }
             : { afterMillis: Duration.toMillis(Duration.fromInputUnsafe(options.after)) },
         );
+        return { commandId: meta.commandId, at: DateTime.makeUnsafe(at) };
       }).pipe(
         Effect.withSpan(
           `Domain.schedule ${aggregate.aggregateName}.${command._tag}`,
           spanOptions(target),
         ),
+      ),
+    unschedule: (target, commandId) =>
+      store.unschedule(Aggregate.targetId(target), commandId).pipe(
+        Effect.withSpan(`Domain.unschedule ${aggregate.aggregateName}`, {
+          ...spanOptions(target),
+          attributes: { ...spanOptions(target).attributes, "domain.command_id": commandId },
+        }),
       ),
     state: (target) =>
       store

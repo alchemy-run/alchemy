@@ -1,5 +1,6 @@
 import { CurrentActivity } from "alchemy/WorkflowEncoding";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import type * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -61,6 +62,17 @@ export interface Receipt<Ev = unknown, Reply = unknown> {
   readonly events: ReadonlyArray<Ev>;
   /** The command's reply, if it declares one. */
   readonly reply: Reply;
+}
+
+/**
+ * What {@link Client.schedule} returns: the pending command's id, to
+ * `unschedule` it by, and when it is due.
+ */
+export interface ScheduleReceipt {
+  /** The command id: the one passed in `options`, or the one derived for it. */
+  readonly commandId: string;
+  /** When the command is due, on the platform's clock. */
+  readonly at: DateTime.Utc;
 }
 
 type ByTag<U, T> = Extract<U, { readonly tag: T }>;
@@ -168,6 +180,31 @@ export interface SendOptions {
 }
 
 /**
+ * The instance already handled a command with this id, so it can no longer
+ * be scheduled or cancelled: a deadline that fired before it was cancelled,
+ * or a command id that was already sent.
+ */
+export class AlreadyExecuted extends Data.TaggedError("AlreadyExecuted")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly commandId: string;
+}> {}
+
+/** The scheduled command with this id was already cancelled. */
+export class AlreadyCancelled extends Data.TaggedError("AlreadyCancelled")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly commandId: string;
+}> {}
+
+/** No command was ever scheduled with this id on the instance. */
+export class NotScheduled extends Data.TaggedError("NotScheduled")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly commandId: string;
+}> {}
+
+/**
  * Options for {@link Client.schedule}: when to send, absolutely or after a delay.
  */
 export type ScheduleOptions = SendOptions &
@@ -263,12 +300,25 @@ export interface Client<Def extends AnyDefinition> {
    * rejection when it fires; such a command reports a fact ("the approval
    * window closed") and records nothing when it no longer applies.
    * Scheduling again with the same command id replaces the earlier one.
+   * Returns the command id to `unschedule` it by, and when it is due. Fails with `AlreadyExecuted` when the instance already handled a command
+   * with that id.
    */
   readonly schedule: <Cmd extends Inst<Schedulable<Def>>>(
     target: Target<Def>,
     command: Cmd,
     options: ScheduleOptions,
-  ) => Effect.Effect<void, never, Command.ContextOf<CommandClassOf<Def, Cmd>>>;
+  ) => Effect.Effect<ScheduleReceipt, AlreadyExecuted, Command.ContextOf<CommandClassOf<Def, Cmd>>>;
+  /**
+   * Cancel a pending scheduled command by the command id it was scheduled
+   * with. Once it succeeds, the command never runs. Fails with
+   * `AlreadyExecuted` when the command ran first, `AlreadyCancelled` when it
+   * was cancelled before, and `NotScheduled` when nothing was scheduled with
+   * that id.
+   */
+  readonly unschedule: (
+    target: Target<Def>,
+    commandId: string,
+  ) => Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled>;
   /** Read the current state of an instance. */
   readonly state: (target: Target<Def>) => Effect.Effect<Def["state"]["Type"]>;
 }
@@ -294,7 +344,11 @@ export interface ClientImpl {
     target: unknown,
     command: { readonly _tag: string },
     options: ScheduleOptions,
-  ) => Effect.Effect<void>;
+  ) => Effect.Effect<ScheduleReceipt, AlreadyExecuted>;
+  readonly unschedule: (
+    target: unknown,
+    commandId: string,
+  ) => Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled>;
   readonly state: (target: unknown) => Effect.Effect<unknown>;
 }
 
@@ -420,7 +474,8 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  * ```typescript
  * const accounts = yield* Account;
  * const { reply } = yield* accounts.send(accountId, new WithdrawMoney({ amount: 30 }));
- * yield* accounts.schedule(accountId, new SendStatement(), { after: "30 days" });
+ * yield* accounts.schedule(accountId, new SendStatement(), { after: "30 days", commandId: "statement" });
+ * yield* accounts.unschedule(accountId, "statement"); // cancel it while it is pending
  * ```
  *
  * @primitive
