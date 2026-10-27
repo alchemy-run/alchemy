@@ -6,6 +6,7 @@ import * as Celld from "@alchemy.run/celld";
  */
 export class FeatureCells extends Celld.Fleet<FeatureCells>()("FeatureCells", {
   instances: 2,
+  retainStorage: false,
   ingress: true,
 }) {}
 

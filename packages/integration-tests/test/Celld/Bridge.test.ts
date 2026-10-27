@@ -48,7 +48,7 @@ const bundleEntry = Effect.fn(function* (entry: string) {
         input: path.join(packagesDir, entry),
         cwd: packagesDir,
         external: [/^cloudflare:/, /^node:/],
-        define: { "globalThis.__ALCHEMY_RUNTIME__": "true" },
+        transform: { define: { "globalThis.__ALCHEMY_RUNTIME__": "true" } },
         plugins: [
           {
             name: "collect-modules",

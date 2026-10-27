@@ -18,6 +18,7 @@ export const INGRESS_DOMAIN = `celld-ingress-${runner}.alchemy-test-2.us`;
  */
 export class IngressCells extends Celld.Fleet<IngressCells>()("IngressCells", {
   instances: 1,
+  retainStorage: false,
   ingress: {
     domain: { name: INGRESS_DOMAIN, dns: Cloudflare.DNS.Adapter() },
   },

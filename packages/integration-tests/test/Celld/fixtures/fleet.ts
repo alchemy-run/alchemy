@@ -13,6 +13,7 @@ import * as Effect from "effect/Effect";
  */
 export class ConformanceCells extends Celld.Fleet<ConformanceCells>()("ConformanceCells", {
   instances: 3,
+  retainStorage: false,
 }) {}
 
 /**

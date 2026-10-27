@@ -99,6 +99,14 @@ export interface FleetProps extends PlatformProps {
    * @default undefined — no public ingress
    */
   ingress?: true | FleetIngress;
+  /**
+   * Keep the fleet's backing storage — every Durable Object, KV, D1, R2,
+   * Queue and Workflow record — when the fleet is destroyed. Set `false`
+   * for disposable fleets (previews, tests): destroying the fleet then
+   * deletes the storage and all of its data.
+   * @default true
+   */
+  retainStorage?: boolean;
   /** Tags applied to host-composed cloud resources. */
   tags?: Record<string, string>;
   /** Written by the host's `compose` — never set manually. @internal */

@@ -55,6 +55,7 @@ test.skipIf(!!process.env.FAST)(
         Effect.gen(function* () {
           const cells = yield* Celld.Fleet("Cells", {
             instances: 1,
+            retainStorage: false,
             cpuArchitecture: "X86_64",
             cpu: 1024,
             memory: 4096,

@@ -151,9 +151,13 @@ export const composeEcsFleet = (
         yield* validateEcsHostTransition(undefined, configuration);
       }
 
+      // Fleet data is retained by default; `retainStorage: false` deletes the
+      // bucket, and everything in it, with the fleet.
+      const retainStorage = props.retainStorage ?? true;
       const bucket = yield* S3.Bucket("Bucket", {
         tags: props.tags,
-      }).pipe(RemovalPolicy.retain());
+        ...(retainStorage ? {} : { forceDestroy: true }),
+      }).pipe(retainStorage ? RemovalPolicy.retain() : (effect) => effect);
       const bootstrap = yield* Bootstrap("Bootstrap", {
         bucket: {
           uri: Output.interpolate`s3://${bucket.bucketName}`,
