@@ -1,7 +1,6 @@
 import * as NodeCrypto from "node:crypto";
 import { AuthError } from "alchemy/Auth/AuthProvider";
 import * as Clock from "effect/Clock";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -15,26 +14,6 @@ export interface ServiceAccountKey {
   readonly private_key: string;
   readonly token_uri?: string;
 }
-
-/**
- * The `authorized_user` credential `gcloud auth application-default login`
- * writes to `application_default_credentials.json`.
- */
-export interface AuthorizedUserCredentials {
-  readonly type: "authorized_user";
-  readonly client_id: string;
-  readonly client_secret: string;
-  readonly refresh_token: string;
-  readonly quota_project_id?: string;
-}
-
-/**
- * Google rejected a refresh token: the user signed out, revoked access, or
- * their organization requires them to sign in again.
- */
-export class InvalidGrant extends Data.TaggedError("GCP::InvalidGrant")<{
-  readonly message: string;
-}> {}
 
 export interface MintedToken {
   readonly accessToken: Redacted.Redacted<string>;
@@ -76,50 +55,16 @@ export const mintAccessToken = (sa: ServiceAccountKey): Effect.Effect<MintedToke
           cause,
         }),
     });
-    const minted = yield* exchangeToken(
-      {
-        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-        assertion: jwt,
-      },
-      issuedAt,
-    ).pipe(
-      Effect.catchTag("GCP::InvalidGrant", (e) =>
-        Effect.fail(AuthError.make({ message: e.message })),
-      ),
-    );
-    return { ...minted, project: sa.project_id };
-  });
-
-/**
- * Exchange the refresh token in a user's application-default credentials
- * for an OAuth2 access token.
- */
-export const refreshUserAccessToken = (
-  user: AuthorizedUserCredentials,
-): Effect.Effect<MintedToken, AuthError | InvalidGrant> =>
-  Clock.currentTimeMillis.pipe(
-    Effect.flatMap((issuedAt) =>
-      exchangeToken(
-        {
-          grant_type: "refresh_token",
-          client_id: user.client_id,
-          client_secret: user.client_secret,
-          refresh_token: user.refresh_token,
-        },
-        issuedAt,
-      ),
-    ),
-    Effect.map((minted) => ({ ...minted, project: user.quota_project_id })),
-  );
-
-const exchangeToken = (
-  params: Record<string, string>,
-  issuedAt: number,
-): Effect.Effect<Omit<MintedToken, "project">, AuthError | InvalidGrant> =>
-  Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     const tokenResponse = yield* http
-      .execute(HttpClientRequest.post(TOKEN_URL).pipe(HttpClientRequest.bodyUrlParams(params)))
+      .execute(
+        HttpClientRequest.post(TOKEN_URL).pipe(
+          HttpClientRequest.bodyUrlParams({
+            grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            assertion: jwt,
+          }),
+        ),
+      )
       .pipe(
         Effect.mapError((cause) =>
           AuthError.make({
@@ -136,13 +81,6 @@ const exchangeToken = (
         }),
       ),
     );
-    if (typeof body === "object" && body !== null && "error" in body) {
-      const { error, error_description } = body as { error: unknown; error_description?: unknown };
-      const message = `Google token endpoint returned ${String(error)}${typeof error_description === "string" ? `: ${error_description}` : ""}`;
-      return yield* error === "invalid_grant"
-        ? new InvalidGrant({ message })
-        : AuthError.make({ message });
-    }
     if (
       typeof body !== "object" ||
       body === null ||
@@ -159,6 +97,7 @@ const exchangeToken = (
     return {
       accessToken: Redacted.make((body as { access_token: string }).access_token),
       expirationMs: issuedAt + expiresIn * 1000,
+      project: sa.project_id,
     };
   }).pipe(Effect.provide(FetchHttpClient.layer));
 

@@ -67,10 +67,7 @@ gcloud config set project my-project --configuration=work
 alchemy profile edit --add GCP --method gcloud --set configuration=work
 ```
 
-A `project` or `region` in the profile overrides the configuration's. Choose
-**Application default credentials** instead to use
-`gcloud auth application-default login`, which every gcloud configuration
-shares.
+A `project` or `region` in the profile overrides the configuration's.
 
 This needs the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install).
 Creating projects without an organization or folder also needs it: Google
@@ -79,7 +76,9 @@ only lets user accounts do that.
 To deploy as a service account instead, choose **Service account JSON**
 and point at the key file. Alchemy stores the path in the profile.
 
-In CI (`CI=true`), Alchemy skips profiles and reads the environment:
+Environment variables need no profile. When a token or key file is set,
+Alchemy uses it instead of the profile, and in CI (`CI=true`) the
+environment is the only source:
 
 - `GOOGLE_PROJECT_ID` — project id (`GOOGLE_CLOUD_PROJECT` is accepted
   as an alias).
