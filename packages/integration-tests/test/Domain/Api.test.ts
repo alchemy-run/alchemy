@@ -65,9 +65,9 @@ class NotesApi extends Domain.Api("NotesApi", Write, Note) {}
 const World = Notes.layer(Layer.empty).pipe(Layer.provideMerge(InMemory));
 
 describe("Domain Api", () => {
-  it.live("localClient calls an Api in process, through every entry's middleware", () =>
+  it.live("clientInProcess calls an Api in process, through every entry's middleware", () =>
     Effect.gen(function* () {
-      const notes = yield* NotesApi.localClient;
+      const notes = yield* NotesApi.clientInProcess;
       const asSam = { headers: { "x-author": "sam" } };
 
       const refused = yield* notes.Write({ target: "n-1", text: "hi" }).pipe(Effect.flip);
@@ -87,18 +87,18 @@ describe("Domain Api", () => {
   it.live("a trusted caller provides its principal with its own middleware Layer", () =>
     Effect.gen(function* () {
       // The served Api keeps checking headers; only this client trusts its caller.
-      const asKim = yield* NotesApi.localClient.pipe(Effect.provide(trustedAuthor("kim")));
+      const asKim = yield* NotesApi.clientInProcess.pipe(Effect.provide(trustedAuthor("kim")));
       const { reply } = yield* asKim.Write({ target: "n-2", text: "from a webhook" });
       expect(reply).toEqual({ by: "kim" });
 
-      const anonymous = yield* NotesApi.localClient;
+      const anonymous = yield* NotesApi.clientInProcess;
       const refused = yield* anonymous.Note.get("n-2").pipe(Effect.flip);
       expect(refused._tag).toBe("Unauthenticated");
     }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(World, AuthorSessionLive))),
   );
 
-  it.live("layerLocalClient provides the Api's Client in process", () => {
-    // Written against `NotesApi.Client`, so it runs remotely (layerClient) or in process (layerLocalClient).
+  it.live("layerClientInProcess provides the Api's Client in process", () => {
+    // Written against `NotesApi.Client`, so it runs remotely (layerClient) or in process (layerClientInProcess).
     const writeAs = Effect.fn(function* (author: string) {
       const notes = yield* NotesApi.Client;
       return yield* notes.Write(
@@ -109,10 +109,27 @@ describe("Domain Api", () => {
     return writeAs("sam").pipe(
       Effect.map(({ reply }) => expect(reply).toEqual({ by: "sam" })),
       Effect.provide(
-        NotesApi.layerLocalClient.pipe(
+        NotesApi.layerClientInProcess.pipe(
           Layer.provideMerge(Layer.mergeAll(World, AuthorSessionLive)),
         ),
       ),
     );
   });
+
+  it.live("client runs over Domain.protocolInProcess", () =>
+    Effect.gen(function* () {
+      const notes = yield* NotesApi.client;
+      const asSam = { headers: { "x-author": "sam" } };
+      const { reply } = yield* notes.Write({ target: "n-4", text: "over a protocol" }, asSam);
+      expect(reply).toEqual({ by: "sam" });
+      expect(yield* notes.Note.get("n-4", asSam)).toEqual({ text: "over a protocol", by: "sam" });
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Domain.protocolInProcess(NotesApi).pipe(
+          Layer.provideMerge(Layer.mergeAll(World, AuthorSessionLive)),
+        ),
+      ),
+    ),
+  );
 });

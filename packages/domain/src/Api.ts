@@ -13,6 +13,7 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Queue from "effect/Queue";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcClientError from "effect/rpc/RpcClientError";
@@ -21,7 +22,6 @@ import * as RpcMessage from "effect/rpc/RpcMessage";
 import type * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
-import * as RpcTest from "effect/rpc/RpcTest";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
@@ -239,7 +239,10 @@ export interface ApiClass<
       ? M
       : "Middleware that provides services is declared on each command, view or aggregate",
   ): ApiClass<Name, Entries>;
-  /** A typed client. Provide a protocol: {@link protocolWebSocket} or {@link protocolHttp}. */
+  /**
+   * A typed client. Provide a protocol: {@link protocolHttp},
+   * {@link protocolWebSocket} or {@link protocolInProcess}.
+   */
   readonly client: Effect.Effect<
     ApiClient<Entries[number]>,
     never,
@@ -253,25 +256,42 @@ export interface ApiClass<
     never,
     RpcClient.Protocol | MiddlewareClients<Entries>
   >;
-  /**
-   * A client wired straight to the handlers, for code in the same process as
-   * the model: a route that already authenticated its caller, a webhook, a
-   * script. Nothing is serialized and nothing goes over the network, but
-   * every entry's server middleware runs, from the middleware Layers in
-   * scope. To call as a caller you already trust, provide a middleware Layer
-   * that provides its context without checking a header, to this client
-   * only. In a Worker, build it per request.
-   */
-  readonly localClient: Effect.Effect<
+  /** {@link client} over {@link protocolHttp}. */
+  readonly clientHttp: (
+    url: string,
+  ) => Effect.Effect<
+    ApiClient<Entries[number]>,
+    never,
+    Scope.Scope | HttpClient.HttpClient | MiddlewareClients<Entries>
+  >;
+  /** {@link layerClient} over {@link protocolHttp}. */
+  readonly layerClientHttp: (
+    url: string,
+  ) => Layer.Layer<ClientKey<Name>, never, HttpClient.HttpClient | MiddlewareClients<Entries>>;
+  /** {@link client} over {@link protocolWebSocket}. */
+  readonly clientWebSocket: (
+    url: string,
+  ) => Effect.Effect<
+    ApiClient<Entries[number]>,
+    never,
+    Scope.Scope | HttpClient.HttpClient | Socket.WebSocketConstructor | MiddlewareClients<Entries>
+  >;
+  /** {@link layerClient} over {@link protocolWebSocket}. */
+  readonly layerClientWebSocket: (
+    url: string,
+  ) => Layer.Layer<
+    ClientKey<Name>,
+    never,
+    HttpClient.HttpClient | Socket.WebSocketConstructor | MiddlewareClients<Entries>
+  >;
+  /** {@link client} over {@link protocolInProcess}. In a Worker, build it per request. */
+  readonly clientInProcess: Effect.Effect<
     ApiClient<Entries[number]>,
     never,
     Scope.Scope | Model.Internals | MiddlewareServices<Entries> | MiddlewareClients<Entries>
   >;
-  /**
-   * Build {@link Client} in process, like {@link localClient}, for the life of
-   * the Layer. Code that uses `Client` runs the same over {@link layerClient}.
-   */
-  readonly layerLocalClient: Layer.Layer<
+  /** {@link layerClient} over {@link protocolInProcess}. */
+  readonly layerClientInProcess: Layer.Layer<
     ClientKey<Name>,
     never,
     Model.Internals | MiddlewareServices<Entries> | MiddlewareClients<Entries>
@@ -692,6 +712,77 @@ const nest = (entries: ReadonlyArray<Entry>, flat: Flat): unknown => {
   return client;
 };
 
+/**
+ * Serves an Api in the caller's process and connects a client to it. Messages
+ * are encoded as on the wire but never leave memory.
+ */
+const makeProtocolInProcess = (
+  entries: ReadonlyArray<Entry>,
+  group: RpcGroup.RpcGroup<Rpc.Any>,
+): Layer.Layer<RpcClient.Protocol, never, Model.Internals> =>
+  Layer.effect(
+    RpcClient.Protocol,
+    Effect.gen(function* () {
+      const codecFor = Schema.toCodecJson as RpcSerialization.CodecFor;
+      const disconnects = yield* Queue.unbounded<number>();
+      const clientIds = new Set<number>();
+      let toServer = (_: number, __: RpcMessage.FromClientEncoded): Effect.Effect<void> =>
+        Effect.void;
+      let toClient = (_: number, __: RpcMessage.FromServerEncoded): Effect.Effect<void> =>
+        Effect.void;
+      const server = yield* RpcServer.Protocol.make((write) => {
+        toServer = write;
+        return Effect.succeed({
+          disconnects,
+          send: (clientId: number, response: RpcMessage.FromServerEncoded) =>
+            toClient(clientId, response),
+          end: () => Effect.void,
+          clientIds: Effect.sync(() => new Set(clientIds) as ReadonlySet<number>),
+          initialMessage: Effect.succeedNone,
+          supportsAck: true,
+          supportsTransferables: false,
+          supportsSpanPropagation: true,
+          supportsNotifications: false,
+          codecFor,
+        });
+      });
+      const protocol = yield* RpcClient.Protocol.make((write) => {
+        toClient = write;
+        return Effect.succeed({
+          send: (clientId: number, request: RpcMessage.FromClientEncoded) =>
+            toServer(clientId, request),
+          supportsAck: true,
+          supportsTransferables: false,
+          codecFor,
+        });
+      });
+      const handlers = yield* handlersOf(entries);
+      // The middleware services in the caller's scope run for every request.
+      yield* RpcServer.make(group).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(RpcServer.Protocol, server),
+            group.toLayer(handlers as never) as Layer.Layer<never>,
+          ),
+        ),
+        Effect.forkScoped,
+      );
+      return RpcClient.Protocol.of({
+        ...protocol,
+        run: (clientId, write) =>
+          Effect.suspend(() => {
+            clientIds.add(clientId);
+            return protocol.run(clientId, write);
+          }).pipe(
+            Effect.onExit(() => {
+              clientIds.delete(clientId);
+              return Queue.offer(disconnects, clientId);
+            }),
+          ),
+      });
+    }),
+  );
+
 // A class so `class BankApi extends Domain.Api(...) {}` works.
 const build = (
   name: string,
@@ -721,14 +812,11 @@ const build = (
     }) as unknown as HttpEffect;
     return { fetch };
   });
-  // The client and server in one process, with no serialization between them.
-  const localClient = Effect.gen(function* () {
-    const handlers = yield* handlersOf(entries);
-    const flat = yield* RpcTest.makeClient(group).pipe(
-      Effect.provide(group.toLayer(handlers as never)),
-    );
-    return nest(entries, flat as unknown as Flat);
-  });
+  // The client for the life of the caller's scope, over the given protocol.
+  const clientOver = <R>(protocol: Layer.Layer<RpcClient.Protocol, never, R>) =>
+    Effect.flatMap(Layer.build(protocol), (context) => Effect.provide(client, context));
+  const layerClient = Layer.effect(Client, client);
+  const inProcess = makeProtocolInProcess(entries, group);
   return Object.assign(
     class {},
     // The class is an Effect: `yield* MyApi` serves it.
@@ -742,9 +830,14 @@ const build = (
         build(name, entries, group.middleware(middleware) as unknown as RpcGroup.RpcGroup<Rpc.Any>),
       client,
       Client,
-      layerClient: Layer.effect(Client, client),
-      localClient,
-      layerLocalClient: Layer.effect(Client, localClient),
+      layerClient,
+      clientHttp: (url: string) => clientOver(protocolHttp(url)),
+      layerClientHttp: (url: string) => layerClient.pipe(Layer.provide(protocolHttp(url))),
+      clientWebSocket: (url: string) => clientOver(protocolWebSocket(url)),
+      layerClientWebSocket: (url: string) =>
+        layerClient.pipe(Layer.provide(protocolWebSocket(url))),
+      clientInProcess: clientOver(inProcess),
+      layerClientInProcess: layerClient.pipe(Layer.provide(inProcess)),
     },
   );
 };
@@ -754,7 +847,9 @@ const build = (
  * send, and the views and aggregates (with a `read` contract) it may read.
  * Nothing in an Api needs a handler. The class is an Effect: `yield* MyApi`
  * gives a Worker its `fetch`. Call it with a typed client over
- * `Domain.protocolWebSocket` or `Domain.protocolHttp`.
+ * `Domain.protocolHttp`, `Domain.protocolWebSocket` or
+ * `Domain.protocolInProcess`, or with `clientHttp`, `clientWebSocket` or
+ * `clientInProcess`, which provide them.
  *
  * ### Declaring an Api
  * **Example:** What customers may reach
@@ -814,16 +909,16 @@ const build = (
  * ```
  *
  * ### Calling it in process
- * `localClient` calls the Api in the same process as the model, through every
- * entry's middleware, with nothing serialized. Code that has already
- * authenticated its caller provides a middleware Layer that trusts it.
+ * `clientInProcess` serves the Api in the caller's process, through every
+ * entry's middleware, with nothing sent over a network. Code that has
+ * already authenticated its caller provides a middleware Layer that trusts it.
  *
  * **Example:** A webhook that deposits as the system
  * ```typescript
  * const asSystem = Layer.succeed(Session, (effect) =>
  *   Effect.provideService(effect, CurrentActor, system("payments-webhook")),
  * );
- * const bank = yield* CustomerApi.localClient.pipe(Effect.provide(asSystem));
+ * const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem));
  * yield* bank.DepositMoney({ target: accountId, amount: 1_000 });
  * ```
  *
@@ -849,6 +944,18 @@ export const protocolHttp = (
   url: string,
 ): Layer.Layer<RpcClient.Protocol, never, HttpClient.HttpClient> =>
   RpcClient.layerProtocolHttp({ url }).pipe(Layer.provide(RpcSerialization.layerNdjson));
+
+/**
+ * The protocol for a client in the same process as the model. It serves the
+ * Api right there: every entry's middleware runs, from the middleware Layers
+ * in scope, and nothing leaves memory. Requires the hosted Domain, like
+ * serving the Api.
+ * In a Worker, build it per request.
+ */
+export const protocolInProcess = <Name extends string, Entries extends ReadonlyArray<Entry>>(
+  api: ApiClass<Name, Entries>,
+): Layer.Layer<RpcClient.Protocol, never, Model.Internals | MiddlewareServices<Entries>> =>
+  makeProtocolInProcess(api.entries, api.group);
 
 /** A frame of a live read: an Effect RPC message, plus the cursor to resume from. */
 type LiveFrame = RpcMessage.FromServerEncoded & { readonly cursor?: number };

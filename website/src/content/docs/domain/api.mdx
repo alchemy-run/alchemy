@@ -194,6 +194,14 @@ export const depositAndWatch = Effect.gen(function* () {
 
 The client needs to know how to reach the server. `Domain.protocolWebSocket(url)` sends commands and one-off reads over HTTP and opens a WebSocket for each live read; if the connection drops, the client reconnects and resumes from the last change it saw. `Domain.protocolHttp(url)` uses HTTP for everything, streaming live reads as long-running responses.
 
+Each protocol also has a shortcut on the Api that provides it:
+
+```typescript
+const bank = yield* CustomerApi.clientWebSocket(url);
+// is short for
+// CustomerApi.client.pipe(Effect.provide(Domain.protocolWebSocket(url)))
+```
+
 ## Handle what can go wrong
 
 Every call's error type says exactly what can fail. It's one of the rejections the entry declares, like `InsufficientFunds`; an error from its middleware, like `Unauthorized`; or an `RpcClientError` when the server can't be reached. Because each is a tagged error, `Effect.catchTag` handles the cases you expect and leaves the rest to propagate.
@@ -233,7 +241,7 @@ See [Integrate with foldkit](/domain/foldkit) for a full browser app.
 
 ## Call it in process
 
-Code in the same process as the model, like a webhook route, a scheduled job or a script, calls the Api with `localClient`. It's the same typed client, wired straight to the handlers: nothing is serialized and nothing goes over the network. Every entry's middleware still runs, from the middleware Layers in scope.
+Code in the same process as the model, like a webhook route, a scheduled job or a script, calls the Api with `clientInProcess`. It's the same typed client over `Domain.protocolInProcess`, which serves the Api right there: nothing goes over the network. Every entry's middleware still runs, from the middleware Layers in scope.
 
 Often that code has already checked who is calling, for example by verifying a webhook signature. Then it provides a middleware Layer that trusts that caller, to this client only. The Api the Worker serves keeps its real middleware.
 
@@ -243,13 +251,13 @@ const asSystem = Layer.succeed(Session, (effect) =>
 );
 
 export const depositFromWebhook = Effect.fn(function* (accountId: AccountId, amount: number) {
-  const bank = yield* CustomerApi.localClient.pipe(Effect.provide(asSystem));
+  const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem));
   return yield* bank.DepositMoney({ target: accountId, amount });
 }, Effect.scoped);
 ```
 
 The caller's `decide` and `validate` read the `CurrentActor` the trusted Layer provides, exactly as they read the one `SessionLive` provides.
 
-`localClient` needs a `Scope`. In a Worker, build it per request, like the served Api: Workers forbid sharing I/O across requests. In a long-lived process, `CustomerApi.layerLocalClient` provides `CustomerApi.Client` in process for the life of the Layer, so code that asks for the client runs the same in process or over `layerClient`.
+`clientInProcess` needs a `Scope`. In a Worker, build it per request, like the served Api: Workers forbid sharing I/O across requests. In a long-lived process, `CustomerApi.layerClientInProcess` provides `CustomerApi.Client` in process for the life of the Layer, so code that asks for the client runs the same in process or over the network.
 
 Tests use the same client. To test an Api end to end, including its middleware and every rejection, see [Testing an Api](/domain/testing-apis).
