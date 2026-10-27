@@ -1,5 +1,6 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials, type Config as CredentialsConfig } from "@distilled.cloud/gcp/Credentials";
+import { cacheUntilExpiry } from "alchemy/Auth/CredentialsCache";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -9,7 +10,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
-import * as Semaphore from "effect/Semaphore";
 
 /**
  * Credentials sourced from the GCE / Cloud Run metadata server — the
@@ -26,37 +26,14 @@ export interface ExpiringCredentials {
   readonly expiresAt: number | undefined;
 }
 
-/** Refresh this long before the reported expiry. */
-const REFRESH_WINDOW_MS = 5 * 60 * 1000;
-
 /**
- * Single-flight, expiry-aware cache over a credential resolver: callers
- * reuse the cached token until it nears expiry, and N concurrent callers
- * observing a stale token trigger exactly one refresh.
+ * Expiry-aware cache over a credential resolver: callers reuse the cached
+ * token until it nears expiry, and concurrent callers share one refresh.
  */
-export const cacheCredentials = <E, R>(resolve: Effect.Effect<ExpiringCredentials, E, R>) =>
-  Effect.gen(function* () {
-    const cache = yield* Ref.make<ExpiringCredentials | undefined>(undefined);
-    const lock = yield* Semaphore.make(1);
-    const fresh = (current: ExpiringCredentials | undefined, now: number) =>
-      current !== undefined &&
-      (current.expiresAt === undefined || current.expiresAt - REFRESH_WINDOW_MS > now);
-    return Effect.gen(function* () {
-      const current = yield* Ref.get(cache);
-      if (fresh(current, yield* Clock.currentTimeMillis)) return current!.config;
-      return yield* lock.withPermits(1)(
-        Effect.gen(function* () {
-          const latest = yield* Ref.get(cache);
-          if (fresh(latest, yield* Clock.currentTimeMillis)) {
-            return latest!.config;
-          }
-          const resolved = yield* resolve;
-          yield* Ref.set(cache, resolved);
-          return resolved.config;
-        }),
-      );
-    });
-  });
+export const cacheCredentials = <E>(resolve: Effect.Effect<ExpiringCredentials, E>) =>
+  cacheUntilExpiry(resolve, (resolved) => resolved.expiresAt).pipe(
+    Effect.map((cached) => Effect.map(cached, (resolved) => resolved.config)),
+  );
 
 const METADATA_ROOT = "http://metadata.google.internal/computeMetadata/v1";
 

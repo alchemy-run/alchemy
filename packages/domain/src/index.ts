@@ -188,6 +188,11 @@ export declare namespace Model {
 /** The aggregates, views, policies, projections and streams hosted together. See {@link ModelModule.make}. */
 export const Model = ModelModule.make;
 
+/** Every definition problem in a Model, without hosting it. See {@link ModelModule.verify}. */
+export const verify = ModelModule.verify;
+/** A problem in a Model's definitions, found by {@link verify} or when its Layer is built. */
+export { DefinitionError } from "./Kernel.ts";
+
 /** A service middleware provides to a request, carried into the domain. See {@link RequestContextModule.make}. */
 export const RequestContext = RequestContextModule.make;
 

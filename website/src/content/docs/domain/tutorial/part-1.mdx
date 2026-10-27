@@ -230,12 +230,6 @@ import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.command.t
 // ...
 type State = typeof State.Type;
 
-+// An event can only follow an open account; anything else is a bug.
-+const mustBeOpen = (s: State) => {
-+  if (s._tag !== "Open") throw new Error(`expected an open account, got ${s._tag}`);
-+  return s;
-+};
-+
 export class Account extends Domain.Aggregate("Account", {
   id: AccountId,
   state: State,
@@ -252,15 +246,15 @@ export class Account extends Domain.Aggregate("Account", {
   },
   evolve: {
     AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-+    MoneyDeposited: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
++    MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
 +  },
 +  reply: {
-+    DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }),
++    DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
   },
 }) {}
 ```
 
-`evolve` never refuses an event, because it already happened. An event that can't follow the current state is a bug, so `mustBeOpen` throws and the command that caused it is rolled back. `reply` answers from the state after the deposit.
+`evolve` never refuses an event, because it already happened. `decide` already returned `NotOpen` for an account that isn't open, so `evolve` and `reply` just cover every state. `reply` answers from the state after the deposit.
 
 ## Test deposits
 
@@ -356,12 +350,12 @@ export class Account extends Domain.Aggregate("Account", {
   },
   evolve: {
     AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-    MoneyDeposited: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
-+    MoneyWithdrawn: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
+    MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
++    MoneyWithdrawn: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
   },
   reply: {
-    DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }),
-+    WithdrawMoney: (s) => ({ balance: mustBeOpen(s).balance }),
+    DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
++    WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
   },
 }) {}
 ```
