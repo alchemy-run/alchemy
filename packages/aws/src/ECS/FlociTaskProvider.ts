@@ -46,12 +46,11 @@ export const FlociTaskProvider = () =>
         repositoryName: attrs.repositoryName,
         main: source.main,
         handler: source.handler,
-        build: source.build,
+        // Secrets stay out, as in the image hash: rotating one does not rebuild.
+        build: source.build === undefined ? undefined : { ...source.build, secrets: undefined },
         isExternal: news.isExternal,
         context: source.context,
         dockerfile: source.dockerfile,
-        // Secrets are left out, as in the image hash: rotating one does not rebuild.
-        buildArgs: source.buildArgs,
         image: source.image,
         port: news.port,
         runtimePlatform: news.runtimePlatform,

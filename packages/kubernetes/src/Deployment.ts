@@ -1,4 +1,5 @@
 import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
+import type * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -175,7 +176,7 @@ export interface BundledDeploymentProps extends DeploymentPropsBase {
   /** Named export to load from `main`. @default "default" */
   handler?: string;
   /** Bundler configuration for the entrypoint. */
-  build?: WorkloadImageSource["build"];
+  build?: Bundle.BundleConfig;
   /** Environment Dockerfile (path or inline content). */
   dockerfile?: WorkloadImageSource["dockerfile"];
   /** Build context for a path {@link dockerfile} environment. */
@@ -329,9 +330,11 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * const api = yield* Kubernetes.Deployment("Api", {
  *   cluster,
  *   context: "./api",
- *   buildArgs: { NODE_ENV: "production" },
- *   // Mounted only into the RUN step that asks for it; never in the image.
- *   buildSecrets: { NPM_TOKEN: Config.Redacted("NPM_TOKEN") },
+ *   build: {
+ *     args: { NODE_ENV: "production" },
+ *     // Mounted only into the RUN step that asks for it; never in the image.
+ *     secrets: { NPM_TOKEN: Config.Redacted("NPM_TOKEN") },
+ *   },
  *   port: 8080,
  * });
  * ```

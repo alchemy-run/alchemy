@@ -1,5 +1,5 @@
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
-import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
+import type { DockerfileBuild } from "@alchemy.run/docker/ImageSource";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import type { ResourceBinding } from "alchemy/Resource";
 import type { ResourceContext } from "alchemy/ResourceContext";
@@ -171,17 +171,16 @@ export interface WorkloadImageSource {
   main?: string;
   handler?: string;
   /**
-   * Bundler configuration for `main`. Unused code is tree-shaken.
+   * Bundler configuration for `main`, or Docker build args and secrets for
+   * a `context`/`dockerfile` build. Unused bundled code is tree-shaken.
    * `effect`, alchemy, and `@distilled.cloud` are marked pure so unused
    * parts prune more aggressively. List extra packages with
    * `pure.packages`, or disable with `pure: false`.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig & DockerfileBuild;
   context?: string;
   dockerfile?: string | InlineDockerfile;
   image?: string;
-  buildArgs?: DockerfileBuildOptions["buildArgs"];
-  buildSecrets?: DockerfileBuildOptions["buildSecrets"];
 }
 
 export interface WorkloadIdentityReconcileOptions {

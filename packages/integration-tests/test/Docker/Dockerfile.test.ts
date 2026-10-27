@@ -92,23 +92,25 @@ describe(
         expect(yield* dies({ context: "./app", dockerfile: "./app/Dockerfile" })).toBe(false);
 
         // Build args and secrets need a Dockerfile build.
-        const buildArgs = { NODE_ENV: "production" };
-        const buildSecrets = { NPM_TOKEN: Redacted.make("token") };
-        expect(yield* dies({ context: "./app", buildArgs, buildSecrets })).toBe(false);
-        expect(yield* dies({ dockerfile: Dockerfile.inline`FROM x`, buildArgs })).toBe(false);
-        expect(yield* dies({ main: "./i.ts", buildArgs })).toBe(true);
-        expect(yield* dies({ image: "busybox", buildSecrets })).toBe(true);
+        const args = { NODE_ENV: "production" };
+        const secrets = { NPM_TOKEN: Redacted.make("token") };
+        expect(yield* dies({ context: "./app", build: { args, secrets } })).toBe(false);
+        expect(yield* dies({ dockerfile: Dockerfile.inline`FROM x`, build: { args } })).toBe(false);
+        expect(yield* dies({ main: "./i.ts", build: { args } })).toBe(true);
+        expect(yield* dies({ image: "busybox", build: { secrets } })).toBe(true);
+        // A `main` program's bundler config is not a Docker build.
+        expect(yield* dies({ main: "./i.ts", build: { pure: false } })).toBe(false);
       }),
     );
 
     it.effect("build args and secrets on a main or image source die with a tagged defect", () =>
       Effect.gen(function* () {
         const exit = yield* Effect.exit(
-          validateImageSource("Api", { image: "busybox", buildArgs: { A: "1" } }),
+          validateImageSource("Api", { image: "busybox", build: { args: { A: "1" } } }),
         );
         const defect = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
         expect(defect).toMatchObject({
-          _tag: "DockerfileBuildOptionsConflict",
+          _tag: "DockerfileBuildConflict",
           id: "Api",
           source: "image",
         });
@@ -243,22 +245,21 @@ RUN apt-get install -y ffmpeg`,
           ),
         ).toBe(false);
         // Build args and secrets need a Dockerfile build.
-        const buildSecrets = { NPM_TOKEN: Redacted.make("token") };
+        const secrets = { NPM_TOKEN: Redacted.make("token") };
         expect(
           yield* dies(
             validateContainerImageProps("Api", {
               context: "./app",
-              buildArgs: { A: "1" },
-              buildSecrets,
+              build: { args: { A: "1" }, secrets },
             }),
           ),
         ).toBe(false);
         expect(
-          yield* dies(validateContainerImageProps("Api", { main: "./i.ts", buildSecrets })),
+          yield* dies(validateContainerImageProps("Api", { main: "./i.ts", build: { secrets } })),
         ).toBe(true);
         expect(
           yield* dies(
-            validateContainerImageProps("Api", { image: "busybox", buildArgs: { A: "1" } }),
+            validateContainerImageProps("Api", { image: "busybox", build: { args: { A: "1" } } }),
           ),
         ).toBe(true);
       }),

@@ -1,4 +1,5 @@
 import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
+import type * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
 import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -156,7 +157,7 @@ export interface BundledJobProps extends JobPropsBase {
   /** Named export to load from `main`. @default "default" */
   handler?: string;
   /** Bundler configuration for the entrypoint. */
-  build?: WorkloadImageSource["build"];
+  build?: Bundle.BundleConfig;
   /** Environment Dockerfile (path or inline content). */
   dockerfile?: WorkloadImageSource["dockerfile"];
   /** Build context for a path {@link dockerfile} environment. */
@@ -276,9 +277,11 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * const migrate = yield* Kubernetes.Job("DbMigrate", {
  *   cluster,
  *   context: "./migrator",
- *   buildArgs: { NODE_ENV: "production" },
- *   // Mounted only into the RUN step that asks for it; never in the image.
- *   buildSecrets: { NPM_TOKEN: Config.Redacted("NPM_TOKEN") },
+ *   build: {
+ *     args: { NODE_ENV: "production" },
+ *     // Mounted only into the RUN step that asks for it; never in the image.
+ *     secrets: { NPM_TOKEN: Config.Redacted("NPM_TOKEN") },
+ *   },
  *   backoffLimit: 2,
  * });
  * ```

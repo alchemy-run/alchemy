@@ -1,6 +1,6 @@
 import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
-import { validateDockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
+import { validateDockerfileBuild } from "@alchemy.run/docker/ImageSource";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
@@ -98,22 +98,19 @@ export const createContainerApplicationName = (id: string, name: string | undefi
  *   and `context`.
  * - `dockerfile` (string path against `context`, or inline content with no
  *   `context`) — the user-Dockerfile build. Only this source takes
- *   `buildArgs` / `buildSecrets`.
+ *   `build.args` / `build.secrets`.
  *
  * Invalid combinations are programmer errors, surfaced as plan-time defects
  * (`Effect.die`) rather than typed errors.
  */
 export const validateContainerImageProps = (
   id: string,
-  props: Pick<
-    AnyContainerApplicationProps,
-    "main" | "image" | "dockerfile" | "context" | "buildArgs" | "buildSecrets"
-  >,
+  props: Pick<AnyContainerApplicationProps, "main" | "image" | "dockerfile" | "context" | "build">,
 ): Effect.Effect<void> =>
   validateImageSources(props).pipe(
     Effect.andThen(
       // An empty `main` declares no program, as in `validateImageSources`.
-      validateDockerfileBuildOptions(id, { ...props, main: props.main || undefined }),
+      validateDockerfileBuild(id, { ...props, main: props.main || undefined }),
     ),
   );
 

@@ -17,8 +17,10 @@ export default Kubernetes.Job(
     return {
       cluster,
       context: `${import.meta.dirname}/buildsecrets`,
-      buildArgs: { GREETING: "hello" },
-      buildSecrets: { token: Redacted.make(BUILD_SECRET) },
+      build: {
+        args: { GREETING: "hello" },
+        secrets: { token: Redacted.make(BUILD_SECRET) },
+      },
       name: "local-dockerfile-job",
       backoffLimit: 0,
     };

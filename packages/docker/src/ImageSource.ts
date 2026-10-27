@@ -88,14 +88,14 @@ export interface BundledImageSource {
  * Build arguments and BuildKit secrets for an image built from the user's
  * own Dockerfile (`context` / `dockerfile`).
  */
-export interface DockerfileBuildOptions {
+export interface DockerfileBuild {
   /**
    * Docker build arguments (`--build-arg`), read by `ARG` instructions.
    * They are part of the image's content hash, so changing one rebuilds the
    * image. Never pass secrets here: build args are visible in the image
-   * history. Use {@link buildSecrets} instead.
+   * history. Use {@link secrets} instead.
    */
-  buildArgs?: Record<string, string>;
+  args?: Record<string, string>;
   /**
    * BuildKit secrets, keyed by id. Mount one in a `RUN` step with
    * `--mount=type=secret,id=<id>` and read it from `/run/secrets/<id>`, or
@@ -105,7 +105,13 @@ export interface DockerfileBuildOptions {
    * Secrets are left out of the image's content hash, so rotating one does
    * not rebuild the image.
    */
-  buildSecrets?: Record<string, Redacted.Redacted<string>>;
+  secrets?: Record<string, Redacted.Redacted<string>>;
+}
+
+/** The `build` prop of a source built from the user's own Dockerfile. */
+export interface DockerfileBuildOptions {
+  /** Build arguments and BuildKit secrets for the Dockerfile build. */
+  build?: DockerfileBuild;
 }
 
 /**
@@ -149,12 +155,11 @@ export type ImageSourceProps = BundledImageSource | DockerfileImageSource | Regi
 export interface ImageSourceLike {
   main?: string;
   handler?: string;
-  build?: BundledImageSource["build"];
+  /** Bundler config for `main`; Docker build args and secrets for `context`. */
+  build?: Bundle.BundleConfig & DockerfileBuild;
   context?: string;
   dockerfile?: string | InlineDockerfile;
   image?: string;
-  buildArgs?: Record<string, string>;
-  buildSecrets?: Record<string, Redacted.Redacted<string>>;
 }
 
 export type ImageSourceKind = "main" | "context" | "image";
@@ -175,32 +180,30 @@ export const imageSourceKind = (source: ImageSourceLike): ImageSourceKind | unde
         : undefined;
 
 /**
- * `buildArgs` or `buildSecrets` set on an image that is not built from the
+ * `build.args` or `build.secrets` set on an image that is not built from the
  * user's own Dockerfile: a `main` program or a pre-built `image`.
  */
-export class DockerfileBuildOptionsConflict extends Data.TaggedError(
-  "DockerfileBuildOptionsConflict",
-)<{
+export class DockerfileBuildConflict extends Data.TaggedError("DockerfileBuildConflict")<{
   readonly id: string;
   readonly source: "main" | "image";
 }> {
   override get message() {
-    return `'${this.id}': 'buildArgs' and 'buildSecrets' apply to an image built from your own Dockerfile ('context' / 'dockerfile'), not to '${this.source}'`;
+    return `'${this.id}': 'build.args' and 'build.secrets' apply to an image built from your own Dockerfile ('context' / 'dockerfile'), not to '${this.source}'`;
   }
 }
 
 /**
- * Dies with {@link DockerfileBuildOptionsConflict} when `buildArgs` or
- * `buildSecrets` are set alongside `main` or `image`.
+ * Dies with {@link DockerfileBuildConflict} when `build.args` or
+ * `build.secrets` are set alongside `main` or `image`.
  */
-export const validateDockerfileBuildOptions = (
+export const validateDockerfileBuild = (
   id: string,
-  source: Pick<ImageSourceLike, "main" | "image" | "buildArgs" | "buildSecrets">,
+  source: { main?: string; image?: string; build?: DockerfileBuild },
 ): Effect.Effect<void> =>
   (source.main !== undefined || source.image !== undefined) &&
-  (source.buildArgs !== undefined || source.buildSecrets !== undefined)
+  (source.build?.args !== undefined || source.build?.secrets !== undefined)
     ? Effect.die(
-        new DockerfileBuildOptionsConflict({
+        new DockerfileBuildConflict({
           id,
           source: source.main !== undefined ? "main" : "image",
         }),
@@ -238,7 +241,7 @@ export const validateImageSource = (id: string, source: ImageSourceLike): Effect
       ),
     );
   }
-  return validateDockerfileBuildOptions(id, source);
+  return validateDockerfileBuild(id, source);
 };
 
 /**
@@ -350,7 +353,7 @@ export const computeStaticSourceHash = Effect.fn(function* (
         dockerfile: source.dockerfile.content,
         platform: platform ?? "linux/amd64",
         // Absent when unset, so existing hashes hold. Secrets are excluded.
-        buildArgs: source.buildArgs,
+        buildArgs: source.build?.args,
       })).slice(0, 16);
     }
     const fs = yield* FileSystem.FileSystem;
@@ -364,7 +367,7 @@ export const computeStaticSourceHash = Effect.fn(function* (
       contextHash,
       dockerfile: dockerfileContent,
       platform: platform ?? "linux/amd64",
-      buildArgs: source.buildArgs,
+      buildArgs: source.build?.args,
     })).slice(0, 16);
   }
   return undefined;
@@ -579,8 +582,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
       context: string;
       dockerfile?: string;
       platform?: string;
-      buildArgs?: Record<string, string>;
-      buildSecrets?: Record<string, Redacted.Redacted<string>>;
+      build?: DockerfileBuild;
     },
   ) {
     const credentials = yield* target.credentials;
@@ -589,8 +591,8 @@ export const makeContainerImageSource = Effect.gen(function* () {
       context: options.context,
       file: options.dockerfile,
       platform: options.platform,
-      "build-arg": options.buildArgs,
-      secrets: options.buildSecrets,
+      "build-arg": options.build?.args,
+      secrets: options.build?.secrets,
     });
     yield* push(options.imageUri, credentials, options.platform);
     return options.imageUri;
@@ -745,8 +747,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
         imageUri,
         context: contextDir,
         platform,
-        buildArgs: source.buildArgs,
-        buildSecrets: source.buildSecrets,
+        build: source.build,
       });
       yield* session.note(`Pushed ${imageUri}`);
       return { imageUri, repositoryUri, codeHash };
@@ -769,8 +770,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
       context,
       dockerfile,
       platform,
-      buildArgs: source.buildArgs,
-      buildSecrets: source.buildSecrets,
+      build: source.build,
     });
     yield* session.note(`Pushed ${imageUri}`);
     return { imageUri, repositoryUri, codeHash };

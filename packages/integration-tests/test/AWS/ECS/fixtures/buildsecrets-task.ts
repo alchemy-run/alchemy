@@ -11,8 +11,10 @@ export const BUILD_SECRET = "alchemy-build-secret-value";
  */
 export default Task("EcsBuildSecretsTask", {
   context: `${import.meta.dirname}/buildsecrets`,
-  buildArgs: { GREETING: "hello" },
-  buildSecrets: { token: Redacted.make(BUILD_SECRET) },
+  build: {
+    args: { GREETING: "hello" },
+    secrets: { token: Redacted.make(BUILD_SECRET) },
+  },
   cpu: 256,
   memory: 512,
   // Build/run on ARM64 so an image built on an Apple Silicon host matches

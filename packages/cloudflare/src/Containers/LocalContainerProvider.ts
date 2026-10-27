@@ -111,9 +111,9 @@ export const LocalContainerProvider = () =>
               dev: {
                 context: path.relative(process.cwd(), context),
                 dockerfile: "Dockerfile",
-                buildArgs: news.buildArgs,
+                buildArgs: news.build?.args,
               } as DevContainerImage,
-              hash: yield* sha256Object({ dockerfile: content, buildArgs: news.buildArgs }),
+              hash: yield* sha256Object({ dockerfile: content, buildArgs: news.build?.args }),
             };
           }
 
@@ -131,12 +131,12 @@ export const LocalContainerProvider = () =>
             dev: {
               context: path.relative(process.cwd(), context),
               dockerfile: path.relative(context, dockerfile),
-              buildArgs: news.buildArgs,
+              buildArgs: news.build?.args,
             } as DevContainerImage,
             hash: yield* sha256Object({
               contextHash,
               dockerfile: dockerfileContent,
-              buildArgs: news.buildArgs,
+              buildArgs: news.build?.args,
             }),
           };
         }).pipe(Artifacts.cached(`container-image:${id}`));
@@ -157,12 +157,12 @@ export const LocalContainerProvider = () =>
           image: news.image,
           dockerfile: news.dockerfile,
           context: news.context,
-          buildArgs: news.buildArgs,
           runtime: news.runtime,
           handler: news.handler,
           isExternal: news.isExternal,
           external: news.external,
-          build: news.build,
+          // Secrets attach later (see `withBuildSecrets`) and stay out of the hash.
+          build: news.build === undefined ? undefined : { ...news.build, secrets: undefined },
           autoInstallExternals: news.autoInstallExternals,
         };
         if (!isResolved(picked)) return undefined;
@@ -184,8 +184,8 @@ export const LocalContainerProvider = () =>
         dev: DevContainerImage,
         news: AnyContainerApplicationProps,
       ): DevContainerImage =>
-        "dockerfile" in dev && news.buildSecrets !== undefined
-          ? { ...dev, buildSecrets: news.buildSecrets }
+        "dockerfile" in dev && news.build?.secrets !== undefined
+          ? { ...dev, buildSecrets: news.build.secrets }
           : dev;
 
       const placeholderConfiguration = (

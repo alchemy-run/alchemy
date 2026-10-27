@@ -489,7 +489,7 @@ export const LiveContainerProvider = () =>
           const imageHash = (yield* sha256Object({
             dockerfile: content,
             // Absent rather than `{}` when unset, so existing hashes hold.
-            buildArgs: props.buildArgs,
+            buildArgs: props.build?.args,
             imageName: props.publish?.repository?.toLowerCase(),
           })).slice(0, 16);
           return {
@@ -497,8 +497,8 @@ export const LiveContainerProvider = () =>
               kind: "external" as const,
               context,
               dockerfile,
-              buildArgs: props.buildArgs,
-              buildSecrets: props.buildSecrets,
+              buildArgs: props.build?.args,
+              buildSecrets: props.build?.secrets,
             },
             imageRef: makeRef(imageHash),
             imageHash,
@@ -506,8 +506,8 @@ export const LiveContainerProvider = () =>
             dev: {
               context: path.relative(process.cwd(), context),
               dockerfile: "Dockerfile",
-              buildArgs: props.buildArgs,
-              buildSecrets: props.buildSecrets,
+              buildArgs: props.build?.args,
+              buildSecrets: props.build?.secrets,
               env,
             },
           };
@@ -522,7 +522,7 @@ export const LiveContainerProvider = () =>
         // Hash what Docker can consume, including gitignored files and file
         // modes, but excluding ancestor lockfiles outside the build context.
         const contextHash = yield* hashDockerBuildInputs(
-          { context, dockerfile, platform: publicationPlatform, buildArgs: props.buildArgs },
+          { context, dockerfile, platform: publicationPlatform, buildArgs: props.build?.args },
           "effective",
         );
         const imageHash = (yield* sha256Object({
@@ -534,8 +534,8 @@ export const LiveContainerProvider = () =>
             kind: "external" as const,
             context,
             dockerfile,
-            buildArgs: props.buildArgs,
-            buildSecrets: props.buildSecrets,
+            buildArgs: props.build?.args,
+            buildSecrets: props.build?.secrets,
           },
           imageRef: makeRef(imageHash),
           imageHash,
@@ -544,8 +544,8 @@ export const LiveContainerProvider = () =>
           dev: {
             context: path.relative(process.cwd(), context),
             dockerfile: path.relative(context, dockerfile),
-            buildArgs: props.buildArgs,
-            buildSecrets: props.buildSecrets,
+            buildArgs: props.build?.args,
+            buildSecrets: props.build?.secrets,
             env,
           },
         };

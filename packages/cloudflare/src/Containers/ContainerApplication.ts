@@ -1,5 +1,5 @@
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
-import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
+import type { DockerfileBuild, DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -504,13 +504,12 @@ export interface AnyContainerApplicationProps extends Omit<
   image?: string;
   context?: string;
   dockerfile?: string | InlineDockerfile;
-  buildArgs?: DockerfileBuildOptions["buildArgs"];
-  buildSecrets?: DockerfileBuildOptions["buildSecrets"];
   handler?: string;
   runtime?: "bun" | "node";
   external?: string[];
   autoInstallExternals?: boolean;
-  build?: Bundle.BundleConfig;
+  /** Bundler config for `main`; Docker build args and secrets for `context`. */
+  build?: Bundle.BundleConfig & DockerfileBuild;
 }
 
 export type ContainerServices = ContainerApplication | PlatformServices | ProcessServices;

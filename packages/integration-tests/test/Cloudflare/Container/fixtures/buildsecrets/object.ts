@@ -11,8 +11,10 @@ export class BuildSecretsImage extends Cloudflare.Container<BuildSecretsImage>()
     // A template string, not `path.join(import.meta.dirname, …)`: this module
     // is bundled into the Worker, where `import.meta.dirname` is undefined.
     context: `${import.meta.dirname}/context`,
-    buildArgs: { GREETING: greeting },
-    buildSecrets: { token: Redacted.make(token) },
+    build: {
+      args: { GREETING: greeting },
+      secrets: { token: Redacted.make(token) },
+    },
   })),
 ) {}
 
