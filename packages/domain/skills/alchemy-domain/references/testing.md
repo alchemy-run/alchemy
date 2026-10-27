@@ -120,11 +120,11 @@ it("the model is well defined", () => expect(Domain.verify(Bank)).toEqual([]));
 
 For every command, cover the happy path, each rejection, and each authorization case (owner, other customer, agent). For every policy, cover the reaction, the reaction when its command is rejected, and the reaction when an external call fails with its declared error. For every saga, cover completion, each failure with its compensation, and each wait (signal, timeout via `clock`). For every view, check its state after the events it folds.
 
-`Story.coverage(Model)` reports what the stories in this process ran. `missing()` lists each part of the model no story ran, as `command C`, `rejection C/R`, `reaction Policy/Event`, `view V`, `projection J`, `saga S` and `call System.op` lines. Check it after the stories, in the same process, such as in an `afterAll` of the file that runs them:
+`Story.coverage(story)` reports what the stories of one `Story.make` runner ran. `missing()` lists each part of the model no story ran, as `command C`, `rejection C/R`, `reaction Policy/Event`, `view V`, `projection J`, `saga S` and `call System.op` lines. Check it after the stories, such as in an `afterAll`. Files that import one shared runner count together:
 
 ```ts
 afterAll(() => {
-  const missing = Story.coverage(Bank).missing();
+  const missing = Story.coverage(story).missing();
   expect(missing.filter((line) => /^(command|rejection) /.test(line))).toEqual([]);
 });
 ```

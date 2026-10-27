@@ -328,7 +328,7 @@ describe("Domain.Saga", () => {
         _tag: "Rejected",
         rejection: new Insufficient({ balance: 10 }),
       }),
-    ).pipe(Effect.map(() => expect(Story.coverage(Bank).covered()).toContain("saga MoveMoney"))),
+    ).pipe(Effect.map(() => expect(Story.coverage(story).covered()).toContain("saga MoveMoney"))),
   );
 
   it.effect("a failed step undoes the steps before it", () =>

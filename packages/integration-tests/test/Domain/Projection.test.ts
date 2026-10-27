@@ -274,7 +274,7 @@ describe("Domain Projection", () => {
       Story.then(sam, new Deposited({ amount: 50, balance: 50 })),
     ).pipe(
       Effect.map(() =>
-        expect(Story.coverage(Wallets).covered()).toEqual(
+        expect(Story.coverage(story).covered()).toEqual(
           expect.arrayContaining(["projection WalletLedger", "projection WalletCards"]),
         ),
       ),

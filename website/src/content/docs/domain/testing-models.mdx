@@ -173,17 +173,19 @@ A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it to 
 
 ## Find what no story covers
 
-`Story.coverage` collects what every story of a model ran, in this process: the commands each aggregate handled and the rejections it returned, the events each policy reacted to, the views and projections that received events, the sagas that started, and the external system calls. `missing()` lists what the model declares and no story ran:
+`Story.coverage` collects what the stories of one runner ran: the commands each aggregate handled and the rejections it returned, the events each policy reacted to, the views and projections that received events, the sagas that started, and the external system calls. `missing()` lists what the model declares and no story ran:
 
 ```typescript title="packages/domain/test/coverage.test.ts"
+const story = Story.make(Bank, { layer: BankPolicies, stub: [FraudCheck] });
+
 afterAll(() => {
-  expect(Story.coverage(Bank).missing()).toEqual([]);
+  expect(Story.coverage(story).missing()).toEqual([]);
 });
 ```
 
-Each line names one part, such as `command WithdrawMoney`, `rejection WithdrawMoney/InsufficientFunds`, `reaction FraudReview/MoneyWithdrawn`, `view AccountSummary`, `saga ExecuteTransfer` or `call FraudCheck.score`. Filter the lines to require only some kinds. Commands that policies and sagas send count too. The calls listed are every operation of each system a story stubbed or called.
+Each line names one part, such as `command WithdrawMoney`, `rejection WithdrawMoney/InsufficientFunds`, `reaction FraudReview/MoneyWithdrawn`, `view AccountSummary`, `saga ExecuteTransfer` or `call FraudCheck.score`. Filter the lines to require only some kinds. Commands that policies and sagas send count too. The calls listed are every operation of each system the runner stubs.
 
-The registry lives in memory and fills as stories run, so check it after the stories it should see, in the same process: an `afterAll` in the file that runs them works with any runner.
+Coverage fills as the runner's stories run, so read it after them, such as in an `afterAll`. Stories in several files count together when they import one shared runner.
 
 ## Trust a passing story
 

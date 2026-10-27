@@ -570,17 +570,21 @@ interface ObservedCall {
   expected: boolean;
 }
 
-/** What the stories of each model ran (see {@link coverage}). */
-const registry = new Map<
-  Model.Any,
-  { readonly ran: Set<string>; readonly systems: Map<string, ExternalSystem.Any> }
->();
+/** What the stories of one {@link make} runner ran (see {@link coverage}). */
+interface Ran {
+  readonly model: Model.Any & { readonly sagas: ReadonlyArray<Saga.Any> };
+  readonly lines: Set<string>;
+  /** The systems the runner stubs, for their `call System.op` lines. */
+  readonly systems: Map<string, ExternalSystem.Any>;
+}
 
-const registryOf = (model: Model.Any) => {
-  let entry = registry.get(model);
-  if (!entry) registry.set(model, (entry = { ran: new Set(), systems: new Map() }));
-  return entry;
-};
+const RanId: unique symbol = Symbol.for("@alchemy.run/domain/Story/Ran");
+
+/** Runs a story's steps against the model. Returned by {@link make}. */
+export interface Runner<E, R> {
+  (...steps: ReadonlyArray<Step>): Effect.Effect<void, E, R>;
+  readonly [RanId]: Ran;
+}
 
 /** What a story ran, as coverage lines. */
 const ranLines = (activity: ReadonlyArray<InMemory.Activity>) =>
@@ -601,61 +605,63 @@ const ranLines = (activity: ReadonlyArray<InMemory.Activity>) =>
     }
   });
 
-/** Which parts of a model the stories in this process ran. See {@link coverage}. */
+/** Which parts of a model a runner's stories ran. See {@link coverage}. */
 export interface Coverage {
   /**
    * Every part of the model no story ran, as `kind name` lines in the
    * model's order: `command C`, `rejection C/R` (C rejected with R),
    * `reaction P/E` (policy P handled event E), `view V`, `projection J`,
    * `saga S` (a run started), and `call System.op` for every op of a system
-   * a story stubbed or called.
+   * the runner stubs.
    */
   readonly missing: () => ReadonlyArray<string>;
-  /** Every line stories ran, in the order they first ran. */
+  /** Every line the stories ran, in the order they first ran. */
   readonly covered: () => ReadonlyArray<string>;
 }
 
 /**
  * Which commands, rejections, policy reactions, views, projections, sagas and
- * external system calls the stories of a model ran, collected across every
- * story this process ran. Check it after the stories, for example in a last
- * test or an `afterAll`, in the same process as the stories.
+ * external system calls the stories of one {@link make} runner ran, passed or
+ * failed. Read it after the stories, for example in an `afterAll`. Stories in
+ * several files count together when they share one runner module.
  *
  * **Example:** Require every command and rejection in a story
  * ```typescript
+ * const story = Story.make(Bank, { layer: BankPolicies });
+ *
  * afterAll(() => {
- *   const missing = Story.coverage(Bank).missing();
+ *   const missing = Story.coverage(story).missing();
  *   expect(missing.filter((line) => /^(command|rejection) /.test(line))).toEqual([]);
  * });
  * ```
  */
-const coverage = (model: Model.Any): Coverage => ({
-  covered: () => [...registryOf(model).ran],
-  missing: () => {
-    const { ran, systems } = registryOf(model);
-    const { aggregates, policies, views, projections } = model.definitions;
-    // `sagas` is a static of every Model class, not part of `Model.Any`.
-    const sagas = (model as { readonly sagas?: ReadonlyArray<Saga.Any> }).sagas ?? [];
-    const declared = [
-      ...aggregates.flatMap((aggregate) =>
-        aggregate.definition.commands.flatMap((command) => [
-          `command ${command.tag}`,
-          ...command.rejects.map((rejection) => `rejection ${command.tag}/${rejection.tag}`),
-        ]),
-      ),
-      ...policies.flatMap((policy) =>
-        policy.definition.on.map((event) => `reaction ${policy.policyName}/${event.tag}`),
-      ),
-      ...views.map((view) => `view ${view.viewName}`),
-      ...projections.map((projection) => `projection ${projection.projectionName}`),
-      ...sagas.map((saga) => `saga ${saga.sagaName}`),
-      ...[...systems.values()].flatMap((system) =>
-        Object.keys(system.ops).map((op) => `call ${system.systemName}.${op}`),
-      ),
-    ];
-    return [...new Set(declared)].filter((line) => !ran.has(line));
-  },
-});
+const coverage = (story: Runner<unknown, unknown>): Coverage => {
+  const { model, lines, systems } = story[RanId];
+  return {
+    covered: () => [...lines],
+    missing: () => {
+      const { aggregates, policies, views, projections } = model.definitions;
+      const declared = [
+        ...aggregates.flatMap((aggregate) =>
+          aggregate.definition.commands.flatMap((command) => [
+            `command ${command.tag}`,
+            ...command.rejects.map((rejection) => `rejection ${command.tag}/${rejection.tag}`),
+          ]),
+        ),
+        ...policies.flatMap((policy) =>
+          policy.definition.on.map((event) => `reaction ${policy.policyName}/${event.tag}`),
+        ),
+        ...views.map((view) => `view ${view.viewName}`),
+        ...projections.map((projection) => `projection ${projection.projectionName}`),
+        ...model.sagas.map((saga) => `saga ${saga.sagaName}`),
+        ...[...systems.values()].flatMap((system) =>
+          Object.keys(system.ops).map((op) => `call ${system.systemName}.${op}`),
+        ),
+      ];
+      return [...new Set(declared)].filter((line) => !lines.has(line));
+    },
+  };
+};
 
 /** Options for {@link make}. */
 interface StoryOptions<Policies, LE, LR, Systems> {
@@ -694,32 +700,31 @@ interface StoryOptions<Policies, LE, LR, Systems> {
  * );
  * ```
  */
-const make =
-  <
-    Name extends string,
-    Provided,
-    Policies,
-    LE = never,
-    LR = never,
-    Systems extends ExternalSystem.Any = never,
-  >(
-    domain: Model.ModelClass<Name, Provided, Policies>,
-    ...[options = {}]: [Policies] extends [never]
-      ? [options?: StoryOptions<Policies, LE, LR, Systems>]
-      : [options: StoryOptions<Policies, LE, LR, Systems> & { readonly layer: unknown }]
-  ) =>
-  (
-    ...steps: ReadonlyArray<Step>
-  ): Effect.Effect<
-    void,
-    StoryFailure | LE,
-    Exclude<LR, Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine>
-  > =>
+const make = <
+  Name extends string,
+  Provided,
+  Policies,
+  LE = never,
+  LR = never,
+  Systems extends ExternalSystem.Any = never,
+>(
+  domain: Model.ModelClass<Name, Provided, Policies>,
+  ...[options = {}]: [Policies] extends [never]
+    ? [options?: StoryOptions<Policies, LE, LR, Systems>]
+    : [options: StoryOptions<Policies, LE, LR, Systems> & { readonly layer: unknown }]
+): Runner<
+  StoryFailure | LE,
+  Exclude<LR, Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine>
+> => {
+  const ran: Ran = {
+    model: domain,
+    lines: new Set(),
+    systems: new Map((options.stub ?? []).map((system) => [system.systemName, system])),
+  };
+  const runner = (...steps: ReadonlyArray<Step>) =>
     Effect.gen(function* () {
       const clockState = { now: Date.parse("2026-01-01T00:00:00.000Z") };
       const platform = InMemory.make({ manual: true, now: () => clockState.now });
-      const ran = registryOf(domain);
-      for (const system of options.stub ?? []) ran.systems.set(system.systemName, system);
       const calls: Array<PendingCall> = [];
       const observed: Array<ObservedCall> = [];
       const stubbed = new Set((options.stub ?? []).map((system) => system.systemName));
@@ -736,7 +741,7 @@ const make =
               expected: false,
             };
             observed.push(entry);
-            ran.ran.add(`call ${system}.${op}`);
+            ran.lines.add(`call ${system}.${op}`);
             return yield* call.pipe(
               Effect.onExit((exit) =>
                 Effect.suspend(() => {
@@ -767,7 +772,7 @@ const make =
                         tag: undefined,
                         expected: false,
                       });
-                      ran.ran.add(`call ${system.systemName}.${op}`);
+                      ran.lines.add(`call ${system.systemName}.${op}`);
                       return yield* Deferred.await(deferred);
                     }),
                   ),
@@ -1282,7 +1287,7 @@ const make =
         // Record what ran, whether the story passed or failed.
         Effect.ensuring(
           Effect.sync(() => {
-            for (const line of ranLines(platform.control.activity)) ran.ran.add(line);
+            for (const line of ranLines(platform.control.activity)) ran.lines.add(line);
           }),
         ),
         Effect.catchTag("StepFailed", report),
@@ -1295,6 +1300,8 @@ const make =
       StoryFailure | LE,
       Exclude<LR, Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine>
     >;
+  return Object.assign(runner, { [RanId]: ran });
+};
 
 /**
  * Given / when / then specifications of a domain model, run against the real
@@ -1373,7 +1380,7 @@ const make =
  * **Example:** Require every command and rejection to appear in a story
  * ```typescript
  * afterAll(() => {
- *   const missing = Story.coverage(Bank).missing();
+ *   const missing = Story.coverage(story).missing();
  *   expect(missing.filter((line) => /^(command|rejection) /.test(line))).toEqual([]);
  * });
  * ```
