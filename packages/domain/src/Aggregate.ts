@@ -1,5 +1,6 @@
 import { CurrentActivity } from "alchemy/WorkflowEncoding";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import type * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -14,9 +15,10 @@ import * as RequestContext from "./RequestContext.ts";
 import type * as Telemetry from "./Telemetry.ts";
 
 /**
- * Instance type produced by a class.
+ * The instance type of a class: `InstanceOf<typeof NotOwner>` is `NotOwner`.
+ * Distributes over a union of classes.
  */
-export type Inst<C> = C extends abstract new (...args: any[]) => infer I ? I : never;
+export type InstanceOf<C> = C extends abstract new (...args: any[]) => infer I ? I : never;
 
 /**
  * Context passed to every `decide` handler.
@@ -63,6 +65,17 @@ export interface Receipt<Ev = unknown, Reply = unknown> {
   readonly reply: Reply;
 }
 
+/**
+ * What {@link Client.schedule} returns: the pending command's id, to
+ * `unschedule` it by, and when it is due.
+ */
+export interface ScheduleReceipt {
+  /** The command id: the one passed in `options`, or the one derived for it. */
+  readonly commandId: string;
+  /** When the command is due, on the platform's clock. */
+  readonly at: DateTime.Utc;
+}
+
 type ByTag<U, T> = Extract<U, { readonly tag: T }>;
 type ReplyTags<C extends Command.Any> = C extends {
   readonly reply: Schema.Top;
@@ -75,11 +88,11 @@ type IdSchema = Schema.Top & { readonly Type: string; readonly Encoded: string }
 
 /** What `decide` returns for a command: events, a rejection, or an Effect of either. */
 export type Decision<C extends Command.Any> =
-  | ReadonlyArray<Inst<C["events"][number]>>
-  | Inst<C["rejects"][number]>
+  | ReadonlyArray<InstanceOf<C["events"][number]>>
+  | InstanceOf<C["rejects"][number]>
   | Effect.Effect<
-      ReadonlyArray<Inst<C["events"][number]>>,
-      Inst<C["rejects"][number]>,
+      ReadonlyArray<InstanceOf<C["events"][number]>>,
+      InstanceOf<C["rejects"][number]>,
       Command.ContextOf<C>
     >;
 
@@ -116,7 +129,7 @@ export interface Definition<
   readonly decide: {
     readonly [T in C[number]["tag"]]: (
       state: S["Type"],
-      command: Inst<ByTag<C[number], T>>,
+      command: InstanceOf<ByTag<C[number], T>>,
       ctx: DecideContext<Id["Type"]>,
     ) => Decision<ByTag<C[number], T>>;
   };
@@ -129,7 +142,7 @@ export interface Definition<
   readonly evolve: {
     readonly [T in E["tag"]]: (
       state: S["Type"],
-      event: Inst<ByTag<E, T>>,
+      event: InstanceOf<ByTag<E, T>>,
       envelope: Envelope<Id["Type"]>,
     ) => S["Type"];
   };
@@ -141,7 +154,7 @@ export interface Definition<
   readonly reply?: {
     readonly [T in ReplyTags<C[number]>]: (
       state: S["Type"],
-      events: ReadonlyArray<Inst<E>>,
+      events: ReadonlyArray<InstanceOf<E>>,
     ) => NonNullable<ByTag<C[number], T>["reply"]>["Type"];
   };
   /**
@@ -166,6 +179,31 @@ export interface SendOptions {
   /** Idempotency key. A command with an already-seen id returns the original receipt. */
   readonly commandId?: string;
 }
+
+/**
+ * The instance already handled a command with this id, so it can no longer
+ * be scheduled or cancelled: a deadline that fired before it was cancelled,
+ * or a command id that was already sent.
+ */
+export class AlreadyExecuted extends Data.TaggedError("AlreadyExecuted")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly commandId: string;
+}> {}
+
+/** The scheduled command with this id was already cancelled. */
+export class AlreadyCancelled extends Data.TaggedError("AlreadyCancelled")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly commandId: string;
+}> {}
+
+/** No command was ever scheduled with this id on the instance. */
+export class NotScheduled extends Data.TaggedError("NotScheduled")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly commandId: string;
+}> {}
 
 /**
  * Options for {@link Client.schedule}: when to send, absolutely or after a delay.
@@ -248,13 +286,13 @@ export interface Client<Def extends AnyDefinition> {
    * Requires the context the command's middleware provides (e.g. the current
    * actor): an Api's middleware provides it, other senders provide it.
    */
-  readonly send: <Cmd extends Inst<Def["commands"][number]>>(
+  readonly send: <Cmd extends InstanceOf<Def["commands"][number]>>(
     target: Target<Def>,
     command: Cmd,
     options?: SendOptions,
   ) => Effect.Effect<
-    Receipt<Inst<Def["events"][number]>, ReplyOf<CommandClassOf<Def, Cmd>>>,
-    Inst<CommandClassOf<Def, Cmd>["rejects"][number]>,
+    Receipt<InstanceOf<Def["events"][number]>, ReplyOf<CommandClassOf<Def, Cmd>>>,
+    InstanceOf<CommandClassOf<Def, Cmd>["rejects"][number]>,
     Command.ContextOf<CommandClassOf<Def, Cmd>>
   >;
   /**
@@ -263,12 +301,25 @@ export interface Client<Def extends AnyDefinition> {
    * rejection when it fires; such a command reports a fact ("the approval
    * window closed") and records nothing when it no longer applies.
    * Scheduling again with the same command id replaces the earlier one.
+   * Returns the command id to `unschedule` it by, and when it is due. Fails with `AlreadyExecuted` when the instance already handled a command
+   * with that id.
    */
-  readonly schedule: <Cmd extends Inst<Schedulable<Def>>>(
+  readonly schedule: <Cmd extends InstanceOf<Schedulable<Def>>>(
     target: Target<Def>,
     command: Cmd,
     options: ScheduleOptions,
-  ) => Effect.Effect<void, never, Command.ContextOf<CommandClassOf<Def, Cmd>>>;
+  ) => Effect.Effect<ScheduleReceipt, AlreadyExecuted, Command.ContextOf<CommandClassOf<Def, Cmd>>>;
+  /**
+   * Cancel a pending scheduled command by the command id it was scheduled
+   * with. Once it succeeds, the command never runs. Fails with
+   * `AlreadyExecuted` when the command ran first, `AlreadyCancelled` when it
+   * was cancelled before, and `NotScheduled` when nothing was scheduled with
+   * that id.
+   */
+  readonly unschedule: (
+    target: Target<Def>,
+    commandId: string,
+  ) => Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled>;
   /** Read the current state of an instance. */
   readonly state: (target: Target<Def>) => Effect.Effect<Def["state"]["Type"]>;
 }
@@ -294,7 +345,11 @@ export interface ClientImpl {
     target: unknown,
     command: { readonly _tag: string },
     options: ScheduleOptions,
-  ) => Effect.Effect<void>;
+  ) => Effect.Effect<ScheduleReceipt, AlreadyExecuted>;
+  readonly unschedule: (
+    target: unknown,
+    commandId: string,
+  ) => Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled>;
   readonly state: (target: unknown) => Effect.Effect<unknown>;
 }
 
@@ -312,9 +367,9 @@ export type IdOf<A extends Any> = A["definition"]["id"]["Type"];
 /** The state type of an aggregate class. */
 export type StateOf<A extends Any> = A["definition"]["state"]["Type"];
 /** The event instance types of an aggregate class. */
-export type EventOf<A extends Any> = Inst<A["definition"]["events"][number]>;
+export type EventOf<A extends Any> = InstanceOf<A["definition"]["events"][number]>;
 /** The command instance types of an aggregate class. */
-export type CommandOf<A extends Any> = Inst<A["definition"]["commands"][number]>;
+export type CommandOf<A extends Any> = InstanceOf<A["definition"]["commands"][number]>;
 /** The requirement identifier of an aggregate class. */
 export type Identifier<A extends Any> = A extends Context.Key<infer I, unknown> ? I : never;
 
@@ -420,7 +475,8 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  * ```typescript
  * const accounts = yield* Account;
  * const { reply } = yield* accounts.send(accountId, new WithdrawMoney({ amount: 30 }));
- * yield* accounts.schedule(accountId, new SendStatement(), { after: "30 days" });
+ * yield* accounts.schedule(accountId, new SendStatement(), { after: "30 days", commandId: "statement" });
+ * yield* accounts.unschedule(accountId, "statement"); // cancel it while it is pending
  * ```
  *
  * @primitive

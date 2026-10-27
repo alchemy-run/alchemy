@@ -7,7 +7,7 @@ Stories check your model. To check what a client can do and see through an Api, 
 
 ## Test in process
 
-`testClient` calls the Api in the same process, through its real middleware. Sign each client in with `sessionClient`, and check every outcome a caller can get.
+`clientInProcess` calls the Api in the same process, through its real middleware. Sign each client in with `sessionClient`, and check every outcome a caller can get.
 
 ```typescript
 // packages/server/test/access.test.ts
@@ -37,9 +37,9 @@ const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
 );
 
 const asCustomer = (id: string) =>
-  CustomerApi.testClient.pipe(Effect.provide(sessionClient(`customer:${id}`)));
+  CustomerApi.clientInProcess.pipe(Effect.provide(sessionClient(`customer:${id}`)));
 const asAgent = (id: string) =>
-  SupportApi.testClient.pipe(Effect.provide(sessionClient(`agent:${id}`)));
+  SupportApi.clientInProcess.pipe(Effect.provide(sessionClient(`agent:${id}`)));
 
 // Each test gets a fresh bank.
 const inBank = <A, E>(effect: Effect.Effect<A, E, Scope.Scope | Layer.Success<typeof World>>) =>
@@ -66,7 +66,7 @@ it.live("only the owner, or an agent, reads an account", () =>
 it.live("a request without a session is unauthorized", () =>
   inBank(
     Effect.gen(function* () {
-      const nobody = yield* CustomerApi.testClient.pipe(Effect.provide(sessionClient("nobody")));
+      const nobody = yield* CustomerApi.clientInProcess.pipe(Effect.provide(sessionClient("nobody")));
       const refused = yield* nobody.AccountSummary.get(AccountId.make("c-1-main")).pipe(Effect.flip);
       expect(refused._tag).toBe("Unauthorized");
     }),
