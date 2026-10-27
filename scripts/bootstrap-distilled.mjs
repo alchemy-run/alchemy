@@ -186,16 +186,22 @@ function cloneUnchanged(mainCheckout, checkout, pin) {
 
 // Node's copyFileSync never clones on macOS: COPYFILE_FICLONE_FORCE fails with
 // ENOSYS and COPYFILE_FICLONE silently writes a full copy. `cp -c` calls
-// clonefile(2), so pass it each directory's files in a few large batches.
+// clonefile(2). A distilled checkout spans over a thousand directories, so one
+// shell runs a `cp -c` per directory batch, eight at a time. A failed batch
+// leaves files missing, which populate() rewrites.
 function cloneWithCp(sources) {
+  const quote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
+  const lines = [];
+  let jobs = 0;
   for (const [dir, files] of sources) {
     mkdirSync(dir, { recursive: true });
     for (let i = 0; i < files.length; i += 500) {
-      // A failed batch leaves files missing, which populate() rewrites.
-      const result = spawnSync("cp", ["-c", ...files.slice(i, i + 500), dir], { stdio: "ignore" });
-      if (result.status !== 0) return;
+      lines.push(`cp -c ${[...files.slice(i, i + 500), dir].map(quote).join(" ")} &`);
+      if (++jobs % 8 === 0) lines.push("wait");
     }
   }
+  lines.push("wait");
+  spawnSync("/bin/sh", ["-s"], { input: lines.join("\n"), stdio: ["pipe", "ignore", "ignore"] });
 }
 
 function cloneWithNode(sources) {
