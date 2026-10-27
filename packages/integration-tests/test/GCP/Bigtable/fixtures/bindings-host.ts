@@ -121,9 +121,23 @@ export default class BigtableBindingsHost extends GCP.Function<BigtableBindingsH
           return yield* checkConsistency({ body: { consistencyToken } });
         }),
         dropRowRange: dropRowRange({ body: { deleteAllDataFromTable: true } }),
+        // Drop first, so a rerun against a table that kept `extra` still adds it.
         addFamily: modifyColumnFamilies({
-          body: { modifications: [{ id: "extra", create: { gcRule: { maxNumVersions: 1 } } }] },
-        }),
+          body: {
+            modifications: [
+              { id: "extra", drop: true },
+              { id: "extra", create: { gcRule: { maxNumVersions: 1 } } },
+            ],
+          },
+        }).pipe(
+          Effect.catchTag("NotFound", () =>
+            modifyColumnFamilies({
+              body: {
+                modifications: [{ id: "extra", create: { gcRule: { maxNumVersions: 1 } } }],
+              },
+            }),
+          ),
+        ),
         dropFamily: modifyColumnFamilies({
           body: { modifications: [{ id: "extra", drop: true }] },
         }),

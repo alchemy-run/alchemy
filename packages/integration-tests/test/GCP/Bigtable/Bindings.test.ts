@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { expectAuditEntry } from "../auditLogs.ts";
 import { expectProbe } from "../bindingHost.ts";
 import BigtableBindingsHost, {
@@ -230,7 +231,19 @@ describe.skipIf(!!process.env.FAST)(
               baseUrl,
               `restoreTable?backup=${encodeURIComponent(backupName)}&id=${id}`,
             );
-            expect(restored.name).toContain(`${instanceName}/operations/`);
+            expect(restored.name).toContain(`${instanceName}/tables/${id}/`);
+            // The copy blocks deleting the cluster on destroy: remove both out of band.
+            yield* bigtable.deleteProjectsInstancesClustersBackups({ name: copied.name! });
+            yield* bigtable
+              .deleteProjectsInstancesTables({ name: `${instanceName}/tables/${id}` })
+              .pipe(
+                Effect.retry({
+                  // The restore is still running for a few seconds.
+                  while: (error) => error._tag === "BadRequest" || error._tag === "Conflict",
+                  schedule: Schedule.spaced("5 seconds"),
+                  times: 24,
+                }),
+              );
             yield* expectInstanceGrants;
           }),
         live,

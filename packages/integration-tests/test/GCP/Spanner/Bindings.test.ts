@@ -232,7 +232,7 @@ describe(
             const gone = yield* spanner
               .getProjectsInstancesDatabasesSessions({ name: sessionName })
               .pipe(Effect.flip);
-            expect(gone._tag).toEqual("NotFound");
+            expect(gone._tag).toEqual("SessionNotFound");
 
             expect(yield* databaseRoles(names.gen)).toEqual([
               "roles/spanner.databaseAdmin",

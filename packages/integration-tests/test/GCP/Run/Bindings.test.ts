@@ -3,6 +3,7 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
@@ -18,6 +19,8 @@ import RunBindingsHost, {
   Migrate,
   Workers,
 } from "./fixtures/bindings-host.ts";
+
+class StillExists extends Data.TaggedError("StillExists") {}
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -226,17 +229,19 @@ describe("Run Bindings", { tags: ["provider:gcp", "provider:gcp:run", "live"] },
 
           yield* expectProbe(baseUrl, `cancelExecution?execution=${id}`);
           yield* expectProbe(baseUrl, `deleteExecution?execution=${id}`);
+          // Deletion is a long-running operation: wait until the execution is gone.
           const gone = yield* cloudrun
             .getProjectsLocationsJobsExecutions({ name: executionName })
             .pipe(
-              Effect.flip,
-              Effect.repeat({
+              Effect.flatMap(() => Effect.fail(new StillExists())),
+              Effect.retry({
+                while: (error) => error._tag === "StillExists",
                 schedule: Schedule.spaced("3 seconds"),
-                until: (error) => error._tag === "NotFound",
                 times: 20,
               }),
+              Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
             );
-          expect(gone._tag).toEqual("NotFound");
+          expect(gone).toEqual("gone");
 
           const policy = yield* cloudrun.getIamPolicyProjectsLocationsJobs({
             resource: names.genJob,
