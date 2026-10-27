@@ -50,11 +50,8 @@ export const Envelope = Schema.Struct({
   correlationId: Schema.String,
 });
 
-/** An {@link Envelope} whose `id` is the aggregate's id type. */
-export interface Envelope<Id = string> extends Omit<typeof Envelope.Type, "id"> {
-  /** The id of the aggregate instance that committed the event. */
-  readonly id: Id;
-}
+/** An {@link Envelope} whose `id` is the aggregate's (branded) id. */
+export type Envelope<Id = string> = typeof Envelope.Type & { readonly id: Id };
 
 /**
  * The outcome of a successfully handled command.
