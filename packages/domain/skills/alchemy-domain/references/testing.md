@@ -151,10 +151,10 @@ const asCustomer = (id: string) =>
 it.live("only the owner may withdraw", () =>
   Effect.gen(function* () {
     const sam = yield* asCustomer("c-1");
-    const deposited = yield* sam.DepositMoney({ target: accountId, amount: 250 });
+    const deposited = yield* sam.DepositMoney(accountId, { amount: 250 });
     // deposited: { reply: { balance: 250 }, stream: "Account/...", version: 2 }
     const alex = yield* asCustomer("c-2");
-    const refused = yield* alex.WithdrawMoney({ target: accountId, amount: 10 }, mfa).pipe(Effect.flip);
+    const refused = yield* alex.WithdrawMoney(accountId, { amount: 10 }, mfa).pipe(Effect.flip);
     expect(refused._tag).toBe("NotOwner");
   }).pipe(Effect.scoped, Effect.provide(World)),
 );

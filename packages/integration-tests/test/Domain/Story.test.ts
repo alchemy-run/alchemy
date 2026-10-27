@@ -643,15 +643,16 @@ describe("Domain Story", () => {
       const counters = yield* Counter;
       yield* counters.send(c1, new Increment({ by: 3 }));
       const reset = yield* client.ResetCounter(
-        { target: "c-1" },
+        "c-1",
+        {},
         { headers: Headers.fromInput({ "x-operator": "sam" }) },
       );
       expect(reset).toEqual({ reply: { total: 0 }, stream: "Counter/c-1", version: 2 });
       const denied = yield* client
-        .ResetCounter({ target: "c-1" }, { headers: Headers.fromInput({ "x-operator": "guest" }) })
+        .ResetCounter("c-1", {}, { headers: Headers.fromInput({ "x-operator": "guest" }) })
         .pipe(Effect.flip);
       expect(denied._tag).toBe("NotAnOperator");
-      const anonymous = yield* client.ResetCounter({ target: "c-1" }).pipe(Effect.flip);
+      const anonymous = yield* client.ResetCounter("c-1").pipe(Effect.flip);
       expect(anonymous._tag).toBe("Unauthenticated");
     }).pipe(
       Effect.scoped,

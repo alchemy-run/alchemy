@@ -41,7 +41,7 @@ Policies, projections and external systems are never on an Api. They run inside 
 A command becomes a method that takes its target and input together, and returns the receipt with the reply. Its middleware runs first, and its aggregate's `decide` has the final say.
 
 ```typescript title="packages/server/test/apiEntries.ts"
-const { reply } = yield* bank.DepositMoney({ target: accountId, amount: 500 });
+const { reply } = yield* bank.DepositMoney(accountId, { amount: 500 });
 ```
 
 ### Views
@@ -171,7 +171,7 @@ See [Cloudflare Durable Objects](/domain/cloudflare) for how the model is hosted
 
 ## Call it with a typed client
 
-`Api.client` builds a client typed from the Api's entries. Each command is a method that takes the target and the input together. Each view or aggregate is a namespace with its reads.
+`Api.client` builds a client typed from the Api's entries. Each command is a method that takes the target, the input, and optional call options like `headers`. Each view or aggregate is a namespace with its reads.
 
 ```typescript
 // packages/domain/test/depositAndWatch.ts
@@ -183,7 +183,7 @@ import { CustomerApi } from "../src/CustomerApi.api.ts";
 export const depositAndWatch = Effect.gen(function* () {
   const bank = yield* CustomerApi.client;
   const accountId = AccountId.make("c-1-main");
-  const { reply } = yield* bank.DepositMoney({ target: accountId, amount: 1_000 });
+  const { reply } = yield* bank.DepositMoney(accountId, { amount: 1_000 });
   yield* Effect.log(`balance ${reply.balance}`);
   yield* bank.AccountSummary.watch(accountId).pipe(
     Stream.take(2),
@@ -213,7 +213,7 @@ import type { AccountId } from "@bank/domain/Account/Account.id";
 import { type CustomerClient, mfa } from "./flows.ts";
 
 export const withdraw = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
-  const receipt = yield* bank.WithdrawMoney({ target: accountId, amount: 2_000 }, mfa).pipe(
+  const receipt = yield* bank.WithdrawMoney(accountId, { amount: 2_000 }, mfa).pipe(
     Effect.catchTag("InsufficientFunds", (r) => Effect.fail(`only ${r.balance} available`)),
   );
   return receipt.reply.balance;
@@ -270,7 +270,7 @@ const asSystem = Layer.succeed(Session, (effect) =>
 
 export const depositFromWebhook = Effect.fn(function* (accountId: AccountId, amount: number) {
   const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem));
-  return yield* bank.DepositMoney({ target: accountId, amount });
+  return yield* bank.DepositMoney(accountId, { amount });
 }, Effect.scoped);
 ```
 

@@ -47,7 +47,7 @@ it.live("a customer registers and deposits", () =>
   Effect.gen(function* () {
     const sam = yield* CustomerApi.clientInProcess.pipe(Effect.provide(signedInAs(customer("c-1"))));
     const accountId = yield* register(sam, "c-1", "sam");
-    const { reply } = yield* sam.DepositMoney({ target: accountId, amount: 100 });
+    const { reply } = yield* sam.DepositMoney(accountId, { amount: 100 });
     expect(reply.balance).toBe(100);
   }).pipe(Effect.scoped, Effect.provide(BankInMemory)),
 );
