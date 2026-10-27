@@ -16,6 +16,7 @@ export {
   withMySqlExecutor,
   withPgClient,
   withPgExecutor,
+  type ConnectOptions,
   type Rows,
 } from "./Executors.ts";
 export {
