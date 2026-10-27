@@ -21,6 +21,14 @@ import { QueueSinkFunction, QueueSinkFunctionLive } from "./sink-handler";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
+// A queue's identity. Its other outputs (observed attributes and tags) change
+// with every update.
+const queueIdentity = (queue: { queueName: string; queueUrl: string; queueArn: string }) => ({
+  queueName: queue.queueName,
+  queueUrl: queue.queueUrl,
+  queueArn: queue.queueArn,
+});
+
 const provider = test.provider;
 const { test: adoptingTest } = Test.make({ providers: AWS.providers(), adopt: true });
 
@@ -115,13 +123,13 @@ for (const fifo of [false, true]) {
         expect(tags.Tags?.phase).toBe("30 seconds");
 
         const updated = yield* deployQueue("sqs:ReceiveMessage", true, "30 seconds");
-        expect(updated).toEqual(created);
+        expect(queueIdentity(updated)).toEqual(queueIdentity(created));
         yield* waitForQueuePolicy(updated.queueUrl, [
           explicit,
           boundStatement(created.queueArn, "sqs:ReceiveMessage"),
         ]);
         const unbound = yield* deployQueue(undefined, true, "60 seconds");
-        expect(unbound).toEqual(created);
+        expect(queueIdentity(unbound)).toEqual(queueIdentity(created));
         yield* waitForQueuePolicy(unbound.queueUrl, [explicit]);
         yield* waitForQueueAttributeMatch(unbound.queueUrl, {
           VisibilityTimeout: "60",
@@ -129,7 +137,7 @@ for (const fifo of [false, true]) {
         });
 
         const cleared = yield* deployQueue(undefined, false, "60 seconds");
-        expect(cleared).toEqual(created);
+        expect(queueIdentity(cleared)).toEqual(queueIdentity(created));
         yield* waitForQueueAttributePredicate(
           cleared.queueUrl,
           (attrs) => !attrs.Policy && !attrs.RedriveAllowPolicy,
@@ -279,7 +287,9 @@ describe.concurrent(
               const replacement = yield* deployQueue(!initialFifo, "30 seconds");
               expect(replacement.queue.queueName).toBe(initialFifo ? baseName : `${baseName}.fifo`);
               expect(replacement.queue.queueArn).not.toBe(original.queue.queueArn);
-              expect(replacement.reference).toEqual(original.reference);
+              expect(queueIdentity(replacement.reference)).toEqual(
+                queueIdentity(original.reference),
+              );
               yield* waitForQueueTags(
                 replacement.reference.queueUrl,
                 (tags) => tags.target === replacement.queue.queueArn,
@@ -303,7 +313,10 @@ describe.concurrent(
               ]);
               yield* assertQueueDeleted(original.queue.queueUrl);
               const updated = yield* deployQueue(!initialFifo, "45 seconds");
-              expect(updated).toEqual(replacement);
+              expect(queueIdentity(updated.queue)).toEqual(queueIdentity(replacement.queue));
+              expect(queueIdentity(updated.reference)).toEqual(
+                queueIdentity(replacement.reference),
+              );
               yield* waitForQueueAttributeMatch(updated.queue.queueUrl, {
                 VisibilityTimeout: "45",
               });
@@ -603,7 +616,7 @@ describe.concurrent(
           yield* SQS.deleteQueue({ QueueUrl: initial.queueUrl });
           yield* assertQueueDeleted(initial.queueUrl);
           const recovered = yield* deployQueue("60 seconds");
-          expect(recovered).toEqual(initial);
+          expect(queueIdentity(recovered)).toEqual(queueIdentity(initial));
           yield* waitForQueueAttributeMatch(recovered.queueUrl, {
             QueueArn: initial.queueArn,
             VisibilityTimeout: "60",
@@ -621,7 +634,7 @@ describe.concurrent(
           expect(tags.Tags?.["alchemy::id"]).toBe("RecoveryQueue");
 
           const unbound = yield* deployQueue("60 seconds", false);
-          expect(unbound).toEqual(recovered);
+          expect(queueIdentity(unbound)).toEqual(queueIdentity(recovered));
           yield* waitForQueueAttributePredicate(unbound.queueUrl, (attrs) => !attrs.Policy);
 
           yield* stack.destroy();

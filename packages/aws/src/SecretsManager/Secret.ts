@@ -524,7 +524,21 @@ export const SecretProvider = () =>
           }
 
           yield* session.note(secretArn);
-          const final = yield* secretsmanager.describeSecret({ SecretId: secretArn });
+          // DescribeSecret lags writes (and a just-restored secret), so poll
+          // until it reflects the description written above.
+          const final = yield* secretsmanager.describeSecret({ SecretId: secretArn }).pipe(
+            Effect.retry({
+              while: (e) => e._tag === "ResourceNotFoundException",
+              schedule: Schedule.spaced("1 second"),
+              times: 10,
+            }),
+            Effect.repeat({
+              until: (described) =>
+                news.description === undefined || described.Description === news.description,
+              schedule: Schedule.spaced("1 second"),
+              times: 10,
+            }),
+          );
           const attributes = yield* observeSecretAttributes({
             ...final,
             ARN: secretArn,
