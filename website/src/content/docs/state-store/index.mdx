@@ -193,7 +193,7 @@ For tests, Alchemy provides an in-memory state store so tests don't
 touch the filesystem:
 
 ```typescript
-import * as TestState from "alchemy/Test/TestState";
+import * as TestState from "@alchemy.run/test/TestState";
 
 // Seed with existing resource state
 const state = TestState.state({
@@ -203,7 +203,7 @@ const state = TestState.state({
 });
 ```
 
-The test harness (`alchemy/Test/Bun` and `alchemy/Test/Vitest`)
+The test harness (`@alchemy.run/test/Bun` and `@alchemy.run/test/Vitest`)
 handles state setup automatically.
 
 ## Writing your own state store

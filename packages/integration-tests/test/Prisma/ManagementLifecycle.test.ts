@@ -25,13 +25,13 @@ import type {
   SourceRepository as ApiSourceRepository,
 } from "@alchemy.run/prisma/Types";
 import { expect, it } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { ResourceContext } from "alchemy/ResourceContext";
-import * as Test from "alchemy/Test/Alchemy";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

@@ -141,10 +141,8 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@alchemy.run/test": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/vitest": "catalog:",
     "@oxc-project/types": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
@@ -164,16 +162,13 @@
     "tsx": "catalog:",
     "typescript": "catalog:",
     "uuid": "catalog:",
-    "vitest": "catalog:",
     "wrangler": "catalog:",
     "ws": "catalog:"
   },
   "peerDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@alchemy.run/test": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/vitest": "catalog:",
     "effect": "catalog:",
     "vite": "catalog:",
     "ws": "catalog:"
@@ -182,16 +177,10 @@
     "@alchemy.run/frontend-frameworks": {
       "optional": true
     },
-    "@alchemy.run/test": {
-      "optional": true
-    },
     "@effect/platform-bun": {
       "optional": true
     },
     "@effect/platform-node": {
-      "optional": true
-    },
-    "@effect/vitest": {
       "optional": true
     },
     "vite": {

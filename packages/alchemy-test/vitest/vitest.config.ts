@@ -12,11 +12,6 @@ const project = (hooks: "stack" | "list") => ({
 });
 
 export default defineConfig({
-  resolve: {
-    alias: {
-      "@": path.resolve(packageRoot, "src"),
-    },
-  },
   test: {
     root: packageRoot,
     include: ["vitest/**/*.test.ts"],

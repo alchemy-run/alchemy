@@ -3,8 +3,8 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { WorkerDomainConfigError } from "@alchemy.run/cloudflare/Workers/WorkerProvider";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

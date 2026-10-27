@@ -976,7 +976,7 @@ Compose a `Stack` that deploys the fixture, share one deploy across the file wit
 // Service.test.ts
 import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { expect } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Region } from "@alchemy.run/aws/Account";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as account from "@distilled.cloud/aws/account";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

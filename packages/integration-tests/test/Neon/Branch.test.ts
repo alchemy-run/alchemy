@@ -4,6 +4,7 @@ import { Project } from "@alchemy.run/neon/Project";
 import { waitForOperations } from "@alchemy.run/neon/Project";
 import { providers } from "@alchemy.run/neon/Providers";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import {
   createProjectBranch,
   deleteProjectBranch,
@@ -18,7 +19,6 @@ import {
 import { adopt, OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";

@@ -1,5 +1,6 @@
 import * as GitHub from "@alchemy.run/github";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Git from "@distilled.cloud/github/git";
 import * as Issues from "@distilled.cloud/github/issues";
 import * as Pulls from "@distilled.cloud/github/pulls";
@@ -7,7 +8,6 @@ import * as Repos from "@distilled.cloud/github/repos";
 import * as Users from "@distilled.cloud/github/users";
 import * as Output from "alchemy/Output";
 import { destroy } from "alchemy/RemovalPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { gh } from "./scope.ts";
 

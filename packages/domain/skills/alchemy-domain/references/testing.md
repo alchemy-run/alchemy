@@ -152,7 +152,7 @@ it.live("only the owner may withdraw", () =>
 
 ## Integration: the deployed stack
 
-At the root, deploy `alchemy.run.ts` with `alchemy/Test/Bun` and drive the deployed Api over HTTP and WebSocket. Keep it to one end-to-end flow. Stories carry the behavior.
+At the root, deploy `alchemy.run.ts` with `@alchemy.run/test/Bun` and drive the deployed Api over HTTP and WebSocket. Keep it to one end-to-end flow. Stories carry the behavior.
 
 ## Commands
 

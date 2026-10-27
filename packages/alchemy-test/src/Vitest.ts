@@ -1,5 +1,8 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 import { it } from "@effect/vitest";
+import type { AlchemyContext } from "alchemy/AlchemyContext";
+import type { CompiledStack, StackDefinition } from "alchemy/Stack";
+import type { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
@@ -9,9 +12,6 @@ import {
   beforeAll as vitestBeforeAll,
   beforeEach as vitestBeforeEach,
 } from "vitest";
-import type { AlchemyContext } from "../AlchemyContext.ts";
-import type { CompiledStack, StackDefinition } from "../Stack.ts";
-import type { Stage } from "../Stage.ts";
 import * as Core from "./Core.ts";
 
 export {

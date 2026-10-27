@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Alchemist from "alchemy/Alchemist";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";

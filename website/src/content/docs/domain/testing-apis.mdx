@@ -162,7 +162,7 @@ it.live("the CustomerApi round-trips over HTTP, including a streamed watch", () 
 
 ## Test a deployment
 
-The example's integration test deploys the whole bank with `alchemy/Test/Bun` and drives it over the network. A client that isn't a browser can set headers on its WebSockets, so it sends `Authorization` on each live read, as it does on every call.
+The example's integration test deploys the whole bank with `@alchemy.run/test/Bun` and drives it over the network. A client that isn't a browser can set headers on its WebSockets, so it sends `Authorization` on each live read, as it does on every call.
 
 ```typescript
 // packages/domain/test/liveClient.ts

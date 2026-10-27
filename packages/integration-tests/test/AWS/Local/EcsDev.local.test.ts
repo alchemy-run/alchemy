@@ -26,11 +26,11 @@ import { spawnSync } from "node:child_process";
  */
 import * as AWS from "@alchemy.run/aws";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Command from "alchemy/Command";
 import * as Output from "alchemy/Output";
 import { Stack } from "alchemy/Stack";
 import { State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import { initialCwd } from "alchemy/Util/Node";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
