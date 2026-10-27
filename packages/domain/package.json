@@ -53,14 +53,23 @@
     "build:package": "node scripts/build.ts"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
-    "typescript": "catalog:"
+    "foldkit": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "alchemy": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "foldkit": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "foldkit": {
+      "optional": true
+    }
   }
 }

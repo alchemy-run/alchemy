@@ -1,6 +1,6 @@
 # Design: a Foldkit adapter for Domain
 
-Status: proposal. No code yet. "PR sequence" lists the code PRs that would follow.
+Status: implementation in progress in PR #2700. Design and code share this branch; each adapter feature has its own commit.
 
 ## The problem
 
@@ -60,7 +60,7 @@ The adapter in this design needs no new Domain primitive.
 
 ## Placement
 
-`@alchemy.run/domain/foldkit`, an experimental subpath with `foldkit` as an optional peer. It is not re-exported from the package root.
+`@alchemy.run/domain/Foldkit`, an experimental subpath with `foldkit` as an optional peer. It is not re-exported from the package root.
 
 - Alchemy already couples to Foldkit: `Cloudflare.Website.Foldkit`, `packages/aws/src/Website/Foldkit.ts`, a Foldkit guide, and a Foldkit bank example.
 - The Domain client surface moves faster than Foldkit's.
@@ -70,7 +70,7 @@ foldkit-plus Phase 6 plans its own Domain adapter for its Remote layer. That is 
 
 ## Foldkit versions
 
-The adapter targets Foldkit `main`, where `Command.define` takes `execute`. On the Blocks branch (`codex/layers-and-submodels`, foldkit/foldkit#1655), `Command.define` forbids `execute`, takes a `handler` Layer, and checks construction requirements (`packages/foldkit/src/command/index.ts` at `f3be22cfe`, lines 25 to 27 and 391 to 418). A declaration fixture is pinned to `f3be22cfe` on the Blocks branch and to a SHA on `main`. A handler-Layer variant follows once #1655 merges.
+The adapter targets the workspace catalog's Foldkit `^0.169.0`, whose `Command.define` takes `execute`. Tests and declarations run against the installed release. The Blocks branch is outside v1.
 
 ## The adapter
 
@@ -97,6 +97,8 @@ For each command in `CustomerApi.commands`:
 `Bank.Message` types come from a mapped type over `CommandsOf<A>`, not from a runtime record, so each tag keeps its own `input`, `reply`, and Rejections. Declaration tests cover an empty input, a branded target, a Schema transform in the input, and a command with middleware.
 
 Headers such as an MFA code go through a client Layer or a config seam. They are never stored in a Message, because Messages are replayed in DevTools and Stories.
+
+`DomainFoldkit.next(commandIds)` returns `{ commandId, commandIds }`. `CommandHeaders` is an optional service whose `get(commandName)` reads headers at execution time.
 
 `commandId` must be unique and `update` must stay pure. `DomainFoldkit.CommandIds` is a Schema value `{ session, sent }` with a pure `next`. `session` comes from Flags, once per page load, so two tabs never share it, and a cached server render must not reuse it.
 
