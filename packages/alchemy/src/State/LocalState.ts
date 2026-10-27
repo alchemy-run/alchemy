@@ -13,6 +13,11 @@ import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import { State, StateStoreError, type StateService } from "./State.ts";
 import { encodeState, reviveState } from "./StateEncoding.ts";
 
+/** Owner read/write only: state files carry secrets. */
+const STATE_FILE_MODE = 0o600;
+/** Owner only: other users can't list or open anything below. */
+const STATE_DIR_MODE = 0o700;
+
 export const localState = () =>
   Layer.effect(
     State,
@@ -96,8 +101,10 @@ export const makeLocalState = () =>
     // Write state files atomically so a concurrent `get` (e.g. a parallel
     // test reading shared `.alchemy/state`) never observes a truncated,
     // mid-write file — which would otherwise surface as `JSON.parse("")` →
-    // "Unexpected end of JSON input".
-    const writeAtomic = (file: string, contents: string) => writeFileAtomic(fs, file, contents);
+    // "Unexpected end of JSON input". State holds secrets in plain JSON
+    // (Redacted values are stored unwrapped), so only the owner may read it.
+    const writeAtomic = (file: string, contents: string) =>
+      writeFileAtomic(fs, file, contents, STATE_FILE_MODE);
 
     // Parse a state file, tolerating an empty read. A zero-length file can
     // linger from a write that was interrupted before this atomic-write change
@@ -112,8 +119,12 @@ export const makeLocalState = () =>
       created.has(dir)
         ? Effect.succeed(void 0)
         : fs
-            .makeDirectory(dir, { recursive: true })
+            .makeDirectory(dir, { recursive: true, mode: STATE_DIR_MODE })
             .pipe(Effect.tap(() => Effect.sync(() => created.add(dir))));
+
+    // Files written before state was owner-only keep their old mode until
+    // rewritten; closing the root directory to other users covers them all.
+    yield* fs.chmod(stateDir, STATE_DIR_MODE).pipe(Effect.ignore);
 
     const state: StateService = {
       id: "local",

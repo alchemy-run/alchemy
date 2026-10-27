@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Pipeable } from "effect/Pipeable";
 import { AdoptPolicy } from "./AdoptPolicy.ts";
-import { toFqn } from "./FQN.ts";
+import { toFqn, validateFqn } from "./FQN.ts";
 import type { Input, InputProps, PropsInput } from "./Input.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
 import * as Output from "./Output.ts";
@@ -357,6 +357,7 @@ export function Resource<R extends ResourceLike>(
       const stack = yield* StackContext;
       const namespace = yield* CurrentNamespace;
       const fqn = toFqn(namespace, id);
+      yield* validateFqn(fqn, "Resource");
 
       // `remote()` opts resources out of local emulation during dev. The
       // captured Mode is either "live" (pinned) or undefined (run default).

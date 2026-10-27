@@ -56,6 +56,31 @@ describe("makeLocalState", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(PlatformServices)),
   );
 
+  it.effect.skipIf(process.platform === "win32")(
+    "state is readable only by its owner (it holds unwrapped secrets)",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const state = yield* makeLocalState();
+        const stack = "local-state-test-mode";
+        const stage = "test";
+        yield* state.set({
+          stack,
+          stage,
+          fqn: "secretive",
+          value: resource("secretive", { token: "s3cr3t" }),
+        });
+        yield* state.setOutput({ stack, stage, value: { token: "s3cr3t" } });
+        const mode = (file: string) =>
+          fs.stat(file).pipe(Effect.map((info) => (info.mode & 0o777).toString(8)));
+        expect(yield* mode(yield* statePath())).toBe("700");
+        expect(yield* mode(yield* statePath(stack, stage))).toBe("700");
+        expect(yield* mode(yield* statePath(stack, stage, "secretive.json"))).toBe("600");
+        expect(yield* mode(yield* statePath(stack, stage, "__stack_output__.json"))).toBe("600");
+        yield* state.deleteStack({ stack });
+      }).pipe(Effect.provide(PlatformServices)),
+  );
+
   it.effect("set/get roundtrip with list, listStacks and listStages", () =>
     Effect.gen(function* () {
       const state = yield* makeLocalState();

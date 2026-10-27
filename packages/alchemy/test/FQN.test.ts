@@ -1,8 +1,43 @@
 import { describe, expect, test } from "@alchemy.run/test";
-import { fromPath, FQN_SEPARATOR, parseFqn, toFqn, toPath } from "../src/FQN";
+import {
+  encodeFqn,
+  fromPath,
+  FQN_SEPARATOR,
+  invalidFqnReason,
+  parseFqn,
+  toFqn,
+  toPath,
+} from "../src/FQN";
 import type { NamespaceNode } from "../src/Namespace";
 
 describe("FQN", { tags: ["unit", "local"] }, () => {
+  describe("invalidFqnReason", () => {
+    test("accepts ids whose encoding no other id can produce", () => {
+      for (const fqn of ["Bucket", "My/Resource", "snake_case/id_1", "a/b/c", "x-y.z"]) {
+        expect(invalidFqnReason(fqn)).toBeUndefined();
+      }
+    });
+
+    test("refuses ids that could encode to another id's file name", () => {
+      // Colliding pairs: `My/Resource` stays valid, `My__Resource` is refused;
+      // `a/_b` and `a_/b` both encode to `a___b`, so both are refused.
+      expect(encodeFqn("My/Resource")).toEqual(encodeFqn("My__Resource"));
+      expect(invalidFqnReason("My/Resource")).toBeUndefined();
+      expect(encodeFqn("a/_b")).toEqual(encodeFqn("a_/b"));
+      for (const fqn of [
+        "My__Resource",
+        "a/_b",
+        "a_/b",
+        "_leading",
+        "trailing_",
+        // a store's own bookkeeping file
+        "__stack_output__",
+      ]) {
+        expect(invalidFqnReason(fqn)).toBeDefined();
+      }
+    });
+  });
+
   describe("toPath", () => {
     test("returns empty array for undefined namespace", () => {
       expect(toPath(undefined)).toEqual([]);

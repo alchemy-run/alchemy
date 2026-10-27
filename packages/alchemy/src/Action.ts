@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { Pipeable } from "effect/Pipeable";
 import { makeCaptureContext } from "./ActionRuntimeContext.ts";
-import { toFqn } from "./FQN.ts";
+import { toFqn, validateFqn } from "./FQN.ts";
 import type { Input } from "./Input.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
 import * as Output from "./Output.ts";
@@ -232,6 +232,7 @@ const registerAction = <Type extends string, In extends object | undefined, Out>
     const stack = yield* Stack;
     const namespace = yield* CurrentNamespace;
     const fqn = toFqn(namespace, id);
+    yield* validateFqn(fqn, "Action");
 
     const actions = (stack.actions ??= {});
     const existing = actions[fqn];

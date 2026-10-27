@@ -1,3 +1,5 @@
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
 import type { NamespaceNode } from "./Namespace.ts";
 
 /**
@@ -8,8 +10,53 @@ export const FQN_SEPARATOR = "/";
 /**
  * Encode an FQN for safe filesystem storage.
  * Replaces `/` (FQN separator) with `__` to avoid subdirectory creation.
+ *
+ * The encoding is one-to-one only for FQNs that {@link invalidFqnReason}
+ * accepts; resources and actions are refused at registration otherwise.
  */
 export const encodeFqn = (fqn: string): string => fqn.replaceAll(FQN_SEPARATOR, "__");
+
+/**
+ * Why `fqn` can't be stored, or `undefined` when it can.
+ *
+ * {@link encodeFqn} turns `/` into `__`, so an id containing `__`, or an `_`
+ * at either end of a segment, could encode to another resource's file name
+ * (`My/Resource` and `My__Resource` both become `My__Resource`) and the two
+ * would share one state row. It could also take the name of a store's own
+ * bookkeeping files (`__stack_output__`). Refusing those ids keeps every
+ * `__` in an encoded name a separator.
+ */
+export const invalidFqnReason = (fqn: string): string | undefined => {
+  if (fqn.includes("__")) return "it contains '__'";
+  if (/(^|\/)_|_($|\/)/.test(fqn)) return "an id starts or ends with '_'";
+  return undefined;
+};
+
+/**
+ * A logical id (or a namespace above it) can't be stored without colliding
+ * with another resource's state; see {@link invalidFqnReason}.
+ */
+export class InvalidLogicalIdError extends Data.TaggedError("InvalidLogicalIdError")<{
+  message: string;
+  /** Fully qualified logical id that was refused. */
+  fqn: string;
+}> {}
+
+/** Refuse an FQN whose state file name another FQN could share. */
+export const validateFqn = (fqn: string, kind: string) => {
+  const reason = invalidFqnReason(fqn);
+  return reason === undefined
+    ? Effect.void
+    : Effect.die(
+        new InvalidLogicalIdError({
+          message:
+            `${kind} '${fqn}' can't be stored: ${reason}. State files are named after ` +
+            `the id with '/' written as '__', so this id could share a file with ` +
+            `another one. Rename it (e.g. 'My__Bucket' -> 'MyBucket').`,
+          fqn,
+        }),
+      );
+};
 
 /**
  * Decode a filename back to FQN.
