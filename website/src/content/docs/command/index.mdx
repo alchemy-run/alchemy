@@ -59,13 +59,17 @@ set `destroyCommand`:
 yield* Command.Exec("migrate", {
   command: "npm run db:migrate",
   destroyCommand: "npm run db:backup",
+  // Referencing the database makes the backup run before it is deleted.
+  env: { DATABASE_URL: database.connectionUrl },
 });
 ```
 
-`destroyCommand` runs on delete with the `cwd`, `env`, `shell`, and
-`timeout` of the last deploy, before the resources this `Exec`
-depends on are destroyed. A non-zero exit fails the destroy, so make
-the command succeed when its target can already be gone.
+Delete runs the `destroyCommand` saved by the last deploy, with that
+deploy's `cwd`, `env`, `shell`, and `timeout`, before the resources
+this `Exec` references are destroyed. Editing it alone does not
+re-run `command`. A non-zero exit fails the destroy: make the command
+succeed when its target is already gone, and deploy a fix before
+destroying again.
 
 `Dev` runs a long-lived process scoped to the stack instance:
 
@@ -86,7 +90,8 @@ there is no quoting support unless you set `shell`. `Build`'s delete
 removes the output directory (`Exec`'s delete runs `destroyCommand`
 if set, and otherwise does nothing).
 `Redacted` env values are unwrapped at spawn time and kept out of
-logs and state.
+logs; state stores them as `Redacted`, so `destroyCommand` receives
+them.
 :::
 
 Pre-beta.58 `Build.Command` / `Build.DevServer` state converges

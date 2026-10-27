@@ -105,7 +105,8 @@ yield* Command.Exec("migrate", {
 ```
 
 `Redacted` env values are unwrapped at spawn time, so the secret
-reaches the child process without appearing in logs or state. The
+reaches the child process without appearing in logs. State stores
+them as `Redacted`. The
 full re-run matrix:
 
 - Unchanged inputs — the run is skipped.

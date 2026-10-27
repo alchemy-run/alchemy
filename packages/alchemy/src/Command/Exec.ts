@@ -18,10 +18,12 @@ export interface ExecProps extends CommandRunProps {
   memo?: MemoOptions | boolean;
   /**
    * Command to run when the resource is deleted, for a final backup or a
-   * deregistration call. It runs before the resources this `Exec` depends on
-   * are destroyed, with the `cwd`, `env`, `shell` and `timeout` of the last
-   * deploy. A non-zero exit fails the delete, so make the command succeed
-   * when its target can already be gone.
+   * deregistration call. Delete runs the `destroyCommand` saved by the last
+   * deploy, with that deploy's `cwd`, `env`, `shell` and `timeout`, before the
+   * resources this `Exec` references are destroyed. Editing it alone does not
+   * re-run `command`. A non-zero exit fails the delete: make the command
+   * succeed when its target is already gone, and deploy a fix before
+   * destroying again.
    */
   destroyCommand?: string;
 }
@@ -95,6 +97,8 @@ export interface Exec extends Resource<
  * yield* Exec("migrate", {
  *   command: "npm run db:migrate",
  *   destroyCommand: "npm run db:backup",
+ *   // Referencing the database makes the backup run before it is deleted.
+ *   env: { DATABASE_URL: database.connectionUrl },
  * });
  * ```
  *
@@ -102,20 +106,32 @@ export interface Exec extends Resource<
  */
 export const Exec = Resource<Exec>("Command.Exec");
 
-const hashInputs = (props: ExecProps) =>
+const hashInputFiles = (props: ExecProps) =>
   props.memo === false
     ? Effect.succeed(undefined)
     : hashDirectory({ cwd: props.cwd, memo: props.memo === true ? {} : props.memo });
 
-const hasSameInputs = (props: ExecProps, output: Exec["Attributes"]) =>
-  props.memo === false || output.hash.input === undefined
+const inputHashMatches = (props: ExecProps, output: Exec["Attributes"]) =>
+  output.hash.input === undefined
     ? Effect.succeed(false)
-    : Effect.map(hashInputs(props), (hash) => hash === output.hash.input);
+    : Effect.map(hashInputFiles(props), (hash) => hash === output.hash.input);
 
-const onlyDestroyCommandChanged = (olds: ExecProps | undefined, news: ExecProps) =>
-  olds !== undefined &&
-  olds.destroyCommand !== news.destroyCommand &&
-  !havePropsChanged({ ...olds, destroyCommand: undefined }, { ...news, destroyCommand: undefined });
+const withoutDestroyCommand = (props: ExecProps): ExecProps => ({
+  ...props,
+  destroyCommand: undefined,
+});
+
+// Only an update persists props, and `delete` reads `destroyCommand` from them.
+const onlyDestroyCommandChanged = (
+  olds: ExecProps | undefined,
+  news: ExecProps,
+  output: Exec["Attributes"],
+) =>
+  olds === undefined ||
+  olds.destroyCommand === news.destroyCommand ||
+  havePropsChanged(withoutDestroyCommand(olds), withoutDestroyCommand(news))
+    ? Effect.succeed(false)
+    : inputHashMatches(news, output);
 
 export const ExecProvider = () =>
   Provider.effect(
@@ -127,21 +143,16 @@ export const ExecProvider = () =>
         list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!output || !isResolved(news)) return undefined;
+          if (yield* onlyDestroyCommandChanged(olds, news, output)) {
+            return { action: "update", stables: ["hash"] };
+          }
           if (havePropsChanged(olds, news)) return { action: "update" };
-          return { action: (yield* hasSameInputs(news, output)) ? "noop" : "update" };
+          return { action: (yield* inputHashMatches(news, output)) ? "noop" : "update" };
         }),
         reconcile: Effect.fn(function* ({ news, olds, output, session }) {
-          // A noop never persists props and `delete` reads `destroyCommand`
-          // from state, so an edit to it alone is saved here without a re-run.
-          if (
-            output &&
-            onlyDestroyCommandChanged(olds, news) &&
-            (yield* hasSameInputs(news, output))
-          ) {
-            return output;
-          }
+          if (output && (yield* onlyDestroyCommandChanged(olds, news, output))) return output;
           yield* run(news, session);
-          return { hash: { input: yield* hashInputs(news) } };
+          return { hash: { input: yield* hashInputFiles(news) } };
         }),
         delete: Effect.fn(function* ({ olds, session }) {
           if (olds.destroyCommand === undefined) return;

@@ -1,4 +1,4 @@
-import { expect } from "@alchemy.run/test";
+import { assert, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -156,6 +156,73 @@ test.provider(
   { tags: ["unit", "local"], timeout: 30000 },
 );
 
+test.provider(
+  "destroyCommand runs before the resources it references are deleted",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+
+      yield* stack.destroy();
+
+      const cwd = yield* fs.makeTempDirectoryScoped();
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const build = yield* Command.Build("dist", {
+            command: "mkdir -p dist",
+            outdir: "dist",
+            shell: true,
+            cwd,
+            memo: false,
+          });
+          return yield* Command.Exec("check-dist", {
+            command: "true",
+            destroyCommand: "test -d dist",
+            shell: true,
+            cwd,
+            env: { OUTDIR: build.outdir },
+            memo: false,
+          });
+        }),
+      );
+
+      yield* stack.destroy();
+    }),
+  { tags: ["unit", "local"], timeout: 30000 },
+);
+
+test.provider(
+  "a destroyCommand-only edit does not re-run dependents",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fixture = yield* makeTemporaryFixture();
+      const program = (destroyCommand: string) =>
+        Effect.gen(function* () {
+          const migrate = yield* Command.Exec("migrate", {
+            command: "true",
+            destroyCommand,
+            shell: true,
+            cwd: fixture.cwd,
+            memo: { include: ["src/**"] },
+          });
+          return yield* Command.Exec("seed", {
+            command: "true",
+            shell: true,
+            cwd: fixture.cwd,
+            env: { MIGRATED: migrate.hash.input },
+            memo: { include: ["src/**"] },
+          });
+        });
+
+      yield* stack.deploy(program("echo A"));
+      const plan = yield* stack.plan(program("echo B"));
+      expect(plan.resources.migrate?.action).toBe("update");
+      expect(plan.resources.seed?.action).toBe("noop");
+    }),
+  { tags: ["unit", "local"], timeout: 60000 },
+);
+
 const destroyCommandEdits: Array<{
   title: string;
   memo: Command.ExecProps["memo"];
@@ -230,11 +297,10 @@ test.provider(
       yield* deploy("exit 3");
 
       const error = yield* Effect.flip(stack.destroy());
-      expect(error).toBeInstanceOf(DestroyError);
-      const failures = error instanceof DestroyError ? error.failures : [];
-      expect(failures[0]?.cause.reasons.find(Cause.isFailReason)?.error).toBeInstanceOf(
-        Command.CommandError,
-      );
+      assert(error instanceof DestroyError);
+      expect(error.failures.map((failure) => Cause.squash(failure.cause))).toEqual([
+        expect.any(Command.CommandError),
+      ]);
       expect(yield* readStateRow("failing-destroy")).toBeDefined();
 
       yield* deploy("true");
