@@ -26,7 +26,7 @@ export type GetWorkflowShape = (
  * Gets details of a single workflow.
  *
  * Bind it to a {@link Workflow} and provide {@link GetWorkflowHttp}. The
- * host gets `roles/workflows.viewer` on the bound resource.
+ * host gets `roles/workflows.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `workflows.get`

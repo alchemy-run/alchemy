@@ -4,3 +4,4 @@ export * from "./RepositoriesAttachment.ts";
 export * from "./RepositoriesPackagesTag.ts";
 export * from "./RepositoriesRule.ts";
 export * from "./Repository.ts";
+export * from "./generated.ts";

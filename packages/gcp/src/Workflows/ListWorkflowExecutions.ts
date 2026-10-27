@@ -26,7 +26,7 @@ export type ListWorkflowExecutionsShape = (
  * Returns a list of executions which belong to the workflow with the given name.
  *
  * Bind it to a {@link Workflow} and provide {@link ListWorkflowExecutionsHttp}. The
- * host gets `roles/workflows.invoker` on the bound resource.
+ * host gets `roles/workflows.invoker` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `executions.list`

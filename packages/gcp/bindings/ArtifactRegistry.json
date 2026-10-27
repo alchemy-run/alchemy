@@ -1,0 +1,39 @@
+{
+  "discovery": "artifactregistry-v1",
+  "module": "artifactregistry_v1",
+  "resources": {
+    "Repository": {
+      "pattern": "projects/*/locations/*/repositories/*",
+      "iamKind": "artifactregistry.repository"
+    }
+  },
+  "permissions": {
+    "artifactregistry.projects.locations.repositories.googetArtifacts.import": "artifactregistry.repositories.uploadArtifacts",
+    "artifactregistry.projects.locations.repositories.yumArtifacts.import": "artifactregistry.repositories.uploadArtifacts",
+    "artifactregistry.projects.locations.repositories.aptArtifacts.import": "artifactregistry.repositories.uploadArtifacts",
+    "artifactregistry.projects.locations.repositories.packages.versions.batchDelete": "artifactregistry.versions.delete",
+    "artifactregistry.projects.locations.repositories.exportArtifact": "artifactregistry.repositories.exportArtifacts"
+  },
+  "roles": {
+    "artifactregistry.repositories.get": "roles/artifactregistry.reader",
+    "artifactregistry.repositories.list": "roles/artifactregistry.reader",
+    "artifactregistry.repositories.downloadArtifacts": "roles/artifactregistry.reader",
+    "artifactregistry.repositories.uploadArtifacts": "roles/artifactregistry.writer"
+  },
+  "skip": {
+    "artifactregistry.projects.locations.repositories.prewarmArtifact": "checks a permission no predefined Artifact Registry role grants (preview)",
+    "artifactregistry.projects.locations.repositories.checkPrewarmedArtifact": "checks a permission no predefined Artifact Registry role grants (preview)",
+    "artifactregistry.projects.locations.repositories.removePrewarmedArtifact": "checks a permission no predefined Artifact Registry role grants (preview)",
+    "artifactregistry.projects.locations.repositories.googetArtifacts.upload": "a media upload; distilled sends only the request metadata, not the file body",
+    "artifactregistry.projects.locations.repositories.genericArtifacts.upload": "a media upload; distilled sends only the request metadata, not the file body",
+    "artifactregistry.projects.locations.repositories.yumArtifacts.upload": "a media upload; distilled sends only the request metadata, not the file body",
+    "artifactregistry.projects.locations.repositories.aptArtifacts.upload": "a media upload; distilled sends only the request metadata, not the file body",
+    "artifactregistry.projects.locations.repositories.kfpArtifacts.upload": "a media upload; distilled sends only the request metadata, not the file body",
+    "artifactregistry.projects.locations.repositories.goModules.upload": "a media upload; distilled sends only the request metadata, not the file body",
+    "artifactregistry.projects.locations.repositories.files.upload": "a media upload; distilled sends only the request metadata, not the file body",
+    "artifactregistry.projects.locations.repositories.prewarmedArtifacts.list": "checks a permission no predefined Artifact Registry role grants (preview)"
+  },
+  "names": {
+    "BatchVersionDelete": "BatchDeleteRepositoryPackageVersions"
+  }
+}

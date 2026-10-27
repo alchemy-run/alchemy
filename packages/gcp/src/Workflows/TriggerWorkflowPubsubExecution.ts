@@ -26,7 +26,7 @@ export type TriggerWorkflowPubsubExecutionShape = (
  * Triggers a new execution using the latest revision of the given workflow by a Pub/Sub push notification.
  *
  * Bind it to a {@link Workflow} and provide {@link TriggerWorkflowPubsubExecutionHttp}. The
- * host gets `roles/workflows.invoker` on the bound resource.
+ * host gets `roles/workflows.invoker` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `workflows.triggerPubsubExecution`

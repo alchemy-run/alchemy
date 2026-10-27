@@ -29,7 +29,7 @@ export type GetWorkflowExecutionShape = (
  * Returns an execution of the given name.
  *
  * Bind it to a {@link Workflow} and provide {@link GetWorkflowExecutionHttp}. The
- * host gets `roles/workflows.invoker` on the bound resource.
+ * host gets `roles/workflows.invoker` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `executions.get`

@@ -26,7 +26,7 @@ export type ListWorkflowRevisionsShape = (
  * Lists revisions for a given workflow.
  *
  * Bind it to a {@link Workflow} and provide {@link ListWorkflowRevisionsHttp}. The
- * host gets `roles/workflows.viewer` on the bound resource.
+ * host gets `roles/workflows.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `workflows.listRevisions`

@@ -26,7 +26,7 @@ export type GetJobShape = (
  * Gets a job.
  *
  * Bind it to a {@link Job} and provide {@link GetJobHttp}. The
- * host gets `roles/cloudscheduler.viewer` on the bound resource.
+ * host gets `roles/cloudscheduler.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `jobs.get`

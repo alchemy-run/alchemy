@@ -50,6 +50,12 @@ interface ResourceConfig {
   pattern: string;
   /** `GcpIamResourceKind` of the resource's own IAM policy; omit for project-level grants. */
   iamKind?: string;
+  /**
+   * Without a resource IAM policy, grant on the project under an IAM
+   * Condition matching only the bound resource and its children
+   * (Firestore databases).
+   */
+  scopeByCondition?: boolean;
   /** Resource type when it isn't `GCP.<Service>.<key>`. */
   type?: string;
 }
@@ -84,6 +90,12 @@ interface ServiceConfig extends Partial<ApiConfig> {
   names?: Record<string, string>;
   /** Method id → reason it is not a binding. */
   skip?: Record<string, string>;
+  /**
+   * Method id → a fixed path appended to the bound resource's name, for
+   * targets that aren't a child resource: Firestore queries run on
+   * `projects/p/databases/d/documents`.
+   */
+  append?: Record<string, string>;
   /**
    * Method id → `[separator, field]` appended to the target name, for
    * targets like `projects/p/schemas/s@<revisionId>`.
@@ -197,6 +209,7 @@ interface Variant {
   param: string;
   children: [string, string][];
   suffix?: [string, string];
+  append?: string;
   grantOn?: { attribute: string; iamKind?: string };
   projectGrant?: string;
   permission: string;
@@ -289,7 +302,8 @@ const classify = (options: {
         (r) =>
           r.segments.length <= target.segments.length &&
           r.segments.every((s, i) => s === target.segments[i]) &&
-          (target.segments.length - r.segments.length) % 2 === 0,
+          (config.append?.[id] !== undefined ||
+            (target.segments.length - r.segments.length) % 2 === 0),
       )
       .sort((a, b) => b.segments.length - a.segments.length)[0];
     if (resource === undefined) {
@@ -301,7 +315,7 @@ const classify = (options: {
       );
       continue;
     }
-    const extra = target.segments.slice(resource.segments.length);
+    const extra = config.append?.[id] ? [] : target.segments.slice(resource.segments.length);
     const children: [string, string][] = [];
     for (let i = 0; i < extra.length; i += 2) {
       children.push([extra[i]!, singular(extra[i]!)]);
@@ -319,7 +333,14 @@ const classify = (options: {
     const permission =
       config.permissions?.[id] ??
       [verb === "patch" ? "update" : verb, verb]
-        .flatMap((v) => [...scoped].reverse().map((c) => `${permissionService}.${c}.${v}`))
+        // Only the method's own collection: a parent's permission
+        // (`databases.create` for creating an index) is a different action.
+        // Some services lowercase it (`artifactregistry.dockerimages.get`).
+        .flatMap((v) =>
+          [scoped.at(-1)!, scoped.at(-1)!.toLowerCase()].map(
+            (c) => `${permissionService}.${c}.${v}`,
+          ),
+        )
         .find((p) => roles[p] !== undefined);
     if (permission === undefined || roles[permission] === undefined) {
       results.push({ id, kind: "needs-permission", reason: permission });
@@ -369,6 +390,7 @@ const classify = (options: {
       param: target.param,
       children,
       suffix: config.suffix?.[id],
+      append: config.append?.[id],
       grantOn: config.grantOn?.[id],
       projectGrant: config.projectGrant?.[id],
       permission,
@@ -398,7 +420,20 @@ const apiImports = (binding: Binding, type: boolean) =>
     .map(([ns, path]) => `import ${type ? "type " : ""}* as ${ns} from "${path}";`)
     .join("\n");
 
-const emitContract = (service: string, binding: Binding) => {
+/** Where a variant's role is granted, for the binding's JSDoc. */
+const grantScope = (config: ServiceConfig, variant: Variant) => {
+  const resource = config.resources[variant.resource]!;
+  if (variant.projectGrant) return `the project: ${variant.projectGrant}`;
+  if (variant.grantOn)
+    return `the resource the bound one names in \`${variant.grantOn.attribute}\``;
+  if (resource.iamKind) return "the bound resource";
+  if (resource.scopeByCondition) {
+    return "the project, under an IAM condition matching only the bound resource";
+  }
+  return "the project (the service has no per-resource IAM policy)";
+};
+
+const emitContract = (service: string, config: ServiceConfig, binding: Binding) => {
   const first = binding.variants[0]!;
   const moduleSource = first.api.moduleSource;
   const resourceTypes = [...new Set(binding.variants.map((v) => v.resource))];
@@ -449,7 +484,7 @@ export type ${binding.name}Shape = (
  * ${binding.description.replace(/\*\//g, "*\\/") || `Runtime binding for \`${first.methodId}\`.`}
  *
  * Bind it to a ${resourceDocs} and provide {@link ${binding.name}Http}. The
- * host gets ${grants} on ${first.projectGrant ? `the project: ${first.projectGrant}` : first.grantOn ? `the resource the bound one names in \`${first.grantOn.attribute}\`` : "the bound resource"}.
+ * host gets ${grants} on ${grantScope(config, first)}.
  *
  * ### Usage
  * **Example:** Call \`${first.methodId.split(".").slice(-2).join(".")}\`
@@ -473,12 +508,17 @@ const emitHttp = (service: string, config: ServiceConfig, binding: Binding) => {
     const resource = config.resources[v.resource]!;
     const type = resource.type ?? `GCP.${service}.${v.resource}`;
     const iamKind = v.projectGrant ? undefined : v.grantOn ? v.grantOn.iamKind : resource.iamKind;
-    const iam = iamKind ? `{ role: "${v.role}", on: "${iamKind}" }` : `{ role: "${v.role}" }`;
+    const iam = iamKind
+      ? `{ role: "${v.role}", on: "${iamKind}" }`
+      : resource.scopeByCondition && !v.projectGrant
+        ? `{ role: "${v.role}", scopeByCondition: true }`
+        : `{ role: "${v.role}" }`;
     const children =
       (v.children.length
         ? `\n      children: [${v.children.map(([c, f]) => `["${c}", "${f}"]`).join(", ")}],`
         : "") +
       (v.suffix ? `\n      suffix: ["${v.suffix[0]}", "${v.suffix[1]}"],` : "") +
+      (v.append ? `\n      append: "${v.append}",` : "") +
       (v.grantOn ? `\n      grantOn: "${v.grantOn.attribute}",` : "");
     return `    {
       resource: "${type}",
@@ -610,7 +650,7 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
     }
     yield* fs.writeFileString(
       path.join(serviceDir, `${binding.name}.ts`),
-      emitContract(service, binding),
+      emitContract(service, config, binding),
     );
     yield* fs.writeFileString(
       path.join(serviceDir, `${binding.name}Http.ts`),
