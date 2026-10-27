@@ -36,6 +36,7 @@ import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import type { RegionName } from "@distilled.cloud/aws/Region";
+import * as S3 from "@distilled.cloud/aws/s3";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -44,8 +45,13 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
+import { liveContext } from "../Local/fixtures/live.ts";
 import { FLOCI_ENDPOINT, rawS3GetObject } from "../Local/fixtures/raw.ts";
+import RemoteBindingFunctionLive, {
+  RemoteBindingFunction,
+} from "./fixtures/floci-remote-binding/handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -412,4 +418,75 @@ test.provider(
       yield* stack.destroy();
     }),
   { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 300_000 },
+);
+
+test.provider(
+  "a dev Function's bindings reach an Alchemy.remote() bucket in the real cloud",
+  (stack) =>
+    Effect.gen(function* () {
+      const client = yield* HttpClient.HttpClient;
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* RemoteBindingFunction;
+        }).pipe(Effect.provide(RemoteBindingFunctionLive)),
+      );
+      // The function itself is emulated.
+      expect(fn.functionUrl).toContain("localhost:4566");
+
+      const fetchText = (path: string) =>
+        client.get(`${fn.functionUrl!.replace(/\/$/, "")}${path}`).pipe(
+          Effect.flatMap((response) =>
+            Effect.map(response.text, (body) => ({ status: response.status, body })),
+          ),
+          Effect.retry({
+            while: (): boolean => true,
+            schedule: Schedule.spaced("2 seconds"),
+            times: 60,
+          }),
+        );
+
+      // First invoke pulls the Lambda runtime image; wait for the function to serve.
+      const info = yield* fetchText("/info").pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (res): boolean => res.status === 200,
+          times: 60,
+        }),
+      );
+      const { bucketName } = JSON.parse(info.body) as { bucketName: string };
+
+      // A freshly-minted live key takes a few seconds to propagate.
+      const put = yield* fetchText("/put?key=hello.txt&value=from-floci").pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (res): boolean => res.status === 200,
+          times: 30,
+        }),
+      );
+      expect(put.body).toBe("ok");
+      const get = yield* fetchText("/get?key=hello.txt");
+      expect(get).toEqual({ status: 200, body: "from-floci" });
+
+      // Out-of-band: the object landed in the REAL bucket.
+      const object = yield* S3.getObject({ Bucket: bucketName, Key: "hello.txt" }).pipe(
+        Effect.flatMap((result) => Stream.mkString(Stream.decodeText(result.Body!))),
+        Effect.provide(liveContext),
+      );
+      expect(object).toBe("from-floci");
+
+      yield* stack.destroy();
+
+      const gone = yield* S3.headBucket({ Bucket: bucketName }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        Effect.provide(liveContext),
+      );
+      expect(gone).toBe(true);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:s3", "local"],
+    timeout: 540_000,
+  },
 );

@@ -113,6 +113,7 @@ export const Service = <
       ).pipe(
         Effect.flatMap((resolved) =>
           f(...resolved).pipe(
+            Effect.provideService(Targets, targetsOf(resolved)),
             // Deploy-time data-plane routing: the client's calls must target
             // whatever data plane the bound resource actually lives on. In an
             // `alchemy dev` run a local-mode resource exists only on the
@@ -137,6 +138,28 @@ export const Service = <
     );
   return taggedFunction(tag as any, callable) as unknown as Self;
 };
+
+/**
+ * The resources the binding being built targets: the resource arguments of
+ * the `.bind(...)` call whose implementation is running. Provided at deploy
+ * AND inside a deployed Function/Worker, so an implementation can route its
+ * client per bound resource at runtime (e.g. AWS bindings on a locally
+ * emulated host reaching an `Alchemy.remote()` resource in the real cloud).
+ * Empty outside a bind.
+ */
+export const Targets = Context.Reference<readonly ResourceLike[]>("alchemy/Binding/Targets", {
+  defaultValue: () => [],
+});
+
+/**
+ * Bind arguments are the capability's target resources by convention — the
+ * top level plus one array level (multi-resource bindings like
+ * ExecuteTransaction take tuples of resources).
+ */
+const targetsOf = (args: readonly unknown[]): ResourceLike[] =>
+  args.flatMap((arg): ResourceLike[] =>
+    Array.isArray(arg) ? arg.filter(isResource) : isResource(arg) ? [arg] : [],
+  );
 
 /**
  * Route a binding client's invocations to the data plane its bound
@@ -165,12 +188,7 @@ const routeClientDataPlane = (
 ): Effect.Effect<any> =>
   Effect.suspend(() => {
     if (globalThis.__ALCHEMY_RUNTIME__) return Effect.succeed(client);
-    // Bind arguments are the capability's target resources by convention —
-    // scan the top level plus one array level (multi-resource bindings like
-    // ExecuteTransaction take tuples of resources).
-    const resources = resolvedArgs.flatMap((arg): ResourceLike[] =>
-      Array.isArray(arg) ? arg.filter(isResource) : isResource(arg) ? [arg] : [],
-    );
+    const resources = targetsOf(resolvedArgs);
     // Account-scoped clients (no resource among the args) need no routing:
     // the ambient environment is already mode-aware — a dev run's ambient IS
     // the emulator (see AWS/Providers.ts), a deploy's is the live chain.

@@ -175,6 +175,17 @@ const secret = yield* AWS.SecretsManager.Secret("ProdSecret", { ... })
   .pipe(Alchemy.remote());
 ```
 
+A local Function bound to a remote resource reaches it in the real
+cloud. Alchemy creates an IAM user and role in your account for that
+Function, grants the binding's permissions on the role, and the
+binding signs its calls with them:
+
+```typescript
+const bucket = yield* AWS.S3.Bucket("Uploads").pipe(Alchemy.remote());
+// inside a local Lambda: writes land in the real bucket
+const putObject = yield* AWS.S3.PutObject(bucket);
+```
+
 If a remote resource needs credentials you don't have,
 `alchemy dev` tells you before touching anything:
 
