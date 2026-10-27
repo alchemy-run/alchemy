@@ -1,7 +1,7 @@
 import { makeD1MigrationExecutor } from "@alchemy.run/cloudflare/D1/ApplyMigrations";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Retry from "@distilled.cloud/cloudflare/Retry";
-import { ServiceUnavailable } from "@distilled.cloud/core/errors";
+import { GatewayTimeout, ServiceUnavailable, TooManyRequests } from "@distilled.cloud/core/errors";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
@@ -9,7 +9,7 @@ import * as Ref from "effect/Ref";
 // D1 can run a batch and still fail its reply. Resending it runs the
 // migration's DDL twice (#1889), so the batch must not retry transient errors.
 describe("makeD1MigrationExecutor", () => {
-  it.effect("retries a transient error on query but not on batch", () =>
+  it.effect("query keeps the default retry policy; batch does not retry", () =>
     Effect.gen(function* () {
       const policies: Array<Option.Option<Retry.Policy>> = [];
       const executor = makeD1MigrationExecutor(() =>
@@ -30,7 +30,13 @@ describe("makeD1MigrationExecutor", () => {
       const policy = Option.getOrThrow(batch!);
       const options =
         typeof policy === "function" ? policy(yield* Ref.make<unknown>(undefined)) : policy;
-      expect(options.while?.(new ServiceUnavailable({ message: "lost reply" }))).toBe(false);
+      for (const error of [
+        new ServiceUnavailable({ message: "lost reply" }),
+        new GatewayTimeout({ message: "lost reply" }),
+        new TooManyRequests({ message: "rate limited" }),
+      ]) {
+        expect(options.while?.(error)).toBe(false);
+      }
     }),
   );
 });
