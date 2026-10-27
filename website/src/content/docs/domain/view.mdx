@@ -169,17 +169,19 @@ A `where` filter narrows any read, like only deposits over a threshold. A filter
 
 ## Know when a live read is current
 
-`events` sends the key's history, then new entries as they're recorded. Pass `caughtUp: true` to get a `CaughtUp` frame between the two: every entry up to its `cursor` has arrived, so the screen now shows the key's current state, and it can stop showing "loading". Resume a dropped feed with `after: cursor`: nothing arrives twice, and nothing is missed.
+`events` sends the key's history, then a `CaughtUp` frame, then new entries as they're recorded. Once `CaughtUp` arrives, the screen shows the key's current state and can stop showing "loading".
 
 ```typescript
-yield* bank.Statement.events(accountId, { after: cursor, caughtUp: true }).pipe(
+yield* bank.Statement.events(accountId).pipe(
   Stream.runForEach((frame) =>
-    Domain.View.isCaughtUp(frame) ? markLive(frame.cursor) : addLine(frame),
+    Domain.Read.isCaughtUp(frame) ? markLive(frame.cursor) : addLine(frame),
   ),
 );
 ```
 
-`watch` with `withCursor: true` gives each state with its cursor (`{ state, cursor }`), so a screen that watches the state can later follow `events` from where the state was. Over `protocolWebSocket`, a read that reconnects sends `CaughtUp` again after the entries it missed.
+`Stream.filter(Domain.Read.isEvent)` drops the frame when you don't need it.
+
+`watch` sends each state with its cursor, `{ state, cursor }`. Pass a cursor as `after` to `events` and the feed starts right after it: nothing arrives twice, and nothing is missed. That's how a screen that rendered a watched state follows the events from there, and how a dropped feed resumes from its last `CaughtUp`. Over `protocolWebSocket`, a read that reconnects sends `CaughtUp` again after the entries it missed.
 
 ## Decide who may read it
 

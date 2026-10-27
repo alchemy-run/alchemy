@@ -103,6 +103,7 @@ A client can read an instance's history directly, then keep receiving new events
 
 ```typescript
 // packages/server/test/followAccount.ts
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { AccountId } from "@bank/domain/Account/Account.id";
@@ -110,6 +111,7 @@ import type { CustomerClient } from "./flows.ts";
 
 export const followAccount = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
   yield* bank.Account.events(accountId).pipe(
+    Stream.filter(Domain.Read.isEvent),
     Stream.runForEach(({ event, envelope }) =>
       Effect.log(`#${envelope.seq} ${event._tag} (command ${envelope.commandId})`),
     ),
@@ -117,6 +119,6 @@ export const followAccount = Effect.fn(function* (bank: CustomerClient, accountI
 });
 ```
 
-`events` replays from the beginning, then continues live. Pass `after` with a `seq` to resume from a position you've already seen.
+`events` replays from the beginning, sends a `CaughtUp` frame, then continues live. `Domain.Read.isEvent` keeps only the events. Pass `after` with a `seq` to resume from a position you've already seen.
 
 Next, [Aggregate](/domain/aggregate) puts commands and events together.

@@ -883,7 +883,7 @@ const build = (
  * const { reply } = yield* bank.DepositMoney({ target: accountId, amount: 1_000 });
  * const summary = yield* bank.AccountSummary.get(accountId);
  * yield* bank.AccountSummary.watch(accountId).pipe(
- *   Stream.runForEach((s) => Effect.log(s?.balance)),
+ *   Stream.runForEach(({ state }) => Effect.log(state?.balance)),
  * );
  * ```
  *

@@ -69,7 +69,7 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
               const bank = yield* CustomerApi.Client;
               return bank.AccountSummary.watch(accountId);
             })).pipe(
-              Stream.map((summary) => Message.GotBalance({ balance: summary?.balance ?? null })),
+              Stream.map(({ state }) => Message.GotBalance({ balance: state?.balance ?? null })),
               Stream.catch((error) => Stream.succeed(Message.FailedWatch({ reason: error._tag }))),
             )
           : Stream.empty,
@@ -80,7 +80,7 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
 
 Watch state with `View.watch(key)`, and watch emitted events with `View.events(key)` (e.g. statement lines). A failed `validate` ends the watch with its rejection.
 
-Pass `caughtUp: true` to `View.events` to get a `CaughtUp { cursor }` frame after the history (`Domain.View.isCaughtUp(frame)`): show the feed as live only then, and resume a dropped feed with `after: cursor`. `View.watch(key, { withCursor: true })` gives `{ state, cursor }`.
+`watch` sends `{ state, cursor }`; `events` sends the history, a `CaughtUp { cursor }` frame (`Domain.Read.isCaughtUp(frame)`), then live entries. Show the feed as live once `CaughtUp` arrives, drop it with `Stream.filter(Domain.Read.isEvent)`, and pass a cursor as `after` to resume with nothing twice. Aggregates and streams read the same way.
 
 ## Tracing from the browser
 

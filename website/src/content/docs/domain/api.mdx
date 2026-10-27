@@ -46,7 +46,7 @@ const { reply } = yield* bank.DepositMoney({ target: accountId, amount: 500 });
 
 ### Views
 
-A view becomes a namespace with four reads: `get` for the current state, `watch` for the state and every change, `events` for its emitted events, history first, and `list` for a page of them. `get` also takes `atLeast`, to read your own write. Its middleware and `validate` decide who may read which key, on every read and on every change while a client watches.
+A view becomes a namespace with four reads: `get` for the current state, `watch` for the state and every change, each with its cursor, `events` for its emitted events (history, a `CaughtUp` frame, then live), and `list` for a page of them. Streams and aggregates send the same shapes; see [Know when a live read is current](/domain/view#know-when-a-live-read-is-current). `get` also takes `atLeast`, to read your own write. Its middleware and `validate` decide who may read which key, on every read and on every change while a client watches.
 
 ```typescript title="packages/server/test/apiEntries.ts"
 const summary = yield* bank.AccountSummary.get(accountId);
@@ -79,7 +79,7 @@ read: {
 
 ```typescript title="packages/server/test/apiEntries.ts"
 const account = yield* bank.Account.get(accountId);
-const history = bank.Account.events(accountId, { after: 0 });
+const history = bank.Account.events(accountId, { after: "0" });
 ```
 
 Reading an aggregate directly is handy for an account's own screen. For anything shaped for a question, like a statement or a dashboard, prefer a view: it keeps the aggregate's state free to change with its rules.
@@ -187,7 +187,7 @@ export const depositAndWatch = Effect.gen(function* () {
   yield* Effect.log(`balance ${reply.balance}`);
   yield* bank.AccountSummary.watch(accountId).pipe(
     Stream.take(2),
-    Stream.runForEach((summary) => Effect.log(`balance is now ${summary?.balance}`)),
+    Stream.runForEach(({ state }) => Effect.log(`balance is now ${state?.balance}`)),
   );
 });
 ```

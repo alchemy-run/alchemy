@@ -201,7 +201,7 @@ it.live("a watch ends with NotOwner when support reassigns the account", () =>
       yield* support.ChangeOwner({ target: accountId, customerId: CustomerId.make("c-2") });
 
       const [first, second] = yield* Fiber.join(updates);
-      expect(first).toMatchObject({ _tag: "Success", success: { balance: 0 } });
+      expect(first).toMatchObject({ _tag: "Success", success: { state: { balance: 0 } } });
       expect(second).toMatchObject({ _tag: "Failure", failure: { _tag: "NotOwner" } });
     }),
   ),

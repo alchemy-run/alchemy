@@ -13,7 +13,7 @@ Every command can carry a `commandId` you choose. The events it causes carry the
 
 ```typescript
 // packages/web/src/Deposits.ts
-import type * as Domain from "@alchemy.run/domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -154,6 +154,7 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
             return bank.Statement.events(accountId);
           }),
         ).pipe(
+          Stream.filter(Domain.Read.isEvent),
           Stream.map(({ event, envelope }) =>
             Message.GotLine({ commandId: envelope.commandId, line: event }),
           ),

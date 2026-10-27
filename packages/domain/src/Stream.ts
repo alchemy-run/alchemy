@@ -168,7 +168,9 @@ export interface StreamKey<Name extends string> {
  * **Example:** Through an Api
  * ```typescript
  * const latest = yield* bank.AccountCard.peek(accountId);
- * yield* bank.AccountCard.watch(accountId).pipe(Stream.runForEach((card) => Effect.log(card)));
+ * yield* bank.AccountCard.watch(accountId).pipe(
+ *   Stream.runForEach(({ state: card }) => Effect.log(card)),
+ * );
  * ```
  *
  * @primitive
