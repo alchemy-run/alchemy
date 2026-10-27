@@ -3,6 +3,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
 import { packageWebsiteArtifact, type WebsiteArtifactProps } from "./Artifact.ts";
 
 NodeRuntime.runMain(
@@ -16,5 +17,5 @@ NodeRuntime.runMain(
     const props = yield* Effect.try(() => JSON.parse(source) as WebsiteArtifactProps);
     const { archive } = yield* packageWebsiteArtifact(props);
     yield* fs.writeFile(outputPath, archive);
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer), Effect.provide(FetchHttpClient.layer)),
+  }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer))),
 );

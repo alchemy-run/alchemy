@@ -1879,15 +1879,18 @@ export const ingestPackFrom = (
         const speculate = (start: number) =>
           Effect.gen(function* () {
             const head = bytesFrom(start, Math.min(start + 32, availableEnd()));
-            let need = start + 64;
-            try {
-              const h = decodeTypeSize(head, 0);
-              // zlib's worst case is ~0.1% + a few bytes; deltas carry an
-              // offset varint before their stream.
-              need = start + h.next + Math.ceil(h.size * 1.001) + 80;
-            } catch {
+            let need = yield* Effect.try({
+              try: () => {
+                const h = decodeTypeSize(head, 0);
+                // zlib's worst case is ~0.1% + a few bytes; deltas carry an
+                // offset varint before their stream.
+                return start + h.next + Math.ceil(h.size * 1.001) + 80;
+              },
+              catch: (error) => PackIngestError.make({ reason: String(error) }),
+            }).pipe(
               // Header cut by the received edge: wait for more below.
-            }
+              Effect.orElseSucceed(() => start + 64),
+            );
             while (true) {
               const end = Math.min(need, availableEnd());
               const bytes = bytesFrom(start, end);
@@ -2244,8 +2247,9 @@ export const ingestPackFrom = (
             current.items.push(r);
             current.bytes += delta.length;
           }
-          const resolved = yield* Effect.all(
-            batches.map((batch) =>
+          const resolved = yield* Effect.forEach(
+            batches,
+            (batch) =>
               hasher
                 .resolveDeltas(batch.bases, batch.jobs, {
                   maxObjectSize: MAX_OBJECT_SIZE,
@@ -2260,7 +2264,6 @@ export const ingestPackFrom = (
                   Effect.mapError(asIngest),
                   Effect.map((results) => ({ batch, results })),
                 ),
-            ),
             { concurrency: hasher.concurrency ?? HASH_CONCURRENCY },
           );
           for (const { batch, results } of resolved) {
@@ -2530,14 +2533,10 @@ export const ingestPack = (
 
     for (let i = 0; i < count; i++) {
       const entryStart = offset;
-      let header;
-      try {
-        header = decodeTypeSize(pack, offset);
-      } catch (error) {
-        return yield* PackIngestError.make({
-          reason: `entry ${i}: ${String(error)}`,
-        });
-      }
+      const header = yield* Effect.try({
+        try: () => decodeTypeSize(pack, offset),
+        catch: (error) => PackIngestError.make({ reason: `entry ${i}: ${String(error)}` }),
+      });
       if (!isDeltaType(header.type)) {
         if (header.size > MAX_OBJECT_SIZE) {
           return yield* PackIngestError.make({ reason: "object too large" });
@@ -2576,14 +2575,10 @@ export const ingestPack = (
         let baseOffset: number | undefined;
         let baseOid: Oid | undefined;
         if (header.type === 6) {
-          let decoded;
-          try {
-            decoded = decodeOfsDeltaOffset(pack, header.next);
-          } catch (error) {
-            return yield* PackIngestError.make({
-              reason: `entry ${i}: ${String(error)}`,
-            });
-          }
+          const decoded = yield* Effect.try({
+            try: () => decodeOfsDeltaOffset(pack, header.next),
+            catch: (error) => PackIngestError.make({ reason: `entry ${i}: ${String(error)}` }),
+          });
           baseOffset = entryStart - decoded.value;
           if (baseOffset < 12) {
             return yield* PackIngestError.make({

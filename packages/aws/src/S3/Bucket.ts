@@ -644,8 +644,9 @@ export const BucketProvider = () =>
             yield* Effect.logInfo(
               `S3 Bucket delete: aborting ${inProgress.length} in-progress multipart upload(s) in ${bucketName}`,
             );
-            yield* Effect.all(
-              inProgress.map((u) =>
+            yield* Effect.forEach(
+              inProgress,
+              (u) =>
                 s3
                   .abortMultipartUpload({
                     Bucket: bucketName,
@@ -655,7 +656,6 @@ export const BucketProvider = () =>
                   // Already aborted/completed concurrently — a race, not a
                   // failure.
                   .pipe(Effect.catchTag("NoSuchUpload", () => Effect.void)),
-              ),
               { concurrency: 8 },
             );
           }

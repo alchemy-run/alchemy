@@ -35,7 +35,7 @@ export const encodeImageSet = (pins: readonly ContainerImagePin[]): string | und
 
 export const decodeImageSet = (raw: string | undefined): ContainerImagePin[] | undefined => {
   if (raw === undefined) return undefined;
-  const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(ImageSet))(raw);
+  const decoded = Schema.decodeOption(Schema.fromJsonString(ImageSet))(raw);
   if (!Option.isSome(decoded)) return undefined;
   const pins = decoded.value;
   return valid(pins) ? canonical(pins) : undefined;

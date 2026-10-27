@@ -479,10 +479,8 @@ const executePlan = Effect.fn(function* (
   const allNodes: Record<string, Apply | ActionApply> = { ...plan.resources, ...plan.actions };
 
   const ready = Object.fromEntries(
-    yield* Effect.all(
-      Object.keys(allNodes).map((fqn) =>
-        Effect.map(Deferred.make<void>(), (d) => [fqn, d] as const),
-      ),
+    yield* Effect.forEach(Object.keys(allNodes), (fqn) =>
+      Effect.map(Deferred.make<void>(), (d) => [fqn, d] as const),
     ),
   ) as Record<string, Deferred.Deferred<void>>;
 
@@ -491,50 +489,48 @@ const executePlan = Effect.fn(function* (
   // precreate stubs do NOT signal `readyStable`, so any consumer that
   // requires stable inputs (e.g. Tasks) waits past the precreate phase.
   const readyStable = Object.fromEntries(
-    yield* Effect.all(
-      Object.keys(allNodes).map((fqn) =>
-        Effect.map(Deferred.make<void>(), (d) => [fqn, d] as const),
-      ),
+    yield* Effect.forEach(Object.keys(allNodes), (fqn) =>
+      Effect.map(Deferred.make<void>(), (d) => [fqn, d] as const),
     ),
   ) as Record<string, Deferred.Deferred<void>>;
 
   const waitForDeps = (downstreamFqn: string, fqns: string[]) =>
-    Effect.all(
-      fqns
-        .filter((fqn) => fqn in ready)
-        .map((fqn) =>
-          // Non-cycle upstreams must be observed at their TERMINAL output
-          // (`readyStable`), not their early precreate signal (`ready`). This
-          // is what makes a failed upstream actually interrupt its downstream:
-          // a resource with `precreate` resolves `ready` before its real
-          // `reconcile` runs, so a downstream waiting on `ready` would proceed
-          // (and even finish) even though the upstream's reconcile later
-          // failed. Waiting on `readyStable` means the downstream's
-          // `waitForDeps` short-circuits with the upstream's failure cause.
-          //
-          // Cycle members are the exception: peers in an SCC depend on each
-          // other, so they must rendezvous on the early `ready`/precreate
-          // signal to break the deadlock. Phase 3 (`converge`) re-runs them
-          // against final outputs once the cycle settles. A downstream
-          // outside the cycle must still wait for reconcile: e.g. a queue
-          // consumer cannot attach to a Worker's fetch-only precreate stub.
-          plan.cycleMembers.has(downstreamFqn) && plan.cycleMembers.has(fqn)
-            ? Deferred.await(ready[fqn])
-            : Deferred.await(readyStable[fqn]),
-        ),
+    Effect.forEach(
+      fqns.filter((fqn) => fqn in ready),
+      (fqn) =>
+        // Non-cycle upstreams must be observed at their TERMINAL output
+        // (`readyStable`), not their early precreate signal (`ready`). This
+        // is what makes a failed upstream actually interrupt its downstream:
+        // a resource with `precreate` resolves `ready` before its real
+        // `reconcile` runs, so a downstream waiting on `ready` would proceed
+        // (and even finish) even though the upstream's reconcile later
+        // failed. Waiting on `readyStable` means the downstream's
+        // `waitForDeps` short-circuits with the upstream's failure cause.
+        //
+        // Cycle members are the exception: peers in an SCC depend on each
+        // other, so they must rendezvous on the early `ready`/precreate
+        // signal to break the deadlock. Phase 3 (`converge`) re-runs them
+        // against final outputs once the cycle settles. A downstream
+        // outside the cycle must still wait for reconcile: e.g. a queue
+        // consumer cannot attach to a Worker's fetch-only precreate stub.
+        plan.cycleMembers.has(downstreamFqn) && plan.cycleMembers.has(fqn)
+          ? Deferred.await(ready[fqn])
+          : Deferred.await(readyStable[fqn]),
       { concurrency: "unbounded" },
     );
 
   const waitForStableDeps = (fqns: string[]) =>
-    Effect.all(
-      fqns.filter((fqn) => fqn in readyStable).map((fqn) => Deferred.await(readyStable[fqn])),
+    Effect.forEach(
+      fqns.filter((fqn) => fqn in readyStable),
+      (fqn) => Deferred.await(readyStable[fqn]),
       { concurrency: "unbounded" },
     );
 
   const failures: LifecycleFailure[] = [];
 
-  yield* Effect.all(
-    Object.entries(allNodes).map(([fqn, node]) =>
+  yield* Effect.forEach(
+    Object.entries(allNodes),
+    ([fqn, node]) =>
       (node as ActionApply).kind === "action"
         ? executeActionNode(
             fqn,
@@ -567,7 +563,6 @@ const executePlan = Effect.fn(function* (
             failures,
             plan.cycleMembers.has(fqn),
           ),
-    ),
     { concurrency: "unbounded" },
   );
 
@@ -1982,8 +1977,9 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
   // Task deletions are pure state drops — no body is invoked. Run them in
   // parallel before resource GC; tasks never have provider-side dependencies
   // to wait on.
-  yield* Effect.all(
-    Object.entries(plan.actionDeletions ?? {}).map(([fqn, node]) =>
+  yield* Effect.forEach(
+    Object.entries(plan.actionDeletions ?? {}),
+    ([fqn, node]) =>
       node === undefined
         ? Effect.void
         : Effect.gen(function* () {
@@ -2003,7 +1999,6 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
               status: "deleted",
             });
           }),
-    ),
     { concurrency: "unbounded" },
   );
 
@@ -2162,8 +2157,9 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
             // this resource legitimately undeletable (dependency violation),
             // so it is skipped with a "blocked by" note instead of surfacing
             // a spurious second error.
-            const dependents = yield* Effect.all(
-              downstream.map((dep) =>
+            const dependents = yield* Effect.forEach(
+              downstream,
+              (dep) =>
                 dep !== fqn && !ancestors.has(dep)
                   ? dep in deletionGraph
                     ? deleteResource(
@@ -2177,7 +2173,6 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                         outcome: unresolved.has(dep) ? ("failed" as const) : ("deleted" as const),
                       }))
                   : Effect.succeed({ dep, outcome: "deleted" as const }),
-              ),
               { concurrency: "unbounded" },
             );
 
@@ -2427,10 +2422,9 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
     // retained) inside each node's delete effect — the effects resolve to
     // outcomes and never fail, so one bad resource never interrupts sibling
     // deletions mid-flight.
-    yield* Effect.all(
-      Object.values(deletionGraph)
-        .filter((node) => node !== undefined)
-        .map((node) => deleteResource(node)),
+    yield* Effect.forEach(
+      Object.values(deletionGraph).filter((node) => node !== undefined),
+      (node) => deleteResource(node),
       { concurrency: "unbounded" },
     );
   });

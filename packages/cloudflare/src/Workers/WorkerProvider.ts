@@ -1046,10 +1046,9 @@ const resolveMetadataHashValue = (value: unknown): Effect.Effect<MetadataHashVal
       return resolved.toISOString();
     }
     if (Array.isArray(resolved)) {
-      return yield* Effect.all(
-        resolved.map((item) => resolveMetadataHashValue(item)),
-        { concurrency: "unbounded" },
-      );
+      return yield* Effect.forEach(resolved, (item) => resolveMetadataHashValue(item), {
+        concurrency: "unbounded",
+      });
     }
     if (Predicate.isObject(resolved)) {
       // Only plain objects round-trip predictably. A class instance would
@@ -1058,12 +1057,12 @@ const resolveMetadataHashValue = (value: unknown): Effect.Effect<MetadataHashVal
       if (prototype !== Object.prototype && prototype !== null) {
         return undefined;
       }
-      const entries = yield* Effect.all(
-        Object.entries(resolved).map(([key, nested]) =>
+      const entries = yield* Effect.forEach(
+        Object.entries(resolved),
+        ([key, nested]) =>
           resolveMetadataHashValue(nested).pipe(
             Effect.map((materializedNested) => [key, materializedNested] as const),
           ),
-        ),
         { concurrency: "unbounded" },
       );
       return Object.fromEntries(entries.filter(([, nested]) => nested !== undefined));
@@ -1380,12 +1379,12 @@ export const LiveWorkerProvider = () =>
           // Detach what's no longer wanted. Use the live list so we
           // don't try to delete domains we no longer track.
           const toRemove = liveAll.filter((d) => !desiredSet.has(d.hostname));
-          yield* Effect.all(
-            toRemove.map((d) =>
+          yield* Effect.forEach(
+            toRemove,
+            (d) =>
               workers
                 .deleteDomain({ accountId, domainId: d.id })
                 .pipe(Effect.catchTag("DomainNotFound", () => Effect.void)),
-            ),
             { concurrency: "unbounded" },
           );
 
@@ -1470,7 +1469,7 @@ export const LiveWorkerProvider = () =>
             return { hostname, id: res.id ?? "", zoneId: res.zoneId ?? zoneId };
           });
 
-          const applied = yield* Effect.all(desired.map(attachDomain), {
+          const applied = yield* Effect.forEach(desired, attachDomain, {
             concurrency: "unbounded",
           });
           return applied;
@@ -1814,8 +1813,9 @@ export const LiveWorkerProvider = () =>
           return Effect.succeed([] as Worker["Attributes"]["routes"]);
         }
 
-        const routesByZone = Effect.all(
-          uniqueZoneIds.map((zoneId) =>
+        const routesByZone = Effect.forEach(
+          uniqueZoneIds,
+          (zoneId) =>
             workers.listRoutes({ zoneId }).pipe(
               Effect.map((response): Worker["Attributes"]["routes"] =>
                 (response.result ?? []).flatMap((route) =>
@@ -1833,7 +1833,6 @@ export const LiveWorkerProvider = () =>
               ),
               Effect.orElseSucceed(() => []),
             ),
-          ),
           // Bounded: this issues one request per zone, so a Worker with routes
           // spread across many zones would otherwise burst the account's whole
           // API budget in a single tick (#926).
@@ -1889,12 +1888,12 @@ export const LiveWorkerProvider = () =>
           const liveByKey = new Map(liveAll.map((route) => [routeKey(route), route]));
 
           const toRemove = liveAll.filter((route) => !desiredKeys.has(routeKey(route)));
-          yield* Effect.all(
-            toRemove.map((route) =>
+          yield* Effect.forEach(
+            toRemove,
+            (route) =>
               workers
                 .deleteRoute({ zoneId: route.zoneId, routeId: route.id })
                 .pipe(Effect.catchTag("RouteNotFound", () => Effect.void)),
-            ),
             { concurrency: "unbounded" },
           );
 
@@ -1965,7 +1964,7 @@ export const LiveWorkerProvider = () =>
             };
           });
 
-          return yield* Effect.all(desired.map(attachRoute), { concurrency: "unbounded" });
+          return yield* Effect.forEach(desired, attachRoute, { concurrency: "unbounded" });
         });
 
       const createAlchemyWorkerTags = (id: string) => [
@@ -5494,12 +5493,12 @@ export const LiveWorkerProvider = () =>
           // expensive, so trust the persisted route ids (refreshed by
           // `read`) and tolerate already-deleted routes.
           if (output.routes?.length) {
-            yield* Effect.all(
-              output.routes.map((route) =>
+            yield* Effect.forEach(
+              output.routes,
+              (route) =>
                 workers
                   .deleteRoute({ zoneId: route.zoneId, routeId: route.id })
                   .pipe(Effect.catchTag("RouteNotFound", () => Effect.void)),
-              ),
               { concurrency: "unbounded" },
             );
           }

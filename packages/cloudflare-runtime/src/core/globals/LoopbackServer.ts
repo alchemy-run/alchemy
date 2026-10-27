@@ -140,12 +140,10 @@ export const LoopbackServerLive = Layer.effect(
           ? makeHandler(handler, { scope }).pipe(
               Effect.map((handler) => {
                 MutableHashMap.set(routes, name, handler);
-                return Effect.void;
               }),
             )
           : Effect.sync(() => {
               MutableHashMap.set(routes, name, handler);
-              return Effect.void;
             }),
     });
   }),

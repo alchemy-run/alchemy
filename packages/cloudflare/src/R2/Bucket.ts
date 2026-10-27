@@ -1474,8 +1474,9 @@ export const ProviderLive = () =>
           };
         }),
         delete: Effect.fn(function* ({ olds = {}, output, force }) {
-          yield* Effect.all(
-            (output.domains ?? []).map((domain) =>
+          yield* Effect.forEach(
+            output.domains ?? [],
+            (domain) =>
               r2
                 .deleteBucketDomainCustom({
                   accountId: output.accountId,
@@ -1484,7 +1485,6 @@ export const ProviderLive = () =>
                   jurisdiction: output.jurisdiction,
                 })
                 .pipe(Effect.catchTag(["DomainNotFound", "NoSuchBucket"], () => Effect.void)),
-            ),
             { concurrency: "unbounded" },
           );
 

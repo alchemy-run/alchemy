@@ -411,23 +411,24 @@ export const fromContainer = (
 
   // A single readiness probe: any response (even non-2xx) proves the port
   // accepts connections. A process that has exited is a crash, not "not ready".
-  const probePort = (container: cf.Container, port: number) =>
-    Effect.tryPromise({
+  const probePort = (container: cf.Container, port: number) => {
+    const notReady = (cause: unknown) =>
+      container.running
+        ? new ContainerError({ message: `Container port ${port} is not ready`, cause })
+        : new ContainerCrashedError({
+            message: `Container exited while waiting for port ${port}`,
+            cause,
+          });
+    return Effect.tryPromise({
       try: () =>
         httpSchemePort(container.getTcpPort(port)).fetch("http://containerstarthealthcheck"),
-      catch: (cause) => cause,
+      catch: notReady,
     }).pipe(
       Effect.timeout(READINESS_PROBE_TIMEOUT),
       Effect.asVoid,
-      Effect.mapError((cause) =>
-        container.running
-          ? new ContainerError({ message: `Container port ${port} is not ready`, cause })
-          : new ContainerCrashedError({
-              message: `Container exited while waiting for port ${port}`,
-              cause,
-            }),
-      ),
+      Effect.mapError((error) => (error._tag === "TimeoutError" ? notReady(error) : error)),
     );
+  };
 
   const waitForPort = (port: number) =>
     Effect.gen(function* () {

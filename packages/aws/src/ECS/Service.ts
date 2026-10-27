@@ -2887,13 +2887,13 @@ export const ServiceProvider = () =>
         // already-attached ARNs; a `LimitExceededException` means the
         // policy was NOT attached, so it propagates and fails the deploy
         // rather than silently shipping a role with missing permissions.
-        yield* Effect.all(
-          (news.taskRoleManagedPolicyArns ?? []).map((policyArn) =>
+        yield* Effect.forEach(
+          news.taskRoleManagedPolicyArns ?? [],
+          (policyArn) =>
             iam.attachRolePolicy({
               RoleName: taskRoleName,
               PolicyArn: policyArn,
             }),
-          ),
           { concurrency: "unbounded" },
         );
 

@@ -75,9 +75,7 @@ export const CredentialsStoreLive = Layer.effect(
             ),
           );
           if (data === undefined) return undefined;
-          const json = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(
-            data,
-          ).pipe(
+          const json = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(data).pipe(
             Effect.mapError((cause) =>
               AuthError.make({
                 message: `Stored credentials at '${filePath}' contain invalid JSON.`,

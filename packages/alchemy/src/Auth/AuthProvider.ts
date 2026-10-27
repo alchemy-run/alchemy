@@ -361,7 +361,7 @@ export const AuthProvider =
       const environment =
         service.environment === undefined
           ? []
-          : yield* Schema.decodeUnknownEffect(EnvironmentVariables)(service.environment).pipe(
+          : yield* Schema.decodeEffect(EnvironmentVariables)(service.environment).pipe(
               Effect.orDie,
             );
       if (service.readEnvironment !== undefined && environment.length === 0) {

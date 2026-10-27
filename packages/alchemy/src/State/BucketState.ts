@@ -406,14 +406,12 @@ export const makeBucketState = (options: BucketStateOptions) =>
         verifyHeldLeases.pipe(Effect.andThen(listChildren(`${prefix}${stack}/`))),
       get: (request) => guarded(request, readJson<PersistedState>(resourceKey(request))),
       getReplacedResources: Effect.fn(function* (request) {
-        return (yield* Effect.all(
-          (yield* state.list(request)).map((fqn) =>
-            state.get({
-              stack: request.stack,
-              stage: request.stage,
-              fqn,
-            }),
-          ),
+        return (yield* Effect.forEach(yield* state.list(request), (fqn) =>
+          state.get({
+            stack: request.stack,
+            stage: request.stage,
+            fqn,
+          }),
         )).filter((r) => r?.status === "replaced");
       }),
       set: (request) =>

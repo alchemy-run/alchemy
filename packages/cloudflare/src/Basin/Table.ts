@@ -290,16 +290,14 @@ export class BasinTableCredentialsUnavailable extends Data.TaggedError(
 
 const TableResource = Resource<Table>(TypeId);
 
+// A schema that cannot be lowered is a defect: `Effect.sync` dies with the thrown error.
 const toProps = <P>(props: P): Effect.Effect<P> =>
-  Effect.try({
-    try: () => {
-      const p = props as { schema?: unknown } | undefined;
-      return p?.schema !== undefined && S.isSchema(p.schema)
-        ? ({ ...p, schema: toTableSchema(p.schema as S.Schema<any>) } as P)
-        : props;
-    },
-    catch: (error) => error,
-  }).pipe(Effect.orDie);
+  Effect.sync(() => {
+    const p = props as { schema?: unknown } | undefined;
+    return p?.schema !== undefined && S.isSchema(p.schema)
+      ? ({ ...p, schema: toTableSchema(p.schema as S.Schema<any>) } as P)
+      : props;
+  });
 
 /**
  * An Apache Iceberg table in a Cloudflare Basin (R2 Data) catalog.

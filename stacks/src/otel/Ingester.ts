@@ -1,11 +1,23 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Alchemy from "alchemy";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Redacted from "effect/Redacted";
 import { Logs, Metrics, Traces } from "./Datasets.ts";
 import { IngestToken } from "./IngestToken.ts";
+
+class UpstreamFetchError extends Data.TaggedError("UpstreamFetchError")<{
+  message: string;
+  cause: unknown;
+}> {}
+
+const upstreamFetchError = (cause: unknown) =>
+  new UpstreamFetchError({
+    message: cause instanceof Error ? cause.message : String(cause),
+    cause,
+  });
 
 /**
  * Public ingest relay used by both:
@@ -91,7 +103,7 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
                 },
                 body,
               }),
-            catch: (e) => (e instanceof Error ? e : new Error(String(e))),
+            catch: upstreamFetchError,
           });
 
           return HttpServerResponse.fromWeb(response);
@@ -132,7 +144,7 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
                   ({ cf: { cacheTtl: 3600, cacheEverything: true } } as any)
                 : {}),
             }),
-          catch: (e) => (e instanceof Error ? e : new Error(String(e))),
+          catch: upstreamFetchError,
         });
 
         return HttpServerResponse.fromWeb(upstream);
