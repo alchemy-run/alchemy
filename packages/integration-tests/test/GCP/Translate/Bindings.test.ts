@@ -5,7 +5,7 @@ import type * as translate from "@distilled.cloud/gcp/translate_v3";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { callProbe, dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { callProbe, expectProbe } from "../bindingHost.ts";
 import TranslateBindingsHost, {
   Dataset,
   EnEs,
@@ -45,7 +45,7 @@ const expectProjectGrants = Effect.gen(function* () {
   ]);
 });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "Translate Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:translate", "provider:gcp:run", "live"],

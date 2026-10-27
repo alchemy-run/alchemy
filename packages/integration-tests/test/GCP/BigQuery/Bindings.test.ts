@@ -5,7 +5,7 @@ import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import BigQueryBindingsHost, {
   Analytics,
   Inserted,
@@ -103,7 +103,7 @@ const LEGACY_DATASET_ROLES: Record<string, string> = {
   OWNER: "roles/bigquery.dataOwner",
 };
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "BigQuery Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:bigquery", "provider:gcp:run", "live"],
