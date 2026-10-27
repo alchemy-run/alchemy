@@ -3,8 +3,13 @@ import type { Rpc } from "alchemy/Rpc";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Data from "effect/Data";
 import type * as Effect from "effect/Effect";
+import type * as HttpApi from "effect/http-api/HttpApi";
+import type * as HttpApiClient from "effect/http-api/HttpApiClient";
+import type * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 import type * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
+import type { Rpc as EffectRpc, RpcClient, RpcGroup } from "effect/rpc";
+import type * as RpcClientError from "effect/rpc/RpcClientError";
 import type { Service } from "./Service.ts";
 
 /** Request options for {@link InvokeServiceClient.fetch}. */
@@ -140,14 +145,39 @@ export class InvokeServiceError extends Data.TaggedError("GCP.Run.InvokeServiceE
  * @binding
  * @category Run
  */
+/** `fetch` and `httpClient` of a bound service, alongside a typed client. */
+export type InvokeServiceTransport = Pick<InvokeServiceClient, "fetch" | "httpClient">;
+
+/** The API a bound service serves, when it is an Effect RPC group or HttpApi. */
+export type InvokeServiceOptions =
+  | { schema: RpcGroup.RpcGroup<EffectRpc.Any> }
+  | { api: HttpApi.HttpApi<string, HttpApiGroup.Constraint> };
+
 export interface InvokeService extends Binding.Service<
   InvokeService,
   "GCP.Run.InvokeService",
-  (service: Service) => Effect.Effect<InvokeServiceClient>
+  (service: Service, options?: InvokeServiceOptions) => Effect.Effect<InvokeServiceClient>
 > {
   <Target extends Service, Req = never>(
     service: Target | Effect.Effect<Target, never, Req>,
   ): Effect.Effect<InvokeServiceClient<ShapeOf<Target>>, never, InvokeService | Req>;
+  <Rpcs extends EffectRpc.Any, Req = never>(
+    service: Service | Effect.Effect<Service, never, Req>,
+    options: { schema: RpcGroup.RpcGroup<Rpcs> },
+  ): Effect.Effect<
+    RpcClient.RpcClient<Rpcs, RpcClientError.RpcClientError> & InvokeServiceTransport,
+    never,
+    InvokeService | Req
+  >;
+  <Groups extends HttpApiGroup.Constraint, Req = never>(
+    service: Service | Effect.Effect<Service, never, Req>,
+    options: { api: HttpApi.HttpApi<string, Groups> },
+  ): Effect.Effect<
+    HttpApiClient.Client<Groups, HttpClientError.HttpClientError | InvokeServiceError> &
+      InvokeServiceTransport,
+    never,
+    InvokeService | Req
+  >;
 }
 
 export const InvokeService = Binding.Service<InvokeService>("GCP.Run.InvokeService");

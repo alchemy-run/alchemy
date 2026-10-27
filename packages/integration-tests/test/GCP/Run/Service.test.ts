@@ -17,6 +17,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { DataBucket, Tweets } from "./fixtures/bound-resources.ts";
 import Worker from "./fixtures/container-worker.ts";
+import EffectApiCaller from "./fixtures/effect-apis/caller.ts";
 import BoundContainerService from "./fixtures/service-bound-container.ts";
 import PublishOnlyService from "./fixtures/service-publish-only.ts";
 import BoundRedisService from "./fixtures/service-redis.ts";
@@ -370,6 +371,45 @@ test.provider(
           Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
         );
       expect(repository).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 900_000 },
+);
+
+test.provider(
+  "typed Effect RPC and HttpApi clients reach sidecars and private services",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const caller = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* EffectApiCaller;
+        }),
+      );
+
+      const client = yield* HttpClient.HttpClient;
+      // A fresh run.invoker grant takes a moment to reach the backends.
+      const call = yield* client.get(`${caller.uri}/`).pipe(
+        Effect.flatMap((response) =>
+          response.text.pipe(Effect.map((text) => ({ status: response.status, text }))),
+        ),
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          // Each call reports its own failure in the body.
+          until: (response) => response.status === 200 && !response.text.includes('"failed"'),
+          times: 24,
+        }),
+      );
+      expect(call.status).toEqual(200);
+      expect(JSON.parse(call.text)).toEqual({
+        rpcSidecar: { task: "from rpc sidecar", missing: "TaskNotFound", counts: [1, 2, 3] },
+        apiSidecar: { task: "from api sidecar", missing: "TaskNotFound" },
+        rpcService: { task: "from rpc service", missing: "TaskNotFound", counts: [1, 2, 3] },
+        apiService: { task: "from api service", missing: "TaskNotFound" },
+      });
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(caller.name)).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 900_000 },
 );
