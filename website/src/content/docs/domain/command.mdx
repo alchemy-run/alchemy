@@ -127,7 +127,7 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
 
 Middleware runs in order, and any of it can stop the command with its own error, like `Unauthorized`. What it provides, such as who the caller is, travels with the command to the aggregate, where `decide` reads it to authorize the change. See [Sessions and middleware](/domain/sessions).
 
-A command whose `decide` reads nothing its middleware provides can say so with `predictable: true`. Then `decide` may require nothing, and a client that holds the aggregate's state can run it with `Account.predict`. See [Optimistic updates](/domain/optimistic-updates#predict-the-outcome-locally).
+A client can run the same `decide` with `Account.predict` when it provides what the middleware would, from a client-side Layer. See [Optimistic updates](/domain/optimistic-updates#give-the-client-what-middleware-provides).
 
 ## Send it
 

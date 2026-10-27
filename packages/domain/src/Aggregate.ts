@@ -77,8 +77,7 @@ type IdSchema = Schema.Top & { readonly Type: string; readonly Encoded: string }
 
 /**
  * What `decide` returns for a command: events, a rejection, or an Effect of
- * either. The Effect may read what the command's middleware provides, unless
- * the command is `predictable`: then it reads nothing, so a client can run it.
+ * either. The Effect may read what the command's middleware provides.
  */
 export type Decision<C extends Command.Any> =
   | ReadonlyArray<Inst<C["events"][number]>>
@@ -86,7 +85,7 @@ export type Decision<C extends Command.Any> =
   | Effect.Effect<
       ReadonlyArray<Inst<C["events"][number]>>,
       Inst<C["rejects"][number]>,
-      C extends { readonly predictable: true } ? never : Command.ContextOf<C>
+      Command.ContextOf<C>
     >;
 
 /** The event classes a set of commands may record. */
@@ -325,9 +324,16 @@ export type CommandOf<A extends Any> = Inst<A["definition"]["commands"][number]>
 export type Identifier<A extends Any> = A extends Context.Key<infer I, unknown> ? I : never;
 
 /**
- * Options for {@link predict}: what the server would give `decide`.
+ * Options for {@link predict}: what the server would give `decide`. A command
+ * with middleware needs `context`: what its middleware provides, from a
+ * client-side Layer of the same services.
  */
-export interface PredictOptions<Id = string> {
+export type PredictOptions<Id = string, R = never> = PredictBase<Id> &
+  ([R] extends [never]
+    ? { readonly context?: Context.Context<never> }
+    : { readonly context: Context.Context<R> });
+
+interface PredictBase<Id> {
   /** The id of the instance the command targets. */
   readonly id: Id;
   /** The time the command is decided at (the server stamps commands with its clock). */
@@ -338,8 +344,6 @@ export interface PredictOptions<Id = string> {
   readonly commandId?: string;
   /** Defaults to the command id. */
   readonly correlationId?: string;
-  /** What the command's middleware would provide, for a `decide` that reads it. */
-  readonly context?: Context.Context<never>;
 }
 
 /**
@@ -396,7 +400,7 @@ export const predict = (
       Effect.runSyncExit(
         Effect.provideContext(
           decision as Effect.Effect<unknown, unknown, never>,
-          options.context ?? Context.empty(),
+          (options.context ?? Context.empty()) as Context.Context<never>,
         ),
       ),
     );
@@ -670,11 +674,14 @@ export interface AggregateClass<
   /**
    * Decide a command locally, with this aggregate's own `decide` and
    * `evolve`: the events and state, or the rejection, the server would give
-   * for the same state, id and time. See {@link predict}.
+   * for the same state, id and time. A command with middleware needs
+   * `context`: what its middleware provides, from a client-side Layer. See
+   * {@link predict}.
    *
    * **Example:** Show a withdrawal before the bank answers
    * ```typescript
-   * const outcome = Account.predict(state, new WithdrawMoney({ amount: 30 }), { id, now });
+   * const context = yield* Layer.build(Layer.succeed(CurrentActor, actor));
+   * const outcome = Account.predict(state, new WithdrawMoney({ amount: 30 }), { id, now, context });
    * if (outcome._tag === "Rejected") showError(outcome.rejection); // InsufficientFunds
    * if (outcome._tag === "Accepted") showPending(outcome.state);
    * ```
@@ -683,7 +690,7 @@ export interface AggregateClass<
     this: Self,
     state: StateOf<Self>,
     command: Cmd,
-    options: PredictOptions<IdOf<Self>>,
+    options: PredictOptions<IdOf<Self>, Command.ContextOf<CommandClassOf<Self["definition"], Cmd>>>,
   ): Prediction<
     StateOf<Self>,
     Inst<CommandClassOf<Self["definition"], Cmd>["events"][number]>,

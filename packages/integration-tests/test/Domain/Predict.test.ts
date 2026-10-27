@@ -33,22 +33,19 @@ class Open extends Domain.Command("Open", {
   target: Schema.String,
   input: { owner: Schema.String },
   events: [Opened],
-  predictable: true,
 }) {}
 class Deposit extends Domain.Command("Deposit", {
   target: Schema.String,
   input: { amount: Schema.Number },
   events: [Deposited],
-  predictable: true,
 }) {}
 class Withdraw extends Domain.Command("Withdraw", {
   target: Schema.String,
   input: { amount: Schema.Number },
   events: [Withdrawn],
   rejects: [InsufficientFunds],
-  predictable: true,
 }) {}
-// Reads the operator, so a client cannot always predict it.
+// Reads the operator, so a client predicts it only with the operator in context.
 class Freeze extends Domain.Command("Freeze", {
   target: Schema.String,
   events: [Frozen],
@@ -97,7 +94,6 @@ class Move extends Domain.Command("Move", {
   target: Schema.String,
   input: { from: Schema.String, to: Schema.String, amount: Schema.Number },
   events: [Moved],
-  predictable: true,
 }) {}
 class Transfer extends Domain.Aggregate("Transfer", {
   id: Schema.String,
@@ -241,9 +237,10 @@ describe("Domain Aggregate.predict", () => {
     }),
   );
 
-  it.effect("a decide that reads a service needs that context", () =>
+  it.effect("a command with middleware needs what its middleware provides", () =>
     Effect.sync(() => {
       const state = Account.definition.initial;
+      // @ts-expect-error Freeze's middleware provides Operator: pass it as context
       const unknown = Account.predict(state, new Freeze(), { id: "a-1", now });
       expect(unknown._tag).toBe("Unpredictable");
 
@@ -301,15 +298,18 @@ describe("Domain Aggregate.predict", () => {
     ),
   );
 
-  it.effect("predictable marks commands whose decide needs no context", () =>
-    Effect.sync(() => {
-      expect([Open, Deposit, Withdraw, Freeze].map((c) => c.predictable)).toEqual([
-        true,
-        true,
-        true,
-        false,
-      ]);
-    }),
+  it.effect("a client-side Layer provides the middleware's context", () =>
+    Effect.gen(function* () {
+      // The server's OperatorSession reads a header; the client knows who it is.
+      const ClientSession = Layer.succeed(Operator, "sam");
+      const context = yield* Layer.build(ClientSession);
+      const local = Account.predict(Account.definition.initial, new Freeze(), {
+        id: "a-1",
+        now,
+        context,
+      });
+      expect(local).toMatchObject({ _tag: "Accepted", events: [new Frozen({ by: "sam" })] });
+    }).pipe(Effect.scoped),
   );
 });
 
@@ -401,24 +401,3 @@ describe("Domain View.evolve", () => {
     }).pipe(Effect.provide(Hosted)),
   );
 });
-
-// A predictable command's decide may not read what its middleware provides.
-class Peek extends Domain.Command("Peek", {
-  target: Schema.String,
-  events: [Frozen],
-  middleware: [OperatorSession],
-  predictable: true,
-}) {}
-export class Peeking extends Domain.Aggregate("Peeking", {
-  id: Schema.String,
-  state: Schema.Struct({}),
-  initial: {},
-  commands: [Peek],
-  decide: {
-    // @ts-expect-error a predictable command's decide requires nothing
-    Peek: Effect.fn(function* () {
-      return [new Frozen({ by: yield* Operator })];
-    }),
-  },
-  evolve: { Frozen: (s) => s },
-}) {}

@@ -86,7 +86,7 @@ export declare namespace Aggregate {
   /** The instance type of a class. */
   export type Inst<C> = AggregateModule.Inst<C>;
   /** Options for `MyAggregate.predict`. */
-  export type PredictOptions<Id = string> = AggregateModule.PredictOptions<Id>;
+  export type PredictOptions<Id = string, R = never> = AggregateModule.PredictOptions<Id, R>;
   /** What `MyAggregate.predict` gives: accepted with events and state, rejected, or unpredictable. */
   export type Prediction<State, Ev, Rej, Id = string> = AggregateModule.Prediction<
     State,
