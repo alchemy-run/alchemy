@@ -5,6 +5,7 @@ import type { BindingHooks, Module } from "@alchemy.run/cloudflare-runtime/core"
 import { DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
 import * as Runtime from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import * as RuntimeServices from "@alchemy.run/cloudflare-runtime/core/RuntimeServices";
+import { hasNodejsAls, hasNodejsCompat } from "@alchemy.run/cloudflare-runtime/rolldown/utils";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
@@ -102,6 +103,7 @@ export function createWorkerdPrerenderer(options: WorkerdPrerendererOptions): As
       const context = vite?.context ?? (await buildDefaultContext(scope));
       const worker = vite?.worker;
 
+      const compatibilityDate = vite?.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE;
       const program = Effect.gen(function* () {
         const runtime = yield* Runtime.Runtime;
         return yield* runtime.start({
@@ -109,11 +111,14 @@ export function createWorkerdPrerenderer(options: WorkerdPrerendererOptions): As
           // Suffixed so the prerender instance never collides with a
           // concurrently running dev server in the local dev registry.
           name: worker?.name !== undefined ? `${worker.name}-prerender` : "astro-prerender",
-          compatibilityDate: vite?.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
+          compatibilityDate,
           // The render scope installed per prerender request imports
           // `node:async_hooks`, so make sure AsyncLocalStorage is available
           // even when the user's flags don't enable it (upstream does the same).
-          compatibilityFlags: withAsyncLocalStorage(vite?.compatibilityFlags ?? []),
+          compatibilityFlags: withAsyncLocalStorage(
+            vite?.compatibilityFlags ?? [],
+            compatibilityDate,
+          ),
           bindings: (worker?.bindings ?? []) as BindingHooks,
           modules,
           assets: {
@@ -302,7 +307,14 @@ const buildDefaultContext = (
     Effect.runPromise,
   );
 
-const withAsyncLocalStorage = (flags: ReadonlyArray<string>): Array<string> =>
-  flags.includes("nodejs_compat") || flags.includes("nodejs_als")
+/**
+ * Adds `nodejs_als` unless Node compat already provides AsyncLocalStorage,
+ * either through a flag or because the compatibility date turns it on.
+ */
+export const withAsyncLocalStorage = (
+  flags: ReadonlyArray<string>,
+  compatibilityDate: string,
+): Array<string> =>
+  hasNodejsCompat(flags, compatibilityDate) || hasNodejsAls(flags)
     ? [...flags]
     : [...flags, "nodejs_als"];
