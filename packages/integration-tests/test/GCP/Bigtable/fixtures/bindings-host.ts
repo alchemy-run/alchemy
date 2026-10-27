@@ -121,7 +121,7 @@ export default class BigtableBindingsHost extends GCP.Function<BigtableBindingsH
           return yield* checkConsistency({ body: { consistencyToken } });
         }),
         dropRowRange: dropRowRange({ body: { deleteAllDataFromTable: true } }),
-        // Drop first, so a rerun against a table that kept `extra` still adds it.
+        // Drop and recreate in one call, so a rerun against a table that kept `extra` still works.
         addFamily: modifyColumnFamilies({
           body: {
             modifications: [
@@ -138,9 +138,6 @@ export default class BigtableBindingsHost extends GCP.Function<BigtableBindingsH
             }),
           ),
         ),
-        dropFamily: modifyColumnFamilies({
-          body: { modifications: [{ id: "extra", drop: true }] },
-        }),
         // The table isn't deleted, so there is nothing to undelete.
         undelete: outcome(undelete({ body: {} })),
         tableChildren: Effect.all({

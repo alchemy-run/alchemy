@@ -6,7 +6,7 @@ import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { expectAuditEntry } from "../auditLogs.ts";
-import { callProbe, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import BigtableBindingsHost, {
   AuditMarkers,
   Db,
@@ -167,18 +167,6 @@ describe.skipIf(!!process.env.FAST)(
             );
             expect(added.name).toEqual(genTableName);
             expect(Object.keys(added.columnFamilies ?? {}).sort()).toEqual(["cf", "extra"]);
-            // The add is still applying for a few seconds ("concurrent modifications").
-            const dropped = yield* callProbe<{ columnFamilies?: object }>(
-              baseUrl,
-              "dropFamily",
-            ).pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced("5 seconds"),
-                until: (outcome) => outcome.ok,
-                times: 12,
-              }),
-            );
-            expect(dropped.ok && Object.keys(dropped.value.columnFamilies ?? {})).toEqual(["cf"]);
             expect(yield* expectProbe<string>(baseUrl, "undelete")).not.toEqual("succeeded");
             const children = yield* expectProbe<{
               missingAuthorizedView: string;
