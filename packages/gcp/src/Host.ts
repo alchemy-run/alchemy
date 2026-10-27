@@ -15,6 +15,7 @@ import {
   type GcpIamResourceKind,
   type IamCondition,
 } from "./IamPolicy.ts";
+import type { BoundContainer } from "./Run/Container.ts";
 import { parseServiceAccountKey } from "./Token.ts";
 
 export type { GcpIamResourceKind } from "./IamPolicy.ts";
@@ -68,6 +69,11 @@ export type GcpHostBinding = {
    * Unix sockets under `/cloudsql` (Cloud Run services only).
    */
   cloudSqlInstances?: string[];
+  /**
+   * Sidecar containers to add to the host's revision (Cloud Run services
+   * and containers only); see `GCP.Run.bindContainer`.
+   */
+  containers?: BoundContainer[];
 };
 
 /**

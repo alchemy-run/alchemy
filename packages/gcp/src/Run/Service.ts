@@ -40,6 +40,7 @@ import {
   waitForOperation as waitForLongRunningOperation,
 } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
+import { boundContainersOf, directContainerNames } from "./Container.ts";
 
 const DEFAULT_IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
 const MAX_NAME_LENGTH = 49;
@@ -120,7 +121,7 @@ export type Probe = {
   failureThreshold?: number;
 };
 
-export type Container = {
+export type ContainerSpec = {
   /** DNS_LABEL container name. Required to reference it from `dependsOn`. */
   name?: string;
   /**
@@ -176,7 +177,7 @@ export type RevisionScaling = {
 
 export type RevisionTemplate = {
   /** Containers that make up the revision. */
-  containers?: Container[];
+  containers?: ContainerSpec[];
   /** Request timeout (e.g. `"300s"`). */
   timeout?: string;
   /** Max concurrent requests per instance. `0` uses the server default. */
@@ -310,6 +311,16 @@ export type ServiceProps = PlatformProps & {
    * @default 8080
    */
   port?: number;
+  /**
+   * Startup probe for the main container (`template.containers[0]`).
+   * Shorthand for setting it on the container.
+   */
+  startupProbe?: Probe;
+  /**
+   * Liveness probe for the main container (`template.containers[0]`).
+   * Shorthand for setting it on the container.
+   */
+  livenessProbe?: Probe;
   /**
    * Additional environment variables for the Effect-native container.
    * Merged after binding-injected `env`.
@@ -677,9 +688,17 @@ const toId = (id: string, serviceId: string | undefined, existing?: string) =>
 
 const desiredTemplate = (news: ServiceProps): cloudrun.GoogleCloudRunV2RevisionTemplate => {
   const template = news.template ?? {};
+  const [main = { image: DEFAULT_IMAGE }, ...rest] = template.containers ?? [];
   return {
     ...template,
-    containers: template.containers ?? [{ image: DEFAULT_IMAGE }],
+    containers: [
+      {
+        ...main,
+        startupProbe: news.startupProbe ?? main.startupProbe,
+        livenessProbe: news.livenessProbe ?? main.livenessProbe,
+      },
+      ...rest,
+    ],
   };
 };
 
@@ -1207,13 +1226,23 @@ export const ServiceProvider = () =>
       };
       const desiredAnnotations = news.annotations;
       const template = desiredTemplate(news);
+      const hostBindings = bindings as ResourceBinding<GcpHostBinding>[];
+      // Bound sidecars run as this service's account, so their bindings'
+      // roles are granted to it.
+      const boundContainers = boundContainersOf(hostBindings);
       const identity = yield* resolveHostIdentity({
         project: env.project,
         hostType: HOST_TYPE,
         resourceName: name,
         userServiceAccount: template.serviceAccount,
         effectNative: news.main !== undefined,
-        bindings: bindings as ResourceBinding<GcpHostBinding>[],
+        bindings: [
+          ...hostBindings,
+          ...boundContainers.map((container) => ({
+            sid: `GCP.Run.Container(${container.spec.name})`,
+            data: { iam: container.iam },
+          })),
+        ],
         output,
       });
       template.serviceAccount = identity.serviceAccount;
@@ -1258,10 +1287,22 @@ export const ServiceProvider = () =>
         }
       }
 
-      const mounted = mountCloudSqlInstances(
-        template,
-        bindings as ResourceBinding<GcpHostBinding>[],
-      );
+      if (boundContainers.length > 0) {
+        const [main = {}, ...rest] = template.containers ?? [];
+        const declared = new Set(rest.map((container) => container.name));
+        const dependsOn = [
+          ...new Set([...(main.dependsOn ?? []), ...directContainerNames(hostBindings)]),
+        ];
+        template.containers = [
+          { ...main, dependsOn },
+          ...rest,
+          ...boundContainers
+            .filter((container) => !declared.has(container.spec.name))
+            .map((container) => container.spec),
+        ];
+      }
+
+      const mounted = mountCloudSqlInstances(template, hostBindings);
       template.volumes = mounted.volumes;
       template.containers = mounted.containers;
 

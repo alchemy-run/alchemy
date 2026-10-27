@@ -1,5 +1,6 @@
 import type { HttpEffect } from "alchemy/Http";
 import * as Http from "alchemy/Http";
+import { serveRpc } from "alchemy/Rpc";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -35,8 +36,25 @@ export const isGcpListenHost = (
 
 const notFound = Effect.succeed(HttpServerResponse.text("Not Found", { status: 404 }));
 
+/** Methods on an impl shape that are served as RPC. */
+export const rpcMethodsOf = (shape: Record<string, unknown> | undefined) =>
+  Object.fromEntries(
+    Object.entries(shape ?? {}).filter(
+      ([key, value]) => key !== "fetch" && key !== "run" && typeof value === "function",
+    ),
+  );
+
 export const createGcpHostRuntimeContext =
-  (type: string) =>
+  (
+    type: string,
+    options?: {
+      /**
+       * Serve the impl's methods on `/__rpc__/*`. Only for hosts no
+       * request reaches from outside the instance (sidecar containers).
+       */
+      rpc?: boolean;
+    },
+  ) =>
   (id: string): GcpHostRuntimeContext => {
     const base = createHostRuntimeContext(type)(id);
     const listeners: GcpHttpListener[] = [];
@@ -62,9 +80,14 @@ export const createGcpHostRuntimeContext =
         Effect.sync(() => {
           listeners.push(listener);
         }),
-      serve: ((handler, options) => {
+      serve: ((handler, serveOptions) => {
         served = true;
-        return base.serve(route(handler as HttpEffect<any>), options);
+        const routed = route(handler as HttpEffect<any>);
+        const methods = options?.rpc ? rpcMethodsOf(serveOptions?.shape) : {};
+        return base.serve(
+          Object.keys(methods).length > 0 ? serveRpc(methods, routed) : routed,
+          serveOptions,
+        );
       }) as HostRuntimeContext["serve"],
       // A host whose only job is consuming events has no `fetch`, so the
       // Platform never calls `serve`; start the server for the listeners.
