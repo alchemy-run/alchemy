@@ -52,7 +52,12 @@ export default class DomainToursWorker extends Cloudflare.Worker<DomainToursWork
           );
         }
         return yield* HttpServerResponse.json(Option.getOrNull(yield* busy.query(orgId)));
-      }),
+      }).pipe(
+        // The view has not caught up with the write yet: the caller retries.
+        Effect.catchTag("ConsistencyTimeout", () =>
+          Effect.succeed(HttpServerResponse.text("not caught up", { status: 503 })),
+        ),
+      ),
     };
   }).pipe(Effect.provide(ToursLive)),
 ) {}
