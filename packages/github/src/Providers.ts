@@ -1,3 +1,4 @@
+import { GraphQLLive } from "@distilled.cloud/github/GraphQL";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Provider from "alchemy/Provider";
@@ -89,6 +90,7 @@ export const providers = (options?: ProvidersOptions) =>
         WikiPageProvider(),
       ),
     ),
+    Layer.provideMerge(GraphQLLive),
     Layer.provideMerge(Credentials.fromAuthProvider(options)),
     Layer.provideMerge(makeGitHubAuth(options)),
     Layer.provideMerge(ProfileStoreLive),

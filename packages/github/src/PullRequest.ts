@@ -1,5 +1,6 @@
+import { Query } from "@distilled.cloud/core/query";
+import * as GraphQL from "@distilled.cloud/github/GraphQL";
 import * as Issues from "@distilled.cloud/github/issues";
-import * as Meta from "@distilled.cloud/github/meta";
 import * as Pulls from "@distilled.cloud/github/pulls";
 import * as Repos from "@distilled.cloud/github/repos";
 import { isResolved } from "alchemy/Diff";
@@ -348,11 +349,7 @@ export const PullRequestProvider = () =>
         // GitHub only permits draft transitions while a pull request is open,
         // and only through GraphQL.
         if (draftChanged) {
-          const mutation = draft ? "convertPullRequestToDraft" : "markPullRequestReadyForReview";
-          yield* Meta.graphql({
-            query: `mutation($id: ID!) { ${mutation}(input: {pullRequestId: $id}) { pullRequest { id } } }`,
-            variables: { id: observed.node_id },
-          });
+          yield* (draft ? convertToDraft : markReadyForReview)(observed.node_id);
         }
         yield* syncPullRequestMeta(news, observed.number);
         if (draftChanged && state === "closed") {
@@ -433,6 +430,16 @@ const attributes = (data: Pulls.PullRequest) => ({
 
 const sameNames = (left: string[], right: string[]) =>
   JSON.stringify([...new Set(left)].sort()) === JSON.stringify([...new Set(right)].sort());
+
+const convertToDraft = Query.fn(
+  (pullRequestId: string) =>
+    GraphQL.GitHub.convertPullRequestToDraft({ input: { pullRequestId } }).pullRequest.id,
+);
+
+const markReadyForReview = Query.fn(
+  (pullRequestId: string) =>
+    GraphQL.GitHub.markPullRequestReadyForReview({ input: { pullRequestId } }).pullRequest.id,
+);
 
 const syncPullRequestMeta = Effect.fn(function* (props: PullRequestProps, prNumber: number) {
   const scope = { owner: props.owner, repo: props.repository };

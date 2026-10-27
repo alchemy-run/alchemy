@@ -53,6 +53,7 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
+    "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/github": "workspace:*",
     "libsodium-wrappers": "catalog:"
   },

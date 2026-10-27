@@ -9531,6 +9531,9 @@ importers:
 
   packages/github:
     dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
       '@distilled.cloud/github':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/github
