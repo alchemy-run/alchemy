@@ -9,7 +9,7 @@ import * as RuntimeServices from "@alchemy.run/cloudflare-runtime/core/RuntimeSe
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * Wrangler-free workerd prerenderer: the build-side driver of the
- * `__astro_*` prerender protocol, ported from `@astrojs/cloudflare` v14.1.3
+ * `__astro_*` prerender protocol, ported from `@astrojs/cloudflare` v14.4.2
  * (`src/prerenderer.ts`).
  *
  * Upstream boots a Vite preview server wrapped around
@@ -24,8 +24,9 @@ import * as RuntimeServices from "@alchemy.run/cloudflare-runtime/core/RuntimeSe
  * Protocol (served by the vendored runtime handler when
  * `virtual:astro-cloudflare:config`'s `isPrerender` is true):
  * - `POST /__astro_static_paths` → all paths to prerender (serialized routes)
- * - `POST /__astro_prerender` → renders one page; a failure is signalled via
- *   the `x-astro-prerender-error` response header
+ * - `POST /__astro_prerender` → renders one page, framed with its render
+ *   metadata (`runtime/utils/prerender-response.ts`); a failure is signalled
+ *   via the `x-astro-prerender-error` response header
  *
  * This module is heavyweight (Effect + cloudflare-runtime); the integration
  * imports it lazily inside the `astro:build:start` hook so `astro dev` and
@@ -33,7 +34,7 @@ import * as RuntimeServices from "@alchemy.run/cloudflare-runtime/core/RuntimeSe
  */
 import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
-import type { AstroConfig, AstroPrerenderer, PathWithRoute } from "astro";
+import type { AstroConfig, AstroPrerenderer, StaticPathsResult } from "astro";
 import { deserializeRouteData, serializeRouteData } from "astro/app/manifest";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -42,6 +43,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { PlatformServices } from "../Platform.ts";
+import { readFramedPrerenderResponse } from "./prerender-response.ts";
 import type { PrerenderRequest, StaticPathsResponse } from "./runtime/prerender-types.ts";
 import { PRERENDER_ENDPOINT, STATIC_PATHS_ENDPOINT } from "./runtime/utils/prerender-constants.ts";
 
@@ -108,7 +110,10 @@ export function createWorkerdPrerenderer(options: WorkerdPrerendererOptions): As
           // concurrently running dev server in the local dev registry.
           name: worker?.name !== undefined ? `${worker.name}-prerender` : "astro-prerender",
           compatibilityDate: vite?.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
-          compatibilityFlags: vite?.compatibilityFlags ?? [],
+          // The render scope installed per prerender request imports
+          // `node:async_hooks`, so make sure AsyncLocalStorage is available
+          // even when the user's flags don't enable it (upstream does the same).
+          compatibilityFlags: withAsyncLocalStorage(vite?.compatibilityFlags ?? []),
           bindings: (worker?.bindings ?? []) as BindingHooks,
           modules,
           assets: {
@@ -126,7 +131,7 @@ export function createWorkerdPrerenderer(options: WorkerdPrerendererOptions): As
       serverUrl = url.origin;
     },
 
-    async getStaticPaths(): Promise<Array<PathWithRoute>> {
+    async getStaticPaths(): Promise<StaticPathsResult> {
       const response = await fetch(`${origin()}${STATIC_PATHS_ENDPOINT}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -141,10 +146,12 @@ export function createWorkerdPrerenderer(options: WorkerdPrerendererOptions): As
       }
 
       const data = (await response.json()) as StaticPathsResponse;
-      return data.paths.map(({ pathname, route }) => ({
+      const paths = data.paths.map(({ pathname, route, cacheKey }) => ({
         pathname,
         route: deserializeRouteData(route),
+        cacheKey,
       }));
+      return { paths, metadata: data.metadata };
     },
 
     async render(request, { routeData }) {
@@ -167,7 +174,7 @@ export function createWorkerdPrerenderer(options: WorkerdPrerendererOptions): As
         throw new Error(`Failed to prerender ${request.url}: ${prerenderError}`);
       }
 
-      return response;
+      return readFramedPrerenderResponse(response);
     },
 
     async teardown() {
@@ -294,3 +301,8 @@ const buildDefaultContext = (
     Layer.buildWithScope(scope),
     Effect.runPromise,
   );
+
+const withAsyncLocalStorage = (flags: ReadonlyArray<string>): Array<string> =>
+  flags.includes("nodejs_compat") || flags.includes("nodejs_als")
+    ? [...flags]
+    : [...flags, "nodejs_als"];

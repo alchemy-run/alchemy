@@ -170,7 +170,7 @@
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "effect": "catalog:",
-    "vite": "catalog:",
+    "vite": "catalog:frontend-peer",
     "ws": "catalog:"
   },
   "peerDependenciesMeta": {

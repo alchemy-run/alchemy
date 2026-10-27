@@ -94,7 +94,7 @@ const cloudflareAdapter: ReturnType<
   typeof createServerEntryAdapter<CloudflareAdapterOptions | undefined>
 > = createServerEntryAdapter(
   (
-    { processRequest, processBuild, setAllEnv, config, notFoundHtml },
+    { processRequest, processBuild, unstable_setAllEnv: setAllEnv, config, notFoundHtml },
     options?: CloudflareAdapterOptions,
   ) => {
     const {
