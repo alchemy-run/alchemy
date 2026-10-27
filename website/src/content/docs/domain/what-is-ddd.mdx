@@ -133,12 +133,12 @@ export class Account extends Domain.Aggregate("Account", {
   },
   evolve: {
     AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-    MoneyDeposited: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
-    MoneyWithdrawn: (s, e) => ({ ...mustBeOpen(s), balance: e.balanceAfter }),
+    MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
+    MoneyWithdrawn: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
   },
   reply: {
-    DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }),
-    WithdrawMoney: (s) => ({ balance: mustBeOpen(s).balance }),
+    DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
+    WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
   },
 }) {}
 ```

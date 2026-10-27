@@ -325,11 +325,12 @@ export const LiveContainerProvider = () =>
           ),
         );
         const response = yield* http.execute(request).pipe(
-          Effect.mapError(() =>
+          Effect.mapError((cause) =>
             ContainerRegistryError.make({
               reason: "ManifestRequestFailed",
               message: "Failed to resolve the container registry digest",
               imageRef,
+              cause,
             }),
           ),
         );

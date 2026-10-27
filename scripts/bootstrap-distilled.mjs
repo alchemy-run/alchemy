@@ -1,5 +1,14 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import {
+  constants,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
 
 // Git hooks export repository-specific variables. Do not pass those through to
@@ -18,6 +27,8 @@ function git(args, cwd) {
     cwd,
     env,
     encoding: "utf8",
+    // ls-tree and ls-files of a distilled checkout run to several MB.
+    maxBuffer: 256 * 1024 * 1024,
     stdio: ["ignore", "pipe", "inherit"],
   }).trim();
 }
@@ -106,9 +117,73 @@ export function bootstrap(root, previousHead) {
   // The destination was checked above: it is missing or empty. One --force
   // replaces only its stale registration; Git still refuses locked worktrees
   // (overriding a lock would require --force twice). Do not prune other entries.
-  git(["worktree", "add", "--force", "--detach", checkout, pin], mainCheckout);
+  git(["worktree", "add", "--force", "--detach", "--no-checkout", checkout, pin], mainCheckout);
   isolateWorktreeConfig(mainRoot);
+  populate(mainCheckout, checkout, pin);
   gitLocked(["submodule", "init", "--", "submodules/distilled"], root);
+}
+
+// Errors that mean "this filesystem cannot clone files": fall back to writing them.
+const NO_CLONE = new Set(["ENOTSUP", "EOPNOTSUPP", "EXDEV", "EINVAL", "ENOSYS"]);
+
+/**
+ * Fill a `--no-checkout` distilled worktree with the files at `pin`.
+ *
+ * A distilled checkout is about 1.1 GB, and every Alchemy worktree gets one.
+ * On a copy-on-write filesystem (APFS on macOS, btrfs, XFS) a file can be
+ * cloned: the copy shares the original's blocks until one of them changes. So
+ * every file whose content at `pin` matches the primary checkout's clean copy
+ * is cloned from it, which costs a few megabytes in total; Git writes the rest.
+ * On other filesystems the first clone fails and Git writes every file, as a
+ * plain `git worktree add` would. Set ALCHEMY_DISTILLED_CLONE=0 to skip cloning.
+ */
+function populate(mainCheckout, checkout, pin) {
+  if (env.ALCHEMY_DISTILLED_CLONE !== "0") cloneUnchanged(mainCheckout, checkout, pin);
+  git(["reset", "--quiet", "--mixed", pin], checkout);
+  // Hash the cloned files once so they count as clean, then let Git write
+  // every file that is still missing or different.
+  tryGit(["update-index", "-q", "--refresh"], checkout);
+  const stale = git(["diff", "--name-only", "-z"], checkout);
+  if (stale !== "") {
+    execFileSync("git", ["checkout", "--quiet", "--pathspec-from-file=-", "--pathspec-file-nul"], {
+      cwd: checkout,
+      env,
+      input: stale,
+      stdio: ["pipe", "inherit", "inherit"],
+    });
+  }
+}
+
+function cloneUnchanged(mainCheckout, checkout, pin) {
+  // The primary checkout's index, minus files with uncommitted changes.
+  const dirty = new Set(
+    git(["status", "--porcelain=v1", "-z", "--untracked-files=no", "--no-renames"], mainCheckout)
+      .split("\0")
+      .filter(Boolean)
+      .map((entry) => entry.slice(3)),
+  );
+  const indexed = new Map();
+  for (const entry of git(["ls-files", "--stage", "-z"], mainCheckout).split("\0")) {
+    const [meta, path] = entry.split("\t");
+    const [mode, oid, stage] = (meta ?? "").split(" ");
+    if (path && stage === "0" && mode !== "120000" && mode !== "160000" && !dirty.has(path)) {
+      indexed.set(path, oid);
+    }
+  }
+  for (const entry of git(["ls-tree", "-r", "-z", "--full-tree", pin], checkout).split("\0")) {
+    const [meta, path] = entry.split("\t");
+    const oid = (meta ?? "").split(" ")[2];
+    if (!path || indexed.get(path) !== oid) continue;
+    const target = resolve(checkout, path);
+    mkdirSync(dirname(target), { recursive: true });
+    try {
+      copyFileSync(resolve(mainCheckout, path), target, constants.COPYFILE_FICLONE_FORCE);
+    } catch (error) {
+      rmSync(target, { force: true });
+      if (NO_CLONE.has(error.code)) return;
+      throw error;
+    }
+  }
 }
 
 function isolateWorktreeConfig(mainRoot) {
