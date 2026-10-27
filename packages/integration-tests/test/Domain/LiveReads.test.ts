@@ -77,22 +77,22 @@ type Frame = { readonly envelope: { readonly seq: number } } | Domain.Read.Caugh
 
 /** A key's live reads, the same for an aggregate, a view and a stream. */
 interface LiveReads {
-  readonly watch: (key: string) => Stream.Stream<{ readonly cursor: string }, unknown>;
-  readonly events: (key: string, after?: string) => Stream.Stream<Frame, unknown>;
+  readonly watch: (key: string) => Stream.Stream<{ readonly cursor: number }, unknown>;
+  readonly events: (key: string, after?: number) => Stream.Stream<Frame, unknown>;
 }
 
 const readsOf = (api: Client): Record<"aggregate" | "view" | "stream", LiveReads> => ({
   aggregate: {
     watch: (key: string) => api.Counter.watch(key),
-    events: (key: string, after?: string) => api.Counter.events(key, { after }),
+    events: (key: string, after?: number) => api.Counter.events(key, { after }),
   },
   view: {
     watch: (key: string) => api.Totals.watch(key),
-    events: (key: string, after?: string) => api.Totals.events(key, { after }),
+    events: (key: string, after?: number) => api.Totals.events(key, { after }),
   },
   stream: {
     watch: (key: string) => api.Bumps.watch(key),
-    events: (key: string, after?: string) => api.Bumps.events(key, { after }),
+    events: (key: string, after?: number) => api.Bumps.events(key, { after }),
   },
 });
 
@@ -136,7 +136,7 @@ for (const [transport, layer] of [
           expect(frames(yield* Fiber.join(feed))).toEqual([1, 2, 3, "caught up at 3", 4]);
 
           // Resuming after a cursor: the rest of the history, nothing twice, no gap.
-          const resumed = yield* read.events("c-1", "2").pipe(Stream.take(3), Stream.runCollect);
+          const resumed = yield* read.events("c-1", 2).pipe(Stream.take(3), Stream.runCollect);
           expect(frames(resumed)).toEqual([3, 4, "caught up at 4"]);
 
           const empty = yield* read.events("c-0").pipe(Stream.take(1), Stream.runCollect);
@@ -154,7 +154,7 @@ for (const [transport, layer] of [
           yield* Effect.sleep("30 millis");
           yield* api.Increment({ target: "c-1", by: 4 });
           const [first, second] = yield* Fiber.join(watched);
-          expect([first!.cursor, second!.cursor]).toEqual(["3", "4"]);
+          expect([first!.cursor, second!.cursor]).toEqual([3, 4]);
 
           // From the first state's cursor, events sends only what came after it.
           const after = yield* read
@@ -182,10 +182,10 @@ for (const [transport, layer] of [
         const [aggregate] = yield* api.Counter.watch("c-1").pipe(Stream.take(1), Stream.runCollect);
         const [view] = yield* api.Totals.watch("c-1").pipe(Stream.take(1), Stream.runCollect);
         const [stream] = yield* api.Bumps.watch("c-1").pipe(Stream.take(1), Stream.runCollect);
-        expect(aggregate).toEqual({ state: { total: 6 }, cursor: "3" });
-        expect(view).toEqual({ state: { total: 6 }, cursor: "3" });
+        expect(aggregate).toEqual({ state: { total: 6 }, cursor: 3 });
+        expect(view).toEqual({ state: { total: 6 }, cursor: 3 });
         expect(stream!.state?.event).toEqual(new Bumped({ by: 3 }));
-        expect(stream!.cursor).toBe("3");
+        expect(stream!.cursor).toBe(3);
       }).pipe(Effect.scoped, Effect.provide(layer)),
     );
   });

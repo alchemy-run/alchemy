@@ -108,7 +108,7 @@ export const cardReads = Effect.fn(function* (bank: CustomerClient, accountId: A
   );
 
   // History from a position, then live; and a page of it.
-  yield* bank.AccountCard.events(accountId, { after: "0" }).pipe(Stream.take(1), Stream.runDrain);
+  yield* bank.AccountCard.events(accountId, { after: 0 }).pipe(Stream.take(1), Stream.runDrain);
   const page = yield* bank.AccountCard.list(accountId, { order: "desc", take: 10 });
   return [now, page.entries.length] as const;
 });

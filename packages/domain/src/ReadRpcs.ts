@@ -24,10 +24,10 @@ export const EnvelopeSchema = Schema.Struct({
 });
 
 /** The frame `events` sends after its history. */
-export const CaughtUpSchema = Schema.TaggedStruct("CaughtUp", { cursor: Schema.String });
+export const CaughtUpSchema = Schema.TaggedStruct("CaughtUp", { cursor: Schema.Number });
 
 /** What `watch` sends: a state with its cursor. */
-const snapshotSchema = (state: Schema.Top) => Schema.Struct({ state, cursor: Schema.String });
+const snapshotSchema = (state: Schema.Top) => Schema.Struct({ state, cursor: Schema.Number });
 
 /** Something an Api can expose for reading. */
 export type Readable = View.Any | Aggregate.Any | DomainStream.Any;
@@ -118,7 +118,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
         Rpc.make(`${name}.events`, {
           payload: {
             key,
-            after: Schema.optional(Schema.String),
+            after: Schema.optional(Schema.Number),
             where: Schema.optional(Schema.Unknown),
           },
           success: Schema.Union([CaughtUpSchema, recorded]),
@@ -133,11 +133,11 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
             where: Schema.optional(Schema.Unknown),
             order: Schema.optional(Schema.Literals(["asc", "desc"])),
             take: Schema.optional(Schema.Number),
-            after: Schema.optional(Schema.String),
+            after: Schema.optional(Schema.Number),
           },
           success: Schema.Struct({
             entries: Schema.Array(recorded),
-            cursor: Schema.NullOr(Schema.String),
+            cursor: Schema.NullOr(Schema.Number),
           }),
           error,
         }),
@@ -178,7 +178,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
         Rpc.make(`${name}.events`, {
           payload: {
             key,
-            after: Schema.optional(Schema.String),
+            after: Schema.optional(Schema.Number),
             where: Schema.optional(Schema.Unknown),
           },
           success: Schema.Union([CaughtUpSchema, recorded]),
@@ -193,11 +193,11 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
             where: Schema.optional(Schema.Unknown),
             order: Schema.optional(Schema.Literals(["asc", "desc"])),
             take: Schema.optional(Schema.Number),
-            after: Schema.optional(Schema.String),
+            after: Schema.optional(Schema.Number),
           },
           success: Schema.Struct({
             entries: Schema.Array(recorded),
-            cursor: Schema.NullOr(Schema.String),
+            cursor: Schema.NullOr(Schema.Number),
           }),
           error,
         }),
@@ -218,7 +218,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
       ),
       events: guard(
         Rpc.make(`${name}.events`, {
-          payload: { key: def.id, after: Schema.optional(Schema.String) },
+          payload: { key: def.id, after: Schema.optional(Schema.Number) },
           success: Schema.Union([CaughtUpSchema, recorded]),
           error,
           stream: true,

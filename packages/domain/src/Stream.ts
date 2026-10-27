@@ -96,7 +96,7 @@ export interface Host<Key extends Aggregate.Any, E> {
       readonly where?: Filter<E>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
-      readonly after?: string;
+      readonly after?: number;
     },
   ) => Effect.Effect<Page<Entry<E, Aggregate.IdOf<Key>>>>;
   /**

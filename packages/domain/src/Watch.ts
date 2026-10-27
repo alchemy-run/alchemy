@@ -143,7 +143,7 @@ const markCaughtUp = (subscription: Subscription, items: ReadonlyArray<Item>, cu
           ...items,
           {
             state: null,
-            value: Option.some({ _tag: "CaughtUp", cursor: String(cursor) }),
+            value: Option.some({ _tag: "CaughtUp", cursor }),
             marker: true,
           } satisfies Item,
         ],
@@ -172,7 +172,7 @@ export const viewPush =
           view,
           subscription,
           ref,
-          [{ state, value: Option.some({ state: visible, cursor: String(snapshot.seq) }) }],
+          [{ state, value: Option.some({ state: visible, cursor: snapshot.seq }) }],
           snapshot.version,
         );
       }
@@ -209,7 +209,7 @@ export const aggregatePush =
           aggregate,
           subscription,
           ref,
-          [{ state, value: Option.some({ state, cursor: String(current.version) }) }],
+          [{ state, value: Option.some({ state, cursor: current.version }) }],
           current.version,
         );
       }
@@ -248,7 +248,7 @@ export const streamPush =
           stream,
           subscription,
           ref,
-          [{ state: decoded, value: Option.some({ state: decoded, cursor: String(meta.seq) }) }],
+          [{ state: decoded, value: Option.some({ state: decoded, cursor: meta.seq }) }],
           meta.seq,
         );
       }

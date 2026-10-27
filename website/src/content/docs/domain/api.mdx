@@ -79,7 +79,7 @@ read: {
 
 ```typescript title="packages/server/test/apiEntries.ts"
 const account = yield* bank.Account.get(accountId);
-const history = bank.Account.events(accountId, { after: "0" });
+const history = bank.Account.events(accountId, { after: 0 });
 ```
 
 Reading an aggregate directly is handy for an account's own screen. For anything shaped for a question, like a statement or a dashboard, prefer a view: it keeps the aggregate's state free to change with its rules.

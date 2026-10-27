@@ -96,7 +96,7 @@ export interface ViewClient<V extends View.Any> {
   readonly events: (
     key: Aggregate.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
-      readonly after?: string;
+      readonly after?: number;
       readonly where?: Filter<View.EventOf<V>>;
     },
   ) => Stream.Stream<
@@ -110,7 +110,7 @@ export interface ViewClient<V extends View.Any> {
       readonly where?: Filter<View.EventOf<V>>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
-      readonly after?: string;
+      readonly after?: number;
     },
   ) => Effect.Effect<
     View.Page<View.Entry<View.StateOf<V>, View.EventOf<V>, Aggregate.IdOf<View.KeyOf<V>>>>,
@@ -149,7 +149,7 @@ export interface StreamClient<S extends DomainStream.Any> {
   readonly events: (
     key: Aggregate.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions & {
-      readonly after?: string;
+      readonly after?: number;
       readonly where?: Filter<DomainStream.EventOf<S>>;
     },
   ) => Stream.Stream<
@@ -164,7 +164,7 @@ export interface StreamClient<S extends DomainStream.Any> {
       readonly where?: Filter<DomainStream.EventOf<S>>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
-      readonly after?: string;
+      readonly after?: number;
     },
   ) => Effect.Effect<
     View.Page<DomainStream.Entry<DomainStream.EventOf<S>, Aggregate.IdOf<DomainStream.KeyOf<S>>>>,
@@ -196,7 +196,7 @@ export interface AggregateClient<A extends Aggregate.Any> {
    */
   readonly events: (
     key: Aggregate.IdOf<A>,
-    options?: CallOptions & { readonly after?: string },
+    options?: CallOptions & { readonly after?: number },
   ) => Stream.Stream<
     Recorded<Aggregate.EventOf<A>, Aggregate.IdOf<A>> | Read.CaughtUp,
     ReadError<A["definition"]["read"]>
@@ -348,12 +348,12 @@ interface ReadPayload {
   readonly key: string;
   readonly where?: unknown;
   readonly atLeast?: { readonly stream: string; readonly version: number };
-  readonly after?: string;
+  readonly after?: number;
   readonly order?: "asc" | "desc";
   readonly take?: number;
 }
 
-const caughtUpAt = (seq: number): Read.CaughtUp => ({ _tag: "CaughtUp", cursor: String(seq) });
+const caughtUpAt = (seq: number): Read.CaughtUp => ({ _tag: "CaughtUp", cursor: seq });
 
 /**
  * A key's events from `start`, with a `CaughtUp` frame after its history: the
@@ -449,12 +449,12 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
               return check(
                 "watch",
                 refOf(id),
-              )(entry).pipe(Effect.as({ state: entry, cursor: String(entry?.envelope.seq ?? 0) }));
+              )(entry).pipe(Effect.as({ state: entry, cursor: entry?.envelope.seq ?? 0 }));
             }),
           ),
         );
         handlers[`${name}.events`] = stream(rpcs.events, ({ key: id, after, where }) => {
-          const start = after === undefined ? 0 : Number(after);
+          const start = after ?? 0;
           return Stream.unwrap(
             latest(id).pipe(
               Effect.map((last) =>
@@ -481,7 +481,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
                 where: where as Filter<unknown> | undefined,
                 order,
                 take,
-                after: after === undefined ? undefined : String(after),
+                after,
               }),
             ),
           ),
@@ -516,21 +516,19 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
               return check(
                 "watch",
                 refOf(id),
-              )(state).pipe(
-                Effect.as({ state: visible(state, where), cursor: String(snapshot.seq) }),
-              );
+              )(state).pipe(Effect.as({ state: visible(state, where), cursor: snapshot.seq }));
             }),
           ),
         );
         handlers[`${name}.events`] = stream(rpcs.events, ({ key: id, after, where }) => {
-          const start = after === undefined ? 0 : Number(after);
+          const start = after ?? 0;
           return Stream.unwrap(
             viewStore.read(id).pipe(
               Effect.map((snapshot) =>
                 withCaughtUp(
                   start,
                   snapshot.seq,
-                  host.events(refOf(id), { after: String(start) }),
+                  host.events(refOf(id), { after: start }),
                   (entry) => entry.envelope.seq,
                   (entry) =>
                     matches(where as Filter<unknown> | undefined, entry.event)
@@ -550,7 +548,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
                 where: where as Filter<unknown> | undefined,
                 order,
                 take,
-                after: after === undefined ? undefined : String(after),
+                after,
               }),
             ),
           ),
@@ -576,12 +574,12 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
             return check(
               "watch",
               refOf(id),
-            )(decoded).pipe(Effect.as({ state: decoded, cursor: String(version) }));
+            )(decoded).pipe(Effect.as({ state: decoded, cursor: version }));
           }),
         ),
       );
       handlers[`${name}.events`] = stream(rpcs.events, ({ key: id, after }) => {
-        const start = after === undefined ? 0 : Number(after);
+        const start = after ?? 0;
         return Stream.unwrap(
           store.state(id).pipe(
             Effect.map(({ version }) =>
@@ -704,7 +702,7 @@ const liveReads = (
       mode: read.mode,
       where: where as Subscription["where"],
       context: {},
-      cursor: live.cursor ?? (read.mode === "watch" ? -1 : after === undefined ? 0 : Number(after)),
+      cursor: live.cursor ?? (read.mode === "watch" ? -1 : (after ?? 0)),
     };
     const judged = yield* authorized.pipe(
       Effect.map((context): Subscription => ({ ...subscription, context })),

@@ -261,7 +261,7 @@ export interface Entry<S, E, Id = string> {
 export interface Page<Entry> {
   readonly entries: ReadonlyArray<Entry>;
   /** Pass as `after` to continue; `null` when there are no more entries. */
-  readonly cursor: string | null;
+  readonly cursor: number | null;
 }
 
 /**
@@ -312,7 +312,7 @@ export interface Host<S, Key extends Aggregate.Any, E> {
    */
   readonly events: (
     key: Aggregate.Ref<Key>,
-    options?: { readonly after?: string; readonly where?: Filter<E> },
+    options?: { readonly after?: number; readonly where?: Filter<E> },
   ) => Stream.Stream<Entry<S, E, Aggregate.IdOf<Key>>>;
   /** A page of the key's emitted events, oldest first unless `order` is `"desc"`. */
   readonly list: (
@@ -321,7 +321,7 @@ export interface Host<S, Key extends Aggregate.Any, E> {
       readonly where?: Filter<E>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
-      readonly after?: string;
+      readonly after?: number;
     },
   ) => Effect.Effect<Page<Entry<S, E, Aggregate.IdOf<Key>>>>;
 }

@@ -154,14 +154,14 @@ test(
     );
     expect(
       feed.map((frame) => (Domain.Read.isCaughtUp(frame) ? frame.cursor : frame.event.kind)),
-    ).toEqual(["deposit", "withdrawal", "transfer-out", String(page.entries[0]!.envelope.seq)]);
+    ).toEqual(["deposit", "withdrawal", "transfer-out", page.entries[0]!.envelope.seq]);
     // a watched state's cursor resumes the feed with nothing twice: straight to CaughtUp
     const [watched] = yield* sam.Statement.watch(samMain).pipe(
       Stream.take(1),
       Stream.runCollect,
       Effect.timeout("20 seconds"),
     );
-    expect(watched!.cursor).toBe(String(page.entries[0]!.envelope.seq));
+    expect(watched!.cursor).toBe(page.entries[0]!.envelope.seq);
     const [resumed] = yield* sam.Statement.events(samMain, { after: watched!.cursor }).pipe(
       Stream.take(1),
       Stream.runCollect,
@@ -181,7 +181,7 @@ test(
       Effect.timeout("20 seconds"),
     );
     expect(history.at(-1)).toEqual({ _tag: "CaughtUp", cursor: account!.cursor });
-    expect(history.length - 1).toBe(Number(account!.cursor));
+    expect(history.length - 1).toBe(account!.cursor);
 
     // a projection (AccountCards) appends to a stream; its Durable Object pushes each new card
     const card = yield* sam.AccountCard.watch(samMain).pipe(

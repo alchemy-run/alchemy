@@ -8,13 +8,12 @@ export type Mode = "get" | "watch" | "events" | "list";
 
 /**
  * What `watch` sends: the key's state and the cursor it is valid at, the
- * `seq` of the last event the key had when the state was read (`"0"` before
- * any).
+ * `seq` of the last event the key had when the state was read (`0` before any).
  */
 export interface Snapshot<S> {
   readonly state: S;
   /** Pass as `after` to `events` to receive every later event, once. */
-  readonly cursor: string;
+  readonly cursor: number;
 }
 
 /**
@@ -24,8 +23,8 @@ export interface Snapshot<S> {
  */
 export interface CaughtUp {
   readonly _tag: "CaughtUp";
-  /** The `seq` of the last event of the history (`"0"` for none); resume `events` after it. */
-  readonly cursor: string;
+  /** The `seq` of the last event of the history (`0` for none); resume `events` after it. */
+  readonly cursor: number;
 }
 
 /** Is a frame of `events` the {@link CaughtUp} marker? */

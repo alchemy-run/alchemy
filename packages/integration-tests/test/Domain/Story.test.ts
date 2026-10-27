@@ -641,8 +641,8 @@ describe("Domain Story", () => {
       yield* Effect.sleep("20 millis");
       yield* counters.send(c1, new Increment({ by: 2 }));
       expect(yield* Fiber.join(totals)).toEqual([
-        { state: { total: 3 }, cursor: "1" },
-        { state: { total: 5 }, cursor: "2" },
+        { state: { total: 3 }, cursor: 1 },
+        { state: { total: 5 }, cursor: 2 },
       ]);
       expect((yield* Fiber.join(states)).map(({ state }) => state.total)).toEqual([3, 5]);
 
