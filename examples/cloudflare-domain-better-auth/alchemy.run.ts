@@ -8,6 +8,13 @@ export default Alchemy.Stack(
   { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const notes = yield* NotesWorker;
-    return { url: notes.url.as<string>() };
+    // The foldkit app, built with Vite. Its Worker serves the build and
+    // forwards /api to the Notes Worker, so the app and the Api share one origin.
+    const app = yield* Cloudflare.Website.Foldkit("NotesApp", {
+      main: "src/web/worker.ts",
+      env: { NOTES: notes },
+      assets: { runWorkerFirst: ["/api", "/api/*"] },
+    });
+    return { url: app.url.as<string>() };
   }),
 );

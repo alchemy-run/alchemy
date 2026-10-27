@@ -1,4 +1,4 @@
-/public/page.js
+dist/
 *.map
 .env
 node_modules/

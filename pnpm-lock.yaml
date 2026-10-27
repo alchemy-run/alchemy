@@ -2114,6 +2114,9 @@ importers:
       '@alchemy.run/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@effect/platform-browser':
+        specifier: 4.0.5
+        version: 4.0.5(effect@4.0.5)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
@@ -2123,6 +2126,9 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+      foldkit:
+        specifier: 'catalog:'
+        version: 0.167.0(@effect/platform-browser@4.0.5(effect@4.0.5))(effect@4.0.5)
     devDependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
@@ -2130,6 +2136,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.5(effect@4.0.5)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
+      '@foldkit/vite-plugin':
+        specifier: 'catalog:'
+        version: 0.27.1(effect@4.0.5)(foldkit@0.167.0(@effect/platform-browser@4.0.5(effect@4.0.5))(effect@4.0.5))(redis@6.2.1)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
@@ -2139,6 +2148,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
       vitest:
         specifier: 'catalog:'
         version: 5.0.4(@types/node@26.6.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))

@@ -1,6 +1,6 @@
 # Domain + better-auth on Cloudflare
 
-Signs users in to a Domain Api with GitHub or Google through [better-auth](https://better-auth.com). Companion to the [Sign in with better-auth](https://alchemy.run/domain/better-auth) page.
+Signs users in to a Domain Api with GitHub or Google through [better-auth](https://better-auth.com), with a [foldkit](https://foldkit.dev) UI. Companion to the [Sign in with better-auth](https://alchemy.run/domain/better-auth) page.
 
 ## Run locally
 
@@ -8,10 +8,10 @@ Signs users in to a Domain Api with GitHub or Google through [better-auth](https
 pnpm install
 cd examples/cloudflare-domain-better-auth
 cp .env.example .env   # add your GitHub and Google OAuth credentials
-bun run dev
+bun alchemy dev
 ```
 
-Register `http://localhost:1337/api/auth/callback/github` and `http://localhost:1337/api/auth/callback/google` as the callback URLs of your OAuth apps.
+`alchemy dev` prints the app's URL (`http://localhost:1338`). Register `<app url>/api/auth/callback/github` and `<app url>/api/auth/callback/google` as the callback URLs of your OAuth apps.
 
 ## Test
 
@@ -19,4 +19,4 @@ Register `http://localhost:1337/api/auth/callback/github` and `http://localhost:
 pnpm test
 ```
 
-The tests sign users in through a local OpenID Connect provider, then call the Api over HTTP with the session cookie.
+The tests sign users in through a local OpenID Connect provider, then call the Api over HTTP with the session cookie. foldkit stories test the app's `update`.

@@ -16,13 +16,12 @@ const NotesLive = SessionLive.pipe(
   Layer.provide(Layer.mergeAll(DomainCloudflare.DurableObjects, CloudflareD1(AuthDb))),
 );
 
-/** Serves the page, better-auth's routes under /api/auth, and the NotesApi under /api. */
+/** Serves better-auth's routes under /api/auth, and the NotesApi under /api. */
 export default class NotesWorker extends Cloudflare.Worker<NotesWorker>()(
   "NotesWorker",
   {
     main: import.meta.url,
     compatibility: { flags: ["nodejs_compat"] },
-    assets: { directory: "./public" },
   },
   Effect.gen(function* () {
     const auth = yield* Auth;

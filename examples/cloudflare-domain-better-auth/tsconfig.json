@@ -1,6 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["alchemy.run.ts", "src/**/*", "test/**/*", "vitest.config.ts"],
+  "include": ["alchemy.run.ts", "src/**/*", "test/**/*", "vitest.config.ts", "vite.config.ts"],
   "compilerOptions": {
     "noEmit": true,
     "rootDir": ".",

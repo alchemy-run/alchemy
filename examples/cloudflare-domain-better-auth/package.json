@@ -10,9 +10,8 @@
   },
   "type": "module",
   "scripts": {
-    "build:client": "bun build src/page.ts --target browser --outdir public",
-    "dev": "bun run build:client && alchemy dev",
-    "deploy": "bun run build:client && alchemy deploy",
+    "dev": "alchemy dev",
+    "deploy": "alchemy deploy",
     "destroy": "alchemy destroy",
     "test": "vitest run"
   },
@@ -20,16 +19,20 @@
     "@alchemy.run/better-auth": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/domain": "workspace:*",
+    "@effect/platform-browser": "catalog:",
     "alchemy": "workspace:*",
     "better-auth": "catalog:",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "foldkit": "catalog:"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
+    "@foldkit/vite-plugin": "catalog:",
     "@types/bun": "catalog:",
     "oauth2-mock-server": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:"
   }
 }
