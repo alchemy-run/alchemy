@@ -6,7 +6,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as parametermanager from "@distilled.cloud/gcp/parametermanager_v1";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import ParameterManagerBindingsHost, { AppConfig, PAYLOAD, V1 } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -35,7 +35,7 @@ const hostProjectGrants = Effect.gen(function* () {
 
 const base64 = (text: string) => Buffer.from(text, "utf8").toString("base64");
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "ParameterManager Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:parametermanager", "provider:gcp:run", "live"],

@@ -35,7 +35,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { dockerAvailable, FLOCI_ENDPOINT, rawS3GetObject } from "./fixtures/raw.ts";
+import { FLOCI_ENDPOINT, rawS3GetObject } from "./fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -99,7 +99,7 @@ const assumeRolePolicy = {
   ],
 };
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "SQS -> raw floci Lambda -> S3 event pumping through our client stack",
   (stack) =>
     Effect.gen(function* () {

@@ -7,7 +7,7 @@ import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import ArtifactRegistryBindingsHost, { Images } from "./fixtures/bindings-host.ts";
 import { IMAGE, pushDockerVersion } from "./registry.ts";
 
@@ -40,7 +40,7 @@ const projectGrantsOf = (account: string) =>
       }));
   });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "ArtifactRegistry Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:artifactregistry", "provider:gcp:run", "live"],

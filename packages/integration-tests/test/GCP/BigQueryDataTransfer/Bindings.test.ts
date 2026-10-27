@@ -6,7 +6,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as bqdt from "@distilled.cloud/gcp/bigquerydatatransfer_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import BigQueryDataTransferBindingsHost, { Nightly } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -33,7 +33,7 @@ const projectGrantsOf = (account: string) =>
       }));
   });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "BigQueryDataTransfer Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:bigquerydatatransfer", "provider:gcp:run", "live"],

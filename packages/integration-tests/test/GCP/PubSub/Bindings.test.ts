@@ -7,7 +7,7 @@ import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { callProbe, dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { callProbe, expectProbe } from "../bindingHost.ts";
 import PubSubBindingsHost, {
   EventSchema,
   PUBLISH_PAYLOAD,
@@ -100,7 +100,7 @@ const expectNoRedelivery = (subscription: string) =>
     expect(page.receivedMessages ?? []).toEqual([]);
   });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "PubSub Bindings",
   { tags: ["provider:gcp", "provider:gcp:pubsub", "provider:gcp:run", "live"] },
   () => {

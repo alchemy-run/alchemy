@@ -5,7 +5,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as datastore from "@distilled.cloud/gcp/datastore_v1";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import DatastoreBindingsHost, {
   apiDatabaseId,
   COMMITTED,
@@ -87,7 +87,7 @@ const expectScopedGrants = Effect.gen(function* () {
   ]);
 });
 
-describe.skipIf(!dockerAvailable || !!process.env.FAST)(
+describe.skipIf(!!process.env.FAST)(
   "Datastore Bindings",
   {
     tags: [

@@ -6,7 +6,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as cloudbuild from "@distilled.cloud/gcp/cloudbuild_v2";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import CloudBuildBindingsHost, { Source } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -48,7 +48,7 @@ const expectProjectGrants = Effect.gen(function* () {
   expect(yield* projectGrantsOf(hostAccount)).toEqual(PROJECT_GRANTS);
 });
 
-describe.skipIf(!dockerAvailable || !runLifecycle)(
+describe.skipIf(!runLifecycle)(
   "CloudBuild Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:cloudbuild", "provider:gcp:run", "live"],

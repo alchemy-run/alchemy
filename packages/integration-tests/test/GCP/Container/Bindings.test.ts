@@ -5,7 +5,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as container from "@distilled.cloud/gcp/container_v1";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import ContainerBindingsHost, {
   App,
   slow,
@@ -39,7 +39,7 @@ const expectProjectGrants = Effect.gen(function* () {
   expect(roles).toEqual([{ role: "roles/container.clusterViewer", condition: undefined }]);
 });
 
-describe.skipIf(!dockerAvailable || !slow)(
+describe.skipIf(!slow)(
   "Container Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:container", "provider:gcp:run", "live"],

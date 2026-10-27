@@ -8,7 +8,7 @@ import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as storagetransfer from "@distilled.cloud/gcp/storagetransfer_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import StorageTransferBindingsHost, {
   Copy,
   SEED_KEY,
@@ -77,7 +77,7 @@ const grantBucketRole = (bucket: string, member: string, role: string) =>
     }),
   );
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "StorageTransfer Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:storagetransfer", "provider:gcp:run", "live"],

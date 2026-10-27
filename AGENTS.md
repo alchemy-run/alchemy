@@ -766,6 +766,7 @@ Choose the deployment-based pattern that fits the behavior under test:
 
 Keep regression cases in the relevant existing resource or binding suite. A Worker lifecycle feature belongs in `test/Cloudflare/Workers/Worker.test.ts`; binding fixtures belong beside their owning suite in `fixtures/`.
 
+- Assume Docker is installed. Never `skipIf`-gate a test on Docker availability; a missing daemon fails the test.
 - Start and end `test.provider` cases with `stack.destroy()`. Fixture suites deploy in `beforeAll` and destroy in `afterAll`. Use deterministic resource identities and verify deletion through the cloud API.
 - Exercise create, update, redeploy, and removal through the stack. **Do not mock HTTP or SDK responses, invoke provider lifecycle methods directly, or call extracted reconciliation helpers as a substitute for a deployment.**
 - Verify the resulting cloud state through distilled and exercise the deployed runtime when relevant. Use real SDK calls on test-owned resources to establish out-of-band state or verify API update semantics. Keep provider behavior assertions driven by `stack.deploy`.

@@ -6,7 +6,7 @@ import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as workflowexecutions from "@distilled.cloud/gcp/workflowexecutions_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import WorkflowsBindingsHost, { Greet } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -18,7 +18,7 @@ let hostAccount: string;
 let project: string;
 let workflowName: string;
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "Workflows Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:workflows", "provider:gcp:run", "live"],

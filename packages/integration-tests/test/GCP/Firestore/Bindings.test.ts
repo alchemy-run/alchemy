@@ -6,7 +6,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import FirestoreBindingsHost, {
   DocsDatabase,
   PATCHED,
@@ -67,7 +67,7 @@ const scopedRoles = (database: string) =>
       .sort();
   });
 
-describe.skipIf(!dockerAvailable || !!process.env.FAST)(
+describe.skipIf(!!process.env.FAST)(
   "Firestore Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:firestore", "provider:gcp:run", "live"],

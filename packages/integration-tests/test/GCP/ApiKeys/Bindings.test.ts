@@ -6,7 +6,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as apikeys from "@distilled.cloud/gcp/apikeys_v2";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import ApiKeysBindingsHost, { Maps } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -33,7 +33,7 @@ const projectGrantsOf = (account: string) =>
       }));
   });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "ApiKeys Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:apikeys", "provider:gcp:run", "live"],

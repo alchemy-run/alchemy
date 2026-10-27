@@ -6,7 +6,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as cw from "@distilled.cloud/gcp/contentwarehouse_v1";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import ContentWarehouseBindingsHost, {
   Checks,
   Note,
@@ -54,7 +54,7 @@ const expectProjectGrants = Effect.gen(function* () {
   ]);
 });
 
-describe.skipIf(!dockerAvailable || !runLifecycle)(
+describe.skipIf(!runLifecycle)(
   "ContentWarehouse Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:contentwarehouse", "provider:gcp:run", "live"],

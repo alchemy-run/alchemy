@@ -7,7 +7,7 @@ import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import { callProbe, dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { callProbe, expectProbe } from "../bindingHost.ts";
 import StorageBindingsHost, {
   DeleteAssets,
   GetAssets,
@@ -53,7 +53,7 @@ const objectOf = (bucket: string, object: string) =>
     .getObjects({ bucket, object })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "Storage Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:storage", "provider:gcp:run", "live"],

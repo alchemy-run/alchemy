@@ -1,4 +1,5 @@
 import { CurrentActivity } from "alchemy/WorkflowEncoding";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import type * as DateTime from "effect/DateTime";
@@ -8,6 +9,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Command from "./Command.ts";
 import type * as Event from "./Event.ts";
+import { DefinitionError, judge, settle, targetId as internalTargetId } from "./internal.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
 import type * as Rejection from "./Rejection.ts";
@@ -86,7 +88,10 @@ type ReplyTags<C extends Command.Any> = C extends {
 
 type IdSchema = Schema.Top & { readonly Type: string; readonly Encoded: string };
 
-/** What `decide` returns for a command: events, a rejection, or an Effect of either. */
+/**
+ * What `decide` returns for a command: events, a rejection, or an Effect of
+ * either. The Effect may read what the command's middleware provides.
+ */
 export type Decision<C extends Command.Any> =
   | ReadonlyArray<InstanceOf<C["events"][number]>>
   | InstanceOf<C["rejects"][number]>
@@ -373,6 +378,117 @@ export type CommandOf<A extends Any> = InstanceOf<A["definition"]["commands"][nu
 /** The requirement identifier of an aggregate class. */
 export type Identifier<A extends Any> = A extends Context.Key<infer I, unknown> ? I : never;
 
+/**
+ * Options for {@link predict}: what the server would give `decide`. A command
+ * with middleware needs `context`: what its middleware provides, from a
+ * client-side Layer of the same services.
+ */
+export type PredictOptions<Id = string, R = never> = PredictBase<Id> &
+  ([R] extends [never]
+    ? { readonly context?: Context.Context<never> }
+    : { readonly context: Context.Context<R> });
+
+interface PredictBase<Id> {
+  /** The id of the instance the command targets. */
+  readonly id: Id;
+  /** The time the command is decided at (the server stamps commands with its clock). */
+  readonly now: DateTime.Utc;
+  /** The state's version: predicted envelopes continue from it. Defaults to `0`. */
+  readonly version?: number;
+  /** The id the command will be sent with, for the predicted envelopes. Defaults to `""`. */
+  readonly commandId?: string;
+  /** Defaults to the command id. */
+  readonly correlationId?: string;
+}
+
+/**
+ * What the aggregate would do with a command, decided locally: the events it
+ * would record and the state after them, the rejection it would return, or
+ * `Unpredictable` when only the server can tell. `cause` says why: `decide`
+ * waited on something asynchronous (the server awaits it; `predict` is
+ * synchronous), died, or broke its command's declaration through a cast (a
+ * `DefinitionError`, which the server dies on).
+ */
+export type Prediction<State, Ev, Rej, Id = string> =
+  | {
+      readonly _tag: "Accepted";
+      readonly events: ReadonlyArray<Ev>;
+      /** One envelope per event, as the server would stamp it (`seq` from `version`). */
+      readonly envelopes: ReadonlyArray<Envelope<Id>>;
+      readonly state: State;
+    }
+  | { readonly _tag: "Rejected"; readonly rejection: Rej }
+  | { readonly _tag: "Unpredictable"; readonly cause: Cause.Cause<unknown> };
+
+/**
+ * Run an aggregate's own `decide` and `evolve` for one command, without a
+ * platform: the same events and state, or the same rejection, as the server
+ * for the same state, id and time. Use it to show a command's outcome before
+ * the server answers.
+ *
+ * An effectful decision runs here synchronously, as the kernel runs it: a
+ * rejection fails with itself, and a `decide` that suspends or dies gives
+ * `Unpredictable`. `predict` never throws.
+ */
+export const predict = (
+  aggregate: Any,
+  state: unknown,
+  command: { readonly _tag: string },
+  options: PredictOptions<unknown>,
+): Prediction<unknown, { readonly _tag: string }, { readonly _tag: string }, unknown> => {
+  const def = aggregate.definition;
+  const cls = def.commands.find((c) => c.tag === command._tag);
+  const decide = def.decide[command._tag] as
+    | ((state: unknown, command: unknown, ctx: DecideContext<unknown>) => unknown)
+    | undefined;
+  if (!cls || !decide) {
+    return {
+      _tag: "Unpredictable",
+      cause: Cause.die(
+        new DefinitionError(`${aggregate.aggregateName} does not handle '${command._tag}'`),
+      ),
+    };
+  }
+  let decision = decide(state, command, { id: options.id, now: options.now });
+  if (Effect.isEffect(decision)) {
+    const settled = settle(
+      Effect.runSyncExit(
+        Effect.provideContext(
+          decision as Effect.Effect<unknown, unknown, never>,
+          (options.context ?? Context.empty()) as Context.Context<never>,
+        ),
+      ),
+    );
+    if (settled._tag === "Failed") return { _tag: "Unpredictable", cause: settled.cause };
+    decision = settled.decision;
+  }
+  const judged = judge(aggregate.aggregateName, cls, decision);
+  if (judged._tag === "Undeclared")
+    return { _tag: "Unpredictable", cause: Cause.die(judged.error) };
+  if (judged._tag === "Rejected") return judged;
+  const version = options.version ?? 0;
+  const commandId = options.commandId ?? "";
+  const envelopes: Array<Envelope<unknown>> = [];
+  let next = state;
+  judged.events.forEach((event, index) => {
+    const envelope: Envelope<unknown> = {
+      id: options.id,
+      stream: `${aggregate.aggregateName}/${String(options.id)}`,
+      seq: version + index + 1,
+      at: options.now,
+      commandId,
+      correlationId: options.correlationId ?? commandId,
+    };
+    envelopes.push(envelope);
+    next = (def.evolve[event._tag] as (s: unknown, e: unknown, env: unknown) => unknown)(
+      next,
+      event,
+      envelope,
+    );
+  });
+  return { _tag: "Accepted", events: judged.events, envelopes, state: next };
+};
+
 const RefClass = Symbol.for("alchemy/Domain/Ref.class");
 
 /**
@@ -492,10 +608,7 @@ export const streamOf = (ref: { readonly aggregate: string; readonly id: string 
   `${ref.aggregate}/${ref.id}`;
 
 /** The id addressed by a {@link Target}. @internal */
-export const targetId = (target: unknown): string =>
-  typeof target === "object" && target !== null && "id" in target
-    ? String((target as { readonly id: unknown }).id)
-    : String(target);
+export const targetId = internalTargetId;
 
 /**
  * Deterministic command ids for sends made while a policy handles a trigger,
@@ -562,7 +675,7 @@ export const make = <
   const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 >(
   name: Name,
-  definition: Definition<Id, S, C, Ms, Rejects>,
+  definition: Definition<Id, S, C, Ms, Rejects> & TargetsMatch<Id, C>,
 ): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>> => {
   const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects>>>()(
     `alchemy/Domain/Aggregate/${name}`,
@@ -581,7 +694,37 @@ export const make = <
     static ref<Self extends Any>(this: Self, id: Self["definition"]["id"]["Encoded"]): Ref<Self> {
       return makeRef(this, decodeId(id) as IdOf<Self>);
     }
+    /** Decide a command locally. See {@link predict}. */
+    static predict(
+      this: Any,
+      state: unknown,
+      command: { readonly _tag: string },
+      options: PredictOptions<unknown>,
+    ) {
+      return predict(this, state, command, options);
+    }
   } as unknown as AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>>;
+};
+
+/**
+ * A command whose `target` is the aggregate's `id`, both ways; any other
+ * command becomes a message naming it.
+ */
+type CheckTarget<Id extends IdSchema, Cmd> = Cmd extends Command.Any
+  ? [Id["Type"]] extends [Cmd["target"]["Type"]]
+    ? [Cmd["target"]["Type"]] extends [Id["Type"]]
+      ? Cmd
+      : `${Cmd["tag"]}'s target must be this aggregate's id schema`
+    : `${Cmd["tag"]}'s target must be this aggregate's id schema`
+  : Cmd;
+
+/**
+ * Every command's `target` must be the aggregate's `id`: an Api decodes the
+ * target with the command's schema and the aggregate decodes it with its own.
+ * A mismatched command is a type error on its entry in `commands`.
+ */
+export type TargetsMatch<Id extends IdSchema, C extends ReadonlyArray<Command.Any>> = {
+  readonly commands: { readonly [K in keyof C]: CheckTarget<Id, C[K]> };
 };
 
 /** A definition with its events collected from its commands. */
@@ -605,4 +748,30 @@ export interface AggregateClass<
   readonly definition: Def;
   /** Address one instance of this aggregate. */
   ref<Self extends Any>(this: Self, id: Self["definition"]["id"]["Encoded"]): Ref<Self>;
+  /**
+   * Decide a command locally, with this aggregate's own `decide` and
+   * `evolve`: the events and state, or the rejection, the server would give
+   * for the same state, id and time. A command with middleware needs
+   * `context`: what its middleware provides, from a client-side Layer. See
+   * {@link predict}.
+   *
+   * **Example:** Show a withdrawal before the bank answers
+   * ```typescript
+   * const context = yield* Layer.build(Layer.succeed(CurrentActor, actor));
+   * const outcome = Account.predict(state, new WithdrawMoney({ amount: 30 }), { id, now, context });
+   * if (outcome._tag === "Rejected") showError(outcome.rejection); // InsufficientFunds
+   * if (outcome._tag === "Accepted") showPending(outcome.state);
+   * ```
+   */
+  predict<Self extends Any, Cmd extends CommandOf<Self>>(
+    this: Self,
+    state: StateOf<Self>,
+    command: Cmd,
+    options: PredictOptions<IdOf<Self>, Command.ContextOf<CommandClassOf<Self["definition"], Cmd>>>,
+  ): Prediction<
+    StateOf<Self>,
+    InstanceOf<CommandClassOf<Self["definition"], Cmd>["events"][number]>,
+    InstanceOf<CommandClassOf<Self["definition"], Cmd>["rejects"][number]>,
+    IdOf<Self>
+  >;
 }

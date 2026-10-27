@@ -5,7 +5,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as recaptchaenterprise from "@distilled.cloud/gcp/recaptchaenterprise_v1";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import RecaptchaBindingsHost, { Signup } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -18,7 +18,7 @@ let project: string;
 let keyName: string;
 let keyId: string;
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "RecaptchaEnterprise Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:recaptchaenterprise", "provider:gcp:run", "live"],

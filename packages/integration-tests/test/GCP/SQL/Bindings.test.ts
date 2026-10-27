@@ -6,7 +6,7 @@ import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import SqlBindingsHost, { Db, USER_PASSWORD } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -61,7 +61,7 @@ const expectRole = (role: string) =>
     });
   });
 
-describe.skipIf(!dockerAvailable || !runLifecycle)(
+describe.skipIf(!runLifecycle)(
   "SQL Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:sql", "provider:gcp:run", "live"],

@@ -4,11 +4,12 @@ import { findClusterAdapter } from "@alchemy.run/kubernetes/ClusterAdapter";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as container from "@distilled.cloud/gcp/container_v1";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
-import { CAPACITY_ZONE, CAPACITY_ZONE_2, withGkeClusterSlot } from "../zones.ts";
+import { CAPACITY_REGION, CAPACITY_ZONE, CAPACITY_ZONE_2, withGkeClusterSlot } from "../zones.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -238,6 +239,69 @@ test.provider.skipIf(!runLifecycle)(
       }),
     ).pipe(logLevel),
   // Create ~6 min, logging update ~5 min, delete ~5 min.
+  {
+    tags: ["provider:gcp", "provider:gcp:container", "live"],
+    timeout: 1_800_000,
+    retry: 0,
+  },
+);
+
+test.provider.skipIf(!runLifecycle)(
+  "runs autopilot nodes as a dedicated service account",
+  (stack) =>
+    withGkeClusterSlot(
+      Effect.gen(function* () {
+        const { project } = yield* GcpEnvironment.current;
+        yield* stack.destroy();
+
+        const autopilot = (serviceAccount?: string) =>
+          Effect.gen(function* () {
+            const nodes = yield* GCP.IAM.ServiceAccount("GkeNodes", {});
+            const role = yield* GCP.IAM.Member("GkeNodesRole", {
+              kind: "project",
+              name: project,
+              role: "roles/container.defaultNodeServiceAccount",
+              member: Output.interpolate`serviceAccount:${nodes.email}`,
+            });
+            const cluster = yield* GCP.Container.Cluster("Autopilot", {
+              location: CAPACITY_REGION,
+              autopilot: true,
+              // Grant the node role before GKE provisions any node.
+              serviceAccount:
+                serviceAccount ??
+                Output.all(nodes.email, role.role).pipe(Output.map(([email]) => email)),
+            });
+            return { nodes, cluster };
+          });
+
+        const { nodes, cluster } = yield* stack.deploy(autopilot());
+
+        expect(cluster.autopilot).toEqual(true);
+        const fetched = yield* container.getProjectsLocationsClusters({
+          name: cluster.name,
+        });
+        expect(fetched.autopilot?.enabled).toEqual(true);
+        expect(fetched.autoscaling?.autoprovisioningNodePoolDefaults?.serviceAccount).toEqual(
+          nodes.email,
+        );
+
+        // Redeploying the same identity leaves the cluster in place.
+        expect((yield* stack.plan(autopilot(nodes.email))).resources.Autopilot.action).not.toBe(
+          "replace",
+        );
+        // Autopilot fixes its nodes' identity at creation.
+        expect(
+          (yield* stack.plan(autopilot(`alchemy-other-nodes@${project}.iam.gserviceaccount.com`)))
+            .resources.Autopilot.action,
+        ).toBe("replace");
+
+        yield* stack.destroy();
+
+        const gone = yield* waitUntilGone(cluster.name);
+        expect(gone).toEqual("gone");
+      }),
+    ).pipe(logLevel),
+  // Autopilot create ~10 min, delete ~5 min.
   {
     tags: ["provider:gcp", "provider:gcp:container", "live"],
     timeout: 1_800_000,

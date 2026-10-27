@@ -7,7 +7,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
-import { dockerAvailable } from "../bindingHost.ts";
 import {
   assertSiteGone,
   cloudflareFixture,
@@ -20,7 +19,7 @@ import {
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "Vite SPA: deploy v1, SPA fallback, update to v2 in place, destroy, gone",
   (stack) =>
     Effect.gen(function* () {

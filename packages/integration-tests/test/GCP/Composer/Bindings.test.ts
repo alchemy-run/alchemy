@@ -7,7 +7,7 @@ import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as composer from "@distilled.cloud/gcp/composer_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import ComposerBindingsHost, { Airflow, TaskConfig, TaskSecret } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -48,7 +48,7 @@ const expectProjectGrants = Effect.gen(function* () {
   ]);
 });
 
-describe.skipIf(!dockerAvailable || !runLifecycle)(
+describe.skipIf(!runLifecycle)(
   "Composer Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:composer", "provider:gcp:run", "live"],

@@ -5,7 +5,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import type * as memcache from "@distilled.cloud/gcp/memcache_v1";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import MemcacheBindingsHost, { Cache, memcacheEnabled } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -17,7 +17,7 @@ let hostAccount: string;
 let project: string;
 let instanceName: string;
 
-describe.skipIf(!dockerAvailable || !memcacheEnabled)(
+describe.skipIf(!memcacheEnabled)(
   "Memcache Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:memcache", "provider:gcp:run", "live"],

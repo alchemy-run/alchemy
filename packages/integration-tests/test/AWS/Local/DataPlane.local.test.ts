@@ -32,13 +32,7 @@ import { State, type ResourceState } from "alchemy/State";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { liveContext } from "./fixtures/live.ts";
-import {
-  dockerAvailable,
-  rawAwsJson,
-  rawAwsQuery,
-  rawS3GetBucket,
-  regionOfArn,
-} from "./fixtures/raw.ts";
+import { rawAwsJson, rawAwsQuery, rawS3GetBucket, regionOfArn } from "./fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -63,7 +57,7 @@ const assumeRolePolicy = {
   ],
 };
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "dev mode routes the serverless data plane to floci and stamps local mode",
   (stack) =>
     Effect.gen(function* () {
@@ -262,7 +256,7 @@ test.provider.skipIf(!dockerAvailable)(
  * (testing-profile credentials), its state row is stamped `live`, and the
  * destroy deletes it from the real cloud.
  */
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "Alchemy.remote() parameter runs live in dev alongside a local one",
   (stack) =>
     Effect.gen(function* () {

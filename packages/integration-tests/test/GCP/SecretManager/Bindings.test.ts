@@ -4,7 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import SecretManagerBindingsHost, {
   OpsSecret,
   ReadOnlySecret,
@@ -62,7 +62,7 @@ const versionStates = (parent: string) =>
     return states;
   });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "SecretManager Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:secretmanager", "provider:gcp:run", "live"],
