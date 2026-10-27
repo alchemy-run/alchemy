@@ -238,6 +238,7 @@ export interface EventsOptions<Model, Message, V extends View.Any> {
   readonly key: (model: Model) => ViewKey<V>;
   readonly cursor: (model: Model) => Option.Option<number>;
   readonly isEnabled?: (model: Model) => boolean;
+  readonly restartKey?: (model: Model) => number;
   readonly onEntry: (entry: View.Entry<View.StateOf<V>, View.EventOf<V>, ViewKey<V>>) => Message;
   readonly onCaughtUp: (cursor: number) => Message;
   readonly onFailure: (error: Api.ReadError<V["definition"]>) => Message;
@@ -252,26 +253,40 @@ export function viewEvents<A extends Api.Any, Name extends Views<A>["viewName"],
   readonly dependenciesSchema: Schema.Struct<{
     key: Schema.Schema<ViewKey<ViewNamed<A, Name>>>;
     cursor: Schema.Schema<Option.Option<number>>;
+    restartKey: Schema.optional<typeof Schema.Number>;
     isEnabled: typeof Schema.Boolean;
   }>;
   readonly modelToDependencies: (model: Model) => {
     key: ViewKey<ViewNamed<A, Name>>;
     cursor: Option.Option<number>;
+    restartKey?: number;
     isEnabled: boolean;
   };
   readonly keepAliveEquivalence: (
-    left: { key: ViewKey<ViewNamed<A, Name>>; cursor: Option.Option<number>; isEnabled: boolean },
-    right: { key: ViewKey<ViewNamed<A, Name>>; cursor: Option.Option<number>; isEnabled: boolean },
+    left: {
+      key: ViewKey<ViewNamed<A, Name>>;
+      cursor: Option.Option<number>;
+      restartKey?: number;
+      isEnabled: boolean;
+    },
+    right: {
+      key: ViewKey<ViewNamed<A, Name>>;
+      cursor: Option.Option<number>;
+      restartKey?: number;
+      isEnabled: boolean;
+    },
   ) => boolean;
   readonly dependenciesToStream: (
     dependencies: {
       key: ViewKey<ViewNamed<A, Name>>;
       cursor: Option.Option<number>;
+      restartKey?: number;
       isEnabled: boolean;
     },
     readDependencies: () => {
       key: ViewKey<ViewNamed<A, Name>>;
       cursor: Option.Option<number>;
+      restartKey?: number;
       isEnabled: boolean;
     },
   ) => Stream.Stream<Message, never, A["Client"]["Identifier"]>;
@@ -286,20 +301,29 @@ export function viewEvents(
   )!;
   const keySchema = Schema.toType(Key.idSchemaOf(view.definition.key));
   const sameKey = Schema.toEquivalence(keySchema);
-  type Dependencies = { key: string; cursor: Option.Option<number>; isEnabled: boolean };
+  type Dependencies = {
+    key: string;
+    cursor: Option.Option<number>;
+    restartKey?: number;
+    isEnabled: boolean;
+  };
   return {
     dependenciesSchema: Schema.Struct({
       key: keySchema,
       cursor: Schema.Option(Schema.Number),
+      restartKey: Schema.optional(Schema.Number),
       isEnabled: Schema.Boolean,
     }),
     modelToDependencies: (model: unknown): Dependencies => ({
       key: options.key(model),
       cursor: options.cursor(model),
+      restartKey: options.restartKey?.(model),
       isEnabled: options.isEnabled?.(model) ?? true,
     }),
     keepAliveEquivalence: (left: Dependencies, right: Dependencies) =>
-      sameKey(left.key, right.key) && left.isEnabled === right.isEnabled,
+      sameKey(left.key, right.key) &&
+      left.isEnabled === right.isEnabled &&
+      left.restartKey === right.restartKey,
     dependenciesToStream: (_: Dependencies, readDependencies: () => Dependencies) =>
       Stream.suspend(() => {
         const { key, cursor, isEnabled } = readDependencies();
@@ -333,3 +357,18 @@ export function viewEvents(
       }),
   };
 }
+
+/** Decode snapshot wire data in Flags, converting null state to Option.none. */
+export const SnapshotFlags = <State extends Schema.Top>(state: State) =>
+  Schema.Struct({
+    state: Schema.OptionFromNullOr(state),
+    cursor: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
+  });
+
+/** Ignore an unreadable or stale snapshot so init can start with empty state and a fresh watch. */
+export const decodeSnapshotFlags = <
+  State extends Schema.Top & { readonly DecodingServices: never },
+>(
+  state: State,
+  flags: unknown,
+) => Schema.decodeUnknownOption(SnapshotFlags(state))(flags);

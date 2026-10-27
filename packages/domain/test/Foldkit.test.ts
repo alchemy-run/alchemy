@@ -211,3 +211,27 @@ it("keeps the event stream alive across cursor changes", () => {
     false,
   );
 });
+
+it("decodes snapshot Flags and falls back when their state Schema changed", () => {
+  const State = Schema.Struct({ total: Schema.Number });
+  expect(Foldkit.decodeSnapshotFlags(State, { state: { total: 4 }, cursor: 7 })).toEqual(
+    Option.some({ state: Option.some({ total: 4 }), cursor: 7 }),
+  );
+  expect(Foldkit.decodeSnapshotFlags(State, { state: null, cursor: 0 })).toEqual(
+    Option.some({ state: Option.none(), cursor: 0 }),
+  );
+  expect(Foldkit.decodeSnapshotFlags(State, { state: { oldTotal: 4 }, cursor: 7 })).toEqual(
+    Option.none(),
+  );
+  expect(Foldkit.decodeSnapshotFlags(State, { state: null, cursor: -1 })).toEqual(Option.none());
+  expect(Foldkit.decodeSnapshotFlags(State, undefined)).toEqual(Option.none());
+});
+
+it("can restart a failed Flags cursor without changing the View key", () => {
+  expect(
+    feed.keepAliveEquivalence(
+      { ...dependencies, restartKey: 0 },
+      { ...dependencies, cursor: Option.none(), restartKey: 1 },
+    ),
+  ).toBe(false);
+});

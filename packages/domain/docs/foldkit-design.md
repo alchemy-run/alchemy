@@ -139,7 +139,9 @@ The adapter has no reducer. Each entry carries the View's `state` after it; any 
 
 The server reads `snapshot(key)` and puts `{ state, cursor }` into Flags. `init` seeds the Model for `watchView` and the cursor for `viewEvents`. State and cursor come from one read, so the log resumes with no gap and no duplicate.
 
-Flags can be stale: a cached page, an old tab, a new deploy that changed the state's Schema. A Flags decode failure falls back to an empty Model and a fresh `watch`. An `events` failure on the Flags cursor restarts with `after` unset.
+`SnapshotFlags(State)` decodes wire `{ state, cursor }` and converts null to `Option.none()`. `decodeSnapshotFlags(State, unknownFlags)` returns `None` when decode fails. The app keeps the untrusted snapshot field as `Schema.Unknown` in its outer Flags and decodes that field in init, so stale data cannot prevent boot.
+
+Flags can be stale: a cached page, an old tab, a new deploy that changed the state's Schema. A Flags decode failure falls back to an empty Model and a fresh `watch`. An `events` failure on the Flags cursor lets the app clear the seeded state and cursor, then increment `restartKey`. The next stream starts with `after` unset. The app attempts this once; later failures reach its normal error state. Domain has no distinct stale-cursor error, so the adapter does not retry every read failure by itself.
 
 ## Failure modes
 
