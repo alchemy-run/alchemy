@@ -3213,11 +3213,11 @@ export const FunctionProvider = () =>
 
           yield* session.note(summary(prepared.deployment));
 
+          // Re-read rather than reuse the create/update response, which omits
+          // settings such as `DurableConfig` that `read` observes.
           const observed = yield* observeFunctionConfiguration({
             id,
-            configuration:
-              configuration ??
-              (yield* Lambda.getFunctionConfiguration({ FunctionName: functionName })),
+            configuration: yield* Lambda.getFunctionConfiguration({ FunctionName: functionName }),
             qualifier: news.alias,
             roleName,
             logging: news.logging,
