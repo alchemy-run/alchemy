@@ -1330,9 +1330,10 @@ describe.concurrent(
     );
 
     // #2533: a cyclic dispatch-namespace Worker precreates a stub that uploads
-    // nothing. Its namespace is still unresolved, so the checkpoint keeps no
-    // stub (#2540). When the upload then fails, destroy must not read that as
-    // an account-level Worker and delete the same-name script there.
+    // nothing. Its namespace comes from outside the cycle, so it resolves
+    // before precreate and the stub records it. When the upload then fails,
+    // destroy must not read that as an account-level Worker and delete the
+    // same-name script there.
     test.provider(
       "destroy preserves the account Worker after an interrupted dispatch precreate",
       (stack) =>
@@ -1376,7 +1377,10 @@ describe.concurrent(
             expect(checkpoint).toMatchObject({ status: "creating" });
             if (!isResourceState(checkpoint))
               return yield* Effect.die("Missing resource checkpoint");
-            expect(checkpoint.attr).toBeUndefined();
+            expect(checkpoint.attr).toMatchObject({
+              workerId: "",
+              namespace: scriptName(stack, "unavailable-ns"),
+            });
             expect(yield* deployments()).toEqual(before);
 
             yield* stack.destroy();
