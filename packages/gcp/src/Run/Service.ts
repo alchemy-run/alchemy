@@ -45,6 +45,7 @@ import {
 } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 import { boundContainersOf, directContainerNames } from "./Container.ts";
+import { publicInvokerGrant, ServiceRpcPublic } from "./RpcExposure.ts";
 
 const DEFAULT_IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
 const MAX_NAME_LENGTH = 49;
@@ -619,17 +620,7 @@ export class ServiceReconciling extends Data.TaggedError("GCP.Run.ServiceReconci
   state: string;
 }> {}
 
-/**
- * The service returns RPC methods but `invokerIamDisabled` is set, so
- * anyone could call them.
- */
-export class ServiceRpcPublic extends Data.TaggedError("GCP.Run.ServiceRpcPublic")<{
-  id: string;
-}> {
-  override get message() {
-    return `GCP.Run.Service ${this.id} returns RPC methods but sets invokerIamDisabled, so they would be public. Keep the IAM invoker check on and call it with GCP.Run.InvokeService.`;
-  }
-}
+export { ServiceRpcPublic };
 
 export class ServiceStillExists extends Data.TaggedError("GCP.Run.ServiceStillExists")<{
   name: string;
@@ -1231,13 +1222,25 @@ export const ServiceProvider = () =>
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
-      if (news.invokerIamDisabled === true && news.env?.[RPC_METHODS_ENV] !== undefined) {
-        return yield* new ServiceRpcPublic({ id });
+      const servesRpcMethods = news.env?.[RPC_METHODS_ENV] !== undefined;
+      if (servesRpcMethods && news.invokerIamDisabled === true) {
+        return yield* new ServiceRpcPublic({ service: id, via: "sets invokerIamDisabled" });
       }
       const env = yield* GcpEnvironment.current;
       const serviceId = yield* toId(id, news.serviceId, output?.serviceId);
       const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, serviceId);
+      if (servesRpcMethods) {
+        // A public invoker grant (a `GCP.IAM.Member` or one made by hand)
+        // opens the service just like `invokerIamDisabled`.
+        const policy = yield* cloudrun
+          .getIamPolicyProjectsLocationsServices({ resource: name })
+          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        const grant = publicInvokerGrant(policy);
+        if (grant !== undefined) {
+          return yield* new ServiceRpcPublic({ service: id, via: `${grant} on its IAM policy` });
+        }
+      }
       const parent = `projects/${env.project}/locations/${location}`;
       const desiredLabels = {
         ...toLabels(news.labels),
