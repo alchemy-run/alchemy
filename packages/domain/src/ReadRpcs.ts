@@ -2,6 +2,7 @@ import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Event from "./Event.ts";
+import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -84,7 +85,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
   let rpcs: ReadRpcs;
   if (entry.kind === "Stream") {
     const def = entry.definition;
-    const key = def.key.definition.id;
+    const key = Key.idSchemaOf(def.key);
     const recorded = Schema.Struct({ event: union(def.entries), envelope: EnvelopeSchema });
     const latest = Schema.NullOr(recorded);
     rpcs = {
@@ -134,7 +135,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
     };
   } else if (entry.kind === "View") {
     const def = entry.definition;
-    const key = def.key.definition.id;
+    const key = Key.idSchemaOf(def.key);
     const state = Schema.NullOr(def.state ?? Schema.Null);
     const recorded = Schema.Struct({
       event: union(outputEvents(entry)),

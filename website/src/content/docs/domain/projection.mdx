@@ -118,6 +118,17 @@ The platform helps on its side too: every key keeps an input log, and a delivery
 
 A source keyed by the same aggregate routes itself. For any other source, `keyOf` names the key, by event tag or source name, and can send one event to several keys with named routes, exactly as a [view's `keyOf`](/domain/view#route-one-event-to-several-keys) does. Each input then carries its `route`.
 
+The key can also be a string Schema, such as an org id, when there is no aggregate to partition by. `keyOf` then returns the value, and the handler gets it as `key`.
+
+```typescript
+export class OrgLedger extends Domain.Projection("OrgLedger", {
+  from: [Account],
+  key: OrgId,
+  keyOf: { Account: ({ event }) => event.orgId },
+  on: [MoneyDeposited],
+}) {}
+```
+
 Within a key, events from one source stay in that source's order. Events from different sources have no order between them: the model is distributed on purpose, and there is no total order to give.
 
 ## Batch it on its Layer

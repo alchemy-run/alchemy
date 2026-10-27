@@ -8,7 +8,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Command from "./Command.ts";
 import type * as Event from "./Event.ts";
-import { DefinitionError, judge, settle } from "./internal.ts";
+import { DefinitionError, judge, settle, targetId as internalTargetId } from "./internal.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
 import type * as Rejection from "./Rejection.ts";
@@ -548,10 +548,7 @@ export const streamOf = (ref: { readonly aggregate: string; readonly id: string 
   `${ref.aggregate}/${ref.id}`;
 
 /** The id addressed by a {@link Target}. @internal */
-export const targetId = (target: unknown): string =>
-  typeof target === "object" && target !== null && "id" in target
-    ? String((target as { readonly id: unknown }).id)
-    : String(target);
+export const targetId = internalTargetId;
 
 /**
  * Deterministic command ids for sends made while a policy handles a trigger,

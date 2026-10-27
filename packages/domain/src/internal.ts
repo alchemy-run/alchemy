@@ -107,14 +107,21 @@ export const judge = (
 type AnyHandler = (...args: ReadonlyArray<unknown>) => unknown;
 type HandlerMap = { readonly [key: string]: AnyHandler | Record<string, AnyHandler | undefined> };
 
+/** The id a ref or a Schema key value addresses. @internal */
+export const targetId = (target: unknown): string =>
+  typeof target === "object" && target !== null && "id" in target
+    ? String((target as { readonly id: unknown }).id)
+    : String(target);
+
 /** One input for a view's evolve. @internal */
 export interface LocalViewInput {
   readonly name: string;
   readonly event: { readonly _tag: string };
-  readonly source: { readonly aggregate: string; readonly id: unknown };
+  /** A ref for an aggregate source, the key value for a Schema-keyed view. */
+  readonly source: unknown;
   readonly state?: unknown;
   readonly envelope: { readonly at: unknown };
-  readonly key?: { readonly aggregate: string; readonly id: unknown };
+  readonly key?: unknown;
 }
 
 /**
@@ -149,22 +156,23 @@ export const evolveView = (
     envelope: input.envelope,
   };
   const custom = keyOf?.[tag] ?? keyOf?.[input.name];
-  type Ref = { readonly aggregate: string; readonly id: unknown } | undefined;
-  let key: Ref;
+  let key: unknown;
   let routes: ReadonlyArray<string | undefined>;
+  // A route returns a ref for an aggregate key, or the value of a Schema key.
+  const reaches = (reached: unknown) =>
+    reached !== undefined && key !== undefined && targetId(reached) === targetId(key);
   if (typeof custom === "function") {
-    const reached = custom(routing) as Ref;
+    const reached = custom(routing);
     key = input.key ?? reached;
-    routes = reached && key && reached.id === key.id ? [undefined] : [];
+    routes = reaches(reached) ? [undefined] : [];
   } else if (custom) {
     key = input.key;
-    routes = Object.entries(custom).flatMap(([route, fn]) => {
-      const reached = fn?.(routing) as Ref;
-      return reached && key && reached.id === key.id ? [route] : [];
-    });
+    routes = Object.entries(custom).flatMap(([route, fn]) =>
+      reaches(fn?.(routing)) ? [route] : [],
+    );
   } else {
     key = input.key ?? input.source;
-    routes = key.id === input.source.id ? [undefined] : [];
+    routes = reaches(input.source) ? [undefined] : [];
   }
   let current = state;
   for (const route of routes) {

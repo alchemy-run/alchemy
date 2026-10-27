@@ -139,9 +139,19 @@ class Flows extends Domain.View("Flows", {
   },
 }) {}
 
+// Keyed by the sender's id itself, a Schema key with no aggregate behind it.
+class Sent extends Domain.View("Sent", {
+  from: [Transfer],
+  key: Schema.String,
+  keyOf: { Moved: ({ event }) => event.from },
+  state: Schema.Struct({ total: Schema.Number }),
+  initial: { total: 0 },
+  evolve: { Moved: (s, e) => ({ total: s.total + e.amount }) },
+}) {}
+
 class Bank extends Domain.Model("Bank", {
   aggregates: [Account, Transfer],
-  views: [Balance, Flows],
+  views: [Balance, Flows, Sent],
 }) {}
 
 // A decide that waits on something asynchronous, and one that breaks its declaration.
@@ -364,6 +374,30 @@ describe("Domain View.evolve", () => {
         flows.query(Account.ref(key), { atLeast }).pipe(Effect.map(Option.getOrNull));
       expect(yield* server("a-1")).toEqual(fold("a-1"));
       expect(yield* server("a-2")).toEqual(fold("a-2"));
+    }).pipe(Effect.provide(Hosted)),
+  );
+
+  it.live("a view keyed by a Schema value applies only the key keyOf returns", () =>
+    Effect.gen(function* () {
+      const transfers = yield* Transfer;
+      const sent = yield* Sent;
+      const command = new Move({ from: "a-1", to: "a-2", amount: 5 });
+      const local = Transfer.predict(Transfer.definition.initial, command, { id: "t-2", now });
+      if (local._tag !== "Accepted") return expect(local._tag).toBe("Accepted");
+      const fold = (key: string) =>
+        Sent.evolve(null, {
+          name: "Transfer",
+          event: local.events[0]!,
+          source: Transfer.ref("t-2"),
+          envelope: local.envelopes[0]!,
+          key,
+        });
+
+      const receipt = yield* transfers.send(Transfer.ref("t-2"), command);
+      const atLeast = { stream: receipt.stream, version: receipt.version };
+      expect(fold("a-1")).toEqual({ total: 5 });
+      expect(fold("a-2")).toBeNull();
+      expect(Option.getOrNull(yield* sent.query("a-1", { atLeast }))).toEqual(fold("a-1"));
     }).pipe(Effect.provide(Hosted)),
   );
 });
