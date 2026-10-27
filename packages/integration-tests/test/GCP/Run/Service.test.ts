@@ -16,9 +16,12 @@ import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { DataBucket, Tweets } from "./fixtures/bound-resources.ts";
+import Worker from "./fixtures/container-worker.ts";
+import BoundContainerService from "./fixtures/service-bound-container.ts";
 import PublishOnlyService from "./fixtures/service-publish-only.ts";
 import BoundRedisService from "./fixtures/service-redis.ts";
 import SidecarService from "./fixtures/service-sidecar.ts";
+import UnboundContainerService from "./fixtures/service-unbound-container.ts";
 import BoundService from "./fixtures/service.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -167,7 +170,9 @@ const latestRevision = (service: { name: string; latestReadyRevision: string | u
     name: `${service.name}/revisions/${service.latestReadyRevision?.split("/").pop()}`,
   });
 
-const probedContainers = (probe: { periodSeconds: number } | undefined): GCP.Run.Container[] => [
+const probedContainers = (
+  probe: { periodSeconds: number } | undefined,
+): GCP.Run.ContainerSpec[] => [
   {
     name: "proxy",
     image: HELLO_IMAGE,
@@ -283,6 +288,88 @@ test.provider(
 
       yield* stack.destroy();
       expect(yield* waitUntilGone(deployed.name)).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 900_000 },
+);
+
+test.provider(
+  "a bound Container runs as a sidecar and answers RPC over localhost",
+  (stack) =>
+    Effect.gen(function* () {
+      const { project } = yield* GcpEnvironment.current;
+      yield* stack.destroy();
+
+      const { service: deployed, worker } = yield* stack.deploy(
+        Effect.gen(function* () {
+          return { service: yield* BoundContainerService, worker: yield* Worker };
+        }),
+      );
+      expect(worker.repository).toEqual(expect.any(String));
+
+      // Api depends on Worker, which depends on Static: one revision, three containers.
+      const revision = yield* latestRevision(deployed);
+      const byName = new Map((revision.containers ?? []).map((c) => [c.name ?? "", c]));
+      expect(revision.containers?.length).toEqual(3);
+      expect(revision.containers?.[0]?.dependsOn).toEqual(["worker"]);
+      expect(revision.containers?.[0]?.startupProbe).toMatchObject({
+        httpGet: { path: "/health", port: 8080 },
+      });
+      expect(byName.get("worker")?.dependsOn).toEqual(["static"]);
+      expect(byName.get("worker")?.startupProbe).toMatchObject({
+        httpGet: { path: "/health", port: 3000 },
+      });
+      expect(byName.get("static")?.startupProbe).toMatchObject({ tcpSocket: { port: 80 } });
+
+      const client = yield* HttpClient.HttpClient;
+      const call = yield* client.get(`${deployed.uri}/call`).pipe(
+        Effect.flatMap((response) =>
+          response.text.pipe(Effect.map((text) => ({ status: response.status, text }))),
+        ),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (response) => response.status !== 404 && response.status < 502,
+          times: 15,
+        }),
+      );
+      expect(call.text).not.toContain("Error");
+      expect(call.status).toEqual(200);
+      const body = yield* fetchJson<{
+        greeting: string;
+        counts: number[];
+        published: number;
+        staticStatus: number;
+        health: string;
+      }>(`${deployed.uri}/call`);
+      expect(body).toEqual({
+        greeting: "hello sam",
+        counts: [1, 2, 3],
+        published: 1,
+        staticStatus: 200,
+        health: "worker ok",
+      });
+
+      // Removing the binding drops the sidecars from the next revision.
+      const unbound = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* UnboundContainerService;
+        }),
+      );
+      const solo = yield* latestRevision(unbound);
+      expect(solo.containers?.length).toEqual(1);
+      expect(solo.containers?.[0]?.dependsOn ?? []).toEqual([]);
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(deployed.name)).toEqual("gone");
+      // The sidecar's image repository went with it.
+      const repository = yield* artifactregistry
+        .getProjectsLocationsRepositories({
+          name: `projects/${project}/locations/us-central1/repositories/${worker.repository}`,
+        })
+        .pipe(
+          Effect.as("found" as const),
+          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+        );
+      expect(repository).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 900_000 },
 );

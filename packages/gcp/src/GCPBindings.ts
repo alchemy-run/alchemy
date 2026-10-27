@@ -89,6 +89,7 @@ const KEY_ENV = {
 export const runsAsServiceAccount = (host: ResourceLike): boolean => {
   switch (host.Type) {
     case "GCP.Run.Service":
+    case "GCP.Run.Container":
     case "GCP.Run.Job":
     case "GCP.Run.WorkerPool":
     case "GCP.CloudFunctions.Function":
