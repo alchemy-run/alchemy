@@ -2,6 +2,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { isPlainObject } from "alchemy/Util/data";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import {
   applyObject,
@@ -15,6 +16,11 @@ import { driftMask, hashDriftSelection } from "./internal/declared.ts";
 import { connectionIdentity, connectionOfOutput, tryConnectionOf } from "./internal/workload.ts";
 import type { KubernetesObjectDefinition, KubernetesObjectRef } from "./Objects.ts";
 import type { Providers } from "./Providers.ts";
+
+export class ManifestInvalidProps extends Data.TaggedError("ManifestInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * A literal Kubernetes object: `apiVersion` + `kind` + `metadata`, with the
@@ -174,9 +180,9 @@ const toObjectDefinition = (
   const name = manifest.metadata?.name;
   if (!name) {
     return Effect.fail(
-      new Error(
-        `Kubernetes.Manifest requires manifest.metadata.name (got ${manifest.apiVersion}/${manifest.kind})`,
-      ),
+      new ManifestInvalidProps({
+        message: `Kubernetes.Manifest requires manifest.metadata.name (got ${manifest.apiVersion}/${manifest.kind})`,
+      }),
     );
   }
   return Effect.succeed(manifest as KubernetesObjectDefinition);

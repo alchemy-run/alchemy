@@ -5,9 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ServiceLevelObjectiveOperationFailed extends Data.TaggedError(
+  "ServiceLevelObjectiveOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ServiceLevelObjectiveProps {
   /**
@@ -344,7 +352,9 @@ export const ServiceLevelObjectiveProvider = () =>
           }
 
           if (live === undefined) {
-            return yield* Effect.fail(new Error(`failed to reconcile SLO '${sloName}'`));
+            return yield* new ServiceLevelObjectiveOperationFailed({
+              message: `failed to reconcile SLO '${sloName}'`,
+            });
           }
 
           // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption

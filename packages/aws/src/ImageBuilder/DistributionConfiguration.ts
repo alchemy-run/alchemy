@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -15,6 +16,13 @@ import {
   syncImageBuilderTags,
   toTagRecord,
 } from "./internal.ts";
+
+export class DistributionConfigurationUnexpectedResponse extends Data.TaggedError(
+  "DistributionConfigurationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DistributionConfigurationProps {
   /**
@@ -110,9 +118,9 @@ export const DistributionConfigurationProvider = () =>
 
       const toAttrs = Effect.fn(function* (config: imagebuilder.DistributionConfiguration) {
         if (!config.arn || !config.name) {
-          return yield* Effect.fail(
-            new Error("Image Builder distribution configuration is missing its ARN or name"),
-          );
+          return yield* new DistributionConfigurationUnexpectedResponse({
+            message: "Image Builder distribution configuration is missing its ARN or name",
+          });
         }
         return {
           distributionConfigurationName: config.name,
@@ -166,11 +174,9 @@ export const DistributionConfigurationProvider = () =>
               .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.undefined));
             observed = yield* getConfiguration(created?.distributionConfigurationArn ?? arn);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(
-                  `created Image Builder distribution configuration '${name}' is not readable`,
-                ),
-              );
+              return yield* new DistributionConfigurationUnexpectedResponse({
+                message: `created Image Builder distribution configuration '${name}' is not readable`,
+              });
             }
           }
 

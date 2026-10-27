@@ -5,11 +5,24 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { withQueryEndpoint } from "./internal.ts";
+
+export class ScheduledQueryInvalidProps extends Data.TaggedError("ScheduledQueryInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ScheduledQueryUnexpectedResponse extends Data.TaggedError(
+  "ScheduledQueryUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type ScheduledQueryState = TSQ.ScheduledQueryState;
 
@@ -264,7 +277,9 @@ export const ScheduledQueryProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("Timestream ScheduledQuery requires props"));
+            return yield* new ScheduledQueryInvalidProps({
+              message: "Timestream ScheduledQuery requires props",
+            });
           }
           const name = output?.name ?? (yield* createScheduledQueryName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -307,9 +322,9 @@ export const ScheduledQueryProvider = () =>
             yield* session.note(`Creating scheduled query ${name}...`);
             state = yield* findScheduledQueryByName(name);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created scheduled query ${name}`),
-              );
+              return yield* new ScheduledQueryUnexpectedResponse({
+                message: `failed to read created scheduled query ${name}`,
+              });
             }
           }
 
@@ -348,9 +363,9 @@ export const ScheduledQueryProvider = () =>
 
           const final = yield* readScheduledQuery(state.scheduledQueryArn);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled scheduled query ${name}`),
-            );
+            return yield* new ScheduledQueryUnexpectedResponse({
+              message: `failed to read reconciled scheduled query ${name}`,
+            });
           }
           return final;
         }),

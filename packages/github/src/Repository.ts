@@ -3,10 +3,16 @@ import * as Users from "@distilled.cloud/github/users";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import type * as GitHub from "./Providers.ts";
+
+export class RepositoryOperationFailed extends Data.TaggedError("RepositoryOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface RepositoryProps {
   /**
@@ -450,9 +456,9 @@ export const RepositoryProvider = () =>
             observed = yield* getRepo(news.name);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`Failed to create or locate GitHub repository ${news.owner}/${news.name}`),
-            );
+            return yield* new RepositoryOperationFailed({
+              message: `Failed to create or locate GitHub repository ${news.owner}/${news.name}`,
+            });
           }
         }
 

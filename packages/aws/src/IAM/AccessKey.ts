@@ -2,11 +2,17 @@ import * as iam from "@distilled.cloud/aws/iam";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toRedactedString } from "./common.ts";
+
+export class AccessKeyUnexpectedResponse extends Data.TaggedError("AccessKeyUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface AccessKeyProps {
   /**
@@ -134,7 +140,9 @@ export const AccessKeyProvider = () =>
       }
 
       if (!accessKeyId) {
-        return yield* Effect.fail(new Error(`AccessKey for user '${news.userName}' has no id`));
+        return yield* new AccessKeyUnexpectedResponse({
+          message: `AccessKey for user '${news.userName}' has no id`,
+        });
       }
 
       // Sync — apply the desired status when it differs from the observed

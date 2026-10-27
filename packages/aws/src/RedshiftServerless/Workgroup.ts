@@ -12,6 +12,11 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readTags, syncTags, toWireTags } from "./internal.ts";
 
+export class WorkgroupUnexpectedResponse extends Data.TaggedError("WorkgroupUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface WorkgroupProps {
   /**
    * Name of the workgroup. Must be 3-64 characters, lowercase letters,
@@ -319,9 +324,9 @@ export const WorkgroupProvider = () =>
           const settled = yield* waitForAvailable(name);
           if (settled !== undefined) observed = settled;
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`Redshift workgroup '${name}' disappeared while reconciling`),
-            );
+            return yield* new WorkgroupUnexpectedResponse({
+              message: `Redshift workgroup '${name}' disappeared while reconciling`,
+            });
           }
 
           // 3. Sync — one updateWorkgroup per drifted field (multi-field

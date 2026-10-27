@@ -3,8 +3,21 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+
+export class OriginRequestPolicyConflict extends Data.TaggedError("OriginRequestPolicyConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class OriginRequestPolicyUnexpectedResponse extends Data.TaggedError(
+  "OriginRequestPolicyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface OriginRequestPolicyProps {
   /**
@@ -234,18 +247,18 @@ export const OriginRequestPolicyProvider = () =>
                             Location: undefined,
                           })
                         : Effect.fail(
-                            new Error(
-                              `Origin request policy '${name}' already exists but could not be recovered`,
-                            ),
+                            new OriginRequestPolicyConflict({
+                              message: `Origin request policy '${name}' already exists but could not be recovered`,
+                            }),
                           ),
                     ),
                   ),
                 ),
               );
             if (!created.OriginRequestPolicy?.Id) {
-              return yield* Effect.fail(
-                new Error("createOriginRequestPolicy returned no identifier"),
-              );
+              return yield* new OriginRequestPolicyUnexpectedResponse({
+                message: "createOriginRequestPolicy returned no identifier",
+              });
             }
             yield* session.note(created.OriginRequestPolicy.Id);
             return toAttrs(
@@ -263,9 +276,9 @@ export const OriginRequestPolicyProvider = () =>
             OriginRequestPolicyConfig: buildConfig(observed.config.Name, news),
           });
           if (!updated.OriginRequestPolicy?.Id) {
-            return yield* Effect.fail(
-              new Error("updateOriginRequestPolicy returned no identifier"),
-            );
+            return yield* new OriginRequestPolicyUnexpectedResponse({
+              message: "updateOriginRequestPolicy returned no identifier",
+            });
           }
           yield* session.note(observed.id);
           return toAttrs(

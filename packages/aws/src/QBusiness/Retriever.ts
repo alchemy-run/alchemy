@@ -11,6 +11,16 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class RetrieverInvalidProps extends Data.TaggedError("RetrieverInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class RetrieverUnexpectedResponse extends Data.TaggedError("RetrieverUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type RetrieverStatus = qbusiness.RetrieverStatus;
 export type RetrieverType = qbusiness.RetrieverType;
 
@@ -246,7 +256,9 @@ export const RetrieverProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("QBusiness Retriever requires props"));
+            return yield* new RetrieverInvalidProps({
+              message: "QBusiness Retriever requires props",
+            });
           }
           const applicationId = news.applicationId;
           const displayName = yield* createDisplayName(id, news);
@@ -273,17 +285,17 @@ export const RetrieverProvider = () =>
               })),
             });
             if (!created.retrieverId) {
-              return yield* Effect.fail(
-                new Error(`CreateRetriever for '${displayName}' returned no retrieverId`),
-              );
+              return yield* new RetrieverUnexpectedResponse({
+                message: `CreateRetriever for '${displayName}' returned no retrieverId`,
+              });
             }
             yield* session.note(`Creating retriever ${displayName} (${created.retrieverId})...`);
             yield* waitForRetrieverActive(applicationId, created.retrieverId);
             state = yield* readRetrieverById(applicationId, created.retrieverId);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created retriever ${displayName}`),
-              );
+              return yield* new RetrieverUnexpectedResponse({
+                message: `failed to read created retriever ${displayName}`,
+              });
             }
           }
 
@@ -332,9 +344,9 @@ export const RetrieverProvider = () =>
 
           const final = yield* readRetrieverById(applicationId, state.attrs.retrieverId);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled retriever ${displayName}`),
-            );
+            return yield* new RetrieverUnexpectedResponse({
+              message: `failed to read reconciled retriever ${displayName}`,
+            });
           }
           return final.attrs;
         }),

@@ -6,6 +6,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import {
@@ -16,6 +17,11 @@ import {
   type WafScope,
   withWafScope,
 } from "./internal.ts";
+
+export class WAFv2IPSetUnexpectedResponse extends Data.TaggedError("WAFv2IPSetUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface IPSetProps {
   /**
@@ -289,7 +295,9 @@ export const IPSetProvider = () =>
           }
 
           if (!observed?.IPSet) {
-            return yield* Effect.fail(new Error(`Failed to observe IPSet '${name}' after create`));
+            return yield* new WAFv2IPSetUnexpectedResponse({
+              message: `Failed to observe IPSet '${name}' after create`,
+            });
           }
 
           const ipSet = observed.IPSet;

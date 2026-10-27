@@ -4,8 +4,16 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+
+export class TransferUserUnexpectedResponse extends Data.TaggedError(
+  "TransferUserUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface UserProps {
   /**
@@ -140,7 +148,9 @@ export const UserProvider = () =>
 
       const toAttrs = Effect.fn(function* (serverId: string, user: transfer.DescribedUser) {
         if (!user.UserName) {
-          return yield* Effect.fail(new Error("Transfer user is missing its UserName"));
+          return yield* new TransferUserUnexpectedResponse({
+            message: "Transfer user is missing its UserName",
+          });
         }
         return {
           userName: user.UserName,
@@ -215,9 +225,9 @@ export const UserProvider = () =>
 
           observed = yield* describe(news.serverId, news.userName);
           if (!observed?.UserName) {
-            return yield* Effect.fail(
-              new Error(`Transfer user '${news.userName}' not found after reconcile`),
-            );
+            return yield* new TransferUserUnexpectedResponse({
+              message: `Transfer user '${news.userName}' not found after reconcile`,
+            });
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.

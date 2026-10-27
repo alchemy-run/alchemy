@@ -4,11 +4,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { parsePolicyDocument, stringifyPolicyDocument, toTagRecord } from "./common.ts";
 import type { PolicyDocument } from "./Policy.ts";
+
+export class UserConflict extends Data.TaggedError("UserConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface UserProps {
   /**
@@ -300,9 +306,9 @@ export const UserProvider = () =>
                     Effect.filterOrFail(
                       (existing) => hasTags(desiredTags, existing.User?.Tags),
                       () =>
-                        new Error(
-                          `User '${userName}' already exists and is not managed by alchemy`,
-                        ),
+                        new UserConflict({
+                          message: `User '${userName}' already exists and is not managed by alchemy`,
+                        }),
                     ),
                   ),
                 ),

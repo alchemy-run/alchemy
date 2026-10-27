@@ -6,12 +6,25 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireDays } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class DocDBElasticClusterNotReady extends Data.TaggedError("DocDBElasticClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class DocDBElasticClusterUnexpectedResponse extends Data.TaggedError(
+  "DocDBElasticClusterUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ClusterProps {
   /**
@@ -239,11 +252,15 @@ export const ClusterProvider = () =>
         return yield* readCluster(name, arn).pipe(
           Effect.flatMap((cluster) => {
             if (cluster === undefined) {
-              return Effect.fail(new Error(`Elastic cluster '${name}' not found`));
+              return Effect.fail(
+                new DocDBElasticClusterNotReady({ message: `Elastic cluster '${name}' not found` }),
+              );
             }
             if (cluster.status !== "ACTIVE") {
               return Effect.fail(
-                new Error(`Elastic cluster '${name}' not active (status: ${cluster.status})`),
+                new DocDBElasticClusterNotReady({
+                  message: `Elastic cluster '${name}' not active (status: ${cluster.status})`,
+                }),
               );
             }
             return Effect.succeed(cluster);
@@ -345,9 +362,9 @@ export const ClusterProvider = () =>
             created = true;
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`Elastic cluster '${name}' not found after create`),
-            );
+            return yield* new DocDBElasticClusterUnexpectedResponse({
+              message: `Elastic cluster '${name}' not found after create`,
+            });
           }
           const arn = observed.clusterArn;
 

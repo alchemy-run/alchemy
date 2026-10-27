@@ -5,10 +5,23 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./common.ts";
+
+export class InstanceProfileConflict extends Data.TaggedError("InstanceProfileConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class InstanceProfileUnexpectedResponse extends Data.TaggedError(
+  "InstanceProfileUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface InstanceProfileProps {
   /**
@@ -196,27 +209,23 @@ export const InstanceProfileProvider = () =>
                   Effect.gen(function* () {
                     const existing = yield* readInstanceProfile(name);
                     if (!existing?.Arn) {
-                      return yield* Effect.fail(
-                        new Error(
-                          `Instance profile '${name}' already exists but could not be described`,
-                        ),
-                      );
+                      return yield* new InstanceProfileConflict({
+                        message: `Instance profile '${name}' already exists but could not be described`,
+                      });
                     }
                     if (!hasTags(desiredTags, existing.Tags)) {
-                      return yield* Effect.fail(
-                        new Error(
-                          `Instance profile '${name}' already exists and is not managed by alchemy`,
-                        ),
-                      );
+                      return yield* new InstanceProfileConflict({
+                        message: `Instance profile '${name}' already exists and is not managed by alchemy`,
+                      });
                     }
                   }),
                 ),
               );
             profile = yield* readInstanceProfile(name);
             if (!profile?.Arn || !profile.InstanceProfileName) {
-              return yield* Effect.fail(
-                new Error(`Instance profile '${name}' was not readable after create`),
-              );
+              return yield* new InstanceProfileUnexpectedResponse({
+                message: `Instance profile '${name}' was not readable after create`,
+              });
             }
           }
 
@@ -251,9 +260,9 @@ export const InstanceProfileProvider = () =>
           // changes after `syncRole`).
           const fresh = yield* readInstanceProfile(name);
           if (!fresh?.Arn || !fresh.InstanceProfileName) {
-            return yield* Effect.fail(
-              new Error(`Instance profile '${name}' was not readable after sync`),
-            );
+            return yield* new InstanceProfileUnexpectedResponse({
+              message: `Instance profile '${name}' was not readable after sync`,
+            });
           }
 
           yield* session.note(fresh.Arn);

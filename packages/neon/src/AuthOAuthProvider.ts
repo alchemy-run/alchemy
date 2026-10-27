@@ -4,10 +4,18 @@ import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { authPlanScope, authRequest, InvalidManagedAuth, removedAuthSettings } from "./Auth.ts";
 import type { Providers } from "./Providers.ts";
+
+export class AuthOAuthProviderUnexpectedResponse extends Data.TaggedError(
+  "AuthOAuthProviderUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface AuthOAuthProviderProps {
   /** Managed Auth integration; its scope is inherited without owning the parent. */
@@ -197,7 +205,9 @@ export const AuthOAuthProviderProvider = () =>
       const result = yield* Neon.listBranchNeonAuthOauthProviders(request);
       const provider = result.providers.find((item) => item.id === news.provider);
       if (!provider)
-        return yield* Effect.fail(new Error("OAuth provider was not visible after reconciliation"));
+        return yield* new AuthOAuthProviderUnexpectedResponse({
+          message: "OAuth provider was not visible after reconciliation",
+        });
       return attributes(news.auth, provider);
     }),
     delete: Effect.fn(function* ({ output }) {

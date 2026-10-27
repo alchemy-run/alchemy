@@ -4,10 +4,21 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ServerNotReady extends Data.TaggedError("ServerNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ServerUnexpectedResponse extends Data.TaggedError("ServerUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ServerProps {
   /**
@@ -232,7 +243,9 @@ export const ServerProvider = () =>
               (server.State === "STARTING" || server.State === "STOPPING")
             ) {
               return Effect.fail(
-                new Error(`Transfer server '${serverId}' still settling (state: ${server.State})`),
+                new ServerNotReady({
+                  message: `Transfer server '${serverId}' still settling (state: ${server.State})`,
+                }),
               );
             }
             return Effect.succeed(server);
@@ -243,7 +256,9 @@ export const ServerProvider = () =>
 
       const toAttrs = Effect.fn(function* (server: transfer.DescribedServer) {
         if (!server.ServerId) {
-          return yield* Effect.fail(new Error("Transfer server is missing its ServerId"));
+          return yield* new ServerUnexpectedResponse({
+            message: "Transfer server is missing its ServerId",
+          });
         }
         return {
           serverId: server.ServerId,
@@ -340,9 +355,9 @@ export const ServerProvider = () =>
           // returned state are stable.
           observed = yield* waitUntilSettled(serverId!);
           if (!observed?.ServerId || !observed.Arn) {
-            return yield* Effect.fail(
-              new Error(`Transfer server '${serverId}' not found after reconcile`),
-            );
+            return yield* new ServerUnexpectedResponse({
+              message: `Transfer server '${serverId}' not found after reconcile`,
+            });
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.

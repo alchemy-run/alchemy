@@ -2,8 +2,14 @@ import * as ds from "@distilled.cloud/aws/directory-service";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+
+export class EventTopicUnexpectedResponse extends Data.TaggedError("EventTopicUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface EventTopicProps {
   /**
@@ -125,11 +131,9 @@ export const EventTopicProvider = () =>
             observed = yield* readEventTopic(props.directoryId, props.topicName);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(
-                `event topic '${props.topicName}' on '${props.directoryId}' not visible after register`,
-              ),
-            );
+            return yield* new EventTopicUnexpectedResponse({
+              message: `event topic '${props.topicName}' on '${props.directoryId}' not visible after register`,
+            });
           }
 
           yield* session.note(`${props.directoryId}/${props.topicName}`);

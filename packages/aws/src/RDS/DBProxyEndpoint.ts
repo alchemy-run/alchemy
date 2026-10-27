@@ -4,10 +4,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class DBProxyEndpointNotReady extends Data.TaggedError("DBProxyEndpointNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DBProxyEndpointProps {
   /**
@@ -165,7 +171,9 @@ export const DBProxyEndpointProvider = () =>
             endpoint?.DBProxyEndpointArn
               ? Effect.succeed(endpoint)
               : Effect.fail(
-                  new Error(`DB proxy endpoint '${props.dbProxyEndpointName}' not ready`),
+                  new DBProxyEndpointNotReady({
+                    message: `DB proxy endpoint '${props.dbProxyEndpointName}' not ready`,
+                  }),
                 ),
           ),
           Effect.retry({ schedule: readinessPolicy }),

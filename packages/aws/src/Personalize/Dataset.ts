@@ -5,11 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readPersonalizeTags, syncPersonalizeTags } from "./internal.ts";
+
+export class PersonalizeDatasetNotReady extends Data.TaggedError("PersonalizeDatasetNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DatasetProps {
   /**
@@ -114,11 +120,9 @@ export const DatasetProvider = () =>
           }),
         );
         if (dataset?.status !== "ACTIVE") {
-          return yield* Effect.fail(
-            new Error(
-              `Personalize dataset ${datasetArn} did not become ACTIVE (status: ${dataset?.status})`,
-            ),
-          );
+          return yield* new PersonalizeDatasetNotReady({
+            message: `Personalize dataset ${datasetArn} did not become ACTIVE (status: ${dataset?.status})`,
+          });
         }
         return dataset;
       });
@@ -230,11 +234,9 @@ export const DatasetProvider = () =>
             }),
           );
           if (remaining !== undefined) {
-            return yield* Effect.fail(
-              new Error(
-                `Personalize dataset ${output.datasetArn} was not deleted (status: ${remaining.status})`,
-              ),
-            );
+            return yield* new PersonalizeDatasetNotReady({
+              message: `Personalize dataset ${output.datasetArn} was not deleted (status: ${remaining.status})`,
+            });
           }
         }),
 

@@ -3,12 +3,20 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { toWireDays } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toRedactedString } from "./common.ts";
+
+export class ServiceSpecificCredentialUnexpectedResponse extends Data.TaggedError(
+  "ServiceSpecificCredentialUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ServiceSpecificCredentialProps {
   /**
@@ -211,9 +219,9 @@ export const ServiceSpecificCredentialProvider = () =>
         });
         const credential = created.ServiceSpecificCredential;
         if (!credential?.ServiceSpecificCredentialId) {
-          return yield* Effect.fail(
-            new Error(`createServiceSpecificCredential returned no credential id`),
-          );
+          return yield* new ServiceSpecificCredentialUnexpectedResponse({
+            message: `createServiceSpecificCredential returned no credential id`,
+          });
         }
         credentialId = credential.ServiceSpecificCredentialId;
         userName = credential.UserName;
@@ -228,9 +236,9 @@ export const ServiceSpecificCredentialProvider = () =>
       }
 
       if (!credentialId) {
-        return yield* Effect.fail(
-          new Error(`ServiceSpecificCredential for user '${news.userName}' has no id`),
-        );
+        return yield* new ServiceSpecificCredentialUnexpectedResponse({
+          message: `ServiceSpecificCredential for user '${news.userName}' has no id`,
+        });
       }
 
       // Sync — apply the desired status when it differs from observed.

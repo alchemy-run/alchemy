@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { isActiveStatus, readAppRunnerTags, syncAppRunnerTags, toWireTags } from "./internal.ts";
+
+export class AutoScalingConfigurationUnexpectedResponse extends Data.TaggedError(
+  "AutoScalingConfigurationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Derive the revision-less "name partial" ARN
@@ -160,11 +168,9 @@ export const AutoScalingConfigurationProvider = () =>
           !config.AutoScalingConfigurationArn ||
           config.AutoScalingConfigurationRevision === undefined
         ) {
-          return yield* Effect.fail(
-            new Error(
-              "App Runner auto scaling configuration is missing its name, ARN, or revision",
-            ),
-          );
+          return yield* new AutoScalingConfigurationUnexpectedResponse({
+            message: "App Runner auto scaling configuration is missing its name, ARN, or revision",
+          });
         }
         return {
           autoScalingConfigurationName: config.AutoScalingConfigurationName,

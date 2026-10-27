@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -14,6 +15,13 @@ import {
   retryWhilePipelineConflict,
   waitForPipelineSettled,
 } from "./internal.ts";
+
+export class OSISPipelineUnexpectedResponse extends Data.TaggedError(
+  "OSISPipelineUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface PipelineLogPublishingOptions {
   /**
@@ -229,16 +237,18 @@ export const PipelineProvider = () =>
       const waitForActive = Effect.fn(function* (name: string) {
         const pipeline = yield* waitForPipelineSettled(name, readPipeline(name));
         if (pipeline === undefined) {
-          return yield* Effect.fail(new Error(`OSIS pipeline '${name}' not found while waiting`));
+          return yield* new OSISPipelineUnexpectedResponse({
+            message: `OSIS pipeline '${name}' not found while waiting`,
+          });
         }
         return pipeline;
       });
 
       const toAttrs = Effect.fn(function* (pipeline: osis.Pipeline) {
         if (!pipeline.PipelineName || !pipeline.PipelineArn) {
-          return yield* Effect.fail(
-            new Error(`OSIS pipeline '${pipeline.PipelineName}' is missing its ARN`),
-          );
+          return yield* new OSISPipelineUnexpectedResponse({
+            message: `OSIS pipeline '${pipeline.PipelineName}' is missing its ARN`,
+          });
         }
         return {
           pipelineName: pipeline.PipelineName,

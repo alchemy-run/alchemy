@@ -13,6 +13,21 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { syncMqTags, toTagRecord } from "./internal.ts";
 
+export class BrokerConflict extends Data.TaggedError("BrokerConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class BrokerOperationFailed extends Data.TaggedError("BrokerOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class BrokerUnexpectedResponse extends Data.TaggedError("BrokerUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /**
  * An ActiveMQ or RabbitMQ user provisioned on the broker at creation.
  */
@@ -528,9 +543,9 @@ export const BrokerProvider = () =>
                     if (existing?.BrokerId) {
                       return { BrokerId: existing.BrokerId };
                     }
-                    return yield* Effect.fail(
-                      new Error(`MQ broker '${name}' create conflicted but no broker was found`),
-                    );
+                    return yield* new BrokerConflict({
+                      message: `MQ broker '${name}' create conflicted but no broker was found`,
+                    });
                   }),
                 ),
               );
@@ -538,22 +553,24 @@ export const BrokerProvider = () =>
           }
 
           if (observed?.BrokerId === undefined) {
-            return yield* Effect.fail(new Error(`MQ broker '${name}' could not be reconciled`));
+            return yield* new BrokerUnexpectedResponse({
+              message: `MQ broker '${name}' could not be reconciled`,
+            });
           }
           const brokerId = observed.BrokerId;
 
           // Wait (bounded) for the broker to settle before mutating it.
           const settled = yield* waitForSettled(brokerId);
           if (settled === undefined) {
-            return yield* Effect.fail(
-              new Error(`MQ broker '${name}' disappeared while reconciling`),
-            );
+            return yield* new BrokerUnexpectedResponse({
+              message: `MQ broker '${name}' disappeared while reconciling`,
+            });
           }
           observed = settled;
           if (observed.BrokerState === "CREATION_FAILED") {
-            return yield* Effect.fail(
-              new Error(`MQ broker '${name}' failed to create (state: CREATION_FAILED)`),
-            );
+            return yield* new BrokerOperationFailed({
+              message: `MQ broker '${name}' failed to create (state: CREATION_FAILED)`,
+            });
           }
 
           // 3. Sync mutable settings — compute an updateBroker request with

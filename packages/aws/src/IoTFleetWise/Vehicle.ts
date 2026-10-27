@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -16,6 +17,11 @@ import {
   syncFleetWiseTags,
   toFleetWiseTagList,
 } from "./internal.ts";
+
+export class VehicleUnexpectedResponse extends Data.TaggedError("VehicleUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface VehicleProps {
   /**
@@ -140,9 +146,9 @@ export const VehicleProvider = () =>
           vehicle.modelManifestArn === undefined ||
           vehicle.decoderManifestArn === undefined
         ) {
-          return yield* Effect.fail(
-            new Error(`Vehicle '${vehicle.vehicleName}' is missing required fields`),
-          );
+          return yield* new VehicleUnexpectedResponse({
+            message: `Vehicle '${vehicle.vehicleName}' is missing required fields`,
+          });
         }
         return {
           vehicleName: vehicle.vehicleName,
@@ -206,7 +212,9 @@ export const VehicleProvider = () =>
             observed = yield* readVehicle(name).pipe(
               Effect.flatMap((vehicle) =>
                 vehicle === undefined
-                  ? Effect.fail(new Error(`Vehicle '${name}' not found`))
+                  ? Effect.fail(
+                      new VehicleUnexpectedResponse({ message: `Vehicle '${name}' not found` }),
+                    )
                   : Effect.succeed(vehicle),
               ),
               retryObservation,
@@ -233,7 +241,9 @@ export const VehicleProvider = () =>
             observed = yield* readVehicle(name).pipe(
               Effect.flatMap((vehicle) =>
                 vehicle === undefined
-                  ? Effect.fail(new Error(`Vehicle '${name}' not found`))
+                  ? Effect.fail(
+                      new VehicleUnexpectedResponse({ message: `Vehicle '${name}' not found` }),
+                    )
                   : Effect.succeed(vehicle),
               ),
               retryObservation,
@@ -280,7 +290,9 @@ export const VehicleProvider = () =>
               observed = yield* readVehicle(name).pipe(
                 Effect.flatMap((vehicle) =>
                   vehicle === undefined
-                    ? Effect.fail(new Error(`Vehicle '${name}' not found`))
+                    ? Effect.fail(
+                        new VehicleUnexpectedResponse({ message: `Vehicle '${name}' not found` }),
+                      )
                     : Effect.succeed(vehicle),
                 ),
                 retryObservation,

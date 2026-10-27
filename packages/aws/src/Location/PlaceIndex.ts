@@ -5,10 +5,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
+
+export class PlaceIndexUnexpectedResponse extends Data.TaggedError("PlaceIndexUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface PlaceIndexProps {
   /**
@@ -166,9 +172,9 @@ export const PlaceIndexProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             state = yield* readIndex(indexName);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created place index ${indexName}`),
-              );
+              return yield* new PlaceIndexUnexpectedResponse({
+                message: `failed to read created place index ${indexName}`,
+              });
             }
           }
 
@@ -203,9 +209,9 @@ export const PlaceIndexProvider = () =>
 
           const final = yield* readIndex(indexName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled place index ${indexName}`),
-            );
+            return yield* new PlaceIndexUnexpectedResponse({
+              message: `failed to read reconciled place index ${indexName}`,
+            });
           }
           return final;
         }),

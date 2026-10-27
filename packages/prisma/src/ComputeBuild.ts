@@ -12,6 +12,11 @@ import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { normalizeEntrypoint } from "./ComputeArchive.ts";
 
+export class ComputeBuildInvalidProps extends Data.TaggedError("ComputeBuildInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export class ComputeBuildError extends Data.TaggedError("ComputeBuildError")<{
   readonly message: string;
   readonly cause?: unknown;
@@ -227,9 +232,9 @@ const collectBoundedOutput = (
       const bytes = state.bytes + chunk.byteLength;
       return bytes > limit
         ? Effect.fail(
-            new Error(
-              `Build ${label} exceeded the ${limit} byte output safety limit. Reduce build verbosity or raise outputLimitBytes explicitly.`,
-            ),
+            new ComputeBuildError({
+              message: `Build ${label} exceeded the ${limit} byte output safety limit. Reduce build verbosity or raise outputLimitBytes explicitly.`,
+            }),
           )
         : Effect.sync(() => {
             state.chunks.push(chunk);
@@ -262,10 +267,14 @@ export const runBuildCommand = Effect.fn(function* ({
   timeoutSeconds = DEFAULT_BUILD_TIMEOUT_SECONDS,
 }: RunBuildCommandOptions) {
   if (!Number.isSafeInteger(outputLimitBytes) || outputLimitBytes <= 0) {
-    return yield* Effect.fail(new Error("outputLimitBytes must be a positive safe integer"));
+    return yield* new ComputeBuildInvalidProps({
+      message: "outputLimitBytes must be a positive safe integer",
+    });
   }
   if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
-    return yield* Effect.fail(new Error("timeoutSeconds must be a positive finite number"));
+    return yield* new ComputeBuildInvalidProps({
+      message: "timeoutSeconds must be a positive finite number",
+    });
   }
   const spawner = yield* ChildProcessSpawner;
   const path = yield* Path.Path;
@@ -299,18 +308,16 @@ export const runBuildCommand = Effect.fn(function* ({
     }).pipe(Effect.timeoutOption(Duration.seconds(timeoutSeconds))),
   );
   if (Option.isNone(resultOption)) {
-    return yield* Effect.fail(
-      new Error(`Build command timed out after ${timeoutSeconds} seconds.`),
-    );
+    return yield* new ComputeBuildError({
+      message: `Build command timed out after ${timeoutSeconds} seconds.`,
+    });
   }
   const result = resultOption.value;
 
   if (result.exitCode !== 0) {
-    return yield* Effect.fail(
-      new Error(
-        `Build command failed with exit code ${result.exitCode} (stdout: ${result.stdout.bytes} bytes; stderr: ${result.stderr.bytes} bytes).`,
-      ),
-    );
+    return yield* new ComputeBuildError({
+      message: `Build command failed with exit code ${result.exitCode} (stdout: ${result.stdout.bytes} bytes; stderr: ${result.stderr.bytes} bytes).`,
+    });
   }
 
   yield* Effect.logDebug("Build command completed", {
@@ -532,7 +539,9 @@ export const runComputeAutoBuild = Effect.fn(function* (options: ComputeAutoBuil
     }
   }
 
-  return yield* Effect.fail(new Error("No suitable Prisma Compute auto-build strategy found."));
+  return yield* new ComputeBuildError({
+    message: "No suitable Prisma Compute auto-build strategy found.",
+  });
 });
 
 export const runComputeStaticBuild = Effect.fn(function* (options: ComputeStaticBuildOptions) {
@@ -541,15 +550,15 @@ export const runComputeStaticBuild = Effect.fn(function* (options: ComputeStatic
   const cwd = options.cwd ? path.resolve(options.cwd) : options.appPath;
   const outdir = normalizeRelativePath(options.outdir);
   if (outdir === undefined) {
-    return yield* Effect.fail(
-      new Error("Static site outdir must be a relative path without parent segments."),
-    );
+    return yield* new ComputeBuildInvalidProps({
+      message: "Static site outdir must be a relative path without parent segments.",
+    });
   }
   const indexPage = normalizeRelativePath(options.indexPage ?? "index.html");
   if (indexPage === undefined || indexPage === ".") {
-    return yield* Effect.fail(
-      new Error("Static site indexPage must be a relative file path without parent segments."),
-    );
+    return yield* new ComputeBuildInvalidProps({
+      message: "Static site indexPage must be a relative file path without parent segments.",
+    });
   }
 
   if (options.command !== undefined) {
@@ -564,17 +573,17 @@ export const runComputeStaticBuild = Effect.fn(function* (options: ComputeStatic
 
   const sourceDir = path.resolve(cwd, outdir);
   if (!(yield* directoryExists(sourceDir))) {
-    return yield* Effect.fail(
-      new Error(`Static site build did not produce an output directory at ${sourceDir}.`),
-    );
+    return yield* new ComputeBuildError({
+      message: `Static site build did not produce an output directory at ${sourceDir}.`,
+    });
   }
   const indexStat = yield* fs
     .stat(path.join(sourceDir, indexPage))
     .pipe(Effect.orElseSucceed(() => undefined));
   if (indexStat?.type !== "File") {
-    return yield* Effect.fail(
-      new Error(`Static site build did not produce ${indexPage} inside ${sourceDir}.`),
-    );
+    return yield* new ComputeBuildError({
+      message: `Static site build did not produce ${indexPage} inside ${sourceDir}.`,
+    });
   }
 
   const temp = yield* makeTempArtifactDir();
@@ -719,7 +728,7 @@ const buildFramework = Effect.fn(function* (options: {
 
   const requiredPath = path.join(options.appPath, options.requiredFile ?? options.sourceDir);
   if (!(yield* fs.exists(requiredPath))) {
-    return yield* Effect.fail(new Error(options.missingOutputMessage));
+    return yield* new ComputeBuildError({ message: options.missingOutputMessage });
   }
 
   const temp = yield* makeTempArtifactDir();
@@ -841,11 +850,9 @@ const resolveNestjsCompiledEntrypoint = Effect.fn(function* (appPath: string) {
     if (stat?.type === "File") return candidate;
   }
 
-  return yield* Effect.fail(
-    new Error(
-      `NestJS build did not produce a compiled entrypoint. Looked for ${candidates.join(", ")} under ${appPath}. Ensure \`nest build\` ran and check package.json main, nest-cli.json, or tsconfig outDir.`,
-    ),
-  );
+  return yield* new ComputeBuildError({
+    message: `NestJS build did not produce a compiled entrypoint. Looked for ${candidates.join(", ")} under ${appPath}. Ensure \`nest build\` ran and check package.json main, nest-cli.json, or tsconfig outDir.`,
+  });
 });
 
 const configuredNestjsCompiledEntrypoint = Effect.fn(function* (appPath: string) {
@@ -889,18 +896,16 @@ const stageTracedNestjsArtifact = Effect.fn(function* (options: {
 
   const sortedFiles = fileList.sort((a, b) => a.localeCompare(b));
   if (sortedFiles.length > STAGING_MAX_ENTRIES) {
-    return yield* Effect.fail(
-      new Error(
-        `Compute artifact staging exceeded the ${STAGING_MAX_ENTRIES} entry safety limit while tracing NestJS dependencies.`,
-      ),
-    );
+    return yield* new ComputeBuildError({
+      message: `Compute artifact staging exceeded the ${STAGING_MAX_ENTRIES} entry safety limit while tracing NestJS dependencies.`,
+    });
   }
   for (const file of sortedFiles) {
     const normalized = normalizeRelativePath(file);
     if (normalized === undefined || normalized === ".") {
-      return yield* Effect.fail(
-        new Error(`NestJS dependency trace returned an unsafe path: ${file}`),
-      );
+      return yield* new ComputeBuildError({
+        message: `NestJS dependency trace returned an unsafe path: ${file}`,
+      });
     }
     yield* stageTracedPath(
       path.join(sourceRoot, normalized),
@@ -987,18 +992,18 @@ const copyDirectoryWithinRoots: (
         const copied = yield* fs.stat(target);
         if (copied.type !== "File" || Number(copied.size) !== size) {
           yield* fs.remove(target, { force: true }).pipe(Effect.ignore);
-          return yield* Effect.fail(
-            new Error(`Compute artifact file changed while staging: ${source}`),
-          );
+          return yield* new ComputeBuildError({
+            message: `Compute artifact file changed while staging: ${source}`,
+          });
         }
         yield* fs.chmod(target, stat.mode & 0o777);
         continue;
       }
 
       yield* accountStagingEntry(budget, source, 0);
-      return yield* Effect.fail(
-        new Error(`Unsupported filesystem entry in compute artifact: ${source}`),
-      );
+      return yield* new ComputeBuildError({
+        message: `Unsupported filesystem entry in compute artifact: ${source}`,
+      });
     }
   },
 );
@@ -1008,11 +1013,9 @@ const readDirectoryEntries = Effect.fn(function* (directory: string) {
   const path = yield* Path.Path;
   const names = yield* fs.readDirectory(directory);
   if (names.length > STAGING_MAX_ENTRIES) {
-    return yield* Effect.fail(
-      new Error(
-        `Compute artifact directory exceeds the ${STAGING_MAX_ENTRIES} entry safety limit: ${directory}`,
-      ),
-    );
+    return yield* new ComputeBuildError({
+      message: `Compute artifact directory exceeds the ${STAGING_MAX_ENTRIES} entry safety limit: ${directory}`,
+    });
   }
   return yield* Effect.forEach(names, (name) =>
     Effect.gen(function* () {
@@ -1101,14 +1104,16 @@ const copyAliasIfMissing = Effect.fn(function* (
     const copied = yield* fs.stat(target);
     if (copied.type !== "File" || Number(copied.size) !== size) {
       yield* fs.remove(target, { force: true }).pipe(Effect.ignore);
-      return yield* Effect.fail(
-        new Error(`Compute artifact file changed while staging: ${source}`),
-      );
+      return yield* new ComputeBuildError({
+        message: `Compute artifact file changed while staging: ${source}`,
+      });
     }
     yield* fs.chmod(target, stat.mode & 0o777);
     return;
   }
-  return yield* Effect.fail(new Error(`Unsupported Bun package alias source: ${source}`));
+  return yield* new ComputeBuildError({
+    message: `Unsupported Bun package alias source: ${source}`,
+  });
 });
 
 const resolveFrameworkEntrypoint = Effect.fn(function* (
@@ -1140,16 +1145,14 @@ const resolveFrameworkEntrypoint = Effect.fn(function* (
 
   if (candidates.length === 1) return candidates[0]!;
   if (candidates.length > 1) {
-    return yield* Effect.fail(
-      new Error(
-        `Next.js standalone output has multiple ${entrypointFile} files (${candidates.join(", ")}). Cannot determine the application entrypoint.`,
-      ),
-    );
+    return yield* new ComputeBuildError({
+      message: `Next.js standalone output has multiple ${entrypointFile} files (${candidates.join(", ")}). Cannot determine the application entrypoint.`,
+    });
   }
 
-  return yield* Effect.fail(
-    new Error(`Could not find framework entrypoint ${entrypoint} inside ${artifactDir}.`),
-  );
+  return yield* new ComputeBuildError({
+    message: `Could not find framework entrypoint ${entrypoint} inside ${artifactDir}.`,
+  });
 });
 
 function buildBun(options: ComputeAutoBuildOptions) {
@@ -1185,7 +1188,9 @@ function buildBun(options: ComputeAutoBuildOptions) {
         .filter((file) => file.endsWith(".js"))
         .sort();
       if (outputFiles.length === 0) {
-        return yield* Effect.fail(new Error("Bun build produced no JavaScript output."));
+        return yield* new ComputeBuildError({
+          message: "Bun build produced no JavaScript output.",
+        });
       }
 
       const expected = `${path.basename(absoluteEntrypoint, path.extname(absoluteEntrypoint))}.js`;
@@ -1205,16 +1210,17 @@ const resolveBunEntrypoint = Effect.fn(function* (appPath: string, entrypoint: s
   const path = yield* Path.Path;
   const candidate = entrypoint ?? (yield* readPackageMain(appPath));
   if (!candidate) {
-    return yield* Effect.fail(
-      new Error(
+    return yield* new ComputeBuildInvalidProps({
+      message:
         "Prisma Compute auto-build needs an entrypoint for Bun apps. Set `entrypoint` or package.json `main`.",
-      ),
-    );
+    });
   }
   const normalized = yield* normalizeEntrypoint(candidate);
   const entrypointPath = path.join(appPath, normalized);
   if (!(yield* fs.exists(entrypointPath))) {
-    return yield* Effect.fail(new Error(`Entrypoint file does not exist: ${entrypointPath}`));
+    return yield* new ComputeBuildInvalidProps({
+      message: `Entrypoint file does not exist: ${entrypointPath}`,
+    });
   }
   const realAppPath = yield* fs.realPath(appPath);
   const realEntrypointPath = yield* fs.realPath(entrypointPath);
@@ -1358,9 +1364,9 @@ const stageTracedPath = Effect.fn(function* (
   const symlinkTarget = yield* fs.readLink(sourcePath).pipe(Effect.orElseSucceed(() => undefined));
   const stat = yield* fs.stat(sourcePath).pipe(Effect.orElseSucceed(() => undefined));
   if (stat === undefined && symlinkTarget === undefined) {
-    return yield* Effect.fail(
-      new Error(`NestJS dependency disappeared while staging: ${sourcePath}`),
-    );
+    return yield* new ComputeBuildError({
+      message: `NestJS dependency disappeared while staging: ${sourcePath}`,
+    });
   }
 
   yield* assertSafeStagingDestination(destinationPath, targetRoot);
@@ -1386,18 +1392,18 @@ const stageTracedPath = Effect.fn(function* (
     const copied = yield* fs.stat(destinationPath);
     if (copied.type !== "File" || Number(copied.size) !== size) {
       yield* fs.remove(destinationPath, { force: true }).pipe(Effect.ignore);
-      return yield* Effect.fail(
-        new Error(`Compute artifact file changed while staging: ${sourcePath}`),
-      );
+      return yield* new ComputeBuildError({
+        message: `Compute artifact file changed while staging: ${sourcePath}`,
+      });
     }
     yield* fs.chmod(destinationPath, stat.mode & 0o777);
     return;
   }
 
   yield* accountStagingEntry(budget, sourcePath, 0);
-  return yield* Effect.fail(
-    new Error(`Unsupported filesystem entry in NestJS dependency trace: ${sourcePath}`),
-  );
+  return yield* new ComputeBuildError({
+    message: `Unsupported filesystem entry in NestJS dependency trace: ${sourcePath}`,
+  });
 });
 
 const makeStagingBudget = (): StagingBudget => ({
@@ -1416,7 +1422,9 @@ const withStagingDeadline = <A, E, R>(
       Effect.fromOption(
         result,
         () =>
-          new Error(`Compute artifact staging timed out after ${STAGING_TIMEOUT_SECONDS} seconds.`),
+          new ComputeBuildError({
+            message: `Compute artifact staging timed out after ${STAGING_TIMEOUT_SECONDS} seconds.`,
+          }),
       ),
     ),
   );
@@ -1424,28 +1432,32 @@ const withStagingDeadline = <A, E, R>(
 const accountStagingEntry = (budget: StagingBudget, source: string, size: number) => {
   if (Date.now() > budget.deadline) {
     return Effect.fail(
-      new Error(`Compute artifact staging timed out after ${STAGING_TIMEOUT_SECONDS} seconds.`),
+      new ComputeBuildError({
+        message: `Compute artifact staging timed out after ${STAGING_TIMEOUT_SECONDS} seconds.`,
+      }),
     );
   }
   if (size > STAGING_MAX_FILE_BYTES) {
     return Effect.fail(
-      new Error(
-        `Compute artifact file exceeds the ${STAGING_MAX_FILE_BYTES} byte per-file safety limit: ${source}`,
-      ),
+      new ComputeBuildError({
+        message: `Compute artifact file exceeds the ${STAGING_MAX_FILE_BYTES} byte per-file safety limit: ${source}`,
+      }),
     );
   }
   const entries = budget.entries + 1;
   if (entries > STAGING_MAX_ENTRIES) {
     return Effect.fail(
-      new Error(`Compute artifact staging exceeded the ${STAGING_MAX_ENTRIES} entry safety limit.`),
+      new ComputeBuildError({
+        message: `Compute artifact staging exceeded the ${STAGING_MAX_ENTRIES} entry safety limit.`,
+      }),
     );
   }
   const totalBytes = budget.totalBytes + size;
   if (!Number.isSafeInteger(totalBytes) || totalBytes > STAGING_MAX_TOTAL_BYTES) {
     return Effect.fail(
-      new Error(
-        `Compute artifact staging exceeded the ${STAGING_MAX_TOTAL_BYTES} byte total safety limit.`,
-      ),
+      new ComputeBuildError({
+        message: `Compute artifact staging exceeded the ${STAGING_MAX_TOTAL_BYTES} byte total safety limit.`,
+      }),
     );
   }
   budget.entries = entries;
@@ -1457,7 +1469,9 @@ const safeFileSize = (source: string, rawSize: ByteSize.ByteSize) => {
   const size = ByteSize.toNumberUnsafe(rawSize);
   return Number.isSafeInteger(size) && size >= 0
     ? Effect.succeed(size)
-    : Effect.fail(new Error(`Compute artifact has an invalid file size: ${source}`));
+    : Effect.fail(
+        new ComputeBuildError({ message: `Compute artifact has an invalid file size: ${source}` }),
+      );
 };
 
 const assertRealPathWithinRoots = Effect.fn(function* (
@@ -1484,15 +1498,15 @@ const assertSafeStagingDestination = Effect.fn(function* (destination: string, t
       Effect.orElseSucceed(() => false),
     );
     if (isDanglingSymlink) {
-      return yield* Effect.fail(
-        new Error(`Compute artifact destination contains a dangling symlink: ${existingAncestor}`),
-      );
+      return yield* new ComputeBuildError({
+        message: `Compute artifact destination contains a dangling symlink: ${existingAncestor}`,
+      });
     }
     const parent = path.dirname(existingAncestor);
     if (parent === existingAncestor) {
-      return yield* Effect.fail(
-        new Error(`Could not establish a safe compute artifact destination: ${destination}`),
-      );
+      return yield* new ComputeBuildError({
+        message: `Could not establish a safe compute artifact destination: ${destination}`,
+      });
     }
     existingAncestor = parent;
   }
@@ -1518,9 +1532,9 @@ const assertPathWithinRoots = Effect.fn(function* (
   ) {
     return;
   }
-  return yield* Effect.fail(
-    new Error(`Compute artifact path escapes its staging root: ${displaySource}`),
-  );
+  return yield* new ComputeBuildError({
+    message: `Compute artifact path escapes its staging root: ${displaySource}`,
+  });
 });
 
 const validateStagedSymlink = Effect.fn(function* (
@@ -1531,9 +1545,9 @@ const validateStagedSymlink = Effect.fn(function* (
   const path = yield* Path.Path;
   const target = yield* fs.readLink(source);
   if (path.isAbsolute(target) || /^[a-zA-Z]:[\\/]/.test(target)) {
-    return yield* Effect.fail(
-      new Error(`Compute artifact contains an absolute symlink: ${source}`),
-    );
+    return yield* new ComputeBuildError({
+      message: `Compute artifact contains an absolute symlink: ${source}`,
+    });
   }
   yield* assertRealPathWithinRoots(source, allowedRoots);
   return target;
@@ -1572,9 +1586,9 @@ const validateStagedDirectory = Effect.fn(function* (root: string, budget: Stagi
           continue;
         }
         yield* accountStagingEntry(budget, source, 0);
-        return yield* Effect.fail(
-          new Error(`Unsupported filesystem entry in compute artifact: ${source}`),
-        );
+        return yield* new ComputeBuildError({
+          message: `Unsupported filesystem entry in compute artifact: ${source}`,
+        });
       }
     },
   );
@@ -1635,7 +1649,7 @@ const packageCliCommand = Effect.fn(function* (
       return `${shellQuote(executablePath)}${argText.length > 0 ? ` ${argText}` : ""}`;
     }
   }
-  return yield* Effect.fail(new Error(missingMessage));
+  return yield* new ComputeBuildError({ message: missingMessage });
 });
 
 const packageScriptCommand = (scriptName: string) =>

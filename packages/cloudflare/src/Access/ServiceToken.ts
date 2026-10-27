@@ -3,6 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
@@ -10,6 +11,13 @@ import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class ServiceTokenUnexpectedResponse extends Data.TaggedError(
+  "ServiceTokenUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type ServiceTokenProps = {
   /**
@@ -245,7 +253,9 @@ export const ServiceTokenProvider = () =>
             ),
           );
         if (!created.id || !created.clientId) {
-          return yield* Effect.fail(new Error("ServiceToken: created token missing id"));
+          return yield* new ServiceTokenUnexpectedResponse({
+            message: "ServiceToken: created token missing id",
+          });
         }
         const fresh = yield* zeroTrust.getAccessServiceTokenForAccount({
           accountId: acct,
@@ -311,7 +321,9 @@ export const ServiceTokenProvider = () =>
       }
 
       if (!synced.id || !synced.clientId) {
-        return yield* Effect.fail(new Error("ServiceToken: ensured token missing id"));
+        return yield* new ServiceTokenUnexpectedResponse({
+          message: "ServiceToken: ensured token missing id",
+        });
       }
       return {
         serviceTokenId: synced.id,

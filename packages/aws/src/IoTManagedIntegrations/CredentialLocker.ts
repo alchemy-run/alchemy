@@ -5,10 +5,25 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { syncManagedIntegrationsTags, toTagRecord, unwrapSensitive } from "./internal.ts";
+
+export class CredentialLockerUnexpectedResponse extends Data.TaggedError(
+  "CredentialLockerUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class CredentialLockerOperationFailed extends Data.TaggedError(
+  "CredentialLockerOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface CredentialLockerProps {
   /**
@@ -98,9 +113,9 @@ export const CredentialLockerProvider = () =>
       const toAttributes = Effect.fn(function* (locker: mi.GetCredentialLockerResponse) {
         const name = unwrapSensitive(locker.Name);
         if (locker.Id === undefined || locker.Arn === undefined || name === undefined) {
-          return yield* Effect.fail(
-            new Error("credential locker response is missing Id, Arn, or Name"),
-          );
+          return yield* new CredentialLockerUnexpectedResponse({
+            message: "credential locker response is missing Id, Arn, or Name",
+          });
         }
         return {
           credentialLockerId: locker.Id,
@@ -146,13 +161,15 @@ export const CredentialLockerProvider = () =>
               Tags: desiredTags,
             });
             if (created.Id === undefined) {
-              return yield* Effect.fail(new Error(`failed to create credential locker '${name}'`));
+              return yield* new CredentialLockerOperationFailed({
+                message: `failed to create credential locker '${name}'`,
+              });
             }
             locker = yield* observeById(created.Id);
             if (locker === undefined) {
-              return yield* Effect.fail(
-                new Error(`credential locker '${created.Id}' vanished after create`),
-              );
+              return yield* new CredentialLockerUnexpectedResponse({
+                message: `credential locker '${created.Id}' vanished after create`,
+              });
             }
           }
 

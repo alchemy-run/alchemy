@@ -3,12 +3,20 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class CertificateUnexpectedResponse extends Data.TaggedError(
+  "CertificateUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type CertificateProps = {
   /**
@@ -197,7 +205,9 @@ export const CertificateProvider = () =>
             ),
           );
         if (!created.id) {
-          return yield* Effect.fail(new Error("Certificate: created certificate missing id"));
+          return yield* new CertificateUnexpectedResponse({
+            message: "Certificate: created certificate missing id",
+          });
         }
         return toAttrs(created, acct, news.certificate);
       }

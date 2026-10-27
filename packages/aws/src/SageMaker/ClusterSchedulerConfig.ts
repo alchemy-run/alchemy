@@ -11,6 +11,20 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class ClusterSchedulerConfigInvalidProps extends Data.TaggedError(
+  "ClusterSchedulerConfigInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ClusterSchedulerConfigUnexpectedResponse extends Data.TaggedError(
+  "ClusterSchedulerConfigUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type SchedulerResourceStatus = sagemaker.SchedulerResourceStatus;
 
 export interface ClusterSchedulerConfigProps {
@@ -265,7 +279,9 @@ export const ClusterSchedulerConfigProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("SageMaker ClusterSchedulerConfig requires props"));
+            return yield* new ClusterSchedulerConfigInvalidProps({
+              message: "SageMaker ClusterSchedulerConfig requires props",
+            });
           }
           const name = yield* createConfigName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -302,9 +318,9 @@ export const ClusterSchedulerConfigProvider = () =>
               created?.ClusterSchedulerConfigId ??
               (yield* findConfigByName(name))?.ClusterSchedulerConfigId;
             if (configId === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to create cluster scheduler config ${name}`),
-              );
+              return yield* new ClusterSchedulerConfigUnexpectedResponse({
+                message: `failed to create cluster scheduler config ${name}`,
+              });
             }
             yield* session.note(`Creating cluster policy ${name}...`);
             yield* waitForConfig(configId, "Ready");
@@ -332,9 +348,9 @@ export const ClusterSchedulerConfigProvider = () =>
 
           described = yield* describeConfigOrUndefined(configId);
           if (described === undefined) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled cluster scheduler config ${name}`),
-            );
+            return yield* new ClusterSchedulerConfigUnexpectedResponse({
+              message: `failed to read reconciled cluster scheduler config ${name}`,
+            });
           }
           const attrs = toAttrs(described);
 

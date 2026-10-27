@@ -3,9 +3,17 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class PolicyStoreAliasUnexpectedResponse extends Data.TaggedError(
+  "PolicyStoreAliasUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface PolicyStoreAliasProps {
   /**
@@ -190,9 +198,9 @@ export const PolicyStoreAliasProvider = () =>
 
           const alias = existing ?? (yield* observe(aliasName));
           if (alias === undefined) {
-            return yield* Effect.fail(
-              new Error(`policy store alias '${aliasName}' not found after create`),
-            );
+            return yield* new PolicyStoreAliasUnexpectedResponse({
+              message: `policy store alias '${aliasName}' not found after create`,
+            });
           }
           yield* session.note(alias.aliasName);
           return {

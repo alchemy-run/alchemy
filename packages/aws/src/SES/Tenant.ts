@@ -5,11 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import type { SuppressionListReason } from "./ConfigurationSet.ts";
+
+export class TenantUnexpectedResponse extends Data.TaggedError("TenantUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The scope of the tenant's suppression list: `ACCOUNT` shares the
@@ -258,7 +264,9 @@ export const TenantProvider = () =>
           }
 
           if (observed === undefined || !observed.TenantId || !observed.TenantArn) {
-            return yield* Effect.fail(new Error(`SES tenant ${name} was not found after create`));
+            return yield* new TenantUnexpectedResponse({
+              message: `SES tenant ${name} was not found after create`,
+            });
           }
           const tenantArn = observed.TenantArn;
 

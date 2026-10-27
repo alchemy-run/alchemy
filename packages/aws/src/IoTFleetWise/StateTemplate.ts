@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -16,6 +17,13 @@ import {
   syncFleetWiseTags,
   toFleetWiseTagList,
 } from "./internal.ts";
+
+export class StateTemplateUnexpectedResponse extends Data.TaggedError(
+  "StateTemplateUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface StateTemplateProps {
   /**
@@ -128,9 +136,9 @@ export const StateTemplateProvider = () =>
 
       const toAttrs = Effect.fn(function* (template: iotfleetwise.GetStateTemplateResponse) {
         if (template.name === undefined || template.arn === undefined) {
-          return yield* Effect.fail(
-            new Error(`StateTemplate '${template.name}' is missing its ARN`),
-          );
+          return yield* new StateTemplateUnexpectedResponse({
+            message: `StateTemplate '${template.name}' is missing its ARN`,
+          });
         }
         return {
           stateTemplateName: template.name,
@@ -191,7 +199,11 @@ export const StateTemplateProvider = () =>
             observed = yield* readTemplate(name).pipe(
               Effect.flatMap((template) =>
                 template === undefined
-                  ? Effect.fail(new Error(`StateTemplate '${name}' not found`))
+                  ? Effect.fail(
+                      new StateTemplateUnexpectedResponse({
+                        message: `StateTemplate '${name}' not found`,
+                      }),
+                    )
                   : Effect.succeed(template),
               ),
               retryObservation,
@@ -236,7 +248,11 @@ export const StateTemplateProvider = () =>
             observed = yield* readTemplate(name).pipe(
               Effect.flatMap((template) =>
                 template === undefined
-                  ? Effect.fail(new Error(`StateTemplate '${name}' not found`))
+                  ? Effect.fail(
+                      new StateTemplateUnexpectedResponse({
+                        message: `StateTemplate '${name}' not found`,
+                      }),
+                    )
                   : Effect.succeed(template),
               ),
               retryObservation,

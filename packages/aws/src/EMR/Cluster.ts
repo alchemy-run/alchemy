@@ -6,12 +6,28 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class EMRClusterOperationFailed extends Data.TaggedError("EMRClusterOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class EMRClusterNotReady extends Data.TaggedError("EMRClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class EMRClusterUnexpectedResponse extends Data.TaggedError("EMRClusterUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * EC2 instance topology for an EMR {@link Cluster} — a master (primary)
@@ -352,25 +368,26 @@ export const ClusterProvider = () =>
       const waitForReady = Effect.fn(function* (clusterId: string) {
         const policy = Schedule.max([Schedule.fixed("20 seconds"), Schedule.recurs(90)]);
         return yield* emr.describeCluster({ ClusterId: clusterId }).pipe(
-          Effect.flatMap((response) => {
-            const cluster = response.Cluster;
-            const state = cluster?.Status?.State ?? "STARTING";
-            if (TERMINAL_STATES.has(state)) {
-              const reason = cluster?.Status?.StateChangeReason;
-              return Effect.fail(
-                new Error(
-                  `EMR cluster '${clusterId}' reached terminal state '${state}'` +
+          Effect.flatMap(
+            Effect.fnUntraced(function* (response) {
+              const cluster = response.Cluster;
+              const state = cluster?.Status?.State ?? "STARTING";
+              if (TERMINAL_STATES.has(state)) {
+                const reason = cluster?.Status?.StateChangeReason;
+                return yield* new EMRClusterOperationFailed({
+                  message:
+                    `EMR cluster '${clusterId}' reached terminal state '${state}'` +
                     ` (${reason?.Code ?? "unknown"}: ${reason?.Message ?? "no message"})`,
-                ),
-              );
-            }
-            if (state !== "WAITING" && state !== "RUNNING") {
-              return Effect.fail(
-                new Error(`EMR cluster '${clusterId}' not ready (state: ${state})`),
-              );
-            }
-            return Effect.succeed(cluster!);
-          }),
+                });
+              }
+              if (state !== "WAITING" && state !== "RUNNING") {
+                return yield* new EMRClusterNotReady({
+                  message: `EMR cluster '${clusterId}' not ready (state: ${state})`,
+                });
+              }
+              return cluster!;
+            }),
+          ),
           Effect.retry({
             while: (e) => e instanceof Error && !e.message.includes("terminal state"),
             schedule: policy,
@@ -380,9 +397,9 @@ export const ClusterProvider = () =>
 
       const toAttrs = Effect.fn(function* (cluster: emr.Cluster) {
         if (!cluster.Id || !cluster.ClusterArn || !cluster.Name) {
-          return yield* Effect.fail(
-            new Error(`EMR cluster '${cluster.Id}' is missing its ARN or name`),
-          );
+          return yield* new EMRClusterUnexpectedResponse({
+            message: `EMR cluster '${cluster.Id}' is missing its ARN or name`,
+          });
         }
         return {
           clusterId: cluster.Id,
@@ -534,9 +551,9 @@ export const ClusterProvider = () =>
                 }),
               );
             if (!created.JobFlowId) {
-              return yield* Effect.fail(
-                new Error(`RunJobFlow for '${name}' returned no JobFlowId`),
-              );
+              return yield* new EMRClusterUnexpectedResponse({
+                message: `RunJobFlow for '${name}' returned no JobFlowId`,
+              });
             }
             clusterId = created.JobFlowId;
           }
@@ -673,7 +690,9 @@ export const ClusterProvider = () =>
               return TERMINAL_STATES.has(state)
                 ? Effect.void
                 : Effect.fail(
-                    new Error(`EMR cluster '${clusterId}' still active (state: ${state})`),
+                    new EMRClusterNotReady({
+                      message: `EMR cluster '${clusterId}' still active (state: ${state})`,
+                    }),
                   );
             }),
             Effect.catchTag("ClusterNotFound", () => Effect.void),

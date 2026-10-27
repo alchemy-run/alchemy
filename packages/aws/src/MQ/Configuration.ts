@@ -5,9 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import { syncMqTags, toTagRecord } from "./internal.ts";
+
+export class ConfigurationUnexpectedResponse extends Data.TaggedError(
+  "ConfigurationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ConfigurationProps {
   /**
@@ -236,9 +244,9 @@ export const ConfigurationProvider = () =>
             });
             observed = yield* readConfiguration(created.Id!);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(`MQ configuration '${name}' disappeared immediately after create`),
-              );
+              return yield* new ConfigurationUnexpectedResponse({
+                message: `MQ configuration '${name}' disappeared immediately after create`,
+              });
             }
           }
 
@@ -271,9 +279,9 @@ export const ConfigurationProvider = () =>
           // 4. Re-read for the fresh latest revision + tags.
           const final = yield* readConfiguration(configurationId);
           if (final === undefined) {
-            return yield* Effect.fail(
-              new Error(`MQ configuration '${name}' disappeared while reconciling`),
-            );
+            return yield* new ConfigurationUnexpectedResponse({
+              message: `MQ configuration '${name}' disappeared while reconciling`,
+            });
           }
           yield* session.note(name);
           return toAttrs(final);

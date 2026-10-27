@@ -33,6 +33,21 @@ import { isInputObject, isPrismaDevId } from "./internal/Refs.ts";
 import type { Providers } from "./Providers.ts";
 import type { PrismaSecretConnection, PrismaRegionId } from "./Types.ts";
 
+export class ProjectConflict extends Data.TaggedError("ProjectConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ProjectInvalidProps extends Data.TaggedError("ProjectInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ProjectUnexpectedResponse extends Data.TaggedError("ProjectUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface ProjectProps {
   /**
    * Project display name. If omitted, Alchemy generates a stable physical name.
@@ -190,9 +205,9 @@ const findProjectByName = (name: string) =>
       const matches = projects.filter((p) => p.name === name);
       return matches.length > 1
         ? Effect.fail(
-            new Error(
-              `Multiple Prisma projects are named '${name}'; use a unique project name before managing it with Alchemy.`,
-            ),
+            new ProjectConflict({
+              message: `Multiple Prisma projects are named '${name}'; use a unique project name before managing it with Alchemy.`,
+            }),
           )
         : Effect.succeed(matches[0]);
     }),
@@ -252,9 +267,9 @@ const defaultDatabase = (projectId: string) =>
       const matches = databases.filter((db) => db.isDefault);
       return matches.length > 1
         ? Effect.fail(
-            new Error(
-              `Prisma project '${projectId}' has multiple default databases; refusing to select one arbitrarily.`,
-            ),
+            new ProjectConflict({
+              message: `Prisma project '${projectId}' has multiple default databases; refusing to select one arbitrarily.`,
+            }),
           )
         : Effect.succeed(matches[0]);
     }),
@@ -416,11 +431,9 @@ const ProviderLive = () =>
             desiredRegion !== undefined &&
             output.defaultRegion !== desiredRegion
           ) {
-            return yield* Effect.fail(
-              new Error(
-                `Cannot safely change Prisma project '${output.projectName}' default database region from '${output.defaultRegion ?? "unknown"}' to '${desiredRegion}' in place. The Management API would create an empty default database and leave the data-bearing database to be deleted. Create a replacement project and perform an explicit data migration/cutover instead.`,
-              ),
-            );
+            return yield* new ProjectInvalidProps({
+              message: `Cannot safely change Prisma project '${output.projectName}' default database region from '${output.defaultRegion ?? "unknown"}' to '${desiredRegion}' in place. The Management API would create an empty default database and leave the data-bearing database to be deleted. Create a replacement project and perform an explicit data migration/cutover instead.`,
+            });
           }
           if (
             desiredCreateDatabase === true &&
@@ -526,9 +539,9 @@ const ProviderLive = () =>
                       })),
                     )
                   : Effect.fail(
-                      new Error(
-                        `Prisma project '${name}' appeared after the adoption check. Refusing to take it over; rerun with adoption enabled if it is the intended project.`,
-                      ),
+                      new ProjectConflict({
+                        message: `Prisma project '${name}' appeared after the adoption check. Refusing to take it over; rerun with adoption enabled if it is the intended project.`,
+                      }),
                     ),
               ),
             );
@@ -539,18 +552,16 @@ const ProviderLive = () =>
             recoverCreateSecrets = result.recoverSecrets;
           }
           if (!project) {
-            return yield* Effect.fail(
-              new Error(`Prisma project '${name}' could not be observed after create recovery.`),
-            );
+            return yield* new ProjectUnexpectedResponse({
+              message: `Prisma project '${name}' could not be observed after create recovery.`,
+            });
           }
           const ownedGeneratedIdentity = news.name === undefined && project.name === name;
 
           if (news.createDatabase === false && createdDatabase) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma created unexpected default database '${createdDatabase.name}' (${createdDatabase.id}) for project '${project.name}' even though createDatabase was false. Refusing to persist a state the Management API cannot remove in place.`,
-              ),
-            );
+            return yield* new ProjectUnexpectedResponse({
+              message: `Prisma created unexpected default database '${createdDatabase.name}' (${createdDatabase.id}) for project '${project.name}' even though createDatabase was false. Refusing to persist a state the Management API cannot remove in place.`,
+            });
           }
 
           if (news.createDatabase === false && !createdProject) {
@@ -558,11 +569,9 @@ const ProviderLive = () =>
               Effect.catchTag("NotFound", () => Effect.undefined),
             );
             if (existingDefault) {
-              return yield* Effect.fail(
-                new Error(
-                  `Prisma project '${project.name}' already owns default database '${existingDefault.name}' (${existingDefault.id}), which cannot be removed in place. Refusing to adopt or reconcile it as createDatabase: false; replace the Prisma.Project instead.`,
-                ),
-              );
+              return yield* new ProjectConflict({
+                message: `Prisma project '${project.name}' already owns default database '${existingDefault.name}' (${existingDefault.id}), which cannot be removed in place. Refusing to adopt or reconcile it as createDatabase: false; replace the Prisma.Project instead.`,
+              });
             }
           }
 
@@ -592,11 +601,9 @@ const ProviderLive = () =>
           if (news.createDatabase !== false) {
             const desiredRegion = news.region ?? "us-east-1";
             if (database && database.region?.id !== desiredRegion) {
-              return yield* Effect.fail(
-                new Error(
-                  `Cannot safely change Prisma project '${name}' default database region from '${database.region?.id ?? "unknown"}' to '${desiredRegion}' in place. The Management API would create an empty default database and risk deleting the existing data-bearing database. Create a replacement project and perform an explicit data migration/cutover instead.`,
-                ),
-              );
+              return yield* new ProjectInvalidProps({
+                message: `Cannot safely change Prisma project '${name}' default database region from '${database.region?.id ?? "unknown"}' to '${desiredRegion}' in place. The Management API would create an empty default database and risk deleting the existing data-bearing database. Create a replacement project and perform an explicit data migration/cutover instead.`,
+              });
             }
             if (!database) {
               defaultDatabaseChanged = true;

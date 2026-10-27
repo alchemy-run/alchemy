@@ -11,6 +11,18 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class KxEnvironmentInvalidProps extends Data.TaggedError("KxEnvironmentInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class KxEnvironmentUnexpectedResponse extends Data.TaggedError(
+  "KxEnvironmentUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type KxEnvironmentStatus = finspace.EnvironmentStatus;
 export type TransitGatewayConfiguration = finspace.TransitGatewayConfiguration;
 export type CustomDNSServer = finspace.CustomDNSServer;
@@ -315,7 +327,9 @@ export const KxEnvironmentProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("FinSpace KxEnvironment requires props"));
+            return yield* new KxEnvironmentInvalidProps({
+              message: "FinSpace KxEnvironment requires props",
+            });
           }
           const name = yield* createKxEnvironmentName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -336,22 +350,24 @@ export const KxEnvironmentProvider = () =>
               tags: desiredTags,
             });
             if (!created.environmentId) {
-              return yield* Effect.fail(
-                new Error(`CreateKxEnvironment for '${name}' returned no id`),
-              );
+              return yield* new KxEnvironmentUnexpectedResponse({
+                message: `CreateKxEnvironment for '${name}' returned no id`,
+              });
             }
             yield* session.note(`Creating kdb environment ${name} (${created.environmentId})...`);
             yield* waitForKxEnvironmentStatus(created.environmentId, "CREATED");
             env = yield* readKxEnvironmentById(created.environmentId);
             if (env === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created kdb environment ${name}`),
-              );
+              return yield* new KxEnvironmentUnexpectedResponse({
+                message: `failed to read created kdb environment ${name}`,
+              });
             }
           }
           const environmentId = env.environmentId;
           if (environmentId === undefined) {
-            return yield* Effect.fail(new Error(`kdb environment '${name}' has no environmentId`));
+            return yield* new KxEnvironmentUnexpectedResponse({
+              message: `kdb environment '${name}' has no environmentId`,
+            });
           }
 
           // Sync network — UpdateKxEnvironmentNetwork is attach-once: apply
@@ -409,9 +425,9 @@ export const KxEnvironmentProvider = () =>
 
           const final = yield* readKxEnvironmentById(environmentId);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled kdb environment ${name}`),
-            );
+            return yield* new KxEnvironmentUnexpectedResponse({
+              message: `failed to read reconciled kdb environment ${name}`,
+            });
           }
           return yield* toKxAttributes(final, environmentId);
         }),

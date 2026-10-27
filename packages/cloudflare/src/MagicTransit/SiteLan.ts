@@ -4,11 +4,17 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class SiteLanUnexpectedResponse extends Data.TaggedError("SiteLanUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const TypeId = "Cloudflare.MagicTransit.SiteLan" as const;
 type TypeId = typeof TypeId;
@@ -267,7 +273,9 @@ export const MagicSiteLanProvider = () =>
           observed = yield* findByName(accountId, siteId, name);
         }
         if (observed) return toAttributes(observed, siteId, accountId);
-        return yield* Effect.fail(new Error(`Magic WAN site LAN ${name} not visible after create`));
+        return yield* new SiteLanUnexpectedResponse({
+          message: `Magic WAN site LAN ${name} not visible after create`,
+        });
       }
 
       // Sync — the update API is a PUT; send the full desired state, but

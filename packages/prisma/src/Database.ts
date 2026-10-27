@@ -56,6 +56,21 @@ import type {
   PrismaSecretConnection,
 } from "./Types.ts";
 
+export class DatabaseConflict extends Data.TaggedError("DatabaseConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class DatabaseInvalidProps extends Data.TaggedError("DatabaseInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class DatabaseOperationFailed extends Data.TaggedError("DatabaseOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface DatabaseDev {
   /**
    * Local provider used by `alchemy dev`.
@@ -355,9 +370,9 @@ const findDatabaseByName = (projectId: string, name: string) =>
       const matches = databases.filter((database) => database.name === name);
       return matches.length > 1
         ? Effect.fail(
-            new Error(
-              `Prisma project '${projectId}' has multiple databases named '${name}'; refusing to select one arbitrarily.`,
-            ),
+            new DatabaseConflict({
+              message: `Prisma project '${projectId}' has multiple databases named '${name}'; refusing to select one arbitrarily.`,
+            }),
           )
         : Effect.succeed(matches[0]);
     }),
@@ -423,9 +438,9 @@ const findDefaultDatabase = (projectId: string) =>
       const matches = databases.filter((database) => database.isDefault);
       return matches.length > 1
         ? Effect.fail(
-            new Error(
-              `Prisma project '${projectId}' has multiple default databases; refusing to select one arbitrarily.`,
-            ),
+            new DatabaseConflict({
+              message: `Prisma project '${projectId}' has multiple default databases; refusing to select one arbitrarily.`,
+            }),
           )
         : Effect.succeed(matches[0]);
     }),
@@ -445,11 +460,9 @@ const resolveDatabaseRegion = Effect.fn(function* (
   const database = yield* findDefaultDatabase(projectId);
   const inherited = database?.region?.id;
   if (inherited === undefined) {
-    return yield* Effect.fail(
-      new Error(
-        `Cannot resolve Prisma database region 'inherit' because project '${projectId}' has no default region and no default database region. Create or promote a default database first, or specify an explicit region.`,
-      ),
-    );
+    return yield* new DatabaseOperationFailed({
+      message: `Cannot resolve Prisma database region 'inherit' because project '${projectId}' has no default region and no default database region. Create or promote a default database first, or specify an explicit region.`,
+    });
   }
   return inherited as PrismaRegionId;
 });
@@ -493,9 +506,9 @@ const branchIdForGitName = (projectId: string, gitName: string) =>
     Effect.flatMap((branches) =>
       branches.length > 1
         ? Effect.fail(
-            new Error(
-              `Prisma project '${projectId}' has multiple branches named '${gitName}'; refusing to select one arbitrarily.`,
-            ),
+            new DatabaseConflict({
+              message: `Prisma project '${projectId}' has multiple branches named '${gitName}'; refusing to select one arbitrarily.`,
+            }),
           )
         : Effect.succeed(branches[0]?.id),
     ),
@@ -560,21 +573,21 @@ const branchAttachment = (props: DatabaseProps) =>
 const validateDatabaseProps = (props: DatabaseProps) =>
   Effect.gen(function* () {
     if ((props as { isDefault?: boolean }).isDefault === true) {
-      return yield* Effect.fail(
-        new Error(
+      return yield* new DatabaseInvalidProps({
+        message:
           "Prisma.Database cannot manage a default database because the Management API has no safe demotion or promote-existing operation, so the resource could never be destroyed. Use Prisma.Project for the project-owned default database.",
-        ),
-      );
+      });
     }
     if (props.branchId !== undefined && props.branchGitName !== undefined) {
-      return yield* Effect.fail(new Error("branchId and branchGitName are mutually exclusive."));
+      return yield* new DatabaseInvalidProps({
+        message: "branchId and branchGitName are mutually exclusive.",
+      });
     }
     if ((props.branchId as unknown) === null || (props.branchGitName as unknown) === null) {
-      return yield* Effect.fail(
-        new Error(
+      return yield* new DatabaseInvalidProps({
+        message:
           "Every Prisma database belongs to a Branch; the Management API rejects detaching (null). Omit both branchId and branchGitName to attach to the project's default branch, or provide one of them.",
-        ),
-      );
+      });
     }
   });
 
@@ -605,11 +618,10 @@ const ProviderLive = () =>
             return { action: "update" } as const;
           }
           if ((news as { isDefault?: unknown }).isDefault === true) {
-            return yield* Effect.fail(
-              new Error(
+            return yield* new DatabaseInvalidProps({
+              message:
                 "Prisma.Database cannot manage a default database because the Management API has no safe demotion or promote-existing operation. Use Prisma.Project for the project-owned default database.",
-              ),
-            );
+            });
           }
           if (isPrismaDevId(output?.databaseId)) {
             return { action: "update" } as const;
@@ -720,11 +732,9 @@ const ProviderLive = () =>
           }
           if (!database) return undefined;
           if (databaseId === undefined && !sourceMatches(database.source, olds.source)) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma database '${database.name}' has immutable source ${JSON.stringify(database.source)} but ${JSON.stringify(olds.source ?? { type: "empty" })} was requested; refusing to adopt a database that cannot converge.`,
-              ),
-            );
+            return yield* new DatabaseConflict({
+              message: `Prisma database '${database.name}' has immutable source ${JSON.stringify(database.source)} but ${JSON.stringify(olds.source ?? { type: "empty" })} was requested; refusing to adopt a database that cannot converge.`,
+            });
           }
           const cachedSecrets = output?.databaseId === database.id ? output : undefined;
           const attrs = attrsFrom(database, {
@@ -766,11 +776,9 @@ const ProviderLive = () =>
               news.name !== undefined &&
               (news.branchId !== undefined || news.branchGitName !== undefined)
             ) {
-              return yield* Effect.fail(
-                new Error(
-                  `Cannot safely create explicitly named Prisma database '${name}' with a branch attachment. The Management API creates the database before attaching the branch and exposes no idempotency key, so a failed response cannot be distinguished from a foreign database. Omit name to use Alchemy's recoverable physical identity, or wait for an atomic Management API operation.`,
-                ),
-              );
+              return yield* new DatabaseInvalidProps({
+                message: `Cannot safely create explicitly named Prisma database '${name}' with a branch attachment. The Management API creates the database before attaching the branch and exposes no idempotency key, so a failed response cannot be distinguished from a foreign database. Omit name to use Alchemy's recoverable physical identity, or wait for an atomic Management API operation.`,
+              });
             }
             let createAttach: {
               branchId: string | undefined;
@@ -818,12 +826,10 @@ const ProviderLive = () =>
                     );
                   }
                   if (news.logicalId !== undefined) {
-                    return yield* Effect.fail(
-                      new Error(
-                        `A Prisma database named '${name}' already exists in project '${projectId}' without logical ID '${logicalId}'. Refusing to take it over; choose a different name.`,
-                        { cause: conflict },
-                      ),
-                    );
+                    return yield* new DatabaseConflict({
+                      message: `A Prisma database named '${name}' already exists in project '${projectId}' without logical ID '${logicalId}'. Refusing to take it over; choose a different name.`,
+                      cause: conflict,
+                    });
                   }
                   return yield* news.name === undefined
                     ? recoverGeneratedDatabaseAfterConflict(projectId, name).pipe(
@@ -838,9 +844,9 @@ const ProviderLive = () =>
                         })),
                       )
                     : Effect.fail(
-                        new Error(
-                          `A Prisma database named '${name}' appeared after the adoption check. Refusing to take it over; rerun with adoption enabled if it is the intended database.`,
-                        ),
+                        new DatabaseConflict({
+                          message: `A Prisma database named '${name}' appeared after the adoption check. Refusing to take it over; rerun with adoption enabled if it is the intended database.`,
+                        }),
                       );
                 }),
               ),
@@ -851,34 +857,26 @@ const ProviderLive = () =>
           }
 
           if (database.project.id !== projectId) {
-            return yield* Effect.fail(
-              new Error(
-                database.isDefault
-                  ? `Cannot move default Prisma database '${database.name}' from project '${database.project.id}' to '${projectId}' because the old default cannot be deleted. Promote another database in the original project first, then retry the move.`
-                  : `Prisma database '${database.name}' belongs to project '${database.project.id}', not requested project '${projectId}'. Refusing to claim convergence; replace the database.`,
-              ),
-            );
+            return yield* new DatabaseInvalidProps({
+              message: database.isDefault
+                ? `Cannot move default Prisma database '${database.name}' from project '${database.project.id}' to '${projectId}' because the old default cannot be deleted. Promote another database in the original project first, then retry the move.`
+                : `Prisma database '${database.name}' belongs to project '${database.project.id}', not requested project '${projectId}'. Refusing to claim convergence; replace the database.`,
+            });
           }
           if (database.region?.id !== region) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma database '${database.name}' is in immutable region '${database.region?.id ?? "unknown"}', not requested region '${region}'. Refusing to claim convergence; replace the database.`,
-              ),
-            );
+            return yield* new DatabaseConflict({
+              message: `Prisma database '${database.name}' is in immutable region '${database.region?.id ?? "unknown"}', not requested region '${region}'. Refusing to claim convergence; replace the database.`,
+            });
           }
           if (!sourceMatches(database.source, news.source)) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma database '${database.name}' has immutable source ${JSON.stringify(database.source)}, not requested source ${JSON.stringify(news.source ?? { type: "empty" })}. Refusing to claim convergence; replace the database.`,
-              ),
-            );
+            return yield* new DatabaseConflict({
+              message: `Prisma database '${database.name}' has immutable source ${JSON.stringify(database.source)}, not requested source ${JSON.stringify(news.source ?? { type: "empty" })}. Refusing to claim convergence; replace the database.`,
+            });
           }
           if (database.isDefault === true && (news.isDefault ?? false) === false) {
-            return yield* Effect.fail(
-              new Error(
-                `Cannot demote default Prisma database '${database.name}' directly because the Management API has no demotion operation. Promote another database in project '${projectId}' first, then retry this deployment.`,
-              ),
-            );
+            return yield* new DatabaseConflict({
+              message: `Cannot demote default Prisma database '${database.name}' directly because the Management API has no demotion operation. Promote another database in project '${projectId}' first, then retry this deployment.`,
+            });
           }
 
           const ownedGeneratedIdentity = news.name === undefined && database.name === name;
@@ -944,11 +942,9 @@ const ProviderLive = () =>
           );
           if (!database) return;
           if (database.isDefault) {
-            return yield* Effect.fail(
-              new Error(
-                `Cannot delete default Prisma database '${database.name ?? output.databaseId}' directly. Promote another database first, or delete the owning Prisma.Project so the API can remove its project-owned default database.`,
-              ),
-            );
+            return yield* new DatabaseConflict({
+              message: `Cannot delete default Prisma database '${database.name ?? output.databaseId}' directly. Promote another database first, or delete the owning Prisma.Project so the API can remove its project-owned default database.`,
+            });
           }
           yield* deleteDatabase({
             databaseId: output.databaseId,

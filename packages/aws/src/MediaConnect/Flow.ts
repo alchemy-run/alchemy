@@ -11,6 +11,18 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class MediaConnectFlowNotReady extends Data.TaggedError("MediaConnectFlowNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class MediaConnectFlowUnexpectedResponse extends Data.TaggedError(
+  "MediaConnectFlowUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /**
  * Every flow output managed by alchemy must carry a `Name` so the reconciler
  * can converge outputs by identity across updates.
@@ -205,11 +217,17 @@ export const FlowProvider = () =>
         return yield* readFlow(flowArn).pipe(
           Effect.flatMap((flow) => {
             if (flow === undefined) {
-              return Effect.fail(new Error(`MediaConnect flow '${flowArn}' not found`));
+              return Effect.fail(
+                new MediaConnectFlowNotReady({
+                  message: `MediaConnect flow '${flowArn}' not found`,
+                }),
+              );
             }
             if (flow.Status !== "STANDBY" && flow.Status !== "ACTIVE" && flow.Status !== "ERROR") {
               return Effect.fail(
-                new Error(`MediaConnect flow '${flowArn}' still settling (status: ${flow.Status})`),
+                new MediaConnectFlowNotReady({
+                  message: `MediaConnect flow '${flowArn}' still settling (status: ${flow.Status})`,
+                }),
               );
             }
             return Effect.succeed(flow);
@@ -227,7 +245,9 @@ export const FlowProvider = () =>
             flow === undefined
               ? Effect.void
               : Effect.fail(
-                  new Error(`MediaConnect flow '${flowArn}' still exists (status: ${flow.Status})`),
+                  new MediaConnectFlowNotReady({
+                    message: `MediaConnect flow '${flowArn}' still exists (status: ${flow.Status})`,
+                  }),
                 ),
           ),
           Effect.retry({ schedule: policy }),
@@ -333,7 +353,9 @@ export const FlowProvider = () =>
             arn = created.Flow?.FlowArn;
           }
           if (arn === undefined) {
-            return yield* Effect.fail(new Error(`MediaConnect flow '${name}' is missing its ARN`));
+            return yield* new MediaConnectFlowUnexpectedResponse({
+              message: `MediaConnect flow '${name}' is missing its ARN`,
+            });
           }
           observed = yield* waitUntilSettled(arn);
 

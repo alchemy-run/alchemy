@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { readQuickSightTags, syncQuickSightTags, toWireTags } from "./internal.ts";
+
+export class QuickSightDataSetUnexpectedResponse extends Data.TaggedError(
+  "QuickSightDataSetUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Properties for an Amazon QuickSight dataset — a prepared, queryable model
@@ -214,9 +222,9 @@ export const DataSetProvider = () =>
 
           observed = yield* readSet(accountId, dataSetId);
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`QuickSight dataset '${dataSetId}' not found after reconcile`),
-            );
+            return yield* new QuickSightDataSetUnexpectedResponse({
+              message: `QuickSight dataset '${dataSetId}' not found after reconcile`,
+            });
           }
 
           // 3b. Sync tags.

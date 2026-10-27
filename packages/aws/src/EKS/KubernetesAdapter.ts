@@ -14,6 +14,7 @@ import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as SigV4 from "@distilled.cloud/aws/SigV4";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Self } from "alchemy/Self";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type { HttpClient } from "effect/http/HttpClient";
@@ -52,6 +53,11 @@ import {
   ensureAssociation,
   ensurePodRole,
 } from "./internal/podIdentity.ts";
+
+export class KubernetesAdapterNotReady extends Data.TaggedError("KubernetesAdapterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 declare module "@alchemy.run/kubernetes/Connection" {
   interface AuthRegistry {
@@ -462,12 +468,11 @@ export const EksKubernetesAdapter = () =>
         const endpoint = cluster.endpoint;
         const certificateAuthorityData = cluster.certificateAuthority?.data;
         if (!endpoint || !certificateAuthorityData) {
-          return yield* Effect.fail(
-            new Error(
+          return yield* new KubernetesAdapterNotReady({
+            message:
               `EKS cluster '${auth.clusterName}' has no endpoint or ` +
-                "certificate authority data yet (still creating?)",
-            ),
-          );
+              "certificate authority data yet (still creating?)",
+          });
         }
         return yield* makeEksTransport({
           clusterName: auth.clusterName,

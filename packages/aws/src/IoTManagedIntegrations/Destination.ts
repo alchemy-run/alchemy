@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { syncManagedIntegrationsTags, toTagRecord } from "./internal.ts";
+
+export class IoTManagedIntegrationsDestinationUnexpectedResponse extends Data.TaggedError(
+  "IoTManagedIntegrationsDestinationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DestinationProps {
   /**
@@ -124,7 +132,9 @@ export const DestinationProvider = () =>
           destination.DeliveryDestinationType === undefined ||
           destination.RoleArn === undefined
         ) {
-          return yield* Effect.fail(new Error("destination response is missing required fields"));
+          return yield* new IoTManagedIntegrationsDestinationUnexpectedResponse({
+            message: "destination response is missing required fields",
+          });
         }
         return {
           destinationName: destination.Name,
@@ -174,7 +184,9 @@ export const DestinationProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             destination = yield* observe(name);
             if (destination === undefined) {
-              return yield* Effect.fail(new Error(`destination '${name}' vanished after create`));
+              return yield* new IoTManagedIntegrationsDestinationUnexpectedResponse({
+                message: `destination '${name}' vanished after create`,
+              });
             }
           }
 
@@ -204,7 +216,9 @@ export const DestinationProvider = () =>
           // Return fresh attributes.
           const final = yield* observe(name);
           if (final === undefined) {
-            return yield* Effect.fail(new Error(`destination '${name}' vanished during reconcile`));
+            return yield* new IoTManagedIntegrationsDestinationUnexpectedResponse({
+              message: `destination '${name}' vanished during reconcile`,
+            });
           }
           const attrs = yield* toAttributes(final);
           yield* session.note(attrs.destinationName);

@@ -4,10 +4,18 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict, waitUntilAbsent } from "./internal.ts";
+
+export class ServiceNetworkVpcAssociationUnexpectedResponse extends Data.TaggedError(
+  "ServiceNetworkVpcAssociationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ServiceNetworkVpcAssociationProps {
   /**
@@ -156,9 +164,9 @@ export const ServiceNetworkVpcAssociationProvider = () =>
               tags: desiredTags,
             });
             if (!created.arn || !created.id) {
-              return yield* Effect.fail(
-                new Error("Failed to create service network VPC association"),
-              );
+              return yield* new ServiceNetworkVpcAssociationUnexpectedResponse({
+                message: "Failed to create service network VPC association",
+              });
             }
             assoc = yield* observe(created.id);
             if (!assoc?.arn || !assoc.id) {
@@ -184,9 +192,9 @@ export const ServiceNetworkVpcAssociationProvider = () =>
           // Every branch above guarantees id/arn; this narrows the reassigned
           // `let` for the type-checker and guards a malformed API response.
           if (!assoc?.arn || !assoc.id) {
-            return yield* Effect.fail(
-              new Error("service network VPC association is missing its id/arn"),
-            );
+            return yield* new ServiceNetworkVpcAssociationUnexpectedResponse({
+              message: "service network VPC association is missing its id/arn",
+            });
           }
 
           yield* syncTags(assoc.arn, desiredTags);

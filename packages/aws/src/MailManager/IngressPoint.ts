@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -15,6 +16,13 @@ import {
   sameShape,
   syncMailManagerTags,
 } from "./internal.ts";
+
+export class IngressPointUnexpectedResponse extends Data.TaggedError(
+  "IngressPointUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface IngressPointProps {
   /**
@@ -176,11 +184,9 @@ export const IngressPointProvider = () =>
 
       const toAttrs = Effect.fn(function* (ingress: mm.GetIngressPointResponse) {
         if (ingress.IngressPointArn === undefined) {
-          return yield* Effect.fail(
-            new Error(
-              `Mail Manager ingress point '${ingress.IngressPointId}' returned without an ARN`,
-            ),
-          );
+          return yield* new IngressPointUnexpectedResponse({
+            message: `Mail Manager ingress point '${ingress.IngressPointId}' returned without an ARN`,
+          });
         }
         return {
           ingressPointId: ingress.IngressPointId,
@@ -274,9 +280,9 @@ export const IngressPointProvider = () =>
                 : yield* observe(undefined, name);
           }
           if (ingress === undefined) {
-            return yield* Effect.fail(
-              new Error(`Mail Manager ingress point '${name}' not found after create`),
-            );
+            return yield* new IngressPointUnexpectedResponse({
+              message: `Mail Manager ingress point '${name}' not found after create`,
+            });
           }
 
           // Provisioning is asynchronous — settle before mutating.

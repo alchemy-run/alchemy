@@ -10,6 +10,13 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class RDSDBParameterGroupUnexpectedResponse extends Data.TaggedError(
+  "RDSDBParameterGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface DBParameterGroupProps {
   /**
    * Name of the parameter group. If omitted, Alchemy generates one.
@@ -312,7 +319,9 @@ export const DBParameterGroupProvider = () =>
               .pipe(Effect.catchTag("DBParameterGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
             if (!observed?.DBParameterGroupName) {
-              return yield* Effect.fail(new Error(`Failed to create DB parameter group '${name}'`));
+              return yield* new RDSDBParameterGroupUnexpectedResponse({
+                message: `Failed to create DB parameter group '${name}'`,
+              });
             }
           }
 

@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -13,6 +14,13 @@ import {
   retryWhileMailManagerConflict,
   syncMailManagerTags,
 } from "./internal.ts";
+
+export class MailManagerArchiveUnexpectedResponse extends Data.TaggedError(
+  "MailManagerArchiveUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ArchiveProps {
   /**
@@ -215,9 +223,9 @@ export const ArchiveProvider = () =>
                 : yield* observe(undefined, name);
           }
           if (archive === undefined) {
-            return yield* Effect.fail(
-              new Error(`Mail Manager archive '${name}' not found after create`),
-            );
+            return yield* new MailManagerArchiveUnexpectedResponse({
+              message: `Mail Manager archive '${name}' not found after create`,
+            });
           }
 
           // 3. SYNC — diff OBSERVED name/retention against desired; apply

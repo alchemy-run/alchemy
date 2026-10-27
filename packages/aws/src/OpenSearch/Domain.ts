@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import { subsetDiffers } from "alchemy/Util/equal";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
@@ -17,6 +18,13 @@ import {
   readDomainTags,
   repeatUntilDomainState,
 } from "./internal.ts";
+
+export class OpenSearchDomainUnexpectedResponse extends Data.TaggedError(
+  "OpenSearchDomainUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DomainClusterConfig {
   /**
@@ -394,9 +402,9 @@ export const DomainProvider = () =>
       const waitForActive = Effect.fn(function* (name: string) {
         const domain = yield* repeatUntilDomainState(readDomain(name), isDomainActive);
         if (domain === undefined) {
-          return yield* Effect.fail(
-            new Error(`OpenSearch domain '${name}' not found while waiting`),
-          );
+          return yield* new OpenSearchDomainUnexpectedResponse({
+            message: `OpenSearch domain '${name}' not found while waiting`,
+          });
         }
         return domain;
       });

@@ -2,12 +2,20 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { createManagedTags, createName, retryConcurrent } from "./common.ts";
+
+export class AlarmMuteRuleUnexpectedResponse extends Data.TaggedError(
+  "AlarmMuteRuleUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type AlarmMuteRuleName = string;
 export type AlarmMuteRuleArn =
@@ -183,9 +191,9 @@ export const AlarmMuteRuleProvider = () =>
 
           const state = yield* readAlarmMuteRule(name);
           if (!state) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled alarm mute rule '${name}'`),
-            );
+            return yield* new AlarmMuteRuleUnexpectedResponse({
+              message: `failed to read reconciled alarm mute rule '${name}'`,
+            });
           }
 
           return {

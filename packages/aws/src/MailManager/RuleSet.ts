@@ -4,6 +4,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -13,6 +14,11 @@ import {
   sameShape,
   syncMailManagerTags,
 } from "./internal.ts";
+
+export class RuleSetUnexpectedResponse extends Data.TaggedError("RuleSetUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface RuleSetProps {
   /**
@@ -227,9 +233,9 @@ export const RuleSetProvider = () =>
                 : yield* observe(undefined, name);
           }
           if (ruleSet === undefined) {
-            return yield* Effect.fail(
-              new Error(`Mail Manager rule set '${name}' not found after create`),
-            );
+            return yield* new RuleSetUnexpectedResponse({
+              message: `Mail Manager rule set '${name}' not found after create`,
+            });
           }
 
           // 3. SYNC — diff OBSERVED name/rules against desired; apply only

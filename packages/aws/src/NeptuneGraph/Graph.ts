@@ -11,6 +11,13 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class NeptuneGraphGraphUnexpectedResponse extends Data.TaggedError(
+  "NeptuneGraphGraphUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface GraphProps {
   /**
    * Name of the graph (lowercase letters, numbers, and hyphens; must start
@@ -347,7 +354,9 @@ export const GraphProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             const graphId = created?.id ?? (yield* findGraphByName(name))?.id;
             if (graphId === undefined) {
-              return yield* Effect.fail(new Error(`Failed to create graph '${name}'`));
+              return yield* new NeptuneGraphGraphUnexpectedResponse({
+                message: `Failed to create graph '${name}'`,
+              });
             }
             observed = yield* waitForGraph(graphId);
           } else {

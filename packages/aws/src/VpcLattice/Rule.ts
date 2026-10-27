@@ -5,10 +5,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict, waitUntilAbsent } from "./internal.ts";
+
+export class VpcLatticeRuleUnexpectedResponse extends Data.TaggedError(
+  "VpcLatticeRuleUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The match conditions of a listener rule (HTTP method, path, and header
@@ -257,7 +265,9 @@ export const RuleProvider = () =>
               ),
             );
             if (!rule?.arn || !rule.id) {
-              return yield* Effect.fail(new Error(`Failed to create rule ${name}`));
+              return yield* new VpcLatticeRuleUnexpectedResponse({
+                message: `Failed to create rule ${name}`,
+              });
             }
           } else if (
             JSON.stringify(rule.match) !== JSON.stringify(news.match) ||

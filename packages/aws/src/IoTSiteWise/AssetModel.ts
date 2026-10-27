@@ -12,6 +12,16 @@ import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { fetchSiteWiseTags, matchesDesired, syncSiteWiseTags } from "./internal.ts";
 
+export class AssetModelInvalidProps extends Data.TaggedError("AssetModelInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class AssetModelUnexpectedResponse extends Data.TaggedError("AssetModelUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type AssetModelType = sitewise.AssetModelType;
 export type AssetModelState = sitewise.AssetModelState;
 export type AssetModelPropertyDefinition = sitewise.AssetModelPropertyDefinition;
@@ -308,7 +318,9 @@ export const AssetModelProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("IoT SiteWise AssetModel requires props"));
+            return yield* new AssetModelInvalidProps({
+              message: "IoT SiteWise AssetModel requires props",
+            });
           }
           const name = yield* createAssetModelName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -336,7 +348,9 @@ export const AssetModelProvider = () =>
             yield* waitForAssetModelState(created.assetModelId, "ACTIVE");
             state = yield* readAssetModelById(created.assetModelId);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created asset model ${name}`));
+              return yield* new AssetModelUnexpectedResponse({
+                message: `failed to read created asset model ${name}`,
+              });
             }
           }
 
@@ -391,7 +405,9 @@ export const AssetModelProvider = () =>
 
           const final = yield* readAssetModelById(state.attrs.assetModelId);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled asset model ${name}`));
+            return yield* new AssetModelUnexpectedResponse({
+              message: `failed to read reconciled asset model ${name}`,
+            });
           }
           return final.attrs;
         }),
