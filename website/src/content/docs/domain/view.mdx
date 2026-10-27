@@ -128,6 +128,27 @@ AccountSummary: (d, _, { source, state }) => ({
 }),
 ```
 
+## Key a view by a value
+
+Some read models are about something the model has no aggregate for, like an organization that owns many accounts. Key the view by a string Schema instead of an aggregate. Each value gets its own instance, and `keyOf` returns the value itself, not a ref.
+
+```typescript
+export const OrgId = Schema.String.pipe(Schema.brand("OrgId"));
+
+export class OrgSchedule extends Domain.View("OrgSchedule", {
+  from: [Tour],
+  key: OrgId,
+  keyOf: { Tour: ({ event }) => event.orgId },
+  state: Schema.Struct({ tours: Schema.Record(Schema.String, Schema.String) }),
+  initial: { tours: {} },
+  evolve: {
+    TourBooked: (s, e, { source }) => ({ tours: { ...s.tours, [source.id]: e.unit } }),
+  },
+}) {}
+```
+
+Reads take the value too: `schedules.watch(orgId)`, `client.OrgSchedule.get(orgId)`, and `Story.view(OrgSchedule, orgId, ...)`. In handlers, `key` is the value, and a view, policy or projection that consumes this view gets it as `source`. Policies, projections and streams take a Schema `key` the same way. A view keyed by the same Schema follows this one without `keyOf`, so use a branded Schema to keep different kinds of ids apart.
+
 ## Route one event to several keys
 
 Some events matter to more than one key. A transfer request names two accounts, and both of their transfer histories should show it, one as money out and one as money in.

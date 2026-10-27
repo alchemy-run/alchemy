@@ -6,6 +6,7 @@ import type * as EffectStream from "effect/Stream";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Event from "./Event.ts";
 import type { Filter } from "./Filter.ts";
+import type * as Key from "./Key.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
 import type * as Rejection from "./Rejection.ts";
@@ -27,7 +28,7 @@ export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Stream";
   readonly streamName: string;
   readonly definition: {
-    readonly key: Aggregate.Any;
+    readonly key: Key.Any;
     readonly entries: ReadonlyArray<Event.Any>;
   } & Read.AnyContract;
   /** Type-level only: the entry events. */
@@ -36,24 +37,27 @@ export interface Any extends Context.Key<unknown, unknown> {
 
 /** The entry event type of a stream class. */
 export type EventOf<S extends Any> = S["~event"];
-/** The key aggregate of a stream class. */
+/** The key of a stream class: an aggregate, or a string Schema. */
 export type KeyOf<S extends Any> = S["definition"]["key"];
 
 /**
  * The pure definition of a stream.
  */
 export interface Definition<
-  Key extends Aggregate.Any,
+  Key extends Key.Any,
   Entries extends ReadonlyArray<Event.Any>,
   Ms extends Middleware.List = readonly [],
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 > extends Read.Contract<
-  Aggregate.Ref<Key>,
-  Entry<Aggregate.Inst<Entries[number]>, Aggregate.IdOf<Key>> | null,
+  Key.RefOf<Key>,
+  Entry<Aggregate.Inst<Entries[number]>, Key.IdOf<Key>> | null,
   Ms,
   Rejects
 > {
-  /** The aggregate whose refs key this stream: one ordered log per key. */
+  /**
+   * What keys this stream, one ordered log per key: an aggregate, whose refs
+   * are its keys, or a string Schema, whose values are.
+   */
   readonly key: Key;
   /** The events the stream's entries may be. */
   readonly entries: Entries;
@@ -63,42 +67,42 @@ export interface Definition<
  * What a projection's handler passes to {@link Host.append}: the input it is
  * handling. Every input a projection handler receives qualifies.
  */
-export interface Origin<Key extends Aggregate.Any> {
-  readonly key: Aggregate.Ref<Key>;
+export interface Origin<Key extends Key.Any> {
+  readonly key: Key.RefOf<Key>;
 }
 
 /**
  * The API of a stream, obtained with `yield* MyStream`.
  */
-export interface Host<Key extends Aggregate.Any, E> {
+export interface Host<Key extends Key.Any, E> {
   /** The latest entry of a key, or `none` if nothing was appended. */
   readonly peek: (
-    key: Aggregate.Ref<Key>,
+    key: Key.RefOf<Key>,
     options?: {
       /** Wait until the stream's writer has handled this write (a command's `stream` and `version`). */
       readonly atLeast?: { readonly stream: string; readonly version: number };
       readonly timeout?: Duration.Input;
     },
-  ) => Effect.Effect<Option.Option<Entry<E, Aggregate.IdOf<Key>>>, ConsistencyTimeout>;
+  ) => Effect.Effect<Option.Option<Entry<E, Key.IdOf<Key>>>, ConsistencyTimeout>;
   /** The latest entry, then each new one. */
   readonly watch: (
-    key: Aggregate.Ref<Key>,
-  ) => EffectStream.Stream<Option.Option<Entry<E, Aggregate.IdOf<Key>>>>;
+    key: Key.RefOf<Key>,
+  ) => EffectStream.Stream<Option.Option<Entry<E, Key.IdOf<Key>>>>;
   /** Every entry from `after` (an entry `seq`), then live ones. */
   readonly events: (
-    key: Aggregate.Ref<Key>,
+    key: Key.RefOf<Key>,
     options?: { readonly after?: number; readonly where?: Filter<E> },
-  ) => EffectStream.Stream<Entry<E, Aggregate.IdOf<Key>>>;
+  ) => EffectStream.Stream<Entry<E, Key.IdOf<Key>>>;
   /** A page of a key's entries, oldest first unless `order` is `"desc"`. */
   readonly list: (
-    key: Aggregate.Ref<Key>,
+    key: Key.RefOf<Key>,
     options?: {
       readonly where?: Filter<E>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
       readonly after?: string;
     },
-  ) => Effect.Effect<Page<Entry<E, Aggregate.IdOf<Key>>>>;
+  ) => Effect.Effect<Page<Entry<E, Key.IdOf<Key>>>>;
   /**
    * Append entries for the input a projection is handling, to that input's
    * key. Only a projection that lists this stream in `writes` may append, and
@@ -175,7 +179,7 @@ export interface StreamKey<Name extends string> {
  */
 export const make = <
   const Name extends string,
-  Key extends Aggregate.Any,
+  Key extends Key.Any,
   const Entries extends ReadonlyArray<Event.Any>,
   const Ms extends Middleware.List = readonly [],
   const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
@@ -209,7 +213,7 @@ export const make = <
 export interface StreamClass<
   Name extends string,
   Def,
-  Key extends Aggregate.Any,
+  Key extends Key.Any,
   E,
 > extends Context.ServiceClass<StreamKey<Name>, string, Host<Key, E>> {
   readonly kind: "Stream";

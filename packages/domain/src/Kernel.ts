@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
 import type * as Event from "./Event.ts";
+import * as Key from "./Key.ts";
 import type {
   Accepted,
   AggregateKit,
@@ -317,8 +318,8 @@ const build = (
     }
     return entry;
   };
-  /** The aggregate whose refs identify a source's instances. */
-  const keyAggregateOf = (entry: SourceEntry) =>
+  /** The key that identifies a source's instances: its aggregate, or a view's key. */
+  const keyOfSource = (entry: SourceEntry): Key.Any =>
     entry.kind === "aggregate" ? entry.aggregate : entry.view.definition.key;
 
   for (const stream of definitions.streams) {
@@ -374,7 +375,8 @@ const build = (
   /** What routing sees of an event. */
   interface RouteInput {
     readonly event: unknown;
-    readonly source: Aggregate.Ref;
+    /** The source instance: a ref, or a Schema-keyed view's key value. */
+    readonly source: unknown;
     readonly envelope: Aggregate.Envelope;
     readonly state: unknown;
     /** The source stream, e.g. `Account/a-1`. */
@@ -405,7 +407,7 @@ const build = (
   /** How a consumer keyed by `def.key` routes `tag` from `source`. */
   const keyRoute = (
     owner: string,
-    def: { readonly key: Aggregate.Any; readonly keyOf?: unknown },
+    def: { readonly key: Key.Any; readonly keyOf?: unknown },
     upstream: SourceEntry,
     source: string,
     tag: string,
@@ -417,10 +419,11 @@ const build = (
       state: input.state,
       envelope: input.envelope,
     });
+    // A route returns a ref for an aggregate key, or the value of a Schema key.
     if (typeof custom === "function") {
       return (input) => {
-        const ref = custom(routing(input)) as Aggregate.Ref | undefined;
-        return ref ? [{ key: ref.id as string }] : [];
+        const ref = custom(routing(input));
+        return ref === undefined ? [] : [{ key: Aggregate.targetId(ref) }];
       };
     }
     if (custom) {
@@ -428,19 +431,20 @@ const build = (
       return (input) => {
         const byKey = new Map<string, Array<string>>();
         for (const [route, fn] of routes) {
-          const ref = fn?.(routing(input)) as Aggregate.Ref | undefined;
-          if (!ref) continue;
-          const list = byKey.get(ref.id as string) ?? [];
-          byKey.set(ref.id as string, list);
+          const ref = fn?.(routing(input));
+          if (ref === undefined) continue;
+          const key = Aggregate.targetId(ref);
+          const list = byKey.get(key) ?? [];
+          byKey.set(key, list);
           list.push(route);
         }
         return [...byKey].map(([key, names]) => ({ key, routes: names }));
       };
     }
-    if (keyAggregateOf(upstream) === def.key)
-      return (input) => [{ key: input.source.id as string }];
+    if (keyOfSource(upstream) === def.key)
+      return (input) => [{ key: Aggregate.targetId(input.source) }];
     problem(
-      `${owner} consumes '${tag}' from ${source}, which is not keyed by ${def.key.aggregateName}: add keyOf.${tag}`,
+      `${owner} consumes '${tag}' from ${source}, which is not keyed by ${Key.isAggregate(def.key) ? def.key.aggregateName : "its key schema"}: add keyOf.${tag}`,
     );
     return () => [];
   };
@@ -559,7 +563,7 @@ const build = (
       }
       if (stream.definition.key !== def.key) {
         problem(
-          `${owner} is keyed by ${def.key.aggregateName}, so it cannot write ${stream.streamName}, keyed by ${stream.definition.key.aggregateName}`,
+          `${owner} is keyed by ${Key.describe(def.key)}, so it cannot write ${stream.streamName}, keyed by ${Key.describe(stream.definition.key)}`,
         );
         continue;
       }
@@ -895,7 +899,7 @@ const build = (
         let changed = false;
         const entries: Array<ViewEntry> = [];
         const downstream: Array<Delivery> = [];
-        const keyRef = Aggregate.makeRef(def.key, key);
+        const keyRef = Key.refOf(def.key, key);
         const stream = `${view.viewName}/${key}`;
         for (const delivery of batch) {
           if ((checkpoints[delivery.source] ?? 0) >= delivery.seq) continue;
@@ -906,7 +910,7 @@ const build = (
           const envelope = decodeEnvelope(delivery.envelope);
           const context = {
             key: keyRef,
-            source: Aggregate.makeRef(keyAggregateOf(origin), envelope.id),
+            source: Key.refOf(keyOfSource(origin), envelope.id),
             state: sourceState(origin, delivery.state),
             envelope,
             at: envelope.at,
@@ -978,7 +982,7 @@ const build = (
   };
 
   const policyKit = (policy: Policy.Any, handler: Policy.Handler<unknown>): PolicyKit => {
-    const keyAggregate = policy.definition.key;
+    const policyKey = policy.definition.key;
     return {
       name: policy.policyName,
       run: (delivery) => {
@@ -986,8 +990,8 @@ const build = (
         if (delivery.history) return Effect.void;
         const upstream = sources.get(delivery.origin)!;
         const envelope = decodeEnvelope(delivery.envelope);
-        const source = Aggregate.makeRef(keyAggregateOf(upstream), envelope.id);
-        const key = keyAggregate ? Aggregate.makeRef(keyAggregate, delivery.key) : source;
+        const source = Key.refOf(keyOfSource(upstream), envelope.id);
+        const key = policyKey ? Key.refOf(policyKey, delivery.key) : source;
         const event = decodeEvent(delivery.event);
         const state = sourceState(upstream, delivery.state);
         const attributes = {
@@ -1041,12 +1045,12 @@ const build = (
     key: string,
     batch: ReadonlyArray<Accepted>,
   ): ReadonlyArray<unknown> => {
-    const keyRef = Aggregate.makeRef(projection.definition.key, key);
+    const keyRef = Key.refOf(projection.definition.key, key);
     const inputs: Array<unknown> = [];
     for (const { delivery, position } of batch) {
       const upstream = sources.get(delivery.origin)!;
       const envelope = decodeEnvelope(delivery.envelope);
-      const source = Aggregate.makeRef(keyAggregateOf(upstream), envelope.id);
+      const source = Key.refOf(keyOfSource(upstream), envelope.id);
       const event = decodeEvent(delivery.event);
       const state = sourceState(upstream, delivery.state);
       // Shared by every route the delivery takes, so their appends count up together.
