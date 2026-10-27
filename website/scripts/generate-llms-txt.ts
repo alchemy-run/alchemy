@@ -746,6 +746,8 @@ const SECTIONS: Section[] = [
         "domain/optimistic-updates",
         "domain/local-first",
         "domain/sessions",
+        "domain/better-auth",
+        "domain/yielded-auth",
         "domain/view-security",
         "domain/unique-values",
         "domain/deadlines",
