@@ -2,6 +2,7 @@ import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
+import type * as Output from "alchemy/Output";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -10,6 +11,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import InvokeCallee from "./fixtures/invoke-callee.ts";
 import InvokeCaller from "./fixtures/invoke-caller.ts";
+import PublicGrant from "./fixtures/invoke-public-grant.ts";
 import PublicRpc from "./fixtures/invoke-public-rpc.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -160,4 +162,65 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 180_000 },
+);
+
+const publicInvoker = (service: Output.Output<string>) =>
+  GCP.IAM.Member("PublicInvoker", {
+    kind: "run.service",
+    name: service,
+    role: "roles/run.invoker",
+    member: "allUsers",
+  });
+
+const failedWithRpcPublic = (exit: Exit.Exit<unknown, unknown>) =>
+  Exit.isFailure(exit) && Cause.pretty(exit.cause).includes("GCP.Run.ServiceRpcPublic");
+
+test.provider(
+  "a public invoker grant cannot expose RPC methods",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // The grant lands after the service: GCP.IAM.Member refuses it.
+      const grantAfter = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const service = yield* PublicGrant;
+            yield* publicInvoker(service.name);
+            return service.name;
+          }),
+        )
+        .pipe(Effect.exit);
+      expect(failedWithRpcPublic(grantAfter)).toEqual(true);
+      yield* stack.destroy();
+
+      // The grant is already there: the service refuses to start serving RPC.
+      const plain = yield* stack.deploy(
+        Effect.gen(function* () {
+          const service = yield* GCP.Run.Service("PublicGrant", {
+            location: "us-central1",
+            template: { containers: [{ image: "us-docker.pkg.dev/cloudrun/container/hello" }] },
+          });
+          yield* publicInvoker(service.name);
+          return service.name;
+        }),
+      );
+      const policy = yield* cloudrun.getIamPolicyProjectsLocationsServices({ resource: plain });
+      expect(
+        policy.bindings?.find((binding) => binding.role === "roles/run.invoker")?.members,
+      ).toContain("allUsers");
+      const grantBefore = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const service = yield* PublicGrant;
+            yield* publicInvoker(service.name);
+            return service.name;
+          }),
+        )
+        .pipe(Effect.exit);
+      expect(failedWithRpcPublic(grantBefore)).toEqual(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 600_000 },
 );

@@ -1,3 +1,4 @@
+import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -9,6 +10,7 @@ import {
   type GcpIamResourceKind,
 } from "../IamPolicy.ts";
 import type { Providers } from "../Providers.ts";
+import { isPublicInvokerGrant, servesRpc, ServiceRpcPublic } from "../Run/RpcExposure.ts";
 
 export type MemberProps = {
   /**
@@ -80,6 +82,18 @@ export const MemberProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news }) {
+      // Never open a Cloud Run service that serves RPC methods to everyone.
+      if (news.kind === "run.service" && isPublicInvokerGrant(news.role, news.member)) {
+        const service = yield* cloudrun
+          .getProjectsLocationsServices({ name: news.name })
+          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        if (servesRpc(service)) {
+          return yield* new ServiceRpcPublic({
+            service: news.name,
+            via: `${news.member} would hold ${news.role}`,
+          });
+        }
+      }
       yield* updateIamMembership({
         kind: news.kind,
         name: news.name,
