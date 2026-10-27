@@ -1,6 +1,6 @@
 import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
-import type * as Aggregate from "./Aggregate.ts";
+import * as Aggregate from "./Aggregate.ts";
 import type * as Event from "./Event.ts";
 import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
@@ -15,14 +15,6 @@ import * as View from "./View.ts";
  *
  * @internal
  */
-
-export const EnvelopeSchema = Schema.Struct({
-  id: Schema.String,
-  stream: Schema.String,
-  seq: Schema.Number,
-  at: Schema.DateTimeUtc,
-  commandId: Schema.String,
-});
 
 /** The frame `events` sends after its history. */
 export const CaughtUpSchema = Schema.TaggedStruct("CaughtUp", { cursor: Schema.Number });
@@ -96,7 +88,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
   if (entry.kind === "Stream") {
     const def = entry.definition;
     const key = Key.idSchemaOf(def.key);
-    const recorded = Schema.Struct({ event: union(def.entries), envelope: EnvelopeSchema });
+    const recorded = Schema.Struct({ event: union(def.entries), envelope: Aggregate.Envelope });
     const latest = Schema.NullOr(recorded);
     rpcs = {
       get: guard(
@@ -155,7 +147,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
     const recorded = Schema.Struct({
       event: union(outputEvents(entry)),
       state,
-      envelope: EnvelopeSchema,
+      envelope: Aggregate.Envelope,
     });
     rpcs = {
       get: guard(
@@ -226,7 +218,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
     };
   } else {
     const def = entry.definition;
-    const recorded = Schema.Struct({ event: union(def.events), envelope: EnvelopeSchema });
+    const recorded = Schema.Struct({ event: union(def.events), envelope: Aggregate.Envelope });
     rpcs = {
       get: guard(Rpc.make(`${name}.get`, { payload: { key: def.id }, success: def.state, error })),
       watch: guard(

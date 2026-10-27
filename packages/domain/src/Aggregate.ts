@@ -33,25 +33,29 @@ export interface DecideContext<Id> {
 }
 
 /**
- * Metadata recorded with every committed event.
+ * Metadata recorded with every committed event. Its schema is what Api clients
+ * decode, so the wire carries every field.
  */
-export interface Envelope<Id = string> {
+export const Envelope = Schema.Struct({
   /** The id of the aggregate instance that committed the event. */
-  readonly id: Id;
+  id: Schema.String,
   /** The stream the event belongs to, e.g. `Account/a-1`. */
-  readonly stream: string;
+  stream: Schema.String,
   /** The event's sequence number within its stream, starting at 1. */
-  readonly seq: number;
+  seq: Schema.Number,
   /** The commit time. */
-  readonly at: DateTime.Utc;
+  at: Schema.DateTimeUtc,
   /** The id of the command that produced the event. */
-  readonly commandId: string;
+  commandId: Schema.String,
   /**
    * The id of the first command in the chain that led here: the same for a
    * command, the events it records, and every reaction and command they cause.
    */
-  readonly correlationId: string;
-}
+  correlationId: Schema.String,
+});
+
+/** An {@link Envelope} whose `id` is the aggregate's (branded) id. */
+export type Envelope<Id = string> = typeof Envelope.Type & { readonly id: Id };
 
 /**
  * The outcome of a successfully handled command.
@@ -434,8 +438,8 @@ export const predict = (
   aggregate: Any,
   state: unknown,
   command: { readonly _tag: string },
-  options: PredictOptions<unknown>,
-): Prediction<unknown, { readonly _tag: string }, { readonly _tag: string }, unknown> => {
+  options: PredictOptions,
+): Prediction<unknown, { readonly _tag: string }, { readonly _tag: string }> => {
   const def = aggregate.definition;
   const cls = def.commands.find((c) => c.tag === command._tag);
   const decide = def.decide[command._tag] as
@@ -468,10 +472,10 @@ export const predict = (
   if (judged._tag === "Rejected") return judged;
   const version = options.version ?? 0;
   const commandId = options.commandId ?? "";
-  const envelopes: Array<Envelope<unknown>> = [];
+  const envelopes: Array<Envelope> = [];
   let next = state;
   judged.events.forEach((event, index) => {
-    const envelope: Envelope<unknown> = {
+    const envelope: Envelope = {
       id: options.id,
       stream: `${aggregate.aggregateName}/${String(options.id)}`,
       seq: version + index + 1,
@@ -699,7 +703,7 @@ export const make = <
       this: Any,
       state: unknown,
       command: { readonly _tag: string },
-      options: PredictOptions<unknown>,
+      options: PredictOptions,
     ) {
       return predict(this, state, command, options);
     }
