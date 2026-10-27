@@ -492,7 +492,7 @@ export const subscriptions = Subscription.make<Model, Message, Notes>()((entry) 
                 return notes.Notes.watch(userId);
               }),
             ).pipe(
-              Stream.map((notebook) => Message.GotNotes({ notes: notebook?.notes ?? [] })),
+              Stream.map(({ state }) => Message.GotNotes({ notes: state?.notes ?? [] })),
               Stream.catch((error) => Stream.succeed(Message.Failed({ reason: error._tag }))),
             ),
     },
