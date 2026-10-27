@@ -116,7 +116,7 @@ describe("Alchemy.Stack stage references", { tags: ["unit", "local"] }, () => {
       Effect.provide(state),
     );
 
-  it.effect("at(stage) resolves the same stack output as stage[name]", () =>
+  it.effect("stage[name] resolves a declared stage's output", () =>
     Effect.gen(function* () {
       class StagedStack extends Alchemy.Stack<
         StagedStack,
@@ -124,14 +124,12 @@ describe("Alchemy.Stack stage references", { tags: ["unit", "local"] }, () => {
         "prod" | `pr-${number}`
       >()("StagedStack") {}
 
-      expect(yield* resolve(StagedStack.at("prod"))).toEqual({ value: "prod" });
       expect(yield* resolve(StagedStack.stage.prod)).toEqual({ value: "prod" });
-      expect(yield* resolve(StagedStack.at("pr-42"))).toEqual({ value: "pr-42" });
       expect(yield* resolve(StagedStack.stage["pr-42"])).toEqual({ value: "pr-42" });
     }),
   );
 
-  it.effect("at(stage) resolves on the inline class reference form", () =>
+  it.effect("stage[name] resolves on the inline class reference form", () =>
     Effect.gen(function* () {
       class InlineStagedStack extends Alchemy.Stack<InlineStagedStack>()(
         "InlineStagedStack",
@@ -139,7 +137,6 @@ describe("Alchemy.Stack stage references", { tags: ["unit", "local"] }, () => {
         Effect.succeed({ value: "dev" }),
       ) {}
 
-      expect(yield* resolve(InlineStagedStack.at("dev"))).toEqual({ value: "dev" });
       expect(yield* resolve(InlineStagedStack.stage.dev)).toEqual({ value: "dev" });
     }),
   );

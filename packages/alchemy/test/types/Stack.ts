@@ -76,27 +76,21 @@ class StagedStack extends Stack<StagedStack, { value: string }, "prod" | `pr-${n
   "StagedStack",
 ) {}
 
-type _AtReturnsSelf = Expect<Equal<ReturnType<typeof StagedStack.at>, Effect.Effect<StagedStack>>>;
 type _StageReturnsSelf = Expect<Equal<typeof StagedStack.stage.prod, Effect.Effect<StagedStack>>>;
-StagedStack.at("prod");
-StagedStack.at("pr-42");
+StagedStack.stage.prod;
 StagedStack.stage["pr-42"];
-// @ts-expect-error
-StagedStack.at("prdo");
 // @ts-expect-error
 StagedStack.stage.prdo;
 // @ts-expect-error
-StagedStack.at("pr-abc");
+StagedStack.stage["pr-abc"];
 // @ts-expect-error
-StagedStack.at(anyStage);
+StagedStack.stage[anyStage];
 
-type _DefaultAtReturnsSelf = Expect<
-  Equal<ReturnType<typeof NamedStack.at>, Effect.Effect<NamedStack>>
+type _DefaultStageReturnsSelf = Expect<
+  Equal<(typeof NamedStack.stage)[string], Effect.Effect<NamedStack>>
 >;
-type _InlineAtReturnsSelf = Expect<
-  Equal<ReturnType<typeof InlineStack.at>, Effect.Effect<InlineStack>>
+type _InlineStageReturnsSelf = Expect<
+  Equal<(typeof InlineStack.stage)[string], Effect.Effect<InlineStack>>
 >;
-NamedStack.at(anyStage);
 NamedStack.stage[anyStage];
-InlineStack.at(anyStage);
 InlineStack.stage[anyStage];

@@ -65,8 +65,7 @@ const c = yield* Backend.stage["pr-42"]; // any stage name
 ```
 
 Declare the stages as a third type parameter and a misspelled
-stage becomes a type error. `Backend.at(stage)` takes a stage held
-in a variable:
+stage becomes a type error:
 
 ```typescript
 export class Backend extends Alchemy.Stack<
@@ -75,7 +74,7 @@ export class Backend extends Alchemy.Stack<
   "prod" | `pr-${number}`
 >()("Backend") {}
 
-const d = yield* Backend.at(`pr-${pr}`);
+const d = yield* Backend.stage[`pr-${pr}`];
 ```
 
 Every successful `apply` persists what the Stack's effect returned
