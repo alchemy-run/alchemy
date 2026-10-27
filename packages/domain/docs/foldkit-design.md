@@ -1,6 +1,6 @@
 # Design: a Foldkit adapter for Domain
 
-Status: v1 implemented in PR #2700. Design and code share this branch. Each adapter feature has its own commit.
+Status: proposal, implemented in this PR.
 
 ## The problem
 
@@ -27,7 +27,7 @@ A proof of concept against production aggregates (Foldkit canary of foldkit/fold
 
 ## What Domain already gives
 
-All on `main` since 2026-10-27:
+Domain provides these APIs:
 
 | Need | API | PR |
 | --- | --- | --- |
@@ -166,27 +166,16 @@ Each needs its own design first.
 - **Trace fixtures.** A Domain Story run replayed as a Foldkit Story, after alchemy#2570.
 - **LiveQuery.** Foldkit's keyed live feed (foldkit/foldkit#1785) becomes an optional source once `viewEvents` proves the shape and #1655 merges.
 
-## PR sequence
+## Scope
 
-PR #2700 holds the design, implementation, tests, guides, and bank example. It stays open for review and Foldkit version updates. Each commit has one reviewable change:
+V1 contains the `Foldkit` subpath, derived Commands and result Messages, command ids, per-call headers, View state and event Subscriptions, snapshot Flags, tests, guides, and the bank example.
 
-| Step | Commit scope | Content |
-| --- | --- | --- |
-| 1 | Domain | `commands(Api)`, result Messages, failure classification, `CommandIds`, header service, declaration tests, optional peer |
-| 2 | Domain | `watchView`, Option state, snapshots and enabled/key lifecycle |
-| 3 | Domain | `viewEvents`, Model cursor resume, duplicate filtering and `CaughtUp` |
-| 4 | Domain | `SnapshotFlags`, decode fallback and explicit `restartKey` for a failed seeded cursor |
-| 5 | Website | Adapter guides and explicit confirmation by `commandId` |
-| 6 | Bank example | Adapter Commands and Subscriptions, offline queue, retry on `Unknown` |
-| 7 | Domain design | Public subpath, implementation details and review status |
-
-A change found in review adds another commit to this PR. Blocks, LiveQuery, trace fixtures, and a generic optimistic helper need separate designs and are outside v1.
+Blocks, LiveQuery, trace fixtures, and a generic optimistic helper are deferred. Each needs a separate design.
 
 ## Alternatives considered
 
 - **The adapter in Foldkit.** Foldkit would depend on Domain, and every Domain client change would need a Foldkit release.
 - **The adapter in foldkit-plus.** It ties Domain users to a contract layer that does not exist yet.
-- **Separate design and implementation PRs.** This work uses one long-lived PR so review, implementation, and version updates share one history. Commits provide the review boundaries.
 - **`View.evolve` over `events` entries.** A type mismatch: `evolve` takes source events, entries are output events with the state already applied.
 - **State from `events`.** Some state changes emit no event.
 - **A `Pending` that confirms when the count of entries with a `commandId` reaches the predicted count.** The two counts measure different things.
