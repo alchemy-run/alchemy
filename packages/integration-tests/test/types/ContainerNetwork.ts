@@ -12,7 +12,7 @@
 // which is what makes these assertions possible. Each @ts-expect-error is a
 // real check: if the type wrongly accepts, the directive itself becomes an
 // error, so this file fails to compile in either direction.
-import type * as Cloudflare from "@/Cloudflare";
+import type * as Cloudflare from "@alchemy.run/cloudflare";
 
 type Network = Cloudflare.Containers.ContainerApplication.Network;
 
