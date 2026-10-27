@@ -20,7 +20,9 @@ class Caller extends Domain.RequestContext<Caller>()(
   "Test/Caller",
   Schema.Struct({ service: Schema.String, nonce: Schema.String }),
 ) {}
-class BadSignature extends Domain.Rejection("BadSignature") {}
+
+/** The request isn't signed by a service the Api knows. */
+class BadSignature extends Schema.TaggedError<BadSignature>()("BadSignature", {}) {}
 
 /** Authenticates a request another service signed. Its client signs every call. */
 class ServiceAuth extends RpcMiddleware.Service<ServiceAuth, { provides: Caller }>()(
@@ -28,8 +30,14 @@ class ServiceAuth extends RpcMiddleware.Service<ServiceAuth, { provides: Caller 
   { error: BadSignature, requiredForClient: true },
 ) {}
 
-/** How long a signature stays valid, and how long its nonce is remembered. */
+/** How far a signature's timestamp may be from the Api's clock, either way. */
 const MAX_AGE_MS = 5 * 60_000;
+
+interface Signed {
+  readonly service: string;
+  readonly timestamp: string;
+  readonly nonce: string;
+}
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 const hmacKey = (secret: string) =>
@@ -39,16 +47,18 @@ const hmacKey = (secret: string) =>
   ]);
 
 /**
- * What a signature covers: the RPC, the time, a nonce, and the payload as
- * the RPC's own schema encodes it. Middleware sees each request's payload,
- * on both sides, so the signature covers one request, not the HTTP body
- * (one body may carry several requests).
+ * What a signature covers: the RPC, who sent it, when, a nonce, and the
+ * payload as the RPC's own schema encodes it. Middleware sees each request's
+ * payload, on both sides, so the signature covers one request, not the HTTP
+ * body (one body may carry several requests).
  */
-const signedText = (rpc: Rpc.AnyWithProps, payload: unknown, timestamp: string, nonce: string) =>
+const signedText = (rpc: Rpc.AnyWithProps, payload: unknown, signed: Signed) =>
   Schema.encodeUnknownEffect(Schema.toCodecJson(rpc.payloadSchema as Schema.Codec<unknown>))(
     payload,
   ).pipe(
-    Effect.map((json) => [rpc._tag, timestamp, nonce, JSON.stringify(json)].join("\n")),
+    Effect.map((json) =>
+      [rpc._tag, signed.service, signed.timestamp, signed.nonce, JSON.stringify(json)].join("\n"),
+    ),
     Effect.orDie,
   );
 
@@ -72,17 +82,14 @@ const serviceAuthClient = (service: string, secret: string) =>
     Effect.gen(function* () {
       const timestamp = String(yield* Clock.currentTimeMillis);
       const nonce = crypto.randomUUID();
-      const signature = yield* sign(
-        secret,
-        yield* signedText(rpc, request.payload, timestamp, nonce),
-      );
+      const text = yield* signedText(rpc, request.payload, { service, timestamp, nonce });
       return yield* next({
         ...request,
         headers: Headers.setAll(request.headers, {
           "x-service": service,
           "x-timestamp": timestamp,
           "x-nonce": nonce,
-          "x-signature": signature,
+          "x-signature": yield* sign(secret, text),
         }),
       });
     }),
@@ -90,20 +97,21 @@ const serviceAuthClient = (service: string, secret: string) =>
 
 /**
  * Server side: check the signature with the calling service's secret, refuse
- * an old timestamp or a nonce seen before, and provide the {@link Caller}.
- * One process remembers nonces here; a deployment keeps them in shared
- * storage (a KV namespace, a Durable Object) for {@link MAX_AGE_MS}.
+ * a timestamp too far from now or a nonce seen before, and provide the
+ * {@link Caller}. A nonce is remembered until its signature expires, so a
+ * request can't be replayed while it's still valid. One process remembers
+ * nonces here; a deployment keeps them in a Durable Object.
  */
-const ServiceAuthLive = (secrets: Readonly<Record<string, string>>) =>
+const ServiceAuthLive = (secrets: Readonly<Record<string, string>>, maxAgeMs = MAX_AGE_MS) =>
   Layer.effect(
     ServiceAuth,
     Effect.gen(function* () {
       const seen = yield* Ref.make(new Map<string, number>());
-      const claim = (nonce: string, now: number) =>
+      const claim = (nonce: string, until: number, now: number) =>
         Ref.modify(seen, (nonces) => {
-          if (nonces.has(nonce)) return [false, nonces] as const;
-          const kept = new Map([...nonces].filter(([, at]) => now - at < MAX_AGE_MS));
-          return [true, kept.set(nonce, now)] as const;
+          const kept = new Map([...nonces].filter(([, expires]) => expires >= now));
+          if (kept.has(nonce)) return [false, kept] as const;
+          return [true, kept.set(nonce, until)] as const;
         });
       return (effect, { rpc, payload, headers }) =>
         Effect.gen(function* () {
@@ -112,15 +120,18 @@ const ServiceAuthLive = (secrets: Readonly<Record<string, string>>) =>
           const timestamp = header("x-timestamp");
           const nonce = header("x-nonce");
           const signature = header("x-signature");
-          const secret = service === undefined ? undefined : secrets[service];
+          // Own keys only: `secrets["constructor"]` is a function every attacker knows.
+          const secret =
+            service !== undefined && Object.hasOwn(secrets, service) ? secrets[service] : undefined;
           if (!service || !secret || !timestamp || !nonce || !signature) {
             return yield* new BadSignature();
           }
           const now = yield* Clock.currentTimeMillis;
-          if (!(Math.abs(now - Number(timestamp)) <= MAX_AGE_MS)) return yield* new BadSignature();
-          const text = yield* signedText(rpc, payload, timestamp, nonce);
+          const sentAt = Number(timestamp);
+          if (!(Math.abs(now - sentAt) <= maxAgeMs)) return yield* new BadSignature();
+          const text = yield* signedText(rpc, payload, { service, timestamp, nonce });
           if (!(yield* verify(secret, text, signature))) return yield* new BadSignature();
-          if (!(yield* claim(nonce, now))) return yield* new BadSignature();
+          if (!(yield* claim(nonce, sentAt + maxAgeMs, now))) return yield* new BadSignature();
           return yield* Effect.provideService(effect, Caller, { service, nonce });
         });
     }),
@@ -166,14 +177,18 @@ interface Sent {
 /**
  * Serve the Api's `fetch` as a web handler, and point `fetch` at it, so calls
  * go over the real HTTP protocol (NDJSON). Every request sent is recorded,
- * for the replay test; `tamper` changes a body in transit.
+ * for the replay tests; `tamper` changes a body in transit, and `maxAgeMs`
+ * shortens how long a signature stays valid.
  */
 const withServer = <A, E, R>(
   test: (
     send: (request: Sent) => Effect.Effect<string>,
     sent: Array<Sent>,
   ) => Effect.Effect<A, E, R>,
-  tamper: (body: string) => string = (body) => body,
+  {
+    tamper = (body) => body,
+    maxAgeMs,
+  }: { readonly tamper?: (body: string) => string; readonly maxAgeMs?: number } = {},
 ) =>
   Effect.gen(function* () {
     const handler = HttpEffect.toWebHandler((yield* LedgerApi).fetch);
@@ -200,12 +215,28 @@ const withServer = <A, E, R>(
   }).pipe(
     Effect.provide(
       Ledgers.layer(Layer.empty).pipe(
-        Layer.provideMerge(Layer.mergeAll(InMemory, ServiceAuthLive(SECRETS))),
+        Layer.provideMerge(Layer.mergeAll(InMemory, ServiceAuthLive(SECRETS, maxAgeMs))),
       ),
     ),
   );
 
-const creditCall = (sent: ReadonlyArray<Sent>) => sent.find((s) => s.body.includes('"Credit"'))!;
+const creditCalls = (sent: ReadonlyArray<Sent>) => sent.filter((s) => s.body.includes('"Credit"'));
+const creditCall = (sent: ReadonlyArray<Sent>) => creditCalls(sent)[0]!;
+
+/** Run `effect` with a clock `ms` ahead of the real one, like a caller whose clock runs fast. */
+const ahead =
+  (ms: number) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Clock.clockWith((clock) =>
+      Effect.provideService(
+        effect,
+        Clock.Clock,
+        Object.assign(Object.create(clock) as Clock.Clock, {
+          currentTimeMillis: Effect.map(clock.currentTimeMillis, (now) => now + ms),
+          currentTimeMillisUnsafe: () => clock.currentTimeMillisUnsafe() + ms,
+        }),
+      ),
+    );
 
 describe("Domain signed service requests", () => {
   it.live("a signed call reaches decide as the calling service", () =>
@@ -248,7 +279,38 @@ describe("Domain signed service requests", () => {
           const refused = yield* ledger.Credit({ target: "acct-1", amount: 5 }).pipe(Effect.flip);
           expect(refused._tag).toBe("BadSignature");
         }).pipe(Effect.scoped, Effect.provide(serviceAuthClient("billing", SECRETS.billing))),
-      (body) => body.replace('"amount":5', '"amount":500'),
+      { tamper: (body) => body.replace('"amount":5', '"amount":500') },
+    ),
+  );
+
+  it.live("a service name off the secrets' prototype is refused", () =>
+    withServer(() =>
+      Effect.gen(function* () {
+        const ledger = yield* LedgerApi.client;
+        const refused = yield* ledger.Credit({ target: "acct-1", amount: 5 }).pipe(Effect.flip);
+        expect(refused._tag).toBe("BadSignature");
+      }).pipe(
+        Effect.scoped,
+        // `secrets["constructor"]` is `Object`, whose text anyone can sign with.
+        Effect.provide(serviceAuthClient("constructor", String(Object))),
+      ),
+    ),
+  );
+
+  it.live("a request from a fast clock can't be replayed while it's still valid", () =>
+    withServer(
+      (send, sent) =>
+        Effect.gen(function* () {
+          const ledger = yield* LedgerApi.client;
+          // Signed 900ms in the future: valid until 1900ms from now.
+          yield* ledger.Credit({ target: "acct-1", amount: 5 }).pipe(ahead(900));
+          yield* Effect.sleep("1100 millis");
+          // Another call, so the Api forgets the nonces it no longer needs.
+          yield* ledger.Credit({ target: "acct-1", amount: 5 });
+          expect(yield* send(creditCall(sent))).toContain('"BadSignature"');
+          expect(yield* ledger.Ledger.get("acct-1")).toMatchObject({ balance: 10 });
+        }).pipe(Effect.scoped, Effect.provide(serviceAuthClient("billing", SECRETS.billing))),
+      { maxAgeMs: 1000 },
     ),
   );
 });
