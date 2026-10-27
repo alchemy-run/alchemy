@@ -127,6 +127,8 @@ yield* transfers.schedule(source, new ExpireTransfer(), {
 yield* transfers.unschedule(source, `expire:${source.id}`);
 ```
 
+`schedule` returns a `ScheduleReceipt` with the command id and when the command is due (`at`), so code that schedules without its own id can still cancel by `receipt.commandId`.
+
 Unscheduling is durable, like scheduling. Once it succeeds, the command never fires, even when a story's clock passes its time. When there was nothing to cancel, it fails and says why: `AlreadyExecuted` when the command already ran, `AlreadyCancelled` when it was cancelled before, and `NotScheduled` when nothing was scheduled with that id.
 
 A policy cancels after the approval is recorded, so the expiry can still arrive in between. Keep the guard in `decide` for that case. A policy can also run again for the same event, and then finds the expiry already cancelled:
