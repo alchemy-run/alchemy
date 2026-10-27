@@ -7,7 +7,7 @@ import { UserFacingError } from "../UserFacingError.ts";
 import { loadConfigProvider } from "../Util/ConfigProvider.ts";
 import { AuthError, getAuthProvider, presentEnvironment } from "./AuthProvider.ts";
 import { cacheUntilExpiry } from "./CredentialsCache.ts";
-import { ProfileStore, SuppressMissingProviderConfig } from "./Profile.ts";
+import { ProfileStore, reloadProviderConfig, SuppressMissingProviderConfig } from "./Profile.ts";
 
 /**
  * Resolve the selected Alchemy profile after the command's dotenv provider is
@@ -87,7 +87,9 @@ export const resolveProviderConfig = <C extends { method: string } = any, Creden
       auth,
       profileName,
       config,
-      resolve: auth.read(profileName, config, (updated) =>
+      // Reload under the credentials lock on every resolve: a refresh
+      // rotates the stored token, so `config` goes stale after the first one.
+      resolve: auth.read(profileName, reloadProviderConfig(profile, auth, profileName), (updated) =>
         profile.setProviderConfig(profileName, providerName, updated).pipe(
           Effect.mapError((cause) =>
             AuthError.make({
