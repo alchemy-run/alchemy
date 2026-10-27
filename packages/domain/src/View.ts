@@ -4,7 +4,7 @@ import type * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
 import type * as Effect from "effect/Effect";
 import type * as Option from "effect/Option";
-import type * as Schema from "effect/Schema";
+import * as Schema from "effect/Schema";
 import type * as Stream from "effect/Stream";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Event from "./Event.ts";
@@ -22,15 +22,13 @@ export class WaitTimeout extends Data.TaggedError("WaitTimeout")<{
 }> {}
 
 /**
- * Raised by `query(key, { atLeast })` when the view has not applied the
- * receipt's events before the timeout.
+ * Raised by a read with `atLeast` when the view has not applied that write
+ * before the timeout. A client receives it like a rejection.
  */
-export class ConsistencyTimeout extends Data.TaggedError("ConsistencyTimeout")<{
-  readonly view: string;
-  readonly key: string;
-  readonly stream: string;
-  readonly version: number;
-}> {}
+export class ConsistencyTimeout extends Schema.TaggedError<ConsistencyTimeout>()(
+  "ConsistencyTimeout",
+  { view: Schema.String, key: Schema.String, stream: Schema.String, version: Schema.Number },
+) {}
 
 /** A handler, or one handler per named route. */
 type Handlers = {

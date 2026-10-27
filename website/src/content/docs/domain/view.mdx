@@ -66,7 +66,7 @@ export const depositThenRead = Effect.fn(function* (bank: CustomerClient, accoun
 });
 ```
 
-`atLeast` makes `get` wait until the summary has applied that version of the account's stream.
+`atLeast` makes `get` wait until the summary has applied that version of the account's stream. If it hasn't within 10 seconds, the read fails with `ConsistencyTimeout`.
 
 ## Emit events of your own
 

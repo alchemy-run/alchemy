@@ -49,6 +49,21 @@ const Wire = CounterApi.layerClient.pipe(
   Layer.provideMerge(Hosted),
 );
 
+/** Each read that takes `atLeast`, waiting for a version the view never reaches. */
+const neverCaughtUp = Effect.gen(function* () {
+  const api = yield* CounterApi.Client;
+  const receipt = yield* api.Increment({ target: "c-3", by: 1 });
+  const atLeast = { stream: receipt.stream, version: receipt.version + 1 };
+  return yield* Effect.all(
+    [
+      Effect.flip(api.Totals.snapshot("c-3", { atLeast })),
+      Effect.flip(api.Totals.get("c-3", { atLeast })),
+      Effect.flip(api.Totals.list("c-3", { atLeast })),
+    ],
+    { concurrency: "unbounded" },
+  );
+});
+
 /** A snapshot, two writes, then a feed that resumes after the snapshot's cursor. */
 const snapshotThenFeed = Effect.gen(function* () {
   const api = yield* CounterApi.Client;
@@ -114,5 +129,25 @@ describe("Domain View reads", () => {
       });
       expect(page.entries.map((entry) => entry.state)).toEqual([{ total: 5 }]);
     }).pipe(Effect.provide(InProcess)),
+  );
+
+  it.live("a read whose atLeast is never reached fails with ConsistencyTimeout", () =>
+    Effect.gen(function* () {
+      const [inProcess, overTheWire] = yield* Effect.all(
+        [
+          neverCaughtUp.pipe(Effect.provide(InProcess)),
+          neverCaughtUp.pipe(Effect.scoped, Effect.provide(Wire)),
+        ],
+        { concurrency: "unbounded" },
+      );
+      for (const error of [...inProcess, ...overTheWire]) {
+        expect(error).toMatchObject({
+          _tag: "ConsistencyTimeout",
+          view: "Totals",
+          key: "c-3",
+          version: 2,
+        });
+      }
+    }),
   );
 });

@@ -5,7 +5,7 @@ import type * as Event from "./Event.ts";
 import * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
 import type * as DomainStream from "./Stream.ts";
-import type * as View from "./View.ts";
+import * as View from "./View.ts";
 
 /**
  * The RPCs of the views and aggregates an Api exposes. Shared by the Api
@@ -83,6 +83,8 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
   const contract = contractOf(entry);
   const guard = (rpc: Rpc.Any) => Middleware.apply(rpc, contract.middleware ?? []);
   const error = union(contract.rejects ?? []);
+  // A read that takes `atLeast` can also time out waiting for the write.
+  const waitError = union([...(contract.rejects ?? []), View.ConsistencyTimeout]);
   let rpcs: ReadRpcs;
   if (entry.kind === "Stream") {
     const def = entry.definition;
@@ -99,7 +101,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
             ),
           },
           success: latest,
-          error,
+          error: waitError,
         }),
       ),
       watch: guard(
@@ -154,7 +156,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
             where: Schema.optional(Schema.Unknown),
           },
           success: state,
-          error,
+          error: waitError,
         }),
       ),
       watch: guard(
@@ -193,7 +195,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
             entries: Schema.Array(recorded),
             cursor: Schema.NullOr(Schema.String),
           }),
-          error,
+          error: waitError,
         }),
       ),
       snapshot: guard(
@@ -206,7 +208,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
             where: Schema.optional(Schema.Unknown),
           },
           success: Schema.Struct({ state, cursor: Schema.String }),
-          error,
+          error: waitError,
         }),
       ),
     };

@@ -80,7 +80,7 @@ export interface ViewClient<V extends View.Any> {
       readonly atLeast?: { readonly stream: string; readonly version: number };
       readonly where?: Filter<View.StateOf<V>>;
     },
-  ) => Effect.Effect<View.StateOf<V> | null, ReadError<V["definition"]>>;
+  ) => Effect.Effect<View.StateOf<V> | null, ReadError<V["definition"]> | View.ConsistencyTimeout>;
   /** The key's state, then every change. Ends with a rejection when `validate` stops allowing it. */
   readonly watch: (
     key: Aggregate.IdOf<View.KeyOf<V>>,
@@ -110,7 +110,7 @@ export interface ViewClient<V extends View.Any> {
     },
   ) => Effect.Effect<
     View.Page<View.Entry<View.StateOf<V>, View.EventOf<V>, Aggregate.IdOf<View.KeyOf<V>>>>,
-    ReadError<V["definition"]>
+    ReadError<V["definition"]> | View.ConsistencyTimeout
   >;
   /**
    * The key's state and the cursor it is valid at, read together. Render the
@@ -124,7 +124,10 @@ export interface ViewClient<V extends View.Any> {
       readonly atLeast?: { readonly stream: string; readonly version: number };
       readonly where?: Filter<View.StateOf<V>>;
     },
-  ) => Effect.Effect<View.Snapshot<View.StateOf<V>>, ReadError<V["definition"]>>;
+  ) => Effect.Effect<
+    View.Snapshot<View.StateOf<V>>,
+    ReadError<V["definition"]> | View.ConsistencyTimeout
+  >;
 }
 
 /** The typed client of a stream exposed in an Api. */
@@ -138,7 +141,7 @@ export interface StreamClient<S extends DomainStream.Any> {
     },
   ) => Effect.Effect<
     DomainStream.Entry<DomainStream.EventOf<S>, Aggregate.IdOf<DomainStream.KeyOf<S>>> | null,
-    ReadError<S["definition"]>
+    ReadError<S["definition"]> | View.ConsistencyTimeout
   >;
   /** The key's latest entry, then each new one. Ends with a rejection when `validate` stops allowing it. */
   readonly watch: (
@@ -403,7 +406,6 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
           host.peek(refOf(id)).pipe(Effect.orDie, Effect.map(Option.getOrNull));
         handlers[`${name}.peek`] = effect(rpcs.get, ({ key: id, atLeast }) =>
           host.peek(refOf(id), { atLeast }).pipe(
-            Effect.orDie,
             Effect.flatMap((found) => {
               const entry = Option.getOrNull(found);
               return check("get", refOf(id))(entry).pipe(Effect.as(entry));
@@ -453,7 +455,6 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
           state !== null && matches(where as Filter<unknown> | undefined, state) ? state : null;
         handlers[`${name}.get`] = effect(rpcs.get, ({ key: id, atLeast, where }) =>
           host.query(refOf(id), { atLeast }).pipe(
-            Effect.orDie,
             Effect.flatMap((found) => {
               const state = Option.getOrNull(found);
               return check("get", refOf(id))(state).pipe(Effect.as(visible(state, where)));
@@ -481,21 +482,21 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
             ),
         );
         handlers[`${name}.snapshot`] = effect(rpcs.snapshot!, ({ key: id, atLeast, where }) =>
-          host.snapshot(refOf(id), { atLeast }).pipe(
-            Effect.orDie,
-            Effect.flatMap(({ state, cursor }) =>
-              check(
-                "get",
-                refOf(id),
-              )(state).pipe(Effect.as({ state: visible(state, where), cursor })),
+          host
+            .snapshot(refOf(id), { atLeast })
+            .pipe(
+              Effect.flatMap(({ state, cursor }) =>
+                check(
+                  "get",
+                  refOf(id),
+                )(state).pipe(Effect.as({ state: visible(state, where), cursor })),
+              ),
             ),
-          ),
         );
         handlers[`${name}.list`] = effect(
           rpcs.list!,
           ({ key: id, atLeast, where, order, take, after }) =>
             host.query(refOf(id), { atLeast }).pipe(
-              Effect.orDie,
               Effect.flatMap((found) => check("list", refOf(id))(Option.getOrNull(found))),
               Effect.andThen(
                 host.list(refOf(id), {
