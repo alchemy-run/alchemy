@@ -153,6 +153,22 @@ const serviceAccountName = (project: string, email: string) =>
   `projects/${project}/serviceAccounts/${email}`;
 
 /**
+ * The numeric unique ID of a host's runtime service account: the `sub` of
+ * the Google ID tokens it fetches, which AWS roles trust. A just-created
+ * account can read as missing for a few seconds.
+ */
+export const serviceAccountUniqueId = (email: string) =>
+  iam.getProjectsServiceAccounts({ name: `projects/-/serviceAccounts/${email}` }).pipe(
+    Effect.retry({
+      while: (error) => error._tag === "NotFound",
+      times: 8,
+      schedule: Schedule.spaced("2 seconds"),
+    }),
+    Effect.map((account) => account.uniqueId),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
+
+/**
  * Let the deploying principal and the serverless robots `actAs` the host
  * service account so Cloud Run / Functions accept it as the runtime
  * identity.

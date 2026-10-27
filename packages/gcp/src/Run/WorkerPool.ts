@@ -262,6 +262,12 @@ export type WorkerPool = Resource<
     updateTime: string | undefined;
     /** Runtime service account email. */
     serviceAccount: string | undefined;
+    /**
+     * Numeric unique ID of the runtime service account: the `sub` of the
+     * Google ID tokens the host fetches. An AWS binding's IAM role trusts
+     * it, so the host reaches AWS without an access key.
+     */
+    serviceAccountUniqueId: string | undefined;
     /** True when Alchemy minted the per-host runtime service account. */
     managedServiceAccount: boolean;
     /** IAM roles bindings granted to the runtime service account. */
@@ -635,7 +641,11 @@ const toAttrs = (
   pool: cloudrun.GoogleCloudRunV2WorkerPool,
   project: string,
   region: string,
-  extras: { iamGrants?: AppliedIamGrant[]; codeHash?: string } = {},
+  extras: {
+    iamGrants?: AppliedIamGrant[];
+    codeHash?: string;
+    serviceAccountUniqueId?: string;
+  } = {},
 ): WorkerPool["Attributes"] => {
   const name = pool.name ?? "";
   const parsed = parseName(name, region);
@@ -665,6 +675,7 @@ const toAttrs = (
       resourceName: name,
       serviceAccount: pool.template?.serviceAccount,
     }),
+    serviceAccountUniqueId: extras.serviceAccountUniqueId,
     iamGrants: extras.iamGrants ?? [],
     codeHash: extras.codeHash,
   };
@@ -842,6 +853,7 @@ export const WorkerPoolProvider = () =>
       const attrs = toAttrs(existing, env.project, env.region, {
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
+        serviceAccountUniqueId: output?.serviceAccountUniqueId,
       });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
@@ -1021,6 +1033,7 @@ export const WorkerPoolProvider = () =>
       return toAttrs(current, env.project, env.region, {
         iamGrants: identity.grants,
         codeHash,
+        serviceAccountUniqueId: identity.uniqueId,
       });
     }),
 

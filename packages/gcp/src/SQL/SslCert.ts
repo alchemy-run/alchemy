@@ -84,7 +84,7 @@ export type SslCert = Resource<
  * ```typescript
  * const instance = yield* GCP.SQL.Instance("AppDb", {
  *   tier: "db-f1-micro",
- *   backupEnabled: false,
+ *   backup: { enabled: false },
  * });
  * const cert = yield* GCP.SQL.SslCert("Client", {
  *   instance: instance.instanceName,

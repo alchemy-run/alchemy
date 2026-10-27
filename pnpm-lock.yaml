@@ -9983,6 +9983,12 @@ importers:
       '@alchemy.run/redis':
         specifier: workspace:*
         version: link:../redis
+      '@distilled.cloud/aws':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/aws
+      '@distilled.cloud/aws4signer':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/aws4signer
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core

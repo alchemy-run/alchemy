@@ -1174,6 +1174,26 @@ export const normalizeFunctionUrl = (
  * };
  * ```
  *
+ * ### GCP Bindings
+ * A GCP binding reaches Google Cloud through workload identity federation:
+ * the function's role may impersonate a service account that holds the
+ * binding's roles, so no service account key is created. A new grant can
+ * take a few minutes to start working.
+ *
+ * **Example:** Publish to a Pub/Sub topic
+ * ```typescript
+ * // init
+ * const publish = yield* GCP.PubSub.Publish(topic);
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // runtime
+ *     yield* publish({ body: { messages: [{ data: btoa("hello") }] } });
+ *     return HttpServerResponse.text("Published");
+ *   }),
+ * };
+ * ```
+ *
  * ### Event Sources
  * Lambda functions can be triggered by event sources like SQS queues,
  * DynamoDB streams, S3 notifications, SNS topics, and Kinesis streams.
