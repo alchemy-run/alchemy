@@ -225,7 +225,7 @@ export const runDevChild = (
 
     const url = yield* Effect.callback<string, FrameworkError>((resume) => {
       const { child } = handle;
-      let lineBuffer = "";
+      let pending: string[] = [];
       let ready = false;
       const capture = (text: string) => {
         handle.output += text;
@@ -243,10 +243,17 @@ export const runDevChild = (
           process.stdout.write(text);
           return;
         }
-        lineBuffer += text;
-        const lines = lineBuffer.split("\n");
-        lineBuffer = lines.pop() ?? "";
-        for (const line of lines) {
+        // Split only the new chunk; re-splitting the whole pending line on
+        // every chunk is quadratic for a long line arriving in pieces.
+        const parts = text.split("\n");
+        const rest = parts.pop() ?? "";
+        if (parts.length === 0) {
+          pending.push(rest);
+          return;
+        }
+        parts[0] = pending.join("") + parts[0];
+        pending = [rest];
+        for (const line of parts) {
           const match = line.match(DEV_CHILD_URL_REGEX);
           if (match !== null) {
             ready = true;
