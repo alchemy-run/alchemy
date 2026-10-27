@@ -53,6 +53,7 @@
     "typecheck": "pnpm ensure:built && tsrs -b && pnpm -C packages/frontend-frameworks exec tsrs --noEmit -p tsconfig.test.json",
     "test:aws:floci": "node scripts/test-aws-floci.ts",
     "test:cloudflare-packages": "pnpm ensure:built && pnpm -r --filter @alchemy.run/cloudflare-runtime --filter @alchemy.run/frontend-frameworks --filter \"./packages/frontend-frameworks/fixtures/*\" run test",
+    "test:cloudflare-packages:no-docker": "pnpm ensure:built && pnpm --filter @alchemy.run/cloudflare-runtime run test:no-docker && pnpm -r --filter @alchemy.run/frontend-frameworks --filter \"./packages/frontend-frameworks/fixtures/*\" run test",
     "test:cross-version": "bun run test/cross-version-test/run.ts",
     "test:dev": "cd ./examples/dev-stress && bun test",
     "test:examples": "node scripts/test-examples.ts",

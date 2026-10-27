@@ -11,6 +11,23 @@ const viteRoot = sourceRoot("vite");
 const workersSharedRoot = sourceRoot("internal/workers-shared");
 const workflowsSharedRoot = sourceRoot("internal/workflows-shared");
 
+// Suites that run Linux containers. CI runs them on its Linux runner only
+// (`--project '!core-docker'` elsewhere): macOS runners have no Docker, and
+// Windows runners only run Windows containers.
+const dockerSuites = [
+  "test/Docker.test.ts",
+  "test/bindings/Container.test.ts",
+  "test/bindings/NativeContainer.test.ts",
+];
+
+const coreTest = {
+  setupFiles: ["./test/setup.ts"],
+  pool: "forks",
+  testTimeout: 30_000,
+  hookTimeout: 30_000,
+  retry: process.env.CI ? 2 : 0,
+} as const;
+
 export default defineConfig({
   test: {
     maxWorkers: process.platform === "win32" ? 2 : undefined,
@@ -18,13 +35,18 @@ export default defineConfig({
       {
         root: coreRoot,
         test: {
+          ...coreTest,
           name: "core",
           include: ["test/**/*.test.ts"],
-          setupFiles: ["./test/setup.ts"],
-          pool: "forks",
-          testTimeout: 30_000,
-          hookTimeout: 30_000,
-          retry: process.env.CI ? 2 : 0,
+          exclude: dockerSuites,
+        },
+      },
+      {
+        root: coreRoot,
+        test: {
+          ...coreTest,
+          name: "core-docker",
+          include: dockerSuites,
         },
       },
       {
