@@ -1,11 +1,13 @@
 import * as GitHub from "@alchemy.run/github";
-import { Octokit } from "@alchemy.run/github/Octokit";
 import { expect } from "@alchemy.run/test";
+import * as Actions from "@distilled.cloud/github/actions";
+import * as Repos from "@distilled.cloud/github/repos";
 import * as Output from "alchemy/Output";
 import { destroy } from "alchemy/RemovalPolicy";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { gh } from "./scope.ts";
 
 const { test } = Test.make({ providers: GitHub.providers() });
 
@@ -27,40 +29,25 @@ const repoName = (repository: GitHub.Repository) =>
 
 const getEnvironment = (name: string) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: async () => {
-        try {
-          const { data } = await octokit.rest.repos.getEnvironment({
-            owner,
-            repo,
-            environment_name: name,
-          });
-          return data;
-        } catch (error: any) {
-          if (error.status === 404) return undefined;
-          throw error;
-        }
-      },
-      catch: (e) => e as Error,
-    });
+    return yield* gh(
+      Repos.getEnvironment({
+        owner,
+        repo,
+        environment_name: name,
+      }),
+    ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
   });
 
 const listBranchPolicies = (name: string) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: async () => {
-        const { data } = await octokit.rest.repos.listDeploymentBranchPolicies({
-          owner,
-          repo,
-          environment_name: name,
-          per_page: 100,
-        });
-        return (data.branch_policies ?? []).map((policy) => policy.name);
-      },
-      catch: (e) => e as Error,
-    });
+    return yield* gh(
+      Repos.listDeploymentBranchPolicies({
+        owner,
+        repo,
+        environment_name: name,
+        per_page: 100,
+      }),
+    ).pipe(Effect.map((data) => (data.branch_policies ?? []).map((policy) => policy.name)));
   });
 
 test.provider.skipIf(!owner)(
@@ -217,24 +204,14 @@ test.provider.skipIf(!owner)(
         );
 
       const readVariable = Effect.gen(function* () {
-        const octokit = yield* Octokit;
-        return yield* Effect.tryPromise({
-          try: async () => {
-            try {
-              const { data } = await octokit.rest.actions.getEnvironmentVariable({
-                owner,
-                repo,
-                environment_name: name,
-                name: "ALCHEMY_ENV_TEST",
-              });
-              return data;
-            } catch (error: any) {
-              if (error.status === 404) return undefined;
-              throw error;
-            }
-          },
-          catch: (e) => e as Error,
-        });
+        return yield* gh(
+          Actions.getEnvironmentVariable({
+            owner,
+            repo,
+            environment_name: name,
+            name: "ALCHEMY_ENV_TEST",
+          }),
+        ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       });
 
       // Create — the variable lands in the environment, not the repo.

@@ -156,8 +156,46 @@ test(
       "deposit",
     ]);
 
+    // a feed pushed by the view's Durable Object marks the end of its history
+    const feed = yield* sam.Statement.events(samMain).pipe(
+      Stream.take(4),
+      Stream.runCollect,
+      Effect.timeout("20 seconds"),
+    );
+    expect(
+      feed.map((frame) => (Domain.Read.isCaughtUp(frame) ? frame.cursor : frame.event.kind)),
+    ).toEqual(["deposit", "withdrawal", "transfer-out", page.entries[0]!.envelope.seq]);
+    // a watched state's cursor resumes the feed with nothing twice: straight to CaughtUp
+    const [watched] = yield* sam.Statement.watch(samMain).pipe(
+      Stream.take(1),
+      Stream.runCollect,
+      Effect.timeout("20 seconds"),
+    );
+    expect(watched!.cursor).toBe(page.entries[0]!.envelope.seq);
+    const [resumed] = yield* sam.Statement.events(samMain, { after: watched!.cursor }).pipe(
+      Stream.take(1),
+      Stream.runCollect,
+      Effect.timeout("20 seconds"),
+    );
+    expect(resumed).toEqual({ _tag: "CaughtUp", cursor: watched!.cursor });
+
+    // an aggregate's Durable Object reads the same way: its watched cursor ends its history
+    const [account] = yield* sam.Account.watch(samMain).pipe(
+      Stream.take(1),
+      Stream.runCollect,
+      Effect.timeout("20 seconds"),
+    );
+    const history = yield* sam.Account.events(samMain).pipe(
+      Stream.takeUntil((frame) => Domain.Read.isCaughtUp(frame)),
+      Stream.runCollect,
+      Effect.timeout("20 seconds"),
+    );
+    expect(history.at(-1)).toEqual({ _tag: "CaughtUp", cursor: account!.cursor });
+    expect(history.length - 1).toBe(account!.cursor);
+
     // a projection (AccountCards) appends to a stream; its Durable Object pushes each new card
     const card = yield* sam.AccountCard.watch(samMain).pipe(
+      Stream.map(({ state }) => state),
       Stream.filter((latest) => latest?.event.balance === 50),
       Stream.runHead,
       Effect.timeout("20 seconds"),
@@ -190,6 +228,7 @@ test(
 
     // a live view (AccountSummary → CustomerDashboard, view to view), pushed by its Durable Object
     const dashboard = yield* sam.CustomerDashboard.watch(CustomerId.make("c-1")).pipe(
+      Stream.map(({ state }) => state),
       Stream.filter((d) => d !== null && CustomerDashboard.computed.totalBalance(d) === 50),
       Stream.runHead,
       Effect.timeout("20 seconds"),

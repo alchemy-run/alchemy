@@ -524,10 +524,17 @@ export const Platform = <
                             return node;
                           } else if (phase === "runtime" && ctx) {
                             // retrieve from the RuntimeContext if running in runtime phase
-                            const value = yield* ctx.get<Redacted.Redacted<string>>(key);
+                            const value = yield* ctx.get<unknown>(key);
                             if (value) {
+                              // `get` JSON-decodes unbound env values (`"true"` →
+                              // `true`), but a `Value` node holds the raw string the
+                              // `Config` schema parses.
                               return ConfigProvider.makeValue(
-                                Redacted.isRedacted(value) ? Redacted.value(value) : value,
+                                Redacted.isRedacted(value)
+                                  ? String(Redacted.value(value))
+                                  : typeof value === "string"
+                                    ? value
+                                    : JSON.stringify(value),
                               );
                             }
                           }

@@ -89,6 +89,7 @@ const program = Effect.gen(function* () {
   );
   // Print the balance now and after every change, in the background.
   yield* bank.AccountSummary.watch(accountId).pipe(
+    Stream.map(({ state }) => state),
     Stream.filter((summary) => summary !== null && summary.owner !== null),
     Stream.runForEach((summary) => Effect.log(`balance: ${summary?.balance}`)),
     Effect.forkChild,

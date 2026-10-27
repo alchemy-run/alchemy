@@ -8,13 +8,13 @@
  */
 import * as Effect from "effect/Effect";
 import { type Operation, makeOperationClient } from "./BindingHttp.ts";
-import { GitHubCredentials } from "./Credentials.ts";
+import { Credentials } from "./Credentials.ts";
 
 export const make = <Request extends ReadonlyArray<any>, Out, E>(op: Operation<Request, Out, E>) =>
   Effect.gen(function* () {
-    const credentials = yield* yield* GitHubCredentials;
+    const credentials = yield* yield* Credentials;
     return makeOperationClient(op, {
       token: Effect.succeed(credentials.token),
-      apiUrl: Effect.succeed(credentials.baseUrl),
+      apiUrl: Effect.succeed(credentials.apiBaseUrl),
     });
   });

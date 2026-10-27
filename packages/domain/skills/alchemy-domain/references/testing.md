@@ -2,7 +2,7 @@
 
 ## Stories: specify the model
 
-A story is given/when/then over the real model, in memory. Policies, sagas and projections run for real. External system calls wait until the story answers them, and a clock you control stamps commands. A story fails on any rejection, external call or saga defect it doesn't account for, so a passing story has accounted for every outcome.
+A story is given/when/then over the real model, in memory. Policies, sagas and projections run for real. External system calls wait until the story answers them, and a clock you control stamps commands. A story fails on any event, rejection, external call or saga defect it doesn't account for, so a passing story has accounted for every outcome.
 
 ```ts
 // packages/domain/test/Bank.story.test.ts
@@ -46,13 +46,16 @@ The steps:
 
 - `given(ref, ...events)` records history. It reaches views, but never triggers policies.
 - `when(ref, command)` sends a command, then runs every policy, saga and projection until the model settles.
-- `then(ref, ...events)` asserts the events committed since the last `then` on that stream. With no events, it asserts that nothing new was committed.
+- `then(ref, ...events)` asserts the next events committed on that stream, since the last `then` or `given` on it. With no events, it asserts that nothing new was committed. Every committed event needs a `then`, on every stream, including those a policy or saga writes: an event no `then` asserts fails the story at the end.
 - `rejected(rejection)` asserts the last command's rejection. An unasserted rejection fails the story.
 - `replied(value)` asserts the last command's reply.
 - `state(ref, partial | fn)` asserts aggregate state.
 - `view(View, ref, partial | fn | Story.none)` asserts view state. `emitted(View, ref, [...])` asserts a view's emitted events, and `streamed(Stream, ref, ...)` a stream's entries.
 - `provide(Service, value)` stands in for middleware on the commands that follow.
 - `clock("2026-01-02T09:00:00Z")` moves time: commands are stamped with it, and scheduled commands and saga sleeps that are now due fire. It also takes epoch milliseconds or a `DateTime`. It only moves forward: a time before the current one fails the story, unless only `provide` steps ran before it.
+- `advance("1 day")` moves the clock forward by a duration (any `Duration.Input`) instead of to a time.
+
+The steps type-check against the last `when`: `rejected` takes only a rejection its command declares in `rejects`, and `replied` only its reply type. A `when` type-checks only after a `provide` for every service its command's middleware provides. A helper typed as plain `Step` turns these checks off until the next `when`, so let helpers infer their return type.
 
 More: [Testing models](https://alchemy.run/domain/testing-models), [Story](https://alchemy.run/domain/story).
 

@@ -119,7 +119,7 @@ it.live("a watch ends with NotOwner when the account changes hands", () =>
       yield* support.ChangeOwner({ target: accountId, customerId: CustomerId.make("c-2") });
 
       const [first, second] = yield* Fiber.join(watched);
-      expect(first).toMatchObject({ _tag: "Success", success: { balance: 0 } });
+      expect(first).toMatchObject({ _tag: "Success", success: { state: { balance: 0 } } });
       expect(second).toMatchObject({ _tag: "Failure", failure: { _tag: "NotOwner" } });
     }),
   ),
@@ -180,6 +180,7 @@ it.live("the CustomerApi round-trips over HTTP, including a streamed watch", () 
     const accountId = yield* register(sam, "c-1", "sam");
     yield* sam.DepositMoney({ target: accountId, amount: 70 });
     const dashboard = yield* sam.CustomerDashboard.watch(CustomerId.make("c-1")).pipe(
+      Stream.map(({ state }) => state),
       Stream.filter((d) => d !== null && CustomerDashboard.computed.totalBalance(d) === 70),
       Stream.runHead,
     );

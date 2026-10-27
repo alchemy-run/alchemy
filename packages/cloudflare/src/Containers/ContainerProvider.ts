@@ -3,7 +3,7 @@ import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { repositoryFromImageRef } from "@alchemy.run/docker/Registry";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { getStableContextDir } from "alchemy/Bundle/TempRoot";
 import { deepEqual, isResolved } from "alchemy/Diff";
@@ -1285,17 +1285,17 @@ export const LiveContainerProvider = () =>
             return { action: "update" } as const;
           }
         }),
-        observe: Effect.fn(function* ({ id, news = {} }) {
+        observe: Effect.fn(function* ({ id, news = {}, previous }) {
           // Precreate creates — or adopts and updates — the application
           // named here; ownership follows `read`.
-          if (!isResolved(nameOf(news))) return undefined;
+          if (!isResolved(nameOf(news))) return Unresolved;
           const name = yield* createApplicationName(id, nameOf(news));
           const existing = yield* findApplicationByName(name);
           if (existing === undefined) return undefined;
           const observed = toAttributes(existing);
-          // Generated names identify this instance by its random suffix.
-          // Explicit names alone do not establish ownership.
-          return nameOf(news) === undefined ? observed : Unowned(observed);
+          return isOwnedApplication(nameOf(news), observed, previous)
+            ? observed
+            : Unowned(observed);
         }),
         precreate: Effect.fn(function* ({ id, news = {}, session }) {
           yield* validateContainerConfiguration(news);
@@ -1582,7 +1582,7 @@ export const LiveContainerProvider = () =>
             applicationId: output.applicationId,
           }).pipe(Effect.catchTag("ContainerApplicationNotFound", () => Effect.void));
         }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const readByName = (name: string) =>
             Effect.gen(function* () {
               yield* Effect.logInfo(`Cloudflare Container read: looking up ${name}`);
@@ -1632,9 +1632,7 @@ export const LiveContainerProvider = () =>
           const name = yield* createApplicationName(id, nameOf(olds));
           attrs = yield* readByName(name);
           if (!attrs) return undefined;
-          // Generated names identify this instance by its random suffix.
-          // Explicit names alone do not establish ownership.
-          return nameOf(olds) === undefined ? attrs : Unowned(attrs);
+          return isOwnedApplication(nameOf(olds), attrs, previous) ? attrs : Unowned(attrs);
         }),
         list: () =>
           Effect.gen(function* () {
@@ -1744,6 +1742,17 @@ export const retryForContainerApplicationReadiness = <A, E, R>(
       schedule: containerApplicationReadinessSchedule,
     }),
   );
+
+/**
+ * Whether an application found by name is ours. A generated name identifies
+ * this instance by its random suffix. An explicit name alone does not, unless
+ * it is the application a replacement is replacing.
+ */
+const isOwnedApplication = (
+  explicitName: unknown,
+  observed: { applicationId: string },
+  previous: { applicationId: string } | undefined,
+) => explicitName === undefined || observed.applicationId === previous?.applicationId;
 
 const toAttributes = (
   application:
