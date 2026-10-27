@@ -197,6 +197,30 @@ export const make = <
 };
 
 /**
+ * Check a Model's definitions without hosting it: every problem that would
+ * otherwise fail its Layer's build, such as a view consuming a source keyed
+ * by another aggregate without `keyOf`, a view with `state` but no
+ * `initial`, a policy listening for an event no source emits, or a stream
+ * with two writers. Returns all of them, in definition order; an empty
+ * array means the Model is valid. Problems that depend on what a handler
+ * returns, such as `decide` returning an event its command does not
+ * declare, still surface when the handler runs.
+ *
+ * **Example:** A unit test for the whole Model
+ * ```typescript
+ * import * as Domain from "@alchemy.run/domain";
+ * import { expect, it } from "vitest";
+ * import { Bank } from "./Bank.model.ts";
+ *
+ * it("the model is well defined", () => {
+ *   expect(Domain.verify(Bank)).toEqual([]);
+ * });
+ * ```
+ */
+export const verify = (model: Any): ReadonlyArray<Kernel.DefinitionError> =>
+  Kernel.verify(model.definitions);
+
+/**
  * Trace one projection batch. A batch merges events from many commits, so it
  * starts its own trace and links to each event's.
  */
@@ -250,7 +274,7 @@ const build = <A, E, R>(
 ) =>
   Effect.gen(function* () {
     const platform = yield* Platform;
-    const kernel = Kernel.make(definitions, telemetry);
+    const kernel = yield* Kernel.make(definitions, telemetry);
 
     const aggregateStores = new Map<string, AggregateStore>();
     const viewStores = new Map<string, ViewStore>();

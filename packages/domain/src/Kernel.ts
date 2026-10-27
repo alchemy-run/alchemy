@@ -173,18 +173,53 @@ export interface Kernel {
 }
 
 /**
- * Build the kernel for a set of definitions. Validates tags and routing.
+ * Build the kernel for a set of definitions. Validates tags and routing, and
+ * dies with a {@link DefinitionError} for the first problem.
  */
 export const make = (
   definitions: Definitions,
   telemetry: Telemetry.Resolved = Telemetry.resolve(undefined),
+): Effect.Effect<Kernel> =>
+  Effect.suspend(() => {
+    const { kernel, problems } = collect(definitions, telemetry);
+    return problems.length > 0 ? Effect.die(problems[0]) : Effect.succeed(kernel);
+  });
+
+/**
+ * Every problem {@link make} would die with, without building anything.
+ * Empty when the definitions are valid.
+ */
+export const verify = (definitions: Definitions): ReadonlyArray<DefinitionError> =>
+  collect(definitions, Telemetry.resolve(undefined)).problems;
+
+/** Build the kernel and collect every definition problem, each once, in order. */
+const collect = (definitions: Definitions, telemetry: Telemetry.Resolved) => {
+  const problems: Array<DefinitionError> = [];
+  const seen = new Set<string>();
+  const kernel = build(definitions, telemetry, (problem) => {
+    if (seen.has(problem.message)) return;
+    seen.add(problem.message);
+    problems.push(problem);
+  });
+  return { kernel, problems };
+};
+
+/**
+ * Build the kernel. Each definition problem goes to `report`, and the build
+ * goes on past it, so {@link verify} sees every problem.
+ */
+const build = (
+  definitions: Definitions,
+  telemetry: Telemetry.Resolved,
+  report: (problem: DefinitionError) => void,
 ): Kernel => {
+  const problem = (message: string) => report(new DefinitionError(message));
   // ---------------------------------------------------------------- events
   const eventCodecs = new Map<string, { readonly cls: Event.Any; readonly codec: JsonCodec }>();
   const registerEvent = (cls: Event.Any) => {
     const existing = eventCodecs.get(cls.tag);
     if (existing && existing.cls !== cls) {
-      throw new DefinitionError(`Two different events are tagged '${cls.tag}'`);
+      return problem(`Two different events are tagged '${cls.tag}'`);
     }
     if (!existing) eventCodecs.set(cls.tag, { cls, codec: jsonCodec(cls) });
   };
@@ -217,7 +252,8 @@ export const make = (
   const aggregateByName = new Map<string, Aggregate.Any>();
   for (const aggregate of definitions.aggregates) {
     if (aggregateByName.has(aggregate.aggregateName)) {
-      throw new DefinitionError(`Duplicate aggregate '${aggregate.aggregateName}'`);
+      problem(`Duplicate aggregate '${aggregate.aggregateName}'`);
+      continue;
     }
     aggregateByName.set(aggregate.aggregateName, aggregate);
     const def = aggregate.definition;
@@ -234,9 +270,17 @@ export const make = (
         if (!rejections.has(rejection.tag)) rejections.set(rejection.tag, jsonCodec(rejection));
       }
     }
+    let initial: Json = null;
+    try {
+      initial = state.encode(def.initial);
+    } catch (error) {
+      problem(
+        `${aggregate.aggregateName}.initial does not match its state schema: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
     aggregateCodecs.set(aggregate.aggregateName, {
       state,
-      initial: state.encode(def.initial),
+      initial,
       commands,
       rejections,
       events: new Set(def.events.map((e: Event.Any) => e.tag)),
@@ -250,7 +294,7 @@ export const make = (
     | { readonly kind: "view"; readonly view: View.Any };
   const sources = new Map<string, SourceEntry>();
   const addSource = (name: string, entry: SourceEntry) => {
-    if (sources.has(name)) throw new DefinitionError(`Two entities are named '${name}'`);
+    if (sources.has(name)) return problem(`Two entities are named '${name}'`);
     sources.set(name, entry);
   };
   for (const aggregate of definitions.aggregates) {
@@ -264,13 +308,14 @@ export const make = (
     source.kind === "Aggregate"
       ? (source as Aggregate.Any).aggregateName
       : (source as View.Any).viewName;
-  const sourceEntry = (owner: string, source: View.Source) => {
+  const sourceEntry = (owner: string, source: View.Source): SourceEntry | undefined => {
     const entry = sources.get(nameOf(source));
     const entity = entry?.kind === "aggregate" ? entry.aggregate : entry?.view;
     if (entity !== source) {
-      throw new DefinitionError(`${owner} consumes ${nameOf(source)}, which is not in the Domain`);
+      problem(`${owner} consumes ${nameOf(source)}, which is not in the Domain`);
+      return undefined;
     }
-    return entry!;
+    return entry;
   };
   /** The key that identifies a source's instances: its aggregate, or a view's key. */
   const keyAggregateOf = (entry: SourceEntry): View.KeySource =>
@@ -278,7 +323,7 @@ export const make = (
 
   for (const stream of definitions.streams) {
     if (sources.has(stream.streamName)) {
-      throw new DefinitionError(`Two entities are named '${stream.streamName}'`);
+      problem(`Two entities are named '${stream.streamName}'`);
     }
     for (const event of stream.definition.entries) registerEvent(event);
   }
@@ -308,12 +353,14 @@ export const make = (
       return declared;
     }
     if (visiting.has(view.viewName)) {
-      throw new DefinitionError(`${view.viewName} consumes itself through other views`);
+      problem(`${view.viewName} consumes itself through other views`);
+      return new Set();
     }
     visiting.add(view.viewName);
     const tags = new Set<string>();
     for (const source of view.definition.from) {
       const upstream = sourceEntry(view.viewName, source);
+      if (!upstream) continue;
       for (const tag of outputTags(upstream)) {
         if (consumes(view, tag, nameOf(source))) tags.add(tag);
       }
@@ -395,15 +442,16 @@ export const make = (
     }
     if (keyAggregateOf(upstream) === def.key)
       return (input) => [{ key: Aggregate.targetId(input.source) }];
-    throw new DefinitionError(
+    problem(
       `${owner} consumes '${tag}' from ${source}, which is not keyed by ${View.isAggregateKey(def.key) ? def.key.aggregateName : "its key schema"}: add keyOf.${tag}`,
     );
+    return () => [];
   };
 
   for (const view of definitions.views) {
     const def = view.definition;
     if (def.state !== undefined && def.initial === undefined) {
-      throw new DefinitionError(`${view.viewName} declares state without initial`);
+      problem(`${view.viewName} declares state without initial`);
     }
     // Route-keyed handlers need the same routes in keyOf.
     for (const field of ["evolve", "emit"] as const) {
@@ -412,7 +460,7 @@ export const make = (
         const routes = handlers(def.keyOf)?.[name];
         for (const route of Object.keys(handler)) {
           if (typeof routes !== "object" || !(route in routes)) {
-            throw new DefinitionError(
+            problem(
               `${view.viewName}.${field}.${name}.${route} has no matching route in keyOf.${name}`,
             );
           }
@@ -421,6 +469,7 @@ export const make = (
     }
     for (const source of def.from) {
       const upstream = sourceEntry(view.viewName, source);
+      if (!upstream) continue;
       const name = nameOf(source);
       for (const tag of outputTags(upstream)) {
         if (!consumes(view, tag, name)) continue;
@@ -448,6 +497,10 @@ export const make = (
       let produced = false;
       for (const source of from) {
         const upstream = sourceEntry(owner, source);
+        if (!upstream) {
+          produced = true; // already reported
+          continue;
+        }
         if (!outputTags(upstream).has(event.tag)) continue;
         produced = true;
         const name = nameOf(source);
@@ -458,17 +511,17 @@ export const make = (
         });
       }
       if (!produced) {
-        throw new DefinitionError(
-          `${owner}: none of ${from.map(nameOf).join(", ")} emits '${event.tag}'`,
-        );
+        problem(`${owner}: none of ${from.map(nameOf).join(", ")} emits '${event.tag}'`);
       }
     }
   };
 
   const policyByName = new Map<string, Policy.Any>();
   for (const policy of definitions.policies) {
-    if (policyByName.has(policy.policyName))
-      throw new DefinitionError(`Duplicate policy '${policy.policyName}'`);
+    if (policyByName.has(policy.policyName)) {
+      problem(`Duplicate policy '${policy.policyName}'`);
+      continue;
+    }
     policyByName.set(policy.policyName, policy);
     const def = policy.definition;
     const owner = `Policy ${policy.policyName}`;
@@ -485,7 +538,10 @@ export const make = (
   const streamNames = new Set(definitions.streams.map((stream) => stream.streamName));
   for (const projection of definitions.projections) {
     const name = projection.projectionName;
-    if (projectionByName.has(name)) throw new DefinitionError(`Duplicate projection '${name}'`);
+    if (projectionByName.has(name)) {
+      problem(`Duplicate projection '${name}'`);
+      continue;
+    }
     projectionByName.set(name, projection);
     const def = projection.definition;
     const owner = `Projection ${name}`;
@@ -494,20 +550,21 @@ export const make = (
     );
     for (const stream of def.writes ?? []) {
       if (!streamNames.has(stream.streamName)) {
-        throw new DefinitionError(
-          `${owner} writes ${stream.streamName}, which is not in the Domain`,
-        );
+        problem(`${owner} writes ${stream.streamName}, which is not in the Domain`);
+        continue;
       }
       const existing = writers.get(stream.streamName);
       if (existing && existing !== projection) {
-        throw new DefinitionError(
+        problem(
           `${stream.streamName} has two writers, ${existing.projectionName} and ${name}: a stream key has exactly one`,
         );
+        continue;
       }
       if (stream.definition.key !== def.key) {
-        throw new DefinitionError(
+        problem(
           `${owner} is keyed by ${def.key.aggregateName}, so it cannot write ${stream.streamName}, keyed by ${stream.definition.key.aggregateName}`,
         );
+        continue;
       }
       writers.set(stream.streamName, projection);
     }
