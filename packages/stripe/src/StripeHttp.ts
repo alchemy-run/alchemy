@@ -1,3 +1,4 @@
+import type { ConfigError } from "@distilled.cloud/core/errors";
 import {
   Credentials,
   DEFAULT_API_BASE_URL,
@@ -70,7 +71,7 @@ export const authorizeWith =
     ) as Effect.Effect<A, E, RuntimeContext>;
 
 export const makeStripeAuth = (options: {
-  credentials: Effect.Effect<StripeCredentialsConfig> | undefined;
+  credentials: Effect.Effect<StripeCredentialsConfig, ConfigError> | undefined;
   http: HttpClient.HttpClient | undefined;
 }): StripeAuth => ({
   authorize: <A, E>(

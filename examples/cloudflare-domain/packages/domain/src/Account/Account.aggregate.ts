@@ -50,17 +50,16 @@ const AccountState = Schema.Union([
 ]);
 type AccountState = typeof AccountState.Type;
 
-// The one rule every block shares: is the account open? A predicate, never a
-// throw, so `decide` turns it into a rejection and `evolve` into a guard.
-const isOpen = (s: AccountState): s is Open => s._tag === "Open";
-
-// Lenses on the narrowed Open state: they cannot miss, so nothing is hidden.
-const balance = Optic.id<Open>().key("balance");
-const frozen = Optic.id<Open>().key("frozen");
+// Optics that focus on the Open account. decide refuses every command on an
+// account that is not open, so these events only follow an Open state; on any
+// other state an optic leaves it unchanged, which keeps evolve total.
+const open = Optic.id<AccountState>().tag("Open");
+const balance = open.key("balance");
+const frozen = open.key("frozen");
 
 // Authorization: customers may act on their own accounts; agents and the system on any.
 const openFor = (s: AccountState, actor: Actor): Open | NotOpen | NotOwner =>
-  !isOpen(s)
+  s._tag !== "Open"
     ? new NotOpen()
     : actor._tag === "Customer" && actor.customerId !== s.customerId
       ? new NotOwner()
@@ -104,7 +103,7 @@ export class Account extends Domain.Aggregate("Account", {
         : [new AccountOpened({ customerId: cmd.customerId, owner: cmd.owner })],
 
     ChangeOwner: Effect.fn(function* (s, cmd) {
-      if (!isOpen(s)) return yield* new NotOpen();
+      if (s._tag !== "Open") return yield* new NotOpen();
       const actor = yield* CurrentActor;
       if (actor._tag !== "Agent") return yield* new NotPermitted();
       return [new OwnerChanged({ previous: s.customerId, customerId: cmd.customerId, by: actor })];
@@ -154,7 +153,7 @@ export class Account extends Domain.Aggregate("Account", {
     },
 
     CreditTransfer: (s, cmd) =>
-      !isOpen(s)
+      s._tag !== "Open"
         ? new NotOpen()
         : [
             new TransferCredited({
@@ -165,7 +164,7 @@ export class Account extends Domain.Aggregate("Account", {
           ],
 
     RefundTransfer: (s, cmd) =>
-      isOpen(s)
+      s._tag === "Open"
         ? [
             new TransferRefunded({
               transferId: cmd.transferId,
@@ -176,7 +175,7 @@ export class Account extends Domain.Aggregate("Account", {
         : [new RefundStranded({ transferId: cmd.transferId, amount: cmd.amount })],
 
     RecordSettlement: (s, cmd) =>
-      isOpen(s)
+      s._tag === "Open"
         ? [
             new SettlementReceived({
               settlementId: cmd.settlementId,
@@ -196,52 +195,27 @@ export class Account extends Domain.Aggregate("Account", {
       frozen: null,
       today: { day: "", withdrawn: 0 },
     }),
-    // A guard throws only here, in evolve: an event in the wrong state is a bug
-    // in decide, so the command dies and nothing commits.
-    OwnerChanged: (s, e) => {
-      if (!isOpen(s)) throw new Error(`OwnerChanged in state ${s._tag}`);
-      return { ...s, customerId: e.customerId };
-    },
-    MoneyDeposited: (s, e) => {
-      if (!isOpen(s)) throw new Error(`MoneyDeposited in state ${s._tag}`);
-      return balance.replace(e.balanceAfter, s);
-    },
-    TransferDebited: (s, e) => {
-      if (!isOpen(s)) throw new Error(`TransferDebited in state ${s._tag}`);
-      return balance.replace(e.balanceAfter, s);
-    },
-    TransferCredited: (s, e) => {
-      if (!isOpen(s)) throw new Error(`TransferCredited in state ${s._tag}`);
-      return balance.replace(e.balanceAfter, s);
-    },
-    TransferRefunded: (s, e) => {
-      if (!isOpen(s)) throw new Error(`TransferRefunded in state ${s._tag}`);
-      return balance.replace(e.balanceAfter, s);
-    },
-    SettlementReceived: (s, e) => {
-      if (!isOpen(s)) throw new Error(`SettlementReceived in state ${s._tag}`);
-      return balance.replace(e.balanceAfter, s);
-    },
-    MoneyWithdrawn: (s, e, { at }) => {
-      if (!isOpen(s)) throw new Error(`MoneyWithdrawn in state ${s._tag}`);
-      const day = dayOf(at);
-      const withdrawn = (s.today.day === day ? s.today.withdrawn : 0) + e.amount;
-      return { ...balance.replace(e.balanceAfter, s), today: { day, withdrawn } };
-    },
-    AccountFrozen: (s, e) => {
-      if (!isOpen(s)) throw new Error(`AccountFrozen in state ${s._tag}`);
-      return frozen.replace(e.reason, s);
-    },
+    OwnerChanged: (s, e) => open.modify((o) => ({ ...o, customerId: e.customerId }))(s),
+    MoneyDeposited: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    TransferDebited: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    TransferCredited: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    TransferRefunded: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    SettlementReceived: (s, e) => Optic.replace(s, balance, e.balanceAfter),
+    MoneyWithdrawn: (s, e, { at }) =>
+      open.modify((o) => {
+        const day = dayOf(at);
+        const withdrawn = (o.today.day === day ? o.today.withdrawn : 0) + e.amount;
+        return { ...o, balance: e.balanceAfter, today: { day, withdrawn } };
+      })(s),
+    AccountFrozen: (s, e) => Optic.replace(s, frozen, e.reason),
     AccountClosed: () => ({ _tag: "Closed" as const }),
     RefundStranded: (s) => s,
     SettlementOnClosedAccount: (s) => s,
   },
 
-  // reply only reads: evolve has already guarded the state, so the account
-  // is open here, and the fallback exists only for the types.
   reply: {
-    DepositMoney: (s) => ({ balance: isOpen(s) ? s.balance : 0 }),
-    WithdrawMoney: (s) => ({ balance: isOpen(s) ? s.balance : 0 }),
+    DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
+    WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
   },
   // Clients may read and watch the account itself (its state and committed
   // events) through an Api, judged like a view against its current state.
@@ -249,7 +223,7 @@ export class Account extends Domain.Aggregate("Account", {
     middleware: [Session],
     rejects: [NotOwner],
     validate: Effect.fn(function* (_request, s) {
-      yield* mustOwn(isOpen(s) ? s.customerId : null);
+      yield* mustOwn(s._tag === "Open" ? s.customerId : null);
     }),
   },
 }) {}

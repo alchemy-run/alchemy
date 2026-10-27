@@ -230,9 +230,6 @@ import { AccountOpened, AlreadyOpen, OpenAccount } from "./OpenAccount.command.t
 // ...
 type State = typeof State.Type;
 
-+// Is the account open? decide turns it into a rejection, evolve into a guard.
-+const isOpen = (s: State): s is Extract<State, { _tag: "Open" }> => s._tag === "Open";
-+
 export class Account extends Domain.Aggregate("Account", {
   id: AccountId,
   state: State,
@@ -243,24 +240,21 @@ export class Account extends Domain.Aggregate("Account", {
     OpenAccount: (s, cmd) =>
       s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
 +    DepositMoney: (s, cmd) =>
-+      !isOpen(s)
++      s._tag !== "Open"
 +        ? new NotOpen()
 +        : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
   },
   evolve: {
     AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-+    MoneyDeposited: (s, e) => {
-+      if (!isOpen(s)) throw new Error(`MoneyDeposited on a ${s._tag} account`);
-+      return { ...s, balance: e.balanceAfter };
-+    },
++    MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
 +  },
 +  reply: {
-+    DepositMoney: (s) => ({ balance: isOpen(s) ? s.balance : 0 }),
++    DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
   },
 }) {}
 ```
 
-`evolve` never refuses an event, because it already happened. An event that can't follow the current state is a bug, so the `evolve` handler throws and the command that caused it is rolled back. That handler is the only place a `throw` belongs; `decide` uses the same `isOpen` to return a rejection. `reply` only reads the state after the deposit, which `evolve` has already guarded.
+`evolve` never refuses an event, because it already happened. `decide` already returned `NotOpen` for an account that isn't open, so `evolve` and `reply` just cover every state. `reply` answers from the state after the deposit.
 
 ## Test deposits
 
@@ -344,11 +338,11 @@ export class Account extends Domain.Aggregate("Account", {
     OpenAccount: (s, cmd) =>
       s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
     DepositMoney: (s, cmd) =>
-      !isOpen(s)
+      s._tag !== "Open"
         ? new NotOpen()
         : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
 +    WithdrawMoney: (s, cmd) =>
-+      !isOpen(s)
++      s._tag !== "Open"
 +        ? new NotOpen()
 +        : cmd.amount > s.balance
 +          ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
@@ -356,18 +350,12 @@ export class Account extends Domain.Aggregate("Account", {
   },
   evolve: {
     AccountOpened: (_, e) => ({ _tag: "Open" as const, owner: e.owner, balance: 0 }),
-    MoneyDeposited: (s, e) => {
-      if (!isOpen(s)) throw new Error(`MoneyDeposited on a ${s._tag} account`);
-      return { ...s, balance: e.balanceAfter };
-    },
-+    MoneyWithdrawn: (s, e) => {
-+      if (!isOpen(s)) throw new Error(`MoneyWithdrawn on a ${s._tag} account`);
-+      return { ...s, balance: e.balanceAfter };
-+    },
+    MoneyDeposited: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
++    MoneyWithdrawn: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
   },
   reply: {
-    DepositMoney: (s) => ({ balance: isOpen(s) ? s.balance : 0 }),
-+    WithdrawMoney: (s) => ({ balance: isOpen(s) ? s.balance : 0 }),
+    DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
++    WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
   },
 }) {}
 ```

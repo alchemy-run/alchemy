@@ -143,22 +143,22 @@ type State = typeof State.Type;
 +
 +// The open account, if the current customer owns it.
 +const owned = Effect.fn(function* (s: State) {
-+  if (!isOpen(s)) return yield* new NotOpen();
++  if (s._tag !== "Open") return yield* new NotOpen();
 +  const actor = yield* CurrentActor;
 +  if (actor.customerId !== s.owner) return yield* new NotOwner();
 +  return s;
 +});
 
-// Is the account open? decide turns it into a rejection, evolve into a guard.
+// An event can only follow an open account; anything else is a bug.
     // ...
     OpenAccount: (s, cmd) =>
       s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
 -    DepositMoney: (s, cmd) =>
--      !isOpen(s)
+-      s._tag !== "Open"
 -        ? new NotOpen()
 -        : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
 -    WithdrawMoney: (s, cmd) =>
--      !isOpen(s)
+-      s._tag !== "Open"
 -        ? new NotOpen()
 -        : cmd.amount > s.balance
 -          ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })

@@ -49,13 +49,14 @@ A rule that spans aggregates never becomes a cross-aggregate transaction. Give t
 ## Rules that keep a model correct
 
 - `decide` is pure, or an `Effect.fn` that reads only what its command's middleware provides (`yield* CurrentActor`). It returns events or a rejection; it never performs I/O.
-- `evolve` only applies an event to state. It never decides anything.
+- `evolve` only applies an event to state. It never decides anything. It and `reply` are total: they cover every state and never fail, because `decide` already refused what can't happen. Keep a state the event can't follow (`s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s`), never a guard that throws.
+- Events carry the outcome `decide` worked out (`balanceAfter`), so `evolve` copies it instead of repeating a rule.
 - Every rejection a command can return is listed in its `rejects`. Callers handle each one with `Effect.catchTag`.
 - Policies and projections run at least once. Make their effects idempotent: commands sent from a handler get deterministic ids, and stores key rows by `stream:seq`.
 - Don't wait for a saga in a policy. `start` it, keyed by the aggregate it's about, and react to the events its steps record.
 - A handler resolves its dependencies once in `toLayer` and requires nothing per call.
 - Build one Layer and provide it once (`Layer.mergeAll`, `Layer.provide`). Never chain `Effect.provide`.
-- `throw` appears only inside an aggregate's `evolve` handler, as a guard for an event that cannot apply to the current state. That is a bug in `decide`, so the command dies and nothing commits. Everywhere else, fail with tagged errors (`Domain.Rejection`, `Schema.TaggedError`): `decide` returns a rejection, `reply` only reads state, and no helper throws. Share the rule as a pure predicate (`isOpen(s)`): `decide` does `if (!isOpen(s)) return new NotOpen()`, `evolve` does `if (!isOpen(s)) throw new Error(...)`.
+- Never `throw`. Fail with tagged errors (`Domain.Rejection`, `Schema.TaggedError`).
 - Tracing is automatic. Record payload values only through a declaration's `attributes`, or with `Effect.annotateCurrentSpan` in an effectful handler. Make secrets `Schema.Redacted`, so they never reach a trace or a log.
 - Test what the model does, through stories: events, replies, rejections, views and saga outcomes. Don't test a saga's internal steps.
 
@@ -66,4 +67,4 @@ A rule that spans aggregates never becomes a cross-aggregate transaction. Give t
 3. Update the views, policies and projections that care about the new events.
 4. Expose it through an Api, if a client sends or reads it, with the middleware it needs.
 5. Write stories for the happy path, every rejection, and every policy reaction.
-6. Run the domain package's tests. Then type-check the monorepo (`tsc -b`) and run the server and web tests.
+6. Run the domain package's tests, with one that expects `Domain.verify(Model)` to be empty. Then type-check the monorepo (`tsc -b`) and run the server and web tests.

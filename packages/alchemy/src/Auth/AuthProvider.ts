@@ -1,4 +1,5 @@
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -344,6 +345,14 @@ export const AuthProvider =
       const ctx = Context.omit(Interaction)(
         yield* Effect.context<FileSystem.FileSystem | Path.Path | R | ImplReq>(),
       ) as Context.Context<FileSystem.FileSystem | Path.Path | R | ImplReq>;
+      // `read` and `readEnvironment` resolve credentials for a caller that
+      // has already chosen its ConfigProvider (`resolveProviderConfig`
+      // checks `presentEnvironment` under it), so they read through that
+      // one, not the one ambient at REGISTRATION. The profile-command
+      // methods keep the snapshot: they run under the process environment,
+      // and `--env-file` reaches them only through it.
+      // SAFETY: as above, the assertion only restores the pre-omit type.
+      const resolveCtx = Context.omit(ConfigProvider.ConfigProvider)(ctx) as typeof ctx;
       const providers = yield* AuthProviders;
       const service = yield* Effect.isEffect(impl) ? impl : Effect.succeed(impl);
       // Validate the declared environment contract at registration so a
@@ -426,8 +435,8 @@ export const AuthProvider =
           withProfileCredentialsLock(
             profileName,
             service.read(profileName, config, updateConfig),
-          ).pipe(Effect.provideContext(ctx)),
-        readEnvironment: service.readEnvironment?.pipe(Effect.provideContext(ctx)),
+          ).pipe(Effect.provideContext(resolveCtx)),
+        readEnvironment: service.readEnvironment?.pipe(Effect.provideContext(resolveCtx)),
         environment,
         configSchema: service.configSchema,
         decodeConfig: (profileName, config) =>

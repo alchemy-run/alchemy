@@ -121,11 +121,10 @@ export interface Definition<
     ) => Decision<ByTag<C[number], T>>;
   };
   /**
-   * One handler per event: folds a committed event into state. Throw, in the
-   * handler itself, when an event cannot apply to the current state; that is a
-   * bug in `decide`, not a rejection. The command then dies and none of its
-   * events commit. Share the condition with `decide` as a pure predicate
-   * (`isOpen(state)`), not as a helper that throws.
+   * One handler per event: folds a committed event into state. It covers
+   * every state and never fails: `decide` refuses a command with a rejection
+   * before it records an event, so a handler keeps a state its event can't
+   * follow.
    */
   readonly evolve: {
     readonly [T in E["tag"]]: (
@@ -136,7 +135,8 @@ export interface Definition<
   };
   /**
    * One handler per command that declares a reply: computes it from the
-   * updated state and the committed events.
+   * updated state and the committed events. Like `evolve`, it covers every
+   * state and never fails.
    */
   readonly reply?: {
     readonly [T in ReplyTags<C[number]>]: (
