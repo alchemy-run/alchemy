@@ -7,7 +7,7 @@ import {
   stampedOf,
   type MigrationsInput,
 } from "@alchemy.run/sql/Migrations";
-import { hashImports, readSqlFile, splitSqliteStatements } from "@alchemy.run/sql/SqlFile";
+import { applySqlImports, hashImports, splitSqliteStatements } from "@alchemy.run/sql/SqlFile";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import { isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -511,18 +511,18 @@ export const ProviderLive = () =>
           })
         : undefined;
 
-      // Sync imports — `runImports` skips files whose hash matches
-      // previously-imported state. On first create the previous map
-      // is empty so all listed files import.
-      const importHashes = news.importFiles?.length
-        ? yield* runImports(
-            acct,
+      const importHashes = yield* applySqlImports({
+        importFiles: news.importFiles,
+        rootDir: yield* rootDir,
+        previous: output?.importHashes,
+        apply: (file) =>
+          importD1Database({
+            accountId: acct,
             databaseId,
-            news.importFiles,
-            yield* rootDir,
-            output?.importHashes ?? {},
-          )
-        : {};
+            sqlData: file.sql,
+            filename: file.id,
+          }).pipe(Effect.asVoid),
+      });
 
       return {
         databaseId,
@@ -622,36 +622,20 @@ export const ProviderLocal = () =>
               })
             : undefined;
 
-          // Sync imports — locally an import file is just multi-statement
-          // SQL, executed through the same gateway. Files whose hash matches
-          // previously-imported state are skipped (mirroring `runImports`).
-          const importHashes: Record<string, string> = { ...output?.importHashes };
-          if (news.importFiles?.length) {
-            const importRootDir = yield* rootDir;
-            const pending: Array<{ path: string; sql: string; hash: string }> = [];
-            for (const filePath of news.importFiles) {
-              const file = yield* readSqlFile(importRootDir, filePath);
-              if (importHashes[filePath] === file.hash) continue;
-              pending.push({ path: filePath, sql: file.sql, hash: file.hash });
-            }
-            if (pending.length > 0) {
-              yield* withLocalD1Query(databaseId, (query) =>
-                Effect.forEach(
-                  pending,
-                  (file) => {
-                    // One statement per batch entry: the simulator's SQLite
-                    // rejects a whole file over its statement length limit.
-                    const batch = splitSqliteStatements(file.sql).map((sql) => ({ sql }));
-                    return batch.length > 0 ? query({ batch }) : Effect.void;
-                  },
-                  { discard: true },
-                ),
-              ).pipe(Effect.provideContext(runtimeContext));
-              for (const file of pending) {
-                importHashes[file.path] = file.hash;
-              }
-            }
-          }
+          // Locally an import file is just multi-statement SQL, executed
+          // through the same gateway.
+          const importHashes = yield* applySqlImports({
+            importFiles: news.importFiles,
+            rootDir: yield* rootDir,
+            previous: output?.importHashes,
+            apply: (file) =>
+              withLocalD1Query(databaseId, (query) => {
+                // One statement per batch entry: the simulator's SQLite
+                // rejects a whole file over its statement length limit.
+                const batch = splitSqliteStatements(file.sql).map((sql) => ({ sql }));
+                return batch.length > 0 ? query({ batch }) : Effect.void;
+              }).pipe(Effect.asVoid, Effect.provideContext(runtimeContext)),
+          });
 
           return {
             databaseId,
@@ -714,34 +698,4 @@ const resolveCloneSource = (source: CloneSource, accountId: string) =>
       return match.uuid;
     }
     return yield* Effect.die("Invalid clone source: must provide databaseId or name");
-  });
-
-/**
- * Read each `importFiles` entry and run it through the D1 import flow,
- * skipping files whose hash matches the previously-imported hash.
- */
-const runImports = (
-  accountId: string,
-  databaseId: string,
-  importFiles: ReadonlyArray<string>,
-  rootDir: string,
-  previous: Record<string, string>,
-) =>
-  Effect.gen(function* () {
-    const hashes: Record<string, string> = { ...previous };
-    for (const filePath of importFiles) {
-      const file = yield* readSqlFile(rootDir, filePath);
-      if (previous[filePath] === file.hash) {
-        hashes[filePath] = file.hash;
-        continue;
-      }
-      yield* importD1Database({ accountId, databaseId, sqlData: file.sql, filename: file.id });
-      hashes[filePath] = file.hash;
-    }
-    // Drop entries for files no longer listed.
-    const tracked = new Set(importFiles);
-    for (const key of Object.keys(hashes)) {
-      if (!tracked.has(key)) delete hashes[key];
-    }
-    return hashes;
   });

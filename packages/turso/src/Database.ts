@@ -6,7 +6,7 @@ import {
   stampedOf,
   type MigrationsInput,
 } from "@alchemy.run/sql/Migrations";
-import { hashImports, readSqlFile, splitSqlStatements } from "@alchemy.run/sql/SqlFile";
+import { applySqlImports, hashImports, splitSqlStatements } from "@alchemy.run/sql/SqlFile";
 import * as turso from "@distilled.cloud/turso/turso";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
@@ -447,23 +447,23 @@ export const DatabaseProvider = () =>
               })
             : undefined;
 
-          const previousImports = output?.importHashes ?? {};
-          const importHashes: Record<string, string> = {};
-          if (news.importFiles?.length) {
-            const root = yield* rootDir;
-            for (const filePath of news.importFiles) {
-              const file = yield* readSqlFile(root, filePath);
-              if (previousImports[filePath] !== file.hash) {
-                yield* session.note(`Importing ${filePath}...`);
-                yield* withConnection(org, target, (connection, client) =>
-                  Hrana.transaction(connection, splitSqlStatements(file.sql)).pipe(
-                    Effect.provideService(HttpClient.HttpClient, client),
+          const importHashes = yield* applySqlImports({
+            importFiles: news.importFiles,
+            rootDir: yield* rootDir,
+            previous: output?.importHashes,
+            apply: (file) =>
+              session
+                .note(`Importing ${file.id}...`)
+                .pipe(
+                  Effect.andThen(
+                    withConnection(org, target, (connection, client) =>
+                      Hrana.transaction(connection, splitSqlStatements(file.sql)).pipe(
+                        Effect.provideService(HttpClient.HttpClient, client),
+                      ),
+                    ),
                   ),
-                );
-              }
-              importHashes[filePath] = file.hash;
-            }
-          }
+                ),
+          });
 
           return toAttrs(org, db, config, {
             ...migrationsAttrs({ input: migrationsInput, run: migrations, output }),
