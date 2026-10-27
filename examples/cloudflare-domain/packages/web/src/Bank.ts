@@ -80,6 +80,7 @@ export const Message = defineMessageUnion({
   ClickedRegister: {},
   ClickedDeposit: {},
   ClickedWithdraw: {},
+  ClickedRetryLine: { commandId: Schema.String },
   ReceivedBankResult: { result: BankCommands.Message },
   CompletedDeliver: { outcomes: Schema.Array(Outcome) },
   CompletedSaveIntents: {},
@@ -145,7 +146,7 @@ export const Deliver = Command.define("Deliver", {
         const outcome = yield* deliver(accountId, intent);
         outcomes.push(outcome);
 
-        if (outcome.result === "Queued" || outcome.result === "Denied") {
+        if (outcome.result === "Queued") {
           for (const rest of intents.slice(outcomes.length)) {
             outcomes.push({ commandId: rest.commandId, result: "Queued", reason: Option.none() });
           }
@@ -169,7 +170,7 @@ export const SaveIntents = Command.define("SaveIntents", {
 // UPDATE
 
 const isIntent = (line: Line): line is Line & { readonly kind: Intent["kind"] } =>
-  (line.ack === "Pending" || line.ack === "Queued" || line.ack === "Denied") &&
+  (line.ack === "Pending" || line.ack === "Queued") &&
   (line.kind === "deposit" || line.kind === "withdrawal");
 const intentsOf = (model: Model): Array<Intent> =>
   model.lines
@@ -186,8 +187,7 @@ const ask = (
 ): Update.Return<Model, Message, Bank> => {
   const allocation = DomainFoldkit.next(model.commandIds);
   const { commandId } = allocation;
-  const isSending =
-    model.online && !model.lines.some((line) => line.ack === "Queued" || line.ack === "Denied");
+  const isSending = model.online && !model.lines.some((line) => line.ack === "Queued");
   const nextModel = modifyFields(model, {
     commandIds: () => allocation.commandIds,
     error: () => Option.none(),
@@ -215,7 +215,7 @@ const ask = (
 };
 
 const flush = (model: Model): Update.Return<Model, Message, Bank> => {
-  if (model.lines.some((line) => line.ack === "Denied")) {
+  if (!model.online) {
     return { model };
   }
   const queued = intentsOf(model).filter((intent) =>
@@ -299,6 +299,18 @@ export const update = (model: Model, message: Message) =>
     },
     ClickedDeposit: () => ask(model, "deposit", 1_000),
     ClickedWithdraw: () => ask(model, "withdrawal", 1_000),
+    ClickedRetryLine: ({ commandId }) => {
+      const retry = flush(
+        modifyFields(model, {
+          lines: Array.map((line) =>
+            line.commandId === commandId && line.ack === "Denied"
+              ? modifyFields(line, { ack: () => "Queued", reason: () => Option.none() })
+              : line,
+          ),
+        }),
+      );
+      return { model: retry.model, commands: [save(retry.model), ...(retry.commands ?? [])] };
+    },
     ReceivedBankResult: ({ result }) =>
       Match.value(result).pipe(
         Match.withReturnType<Update.Return<Model, Message, Bank>>(),
@@ -443,7 +455,13 @@ const lineView = (line: Line, h: HtmlBuilder<Message>) => {
       item(
         line.commandId,
         [h.Class("text-amber-600")],
-        [`${text}, authentication required: ${Option.getOrElse(line.reason, () => "Denied")}`],
+        [
+          `${text}, authentication required: ${Option.getOrElse(line.reason, () => "Denied")}`,
+          h.button(
+            [h.OnClick(Message.ClickedRetryLine({ commandId: line.commandId })), h.Class(button)],
+            ["Retry"],
+          ),
+        ],
       ),
     ),
     Match.when("Rejected", () =>

@@ -38,12 +38,12 @@ it.live("retries only the unknown intent with its original id and queues the res
     expect(ids).toEqual(["page:0", "page:0", "page:0", "page:0"]);
     expect(result.outcomes).toEqual([
       { commandId: "page:0", result: "Queued", reason: Option.none() },
-      { commandId: "page:1", result: "Queued", reason: Option.none() },
+      { commandId: "page:1", result: "Rejected", reason: Option.some("NotOpen") },
     ]);
   }).pipe(Effect.provide(Client)),
 );
 
-it.live("does not retry middleware denial and stops the batch", () =>
+it.live("does not retry middleware denial and sends later intents", () =>
   Effect.gen(function* () {
     const result = yield* Deliver({
       accountId,
@@ -54,7 +54,7 @@ it.live("does not retry middleware denial and stops the batch", () =>
     }).effect;
     expect(result.outcomes).toEqual([
       { commandId: "page:0", result: "Denied", reason: Option.some("MfaRequired") },
-      { commandId: "page:1", result: "Queued", reason: Option.none() },
+      { commandId: "page:1", result: "Rejected", reason: Option.some("NotOpen") },
     ]);
   }).pipe(Effect.provide(Client)),
 );

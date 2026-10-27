@@ -110,7 +110,7 @@ Save unresolved intents in order. An offline click adds a queued line. When onli
 
 A transport retry acts on `Unknown`, with the same `commandId`. If the reply was lost after commit, the aggregate returns its stored receipt. It does not apply the intent twice.
 
-If a retry remains unknown, stop the batch. Leave later intents queued, so a withdrawal cannot pass an earlier deposit. A `Denied` result waits for authentication. A `Rejected` result ends that intent.
+If a retry remains unknown, stop the batch. Leave later intents queued, so a withdrawal cannot pass an earlier deposit. A `Denied` line shows its reason and a retry control. It does not block other intents. After authentication, retry that line with its original id. A `Rejected` result ends that intent.
 
 Persist unresolved intents after each Model change. On reload, replay the statement feed to confirm writes the server applied before the previous page closed.
 

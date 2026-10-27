@@ -306,29 +306,25 @@ test("a new customer opens their account; it appears through the subscription", 
     model((model) => expect(model.balance).toEqual(Option.some(0))),
   ));
 
-test("a denied intent is saved and blocks later intents until authentication", () =>
-  story(
-    update,
-    given(account),
-    message(Message.ClickedWithdraw()),
-    saved,
-    Command.resolve(
-      Deliver,
-      Message.CompletedDeliver({
-        outcomes: [{ commandId: "s:0", result: "Denied", reason: Option.some("MfaRequired") }],
-      }),
-    ),
-    saved,
-    message(Message.ClickedDeposit()),
-    saved,
-    model((model) =>
-      expect(acks(model)).toEqual([
-        ["s:1", "Queued"],
-        ["s:0", "Denied"],
-        ["earlier", "Confirmed"],
-      ]),
-    ),
-  ));
+test("a denied line allows new intents and retries with the same id", () => {
+  const denied = modifyFields(account, {
+    lines: () => [
+      { ...earlier, commandId: "denied", ack: "Denied", reason: Option.some("MfaRequired") },
+      earlier,
+    ],
+  });
+  const deposit = update(denied, Message.ClickedDeposit());
+  expect(Option.getOrThrow(Array.head(deposit.model.lines)).ack).toBe("Pending");
+  const retry = update(denied, Message.ClickedRetryLine({ commandId: "denied" }));
+  expect(Option.getOrThrow(Array.head(retry.model.lines))).toMatchObject({
+    commandId: "denied",
+    ack: "Pending",
+    reason: Option.none(),
+  });
+  expect(retry.commands?.find((command) => command.name === "Deliver")?.args).toMatchObject({
+    intents: [{ commandId: "denied" }],
+  });
+});
 
 test("stale snapshot Flags fall back to empty state", () => {
   const bankInit = init({
