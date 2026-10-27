@@ -6,6 +6,7 @@ import * as iam from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Drift from "alchemy/Drift";
+import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
@@ -1266,6 +1267,73 @@ test.provider(
       yield* restore;
       yield* stack.destroy();
       yield* assertRoleDeleted(original.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+    timeout: 180_000,
+  },
+);
+
+// A cycle precreates before its peers reconcile, but a name from a resource
+// outside the cycle resolves first, so precreate names the function with it.
+test.provider(
+  "a cyclic function precreates a name from a resource outside its cycle",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { fn, queueName } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const queue = yield* AWS.SQS.Queue("NamingQueue");
+          const fn = yield* AWS.Lambda.Function("CyclicNamed", {
+            main: asyncHandlerPath,
+            functionName: queue.queueName.pipe(Output.map((name) => `${name.slice(-56)}-named`)),
+            functionUrl: false,
+          });
+          yield* fn.bind`Self`({ env: { SELF_NAME: fn.functionName } });
+          return { fn, queueName: queue.queueName };
+        }),
+      );
+      expect(fn.functionName).toBe(`${queueName.slice(-56)}-named`);
+      const live = yield* Lambda.getFunction({ FunctionName: fn.functionName });
+      expect(live.Configuration?.Environment?.Variables?.SELF_NAME).toBe(fn.functionName);
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+      yield* assertRoleDeleted(fn.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "provider:aws:sqs", "live"],
+    timeout: 180_000,
+  },
+);
+
+// A name derived from a peer in the function's own cycle is still unresolved
+// when the function precreates, so precreate refuses to guess one.
+test.provider(
+  "a cyclic function refuses a name derived from a peer in its cycle",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const error = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const peer = yield* AWS.Lambda.Function("NamingPeer", {
+              main: asyncHandlerPath,
+              functionUrl: false,
+            });
+            const fn = yield* AWS.Lambda.Function("PeerNamed", {
+              main: asyncHandlerPath,
+              functionName: peer.functionName.pipe(
+                Output.map((name) => `${name.slice(-56)}-named`),
+              ),
+              functionUrl: false,
+            });
+            yield* peer.bind`Named`({ env: { NAMED: fn.functionName } });
+            return fn;
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "UnresolvedIdentity", logicalId: "PeerNamed" });
+      yield* stack.destroy();
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   {
     tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],

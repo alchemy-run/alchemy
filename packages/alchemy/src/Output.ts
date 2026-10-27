@@ -701,6 +701,51 @@ export const evaluate: <A, Req = never>(
     return expr;
   }) as Effect.Effect<any>;
 
+/**
+ * Evaluate the parts of `expr` that `upstream` can resolve. An Output whose
+ * sources are all in `upstream` is evaluated, plain data is walked, and an
+ * Output with any other source is returned unevaluated.
+ */
+export const evaluateAvailable = (
+  expr: any,
+  upstream: {
+    [Id in string]: any;
+  },
+  ancestors: ReadonlySet<object> = new Set(),
+): Effect.Effect<
+  any,
+  InvalidReferenceError | MissingSourceError | Config.ConfigError,
+  State.State
+> =>
+  Effect.gen(function* () {
+    if (isResource(expr) || isOutput(expr)) {
+      const sources = Object.keys(upstreamAny(expr));
+      return sources.every((fqn) => Object.hasOwn(upstream, fqn))
+        ? yield* evaluate(expr, upstream)
+        : expr;
+    }
+    if (Config.isConfig(expr)) {
+      return yield* evaluate(expr, upstream);
+    }
+    if (isPlainData(expr)) {
+      if (ancestors.has(expr)) {
+        return undefined;
+      }
+      const nested = new Set(ancestors).add(expr);
+      if (Array.isArray(expr)) {
+        return yield* Effect.all(expr.map((item) => evaluateAvailable(item, upstream, nested)));
+      }
+      return Object.fromEntries(
+        yield* Effect.all(
+          Object.entries(expr).map(([key, value]) =>
+            evaluateAvailable(value, upstream, nested).pipe(Effect.map((value) => [key, value])),
+          ),
+        ),
+      );
+    }
+    return expr;
+  });
+
 export const hasOutputs = (value: any): value is Output<any, any> =>
   Object.keys(upstreamAny(value)).length > 0;
 

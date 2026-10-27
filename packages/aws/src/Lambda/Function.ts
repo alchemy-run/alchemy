@@ -4,7 +4,7 @@ import * as iam from "@distilled.cloud/aws/iam";
 import type { CreateFunctionRequest } from "@distilled.cloud/aws/lambda";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { Region } from "@distilled.cloud/aws/Region";
-import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
+import { Unowned, Unresolved, UnresolvedIdentity } from "alchemy/AdoptPolicy";
 import * as Binding from "alchemy/Binding";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import type { PackageInstall } from "alchemy/Bundle/InstalledPackages";
@@ -2669,6 +2669,16 @@ export const FunctionProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? observed : Unowned(observed);
         }),
         precreate: Effect.fn(function* ({ id, news, session }) {
+          if (!isResolved(news.functionName)) {
+            return yield* new UnresolvedIdentity({
+              message:
+                `Function(${id}): \`functionName\` depends on a resource in this ` +
+                "Function's dependency cycle, so precreate cannot name the function. " +
+                "Use a literal name, or one from outside the cycle.",
+              resourceType: "AWS.Lambda.Function",
+              logicalId: id,
+            });
+          }
           yield* validateFunctionPackageProps(id, news);
           if (isFunctionImageProps(news)) {
             // Resolve and validate the image before creating the execution
