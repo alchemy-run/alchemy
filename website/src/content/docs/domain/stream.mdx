@@ -106,7 +106,7 @@ export const cardReads = Effect.fn(function* (bank: CustomerClient, accountId: A
   // Every new card, starting with the current one.
   yield* bank.AccountCard.watch(accountId).pipe(
     Stream.take(2),
-    Stream.runForEach((card) => Effect.log(`balance ${card?.event.balance}`)),
+    Stream.runForEach(({ state: card }) => Effect.log(`balance ${card?.event.balance}`)),
   );
 
   // History from a position, then live; and a page of it.

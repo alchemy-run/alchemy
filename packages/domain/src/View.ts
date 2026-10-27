@@ -259,22 +259,12 @@ export interface Entry<S, E, Id = string> {
 }
 
 /**
- * A key's state and the cursor it is valid at: the `seq` of the last event
- * the key had emitted when the state was read (`"0"` before any).
- */
-export interface Snapshot<S> {
-  readonly state: S | null;
-  /** Pass as `after` to `events` to receive every later entry, once. */
-  readonly cursor: string;
-}
-
-/**
  * A page of entries.
  */
 export interface Page<Entry> {
   readonly entries: ReadonlyArray<Entry>;
   /** Pass as `after` to continue; `null` when there are no more entries. */
-  readonly cursor: string | null;
+  readonly cursor: number | null;
 }
 
 /**
@@ -310,7 +300,7 @@ export interface Host<S, Key extends Key.Any, E> {
       readonly atLeast?: { readonly stream: string; readonly version: number };
       readonly timeout?: Duration.Input;
     },
-  ) => Effect.Effect<Snapshot<S>, ConsistencyTimeout>;
+  ) => Effect.Effect<Read.Snapshot<S | null>, ConsistencyTimeout>;
   /** Wait until a key's state matches a filter. */
   readonly waitFor: (
     key: Key.RefOf<Key>,
@@ -338,7 +328,7 @@ export interface Host<S, Key extends Key.Any, E> {
    */
   readonly events: (
     key: Key.RefOf<Key>,
-    options?: { readonly after?: string; readonly where?: Filter<E> },
+    options?: { readonly after?: number; readonly where?: Filter<E> },
   ) => Stream.Stream<Entry<S, E, Key.IdOf<Key>>>;
   /** A page of the key's emitted events, oldest first unless `order` is `"desc"`. */
   readonly list: (
@@ -347,7 +337,7 @@ export interface Host<S, Key extends Key.Any, E> {
       readonly where?: Filter<E>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
-      readonly after?: string;
+      readonly after?: number;
     },
   ) => Effect.Effect<Page<Entry<S, E, Key.IdOf<Key>>>>;
 }

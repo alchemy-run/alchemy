@@ -651,7 +651,7 @@ describe("Domain Story", () => {
       // A snapshot is judged like a get, and its filter narrows the same way.
       expect(yield* client.Totals.snapshot("c-1", { ...sam, atLeast })).toEqual({
         state: { total: 3 },
-        cursor: "1",
+        cursor: 1,
       });
       expect(
         (yield* client.Totals.snapshot("c-1", { ...sam, where: { total: { gt: 10 } } })).state,
@@ -680,10 +680,14 @@ describe("Domain Story", () => {
       );
       yield* Effect.sleep("20 millis");
       yield* counters.send(c1, new Increment({ by: 2 }));
-      expect(yield* Fiber.join(totals)).toEqual([{ total: 3 }, { total: 5 }]);
-      expect((yield* Fiber.join(states)).map((s) => s.total)).toEqual([3, 5]);
+      expect(yield* Fiber.join(totals)).toEqual([
+        { state: { total: 3 }, cursor: 1 },
+        { state: { total: 5 }, cursor: 2 },
+      ]);
+      expect((yield* Fiber.join(states)).map(({ state }) => state.total)).toEqual([3, 5]);
 
       const events = yield* client.Counter.events("c-1", sam).pipe(
+        Stream.filter(Domain.Read.isEvent),
         Stream.take(2),
         Stream.runCollect,
       );
