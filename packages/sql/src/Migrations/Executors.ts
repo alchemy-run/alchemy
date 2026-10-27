@@ -1,8 +1,8 @@
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import type { ConnectionOptions } from "mysql2/promise";
-import type { ClientConfig } from "pg";
+import type { Connection, ConnectionOptions } from "mysql2/promise";
+import type { Client, ClientConfig } from "pg";
 import { importMySql } from "../MySQLDriver.ts";
 import { importPg } from "../PostgresDriver.ts";
 import { MigrationError, type MigrationDialect, type SqlExecutor } from "./Format.ts";
@@ -29,37 +29,54 @@ export const migrationError =
     new MigrationError({ message: `${context} failed: ${describeCause(cause)}`, cause });
 
 /**
- * Open a `pg` client for the scope of `use` and hand it over as a
- * {@link SqlExecutor}; the client always closes afterwards. `config` goes to
+ * Open a `pg` client for the scope of `use`; it always closes afterwards,
+ * including when `connect` itself fails. `config` goes to
  * `new Client(config)` unchanged — a connection string, TLS options, or a
  * `stream` the provider already connected (the Cloud SQL connector).
+ * Prefer {@link withPgExecutor}; use this when the provider runs its own
+ * executor over the client (DSQL) or plain SQL (`importFiles`).
  */
-export const withPgExecutor = <A, E, R>(
+export const withPgClient = <A, E, R>(
   config: ClientConfig,
-  use: (executor: SqlExecutor) => Effect.Effect<A, E, R>,
+  use: (client: Client) => Effect.Effect<A, E, R>,
 ): Effect.Effect<A, MigrationError | E, R> =>
   Effect.acquireUseRelease(
     Effect.tryPromise({
       try: async () => {
         const { Client } = await importPg();
         const client = new Client(config);
-        await client.connect();
+        // pg reports idle socket failures as events; the next query fails
+        // through the error channel instead of crashing the process.
+        client.on("error", () => {});
+        try {
+          await client.connect();
+        } catch (error) {
+          await client.end().catch(() => {});
+          throw error;
+        }
         return client;
       },
       catch: migrationError(`Connecting to postgres${config.host ? ` at ${config.host}` : ""}`),
     }),
-    (client) => use(makePgMigrationExecutor(client)),
+    use,
     (client) => Effect.promise(() => client.end().catch(() => {})),
   );
 
-/**
- * Open a `mysql2` connection for the scope of `use` and hand it over as a
- * {@link SqlExecutor}; the connection always closes afterwards. `config` goes
- * to `createConnection(config)` unchanged.
- */
-export const withMySqlExecutor = <A, E, R>(
-  config: ConnectionOptions,
+/** {@link withPgClient} handing over the client as a {@link SqlExecutor}. */
+export const withPgExecutor = <A, E, R>(
+  config: ClientConfig,
   use: (executor: SqlExecutor) => Effect.Effect<A, E, R>,
+): Effect.Effect<A, MigrationError | E, R> =>
+  withPgClient(config, (client) => use(makePgMigrationExecutor(client)));
+
+/**
+ * Open a `mysql2` connection for the scope of `use`; it always closes
+ * afterwards. `config` goes to `createConnection(config)` unchanged.
+ * Prefer {@link withMySqlExecutor}.
+ */
+export const withMySqlConnection = <A, E, R>(
+  config: ConnectionOptions,
+  use: (connection: Connection) => Effect.Effect<A, E, R>,
 ): Effect.Effect<A, MigrationError | E, R> =>
   Effect.acquireUseRelease(
     Effect.tryPromise({
@@ -69,9 +86,16 @@ export const withMySqlExecutor = <A, E, R>(
       },
       catch: migrationError(`Connecting to mysql${config.host ? ` at ${config.host}` : ""}`),
     }),
-    (connection) => use(makeMySQLMigrationExecutor(connection)),
+    use,
     (connection) => Effect.promise(() => connection.end().catch(() => {})),
   );
+
+/** {@link withMySqlConnection} handing over the connection as a {@link SqlExecutor}. */
+export const withMySqlExecutor = <A, E, R>(
+  config: ConnectionOptions,
+  use: (executor: SqlExecutor) => Effect.Effect<A, E, R>,
+): Effect.Effect<A, MigrationError | E, R> =>
+  withMySqlConnection(config, (connection) => use(makeMySQLMigrationExecutor(connection)));
 
 export type Rows = Array<Record<string, unknown>>;
 

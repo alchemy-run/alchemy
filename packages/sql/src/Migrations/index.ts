@@ -12,7 +12,9 @@ export {
   probeExecutor,
   retryLogin,
   rowsFromCells,
+  withMySqlConnection,
   withMySqlExecutor,
+  withPgClient,
   withPgExecutor,
   type Rows,
 } from "./Executors.ts";
