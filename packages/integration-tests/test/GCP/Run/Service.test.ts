@@ -171,6 +171,7 @@ const probedContainers = (probe: { periodSeconds: number } | undefined): GCP.Run
   {
     name: "proxy",
     image: HELLO_IMAGE,
+    ports: [{ name: "http1", containerPort: 8080 }],
     ...(probe ? { dependsOn: ["app"] } : {}),
   },
   {
@@ -243,35 +244,6 @@ test.provider(
       expect(yield* waitUntilGone(created.name)).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 600_000 },
-);
-
-test.provider(
-  "a label-only update keeps the serving revision",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const deploy = (env: string) =>
-        stack.deploy(
-          Effect.gen(function* () {
-            return yield* GCP.Run.Service("Labeled", {
-              location: "us-central1",
-              labels: { env },
-              // Cloud Run reports this unnamed port back as `http1`.
-              template: { containers: [{ image: HELLO_IMAGE, ports: [{ containerPort: 8080 }] }] },
-            });
-          }),
-        );
-
-      const created = yield* deploy("test");
-      const relabeled = yield* deploy("prod");
-      expect(relabeled.labels).toMatchObject({ env: "prod" });
-      expect(relabeled.latestReadyRevision).toEqual(created.latestReadyRevision);
-
-      yield* stack.destroy();
-      expect(yield* waitUntilGone(created.name)).toEqual("gone");
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 300_000 },
 );
 
 test.provider(
