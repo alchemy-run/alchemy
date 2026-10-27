@@ -84,7 +84,7 @@ test.provider(
           ],
         }),
       );
-      const unknown = `Could not determine whether Cloudflare State Store '${worker}' exists`;
+      const unknown = `Could not determine whether Cloudflare State Store '${worker}' exists, so it was left untouched`;
       const blind = yield* inCI(
         {
           CLOUDFLARE_API_TOKEN: Redacted.value(limited.value),

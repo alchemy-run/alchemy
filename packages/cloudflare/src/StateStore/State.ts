@@ -795,12 +795,14 @@ const isStateStoreServing = (accountId: string, scriptName: string) =>
 
 const existenceUnknown =
   (scriptName: string) =>
-  (cause: Error): StateStoreError =>
+  (cause: Error & { readonly _tag: string }): StateStoreError =>
     new StateStoreError({
       message:
         `Could not determine whether Cloudflare State Store '${scriptName}' exists, ` +
-        `so it was not bootstrapped: ${cause.message}. Check that the Cloudflare ` +
-        `credentials can read Workers scripts (Workers Scripts Read).`,
+        `so it was left untouched: ${cause.message}. ` +
+        (cause._tag === "Forbidden"
+          ? `Check that the Cloudflare credentials can read Workers scripts (Workers Scripts Read).`
+          : `Run the command again.`),
       cause,
     });
 
