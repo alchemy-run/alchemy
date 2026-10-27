@@ -62,10 +62,15 @@ export const HoldDeadlineLive = HoldDeadline.toLayer(
           // a redelivery after the expiry ran: nothing to arm
           .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
       } else {
-        yield* holds
-          .unschedule(source, EXPIRY)
-          // the hold expired first; the release is recorded after it
-          .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
+        yield* holds.unschedule(source, EXPIRY).pipe(
+          // the hold expired first, and the release is recorded after it; a
+          // redelivery, so the expiry is already cancelled; or the hold was
+          // never placed, so there's no expiry
+          Effect.catchTag(
+            ["AlreadyExecuted", "AlreadyCancelled", "NotScheduled"],
+            () => Effect.void,
+          ),
+        );
       }
     });
   }),

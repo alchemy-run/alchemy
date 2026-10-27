@@ -90,6 +90,12 @@ export const Aggregate = AggregateModule.make;
 /** A command with this id already ran, so it can't be scheduled or cancelled. */
 export const AlreadyExecuted = AggregateModule.AlreadyExecuted;
 export type AlreadyExecuted = AggregateModule.AlreadyExecuted;
+/** The scheduled command was already cancelled. */
+export const AlreadyCancelled = AggregateModule.AlreadyCancelled;
+export type AlreadyCancelled = AggregateModule.AlreadyCancelled;
+/** No command was scheduled with that id. */
+export const NotScheduled = AggregateModule.NotScheduled;
+export type NotScheduled = AggregateModule.NotScheduled;
 
 export declare namespace View {
   /** Any View class. */

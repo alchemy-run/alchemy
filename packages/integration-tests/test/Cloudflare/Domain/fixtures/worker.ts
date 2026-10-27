@@ -30,8 +30,10 @@ export default class DomainScheduleWorker extends Cloudflare.Worker<DomainSchedu
         if (route[1] === "cancel")
           return yield* HttpServerResponse.json({
             cancel: yield* holds.unschedule(id, EXPIRY).pipe(
-              Effect.as("Ok"),
-              Effect.catchTag("AlreadyExecuted", (e) => Effect.succeed(e._tag)),
+              Effect.as("Cancelled"),
+              Effect.catchTag(["AlreadyExecuted", "AlreadyCancelled", "NotScheduled"], (e) =>
+                Effect.succeed(e._tag),
+              ),
             ),
           });
         if (route[1] === "place") yield* holds.send(id, new PlaceHold());

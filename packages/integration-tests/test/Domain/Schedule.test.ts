@@ -62,10 +62,15 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
           // a redelivery after the expiry ran: nothing to arm
           .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
       } else {
-        yield* holds
-          .unschedule(source, expiryOf(source.id))
-          // the hold expired first; the release is recorded after it
-          .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
+        yield* holds.unschedule(source, expiryOf(source.id)).pipe(
+          // the hold expired first, and the release is recorded after it; a
+          // redelivery, so the expiry is already cancelled; or the hold was
+          // never placed, so there's no expiry
+          Effect.catchTag(
+            ["AlreadyExecuted", "AlreadyCancelled", "NotScheduled"],
+            () => Effect.void,
+          ),
+        );
       }
     });
   }),
@@ -164,13 +169,24 @@ describe("Domain schedule", () => {
     }).pipe(Effect.provide(HoldsLive)),
   );
 
-  it.live("unscheduling twice, or something never scheduled, succeeds", () =>
+  it.live("unscheduling again fails with AlreadyCancelled, until it is scheduled again", () =>
     Effect.gen(function* () {
       const holds = yield* Hold;
       yield* holds.schedule("h-7", new ExpireHold(), { after: "1 hour", commandId: "x" });
       yield* holds.unschedule("h-7", "x");
+      expect((yield* Effect.flip(holds.unschedule("h-7", "x")))._tag).toBe("AlreadyCancelled");
+      yield* holds.schedule("h-7", new ExpireHold(), { after: "1 hour", commandId: "x" });
       yield* holds.unschedule("h-7", "x");
-      yield* holds.unschedule("h-8", "never");
+    }).pipe(Effect.provide(HoldsLive)),
+  );
+
+  it.live("unscheduling an id that was never scheduled fails with NotScheduled", () =>
+    Effect.gen(function* () {
+      const holds = yield* Hold;
+      const error = yield* Effect.flip(holds.unschedule("h-8", "never"));
+      expect(error).toEqual(
+        new Domain.NotScheduled({ aggregate: "Hold", id: "h-8", commandId: "never" }),
+      );
     }).pipe(Effect.provide(HoldsLive)),
   );
 });

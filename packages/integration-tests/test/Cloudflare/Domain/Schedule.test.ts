@@ -43,12 +43,10 @@ const hold = (url: string, action: "place" | "release" | "state", id: string) =>
 
 /** Cancel a hold's expiry directly, past the policy. */
 const cancel = (url: string, id: string) =>
-  call(url, "cancel", id).pipe(
-    Effect.map((body) => (body as { readonly cancel: "Ok" | "AlreadyExecuted" }).cancel),
-  );
+  call(url, "cancel", id).pipe(Effect.map((body) => (body as { readonly cancel: string }).cancel));
 
 test(
-  "an unscheduled command never fires on Durable Objects, and cancelling one that ran fails",
+  "an unscheduled command never fires on Durable Objects",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const base = url.replace(/\/+$/, "");
@@ -75,10 +73,10 @@ test(
     expect(yield* hold(base, "state", kept)).toBe("expired");
     expect(yield* hold(base, "state", released)).toBe("released");
 
-    // cancelling the expiry that ran reports it; cancelling one that was
-    // already cancelled does nothing
+    // cancelling again says why nothing was cancelled
     expect(yield* cancel(base, kept)).toBe("AlreadyExecuted");
-    expect(yield* cancel(base, released)).toBe("Ok");
+    expect(yield* cancel(base, released)).toBe("AlreadyCancelled");
+    expect(yield* cancel(base, `never-${run}`)).toBe("NotScheduled");
   }),
   { timeout: 180_000 },
 );

@@ -134,6 +134,9 @@ const exclusively = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     return yield* exit;
   });
 
+/** What `scheduled:<commandId>` holds once that command is cancelled; never a job token. */
+const CANCELLED = "cancelled";
+
 /** How long a queue drain may hold its lease before another drain may take over. */
 const LEASE_MS = 60_000;
 
@@ -409,8 +412,9 @@ const aggregateObject = (kit: AggregateKit) =>
           .pipe(Effect.map((receipt) => receipt !== undefined));
       // Scheduled commands: one durable callback job per command id, run here
       // when due. `scheduled:<commandId>` holds the token of the job that may
-      // run, so a job cancelled or replaced after the alarm claimed it does
-      // nothing. It is cleared after the commit, so a retried job still runs.
+      // run, or `CANCELLED` once it is cancelled, so a job cancelled or
+      // replaced after the alarm claimed it does nothing. It is cleared after
+      // the commit (the receipt takes over), so a retried job still runs.
       const timers = yield* makeCallback(
         "domain:schedule",
         (job: {
@@ -452,7 +456,7 @@ const aggregateObject = (kit: AggregateKit) =>
                   meta.commandId,
                   "at" in due ? { at: due.at, payload } : { after: due.afterMillis, payload },
                 );
-                return "Ok" as const;
+                return "Scheduled" as const;
               }),
             ),
           ),
@@ -461,9 +465,15 @@ const aggregateObject = (kit: AggregateKit) =>
             exclusively(
               Effect.gen(function* () {
                 if (yield* executed(commandId)) return "AlreadyExecuted" as const;
-                yield* state.storage.delete(`scheduled:${commandId}`);
+                const key = `scheduled:${commandId}`;
+                const token = yield* state.storage.get<string>(key);
+                if (token === CANCELLED) return "AlreadyCancelled" as const;
+                // A job scheduled before tokens existed has a job but no token.
+                if (token === undefined && (yield* timers.getStatus(commandId)) === undefined)
+                  return "NotScheduled" as const;
+                yield* state.storage.put(key, CANCELLED);
                 yield* timers.cancel(commandId);
-                return "Ok" as const;
+                return "Cancelled" as const;
               }),
             ),
           ),

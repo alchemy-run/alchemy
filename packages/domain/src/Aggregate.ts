@@ -179,6 +179,20 @@ export class AlreadyExecuted extends Data.TaggedError("AlreadyExecuted")<{
   readonly commandId: string;
 }> {}
 
+/** The scheduled command with this id was already cancelled. */
+export class AlreadyCancelled extends Data.TaggedError("AlreadyCancelled")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly commandId: string;
+}> {}
+
+/** No command was ever scheduled with this id on the instance. */
+export class NotScheduled extends Data.TaggedError("NotScheduled")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly commandId: string;
+}> {}
+
 /**
  * Options for {@link Client.schedule}: when to send, absolutely or after a delay.
  */
@@ -286,13 +300,14 @@ export interface Client<Def extends AnyDefinition> {
   /**
    * Cancel a pending scheduled command by the command id it was scheduled
    * with. Once it succeeds, the command never runs. Fails with
-   * `AlreadyExecuted` when the command ran first; does nothing when none is
-   * pending, so it is safe to call again.
+   * `AlreadyExecuted` when the command ran first, `AlreadyCancelled` when it
+   * was cancelled before, and `NotScheduled` when nothing was scheduled with
+   * that id.
    */
   readonly unschedule: (
     target: Target<Def>,
     commandId: string,
-  ) => Effect.Effect<void, AlreadyExecuted>;
+  ) => Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled>;
   /** Read the current state of an instance. */
   readonly state: (target: Target<Def>) => Effect.Effect<Def["state"]["Type"]>;
 }
@@ -319,7 +334,10 @@ export interface ClientImpl {
     command: { readonly _tag: string },
     options: ScheduleOptions,
   ) => Effect.Effect<void, AlreadyExecuted>;
-  readonly unschedule: (target: unknown, commandId: string) => Effect.Effect<void, AlreadyExecuted>;
+  readonly unschedule: (
+    target: unknown,
+    commandId: string,
+  ) => Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled>;
   readonly state: (target: unknown) => Effect.Effect<unknown>;
 }
 

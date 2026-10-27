@@ -127,14 +127,14 @@ yield* transfers.schedule(source, new ExpireTransfer(), {
 yield* transfers.unschedule(source, `expire:${source.id}`);
 ```
 
-Unscheduling is durable, like scheduling. Once it succeeds, the command never fires, even when a story's clock passes its time. It does nothing when the command was never scheduled or was already cancelled, so a policy can call it again on a redelivery.
+Unscheduling is durable, like scheduling. Once it succeeds, the command never fires, even when a story's clock passes its time. When there was nothing to cancel, it fails and says why: `AlreadyExecuted` when the command already ran, `AlreadyCancelled` when it was cancelled before, and `NotScheduled` when nothing was scheduled with that id.
 
-When the command already ran, unscheduling fails with `AlreadyExecuted`. A policy cancels after the approval is recorded, so the expiry can still arrive in between. Keep the guard in `decide` for that case, and catch `AlreadyExecuted` when the policy should react to the deadline having won:
+A policy cancels after the approval is recorded, so the expiry can still arrive in between. Keep the guard in `decide` for that case. A policy can also run again for the same event, and then finds the expiry already cancelled:
 
 ```typescript
-yield* transfers
-  .unschedule(source, `expire:${source.id}`)
-  .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
+yield* transfers.unschedule(source, `expire:${source.id}`).pipe(
+  Effect.catchTag(["AlreadyExecuted", "AlreadyCancelled"], () => Effect.void),
+);
 ```
 
 ## Test it with the clock

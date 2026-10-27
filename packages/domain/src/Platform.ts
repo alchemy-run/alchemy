@@ -150,11 +150,15 @@ export type SendResult =
   | { readonly _tag: "Rejected"; readonly rejection: Json }
   | { readonly _tag: "Accepted"; readonly receipt: ReceiptJson };
 
-/**
- * Result of {@link AggregateStore.schedule} and {@link AggregateStore.unschedule}:
- * done, or the instance already handled a command with that id.
- */
-export type ScheduleResult = "Ok" | "AlreadyExecuted";
+/** Result of {@link AggregateStore.schedule}. */
+export type ScheduleResult = "Scheduled" | "AlreadyExecuted";
+
+/** Result of {@link AggregateStore.unschedule}. */
+export type UnscheduleResult =
+  | "Cancelled"
+  | "AlreadyCancelled"
+  | "AlreadyExecuted"
+  | "NotScheduled";
 
 /**
  * The kernel for one aggregate type, handed to a platform.
@@ -232,11 +236,13 @@ export interface AggregateStore {
   ) => Effect.Effect<ScheduleResult>;
   /**
    * Cancel the pending scheduled command with this `commandId` on one
-   * instance, durably. Does nothing when none is pending. `AlreadyExecuted`
-   * when the instance already has a receipt for `commandId`. Once this
-   * returns `Ok`, the cancelled command never runs, even one already due.
+   * instance, durably, and remember the cancel. Once this returns
+   * `Cancelled`, the command never runs, even one already due. Otherwise:
+   * `AlreadyExecuted` when the instance has a receipt for `commandId`,
+   * `AlreadyCancelled` when it was cancelled before (and not scheduled
+   * again since), `NotScheduled` when it was never scheduled.
    */
-  readonly unschedule: (id: string, commandId: string) => Effect.Effect<ScheduleResult>;
+  readonly unschedule: (id: string, commandId: string) => Effect.Effect<UnscheduleResult>;
   /** Read the stored state of an instance. */
   readonly state: (
     id: string,

@@ -17,6 +17,7 @@ import {
   type StoredEvent,
   type StreamEntry,
   type StreamMeta,
+  type UnscheduleResult,
   type ViewEntry,
   type ViewSnapshot,
 } from "./Platform.ts";
@@ -184,6 +185,8 @@ export const make = (
             state: Json | null;
             version: number;
             readonly receipts: Map<string, SendResult>;
+            /** Ids cancelled and not scheduled again since. */
+            readonly cancelled: Set<string>;
             readonly events: Array<StoredEvent>;
           }
         >();
@@ -208,7 +211,13 @@ export const make = (
           if (!found)
             instances.set(
               id,
-              (found = { state: null, version: 0, receipts: new Map(), events: [] }),
+              (found = {
+                state: null,
+                version: 0,
+                receipts: new Map(),
+                cancelled: new Set(),
+                events: [],
+              }),
             );
           return found;
         };
@@ -257,20 +266,24 @@ export const make = (
             lock.withPermits(1)(
               Effect.suspend(() => {
                 if (executed(id, meta.commandId)) return Effect.succeed("AlreadyExecuted" as const);
+                instance(id).cancelled.delete(meta.commandId);
                 return timer(
                   `${kit.name}/${id}/${meta.commandId}`,
                   "at" in due ? due.at : now() + due.afterMillis,
                   commit(id, command, meta).pipe(Effect.asVoid),
                   lock.withPermits(1),
-                ).pipe(Effect.as("Ok" as const));
+                ).pipe(Effect.as("Scheduled" as const));
               }),
             ),
           unschedule: (id, commandId) =>
             lock.withPermits(1)(
-              Effect.sync(() => {
-                if (executed(id, commandId)) return "AlreadyExecuted" as const;
-                timers.delete(`${kit.name}/${id}/${commandId}`);
-                return "Ok" as const;
+              Effect.sync((): UnscheduleResult => {
+                if (executed(id, commandId)) return "AlreadyExecuted";
+                const { cancelled } = instance(id);
+                if (cancelled.has(commandId)) return "AlreadyCancelled";
+                if (!timers.delete(`${kit.name}/${id}/${commandId}`)) return "NotScheduled";
+                cancelled.add(commandId);
+                return "Cancelled";
               }),
             ),
           state: (id) =>

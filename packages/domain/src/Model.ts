@@ -518,12 +518,10 @@ const aggregateClient = (
       Effect.gen(function* () {
         const id = Aggregate.targetId(target);
         const result = yield* store.unschedule(id, commandId);
-        if (result === "AlreadyExecuted")
-          return yield* new Aggregate.AlreadyExecuted({
-            aggregate: aggregate.aggregateName,
-            id,
-            commandId,
-          });
+        const fields = { aggregate: aggregate.aggregateName, id, commandId };
+        if (result === "AlreadyExecuted") return yield* new Aggregate.AlreadyExecuted(fields);
+        if (result === "AlreadyCancelled") return yield* new Aggregate.AlreadyCancelled(fields);
+        if (result === "NotScheduled") return yield* new Aggregate.NotScheduled(fields);
       }).pipe(
         Effect.withSpan(`Domain.unschedule ${aggregate.aggregateName}`, {
           ...spanOptions(target),
