@@ -71,8 +71,9 @@ export interface ContainerProps {
   /** Memory limit in Docker's byte-suffix format, such as `"512m"` or `"2g"`. */
   memory?: string;
   /**
-   * Memory-plus-swap limit in the same format. Docker defaults it to twice
-   * `memory`; set it equal to `memory` to disable swap.
+   * Memory-plus-swap limit in the same format. Requires `memory`. Docker
+   * defaults it to twice `memory`; set it equal to `memory` to disable swap,
+   * or `"-1"` for unlimited swap.
    */
   memorySwap?: string;
   /**
@@ -321,6 +322,7 @@ export interface Container extends Resource<
  *
  * **Example:** Limit memory and harden the runtime
  * ```typescript
+ * const tmp = yield* Docker.Volume("api-tmp");
  * const api = yield* Docker.Container("api", {
  *   image: "ghcr.io/acme/api:latest",
  *   memory: "512m",
@@ -328,7 +330,7 @@ export interface Container extends Resource<
  *   noNewPrivileges: true,
  *   user: "1000:1000",
  *   // A read-only root filesystem needs an explicit writable path.
- *   volumes: [{ hostPath: "api-tmp", containerPath: "/tmp" }],
+ *   volumes: [{ hostPath: tmp.name, containerPath: "/tmp" }],
  * });
  * ```
  *
@@ -673,9 +675,7 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
       "memory-swap": news.memorySwap,
       user: news.user,
       "security-opt": news.noNewPrivileges ? ["no-new-privileges"] : undefined,
-      // Only when set: an always-present key would change every container's
-      // config hash and recreate it on upgrade.
-      ...(news.readOnly ? { "read-only": true } : {}),
+      "read-only": news.readOnly ? true : undefined,
       restart: news.restart ?? "no",
       label: news.labels,
       "stop-timeout": toSeconds(news.stopTimeout)?.toString(),
@@ -768,6 +768,11 @@ const validateContainerOptions = (news: ContainerProps) => {
       );
     }
     targets.add(device.containerPath);
+  }
+  if (news.memorySwap !== undefined && news.memory === undefined) {
+    return Effect.fail(
+      new InvalidContainerOptions({ message: "Docker.Container memorySwap requires memory" }),
+    );
   }
   return Effect.void;
 };

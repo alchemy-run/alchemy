@@ -119,14 +119,30 @@ healthcheck intervals take Effect `Duration` strings like
 `"5 seconds"`, and `start: true` actually runs the container
 (the default creates it stopped).
 
-To limit and harden a container, set `memory`, `readOnly`,
-`noNewPrivileges`, and `user`. `memory` takes Docker's byte suffixes
-(`"512m"`, `"2g"`). If the container goes over it, the kernel kills a
-process inside the container instead of starving the host.
-`readOnly: true` mounts the root filesystem read-only, so every
-writable path must be a volume. `noNewPrivileges: true` stops
-processes from gaining privileges through setuid binaries. Changing
-any of these replaces the container.
+## Limit and harden a container
+
+```typescript
+const tmp = yield* Docker.Volume("api-tmp");
+const api = yield* Docker.Container("api", {
+  image: "ghcr.io/acme/api:latest",
+  memory: "512m",
+  memorySwap: "512m",
+  readOnly: true,
+  noNewPrivileges: true,
+  user: "1000:1000",
+  volumes: [{ hostPath: tmp.name, containerPath: "/tmp" }],
+});
+```
+
+`memory` takes Docker's byte suffixes (`"512m"`, `"2g"`). If the
+container goes over it, the kernel kills a process inside the
+container instead of starving the host. `memorySwap` set equal to
+`memory` disables swap. `readOnly: true` mounts the root filesystem
+read-only, so every writable path must be a volume.
+`noNewPrivileges: true` stops processes from gaining privileges
+through setuid binaries, and `user` runs the process as that
+`uid[:gid]` instead of the image's user. Changing any of these
+replaces the container.
 
 ## Read the bound ports
 

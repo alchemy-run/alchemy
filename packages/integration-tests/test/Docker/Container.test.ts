@@ -842,10 +842,9 @@ describe(
         expect(yield* exec(first.name, "grep", "NoNewPrivs", "/proc/self/status")).toMatch(
           /NoNewPrivs:\s+1/,
         );
-        const denied = yield* exec(first.name, "touch", "/alchemy-write").pipe(Effect.flip);
-        expect(denied._tag).toBe("PlatformError");
+        const denied = yield* exec(first.name, "touch", "/tmp/alchemy-write").pipe(Effect.flip);
+        expect(denied.message).toContain("Read-only file system");
 
-        // Unchanged props keep the container; a new limit replaces it.
         const same = yield* deploy("64m");
         expect(same.id).toBe(first.id);
         const replaced = yield* deploy("128m");
@@ -874,6 +873,7 @@ describe(
           ],
         },
       ],
+      ["memorySwap without memory", { memorySwap: "1g" }],
     ];
     for (const [name, props] of invalidOptions) {
       test.provider(`rejects ${name} that cannot be combined before calling Docker`, (stack) =>

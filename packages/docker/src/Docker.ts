@@ -92,7 +92,7 @@ export class Docker extends Context.Service<
         /** `--memory-swap` limit in Docker's byte-suffix format. */
         "memory-swap"?: string | undefined;
         /** `--read-only`: mount the root filesystem read-only. */
-        "read-only"?: boolean;
+        "read-only"?: boolean | undefined;
         /** `--security-opt` entries. */
         "security-opt"?: Array<string> | undefined;
         /** `--user`, as `uid[:gid]` or a name. */
