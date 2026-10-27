@@ -1,6 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { recordAuditLogs } from "../../auditLogs.ts";
 import { probeParam, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -29,10 +30,23 @@ export const Greet = GCP.Workflows.Workflow("Greet", {
  * Effect-native Cloud Run service exercising the Workflows bindings as its
  * own runtime service account. Deployed from {@link ../Bindings.test.ts}.
  */
+
+/** Bucket the audit-log consumers record entries in. */
+export const AuditMarkers = GCP.Storage.Bucket("AuditMarkers", {
+  location: "US-CENTRAL1",
+  forceDestroy: true,
+});
+
 export default class WorkflowsBindingsHost extends GCP.Function<WorkflowsBindingsHost>()(
   "WorkflowsBindingsHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const putMarker = yield* GCP.Storage.PutObject(AuditMarkers);
+    yield* GCP.Workflows.consumeWorkflowAuditLogs(
+      Greet,
+      { methods: ["UpdateWorkflow"] },
+      recordAuditLogs("workflow", putMarker),
+    );
     const createExecution = yield* GCP.Workflows.CreateExecution(Greet);
     const getWorkflow = yield* GCP.Workflows.GetWorkflow(Greet);
     const listRevisions = yield* GCP.Workflows.ListWorkflowRevisions(Greet);
@@ -93,6 +107,8 @@ export default class WorkflowsBindingsHost extends GCP.Function<WorkflowsBinding
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
+        GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
+        GCP.Storage.PutObjectHttp,
         GCP.Workflows.CreateExecutionHttp,
         GCP.Workflows.GetWorkflowHttp,
         GCP.Workflows.ListWorkflowRevisionsHttp,

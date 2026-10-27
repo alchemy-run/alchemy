@@ -1,6 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { recordAuditLogs } from "../../auditLogs.ts";
 import { outcome, probeParam, serveProbes } from "../../bindingHost.ts";
 
 /** Repository the host lists (roles/artifactregistry.reader on it). */
@@ -34,10 +35,23 @@ const MISSING_GCS = "gs://alchemy-binding-missing-bucket/none";
  * binding as its own runtime service account. Deployed from
  * {@link ../Bindings.test.ts}.
  */
+
+/** Bucket the audit-log consumers record entries in. */
+export const AuditMarkers = GCP.Storage.Bucket("AuditMarkers", {
+  location: "US-CENTRAL1",
+  forceDestroy: true,
+});
+
 export default class ArtifactRegistryBindingsHost extends GCP.Function<ArtifactRegistryBindingsHost>()(
   "ArtifactRegistryBindingsHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const putMarker = yield* GCP.Storage.PutObject(AuditMarkers);
+    yield* GCP.ArtifactRegistry.consumeRepositoryAuditLogs(
+      Packages,
+      { methods: ["SetIamPolicy"] },
+      recordAuditLogs("repository", putMarker),
+    );
     const AR = GCP.ArtifactRegistry;
     const listImages = yield* AR.ListDockerImages(Images);
 
@@ -214,6 +228,8 @@ export default class ArtifactRegistryBindingsHost extends GCP.Function<ArtifactR
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
+        GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
+        GCP.Storage.PutObjectHttp,
         GCP.ArtifactRegistry.ListDockerImagesHttp,
         GCP.ArtifactRegistry.GetRepositoryHttp,
         GCP.ArtifactRegistry.ListRepositoryPackagesHttp,

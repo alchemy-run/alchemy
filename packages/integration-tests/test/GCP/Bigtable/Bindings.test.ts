@@ -4,8 +4,10 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import * as Effect from "effect/Effect";
+import { expectAuditEntry } from "../auditLogs.ts";
 import { expectProbe } from "../bindingHost.ts";
 import BigtableBindingsHost, {
+  AuditMarkers,
   Db,
   GenBackup,
   GenRows,
@@ -18,6 +20,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "BigtableBindings");
 
 let baseUrl: string;
+let auditMarkers: string;
 let hostAccount: string;
 let instanceName: string;
 let clusterName: string;
@@ -68,6 +71,7 @@ describe.skipIf(!!process.env.FAST)(
             return {
               uri: host.uri,
               serviceAccount: host.serviceAccount,
+              auditMarkers: (yield* AuditMarkers).bucketName,
               instance: (yield* Db).name,
               cluster: (yield* Nodes).name,
               table: (yield* Rows).name,
@@ -77,6 +81,7 @@ describe.skipIf(!!process.env.FAST)(
           }),
         );
         baseUrl = out.uri!;
+        auditMarkers = out.auditMarkers;
         hostAccount = out.serviceAccount!;
         instanceName = out.instance;
         clusterName = out.cluster;
@@ -229,6 +234,56 @@ describe.skipIf(!!process.env.FAST)(
             yield* expectInstanceGrants;
           }),
         live,
+      );
+    });
+
+    describe("consumeInstanceAuditLogs / consumeTableAuditLogs", () => {
+      test.provider(
+        "deliver each resource's audit log entries to the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            // Admin Activity calls that change nothing (or only a description).
+            const cases = [
+              {
+                key: "instance",
+                name: instanceName,
+                method: "SetIamPolicy",
+                trigger: bigtable
+                  .getIamPolicyProjectsInstances({ resource: instanceName, body: {} })
+                  .pipe(
+                    Effect.flatMap((policy) =>
+                      bigtable.setIamPolicyProjectsInstances({
+                        resource: instanceName,
+                        body: { policy },
+                      }),
+                    ),
+                  ),
+              },
+              {
+                key: "table",
+                name: genTableName,
+                method: "SetIamPolicy",
+                trigger: bigtable
+                  .getIamPolicyProjectsInstancesTables({ resource: genTableName, body: {} })
+                  .pipe(
+                    Effect.flatMap((policy) =>
+                      bigtable.setIamPolicyProjectsInstancesTables({
+                        resource: genTableName,
+                        body: { policy },
+                      }),
+                    ),
+                  ),
+              },
+            ];
+            for (const { key, name, method, trigger } of cases) {
+              const entry = yield* expectAuditEntry({ bucket: auditMarkers, key, method, trigger });
+              expect(entry.serviceName).toEqual("bigtableadmin.googleapis.com");
+              // Audit logs may name the project by number.
+              const path = (value: string) => value.replace(/^projects\/[^/]+/, "");
+              expect(path(entry.resourceName)).toContain(path(name));
+            }
+          }),
+        { tags: ["provider:gcp", "live"], timeout: 900_000 },
       );
     });
   },

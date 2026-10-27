@@ -4,8 +4,10 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as Effect from "effect/Effect";
+import { expectAuditEntry } from "../auditLogs.ts";
 import { expectProbe } from "../bindingHost.ts";
 import SecretManagerBindingsHost, {
+  AuditMarkers,
   GenRegionalSecret,
   GenSecret,
   OpsSecret,
@@ -21,6 +23,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "SecretManagerBindings");
 
 let baseUrl: string;
+let auditMarkers: string;
 let hostAccount: string;
 let secrets: {
   ops: string;
@@ -81,6 +84,7 @@ describe(
             return {
               uri: host.uri,
               serviceAccount: host.serviceAccount,
+              auditMarkers: (yield* AuditMarkers).bucketName,
               ops: (yield* OpsSecret).name,
               regional: (yield* RegionalSecret).name,
               readOnly: (yield* ReadOnlySecret).name,
@@ -92,6 +96,7 @@ describe(
           }),
         );
         baseUrl = out.uri!;
+        auditMarkers = out.auditMarkers;
         hostAccount = out.serviceAccount!;
         secrets = {
           ops: out.ops,
@@ -329,6 +334,54 @@ describe(
             expect(out).toEqual({ rotate: "BadRequest", enable: "BadRequest" });
           }),
         live,
+      );
+    });
+
+    describe("consumeSecretAuditLogs / consumeLocationsSecretAuditLogs", () => {
+      test.provider(
+        "deliver each resource's audit log entries to the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            // Admin Activity calls that change nothing (or only a description).
+            const cases = [
+              {
+                key: "secret",
+                name: secrets.gen,
+                method: "SetIamPolicy",
+                trigger: secretmanager.getIamPolicyProjectsSecrets({ resource: secrets.gen }).pipe(
+                  Effect.flatMap((policy) =>
+                    secretmanager.setIamPolicyProjectsSecrets({
+                      resource: secrets.gen,
+                      body: { policy },
+                    }),
+                  ),
+                ),
+              },
+              {
+                key: "locationsSecret",
+                name: secrets.genRegional,
+                method: "SetIamPolicy",
+                trigger: secretmanager
+                  .getIamPolicyProjectsLocationsSecrets({ resource: secrets.genRegional })
+                  .pipe(
+                    Effect.flatMap((policy) =>
+                      secretmanager.setIamPolicyProjectsLocationsSecrets({
+                        resource: secrets.genRegional,
+                        body: { policy },
+                      }),
+                    ),
+                  ),
+              },
+            ];
+            for (const { key, name, method, trigger } of cases) {
+              const entry = yield* expectAuditEntry({ bucket: auditMarkers, key, method, trigger });
+              expect(entry.serviceName).toEqual("secretmanager.googleapis.com");
+              // Audit logs may name the project by number.
+              const path = (value: string) => value.replace(/^projects\/[^/]+/, "");
+              expect(path(entry.resourceName)).toContain(path(name));
+            }
+          }),
+        { tags: ["provider:gcp", "live"], timeout: 900_000 },
       );
     });
   },

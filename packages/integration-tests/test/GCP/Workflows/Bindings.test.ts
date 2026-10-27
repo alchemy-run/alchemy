@@ -4,16 +4,19 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as workflowexecutions from "@distilled.cloud/gcp/workflowexecutions_v1";
+import * as workflows from "@distilled.cloud/gcp/workflows_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectAuditEntry } from "../auditLogs.ts";
 import { expectProbe } from "../bindingHost.ts";
-import WorkflowsBindingsHost, { Greet } from "./fixtures/bindings-host.ts";
+import WorkflowsBindingsHost, { AuditMarkers, Greet } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "WorkflowsBindings");
 
 let baseUrl: string;
+let auditMarkers: string;
 let hostAccount: string;
 let project: string;
 let workflowName: string;
@@ -56,12 +59,14 @@ describe(
             return {
               uri: host.uri,
               serviceAccount: host.serviceAccount,
+              auditMarkers: (yield* AuditMarkers).bucketName,
               name: workflow.name,
               project: workflow.project,
             };
           }),
         );
         baseUrl = out.uri!;
+        auditMarkers = out.auditMarkers;
         hostAccount = out.serviceAccount!;
         workflowName = out.name;
         project = out.project;
@@ -205,6 +210,36 @@ describe(
             yield* expectProjectGrants;
           }),
         live,
+      );
+    });
+
+    describe("consumeWorkflowAuditLogs", () => {
+      test.provider(
+        "deliver each resource's audit log entries to the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            // Admin Activity calls that change nothing (or only a description).
+            const cases = [
+              {
+                key: "workflow",
+                name: workflowName,
+                method: "UpdateWorkflow",
+                trigger: workflows.patchProjectsLocationsWorkflows({
+                  name: workflowName,
+                  updateMask: "description",
+                  body: { description: "audited" },
+                }),
+              },
+            ];
+            for (const { key, name, method, trigger } of cases) {
+              const entry = yield* expectAuditEntry({ bucket: auditMarkers, key, method, trigger });
+              expect(entry.serviceName).toEqual("workflows.googleapis.com");
+              // Audit logs may name the project by number.
+              const path = (value: string) => value.replace(/^projects\/[^/]+/, "");
+              expect(path(entry.resourceName)).toContain(path(name));
+            }
+          }),
+        { tags: ["provider:gcp", "live"], timeout: 900_000 },
       );
     });
   },

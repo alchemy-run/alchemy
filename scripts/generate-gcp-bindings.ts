@@ -781,7 +781,11 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
     ...new Set(apis.map((api) => new URL(api.doc.rootUrl).host.replace(/^[a-z0-9-]+\.mtls\./, ""))),
   ];
   const auditLogs: string[] = [];
-  for (const [key, resource] of Object.entries(config.resources)) {
+  // A child with no IAM of its own is covered by its parent's audit logs
+  // (the filter matches the parent and everything below it).
+  for (const [key, resource] of Object.entries(config.resources).filter(
+    ([, resource]) => !resource.lifecycleOnly,
+  )) {
     const file = `${key}AuditLogs.ts`;
     if (handWritten.has(file)) {
       return yield* Effect.die(new Error(`${service}/${file} is hand-written`));

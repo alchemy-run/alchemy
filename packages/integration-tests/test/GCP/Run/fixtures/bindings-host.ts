@@ -1,6 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { recordAuditLogs } from "../../auditLogs.ts";
 import { outcome, probeParam, serveProbes } from "../../bindingHost.ts";
 
 const IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
@@ -48,10 +49,33 @@ export const GenJob = GCP.Run.Job("GenJob", {
  * Effect-native Cloud Run service exercising every Cloud Run binding as its
  * own runtime service account. Deployed from {@link ../Bindings.test.ts}.
  */
+
+/** Bucket the audit-log consumers record entries in. */
+export const AuditMarkers = GCP.Storage.Bucket("AuditMarkers", {
+  location: "US-CENTRAL1",
+  forceDestroy: true,
+});
+
 export default class RunBindingsHost extends GCP.Function<RunBindingsHost>()(
   "RunBindingsHost",
   { main: import.meta.url, location: "us-central1", invokerIamDisabled: true },
   Effect.gen(function* () {
+    const putMarker = yield* GCP.Storage.PutObject(AuditMarkers);
+    yield* GCP.Run.consumeServiceAuditLogs(
+      GenApi,
+      { methods: ["SetIamPolicy"] },
+      recordAuditLogs("service", putMarker),
+    );
+    yield* GCP.Run.consumeJobAuditLogs(
+      GenJob,
+      { methods: ["SetIamPolicy"] },
+      recordAuditLogs("job", putMarker),
+    );
+    yield* GCP.Run.consumeWorkerPoolAuditLogs(
+      GenWorkers,
+      { methods: ["SetIamPolicy"] },
+      recordAuditLogs("workerPool", putMarker),
+    );
     const getService = yield* GCP.Run.GetService(Api);
     const getWorkerPool = yield* GCP.Run.GetWorkerPool(Workers);
     const runJob = yield* GCP.Run.RunJob(Migrate);
@@ -123,6 +147,8 @@ export default class RunBindingsHost extends GCP.Function<RunBindingsHost>()(
     Effect.provide(GCP.Run.InvokeServiceHttp),
     Effect.provide(
       Layer.mergeAll(
+        GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
+        GCP.Storage.PutObjectHttp,
         GCP.Run.GetJobHttp,
         GCP.Run.ListJobExecutionsHttp,
         GCP.Run.GetJobExecutionHttp,

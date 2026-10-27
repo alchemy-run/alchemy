@@ -1,6 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { recordAuditLogs } from "../../auditLogs.ts";
 import { outcome, probeParam, serveProbes } from "../../bindingHost.ts";
 
 export const ITEMS_DDL = "CREATE TABLE Items (\n  Id STRING(36) NOT NULL,\n) PRIMARY KEY(Id)";
@@ -76,10 +77,33 @@ export const GenSchedule = Effect.gen(function* () {
  * Effect-native Cloud Run service exercising every Spanner binding as its
  * own runtime service account. Deployed from {@link ../Bindings.test.ts}.
  */
+
+/** Bucket the audit-log consumers record entries in. */
+export const AuditMarkers = GCP.Storage.Bucket("AuditMarkers", {
+  location: "US-CENTRAL1",
+  forceDestroy: true,
+});
+
 export default class SpannerBindingsHost extends GCP.Function<SpannerBindingsHost>()(
   "SpannerBindingsHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const putMarker = yield* GCP.Storage.PutObject(AuditMarkers);
+    yield* GCP.Spanner.consumeInstanceAuditLogs(
+      Db,
+      { methods: ["SetIamPolicy"] },
+      recordAuditLogs("instance", putMarker),
+    );
+    yield* GCP.Spanner.consumeDatabaseAuditLogs(
+      Gen,
+      { methods: ["SetIamPolicy"] },
+      recordAuditLogs("database", putMarker),
+    );
+    yield* GCP.Spanner.consumeInstancesBackupAuditLogs(
+      GenBackup,
+      { methods: ["SetIamPolicy"] },
+      recordAuditLogs("backup", putMarker),
+    );
     const getInstance = yield* GCP.Spanner.GetInstance(Db);
     const getDdl = yield* GCP.Spanner.GetDdl(Schema);
     const executeSql = yield* GCP.Spanner.ExecuteSql(App);
@@ -245,6 +269,8 @@ export default class SpannerBindingsHost extends GCP.Function<SpannerBindingsHos
     Effect.provide(GCP.Spanner.ExecuteSqlHttp),
     Effect.provide(
       Layer.mergeAll(
+        GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
+        GCP.Storage.PutObjectHttp,
         GCP.Spanner.GetDatabaseHttp,
         GCP.Spanner.ListDatabaseRolesHttp,
         GCP.Spanner.UpdateDatabaseDdlHttp,

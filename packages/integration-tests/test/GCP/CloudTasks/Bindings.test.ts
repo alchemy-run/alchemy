@@ -5,14 +5,21 @@ import * as Core from "@alchemy.run/test/Core";
 import * as cloudtasks from "@distilled.cloud/gcp/cloudtasks_v2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectAuditEntry } from "../auditLogs.ts";
 import { expectProbe } from "../bindingHost.ts";
-import CloudTasksBindingsHost, { GenQueue, Jobs, TASK_URL } from "./fixtures/bindings-host.ts";
+import CloudTasksBindingsHost, {
+  AuditMarkers,
+  GenQueue,
+  Jobs,
+  TASK_URL,
+} from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "CloudTasksBindings");
 
 let baseUrl: string;
+let auditMarkers: string;
 let queueName: string;
 let genQueueName: string;
 let hostAccount: string;
@@ -43,11 +50,13 @@ describe(
               genQueue: genQueue.name,
               uri: host.uri,
               serviceAccount: host.serviceAccount,
+              auditMarkers: (yield* AuditMarkers).bucketName,
               queue: queue.name,
             };
           }),
         );
         baseUrl = out.uri!;
+        auditMarkers = out.auditMarkers;
         queueName = out.queue;
         genQueueName = out.genQueue;
         hostAccount = out.serviceAccount!;
@@ -172,6 +181,41 @@ describe(
             ]);
           }),
         live,
+      );
+    });
+
+    describe("consumeQueueAuditLogs", () => {
+      test.provider(
+        "deliver each resource's audit log entries to the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            // Admin Activity calls that change nothing (or only a description).
+            const cases = [
+              {
+                key: "queue",
+                name: genQueueName,
+                method: "SetIamPolicy",
+                trigger: cloudtasks
+                  .getIamPolicyProjectsLocationsQueues({ resource: genQueueName, body: {} })
+                  .pipe(
+                    Effect.flatMap((policy) =>
+                      cloudtasks.setIamPolicyProjectsLocationsQueues({
+                        resource: genQueueName,
+                        body: { policy },
+                      }),
+                    ),
+                  ),
+              },
+            ];
+            for (const { key, name, method, trigger } of cases) {
+              const entry = yield* expectAuditEntry({ bucket: auditMarkers, key, method, trigger });
+              expect(entry.serviceName).toEqual("cloudtasks.googleapis.com");
+              // Audit logs may name the project by number.
+              const path = (value: string) => value.replace(/^projects\/[^/]+/, "");
+              expect(path(entry.resourceName)).toContain(path(name));
+            }
+          }),
+        { tags: ["provider:gcp", "live"], timeout: 900_000 },
       );
     });
   },

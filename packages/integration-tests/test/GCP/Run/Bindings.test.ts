@@ -6,9 +6,11 @@ import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
+import { expectAuditEntry } from "../auditLogs.ts";
 import { expectProbe } from "../bindingHost.ts";
 import RunBindingsHost, {
   Api,
+  AuditMarkers,
   Callee,
   GenApi,
   GenJob,
@@ -22,6 +24,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "RunBindings");
 
 let baseUrl: string;
+let auditMarkers: string;
 let member: string;
 let names: {
   api: string;
@@ -61,6 +64,7 @@ describe("Run Bindings", { tags: ["provider:gcp", "provider:gcp:run", "live"] },
           return {
             uri: host.uri,
             serviceAccount: host.serviceAccount,
+            auditMarkers: (yield* AuditMarkers).bucketName,
             api: (yield* Api).name,
             callee: callee.name,
             calleeUri: callee.uri,
@@ -73,6 +77,7 @@ describe("Run Bindings", { tags: ["provider:gcp", "provider:gcp:run", "live"] },
         }),
       );
       baseUrl = out.uri!;
+      auditMarkers = out.auditMarkers;
       member = `serviceAccount:${out.serviceAccount!}`;
       names = { ...out, calleeUri: out.calleeUri! };
     }),
@@ -280,6 +285,69 @@ describe("Run Bindings", { tags: ["provider:gcp", "provider:gcp:run", "live"] },
           expect(rolesOf(poolPolicy)).toEqual(["roles/run.developer", "roles/run.viewer"]);
         }),
       live,
+    );
+  });
+
+  describe("consumeServiceAuditLogs / consumeJobAuditLogs / consumeWorkerPoolAuditLogs", () => {
+    test.provider(
+      "deliver each resource's audit log entries to the host",
+      (_stack) =>
+        Effect.gen(function* () {
+          // Admin Activity calls that change nothing (or only a description).
+          const cases = [
+            {
+              key: "service",
+              name: names.genApi,
+              method: "SetIamPolicy",
+              trigger: cloudrun
+                .getIamPolicyProjectsLocationsServices({ resource: names.genApi })
+                .pipe(
+                  Effect.flatMap((policy) =>
+                    cloudrun.setIamPolicyProjectsLocationsServices({
+                      resource: names.genApi,
+                      body: { policy },
+                    }),
+                  ),
+                ),
+            },
+            {
+              key: "job",
+              name: names.genJob,
+              method: "SetIamPolicy",
+              trigger: cloudrun.getIamPolicyProjectsLocationsJobs({ resource: names.genJob }).pipe(
+                Effect.flatMap((policy) =>
+                  cloudrun.setIamPolicyProjectsLocationsJobs({
+                    resource: names.genJob,
+                    body: { policy },
+                  }),
+                ),
+              ),
+            },
+            {
+              key: "workerPool",
+              name: names.genWorkers,
+              method: "SetIamPolicy",
+              trigger: cloudrun
+                .getIamPolicyProjectsLocationsWorkerPools({ resource: names.genWorkers })
+                .pipe(
+                  Effect.flatMap((policy) =>
+                    cloudrun.setIamPolicyProjectsLocationsWorkerPools({
+                      resource: names.genWorkers,
+                      body: { policy },
+                    }),
+                  ),
+                ),
+            },
+          ];
+          for (const { key, name, method, trigger } of cases) {
+            const entry = yield* expectAuditEntry({ bucket: auditMarkers, key, method, trigger });
+            expect(entry.serviceName).toEqual("run.googleapis.com");
+            // Audit logs may name the project by number.
+            const path = (value: string) => value.replace(/^projects\/[^/]+/, "");
+            expect(path(entry.resourceName)).toContain(path(name));
+          }
+        }),
+      { tags: ["provider:gcp", "live"], timeout: 900_000 },
     );
   });
 });

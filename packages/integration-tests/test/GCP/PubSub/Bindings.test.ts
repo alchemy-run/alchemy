@@ -7,8 +7,10 @@ import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectAuditEntry } from "../auditLogs.ts";
 import { callProbe, expectProbe } from "../bindingHost.ts";
 import PubSubBindingsHost, {
+  AuditMarkers,
   COMMITTED_DEFINITION,
   DetachInbox,
   EventSchema,
@@ -51,6 +53,7 @@ let names: {
   detachInbox: string;
   genSnapshot: string;
   genSchema: string;
+  auditMarkers: string;
 };
 
 const decode = (data: string | undefined) => Buffer.from(data ?? "", "base64").toString("utf8");
@@ -138,6 +141,7 @@ describe(
               detachInbox: (yield* DetachInbox).name,
               genSnapshot: (yield* GenSnapshot).name,
               genSchema: (yield* GenSchema).name,
+              auditMarkers: (yield* AuditMarkers).bucketName,
             };
           }),
         );
@@ -447,6 +451,81 @@ describe(
             expect(rolesOf(policy, member)).toEqual(["roles/pubsub.editor", "roles/pubsub.viewer"]);
           }),
         live,
+      );
+    });
+
+    describe("consumeTopicAuditLogs / consumeSubscriptionAuditLogs / consumeSchemaAuditLogs / consumeSnapshotAuditLogs", () => {
+      test.provider(
+        "deliver each resource's audit log entries to the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            // Re-setting a resource's own policy is an Admin Activity call that changes nothing.
+            const cases = [
+              {
+                key: "topic",
+                name: names.genTopic,
+                trigger: pubsub.getIamPolicyProjectsTopics({ resource: names.genTopic }).pipe(
+                  Effect.flatMap((policy) =>
+                    pubsub.setIamPolicyProjectsTopics({
+                      resource: names.genTopic,
+                      body: { policy },
+                    }),
+                  ),
+                ),
+              },
+              {
+                key: "subscription",
+                name: names.genInbox,
+                trigger: pubsub
+                  .getIamPolicyProjectsSubscriptions({ resource: names.genInbox })
+                  .pipe(
+                    Effect.flatMap((policy) =>
+                      pubsub.setIamPolicyProjectsSubscriptions({
+                        resource: names.genInbox,
+                        body: { policy },
+                      }),
+                    ),
+                  ),
+              },
+              {
+                key: "schema",
+                name: names.genSchema,
+                trigger: pubsub.getIamPolicyProjectsSchemas({ resource: names.genSchema }).pipe(
+                  Effect.flatMap((policy) =>
+                    pubsub.setIamPolicyProjectsSchemas({
+                      resource: names.genSchema,
+                      body: { policy },
+                    }),
+                  ),
+                ),
+              },
+              {
+                key: "snapshot",
+                name: names.genSnapshot,
+                trigger: pubsub.getIamPolicyProjectsSnapshots({ resource: names.genSnapshot }).pipe(
+                  Effect.flatMap((policy) =>
+                    pubsub.setIamPolicyProjectsSnapshots({
+                      resource: names.genSnapshot,
+                      body: { policy },
+                    }),
+                  ),
+                ),
+              },
+            ];
+            for (const { key, name, trigger } of cases) {
+              const entry = yield* expectAuditEntry({
+                bucket: names.auditMarkers,
+                key,
+                method: "SetIamPolicy",
+                trigger,
+              });
+              expect(entry.serviceName).toEqual("pubsub.googleapis.com");
+              // Audit logs may name the project by number.
+              const path = (value: string) => value.replace(/^projects\/[^/]+/, "");
+              expect(path(entry.resourceName)).toEqual(path(name));
+            }
+          }),
+        { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 900_000 },
       );
     });
   },

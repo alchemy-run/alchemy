@@ -1,6 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { recordAuditLogs } from "../../auditLogs.ts";
 import { outcome, probeParam, serveProbes } from "../../bindingHost.ts";
 
 const nativeDatabase = (id: string) =>
@@ -40,10 +41,23 @@ export const PATCHED = "users/alice";
  * Effect-native Cloud Run service exercising every Firestore binding as its
  * own runtime service account. Deployed from {@link ../Bindings.test.ts}.
  */
+
+/** Bucket the audit-log consumers record entries in. */
+export const AuditMarkers = GCP.Storage.Bucket("AuditMarkers", {
+  location: "US-CENTRAL1",
+  forceDestroy: true,
+});
+
 export default class FirestoreBindingsHost extends GCP.Function<FirestoreBindingsHost>()(
   "FirestoreBindingsHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const putMarker = yield* GCP.Storage.PutObject(AuditMarkers);
+    yield* GCP.Firestore.consumeDatabaseAuditLogs(
+      GenDatabase,
+      { methods: ["UpdateDatabase"] },
+      recordAuditLogs("database", putMarker),
+    );
     const patchDocument = yield* GCP.Firestore.PatchDocument(DocsDatabase);
     const getDocument = yield* GCP.Firestore.GetDocument(DocsDatabase);
     const deleteDocument = yield* GCP.Firestore.DeleteDocument(DocsDatabase);
@@ -309,6 +323,8 @@ export default class FirestoreBindingsHost extends GCP.Function<FirestoreBinding
     Effect.provide(GCP.Firestore.ReadWriteDatabaseHttp),
     Effect.provide(
       Layer.mergeAll(
+        GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
+        GCP.Storage.PutObjectHttp,
         GCP.Firestore.GetDatabaseHttp,
         GCP.Firestore.CommitHttp,
         GCP.Firestore.BatchGetDocumentsHttp,

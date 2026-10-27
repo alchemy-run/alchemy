@@ -60,5 +60,3 @@ export * from "./UpdateDatabaseDdlHttp.ts";
 export * from "./InstanceAuditLogs.ts";
 export * from "./DatabaseAuditLogs.ts";
 export * from "./InstancesBackupAuditLogs.ts";
-export * from "./InstancesDatabasesBackupScheduleAuditLogs.ts";
-export * from "./InstancesInstancePartitionAuditLogs.ts";

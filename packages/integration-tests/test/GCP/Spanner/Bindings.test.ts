@@ -4,9 +4,11 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as spanner from "@distilled.cloud/gcp/spanner_v1";
 import * as Effect from "effect/Effect";
+import { expectAuditEntry } from "../auditLogs.ts";
 import { expectProbe } from "../bindingHost.ts";
 import SpannerBindingsHost, {
   App,
+  AuditMarkers,
   Db,
   Gen,
   GenBackup,
@@ -20,6 +22,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "SpannerBindings");
 
 let baseUrl: string;
+let auditMarkers: string;
 let member: string;
 let names: {
   instance: string;
@@ -79,6 +82,7 @@ describe(
             return {
               uri: host.uri,
               serviceAccount: host.serviceAccount,
+              auditMarkers: (yield* AuditMarkers).bucketName,
               instance: (yield* Db).name,
               schema: (yield* Schema).name,
               app: (yield* App).name,
@@ -89,6 +93,7 @@ describe(
           }),
         );
         baseUrl = out.uri!;
+        auditMarkers = out.auditMarkers;
         member = `serviceAccount:${out.serviceAccount!}`;
         names = out;
       }),
@@ -292,6 +297,71 @@ describe(
             expect(yield* instanceRoles).toEqual(INSTANCE_ROLES);
           }),
         live,
+      );
+    });
+
+    describe("consumeInstanceAuditLogs / consumeDatabaseAuditLogs / consumeInstancesBackupAuditLogs", () => {
+      test.provider(
+        "deliver each resource's audit log entries to the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            // Admin Activity calls that change nothing (or only a description).
+            const cases = [
+              {
+                key: "instance",
+                name: names.instance,
+                method: "SetIamPolicy",
+                trigger: spanner
+                  .getIamPolicyProjectsInstances({ resource: names.instance, body: {} })
+                  .pipe(
+                    Effect.flatMap((policy) =>
+                      spanner.setIamPolicyProjectsInstances({
+                        resource: names.instance,
+                        body: { policy },
+                      }),
+                    ),
+                  ),
+              },
+              {
+                key: "database",
+                name: names.gen,
+                method: "SetIamPolicy",
+                trigger: spanner
+                  .getIamPolicyProjectsInstancesDatabases({ resource: names.gen, body: {} })
+                  .pipe(
+                    Effect.flatMap((policy) =>
+                      spanner.setIamPolicyProjectsInstancesDatabases({
+                        resource: names.gen,
+                        body: { policy },
+                      }),
+                    ),
+                  ),
+              },
+              {
+                key: "backup",
+                name: names.backup,
+                method: "SetIamPolicy",
+                trigger: spanner
+                  .getIamPolicyProjectsInstancesBackups({ resource: names.backup, body: {} })
+                  .pipe(
+                    Effect.flatMap((policy) =>
+                      spanner.setIamPolicyProjectsInstancesBackups({
+                        resource: names.backup,
+                        body: { policy },
+                      }),
+                    ),
+                  ),
+              },
+            ];
+            for (const { key, name, method, trigger } of cases) {
+              const entry = yield* expectAuditEntry({ bucket: auditMarkers, key, method, trigger });
+              expect(entry.serviceName).toEqual("spanner.googleapis.com");
+              // Audit logs may name the project by number.
+              const path = (value: string) => value.replace(/^projects\/[^/]+/, "");
+              expect(path(entry.resourceName)).toContain(path(name));
+            }
+          }),
+        { tags: ["provider:gcp", "live"], timeout: 900_000 },
       );
     });
   },

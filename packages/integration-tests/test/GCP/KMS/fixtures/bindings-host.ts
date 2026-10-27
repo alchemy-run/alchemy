@@ -1,6 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { recordAuditLogs } from "../../auditLogs.ts";
 import { outcome, probeParam, serveProbes } from "../../bindingHost.ts";
 import { KEY_RING_ID, kmsTestId } from "../common.ts";
 
@@ -66,10 +67,33 @@ export const Wrap = Effect.gen(function* () {
  * Effect-native Cloud Run service exercising every KMS binding as its own
  * runtime service account. Deployed from {@link ../Bindings.test.ts}.
  */
+
+/** Bucket the audit-log consumers record entries in. */
+export const AuditMarkers = GCP.Storage.Bucket("AuditMarkers", {
+  location: "US-CENTRAL1",
+  forceDestroy: true,
+});
+
 export default class KmsBindingsHost extends GCP.Function<KmsBindingsHost>()(
   "KmsBindingsHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const putMarker = yield* GCP.Storage.PutObject(AuditMarkers);
+    yield* GCP.KMS.consumeKeyRingAuditLogs(
+      Keys,
+      { methods: ["SetIamPolicy"] },
+      recordAuditLogs("keyRing", putMarker),
+    );
+    yield* GCP.KMS.consumeCryptoKeyAuditLogs(
+      Versions,
+      { methods: ["SetIamPolicy"] },
+      recordAuditLogs("cryptoKey", putMarker),
+    );
+    yield* GCP.KMS.consumeImportJobAuditLogs(
+      Wrap,
+      { methods: ["SetIamPolicy"] },
+      recordAuditLogs("importJob", putMarker),
+    );
     const encrypt = yield* GCP.KMS.Encrypt(Cipher);
     const decrypt = yield* GCP.KMS.Decrypt(Cipher);
     const plaintext = btoa("alchemy-kms-binding");
@@ -202,6 +226,8 @@ export default class KmsBindingsHost extends GCP.Function<KmsBindingsHost>()(
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
+        GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
+        GCP.Storage.PutObjectHttp,
         GCP.KMS.EncryptHttp,
         GCP.KMS.DecryptHttp,
         GCP.KMS.GetKeyRingHttp,

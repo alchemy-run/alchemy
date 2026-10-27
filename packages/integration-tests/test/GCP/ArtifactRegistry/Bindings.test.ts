@@ -7,9 +7,11 @@ import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectAuditEntry } from "../auditLogs.ts";
 import { expectProbe } from "../bindingHost.ts";
 import ArtifactRegistryBindingsHost, {
   Apt,
+  AuditMarkers,
   Googet,
   Images,
   Maven,
@@ -25,6 +27,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "ArtifactRegistryBindings");
 
 let baseUrl: string;
+let auditMarkers: string;
 let hostAccount: string;
 type RepositoryRef = {
   name: string;
@@ -93,6 +96,7 @@ describe(
               },
               uri: host.uri,
               serviceAccount: host.serviceAccount,
+              auditMarkers: (yield* AuditMarkers).bucketName,
               repository: {
                 name: images.name,
                 repositoryId: images.repositoryId,
@@ -103,6 +107,7 @@ describe(
           }),
         );
         baseUrl = out.uri!;
+        auditMarkers = out.auditMarkers;
         hostAccount = out.serviceAccount!;
         repository = out.repository;
         packages = out.packages;
@@ -410,6 +415,41 @@ describe(
             }
           }),
         live,
+      );
+    });
+
+    describe("consumeRepositoryAuditLogs", () => {
+      test.provider(
+        "deliver each resource's audit log entries to the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            // Admin Activity calls that change nothing (or only a description).
+            const cases = [
+              {
+                key: "repository",
+                name: packages.name,
+                method: "SetIamPolicy",
+                trigger: artifactregistry
+                  .getIamPolicyProjectsLocationsRepositories({ resource: packages.name })
+                  .pipe(
+                    Effect.flatMap((policy) =>
+                      artifactregistry.setIamPolicyProjectsLocationsRepositories({
+                        resource: packages.name,
+                        body: { policy },
+                      }),
+                    ),
+                  ),
+              },
+            ];
+            for (const { key, name, method, trigger } of cases) {
+              const entry = yield* expectAuditEntry({ bucket: auditMarkers, key, method, trigger });
+              expect(entry.serviceName).toEqual("artifactregistry.googleapis.com");
+              // Audit logs may name the project by number.
+              const path = (value: string) => value.replace(/^projects\/[^/]+/, "");
+              expect(path(entry.resourceName)).toContain(path(name));
+            }
+          }),
+        { tags: ["provider:gcp", "live"], timeout: 900_000 },
       );
     });
   },

@@ -1,5 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { recordAuditLogs } from "../../auditLogs.ts";
 import { serveProbes } from "../../bindingHost.ts";
 
 const job = (id: string) =>
@@ -20,10 +22,23 @@ export const RunJobTarget = job("RunJobTarget");
  * Effect-native Cloud Run service exercising every Cloud Scheduler binding as
  * its own runtime service account. Deployed from {@link ../Bindings.test.ts}.
  */
+
+/** Bucket the audit-log consumers record entries in. */
+export const AuditMarkers = GCP.Storage.Bucket("AuditMarkers", {
+  location: "US-CENTRAL1",
+  forceDestroy: true,
+});
+
 export default class SchedulerBindingsHost extends GCP.Function<SchedulerBindingsHost>()(
   "SchedulerBindingsHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const putMarker = yield* GCP.Storage.PutObject(AuditMarkers);
+    yield* GCP.CloudScheduler.consumeJobAuditLogs(
+      PausedJob,
+      { methods: ["UpdateJob"] },
+      recordAuditLogs("job", putMarker),
+    );
     const pauseJob = yield* GCP.CloudScheduler.PauseJob(PausedJob);
     const resumeJob = yield* GCP.CloudScheduler.ResumeJob(ResumedJob);
     const runJob = yield* GCP.CloudScheduler.RunJob(RunJobTarget);
@@ -42,5 +57,11 @@ export default class SchedulerBindingsHost extends GCP.Function<SchedulerBinding
     Effect.provide(GCP.CloudScheduler.ResumeJobHttp),
     Effect.provide(GCP.CloudScheduler.RunJobHttp),
     Effect.provide(GCP.CloudScheduler.GetJobHttp),
+    Effect.provide(
+      Layer.mergeAll(
+        GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
+        GCP.Storage.PutObjectHttp,
+      ),
+    ),
   ),
 ) {}

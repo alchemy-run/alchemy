@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import { recordAuditLogs } from "../../auditLogs.ts";
 import { serveProbes } from "../../bindingHost.ts";
 
 /** Topic the `Publish` binding writes to; `PublishTap` observes it. */
@@ -87,6 +88,12 @@ const untilSome = <A>(page: ReadonlyArray<A> | undefined) => (page ?? []).length
  * Effect-native Cloud Run service exercising every Pub/Sub binding as its
  * own runtime service account. Deployed from {@link ../Bindings.test.ts}.
  */
+/** Bucket the audit-log consumers record entries in. */
+export const AuditMarkers = GCP.Storage.Bucket("AuditMarkers", {
+  location: "US-CENTRAL1",
+  forceDestroy: true,
+});
+
 export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>()(
   "PubSubBindingsHost",
   { main: import.meta.url, invokerIamDisabled: true },
@@ -98,6 +105,25 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
     const readSubscription = yield* GCP.PubSub.ReadSubscription(ReadInbox);
     const getSchema = yield* GCP.PubSub.GetSchema(EventSchema);
     const validate = yield* GCP.PubSub.ValidateMessage(EventSchema);
+
+    const putMarker = yield* GCP.Storage.PutObject(AuditMarkers);
+    const audited = { methods: ["SetIamPolicy"] };
+    yield* GCP.PubSub.consumeTopicAuditLogs(GenTopic, audited, recordAuditLogs("topic", putMarker));
+    yield* GCP.PubSub.consumeSubscriptionAuditLogs(
+      GenInbox,
+      audited,
+      recordAuditLogs("subscription", putMarker),
+    );
+    yield* GCP.PubSub.consumeSchemaAuditLogs(
+      GenSchema,
+      audited,
+      recordAuditLogs("schema", putMarker),
+    );
+    yield* GCP.PubSub.consumeSnapshotAuditLogs(
+      GenSnapshot,
+      audited,
+      recordAuditLogs("snapshot", putMarker),
+    );
     const getTopic = yield* GCP.PubSub.GetTopic(GenTopic);
     const listTopicSubscriptions = yield* GCP.PubSub.ListTopicSubscriptions(GenTopic);
     const listTopicSnapshots = yield* GCP.PubSub.ListTopicSnapshots(GenTopic);
@@ -239,6 +265,8 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
         GCP.PubSub.ListSchemaRevisionsHttp,
         GCP.PubSub.RollbackSchemaHttp,
         GCP.PubSub.DeleteSchemaRevisionHttp,
+        GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
+        GCP.Storage.PutObjectHttp,
       ),
     ),
   ),

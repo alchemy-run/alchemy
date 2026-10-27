@@ -5,8 +5,10 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import * as Effect from "effect/Effect";
+import { expectAuditEntry } from "../auditLogs.ts";
 import { expectProbe } from "../bindingHost.ts";
 import KmsBindingsHost, {
+  AuditMarkers,
   Cipher,
   Kem,
   Keys,
@@ -23,6 +25,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "KmsBindings");
 
 let baseUrl: string;
+let auditMarkers: string;
 let keyName: string;
 let hostAccount: string;
 let names: {
@@ -81,11 +84,13 @@ describe(
               },
               uri: host.uri,
               serviceAccount: host.serviceAccount,
+              auditMarkers: (yield* AuditMarkers).bucketName,
               key: key.name,
             };
           }),
         );
         baseUrl = out.uri!;
+        auditMarkers = out.auditMarkers;
         keyName = out.key;
         names = out.names;
         hostAccount = out.serviceAccount!;
@@ -320,6 +325,69 @@ describe(
             expect(yield* keyRoles(names.kem)).toEqual(["roles/cloudkms.decapsulator"]);
           }),
         live,
+      );
+    });
+
+    describe("consumeKeyRingAuditLogs / consumeCryptoKeyAuditLogs / consumeImportJobAuditLogs", () => {
+      test.provider(
+        "deliver each resource's audit log entries to the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            // Admin Activity calls that change nothing (or only a description).
+            const cases = [
+              {
+                key: "keyRing",
+                name: names.ring,
+                method: "SetIamPolicy",
+                trigger: kms.getIamPolicyProjectsLocationsKeyRings({ resource: names.ring }).pipe(
+                  Effect.flatMap((policy) =>
+                    kms.setIamPolicyProjectsLocationsKeyRings({
+                      resource: names.ring,
+                      body: { policy },
+                    }),
+                  ),
+                ),
+              },
+              {
+                key: "cryptoKey",
+                name: names.versions,
+                method: "SetIamPolicy",
+                trigger: kms
+                  .getIamPolicyProjectsLocationsKeyRingsCryptoKeys({ resource: names.versions })
+                  .pipe(
+                    Effect.flatMap((policy) =>
+                      kms.setIamPolicyProjectsLocationsKeyRingsCryptoKeys({
+                        resource: names.versions,
+                        body: { policy },
+                      }),
+                    ),
+                  ),
+              },
+              {
+                key: "importJob",
+                name: names.importJob,
+                method: "SetIamPolicy",
+                trigger: kms
+                  .getIamPolicyProjectsLocationsKeyRingsImportJobs({ resource: names.importJob })
+                  .pipe(
+                    Effect.flatMap((policy) =>
+                      kms.setIamPolicyProjectsLocationsKeyRingsImportJobs({
+                        resource: names.importJob,
+                        body: { policy },
+                      }),
+                    ),
+                  ),
+              },
+            ];
+            for (const { key, name, method, trigger } of cases) {
+              const entry = yield* expectAuditEntry({ bucket: auditMarkers, key, method, trigger });
+              expect(entry.serviceName).toEqual("cloudkms.googleapis.com");
+              // Audit logs may name the project by number.
+              const path = (value: string) => value.replace(/^projects\/[^/]+/, "");
+              expect(path(entry.resourceName)).toContain(path(name));
+            }
+          }),
+        { tags: ["provider:gcp", "live"], timeout: 900_000 },
       );
     });
   },

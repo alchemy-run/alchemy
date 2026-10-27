@@ -2,6 +2,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
+import { recordAuditLogs } from "../../auditLogs.ts";
 import { outcome, serveProbes } from "../../bindingHost.ts";
 
 /** Secret the per-operation AddSecretVersion / AccessSecretVersion bind. */
@@ -34,10 +35,28 @@ export const SEEDED = "seeded-value";
  * Effect-native Cloud Run service exercising every Secret Manager binding as
  * its own runtime service account. Deployed from {@link ../Bindings.test.ts}.
  */
+
+/** Bucket the audit-log consumers record entries in. */
+export const AuditMarkers = GCP.Storage.Bucket("AuditMarkers", {
+  location: "US-CENTRAL1",
+  forceDestroy: true,
+});
+
 export default class SecretManagerBindingsHost extends GCP.Function<SecretManagerBindingsHost>()(
   "SecretManagerBindingsHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const putMarker = yield* GCP.Storage.PutObject(AuditMarkers);
+    yield* GCP.SecretManager.consumeSecretAuditLogs(
+      GenSecret,
+      { methods: ["SetIamPolicy"] },
+      recordAuditLogs("secret", putMarker),
+    );
+    yield* GCP.SecretManager.consumeLocationsSecretAuditLogs(
+      GenRegionalSecret,
+      { methods: ["SetIamPolicy"] },
+      recordAuditLogs("locationsSecret", putMarker),
+    );
     const addVersion = yield* GCP.SecretManager.AddSecretVersion(OpsSecret);
     const access = yield* GCP.SecretManager.AccessSecretVersion(OpsSecret);
     const addRegional = yield* GCP.SecretManager.AddSecretVersion(RegionalSecret);
@@ -132,6 +151,8 @@ export default class SecretManagerBindingsHost extends GCP.Function<SecretManage
     Effect.provide(GCP.SecretManager.ReadWriteSecretHttp),
     Effect.provide(
       Layer.mergeAll(
+        GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
+        GCP.Storage.PutObjectHttp,
         GCP.SecretManager.GetSecretHttp,
         GCP.SecretManager.ListSecretVersionsHttp,
         GCP.SecretManager.GetSecretVersionHttp,

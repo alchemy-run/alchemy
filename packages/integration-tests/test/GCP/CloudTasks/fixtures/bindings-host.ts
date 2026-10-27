@@ -1,6 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { recordAuditLogs } from "../../auditLogs.ts";
 import { probeParam, serveProbes } from "../../bindingHost.ts";
 
 /** Queue the binding is granted on (roles/cloudtasks.enqueuer). */
@@ -27,10 +28,23 @@ export const TASK_URL = "https://example.com/alchemy-binding";
  * Effect-native Cloud Run service exercising every Cloud Tasks binding as
  * its own runtime service account. Deployed from {@link ../Bindings.test.ts}.
  */
+
+/** Bucket the audit-log consumers record entries in. */
+export const AuditMarkers = GCP.Storage.Bucket("AuditMarkers", {
+  location: "US-CENTRAL1",
+  forceDestroy: true,
+});
+
 export default class CloudTasksBindingsHost extends GCP.Function<CloudTasksBindingsHost>()(
   "CloudTasksBindingsHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const putMarker = yield* GCP.Storage.PutObject(AuditMarkers);
+    yield* GCP.CloudTasks.consumeQueueAuditLogs(
+      GenQueue,
+      { methods: ["SetIamPolicy"] },
+      recordAuditLogs("queue", putMarker),
+    );
     const createTask = yield* GCP.CloudTasks.CreateTask(Jobs);
     const getQueue = yield* GCP.CloudTasks.GetQueue(GenQueue);
     const pauseQueue = yield* GCP.CloudTasks.PauseQueue(GenQueue);
@@ -104,6 +118,8 @@ export default class CloudTasksBindingsHost extends GCP.Function<CloudTasksBindi
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
+        GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
+        GCP.Storage.PutObjectHttp,
         GCP.CloudTasks.CreateTaskHttp,
         GCP.CloudTasks.GetQueueHttp,
         GCP.CloudTasks.PauseQueueHttp,

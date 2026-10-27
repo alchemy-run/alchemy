@@ -7,10 +7,12 @@ import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectAuditEntry } from "../auditLogs.ts";
 import { expectProbe } from "../bindingHost.ts";
 import FirestoreBindingsHost, {
-  EnterpriseDatabase,
+  AuditMarkers,
   DocsDatabase,
+  EnterpriseDatabase,
   GenDatabase,
   PATCHED,
   ReadOnlyDatabase,
@@ -25,6 +27,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "FirestoreBindings");
 
 let baseUrl: string;
+let auditMarkers: string;
 let hostAccount: string;
 let project: string;
 let databases: {
@@ -95,6 +98,7 @@ describe.skipIf(!!process.env.FAST)(
             return {
               uri: host.uri,
               serviceAccount: host.serviceAccount,
+              auditMarkers: (yield* AuditMarkers).bucketName,
               project: docs.project,
               docs: docs.name,
               readOnly: (yield* ReadOnlyDatabase).name,
@@ -106,6 +110,7 @@ describe.skipIf(!!process.env.FAST)(
           }),
         );
         baseUrl = out.uri!;
+        auditMarkers = out.auditMarkers;
         hostAccount = out.serviceAccount!;
         project = out.project;
         databases = {
@@ -435,6 +440,36 @@ describe.skipIf(!!process.env.FAST)(
             ]);
           }),
         live,
+      );
+    });
+
+    describe("consumeDatabaseAuditLogs", () => {
+      test.provider(
+        "deliver each resource's audit log entries to the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            // Admin Activity calls that change nothing (or only a description).
+            const cases = [
+              {
+                key: "database",
+                name: databases.gen,
+                method: "UpdateDatabase",
+                trigger: firestore.patchProjectsDatabases({
+                  name: databases.gen,
+                  updateMask: "deleteProtectionState",
+                  body: { deleteProtectionState: "DELETE_PROTECTION_DISABLED" },
+                }),
+              },
+            ];
+            for (const { key, name, method, trigger } of cases) {
+              const entry = yield* expectAuditEntry({ bucket: auditMarkers, key, method, trigger });
+              expect(entry.serviceName).toEqual("firestore.googleapis.com");
+              // Audit logs may name the project by number.
+              const path = (value: string) => value.replace(/^projects\/[^/]+/, "");
+              expect(path(entry.resourceName)).toContain(path(name));
+            }
+          }),
+        { tags: ["provider:gcp", "live"], timeout: 900_000 },
       );
     });
   },
