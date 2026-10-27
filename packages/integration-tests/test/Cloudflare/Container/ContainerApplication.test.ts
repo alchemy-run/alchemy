@@ -3,6 +3,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { ContainerPlatform } from "@alchemy.run/cloudflare/Containers/ContainerPlatform";
 import { Docker } from "@alchemy.run/docker/Docker";
 import { assert, describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Deploy from "alchemy/Deploy";
 import * as Destroy from "alchemy/Destroy";
@@ -10,7 +11,6 @@ import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import { Stack } from "alchemy/Stack";
 import { State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -1826,6 +1826,42 @@ describe.concurrent(
           yield* scratch.destroy();
         }).pipe(logLevel),
       { tags: ["provider:cloudflare:r2", "provider:cloudflare:worker"], timeout: 900_000 },
+    );
+
+    // The API rejects network keys it does not know (`unrecognized key:
+    // "assignipv4"`), so camelCase props must reach it as wire names.
+    test.provider(
+      "deploys and updates a network configuration",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const network = { assignIpv4: "none", assignIpv6: "none", mode: "private" } as const;
+          const program = (maxInstances: number) =>
+            Cloudflare.Container("Networked", {
+              image: "mendhak/http-https-echo:41",
+              maxInstances,
+              network,
+            }).Application;
+
+          const first = yield* stack.deploy(program(1));
+          expect(first.configuration.network).toMatchObject(network);
+          const observed = yield* Containers.getContainerApplication({
+            accountId: first.accountId,
+            applicationId: first.applicationId,
+          }).pipe(Effect.map(scheduledApplication));
+          expect(observed.configuration.network).toMatchObject(network);
+
+          const updated = yield* stack.deploy(program(2));
+          expect(updated.applicationId).toBe(first.applicationId);
+          expect(updated.maxInstances).toBe(2);
+          expect((yield* stack.plan(program(2))).resources.Networked.action).toBe("noop");
+
+          yield* stack.destroy();
+          expect(
+            yield* waitForApplicationDeleted(first.accountId, first.applicationId),
+          ).toBeUndefined();
+        }).pipe(logLevel),
+      { timeout: 300_000 },
     );
   },
 );

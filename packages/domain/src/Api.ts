@@ -82,20 +82,26 @@ export interface ViewClient<V extends View.Any> {
       readonly where?: Filter<View.StateOf<V>>;
     },
   ) => Effect.Effect<View.StateOf<V> | null, ReadError<V["definition"]> | View.ConsistencyTimeout>;
-  /** The key's state, then every change. Ends with a rejection when `validate` stops allowing it. */
+  /**
+   * The key's state with its cursor, then every change. Ends with a rejection
+   * when `validate` stops allowing it.
+   */
   readonly watch: (
     key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & { readonly where?: Filter<View.StateOf<V>> },
-  ) => Stream.Stream<View.StateOf<V> | null, ReadError<V["definition"]>>;
-  /** The events the key emitted, each with the state after it: history, then live. */
+  ) => Stream.Stream<Read.Snapshot<View.StateOf<V> | null>, ReadError<V["definition"]>>;
+  /**
+   * The events the key emitted, each with the state after it: history from
+   * `after` (a cursor), a {@link Read.CaughtUp} frame, then live events.
+   */
   readonly events: (
     key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
-      readonly after?: string;
+      readonly after?: number;
       readonly where?: Filter<View.EventOf<V>>;
     },
   ) => Stream.Stream<
-    View.Entry<View.StateOf<V>, View.EventOf<V>, Key.IdOf<View.KeyOf<V>>>,
+    View.Entry<View.StateOf<V>, View.EventOf<V>, Key.IdOf<View.KeyOf<V>>> | Read.CaughtUp,
     ReadError<V["definition"]>
   >;
   /** A page of the key's emitted events. */
@@ -107,7 +113,7 @@ export interface ViewClient<V extends View.Any> {
       readonly where?: Filter<View.EventOf<V>>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
-      readonly after?: string;
+      readonly after?: number;
     },
   ) => Effect.Effect<
     View.Page<View.Entry<View.StateOf<V>, View.EventOf<V>, Key.IdOf<View.KeyOf<V>>>>,
@@ -126,7 +132,7 @@ export interface ViewClient<V extends View.Any> {
       readonly where?: Filter<View.StateOf<V>>;
     },
   ) => Effect.Effect<
-    View.Snapshot<View.StateOf<V>>,
+    Read.Snapshot<View.StateOf<V> | null>,
     ReadError<V["definition"]> | View.ConsistencyTimeout
   >;
 }
@@ -144,15 +150,21 @@ export interface StreamClient<S extends DomainStream.Any> {
     DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>> | null,
     ReadError<S["definition"]> | View.ConsistencyTimeout
   >;
-  /** The key's latest entry, then each new one. Ends with a rejection when `validate` stops allowing it. */
+  /**
+   * The key's latest entry (`null` before any) with its cursor, then each new
+   * one. Ends with a rejection when `validate` stops allowing it.
+   */
   readonly watch: (
     key: Key.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions,
   ) => Stream.Stream<
-    DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>> | null,
+    Read.Snapshot<DomainStream.Entry<
+      DomainStream.EventOf<S>,
+      Key.IdOf<DomainStream.KeyOf<S>>
+    > | null>,
     ReadError<S["definition"]>
   >;
-  /** The key's entries from `after` (an entry `seq`), then live ones. */
+  /** The key's entries from `after` (a cursor), a {@link Read.CaughtUp} frame, then live ones. */
   readonly events: (
     key: Key.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions & {
@@ -160,7 +172,7 @@ export interface StreamClient<S extends DomainStream.Any> {
       readonly where?: Filter<DomainStream.EventOf<S>>;
     },
   ) => Stream.Stream<
-    DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>>,
+    DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>> | Read.CaughtUp,
     ReadError<S["definition"]>
   >;
   /** A page of the key's entries. */
@@ -170,7 +182,7 @@ export interface StreamClient<S extends DomainStream.Any> {
       readonly where?: Filter<DomainStream.EventOf<S>>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
-      readonly after?: string;
+      readonly after?: number;
     },
   ) => Effect.Effect<
     View.Page<DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>>>,
@@ -191,29 +203,70 @@ export interface AggregateClient<A extends Aggregate.Any> {
     key: Aggregate.IdOf<A>,
     options?: CallOptions,
   ) => Effect.Effect<Aggregate.StateOf<A>, ReadError<A["definition"]["read"]>>;
-  /** The instance's state, then its state after every commit. */
+  /** The instance's state with its cursor, then its state after every commit. */
   readonly watch: (
     key: Aggregate.IdOf<A>,
     options?: CallOptions,
-  ) => Stream.Stream<Aggregate.StateOf<A>, ReadError<A["definition"]["read"]>>;
-  /** The instance's committed events: history from `after` (a `seq`), then live. */
+  ) => Stream.Stream<Read.Snapshot<Aggregate.StateOf<A>>, ReadError<A["definition"]["read"]>>;
+  /**
+   * The instance's committed events: history from `after` (a cursor), a
+   * {@link Read.CaughtUp} frame, then live.
+   */
   readonly events: (
     key: Aggregate.IdOf<A>,
     options?: CallOptions & { readonly after?: number },
   ) => Stream.Stream<
-    Recorded<Aggregate.EventOf<A>, Aggregate.IdOf<A>>,
+    Recorded<Aggregate.EventOf<A>, Aggregate.IdOf<A>> | Read.CaughtUp,
     ReadError<A["definition"]["read"]>
   >;
 }
+
+/** How a command is sent: its idempotency key and the call's headers. */
+export interface CommandOptions extends CallOptions {
+  /** A resend with the same id returns the first receipt instead of deciding again. */
+  readonly commandId?: string;
+}
+
+/** The input and options after a command's target. The input may be left out when it has no required field. */
+type CommandArgs<Input> = {} extends Input
+  ? [input?: Input, options?: CommandOptions]
+  : [input: Input, options?: CommandOptions];
+
+/** The typed client of a command exposed in an Api: `bank.WithdrawMoney(target, input, options)`. */
+export type CommandClient<C extends Command.Any> =
+  C["rpc"] extends Rpc.Rpc<
+    infer _Tag,
+    infer Payload,
+    infer Success,
+    infer Error,
+    infer Middleware,
+    infer _Requires
+  >
+    ? Payload["Type"] extends { readonly target: infer Target; readonly input: infer Input }
+      ? (
+          target: Target,
+          ...args: CommandArgs<Input>
+        ) => Effect.Effect<
+          Success["Type"],
+          | Error["Type"]
+          | Middleware["error"]["Type"]
+          | Middleware["~ClientError"]
+          | RpcClientError.RpcClientError,
+          | Payload["EncodingServices"]
+          | Success["DecodingServices"]
+          | Error["DecodingServices"]
+          | Middleware["error"]["DecodingServices"]
+        >
+      : never
+    : never;
 
 /**
  * The typed client of an Api: commands as methods (`bank.WithdrawMoney(...)`),
  * views and aggregates as namespaces (`bank.AccountSummary.watch(...)`).
  */
-export type ApiClient<E extends Entry> = RpcClient.RpcClient<
-  Commands<E>["rpc"],
-  RpcClientError.RpcClientError
-> & {
+export type ApiClient<E extends Entry> = {
+  readonly [C in Commands<E> as C["tag"]]: CommandClient<C>;
+} & {
   readonly [V in Views<E> as V["viewName"]]: ViewClient<V>;
 } & {
   readonly [S in Streams<E> as S["streamName"]]: StreamClient<S>;
@@ -386,17 +439,48 @@ const declaredOnly = (rpc: Rpc.Any) => {
 interface CommandPayload {
   readonly target: string;
   readonly commandId?: string;
-  readonly [field: string]: unknown;
+  readonly input: object;
 }
 
 interface ReadPayload {
   readonly key: string;
   readonly where?: unknown;
   readonly atLeast?: { readonly stream: string; readonly version: number };
-  readonly after?: string | number;
+  readonly after?: number;
   readonly order?: "asc" | "desc";
   readonly take?: number;
 }
+
+const caughtUpAt = (seq: number): Read.CaughtUp => ({ _tag: "CaughtUp", cursor: seq });
+
+/**
+ * A key's events from `start`, with a `CaughtUp` frame after its history: the
+ * events up to `end`, the key's `seq` when the read began. `keep` judges and
+ * filters each event after the end is found, so a filtered-out last event
+ * still ends the history.
+ */
+const withCaughtUp = <A>(
+  start: number,
+  end: number,
+  events: Stream.Stream<A, unknown>,
+  seqOf: (event: A) => number,
+  keep: (event: A) => Effect.Effect<ReadonlyArray<unknown>, unknown>,
+): Stream.Stream<unknown, unknown> => {
+  let sent = start >= end;
+  const rest = events.pipe(
+    Stream.mapEffect((event) =>
+      keep(event).pipe(
+        Effect.map((out) => {
+          if (sent || seqOf(event) < end) return out;
+          sent = true;
+          return [...out, caughtUpAt(seqOf(event))];
+        }),
+      ),
+    ),
+    Stream.flatMap((out) => Stream.fromIterable(out)),
+  );
+  return start >= end ? Stream.concat(Stream.succeed(caughtUpAt(start)), rest) : rest;
+};
 
 type Handler = (input: never) => unknown;
 
@@ -413,7 +497,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
         const declared = declaredOnly(entry.rpc);
         // Runs inside the command's middleware, so the context it provides
         // (the session's actor) travels with the command to its aggregate.
-        handlers[entry.tag] = ({ target, commandId, ...input }: CommandPayload) =>
+        handlers[entry.tag] = ({ target, commandId, input }: CommandPayload) =>
           declared.effect(
             aggregate.send(target, new entry(input), { commandId }).pipe(
               Effect.map((receipt) => ({
@@ -459,21 +543,33 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
           host.watch(refOf(id)).pipe(
             Stream.mapEffect((found) => {
               const entry = Option.getOrNull(found);
-              return check("watch", refOf(id))(entry).pipe(Effect.as(entry));
+              return check(
+                "watch",
+                refOf(id),
+              )(entry).pipe(Effect.as({ state: entry, cursor: entry?.envelope.seq ?? 0 }));
             }),
           ),
         );
-        handlers[`${name}.events`] = stream(rpcs.events, ({ key: id, after, where }) =>
-          host
-            .events(refOf(id), {
-              after: after === undefined ? undefined : Number(after),
-              where: where as Filter<unknown> | undefined,
-            })
-            .pipe(
-              // Each entry is judged as the key's latest entry at that point.
-              Stream.mapEffect((entry) => check("events", refOf(id))(entry).pipe(Effect.as(entry))),
+        handlers[`${name}.events`] = stream(rpcs.events, ({ key: id, after, where }) => {
+          const start = after ?? 0;
+          return Stream.unwrap(
+            latest(id).pipe(
+              Effect.map((last) =>
+                withCaughtUp(
+                  start,
+                  last?.envelope.seq ?? 0,
+                  host.events(refOf(id), { after: start }),
+                  (entry) => entry.envelope.seq,
+                  // Each entry is judged as the key's latest entry at that point.
+                  (entry) =>
+                    matches(where as Filter<unknown> | undefined, entry.event)
+                      ? check("events", refOf(id))(entry).pipe(Effect.as([entry]))
+                      : Effect.succeed([]),
+                ),
+              ),
             ),
-        );
+          );
+        });
         handlers[`${name}.list`] = effect(rpcs.list!, ({ key: id, where, order, take, after }) =>
           latest(id).pipe(
             Effect.flatMap((entry) => check("list", refOf(id))(entry)),
@@ -482,7 +578,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
                 where: where as Filter<unknown> | undefined,
                 order,
                 take,
-                after: after === undefined ? undefined : String(after),
+                after,
               }),
             ),
           ),
@@ -504,26 +600,41 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
             }),
           ),
         );
+        const viewStore = internals.views.get(name)!;
+        // From the stored snapshots, so each state comes with the seq it is valid at.
         handlers[`${name}.watch`] = stream(rpcs.watch, ({ key: id, where }) =>
-          host.watch(refOf(id)).pipe(
-            Stream.mapEffect((found) => {
-              const state = Option.getOrNull(found);
-              return check("watch", refOf(id))(state).pipe(Effect.as(visible(state, where)));
+          viewStore.changes(id).pipe(
+            Stream.mapEffect((snapshot) => {
+              const state =
+                snapshot.state === null
+                  ? null
+                  : internals.kernel.decodeViewState(entry, snapshot.state);
+              return check(
+                "watch",
+                refOf(id),
+              )(state).pipe(Effect.as({ state: visible(state, where), cursor: snapshot.seq }));
             }),
           ),
         );
-        handlers[`${name}.events`] = stream(rpcs.events, ({ key: id, after, where }) =>
-          host
-            .events(refOf(id), {
-              after: after === undefined ? undefined : String(after),
-              where: where as Filter<unknown> | undefined,
-            })
-            .pipe(
-              Stream.mapEffect((entry) =>
-                check("events", refOf(id))(entry.state).pipe(Effect.as(entry)),
+        handlers[`${name}.events`] = stream(rpcs.events, ({ key: id, after, where }) => {
+          const start = after ?? 0;
+          return Stream.unwrap(
+            viewStore.read(id).pipe(
+              Effect.map((snapshot) =>
+                withCaughtUp(
+                  start,
+                  snapshot.seq,
+                  host.events(refOf(id), { after: start }),
+                  (entry) => entry.envelope.seq,
+                  (entry) =>
+                    matches(where as Filter<unknown> | undefined, entry.event)
+                      ? check("events", refOf(id))(entry.state).pipe(Effect.as([entry]))
+                      : Effect.succeed([]),
+                ),
               ),
             ),
-        );
+          );
+        });
         handlers[`${name}.snapshot`] = effect(rpcs.snapshot!, ({ key: id, atLeast, where }) =>
           host
             .snapshot(refOf(id), { atLeast })
@@ -546,7 +657,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
                   where: where as Filter<unknown> | undefined,
                   order,
                   take,
-                  after: after === undefined ? undefined : String(after),
+                  after,
                 }),
               ),
             ),
@@ -567,26 +678,41 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
       );
       handlers[`${name}.watch`] = stream(rpcs.watch, ({ key: id }) =>
         store.changes(id).pipe(
-          Stream.mapEffect(({ state }) => {
+          Stream.mapEffect(({ state, version }) => {
             const decoded = stateOf(state);
-            return check("watch", refOf(id))(decoded).pipe(Effect.as(decoded));
+            return check(
+              "watch",
+              refOf(id),
+            )(decoded).pipe(Effect.as({ state: decoded, cursor: version }));
           }),
         ),
       );
-      handlers[`${name}.events`] = stream(rpcs.events, ({ key: id, after }) =>
-        store.tail(id, typeof after === "number" ? after : 0).pipe(
-          // Judged against the instance's state now, since events carry no state.
-          Stream.mapEffect((stored) =>
-            store.state(id).pipe(
-              Effect.flatMap(({ state }) => check("events", refOf(id))(stateOf(state))),
-              Effect.as({
-                event: internals.kernel.decodeEvent(stored.event),
-                envelope: decodeEnvelope(stored.envelope),
-              }),
+      handlers[`${name}.events`] = stream(rpcs.events, ({ key: id, after }) => {
+        const start = after ?? 0;
+        return Stream.unwrap(
+          store.state(id).pipe(
+            Effect.map(({ version }) =>
+              withCaughtUp(
+                start,
+                version,
+                store.tail(id, start),
+                (stored) => stored.envelope.seq,
+                // Judged against the instance's state now, since events carry no state.
+                (stored) =>
+                  store.state(id).pipe(
+                    Effect.flatMap(({ state }) => check("events", refOf(id))(stateOf(state))),
+                    Effect.as([
+                      {
+                        event: internals.kernel.decodeEvent(stored.event),
+                        envelope: decodeEnvelope(stored.envelope),
+                      },
+                    ]),
+                  ),
+              ),
             ),
           ),
-        ),
-      );
+        );
+      });
     }
     return handlers;
   }) as Effect.Effect<Record<string, Handler>>;
@@ -602,16 +728,25 @@ const LIVE_PARAM = "read";
  * a URL ends up in logs, so a live read authenticates with what its upgrade
  * request carries (in a browser, its cookies).
  */
-interface LiveRequest {
-  readonly id: string | number;
-  readonly tag: string;
-  readonly payload: unknown;
-  readonly cursor?: number;
+const LiveRequest = Schema.Struct({
+  id: Schema.Union([Schema.String, Schema.Number]),
+  tag: Schema.String,
+  payload: Schema.Unknown,
+  cursor: Schema.optional(Schema.Number),
   /** The client's span, as the RPC protocol carries it, so the read joins the caller's trace. */
-  readonly traceId?: string;
-  readonly spanId?: string;
-  readonly sampled?: boolean;
-}
+  traceId: Schema.optional(Schema.String),
+  spanId: Schema.optional(Schema.String),
+  sampled: Schema.optional(Schema.Boolean),
+});
+type LiveRequest = typeof LiveRequest.Type;
+
+const decodeLiveRequest = Schema.decodeUnknownOption(Schema.fromJsonString(LiveRequest));
+
+/** The live read the current request asks for, if its query parameter decodes. */
+const liveRequestOf = (request: { readonly url: string }): LiveRequest | undefined => {
+  const raw = new URL(request.url, "http://localhost").searchParams.get(LIVE_PARAM);
+  return raw === null ? undefined : Option.getOrUndefined(decodeLiveRequest(raw));
+};
 
 /**
  * Serve live reads (`watch` and `events`) as WebSockets. The read's
@@ -649,8 +784,7 @@ const liveReads = (
   }
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest;
-    const raw = new URL(request.url, "http://localhost").searchParams.get(LIVE_PARAM);
-    const live = raw === null ? undefined : (JSON.parse(raw) as LiveRequest);
+    const live = liveRequestOf(request);
     const read = live && reads.get(live.tag);
     if (!live || !read) return HttpServerResponse.text("Unknown live read", { status: 400 });
     if (!read.store?.connect) {
@@ -685,7 +819,7 @@ const liveReads = (
       mode: read.mode,
       where: where as Subscription["where"],
       context: {},
-      cursor: live.cursor ?? (read.mode === "watch" ? -1 : after === undefined ? 0 : Number(after)),
+      cursor: live.cursor ?? (read.mode === "watch" ? -1 : (after ?? 0)),
     };
     const judged = yield* authorized.pipe(
       Effect.map((context): Subscription => ({ ...subscription, context })),
@@ -701,8 +835,7 @@ const liveReads = (
     // A live read continues the trace of the client that opened it, like an RPC call.
     (effect) =>
       Effect.flatMap(HttpServerRequest, (request) => {
-        const raw = new URL(request.url, "http://localhost").searchParams.get(LIVE_PARAM);
-        const live = raw === null ? undefined : (JSON.parse(raw) as LiveRequest);
+        const live = liveRequestOf(request);
         return effect.pipe(
           Effect.withSpan(`Domain.read ${live?.tag ?? "unknown"}`, {
             kind: "server",
@@ -730,7 +863,12 @@ const nest = (entries: ReadonlyArray<Entry>, flat: Flat): unknown => {
   const client: Record<string, unknown> = {};
   for (const entry of entries) {
     if (entry.kind === "Command") {
-      client[entry.tag] = flat[entry.tag];
+      const send = flat[entry.tag]!;
+      client[entry.tag] = (
+        target: unknown,
+        input: object = {},
+        { commandId, ...options }: CommandOptions = {},
+      ) => send({ target, commandId, input }, options);
       continue;
     }
     const name = nameOf(entry);
@@ -950,10 +1088,10 @@ const build = (
  * **Example:** A typed client
  * ```typescript
  * const bank = yield* CustomerApi.client;
- * const { reply } = yield* bank.DepositMoney({ target: accountId, amount: 1_000 });
+ * const { reply } = yield* bank.DepositMoney(accountId, { amount: 1_000 });
  * const summary = yield* bank.AccountSummary.get(accountId);
  * yield* bank.AccountSummary.watch(accountId).pipe(
- *   Stream.runForEach((s) => Effect.log(s?.balance)),
+ *   Stream.runForEach(({ state }) => Effect.log(state?.balance)),
  * );
  * ```
  *
@@ -968,7 +1106,7 @@ const build = (
  *   Effect.provideService(effect, CurrentActor, system("payments-webhook")),
  * );
  * const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem));
- * yield* bank.DepositMoney({ target: accountId, amount: 1_000 });
+ * yield* bank.DepositMoney(accountId, { amount: 1_000 });
  * ```
  *
  * @primitive
@@ -1007,7 +1145,11 @@ export const protocolInProcess = <Name extends string, Entries extends ReadonlyA
   makeProtocolInProcess(api.entries, api.group);
 
 /** A frame of a live read: an Effect RPC message, plus the cursor to resume from. */
-type LiveFrame = RpcMessage.FromServerEncoded & { readonly cursor?: number };
+const LiveFrame = Schema.StructWithRest(
+  Schema.Struct({ _tag: Schema.String, cursor: Schema.optional(Schema.Number) }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+);
+const decodeLiveFrame = Schema.decodeUnknownEffect(Schema.fromJsonString(LiveFrame));
 
 /** The RPCs served as live reads. */
 const isLiveRead = (tag: string) => tag.endsWith(".watch") || tag.endsWith(".events");
@@ -1081,7 +1223,7 @@ export const protocolWebSocket = (
             const pull = yield* Socket.readerString(socket);
             while (!ended) {
               for (const text of yield* pull) {
-                const { cursor: next, ...message } = JSON.parse(text) as LiveFrame;
+                const { cursor: next, ...message } = yield* decodeLiveFrame(text);
                 failures = 0;
                 if (next !== undefined) cursor = next;
                 if (message._tag === "Exit") ended = true;

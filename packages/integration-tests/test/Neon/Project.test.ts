@@ -7,6 +7,7 @@ import { providers } from "@alchemy.run/neon/Providers";
 import { makePgMigrationExecutor } from "@alchemy.run/sql/Migrations";
 import { hashMigrations } from "@alchemy.run/sql/SqlFile";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import {
   createProject,
   deleteProject,
@@ -16,7 +17,6 @@ import {
 } from "@distilled.cloud/neon";
 import { adopt, OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

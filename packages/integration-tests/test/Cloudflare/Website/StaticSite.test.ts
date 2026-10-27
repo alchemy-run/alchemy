@@ -1,12 +1,12 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Command from "alchemy/Command";
 import * as Output from "alchemy/Output";
 import type * as Plan from "alchemy/Plan";
 import { Stack } from "alchemy/Stack";
 import { encodeState, type ResourceState, reviveState, State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

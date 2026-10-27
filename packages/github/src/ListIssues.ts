@@ -1,17 +1,12 @@
-import type { RestEndpointMethodTypes } from "@octokit/rest";
+import type * as Issues from "@distilled.cloud/github/issues";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { GitHubApiError } from "./ApiError.ts";
-import type { EndpointParameters } from "./EndpointParameters.ts";
 import type { Repository } from "./Repository.ts";
 
-export interface ListIssuesRequest extends EndpointParameters<
-  RestEndpointMethodTypes["issues"]["listForRepo"]["parameters"]
-> {}
+export interface ListIssuesRequest extends Omit<Issues.ListForRepoRequest, "owner" | "repo"> {}
 
-export type ListIssuesResponse =
-  RestEndpointMethodTypes["issues"]["listForRepo"]["response"]["data"];
+export type ListIssuesResponse = Issues.ListForRepoResponse;
 
 /**
  * List one page of the repository's issues (`issues.listForRepo`). GitHub
@@ -39,7 +34,7 @@ export interface ListIssues extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListIssuesRequest,
-    ) => Effect.Effect<ListIssuesResponse, GitHubApiError, RuntimeContext>
+    ) => Effect.Effect<ListIssuesResponse, Issues.ListForRepoError, RuntimeContext>
   >
 > {}
 

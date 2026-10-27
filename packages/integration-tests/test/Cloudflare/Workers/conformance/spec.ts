@@ -27,7 +27,7 @@ import { expect } from "@alchemy.run/test";
  * | `/stream/{cell}?n=`            | a `Stream`-returning RPC method    |
  * | `/fail/{cell}`                 | typed `Effect.fail` round-trip     |
  */
-import type { TestApi } from "alchemy/Test/Alchemy";
+import type { TestApi } from "@alchemy.run/test/Alchemy";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

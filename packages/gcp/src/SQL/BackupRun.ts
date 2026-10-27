@@ -103,7 +103,7 @@ export type BackupRun = Resource<
  * ```typescript
  * const instance = yield* GCP.SQL.Instance("AppDb", {
  *   tier: "db-f1-micro",
- *   backupEnabled: true,
+ *   backup: { enabled: true },
  * });
  * const backup = yield* GCP.SQL.BackupRun("Nightly", {
  *   instance: instance.instanceName,

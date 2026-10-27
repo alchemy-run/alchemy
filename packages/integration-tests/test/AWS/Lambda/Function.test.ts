@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
@@ -8,7 +9,7 @@ import { adopt } from "alchemy/AdoptPolicy";
 import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
+import { zipCode } from "alchemy/Util/zip";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -44,7 +45,7 @@ test.provider(
           Effect.gen(function* () {
             const fn = yield* TestFunction;
             yield* fn.bind`ReadinessMarker`({
-              env: { READINESS_MARKER: marker },
+              env: { READINESS_MARKER: marker, CONFIG_FLAG: "true", CONFIG_PORT: "3000" },
             });
             return fn;
           }).pipe(Effect.provide(TestFunctionLive)),
@@ -52,6 +53,8 @@ test.provider(
 
       const { functionName, functionUrl, roleName } = yield* deploy("created");
       yield* assertFunctionReady(functionName, "created");
+      // `Config.Boolean`/`Config.Number` decode JSON-looking env strings at runtime.
+      expect(yield* invokeHttpFunction(functionName, "/config")).toBe("true 3000");
 
       const updated = yield* deploy("updated");
       expect(updated.functionName).toBe(functionName);
@@ -740,6 +743,128 @@ test.provider(
       yield* assertFunctionDeleted(fn.functionName);
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 240_000 },
+);
+
+// #2659: `read` must observe every setting reconcile converges — environment,
+// tracing, code, URL auth/CORS, log retention, execution-role policies — or
+// an out-of-band change reads as `unchanged` and drift never repairs it.
+test.provider(
+  "drift detects and repairs out-of-band configuration, code, URL and role changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        AWS.Lambda.Function("DriftConfigFn", {
+          main: timeoutHandlerPath,
+          handler: "handler",
+          isExternal: true,
+          functionUrl: { authType: "NONE" },
+          env: { DRIFT_MARKER: "declared" },
+          logging: { retention: "1 week" },
+        }),
+      );
+      const target = { name: stack.name, stage: stack.stage };
+      const detect = Drift.detect(target).pipe(
+        Effect.map((result) => result.resources.DriftConfigFn),
+        Effect.provide(stack.state),
+      );
+      expect((yield* detect)?.action).toBe("unchanged");
+      const deployed = yield* Lambda.getFunctionConfiguration({ FunctionName: fn.functionName });
+
+      const settled = Lambda.getFunctionConfiguration({ FunctionName: fn.functionName }).pipe(
+        Effect.repeat({
+          until: (config) => config.LastUpdateStatus === "Successful",
+          schedule: Schedule.spaced("1 second"),
+          times: 30,
+        }),
+      );
+      yield* Lambda.updateFunctionConfiguration({
+        FunctionName: fn.functionName,
+        Environment: {
+          Variables: { ...deployed.Environment?.Variables, DRIFT_MARKER: "out-of-band" },
+        },
+        TracingConfig: { Mode: "Active" },
+      }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ResourceConflictException",
+          schedule: Schedule.exponential(500),
+          times: 8,
+        }),
+      );
+      yield* settled;
+      yield* Lambda.updateFunctionCode({
+        FunctionName: fn.functionName,
+        ZipFile: yield* zipCode("export const handler = async () => 'replaced';"),
+      }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ResourceConflictException",
+          schedule: Schedule.exponential(500),
+          times: 8,
+        }),
+      );
+      yield* settled;
+      yield* Lambda.updateFunctionUrlConfig({
+        FunctionName: fn.functionName,
+        AuthType: "AWS_IAM",
+        Cors: { AllowOrigins: ["https://example.com"] },
+      }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ResourceConflictException",
+          schedule: Schedule.exponential(500),
+          times: 8,
+        }),
+      );
+      yield* Logs.putRetentionPolicy({
+        logGroupName: `/aws/lambda/${fn.functionName}`,
+        retentionInDays: 30,
+      });
+      yield* iam.detachRolePolicy({
+        RoleName: fn.roleName,
+        PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+      });
+
+      const drifted = yield* detect.pipe(
+        Effect.repeat({
+          until: (result) =>
+            result?.attr?.tracing === "Active" &&
+            result.attr.codeSha256 !== deployed.CodeSha256 &&
+            result.attr.functionUrlConfig?.authType === "AWS_IAM" &&
+            result.attr.logRetentionInDays === 30 &&
+            result.attr.executionRole?.managedPolicyArns.length === 0,
+          schedule: Schedule.spaced("2 seconds"),
+          times: 15,
+        }),
+      );
+      expect(drifted?.action).toBe("drifted");
+      expect(drifted?.attr?.environment?.DRIFT_MARKER).toBeDefined();
+      expect(drifted?.attr?.functionUrlConfig?.cors?.AllowOrigins).toEqual(["https://example.com"]);
+
+      const repaired = yield* Drift.repair(target).pipe(Effect.provide(stack.state));
+      expect(repaired.resources.DriftConfigFn?.action).toBe("repaired");
+      expect((yield* detect)?.action).toBe("unchanged");
+
+      const config = yield* Lambda.getFunctionConfiguration({ FunctionName: fn.functionName });
+      const marker = config.Environment?.Variables?.DRIFT_MARKER;
+      expect(Redacted.isRedacted(marker) ? Redacted.value(marker) : marker).toBe("declared");
+      expect(config.TracingConfig?.Mode).toBe("PassThrough");
+      expect(config.CodeSha256).toBe(deployed.CodeSha256);
+      const url = yield* Lambda.getFunctionUrlConfig({ FunctionName: fn.functionName });
+      expect(url.AuthType).toBe("NONE");
+      expect(url.Cors?.AllowOrigins ?? []).toEqual([]);
+      const groups = yield* Logs.describeLogGroups({
+        logGroupNamePrefix: `/aws/lambda/${fn.functionName}`,
+      });
+      expect(groups.logGroups?.[0]?.retentionInDays).toBe(7);
+      const attached = yield* iam.listAttachedRolePolicies({ RoleName: fn.roleName });
+      expect(attached.AttachedPolicies?.map((policy) => policy.PolicyArn)).toContain(
+        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+      );
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(fn.functionName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 300_000 },
 );
 
 // #1536: drift recreates a deleted function without its bindings, then

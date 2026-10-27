@@ -263,6 +263,12 @@ export type Job = Resource<
     parallelism: number | undefined;
     /** Task service account email. */
     serviceAccount: string | undefined;
+    /**
+     * Numeric unique ID of the runtime service account: the `sub` of the
+     * Google ID tokens the host fetches. An AWS binding's IAM role trusts
+     * it, so the host reaches AWS without an access key.
+     */
+    serviceAccountUniqueId: string | undefined;
     /** True when Alchemy minted the per-host runtime service account. */
     managedServiceAccount: boolean;
     /** IAM roles bindings granted to the runtime service account. */
@@ -436,7 +442,11 @@ const toAttrs = (
   job: cloudrun.GoogleCloudRunV2Job,
   project: string,
   region: string,
-  extras: { iamGrants?: AppliedIamGrant[]; codeHash?: string } = {},
+  extras: {
+    iamGrants?: AppliedIamGrant[];
+    codeHash?: string;
+    serviceAccountUniqueId?: string;
+  } = {},
 ): Job["Attributes"] => {
   const name = job.name ?? "";
   const parsed = parseName(name, region);
@@ -469,6 +479,7 @@ const toAttrs = (
       resourceName: name,
       serviceAccount: task?.serviceAccount,
     }),
+    serviceAccountUniqueId: extras.serviceAccountUniqueId,
     iamGrants: extras.iamGrants ?? [],
     codeHash: extras.codeHash,
   };
@@ -730,6 +741,7 @@ export const JobProvider = () =>
       const attrs = toAttrs(existing, env.project, env.region, {
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
+        serviceAccountUniqueId: output?.serviceAccountUniqueId,
       });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
@@ -945,6 +957,7 @@ export const JobProvider = () =>
       return toAttrs(current, env.project, env.region, {
         iamGrants: identity.grants,
         codeHash,
+        serviceAccountUniqueId: identity.uniqueId,
       });
     }),
 

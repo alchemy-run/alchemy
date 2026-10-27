@@ -37,6 +37,8 @@ Runtime.run(
 );
 ```
 
+More: [Integrate with foldkit: Give the app its client](https://alchemy.run/domain/foldkit#give-the-app-its-client).
+
 ## Commands call domain commands
 
 ```ts
@@ -47,7 +49,7 @@ export const Register = Command.define("Register", {
   execute: ({ customerId }) =>
     Effect.gen(function* () {
       const bank = yield* CustomerApi.Client;
-      yield* bank.RegisterCustomer({ target: customerId, name: customerId, username: Username.make(customerId) });
+      yield* bank.RegisterCustomer(customerId, { name: customerId, username: Username.make(customerId) });
       return Message.SucceededCommand();
     }).pipe(Effect.catch((error) => Effect.succeed(Message.FailedCommand({ reason: error._tag })))),
 });
@@ -56,6 +58,8 @@ export const Register = Command.define("Register", {
 Every typed rejection arrives as a tagged error, so `update` can show exactly why something was refused.
 
 To keep a rejection in a Message or the Model, use `CustomerApi.rejections`: one Schema for every rejection the Api's commands declare, decoding to the rejection classes. A helper for every Api takes `A extends Domain.Api.Any` and reads `api.commands`.
+
+More: [Integrate with foldkit: Send domain commands from foldkit commands](https://alchemy.run/domain/foldkit#send-domain-commands-from-foldkit-commands).
 
 ## Subscriptions watch views
 
@@ -71,7 +75,7 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
               const bank = yield* CustomerApi.Client;
               return bank.AccountSummary.watch(accountId);
             })).pipe(
-              Stream.map((summary) => Message.GotBalance({ balance: summary?.balance ?? null })),
+              Stream.map(({ state }) => Message.GotBalance({ balance: state?.balance ?? null })),
               Stream.catch((error) => Stream.succeed(Message.FailedWatch({ reason: error._tag }))),
             )
           : Stream.empty,
@@ -82,7 +86,11 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
 
 Watch state with `View.watch(key)`, and watch emitted events with `View.events(key)` (e.g. statement lines). A failed `validate` ends the watch with its rejection.
 
+`watch` sends `{ state, cursor }`; `events` sends the history, a `CaughtUp { cursor }` frame (`Domain.Read.isCaughtUp(frame)`), then live entries. Show the feed as live once `CaughtUp` arrives, drop it with `Stream.filter(Domain.Read.isEvent)`, and pass a cursor as `after` to resume with nothing twice. Aggregates and streams read the same way.
+
 To show data at first paint, read `View.snapshot(key)` (on the server, or in `init`): it gives `{ state, cursor }` from one read. Start the feed with `View.events(key, { after: cursor })`, so a write between the two reads arrives once and none is missed.
+
+More: [Integrate with foldkit: Watch views with subscriptions](https://alchemy.run/domain/foldkit#watch-views-with-subscriptions).
 
 ## Tracing from the browser
 
@@ -107,6 +115,8 @@ if (path.startsWith("/api/telemetry/")) return yield* telemetry;
 
 Never put an ingest token in the browser. Workers Observability can't receive browser spans, so relay them to an OTLP destination (Axiom, a collector).
 
+More: [Observability: Trace the browser](https://alchemy.run/domain/observability#trace-the-browser).
+
 ## Optimistic updates and offline
 
 - **Optimistic UI.** Send each command with a `commandId` the app chooses, and show it as pending. The view event carrying that `commandId` confirms it, and a typed rejection marks it rejected. Show the server's balance plus every unacknowledged line, so nothing is ever rolled back.
@@ -115,6 +125,8 @@ Never put an ingest token in the browser. Workers Observability can't receive br
 - **Predicted outcome.** `MyAggregate.predict(state, command, { id, now, context })` runs the aggregate's own `decide` and `evolve`: `Accepted` (events, envelopes, next state), `Rejected` (the same rejection the server returns), or `Unpredictable` (only the server can tell: `decide` suspended, died, or broke its declaration). `MyView.evolve(state, { name, event, source, envelope })` folds a predicted event like the server's view. `context` is required, by type, for whatever the command's middleware provides: build it from a client-side Layer of the same services (`yield* Layer.build(ClientSession)`). Still confirm from the stream.
 
 A local mirror of server aggregates, or local-authority sync, isn't supported. It needs a sync engine or CRDTs.
+
+More: [Optimistic updates](https://alchemy.run/domain/optimistic-updates), [Offline and local first](https://alchemy.run/domain/local-first).
 
 ## Hosting the app
 
@@ -129,6 +141,10 @@ export default {
 };
 ```
 
+More: [Integrate with foldkit: Build and host it](https://alchemy.run/domain/foldkit#build-and-host-it).
+
 ## Testing the app
 
 Test `update` and the Commands with foldkit stories (`foldkit/story`) in `packages/web/test`. They need no server.
+
+More: [Integrate with foldkit: Test the app's update](https://alchemy.run/domain/foldkit#test-the-apps-update).

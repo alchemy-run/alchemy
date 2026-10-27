@@ -20,7 +20,7 @@ A Resource Provider implements the following Lifecycle Operations:
 - **Diff** - compares new props with old props and determines if the Resource needs to be updated or replaced. For updates, it can also specify a list of Stable Properties that will not be changed by the update.
 - **Read** - reads the current state of a Resource and returns the current Output Attributes. May return `Unowned(attrs)` to signal an existing-but-foreign resource that the engine should refuse to take over unless `--adopt` is set.
 - **Pre-Create** - an optional operation that creates a stub of a Resource before reconcile runs. Used to resolve circular dependencies — e.g. Function A and B depend on each other, so we create a stub of Function A first and then `reconcile` later wires up the real dependency.
-- **Observe** - an optional, read-only companion to Pre-Create. A cycle pre-creates on unresolved props, before Read can check ownership, so the engine first asks Observe what exists at the identity Pre-Create would claim. It returns the same shape as Read (`undefined`, attributes, or `Unowned(attrs)`), and the engine refuses an `Unowned` result unless `--adopt` is set. Implement it whenever Pre-Create can write to a resource that already exists.
+- **Observe** - an optional, read-only companion to Pre-Create. A cycle pre-creates on unresolved props, before Read can check ownership, so the engine first asks Observe what exists at the identity Pre-Create would claim. It returns the same shape as Read (`undefined`, attributes, or `Unowned(attrs)`), or `Unresolved` when that identity depends on props that haven't resolved yet; the engine refuses an `Unowned` result unless `--adopt` is set, and checks an `Unresolved` identity once it resolves, before Reconcile. Implement it whenever Pre-Create can write to a resource that already exists.
 - **Reconcile** - converges a Resource's actual cloud state to the desired state described by the new Input Properties. Called for both first-time provisioning and subsequent updates. The provider receives `output` (current Attributes) and `olds` (previous Props) which may both be `undefined` on a greenfield create, both defined on an update, or `output !== undefined && olds === undefined` on an adoption. See the **Reconciler doctrine** section below for the required shape.
 - **Delete** - deletes an existing Resource. It must be designed as idempotent because it is always possible for state persistence to fail after the delete operation is called. If the resource doesn't exist during deletion, it should not be considered an error.
 - **Capability** - a runtime requirement of a Function (e.g. require read access to an `R2Bucket`, or `SQS.SendMessage` on a `SQS.Queue`). A Capability is modeled as one or more `Binding.Service`s. Where the underlying API distinguishes access levels, split it into `Read` / `Write` / `ReadWrite` services (see the **Read/Write/ReadWrite binding convention** below); otherwise a single service suffices. Each service typically ships two interchangeable implementations: a native **binding** (`*Binding`) and a token-scoped **HTTP** client (`*Http`).
@@ -976,7 +976,7 @@ Compose a `Stack` that deploys the fixture, share one deploy across the file wit
 // Service.test.ts
 import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { expect } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -1270,6 +1270,21 @@ Rules of thumb:
 - Bullet/numbered lists are fine when they describe a recap, prerequisites, or genuinely list-shaped content (e.g. "the Worker now handles two routes: PUT and GET" at the end). They are **not** fine as a substitute for splitting a compound snippet.
 - A single API call that internally does several things (e.g. `Cloudflare.upgrade()`) doesn't need splitting — describe its behavior in prose.
 - Use `diff lang="typescript"` blocks so each step shows what's added on top of the previous step.
+
+# Package Skills
+
+A package can ship an agent skill under `packages/{package}/skills/{name}/` (e.g. [alchemy-domain](./packages/domain/skills/alchemy-domain/SKILL.md)): a `SKILL.md` plus `references/*.md`. The skill is an **entrypoint**, not a second copy of the docs. It gives an agent the workflow, the rules, and a short template per topic. The website holds the depth.
+
+- **`SKILL.md` links the docs hub and `https://alchemy.run/llms.txt`**, which lists every page, so an agent can find what the skill leaves out.
+- **Every `##`/`###` section ends with a `More:` line** linking the docs page, or the exact `#section`, that covers it in depth:
+
+  ```md
+  More: [Saga: Undo a step when a later one fails](https://alchemy.run/domain/saga#undo-a-step-when-a-later-one-fails).
+  ```
+
+- **Links must resolve.** Use absolute `https://alchemy.run/...` URLs (the skill is read outside the website), not `website/...` paths. After `pnpm --filter website build`, check that each linked page exists under `website/dist/` and that each `#anchor` is an `id` on it.
+- **Keep the skill in step with the docs.** Renaming a docs page or heading means updating the skill links to it. Adding a docs page a skill covers means adding a `More:` link from its section.
+- **Keep sections short.** If a section grows into an explanation, move the explanation to the docs page and link it.
 
 # Pull Request Conventions
 

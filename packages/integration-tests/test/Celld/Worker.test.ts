@@ -14,6 +14,8 @@ import {
 } from "@alchemy.run/celld/Worker";
 import { CelldWorkerProvider } from "@alchemy.run/celld/WorkerProvider";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { scratchStack } from "@alchemy.run/test/Core";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { isResolved, stripEffects } from "alchemy/Diff";
 import * as Output from "alchemy/Output";
@@ -21,8 +23,6 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
-import * as Test from "alchemy/Test/Alchemy";
-import { scratchStack } from "alchemy/Test/Core";
 import type { DurableObjectExport } from "alchemy/Workers/DurableObject";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";

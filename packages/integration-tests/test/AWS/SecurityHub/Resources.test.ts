@@ -5,8 +5,8 @@ import { FindingAggregator } from "@alchemy.run/aws/SecurityHub/FindingAggregato
 import { Hub } from "@alchemy.run/aws/SecurityHub/Hub";
 import { Insight } from "@alchemy.run/aws/SecurityHub/Insight";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as securityhub from "@distilled.cloud/aws/securityhub";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { makeSecurityHubTestLease } from "./TestLease.ts";
 

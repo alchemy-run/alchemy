@@ -1,6 +1,6 @@
 import * as Layer from "effect/Layer";
 import * as BindingLocal from "./BindingLocal.ts";
-import type { GitHubCredentials } from "./Credentials.ts";
+import type { Credentials } from "./Credentials.ts";
 import { GetPullRequest } from "./GetPullRequest.ts";
 import { getPullRequestOperation } from "./GetPullRequestHttp.ts";
 
@@ -12,5 +12,7 @@ import { getPullRequestOperation } from "./GetPullRequestHttp.ts";
  * @product Pull Request
  * @provides GitHub.GetPullRequest
  */
-export const GetPullRequestLocal: Layer.Layer<GetPullRequest, never, GitHubCredentials> =
-  Layer.effect(GetPullRequest, BindingLocal.make(getPullRequestOperation) as never);
+export const GetPullRequestLocal: Layer.Layer<GetPullRequest, never, Credentials> = Layer.effect(
+  GetPullRequest,
+  BindingLocal.make(getPullRequestOperation) as never,
+);

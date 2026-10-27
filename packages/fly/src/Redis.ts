@@ -24,10 +24,13 @@ export const REDIS_ADDON_TYPE = "upstash_redis";
 export const REDIS_PROVIDER = "upstash_redis";
 export const REDIS_URL_ENV = "REDIS_URL";
 
+// Re-export from the defining module, not the `@alchemy.run/redis` barrel:
+// rolldown's lazyBarrel rejects an unused re-export from an `export *` barrel
+// (https://github.com/rolldown/rolldown/issues/11344).
 export {
   CommandError as RedisCommandError,
   UrlMissing as RedisUrlMissing,
-} from "@alchemy.run/redis";
+} from "@alchemy.run/redis/Errors";
 
 export interface RedisProps {
   /**

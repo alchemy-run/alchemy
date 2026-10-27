@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "@alchemy.run/test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import { conformanceTests, waitForReady } from "./conformance/spec.ts";
 import ConformanceWorker from "./fixtures/conformance-worker.ts";

@@ -1,10 +1,10 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as documentai from "@distilled.cloud/gcp/documentai_v1";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import { expectProbe } from "../bindingHost.ts";
 import DocumentAIBindingsHost, { Invoice, InvoiceV1, OcrBind } from "./fixtures/bindings-host.ts";

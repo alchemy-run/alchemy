@@ -1,10 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as GitHub from "@alchemy.run/github";
-import { Octokit as AmbientOctokit } from "@alchemy.run/github/Octokit";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Git from "@distilled.cloud/github/git";
+import * as Issues from "@distilled.cloud/github/issues";
+import * as Pulls from "@distilled.cloud/github/pulls";
+import * as Repos from "@distilled.cloud/github/repos";
 import * as Alchemy from "alchemy";
 import { Action } from "alchemy/Action";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -18,13 +21,11 @@ import GitHubBindingsWorker, {
   Repo,
   repository,
 } from "./fixtures/bindings-worker.ts";
+import { gh } from "./scope.ts";
 
 const providers = Layer.mergeAll(Cloudflare.providers(), GitHub.providers());
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({ providers });
-
-// Out-of-band verification with the provider's credentials.
-const Octokit = AmbientOctokit.pipe(Effect.provide(GitHub.providers()));
 
 const stage = Test.defaultStage();
 const scope = { owner, repo: repository };
@@ -115,12 +116,6 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(
   { timeout: 120_000 },
 );
 
-const request = <A>(run: () => Promise<A>) =>
-  Effect.tryPromise({
-    try: run,
-    catch: (error) => error as Error & { status?: number },
-  });
-
 class NotYet extends Data.TaggedError("NotYet")<{}> {}
 
 // Issue lists and search lag writes; bounded so a real failure surfaces.
@@ -134,12 +129,8 @@ const until = <A, E, R>(effect: Effect.Effect<A, E, R>, ready: (a: A) => boolean
 
 const deleteBranch = (branch: string) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    yield* request(() => octokit.rest.git.deleteRef({ ...scope, ref: `heads/${branch}` })).pipe(
-      Effect.catchIf(
-        (error) => error.status === 404 || error.status === 422,
-        () => Effect.void,
-      ),
+    yield* gh(Git.deleteRef({ ...scope, ref: `heads/${branch}` })).pipe(
+      Effect.catchTag(["NotFound", "UnprocessableEntity"], () => Effect.void),
     );
   });
 
@@ -165,19 +156,14 @@ const scenario = (impl: "Http" | "Local", call: Call) => {
   let reviewId: number | undefined;
 
   const resetBranches = Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    const { data: repo } = yield* request(() => octokit.rest.repos.get(scope));
-    const { data: main } = yield* request(() =>
-      octokit.rest.git.getRef({ ...scope, ref: `heads/${repo.default_branch}` }),
-    );
+    const repo = yield* gh(Repos.get(scope));
+    const main = yield* gh(Git.getRef({ ...scope, ref: `heads/${repo.default_branch}` }));
     for (const branch of [base, head]) {
       yield* deleteBranch(branch);
-      yield* request(() =>
-        octokit.rest.git.createRef({ ...scope, ref: `refs/heads/${branch}`, sha: main.object.sha }),
-      );
+      yield* gh(Git.createRef({ ...scope, ref: `refs/heads/${branch}`, sha: main.object.sha }));
     }
-    yield* request(() =>
-      octokit.rest.repos.createOrUpdateFileContents({
+    yield* gh(
+      Repos.createOrUpdateFileContents({
         ...scope,
         branch: head,
         path,
@@ -191,10 +177,7 @@ const scenario = (impl: "Http" | "Local", call: Call) => {
   afterAll(
     Effect.gen(function* () {
       if (issueNumber !== undefined) {
-        const octokit = yield* Octokit;
-        yield* request(() =>
-          octokit.rest.issues.update({ ...scope, issue_number: issueNumber!, state: "closed" }),
-        );
+        yield* gh(Issues.update({ ...scope, issue_number: issueNumber!, state: "closed" }));
       }
       yield* deleteBranch(head);
       yield* deleteBranch(base);
@@ -209,11 +192,7 @@ const scenario = (impl: "Http" | "Local", call: Call) => {
           const issue = yield* ok("CreateIssue", { title, body: "created by CreateIssue" });
           issueNumber = issue.number;
           expect(issue.title).toBe(title);
-
-          const octokit = yield* Octokit;
-          const { data } = yield* request(() =>
-            octokit.rest.issues.get({ ...scope, issue_number: issueNumber! }),
-          );
+          const data = yield* gh(Issues.get({ ...scope, issue_number: issueNumber! }));
           expect(data.title).toBe(title);
           expect(data.body).toBe("created by CreateIssue");
         }),
@@ -283,10 +262,7 @@ const scenario = (impl: "Http" | "Local", call: Call) => {
             issue_number: issueNumber,
             body: "comment from CreateIssueComment",
           });
-          const octokit = yield* Octokit;
-          const { data } = yield* request(() =>
-            octokit.rest.issues.getComment({ ...scope, comment_id: comment.id }),
-          );
+          const data = yield* gh(Issues.getComment({ ...scope, comment_id: comment.id }));
           expect(data.body).toBe("comment from CreateIssueComment");
         }),
         { tags },
@@ -319,11 +295,7 @@ const scenario = (impl: "Http" | "Local", call: Call) => {
             state_reason: "completed",
           });
           expect(issue.state).toBe("closed");
-
-          const octokit = yield* Octokit;
-          const { data } = yield* request(() =>
-            octokit.rest.issues.get({ ...scope, issue_number: issueNumber! }),
-          );
+          const data = yield* gh(Issues.get({ ...scope, issue_number: issueNumber! }));
           expect(data.state).toBe("closed");
           expect(data.state_reason).toBe("completed");
           expect(data.body).toBe("updated by UpdateIssue");
@@ -353,11 +325,7 @@ const scenario = (impl: "Http" | "Local", call: Call) => {
             body: "opened by CreatePullRequest",
           });
           pullNumber = pull.number;
-
-          const octokit = yield* Octokit;
-          const { data } = yield* request(() =>
-            octokit.rest.pulls.get({ ...scope, pull_number: pullNumber! }),
-          );
+          const data = yield* gh(Pulls.get({ ...scope, pull_number: pullNumber! }));
           expect(data.state).toBe("open");
           expect(data.head.ref).toBe(head);
           expect(data.base.ref).toBe(base);
@@ -382,7 +350,7 @@ const scenario = (impl: "Http" | "Local", call: Call) => {
         Effect.gen(function* () {
           const diff = yield* ok<string>("GetPullRequest", {
             pull_number: pullNumber,
-            format: "diff",
+            accept: "application/vnd.github.diff",
           });
           expect(diff).toContain(`diff --git a/${path} b/${path}`);
         }),
@@ -428,10 +396,8 @@ const scenario = (impl: "Http" | "Local", call: Call) => {
             comments: [{ path, line: 1, body: "inline comment" }],
           });
           reviewId = review.id;
-
-          const octokit = yield* Octokit;
-          const { data } = yield* request(() =>
-            octokit.rest.pulls.getReview({
+          const data = yield* gh(
+            Pulls.getReview({
               ...scope,
               pull_number: pullNumber!,
               review_id: reviewId!,
@@ -485,11 +451,7 @@ const scenario = (impl: "Http" | "Local", call: Call) => {
             merge_method: "squash",
           });
           expect(merged.merged).toBe(true);
-
-          const octokit = yield* Octokit;
-          const { data } = yield* request(() =>
-            octokit.rest.pulls.get({ ...scope, pull_number: pullNumber! }),
-          );
+          const data = yield* gh(Pulls.get({ ...scope, pull_number: pullNumber! }));
           expect(data.merged).toBe(true);
           expect(data.base.ref).toBe(base);
         }),

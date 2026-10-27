@@ -9,9 +9,32 @@ A stream is a keyed, append-only log: one ordered list of entries per key, kept 
 
 Its latest entry is its current value. So one stream answers both "what is it now?" and "tell me every change", which is what a client syncing state needs: the current value first, then everything after it.
 
+## A read model you publish entry by entry
+
+A view's state is shaped by its `evolve`, and its fold belongs to the model. A stream is for when you want to decide, in code, exactly what each client-visible entry contains and when one is written. The projection that writes it can read any source, combine a view's state with an event, skip changes no client cares about, and publish a compact entry shaped for the screen.
+
+The bank's account card is an example. The card on a customer's home screen shows the owner, the balance and whether the account is frozen. It changes when any of those change, and not when anything else does. A stream of `CardChanged` entries is that card, with its whole history:
+
+<DAG
+  nodes={[
+    { id: "c1", label: "CardChanged", type: "balance 100", kind: "event", col: 0, row: 0 },
+    { id: "c2", label: "CardChanged", type: "balance 70", kind: "event", col: 1, row: 0 },
+    { id: "c3", label: "CardChanged", type: "frozen", kind: "event", col: 2, row: 0 },
+    { id: "now", label: "peek", type: "the card now", kind: "query", col: 2, row: 1 },
+  ]}
+  edges={[
+    { from: "c1", to: "c2" },
+    { from: "c2", to: "c3" },
+    { from: "c3", to: "now", dashed: true },
+  ]}
+  caption="One log per account. Its last entry is the card a client shows."
+/>
+
+Use a view when a fold describes the read model well. Use a stream when a projection should choose each entry, and clients should follow those entries live.
+
 ## Declare a stream
 
-A stream names its key and the events its entries may be. The bank keeps a card per account, one entry each time the card changes.
+A stream names its key and the events its entries may be. The example keeps a card per account, one entry each time the card changes.
 
 ```typescript title="packages/domain/src/Account/AccountCard.stream.ts"
 export class CardChanged extends Domain.Event("CardChanged", {
@@ -92,13 +115,7 @@ The model checks this when it's built: a stream listed in two projections' `writ
 
 Exposed on an Api, a stream offers four reads for a key.
 
-```typescript
-// packages/server/test/cardReads.ts
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-import type { AccountId } from "@bank/domain/Account/Account.id";
-import type { CustomerClient } from "./flows.ts";
-
+```typescript title="packages/server/test/cardReads.ts"
 export const cardReads = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
   // The card now: the latest entry, or null.
   const now = yield* bank.AccountCard.peek(accountId);
@@ -106,7 +123,7 @@ export const cardReads = Effect.fn(function* (bank: CustomerClient, accountId: A
   // Every new card, starting with the current one.
   yield* bank.AccountCard.watch(accountId).pipe(
     Stream.take(2),
-    Stream.runForEach((card) => Effect.log(`balance ${card?.event.balance}`)),
+    Stream.runForEach(({ state: card }) => Effect.log(`balance ${card?.event.balance}`)),
   );
 
   // History from a position, then live; and a page of it.
@@ -137,7 +154,8 @@ Because `peek` returns the latest entry, a stream whose entries are full snapsho
 ```typescript title="packages/server/test/cardReads.ts"
 const now = yield* bank.AccountCard.peek(accountId);
 ```
- There's no separate "current value" to keep in sync, and no race between two writers setting it: there's one writer, and its entries are ordered.
+
+There's no separate "current value" to keep in sync, and no race between two writers setting it: there's one writer, and its entries are ordered.
 
 ## Test it
 
@@ -151,4 +169,4 @@ streamed(
 ),
 ```
 
-Next, [Policy](/domain/policy) covers the consumer that acts on the world rather than recording it.
+Next, [Policy](/domain/policy): the consumer that acts on the world rather than recording it.
