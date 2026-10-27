@@ -7,9 +7,11 @@ import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import {
+  boundMechanisms,
   createPolicyName,
   findPolicyByName,
   narrowPolicy,
+  type NotificationPolicyBinding,
   type ObservedPolicy,
   observePolicy,
   type PolicyBody,
@@ -109,10 +111,11 @@ export interface CustomAlertProps {
    */
   every?: CustomAlertWindow;
   /**
-   * Destinations notified when the alert fires. At least one mechanism
-   * is required.
+   * Destinations notified when the alert fires. At least one destination is
+   * required, either declared here or bound by a runtime that consumes the
+   * alert's notifications (`Cloudflare.Alerting.consumeNotifications`).
    */
-  mechanisms: NotificationPolicyMechanisms;
+  mechanisms?: NotificationPolicyMechanisms;
   /**
    * How often to re-alert while the alert keeps firing (e.g. `"30m"`).
    */
@@ -143,7 +146,7 @@ export type CustomAlert = Resource<
   TypeId,
   CustomAlertProps,
   CustomAlertAttributes,
-  never,
+  NotificationPolicyBinding,
   Providers
 >;
 
@@ -253,10 +256,10 @@ export const CustomAlertProvider = () =>
       return match ? toAttributes(match, acct) : undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createPolicyName(id, news.name ?? output?.name);
-      const desired = buildBody(name, news);
+      const desired = buildBody(name, news, bindings);
 
       // 1. Observe — by cached id first, then by deterministic name.
       let observed: ObservedPolicy | undefined;
@@ -299,15 +302,19 @@ export const CustomAlertProvider = () =>
     }),
   });
 
-const buildBody = (name: string, news: CustomAlertProps): PolicyBody => ({
+const buildBody = (
+  name: string,
+  news: CustomAlertProps,
+  bindings: ReadonlyArray<{ data: NotificationPolicyBinding }>,
+): PolicyBody => ({
   name,
   alertType: "custom_analytics",
   enabled: news.enabled ?? true,
   description: news.description,
   alertInterval: news.alertInterval,
   // `Input<string>` ids are resolved to concrete strings by the engine
-  // before reconcile runs.
-  mechanisms: news.mechanisms as PolicyBody["mechanisms"],
+  // before reconcile runs; bound webhooks extend the declared ones.
+  mechanisms: boundMechanisms(news.mechanisms, bindings),
   filters: {
     source: ["sql_api"],
     selectors: [news.query],

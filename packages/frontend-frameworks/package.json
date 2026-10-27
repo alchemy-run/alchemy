@@ -70,6 +70,18 @@
       "worker": "./dist/astro/cloudflare.js",
       "import": "./dist/astro/cloudflare.js"
     },
+    "./astro/cache": {
+      "types": "./dist/astro/cache.d.ts",
+      "bun": "./dist/astro/cache.js",
+      "worker": "./dist/astro/cache.js",
+      "import": "./dist/astro/cache.js"
+    },
+    "./astro/cache/provider": {
+      "types": "./dist/astro/runtime/cache/provider.d.ts",
+      "bun": "./dist/astro/runtime/cache/provider.js",
+      "worker": "./dist/astro/runtime/cache/provider.js",
+      "import": "./dist/astro/runtime/cache/provider.js"
+    },
     "./astro/config": {
       "types": "./dist/astro/config.d.ts",
       "bun": "./dist/astro/config.js",
@@ -480,6 +492,7 @@
   },
   "dependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
+    "@alchemy.run/redis": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@effect/platform-node": "catalog:",
@@ -497,6 +510,7 @@
     "@opennextjs/cloudflare": "catalog:",
     "@sveltejs/kit": "catalog:",
     "@tailwindcss/vite": "catalog:",
+    "@tsrx/oxc": "catalog:",
     "@types/node": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "astro": "catalog:",

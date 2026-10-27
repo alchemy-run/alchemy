@@ -39,7 +39,6 @@
     "./Command": "./src/Command/index.ts",
     "./Bundle": "./src/Bundle/index.ts",
     "./Cli": "./src/Cli/index.ts",
-    "./Cli/CliKit": "./src/Cli/CliKit/index.ts",
     "./DNS": "./src/DNS/index.ts",
     "./Runtime/Bootstrap": "./src/Runtime/Bootstrap.ts",
     "./Runtime/ManagedHttpShutdown": "./src/Runtime/ManagedHttpShutdown.ts",
@@ -85,11 +84,6 @@
         "types": "./lib/Cli/index.d.ts",
         "bun": "./src/Cli/index.ts",
         "default": "./lib/Cli/index.js"
-      },
-      "./Cli/CliKit": {
-        "types": "./lib/Cli/CliKit/index.d.ts",
-        "bun": "./src/Cli/CliKit/index.ts",
-        "default": "./lib/Cli/CliKit/index.js"
       },
       "./DNS": {
         "types": "./lib/DNS/index.d.ts",
@@ -147,10 +141,8 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@alchemy.run/test": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/vitest": "catalog:",
     "@oxc-project/types": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
@@ -170,7 +162,6 @@
     "tsx": "catalog:",
     "typescript": "catalog:",
     "uuid": "catalog:",
-    "vitest": "catalog:",
     "wrangler": "catalog:",
     "ws": "catalog:"
   },
@@ -178,9 +169,8 @@
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/vitest": "catalog:",
     "effect": "catalog:",
-    "vite": "catalog:",
+    "vite": "catalog:frontend-peer",
     "ws": "catalog:"
   },
   "peerDependenciesMeta": {
@@ -191,9 +181,6 @@
       "optional": true
     },
     "@effect/platform-node": {
-      "optional": true
-    },
-    "@effect/vitest": {
       "optional": true
     },
     "vite": {

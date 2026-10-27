@@ -3,13 +3,13 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { WorkerDomainConfigError } from "@alchemy.run/cloudflare/Workers/WorkerProvider";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { expectUrlContains } from "../Utils/Http.ts";
+import { expectUrlContains, waitForDns } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -23,37 +23,6 @@ class RedirectNotReady extends Data.TaggedError("RedirectNotReady")<{
   url: string;
   detail: string;
 }> {}
-
-class DnsNotReady extends Data.TaggedError("DnsNotReady")<{ hostname: string }> {}
-
-/**
- * Wait until `hostname` resolves, querying 1.1.1.1 over DNS-over-HTTPS.
- * The system resolver must not be asked before the record exists: a Worker
- * custom domain's DNS record appears a few seconds after attach, and an
- * early lookup negative-caches NXDOMAIN for the zone's SOA minimum TTL
- * (30 minutes on Cloudflare) — poisoning every later fetch in the test.
- * DoH bypasses that cache entirely, so the first system-resolver query
- * only happens once the record is live.
- */
-const waitForDns = Effect.fn(function* (hostname: string) {
-  yield* Effect.tryPromise({
-    try: async (signal) => {
-      const res = await fetch(`https://1.1.1.1/dns-query?name=${hostname}&type=AAAA`, {
-        headers: { accept: "application/dns-json" },
-        signal,
-      });
-      const body = (await res.json()) as { Answer?: unknown[] };
-      if (!body.Answer?.length) throw new Error("no answer");
-    },
-    catch: () => new DnsNotReady({ hostname }),
-  }).pipe(
-    Effect.retry({
-      while: (e) => e._tag === "DnsNotReady",
-      schedule: Schedule.spaced("5 seconds"),
-      times: 36,
-    }),
-  );
-});
 
 /**
  * Fetch `from` without following redirects and assert a 301 whose
@@ -185,8 +154,8 @@ describe.concurrent(
 
           // The canonical domain AND the alias serve the Worker; the
           // redirect host 301s with path and query preserved — and never
-          // invokes the Worker. Confirm DNS over DoH before the first fetch
-          // (see waitForDns).
+          // invokes the Worker. Confirm DNS on the authoritative nameservers
+          // before the first fetch (see waitForDns in ../Utils/Http.ts).
           yield* waitForDns(mainHost);
           yield* waitForDns(aliasHost);
           yield* waitForDns(oldHost);

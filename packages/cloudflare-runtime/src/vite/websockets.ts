@@ -28,6 +28,29 @@ export function handleWebSocket(
     socket.on("close", () => sockets.delete(socket));
   };
 
+  // An `async` listener (Vite's `server.proxy` awaiting its `bypass`, a
+  // plugin authenticating first) may take an upgrade only after the Worker
+  // has answered it, without touching the socket before. `emit` is wrapped to
+  // keep the promises the other listeners return for each socket, and the
+  // Worker's answer waits for them to settle.
+  const pending = new WeakMap<Duplex, Promise<unknown>>();
+  const emit = httpServer.emit;
+  const emitUpgrade = function (
+    this: vite.HttpServer,
+    event: string | symbol,
+    ...args: Array<any>
+  ) {
+    if (event !== "upgrade") return emit.call(this, event, ...args);
+    const settling: Array<PromiseLike<unknown>> = [];
+    for (const listener of this.rawListeners("upgrade")) {
+      const result: unknown = listener.apply(this, args);
+      if (isPromiseLike(result)) settling.push(result);
+    }
+    if (settling.length > 0) pending.set(args[1] as Duplex, Promise.allSettled(settling));
+    return true;
+  } as typeof emit;
+  httpServer.emit = emitUpgrade;
+
   const onUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
     // Unhandled socket errors crash Node.
     socket.on("error", () => socket.destroy());
@@ -58,14 +81,66 @@ export function handleWebSocket(
     const upstream = NodeNet.connect({ host: target.hostname, port: Number(target.port) });
     track(socket);
     track(upstream);
-    upstream.on("error", () => {
-      upstream.destroy();
-      socket.destroy();
-    });
     socket.on("close", () => upstream.destroy());
-    upstream.on("close", () => socket.destroy());
+
+    // Other plugins serve their own WebSockets on the dev server (a DevTools
+    // relay, `server.proxy` with `ws: true`), and every `upgrade` listener sees
+    // every upgrade. This listener runs first (see `prependListener` below),
+    // so it records the socket's state before any other listener can touch
+    // it. A socket another listener has since written to, ended, or attached
+    // its own listeners to belongs to that listener: the Worker's answer is
+    // dropped rather than written over the other listener's handshake.
+    const before = socketActivity(socket);
+    const claimed = () => isClaimed(socket, before);
+
+    // The Worker's answer is buffered until it is known who answers the
+    // client: an asynchronous listener may claim the socket while the request
+    // is in flight, or may still be deciding when the Worker answers.
+    const answer: Array<Buffer> = [];
+    const buffer = (chunk: Buffer) => answer.push(chunk);
+    let relaying = false;
+    const relay = () => {
+      upstream.off("data", buffer);
+      if (claimed()) {
+        // Leaves the socket to the listener that claimed it.
+        sockets.delete(socket);
+        upstream.destroy();
+        return;
+      }
+      if (upstream.destroyed) {
+        // The Worker closed: relay its whole (buffered) answer, or reset the
+        // client if it never answered.
+        if (answer.length === 0) {
+          socket.destroy();
+          return;
+        }
+        for (const chunk of answer) socket.write(chunk);
+        socket.end();
+        return;
+      }
+      relaying = true;
+      for (const chunk of answer) socket.write(chunk);
+      // oxlint-disable-next-line effecttsgo/unnecessary-pipe-chain -- Node stream piping (socket -> upstream -> socket), not Effect pipe
+      socket.pipe(upstream).pipe(socket);
+    };
+    let decided = false;
+    const decide = () => {
+      if (decided) return;
+      decided = true;
+      const settled = pending.get(socket);
+      if (settled === undefined) return relay();
+      void settled.then(relay);
+    };
+    upstream.on("data", buffer);
+    upstream.once("data", decide);
+    upstream.on("error", () => upstream.destroy());
+    upstream.on("close", () => {
+      if (relaying) socket.destroy();
+      else decide();
+    });
     upstream.once("connect", () => {
-      if (socket.destroyed) {
+      if (socket.destroyed || claimed()) {
+        sockets.delete(socket);
         upstream.destroy();
         return;
       }
@@ -82,13 +157,12 @@ export function handleWebSocket(
       if (head.length > 0) {
         upstream.write(head);
       }
-      // oxlint-disable-next-line effecttsgo/unnecessary-pipe-chain -- Node stream piping (socket -> upstream -> socket), not Effect pipe
-      socket.pipe(upstream).pipe(socket);
     });
   };
 
-  httpServer.on("upgrade", onUpgrade);
+  httpServer.prependListener("upgrade", onUpgrade);
   return () => {
+    if (httpServer.emit === emitUpgrade) httpServer.emit = emit;
     httpServer.off("upgrade", onUpgrade);
     for (const socket of sockets) {
       socket.destroy();
@@ -96,6 +170,47 @@ export function handleWebSocket(
     sockets.clear();
   };
 }
+
+const isPromiseLike = (value: unknown): value is PromiseLike<unknown> =>
+  typeof value === "object" &&
+  value !== null &&
+  "then" in value &&
+  typeof value.then === "function";
+
+interface SocketActivity {
+  readonly written: number;
+  readonly listeners: number;
+}
+
+// `bytesWritten` counts what Node has queued; Bun counts only what it has
+// flushed, so the queued `writableLength` is added for both.
+const socketActivity = (socket: Duplex): SocketActivity => ({
+  written: ((socket as Partial<NodeNet.Socket>).bytesWritten ?? 0) + socket.writableLength,
+  listeners: (["data", "error", "close", "end"] as const).reduce(
+    (count, event) =>
+      count + socket.rawListeners(event).filter((listener) => !isNoop(listener)).length,
+    0,
+  ),
+});
+
+// An empty listener can't take the socket. Vite 8.3.5's HMR `upgrade` listener
+// attaches `socket.on("error", noop)` to every upgrade it doesn't handle.
+const isNoop = (listener: Function) =>
+  /^(?:function\s*[\w$]*\s*)?\(\s*\)\s*(?:=>\s*)?\{\s*\}$/.test(listener.toString());
+
+// A listener that takes an upgrade writes its handshake or refusal, or
+// subscribes to the socket synchronously, before it answers: `ws` listens for
+// `error` before an async `verifyClient`, and Vite's `server.proxy` for
+// `close` and `error` before it dials its target.
+const isClaimed = (socket: Duplex, before: SocketActivity) => {
+  const now = socketActivity(socket);
+  return (
+    socket.destroyed ||
+    socket.writableEnded ||
+    now.written > before.written ||
+    now.listeners > before.listeners
+  );
+};
 
 /**
  * Matches the origin of a Sandbox SDK preview URL.

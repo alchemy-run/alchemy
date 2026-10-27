@@ -1,9 +1,16 @@
-import { spawnSync } from "node:child_process";
 import * as AWS from "@alchemy.run/aws";
+import * as EC2 from "@alchemy.run/aws/EC2";
+import * as Endpoint from "@alchemy.run/aws/Endpoint";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
+import * as Region from "@alchemy.run/aws/Region";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { Queue } from "@alchemy.run/aws/SQS";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
+import { Credentials } from "@distilled.cloud/aws/Credentials";
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as Alchemy from "alchemy";
 /**
  * Credential-free `alchemy dev` for AWS.
@@ -37,13 +44,13 @@ import * as Alchemy from "alchemy";
  */
 import { CredentialsRequired } from "alchemy/Auth/Demand";
 import { ProfileStore, type ProfileStoreService } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 
 const FLOCI_ENDPOINT = "http://localhost:4566";
@@ -54,17 +61,6 @@ const FLOCI_ENDPOINT = "http://localhost:4566";
  * configured a profile" starting state.
  */
 const NO_CREDS_PROFILE = "credfree-dev-test-does-not-exist";
-
-// skipIf gate: floci runs as a Docker container. `docker info` proves the
-// daemon is reachable. Sync probe at collection time — skipIf needs a
-// plain boolean.
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
 
 /**
  * Config keys that could leak ambient AWS credentials (or redirect the
@@ -105,7 +101,8 @@ const providers = AWS.providers().pipe(Layer.provide(maskAwsEnv));
 
 // `dev: true` runs the same topology as the real `alchemy dev` command
 // (including the RPC sidecar default for RPC-backed providers).
-const { test } = Test.make({ providers, dev: true, profile: NO_CREDS_PROFILE });
+const testOptions = { providers, profile: NO_CREDS_PROFILE };
+const { test, deploy, destroy } = Test.make({ ...testOptions, dev: true });
 
 /**
  * Raw (non-distilled) call against the emulator gateway — out-of-band proof
@@ -141,7 +138,7 @@ const rawAwsJson = Effect.fn(function* (options: {
  * synthesized local environment (dummy account, emulator endpoint) instead
  * of prompting or dying.
  */
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "dev deploy with zero AWS credentials lands in the local emulator",
   (stack) =>
     Effect.gen(function* () {
@@ -204,6 +201,58 @@ test.provider.skipIf(!dockerAvailable)(
       ).toBe(false);
     }),
   { tags: ["provider:aws", "provider:aws:s3", "provider:aws:sqs", "local"], timeout: 240_000 },
+);
+
+/** Floci-scoped context for the raw distilled calls the test makes itself. */
+const flociContext = Layer.mergeAll(
+  Endpoint.of(FLOCI_ENDPOINT),
+  Region.of("us-east-1"),
+  Layer.succeed(
+    Credentials,
+    Effect.succeed({
+      accessKeyId: Redacted.make("test"),
+      secretAccessKey: Redacted.make("test"),
+      sessionToken: undefined,
+      region: "us-east-1" as RegionName,
+    }),
+  ),
+);
+
+/**
+ * `AWS.EC2.Network` reads availability zones while it is declared, so
+ * evaluating this program needs a reachable EC2 API.
+ */
+const NetworkStack = Alchemy.Stack(
+  "CredFreeNetwork",
+  { providers, state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const network = yield* EC2.Network("Network", { cidrBlock: "10.0.0.0/16" });
+    return { vpcId: network.vpcId };
+  }),
+);
+
+/**
+ * `alchemy destroy` (live mode, no `--dev`) of a stage `alchemy dev` created
+ * must not evaluate the program against the real cloud (#1976). With zero
+ * credentials, evaluating `EC2.Network` live fails; destroy plans from state
+ * alone and deletes every row through the local provider its mode records.
+ */
+test(
+  "destroy of a dev stage needs no AWS credentials",
+  Effect.gen(function* () {
+    yield* destroy(NetworkStack);
+    const { vpcId } = yield* deploy(NetworkStack);
+    expect(vpcId).toMatch(/^vpc-/);
+
+    // The same call `alchemy destroy --stage <dev stage>` makes: live mode.
+    yield* Core.destroy(testOptions, NetworkStack);
+
+    const vpcs = yield* ec2
+      .describeVpcs({ Filters: [{ Name: "vpc-id", Values: [vpcId] }] })
+      .pipe(Effect.provide(flociContext));
+    expect(vpcs.Vpcs ?? []).toEqual([]);
+  }),
+  { tags: ["provider:aws", "provider:aws:ec2", "local"], timeout: 240_000 },
 );
 
 /**

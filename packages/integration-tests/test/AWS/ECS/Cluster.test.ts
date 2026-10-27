@@ -1,10 +1,11 @@
 import * as AWS from "@alchemy.run/aws";
 import { Cluster } from "@alchemy.run/aws/ECS/Cluster";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -41,6 +42,31 @@ test.provider(
       // Provider inventory (and therefore nuke) must treat it as deleted.
       const afterList = yield* provider.list();
       expect(afterList.some((c) => c.clusterArn === cluster.clusterArn)).toBe(false);
+    }),
+  { tags: ["provider:aws", "provider:aws:ecs", "live"] },
+);
+
+// #1968: ECS fills in account-default settings (containerInsights) the props
+// never declared; an untouched cluster must not read as drifted.
+test.provider(
+  "an untouched cluster reports no drift",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cluster("DriftCluster", {});
+        }),
+      );
+
+      const result = yield* Drift.detect({ name: stack.name, stage: stack.stage }).pipe(
+        Effect.provide(stack.state),
+      );
+      expect(result.resources.DriftCluster?.action).toBe("unchanged");
+      expect(result.resources.DriftCluster?.attr.settings).not.toEqual([]);
+
+      yield* stack.destroy();
     }),
   { tags: ["provider:aws", "provider:aws:ecs", "live"] },
 );

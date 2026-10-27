@@ -9,6 +9,7 @@ import { Aurora, type AuroraProps } from "@alchemy.run/aws/RDS/Aurora";
 import { DBParameterGroup } from "@alchemy.run/aws/RDS/DBParameterGroup";
 import { DBSubnetGroup } from "@alchemy.run/aws/RDS/DBSubnetGroup";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as rds from "@distilled.cloud/aws/rds";
@@ -19,7 +20,6 @@ import * as Drift from "alchemy/Drift";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -2473,6 +2473,91 @@ lifecycle(2, process.env.RDS_TEST_LIFECYCLE)(
         }),
       );
       expect(events).toHaveLength(1);
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: INSTANCE_TIMEOUT,
+  },
+);
+
+// Regression for #2317: a deploy whose core modify resets the master
+// password and also enables IAM authentication. RDS keeps reporting
+// `available` for a few seconds after accepting the reset, so the follow-up
+// IAM modify used to reach a busy instance and fail with
+// `InvalidDBInstanceStateFault`.
+lifecycle(7, process.env.RDS_TEST_LIFECYCLE)(
+  "master password: a password reset followed by an IAM change in one deploy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const startedAt = yield* Effect.sync(() => new Date());
+      const deployInstance = (password: string, iam: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const net = yield* Network("ResetIamNet", {
+              cidrBlock: "10.43.0.0/16",
+            });
+            const subnetGroup = yield* DBSubnetGroup("ResetIamSubnetGroup", {
+              description: "alchemy password reset + IAM lifecycle",
+              subnetIds: net.privateSubnetIds,
+            });
+            return yield* DBInstance("ResetIamInstance", {
+              engine: "postgres",
+              dbInstanceClass: "db.t3.micro",
+              allocatedStorage: 20,
+              masterUsername: "alchemy",
+              masterUserPassword: Redacted.make(password),
+              enableIAMDatabaseAuthentication: iam,
+              deletionProtection: false,
+              dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+              publiclyAccessible: false,
+            });
+          }),
+        );
+
+      const created = yield* deployInstance("ResetIamPass1", false);
+      // The race is a few seconds wide, so give it several chances: each
+      // round resets the password and flips IAM authentication together.
+      const rounds = [
+        { password: "ResetIamPass2", iam: true },
+        { password: "ResetIamPass3", iam: false },
+        { password: "ResetIamPass4", iam: true },
+      ];
+      for (const { password, iam } of rounds) {
+        const updated = yield* deployInstance(password, iam);
+        expect(updated.dbInstanceArn).toBe(created.dbInstanceArn);
+        const instance = (yield* rds.describeDBInstances({
+          DBInstanceIdentifier: updated.dbInstanceIdentifier,
+        })).DBInstances?.[0];
+        expect(instance?.IAMDatabaseAuthenticationEnabled).toBe(iam);
+      }
+
+      // Every password reset really applied, so each IAM modify followed one.
+      const resets = yield* rds
+        .describeEvents({
+          SourceIdentifier: created.dbInstanceIdentifier,
+          SourceType: "db-instance",
+          StartTime: startedAt,
+        })
+        .pipe(
+          Effect.map((response) =>
+            (response.Events ?? []).filter((event) =>
+              /reset master credentials/i.test(event.Message ?? ""),
+            ),
+          ),
+          Effect.repeat({
+            schedule: Schedule.min([
+              Schedule.exponential("5 seconds"),
+              Schedule.spaced("1 minute"),
+            ]),
+            until: (found) => found.length >= rounds.length,
+            times: 10,
+          }),
+        );
+      expect(resets).toHaveLength(rounds.length);
 
       yield* stack.destroy();
     }),

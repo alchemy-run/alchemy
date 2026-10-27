@@ -1,9 +1,11 @@
+import * as Repos from "@distilled.cloud/github/repos";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import * as Stream from "effect/Stream";
+import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface RulesetProps {
@@ -76,106 +78,151 @@ export interface RulesetProps {
   }>;
 
   /**
-   * Rules to enforce on the targeted refs.
+   * Require status checks to pass before merging.
    */
-  rules?: {
+  requiredStatusChecks?: {
     /**
-     * Require status checks to pass before merging.
+     * Status checks that must pass. Each entry is a context name or
+     * integration ID.
      */
-    requiredStatusChecks?: {
+    checks: Array<{
       /**
-       * Status checks that must pass. Each entry is a context name or
-       * integration ID.
+       * The status check context name.
        */
-      checks: Array<{
-        /**
-         * The status check context name.
-         */
-        context: string;
-
-        /**
-         * Optional integration ID.
-         */
-        integrationId?: number;
-      }>;
+      context: string;
 
       /**
-       * Whether to require branches to be up to date before merging.
-       * @default false
+       * Optional integration ID.
        */
-      strictRequiredStatusChecksPolicy?: boolean;
-    };
+      integrationId?: number;
+    }>;
 
     /**
-     * Require commits to be signed.
+     * Whether to require branches to be up to date before merging.
+     * @default false
      */
-    requiredSignatures?: boolean;
+    strictRequiredStatusChecksPolicy?: boolean;
+  };
+
+  /**
+   * Require commits to be signed.
+   */
+  requiredSignatures?: boolean;
+
+  /**
+   * Require pull request before merging.
+   */
+  pullRequest?: {
+    /**
+     * Number of required approving reviews.
+     */
+    requiredApprovingReviewCount?: number;
 
     /**
-     * Require pull request before merging.
+     * Dismiss stale reviews when new commits are pushed.
      */
-    pullRequest?: {
-      /**
-       * Number of required approving reviews.
-       */
-      requiredApprovingReviewCount?: number;
-
-      /**
-       * Dismiss stale reviews when new commits are pushed.
-       */
-      dismissStaleReviewsOnPush?: boolean;
-
-      /**
-       * Require review from code owners.
-       */
-      requireCodeOwnerReview?: boolean;
-
-      /**
-       * Require approval of the most recent reviewable push.
-       */
-      requireLastPushApproval?: boolean;
-
-      /**
-       * Required review thread resolution.
-       */
-      requiredReviewThreadResolution?: boolean;
-
-      /**
-       * Merge methods allowed for pull requests. GitHub allows all three when omitted.
-       */
-      allowedMergeMethods?: Array<"merge" | "squash" | "rebase">;
-
-      /**
-       * Require another approval for changes pushed by someone other than the commit author.
-       * @default true
-       */
-      requireExtraApprovalForUnattributedChanges?: boolean;
-    };
+    dismissStaleReviewsOnPush?: boolean;
 
     /**
-     * Prevent creation of matching refs.
+     * Require review from code owners.
      */
-    creation?: boolean;
+    requireCodeOwnerReview?: boolean;
 
     /**
-     * Prevent updates to matching refs.
+     * Require approval of the most recent reviewable push.
      */
-    update?: boolean;
+    requireLastPushApproval?: boolean;
 
     /**
-     * Prevent deletion of matching refs.
+     * Required review thread resolution.
      */
-    deletion?: boolean;
+    requiredReviewThreadResolution?: boolean;
 
     /**
-     * Require linear history.
+     * Merge methods allowed for pull requests. GitHub allows all three when omitted.
      */
-    requiredLinearHistory?: boolean;
+    allowedMergeMethods?: Array<"merge" | "squash" | "rebase">;
 
     /**
-     * Prevent force pushes.
+     * Require another approval for changes pushed by someone other than the commit author.
+     * @default true
      */
-    nonFastForward?: boolean;
+    requireExtraApprovalForUnattributedChanges?: boolean;
+  };
+
+  /**
+   * Prevent creation of matching refs.
+   */
+  creation?: boolean;
+
+  /**
+   * Prevent updates to matching refs.
+   */
+  update?: boolean;
+
+  /**
+   * Prevent deletion of matching refs.
+   */
+  deletion?: boolean;
+
+  /**
+   * Require linear history.
+   */
+  requiredLinearHistory?: boolean;
+
+  /**
+   * Prevent force pushes.
+   */
+  nonFastForward?: boolean;
+
+  /**
+   * Require pull requests to merge through a merge queue. Only applies to
+   * branch rulesets in organization-owned repositories.
+   */
+  mergeQueue?: {
+    /**
+     * Method used to merge the queued pull requests.
+     * @default "MERGE"
+     */
+    mergeMethod?: "MERGE" | "SQUASH" | "REBASE";
+
+    /**
+     * `ALLGREEN` requires every entry's checks to pass; `HEADGREEN` only
+     * requires the checks of the group's head commit.
+     * @default "ALLGREEN"
+     */
+    groupingStrategy?: "ALLGREEN" | "HEADGREEN";
+
+    /**
+     * Maximum number of queued pull requests building at the same time.
+     * @default 5
+     */
+    maxEntriesToBuild?: number;
+
+    /**
+     * Minimum number of pull requests merged together in a group.
+     * @default 1
+     */
+    minEntriesToMerge?: number;
+
+    /**
+     * Maximum number of pull requests merged together in a group.
+     * @default 5
+     */
+    maxEntriesToMerge?: number;
+
+    /**
+     * Minutes to wait for `minEntriesToMerge` pull requests after the first
+     * one is queued before merging a smaller group.
+     * @default 5
+     */
+    minEntriesToMergeWaitMinutes?: number;
+
+    /**
+     * Minutes to wait for a required status check before treating it as failed.
+     * @default 60
+     */
+    checkResponseTimeoutMinutes?: number;
   };
 
   /**
@@ -187,6 +234,33 @@ export interface RulesetProps {
    */
   baseUrl?: string;
 }
+
+/**
+ * Props as persisted before the rules moved from a nested `rules` object to
+ * the top level. Only previously deployed state can still have this shape.
+ */
+type PersistedRulesetProps = RulesetProps & {
+  rules?: Pick<
+    RulesetProps,
+    | "requiredStatusChecks"
+    | "requiredSignatures"
+    | "pullRequest"
+    | "creation"
+    | "update"
+    | "deletion"
+    | "requiredLinearHistory"
+    | "nonFastForward"
+    | "mergeQueue"
+  >;
+};
+
+/**
+ * Lifts the rules of persisted props out of the legacy nested `rules` object.
+ */
+const upgradeProps = ({ rules, ...props }: PersistedRulesetProps): RulesetProps => ({
+  ...rules,
+  ...props,
+});
 
 export interface Ruleset extends Resource<
   "GitHub.Ruleset",
@@ -233,7 +307,7 @@ export interface Ruleset extends Resource<
  * accidental removal. Opt in to actual deletion by wrapping the resource in
  * {@link destroy}() from `alchemy/RemovalPolicy`.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied by
+ * Authentication is resolved via the GitHub `Credentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
  * `repo` scope, or repository Administration write permission for a
  * fine-grained token. Ruleset deletion does not require `delete_repo`.
@@ -249,11 +323,9 @@ export interface Ruleset extends Resource<
  *   conditions: {
  *     include: ["refs/heads/main"],
  *   },
- *   rules: {
- *     nonFastForward: true,
- *     deletion: true,
- *     requiredLinearHistory: true,
- *   },
+ *   nonFastForward: true,
+ *   deletion: true,
+ *   requiredLinearHistory: true,
  * })
  * ```
  *
@@ -267,13 +339,11 @@ export interface Ruleset extends Resource<
  *   conditions: {
  *     include: ["refs/heads/main", "refs/heads/release/*"],
  *   },
- *   rules: {
- *     pullRequest: {
- *       requiredApprovingReviewCount: 2,
- *       requireCodeOwnerReview: true,
- *       dismissStaleReviewsOnPush: true,
- *       requiredReviewThreadResolution: true,
- *     },
+ *   pullRequest: {
+ *     requiredApprovingReviewCount: 2,
+ *     requireCodeOwnerReview: true,
+ *     dismissStaleReviewsOnPush: true,
+ *     requiredReviewThreadResolution: true,
  *   },
  * })
  * ```
@@ -289,14 +359,35 @@ export interface Ruleset extends Resource<
  *   conditions: {
  *     include: ["refs/heads/main"],
  *   },
- *   rules: {
- *     requiredStatusChecks: {
- *       checks: [
- *         { context: "ci/test" },
- *         { context: "ci/lint" },
- *       ],
- *       strictRequiredStatusChecksPolicy: true,
- *     },
+ *   requiredStatusChecks: {
+ *     checks: [
+ *       { context: "ci/test" },
+ *       { context: "ci/lint" },
+ *     ],
+ *     strictRequiredStatusChecksPolicy: true,
+ *   },
+ * })
+ * ```
+ *
+ * ### Merge Queue
+ * GitHub only supports merge queues on branch rulesets in
+ * organization-owned repositories.
+ *
+ * **Example:** Merge Through a Squash Merge Queue
+ * ```typescript
+ * yield* GitHub.Ruleset("merge-queue", {
+ *   owner: "my-org",
+ *   repository: "my-repo",
+ *   name: "Merge queue",
+ *   conditions: {
+ *     include: ["~DEFAULT_BRANCH"],
+ *   },
+ *   mergeQueue: {
+ *     mergeMethod: "SQUASH",
+ *     groupingStrategy: "ALLGREEN",
+ *     maxEntriesToBuild: 2,
+ *     maxEntriesToMerge: 1,
+ *     minEntriesToMergeWaitMinutes: 1,
  *   },
  * })
  * ```
@@ -315,9 +406,7 @@ export interface Ruleset extends Resource<
  *   bypassActors: [
  *     { actorType: "RepositoryRole", actorId: 5 },
  *   ],
- *   rules: {
- *     nonFastForward: true,
- *   },
+ *   nonFastForward: true,
  * })
  * ```
  *
@@ -337,10 +426,8 @@ export interface Ruleset extends Resource<
  *   conditions: {
  *     include: ["~DEFAULT_BRANCH"],
  *   },
- *   rules: {
- *     deletion: true,
- *     nonFastForward: true,
- *   },
+ *   deletion: true,
+ *   nonFastForward: true,
  * }).pipe(adopt(true))
  * ```
  *
@@ -355,9 +442,10 @@ export const RulesetProvider = () =>
   Provider.succeed(Ruleset, {
     stables: ["rulesetId", "nodeId"],
 
-    diff: Effect.fn(function* ({ news, olds }) {
+    diff: Effect.fn(function* ({ news, olds: persisted }) {
       if (!isResolved(news)) return;
-      if (olds === undefined) return;
+      if (persisted === undefined) return;
+      const olds = upgradeProps(persisted);
       if (
         news.owner !== olds.owner ||
         news.repository !== olds.repository ||
@@ -365,245 +453,215 @@ export const RulesetProvider = () =>
       ) {
         return { action: "replace" };
       }
+      // State persisted with nested rules declares the same ruleset as the
+      // top-level rules it upgrades to.
+      if ("rules" in persisted && deepEqual(olds, news, { stripNullish: true })) {
+        return { action: "noop" };
+      }
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+    reconcile: Effect.fn(
+      function* ({ news, output }) {
+        let observed = output === undefined ? undefined : yield* getRuleset(news, output.rulesetId);
 
-      let observed = output === undefined ? undefined : yield* getRuleset(news, output.rulesetId);
+        const rules: NonNullable<Repos.CreateRepoRulesetRequest["rules"]> = [];
 
-      const rules: NonNullable<
-        NonNullable<Parameters<typeof octokit.rest.repos.createRepoRuleset>[0]>["rules"]
-      > = [];
+        if (news.creation) {
+          rules.push({ type: "creation" });
+        }
+        if (news.update) {
+          rules.push({
+            type: "update",
+            parameters: { update_allows_fetch_and_merge: false },
+          });
+        }
+        if (news.deletion) {
+          rules.push({ type: "deletion" });
+        }
+        if (news.nonFastForward) {
+          rules.push({ type: "non_fast_forward" });
+        }
+        if (news.requiredLinearHistory) {
+          rules.push({ type: "required_linear_history" });
+        }
+        if (news.requiredSignatures) {
+          rules.push({ type: "required_signatures" });
+        }
+        if (news.pullRequest) {
+          const pullRequest = news.pullRequest;
+          // `require_extra_approval_for_unattributed_changes` is accepted by the API but missing
+          // from its OpenAPI description, so it is added outside the typed literal.
+          const parameters = {
+            required_approving_review_count: pullRequest.requiredApprovingReviewCount ?? 0,
+            dismiss_stale_reviews_on_push: pullRequest.dismissStaleReviewsOnPush ?? false,
+            require_code_owner_review: pullRequest.requireCodeOwnerReview ?? false,
+            require_last_push_approval: pullRequest.requireLastPushApproval ?? false,
+            required_review_thread_resolution: pullRequest.requiredReviewThreadResolution ?? false,
+            ...(pullRequest.allowedMergeMethods !== undefined && {
+              allowed_merge_methods: pullRequest.allowedMergeMethods,
+            }),
+            ...(pullRequest.requireExtraApprovalForUnattributedChanges !== undefined && {
+              require_extra_approval_for_unattributed_changes:
+                pullRequest.requireExtraApprovalForUnattributedChanges,
+            }),
+          };
+          rules.push({ type: "pull_request", parameters });
+        }
+        if (news.mergeQueue) {
+          const mergeQueue = news.mergeQueue;
+          rules.push({
+            type: "merge_queue",
+            parameters: {
+              merge_method: mergeQueue.mergeMethod ?? "MERGE",
+              grouping_strategy: mergeQueue.groupingStrategy ?? "ALLGREEN",
+              max_entries_to_build: mergeQueue.maxEntriesToBuild ?? 5,
+              min_entries_to_merge: mergeQueue.minEntriesToMerge ?? 1,
+              max_entries_to_merge: mergeQueue.maxEntriesToMerge ?? 5,
+              min_entries_to_merge_wait_minutes: mergeQueue.minEntriesToMergeWaitMinutes ?? 5,
+              check_response_timeout_minutes: mergeQueue.checkResponseTimeoutMinutes ?? 60,
+            },
+          });
+        }
+        if (news.requiredStatusChecks) {
+          rules.push({
+            type: "required_status_checks",
+            parameters: {
+              required_status_checks: news.requiredStatusChecks.checks.map((check) => ({
+                context: check.context,
+                integration_id: check.integrationId,
+              })),
+              strict_required_status_checks_policy:
+                news.requiredStatusChecks.strictRequiredStatusChecksPolicy ?? false,
+            },
+          });
+        }
 
-      if (news.rules?.creation) {
-        rules.push({ type: "creation" });
-      }
-      if (news.rules?.update) {
-        rules.push({
-          type: "update",
-          parameters: { update_allows_fetch_and_merge: false },
-        });
-      }
-      if (news.rules?.deletion) {
-        rules.push({ type: "deletion" });
-      }
-      if (news.rules?.nonFastForward) {
-        rules.push({ type: "non_fast_forward" });
-      }
-      if (news.rules?.requiredLinearHistory) {
-        rules.push({ type: "required_linear_history" });
-      }
-      if (news.rules?.requiredSignatures) {
-        rules.push({ type: "required_signatures" });
-      }
-      if (news.rules?.pullRequest) {
-        const pullRequest = news.rules.pullRequest;
-        // `require_extra_approval_for_unattributed_changes` is accepted by the API but missing
-        // from its OpenAPI description, so it is added outside the typed literal.
-        const parameters = {
-          required_approving_review_count: pullRequest.requiredApprovingReviewCount ?? 0,
-          dismiss_stale_reviews_on_push: pullRequest.dismissStaleReviewsOnPush ?? false,
-          require_code_owner_review: pullRequest.requireCodeOwnerReview ?? false,
-          require_last_push_approval: pullRequest.requireLastPushApproval ?? false,
-          required_review_thread_resolution: pullRequest.requiredReviewThreadResolution ?? false,
-          ...(pullRequest.allowedMergeMethods !== undefined && {
-            allowed_merge_methods: pullRequest.allowedMergeMethods,
-          }),
-          ...(pullRequest.requireExtraApprovalForUnattributedChanges !== undefined && {
-            require_extra_approval_for_unattributed_changes:
-              pullRequest.requireExtraApprovalForUnattributedChanges,
-          }),
+        const conditions = {
+          ref_name: {
+            include: news.conditions?.include ?? ["~ALL"],
+            exclude: news.conditions?.exclude ?? [],
+          },
         };
-        rules.push({ type: "pull_request", parameters });
-      }
-      if (news.rules?.requiredStatusChecks) {
-        rules.push({
-          type: "required_status_checks",
-          parameters: {
-            required_status_checks: news.rules.requiredStatusChecks.checks.map((check) => ({
-              context: check.context,
-              integration_id: check.integrationId,
-            })),
-            strict_required_status_checks_policy:
-              news.rules.requiredStatusChecks.strictRequiredStatusChecksPolicy ?? false,
-          },
-        });
-      }
 
-      const conditions = {
-        ref_name: {
-          include: news.conditions?.include ?? ["~ALL"],
-          exclude: news.conditions?.exclude ?? [],
-        },
-      };
+        // Build the bypass actors payload
+        const bypassActors = news.bypassActors?.map((actor) => ({
+          actor_type: actor.actorType,
+          actor_id: actor.actorId,
+          bypass_mode: actor.bypassMode ?? "always",
+        }));
 
-      // Build the bypass actors payload
-      const bypassActors = news.bypassActors?.map((actor) => ({
-        actor_type: actor.actorType,
-        actor_id: actor.actorId,
-        bypass_mode: actor.bypassMode ?? "always",
-      }));
+        const desired = {
+          name: news.name,
+          target: news.target ?? "branch",
+          enforcement: news.enforcement ?? "active",
+          bypass_actors: bypassActors ?? [],
+          conditions,
+          rules,
+        } satisfies Omit<Repos.CreateRepoRulesetRequest, "owner" | "repo">;
 
-      const desired = {
-        name: news.name,
-        target: news.target ?? "branch",
-        enforcement: news.enforcement ?? "active",
-        bypass_actors: bypassActors ?? [],
-        conditions,
-        rules,
-      } satisfies Omit<
-        NonNullable<Parameters<typeof octokit.rest.repos.createRepoRuleset>[0]>,
-        "owner" | "repo"
-      >;
+        if (observed === undefined) {
+          observed = yield* Repos.createRepoRuleset({
+            owner: news.owner,
+            repo: news.repository,
+            ...desired,
+          });
+        }
 
-      if (observed === undefined) {
-        observed = yield* Effect.tryPromise({
-          try: () =>
-            octokit.rest.repos.createRepoRuleset({
-              owner: news.owner,
-              repo: news.repository,
-              ...desired,
-            }),
-          catch: (e) => e as Error,
-        }).pipe(Effect.map(({ data }) => data));
-      }
+        if (
+          !deepEqual(
+            {
+              name: observed.name,
+              target: observed.target,
+              enforcement: observed.enforcement,
+              bypass_actors: observed.bypass_actors ?? [],
+              conditions: observed.conditions,
+              rules: observed.rules ?? [],
+            },
+            desired,
+          )
+        ) {
+          const rulesetId = observed.id;
+          observed = yield* Repos.updateRepoRuleset({
+            owner: news.owner,
+            repo: news.repository,
+            ruleset_id: rulesetId,
+            ...desired,
+          });
+        }
 
-      if (
-        !deepEqual(
-          {
-            name: observed.name,
-            target: observed.target,
-            enforcement: observed.enforcement,
-            bypass_actors: observed.bypass_actors ?? [],
-            conditions: observed.conditions,
-            rules: observed.rules ?? [],
-          },
-          desired,
-        )
-      ) {
-        const rulesetId = observed.id;
-        observed = yield* Effect.tryPromise({
-          try: () =>
-            octokit.rest.repos.updateRepoRuleset({
-              owner: news.owner,
-              repo: news.repository,
-              ruleset_id: rulesetId,
-              ...desired,
-            }),
-          catch: (e) => e as Error,
-        }).pipe(Effect.map(({ data }) => data));
-      }
+        return attrsOf(observed);
+      },
+      (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
+    ),
 
-      return attrsOf(observed);
-    }),
-
-    read: Effect.fn(function* ({ olds, output }) {
-      if (output !== undefined) {
-        const observed = yield* getRuleset(olds, output.rulesetId);
-        return observed === undefined ? undefined : attrsOf(observed);
-      }
-      const octokit = yield* octokitFor(olds.baseUrl);
-      const rulesets = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.getRepoRulesets, {
+    read: Effect.fn(
+      function* ({ olds, output }) {
+        if (output !== undefined) {
+          const observed = yield* getRuleset(olds, output.rulesetId);
+          return observed === undefined ? undefined : attrsOf(observed);
+        }
+        const rulesets = yield* Stream.runCollect(
+          Repos.getRepoRulesets.items({
             owner: olds.owner,
             repo: olds.repository,
             includes_parents: false,
             per_page: 100,
           }),
-        catch: (e) => e as Error & { status?: number },
-      }).pipe(
-        Effect.catchIf(
-          (error) => error.status === 404,
-          () => Effect.succeed([]),
-        ),
-      );
-      const match = rulesets.find((ruleset) => ruleset.name === olds.name);
-      if (match === undefined) return undefined;
-      const observed = yield* getRuleset(olds, match.id);
-      return observed === undefined ? undefined : Unowned(attrsOf(observed));
-    }),
+        ).pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
+        const match = rulesets.find((ruleset) => ruleset.name === olds.name);
+        if (match === undefined) return undefined;
+        const observed = yield* getRuleset(olds, match.id);
+        return observed === undefined ? undefined : Unowned(attrsOf(observed));
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
 
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
-
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
-
+      const repos = yield* Stream.runCollect(
+        Repos.listForAuthenticatedUser.items({ per_page: 100 }),
+      );
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          Effect.tryPromise({
-            try: () =>
-              octokit.paginate(octokit.rest.repos.getRepoRulesets, {
-                owner: repo.owner.login,
-                repo: repo.name,
-                includes_parents: false,
-                per_page: 100,
-              }),
-            catch: (e) => e as Error & { status?: number },
-          }).pipe(
+          Stream.runCollect(
+            Repos.getRepoRulesets.items({
+              owner: repo.owner.login,
+              repo: repo.name,
+              includes_parents: false,
+              per_page: 100,
+            }),
+          ).pipe(
             Effect.map((rulesets) => rulesets.map(attrsOf)),
-            Effect.catchIf(
-              (error) => error.status === 403 || error.status === 404,
-              () => Effect.succeed([]),
-            ),
+            Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
           ),
         { concurrency: 10 },
       );
-
       return perRepo.flat();
     }),
 
-    delete: Effect.fn(function* ({ olds, output }) {
-      if (output?.rulesetId === undefined) return;
-
-      const octokit = yield* octokitFor(olds.baseUrl);
-
-      yield* Effect.tryPromise({
-        try: () =>
-          octokit.rest.repos.deleteRepoRuleset({
-            owner: olds.owner,
-            repo: olds.repository,
-            ruleset_id: output.rulesetId,
-          }),
-        catch: (e) => e as Error & { status?: number },
-      }).pipe(
-        Effect.catchIf(
-          (error) => error.status === 404,
-          () => Effect.void,
-        ),
-      );
-    }),
+    delete: Effect.fn(
+      function* ({ olds, output }) {
+        if (output?.rulesetId === undefined) return;
+        yield* Repos.deleteRepoRuleset({
+          owner: olds.owner,
+          repo: olds.repository,
+          ruleset_id: output.rulesetId,
+        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
   });
 
-const getRuleset = Effect.fn(function* (
-  props: Pick<RulesetProps, "owner" | "repository" | "baseUrl">,
-  rulesetId: number,
-) {
-  const octokit = yield* octokitFor(props.baseUrl);
-  return yield* Effect.tryPromise({
-    try: () =>
-      octokit.rest.repos.getRepoRuleset({
-        owner: props.owner,
-        repo: props.repository,
-        ruleset_id: rulesetId,
-      }),
-    catch: (e) => e as Error & { status?: number },
-  }).pipe(
-    Effect.map(({ data }) => data),
-    Effect.catchIf(
-      (error) => error.status === 404,
-      () => Effect.succeed(undefined),
-    ),
-  );
-});
+const getRuleset = Effect.fn(
+  function* (props: Pick<RulesetProps, "owner" | "repository" | "baseUrl">, rulesetId: number) {
+    return yield* Repos.getRepoRuleset({
+      owner: props.owner,
+      repo: props.repository,
+      ruleset_id: rulesetId,
+    }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  },
+  (effect, props) => effect.pipe(withBaseUrl(props.baseUrl)),
+);
 
 const attrsOf = (ruleset: {
   id: number;

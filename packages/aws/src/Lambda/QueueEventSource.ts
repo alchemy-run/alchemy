@@ -2,13 +2,16 @@ import * as Namespace from "alchemy/Namespace";
 import type lambda from "aws-lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
+import * as Option from "effect/Option";
+import { processBatch, traceparentLink } from "../internal/EventSourceBatch.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import {
   QueueEventSource as SQSQueueEventSource,
   type QueueEventSourceProps,
   type QueueEventSourceService,
-  type SQSRecord,
+  type QueueMessagesHandler,
+  type SQSBatchResponse,
+  type SQSEvent,
 } from "../SQS/QueueEventSource.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";
@@ -25,12 +28,10 @@ export const QueueEventSource = Layer.effect(
     const host = yield* Lambda.eventSourceHost("AWS.Lambda.QueueEventSource");
     const Mapping = yield* EventSourceMapping;
 
-    return Effect.fn(function* <StreamReq = never, Req = never>(
+    return Effect.fn(function* <E = never, Req = never>(
       queue: Queue,
       props: QueueEventSourceProps,
-      process: (
-        stream: Stream.Stream<SQSRecord, never, StreamReq>,
-      ) => Effect.Effect<void, never, Req | StreamReq>,
+      process: QueueMessagesHandler<E, Req>,
     ) {
       // Deploy-time: grant IAM and create the event-source mapping. Skipped once
       // running inside the deployed Function (the global guard), where the only
@@ -65,7 +66,8 @@ export const QueueEventSource = Layer.effect(
         Effect.gen(function* () {
           return (event: any) => {
             if (isSQSEvent(event)) {
-              return process(Stream.fromArray(event.Records)).pipe(Effect.orDie);
+              // A failure fails the invocation, so Lambda retries the whole batch.
+              return processQueueBatch(event, process).pipe(Effect.orDie);
             }
           };
         }),
@@ -73,3 +75,24 @@ export const QueueEventSource = Layer.effect(
     }) as QueueEventSourceService;
   }),
 );
+
+/**
+ * Run one SQS batch through the user's handler inside a CONSUMER span and
+ * normalize its result into Lambda's partial-batch response. A failure
+ * propagates so the invocation errors and Lambda retries the whole batch.
+ */
+const processQueueBatch = <E, Req>(
+  event: SQSEvent,
+  process: QueueMessagesHandler<E, Req>,
+): Effect.Effect<SQSBatchResponse, E, Req> =>
+  process(event).pipe(
+    Effect.map((response) => response ?? { batchItemFailures: [] }),
+    processBatch({
+      system: "aws_sqs",
+      destination: event.Records[0]?.eventSourceARN.split(":")[5] ?? "unknown",
+      count: event.Records.length,
+      links: event.Records.flatMap((record) =>
+        Option.toArray(traceparentLink(record.messageAttributes?.traceparent?.stringValue)),
+      ),
+    }),
+  );

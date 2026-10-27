@@ -40,7 +40,7 @@ export const STATE_STORE_VERSION = 8 as const;
 
 /**
  * Hard-coded OTLP/HTTP endpoints. Point at the public ingest relay
- * defined in `stacks/otel.ts` (bound to `otel.alchemy.run`), which
+ * defined in `stacks/src/otel.ts` (bound to `otel.alchemy.run`), which
  * forwards to Axiom with the bearer token attached server-side. Hard-
  * coded on purpose: the worker has no env-var plumbing and the relay
  * is account-level infra that lives outside any single deploy.

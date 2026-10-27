@@ -2,16 +2,16 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as rules from "@distilled.cloud/cloudflare/rules";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { expectUrlRedirect } from "../Utils/Http.ts";
+import { expectUrlRedirect, waitForDns } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -367,6 +367,9 @@ test.provider(
         },
       });
 
+      // The proxied record is brand new; confirm it on the authoritative
+      // nameservers before the first fetch so no resolver caches NXDOMAIN.
+      yield* waitForDns(hostname);
       yield* expectUrlRedirect(`https://${hostname}/old-a`, "/new-a");
       yield* expectUrlRedirect(`https://${hostname}/old-b`, "/new-b");
 

@@ -1,7 +1,7 @@
 import type { MemoOptions } from "alchemy/Command/Memo";
 import type { InputProps } from "alchemy/Input";
 import { effectClass } from "alchemy/Util/effect";
-import { resolveAstroOutput } from "alchemy/Website/AstroOutput";
+import { resolveAstroSettings } from "alchemy/Website/AstroOutput";
 import * as Effect from "effect/Effect";
 import { Namespace } from "../KV/Namespace.ts";
 import type { Providers } from "../Providers.ts";
@@ -199,6 +199,30 @@ type AstroInput<Bindings extends WorkerBindingProps> = InputProps<
  * });
  * ```
  *
+ * ### Route Caching
+ * Astro's route cache works with Workers Cache. Set the cache provider to
+ * `cacheCloudflare()` and Workers Cache is turned on for the Worker. Pages
+ * then go to the edge cache with the rules you give in `routeRules` or
+ * `Astro.cache.set()`. A response with no cache rule is not cached. Set
+ * `cache` on the site to override the Worker cache settings.
+ *
+ * **Example:** Caching a route at the edge
+ * ```typescript
+ * // astro.config.mjs
+ * import { defineConfig } from "astro/config";
+ * import { cacheCloudflare } from "@alchemy.run/frontend-frameworks/astro/cache";
+ *
+ * export default defineConfig({
+ *   cache: { provider: cacheCloudflare() },
+ *   routeRules: { "/insights": { maxAge: 600, swr: 86400 } },
+ * });
+ * ```
+ *
+ * ```typescript
+ * // alchemy.run.ts
+ * const site = yield* Cloudflare.Website.Astro("Website");
+ * ```
+ *
  * ### Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether a
  * rebuild is needed. Use `memo` to narrow the scope when your project
@@ -295,7 +319,7 @@ export const Astro: {
           // `"server"`: astro's own zero-config default is `"static"`,
           // which would prerender every page at build time inside workerd
           // — where the Worker's bindings don't exist.
-          const output = yield* resolveAstroOutput({
+          const { output, workerCache } = yield* resolveAstroSettings({
             rootDir: props.rootDir,
             config: props.config,
             output: props.astro?.output,
@@ -317,6 +341,10 @@ export const Astro: {
           return {
             ...props,
             env,
+            // Astro's Cloudflare cache provider caches responses in Workers
+            // Cache, so turn it on for the Worker unless `cache` is set.
+            cache:
+              props.cache ?? (workerCache && output !== "static" ? { enabled: true } : undefined),
             // Astro's vendored server runtime is built against Node APIs
             // and needs `nodejs_compat`; `getCompatibility` already adds it
             // to every non-python Worker (honoring an explicit

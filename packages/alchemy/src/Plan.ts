@@ -1494,13 +1494,15 @@ const makePlan = <A>(
           renamedFrom,
           adoptionBlocked: reusesMigratedFqn ? "migrated-fqn" : undefined,
           deferredAdoption:
-            provider.read &&
+            (provider.read || provider.observe) &&
             !reusesMigratedFqn &&
             // A replacement targets a new physical identity, which may belong
             // to someone else — admit it like a fresh create.
             (node.action === "replace" ||
               (node.action === "create" &&
-                ((oldState === undefined && !isResolved(news)) ||
+                // Plan reads resolved props itself; without `read`, Apply
+                // admits them through `observe`.
+                ((oldState === undefined && (!isResolved(news) || !provider.read)) ||
                   (oldState?.status === "creating" && oldState.attr === undefined))))
               ? { adopt: adoptThis }
               : undefined,
@@ -1527,7 +1529,16 @@ const makePlan = <A>(
         // `output` is undefined (as it is here), so handing them
         // unresolved exprs crashes. Skip the probe — same behavior as
         // a read that found nothing — and re-drive the create.
-        if (provider.read && !reusesMigratedFqn && isResolved(oldState.props)) {
+        //
+        // A checkpoint whose unresolved props were stripped (`propsIncomplete`)
+        // can't identify the attempt at all: a lookup could match a different
+        // resource. Skip it too and let the diff below decide.
+        if (
+          provider.read &&
+          !reusesMigratedFqn &&
+          !oldState.propsIncomplete &&
+          isResolved(oldState.props)
+        ) {
           const attr = yield* provider
             .read({
               id,

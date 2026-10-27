@@ -22,6 +22,7 @@ import { getDefaultVpcEmrManagedSecurityGroupIds, getDefaultVpcScope } from "./d
 import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
 import {
   declaredSecurityGroupRuleIds,
+  persistedSecurityGroupRuleIds,
   expandSecurityGroupRules,
   observedSecurityGroupRuleKey,
   resolveSecurityGroupRules,
@@ -687,8 +688,14 @@ export const SecurityGroupProvider = () =>
               )
             : yield* findOwnedGroup(id, yield* createGroupName(id, olds?.groupName), olds?.vpcId);
           if (!sg?.GroupId) return undefined;
+          // Rules declared as separate SecurityGroupRule resources are theirs,
+          // not the group's (reconcile leaves them out of its attributes too).
+          const owned = yield* persistedSecurityGroupRuleIds(sg.GroupId);
           const rules = yield* describeSecurityGroupRules(sg.GroupId);
-          return yield* toAttrs(sg, rules);
+          return yield* toAttrs(
+            sg,
+            rules.filter((rule) => !owned.has(rule.SecurityGroupRuleId!)),
+          );
         }),
 
         list: () =>
@@ -890,7 +897,10 @@ export const SecurityGroupProvider = () =>
           if (!matches(finalRules)) {
             return yield* new SecurityGroupRulesNotSettled({ groupId });
           }
-          return yield* toAttrs(finalSg, finalRules);
+          return yield* toAttrs(
+            finalSg,
+            finalRules.filter((rule) => !owned.has(rule.SecurityGroupRuleId!)),
+          );
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

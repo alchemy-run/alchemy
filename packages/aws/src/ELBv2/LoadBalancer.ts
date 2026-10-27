@@ -152,6 +152,13 @@ export interface LoadBalancer extends Resource<
  */
 export const LoadBalancer = Resource<LoadBalancer>("AWS.ELBv2.LoadBalancer");
 
+// ELB returns subnets and security groups in no fixed order (subnets follow
+// availability zones), so Attributes hold them sorted for drift to compare.
+const sortedSubnets = (lb: elbv2.LoadBalancer) =>
+  (lb.AvailabilityZones ?? []).flatMap((zone) => (zone.SubnetId ? [zone.SubnetId] : [])).sort();
+
+const sortedSecurityGroups = (lb: elbv2.LoadBalancer) => [...(lb.SecurityGroups ?? [])].sort();
+
 export const LoadBalancerProvider = () =>
   Provider.effect(
     LoadBalancer,
@@ -237,11 +244,8 @@ export const LoadBalancerProvider = () =>
             vpcId: loadBalancer.VpcId!,
             scheme: loadBalancer.Scheme!,
             type: loadBalancer.Type!,
-            securityGroups: loadBalancer.SecurityGroups ?? [],
-            subnets:
-              loadBalancer.AvailabilityZones?.flatMap((zone) =>
-                zone.SubnetId ? [zone.SubnetId] : [],
-              ) ?? [],
+            securityGroups: sortedSecurityGroups(loadBalancer),
+            subnets: sortedSubnets(loadBalancer),
             attributes,
           };
         }),
@@ -306,10 +310,8 @@ export const LoadBalancerProvider = () =>
               vpcId: lb.VpcId!,
               scheme: lb.Scheme!,
               type: lb.Type!,
-              securityGroups: lb.SecurityGroups ?? [],
-              subnets:
-                lb.AvailabilityZones?.flatMap((zone) => (zone.SubnetId ? [zone.SubnetId] : [])) ??
-                [],
+              securityGroups: sortedSecurityGroups(lb),
+              subnets: sortedSubnets(lb),
               tags: tagsByArn.get(lb.LoadBalancerArn) ?? {},
             }));
           }),
@@ -450,20 +452,25 @@ export const LoadBalancerProvider = () =>
             });
           }
 
+          // Re-read so subnets and security groups set above are reflected.
+          const final =
+            (yield* elbv2
+              .describeLoadBalancers({ LoadBalancerArns: [loadBalancerArn] })
+              .pipe(
+                Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
+              ))?.LoadBalancers?.[0] ?? loadBalancer;
+
           yield* session.note(loadBalancerArn);
           return {
             loadBalancerArn,
-            loadBalancerName: loadBalancer.LoadBalancerName!,
-            dnsName: loadBalancer.DNSName!,
-            canonicalHostedZoneId: loadBalancer.CanonicalHostedZoneId!,
-            vpcId: loadBalancer.VpcId!,
-            scheme: loadBalancer.Scheme!,
-            type: loadBalancer.Type!,
-            securityGroups: loadBalancer.SecurityGroups ?? [],
-            subnets:
-              loadBalancer.AvailabilityZones?.flatMap((zone) =>
-                zone.SubnetId ? [zone.SubnetId] : [],
-              ) ?? [],
+            loadBalancerName: final.LoadBalancerName!,
+            dnsName: final.DNSName!,
+            canonicalHostedZoneId: final.CanonicalHostedZoneId!,
+            vpcId: final.VpcId!,
+            scheme: final.Scheme!,
+            type: final.Type!,
+            securityGroups: sortedSecurityGroups(final),
+            subnets: sortedSubnets(final),
             tags: desiredTags,
             attributes,
           };

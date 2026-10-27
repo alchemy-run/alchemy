@@ -36,3 +36,14 @@ export const qualifiedNameOf = (fn: QualifiedFunctionRef): Output.Output<string>
     ([qualifiedArn, functionArn, functionName]: [string | undefined, string, string]) =>
       aliasArnOf(qualifiedArn, functionArn) ?? functionName,
   );
+
+/**
+ * The `Qualifier` to start `fn`'s durable executions on: the alias name when
+ * the Function sets `alias`, otherwise `$LATEST`.
+ */
+export const qualifierOf = (fn: QualifiedFunctionRef): Output.Output<string> =>
+  Output.map(
+    Output.all(fn.qualifiedArn, fn.functionArn),
+    ([qualifiedArn, functionArn]: [string | undefined, string]) =>
+      aliasArnOf(qualifiedArn, functionArn)?.slice(functionArn.length + 1) ?? "$LATEST",
+  );

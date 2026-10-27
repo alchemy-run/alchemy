@@ -3,6 +3,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import * as R2 from "@alchemy.run/cloudflare/R2";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers_for_platforms";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
@@ -14,7 +15,6 @@ import * as Provider from "alchemy/Provider";
 import { Stack } from "alchemy/Stack";
 import { State } from "alchemy/State";
 import { isResourceState } from "alchemy/State/State";
-import * as Test from "alchemy/Test/Alchemy";
 import { initialCwd } from "alchemy/Util/Node";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -38,6 +38,8 @@ import {
 import type { Counter, Meter } from "./fixtures/do-counter-worker.ts";
 import InitConfigWorker from "./fixtures/init-config-worker.ts";
 import InternalWorker from "./fixtures/internal-worker.ts";
+import OldCompatEffectWorker from "./fixtures/old-compat-effect-worker.ts";
+import TerminalEffectWorker from "./fixtures/terminal-effect-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 const { test: devTest } = Test.make({ providers: Cloudflare.providers(), dev: true });
@@ -1151,6 +1153,67 @@ describe.concurrent(
     const scriptName = (stack: Test.ScratchStack, suffix: string) =>
       `alchemy-cyclic-${suffix}-${stack.stage}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
 
+    // #2194: an interrupted create stores its props without the ones that were
+    // still unresolved. A namespace stripped that way leaves `{ name }`, which
+    // a recovery lookup resolves to the account-level script of that name.
+    // Destroy must not delete that script: the attempt never targeted it.
+    test.provider(
+      "destroy never recovers an interrupted create from props missing its namespace",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* stack.destroy();
+          const name = scriptName(stack, "provenance");
+          // An account-level script tagged for `Api`, unknown to state.
+          yield* stack.deploy(Cloudflare.Worker("Api", { main, name, workersDev: false }));
+          const restore = yield* forget(stack, "Api");
+          const deployments = () => workers.listScriptDeployments({ accountId, scriptName: name });
+          const before = yield* deployments();
+
+          // `Api` waits on a Worker whose upload fails, so its create stops
+          // with the namespace still unresolved and no attributes recorded.
+          const error = yield* stack
+            .deploy(
+              Effect.gen(function* () {
+                const tenant = yield* Cloudflare.WorkersForPlatforms.DispatchNamespace(
+                  "ProvenanceTenant",
+                  { name: scriptName(stack, "provenance-ns") },
+                );
+                const broken = yield* Cloudflare.Worker("Broken", {
+                  script: "export default {",
+                  workersDev: false,
+                });
+                return yield* Cloudflare.Worker("Api", {
+                  main,
+                  name,
+                  namespace: tenant.name,
+                  env: { BROKEN: broken.workerName },
+                });
+              }),
+            )
+            .pipe(Effect.flip);
+          expect(error).toBeDefined();
+          const checkpoint = yield* Effect.gen(function* () {
+            const state = yield* yield* State;
+            return yield* state.get({ stack: stack.name, stage: stack.stage, fqn: "Api" });
+          }).pipe(Effect.provide(stack.state));
+          expect(checkpoint).toMatchObject({ status: "creating", propsIncomplete: true });
+          if (isResourceState(checkpoint)) {
+            expect(checkpoint.attr).toBeUndefined();
+            expect(checkpoint.props).not.toHaveProperty("namespace");
+          }
+
+          yield* stack.destroy();
+          // The account-level script survived the destroy, untouched.
+          expect(yield* deployments()).toEqual(before);
+
+          yield* restore;
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(name, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 180_000 },
+    );
+
     test.provider(
       "a cyclic dispatch-namespace Worker refuses a foreign script in its namespace",
       (stack) =>
@@ -1193,6 +1256,134 @@ describe.concurrent(
           // Remember the original before the namespace goes, so destroy deletes its script first.
           yield* restore;
           yield* stack.destroy();
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 180_000 },
+    );
+
+    // #2540: a cyclic Worker whose namespace is still unresolved precreates a
+    // stub that claims nothing. Its script must be checked once the namespace
+    // resolves, before reconcile uploads over a foreign script there.
+    test.provider(
+      "a cyclic Worker refuses a foreign script in a namespace that resolves during apply",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* stack.destroy();
+          const namespaceName = scriptName(stack, "late-ns");
+          const name = scriptName(stack, "late-user");
+          const namespace = Cloudflare.WorkersForPlatforms.DispatchNamespace("LateNamespace", {
+            name: namespaceName,
+          });
+          yield* stack.deploy(namespace);
+          yield* stack.deploy(
+            Effect.gen(function* () {
+              yield* namespace;
+              return yield* Cloudflare.Worker("LateOriginal", {
+                main,
+                name,
+                namespace: namespaceName,
+              });
+            }),
+          );
+          const restore = yield* forget(stack, "LateOriginal");
+          const request = { accountId, dispatchNamespace: namespaceName, scriptName: name };
+          const before = yield* wfp.getDispatchNamespaceScript(request);
+
+          const program = Effect.gen(function* () {
+            const ns = yield* namespace;
+            const kv = yield* Cloudflare.KV.Namespace("LateKv");
+            const worker = yield* Cloudflare.Worker("LateDifferent", {
+              main,
+              name,
+              // Resolves only once `LateKv` is created, after the cycle precreates.
+              namespace: Output.all(ns.name, kv.namespaceId).pipe(Output.map(([name]) => name)),
+              workersDev: false,
+              env: { KV: kv },
+            });
+            yield* worker.bind`SELF_NAME`({
+              bindings: [{ type: "plain_text", name: "SELF_NAME", text: worker.workerName }],
+            });
+            return worker;
+          });
+          const error = yield* stack.deploy(program).pipe(Effect.flip);
+          expect(error).toMatchObject({ _tag: "OwnedBySomeoneElse", logicalId: "LateDifferent" });
+          expect((yield* wfp.getDispatchNamespaceScript(request)).modifiedOn).toBe(
+            before.modifiedOn,
+          );
+          const checkpoint = yield* Effect.gen(function* () {
+            const state = yield* yield* State;
+            return yield* state.get({
+              stack: stack.name,
+              stage: stack.stage,
+              fqn: "LateDifferent",
+            });
+          }).pipe(Effect.provide(stack.state));
+          // The stub claimed nothing, so a retry checks the script again.
+          expect(checkpoint?.status).toBe("creating");
+          if (isResourceState(checkpoint)) expect(checkpoint.attr).toBeUndefined();
+
+          // Remember the original before the namespace goes, so destroy deletes its script first.
+          yield* restore;
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 180_000 },
+    );
+
+    // #2533: a cyclic dispatch-namespace Worker precreates a stub that uploads
+    // nothing. Its namespace is still unresolved, so the checkpoint keeps no
+    // stub (#2540). When the upload then fails, destroy must not read that as
+    // an account-level Worker and delete the same-name script there.
+    test.provider(
+      "destroy preserves the account Worker after an interrupted dispatch precreate",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* stack.destroy();
+          const name = scriptName(stack, "stub-cleanup");
+          // An account-level script tagged for `Api`, unknown to state.
+          yield* stack.deploy(Cloudflare.Worker("Api", { main, name, workersDev: false }));
+          const restore = yield* forget(stack, "Api");
+          yield* Effect.gen(function* () {
+            const deployments = () =>
+              workers.listScriptDeployments({ accountId, scriptName: name });
+            const before = yield* deployments();
+            // The namespace derives from a new output and doesn't exist, so
+            // the dispatch upload fails after precreate wrote its stub.
+            const error = yield* stack
+              .deploy(
+                Effect.gen(function* () {
+                  const late = yield* Cloudflare.KV.Namespace("StubScopeMarker");
+                  const worker = yield* Cloudflare.Worker("Api", {
+                    main,
+                    name,
+                    namespace: Output.map(late.namespaceId, () =>
+                      scriptName(stack, "unavailable-ns"),
+                    ),
+                    env: { KV: late },
+                  });
+                  yield* worker.bind`SELF_NAME`({
+                    bindings: [{ type: "plain_text", name: "SELF_NAME", text: worker.workerName }],
+                  });
+                  return worker;
+                }),
+              )
+              .pipe(Effect.flip);
+            expect(error).toBeDefined();
+            const checkpoint = yield* Effect.gen(function* () {
+              const state = yield* yield* State;
+              return yield* state.get({ stack: stack.name, stage: stack.stage, fqn: "Api" });
+            }).pipe(Effect.provide(stack.state));
+            expect(checkpoint).toMatchObject({ status: "creating" });
+            if (!isResourceState(checkpoint))
+              return yield* Effect.die("Missing resource checkpoint");
+            expect(checkpoint.attr).toBeUndefined();
+            expect(yield* deployments()).toEqual(before);
+
+            yield* stack.destroy();
+            // The account-level script survived the destroy, untouched.
+            expect(yield* deployments()).toEqual(before);
+          }).pipe(Effect.ensuring(restore.pipe(Effect.andThen(stack.destroy()), Effect.orDie)));
+          yield* waitForWorkerToBeDeleted(name, accountId);
         }).pipe(logLevel),
       { tags: ["live"], timeout: 180_000 },
     );
@@ -1433,6 +1624,44 @@ describe.concurrent(
       { tags: ["live"] },
     );
 
+    // `process.stdin` is undefined on compatibility dates before Node.js
+    // process v2, so an Effect Worker's platform services must not read it
+    // while the Worker starts.
+    for (const [label, worker, dev] of [
+      ["live", test, false],
+      ["dev", devTest, true],
+    ] as const) {
+      worker.provider(
+        `Effect Worker serves on a compatibility date without process.stdin (${label})`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const deployed = yield* stack.deploy(OldCompatEffectWorker);
+            yield* expectUrlContains(deployed.url!, "Hello from an old compatibility date", {
+              label: `old compatibility date (${label})`,
+            });
+            yield* stack.destroy();
+          }).pipe(logLevel),
+        { tags: [dev ? "local" : "live"] },
+      );
+
+      // ...while on later dates, where `process.stdin` exists, handlers
+      // still get the `Terminal` service.
+      worker.provider(
+        `Effect Worker on a current compatibility date still provides Terminal (${label})`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const deployed = yield* stack.deploy(TerminalEffectWorker);
+            yield* expectUrlContains(deployed.url!, "Terminal provided (number)", {
+              label: `Terminal on a current compatibility date (${label})`,
+            });
+            yield* stack.destroy();
+          }).pipe(logLevel),
+        { tags: [dev ? "local" : "live"] },
+      );
+    }
+
     // #745 regression: metadata-only edits (compatibility flags, observability,
     // placement, limits, logpush, env literals, ...) never touch the
     // bundle/vite/asset-content hashes, so the update decision used to plan
@@ -1508,6 +1737,57 @@ describe.concurrent(
           yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["live"], timeout: 360_000 },
+    );
+
+    // Cloudflare keeps a `secret_text` binding that a script upload omits, so
+    // a secret removed from `env` stayed bound to the deployed Worker. The
+    // cleanup must not touch a secret set outside Alchemy.
+    test.provider(
+      "a secret removed from env is unbound; one set outside Alchemy is kept",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const program = (env: Record<string, Redacted.Redacted<string>>) =>
+            Cloudflare.Worker("RemovedSecretWorker", { main, env });
+          const secretBindings = (scriptName: string) =>
+            workers.getScriptScriptAndVersionSetting({ accountId, scriptName }).pipe(
+              Effect.map((settings) =>
+                (settings.bindings ?? [])
+                  .filter((binding) => binding.type === "secret_text")
+                  .map((binding) => binding.name)
+                  .sort(),
+              ),
+            );
+
+          const v1 = yield* stack.deploy(
+            program({ DROPPED: Redacted.make("dropped"), KEPT: Redacted.make("kept") }),
+          );
+          expect(yield* secretBindings(v1.workerName)).toEqual(["DROPPED", "KEPT"]);
+          yield* workers.putScriptSecret({
+            accountId,
+            scriptName: v1.workerName,
+            name: "OUTSIDE",
+            text: "set-outside-alchemy",
+            type: "secret_text",
+          });
+
+          const v2 = yield* stack.deploy(program({ KEPT: Redacted.make("kept") }));
+          expect(yield* secretBindings(v2.workerName)).toEqual(["KEPT", "OUTSIDE"]);
+          expect(v2.secretNames).toEqual(["KEPT"]);
+
+          const settledPlan = yield* stack.plan(program({ KEPT: Redacted.make("kept") }));
+          const action = Object.values(settledPlan.resources).find(
+            (node) => node.resource.LogicalId === "RemovedSecretWorker",
+          )?.action;
+          expect(action).toBe("noop");
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 240_000 },
     );
 
     test.provider(

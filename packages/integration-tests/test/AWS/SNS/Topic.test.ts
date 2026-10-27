@@ -2,11 +2,12 @@ import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { Topic } from "@alchemy.run/aws/SNS";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as SNS from "@distilled.cloud/aws/sns";
 import { adopt } from "alchemy/AdoptPolicy";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -69,6 +70,22 @@ describe("AWS.SNS.Topic", { tags: ["provider:aws", "provider:aws:sns", "live"] }
       const initialAttributes = yield* SNS.getTopicAttributes({ TopicArn: topic.topicArn });
       expect(initialAttributes.Attributes?.DisplayName).toBe("managed-topic-v1");
 
+      // #1968: SNS-filled attributes (Policy, Owner, counters) are not drift,
+      // but an out-of-band change to a declared attribute is.
+      const target = { name: stack.name, stage: stack.stage };
+      const clean = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
+      expect(clean.resources.ManagedTopic?.action).toBe("unchanged");
+      yield* SNS.setTopicAttributes({
+        TopicArn: topic.topicArn,
+        AttributeName: "DisplayName",
+        AttributeValue: "changed-out-of-band",
+      });
+      const drifted = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
+      expect(drifted.resources.ManagedTopic).toMatchObject({
+        action: "drifted",
+        attr: { attributes: { DisplayName: "changed-out-of-band" } },
+      });
+
       const updatedTopic = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Topic("ManagedTopic", {
@@ -109,6 +126,13 @@ describe("AWS.SNS.Topic", { tags: ["provider:aws", "provider:aws:sns", "live"] }
       const attributes = yield* SNS.getTopicAttributes({ TopicArn: topic.topicArn });
       expect(attributes.Attributes?.FifoTopic).toBe("true");
       expect(attributes.Attributes?.ContentBasedDeduplication).toBe("true");
+
+      // #1968: SNS rejects the data protection policy read on FIFO topics;
+      // that must not make the topic read as missing.
+      const clean = yield* Drift.detect({ name: stack.name, stage: stack.stage }).pipe(
+        Effect.provide(stack.state),
+      );
+      expect(clean.resources.FifoTopic?.action).toBe("unchanged");
 
       yield* stack.destroy();
       yield* assertTopicDeleted(topic.topicArn);

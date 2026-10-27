@@ -1305,6 +1305,7 @@
         "default": "./lib/XRay/index.js"
       },
       "./EKS/internal/*": null,
+      "./internal/*": null,
       "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",

@@ -10,11 +10,11 @@ import {
 } from "@alchemy.run/aws/EC2";
 import type { DefaultSecurityGroupProps, SecurityGroupRuleData, VpcId } from "@alchemy.run/aws/EC2";
 import { expect } from "@alchemy.run/test";
+import * as Core from "@alchemy.run/test/Core";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as Drift from "alchemy/Drift";
 import * as Output from "alchemy/Output";
 import { isActionState, State } from "alchemy/State/State";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
@@ -977,6 +977,9 @@ for (const mode of ["omitted", "empty", "inline"] as const) {
           created.ingress!.securityGroupRuleId,
           created.egress!.securityGroupRuleId,
         ];
+        // #1968: the standalone rules created after the group are not drift.
+        const drift = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
+        expect(drift.resources.CompositionGroup?.action).toBe("unchanged");
         const initial = yield* readRules(groupId);
         expect(initial).toHaveLength(mode === "omitted" ? 3 : mode === "empty" ? 2 : 4);
         expect(initial.filter((rule) => !rule.IsEgress)).toHaveLength(mode === "inline" ? 2 : 1);
@@ -1052,11 +1055,12 @@ for (const mode of ["omitted", "empty", "inline"] as const) {
             initial.filter((rule) => ownedIds.some((id) => id === rule.SecurityGroupRuleId)),
           ),
         );
+        // Standalone rules belong to their SecurityGroupRule, not the group.
         expect(
-          [...updated.group.ingressRules, ...updated.group.egressRules].map(
-            (rule) => rule.securityGroupRuleId,
+          [...updated.group.ingressRules, ...updated.group.egressRules].filter((rule) =>
+            ownedIds.some((id) => id === rule.securityGroupRuleId),
           ),
-        ).toEqual(expect.arrayContaining(ownedIds));
+        ).toEqual([]);
 
         const described = yield* stack.deploy(program(8443, "Updated standalone"));
         expect([
@@ -1476,13 +1480,9 @@ test.provider(
         const repaired = yield* stack.deploy(program);
         expect(yield* readRules(groupId)).toHaveLength(2);
         expect(yield* readRules(groupId)).toEqual(expect.arrayContaining(targetRules));
-        expect(repaired.group.ingressRules).toHaveLength(1);
-        expect(repaired.group.egressRules).toHaveLength(1);
-        expect(
-          [...repaired.group.ingressRules, ...repaired.group.egressRules]
-            .map((rule) => rule.securityGroupRuleId)
-            .sort(),
-        ).toEqual(targetRules.map((rule) => rule.SecurityGroupRuleId).sort());
+        // The remaining rules are TargetIngress/TargetEgress's, not the group's.
+        expect(repaired.group.ingressRules).toEqual([]);
+        expect(repaired.group.egressRules).toEqual([]);
         expect(yield* readRules(created.peer.groupId)).toEqual(expect.arrayContaining(peerRules));
         expect(yield* readRules(created.peer.groupId)).toHaveLength(2);
         const observer = yield* observeRuleRequests;

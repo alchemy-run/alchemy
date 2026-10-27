@@ -6,8 +6,8 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as AlchemistState from "../../Alchemist/routes/state.ts";
 import type { ProviderSource, StateSource } from "../../Alchemist/routes/state.ts";
-import * as CliKit from "../../Cli/CliKit/index.ts";
 import type { StateStoreLogEntry } from "../../Contributions.ts";
+import * as Interaction from "../../Interaction.ts";
 import * as State from "../../State/index.ts";
 import {
   stateExplorerScreen,
@@ -172,7 +172,7 @@ const deleteCommand = Command.make(
       }
       const store = yield* AlchemistState.store(source(args));
       yield* usingStore(store)(State.deleteState({ path: requested, recursive }));
-      yield* CliKit.accessors.output.success(`Deleted state at ${requested}`);
+      yield* Interaction.success(`Deleted state at ${requested}`);
     }),
   ),
 ).pipe(
@@ -182,7 +182,7 @@ const deleteCommand = Command.make(
 
 const stateExplorer = (args: StateArgs) =>
   Effect.gen(function* () {
-    const cli = yield* CliKit.CliKit;
+    const cli = yield* Interaction.Interaction;
     const store = yield* AlchemistState.store(source(args));
     const on = provideStore(store);
     const explorer: StateExplorerSource = {
@@ -229,10 +229,9 @@ const stateExplorer = (args: StateArgs) =>
     // Captured here so the explorer's forked fibers run with the command's
     // ambient services (tracing, terminal) rather than the default runtime.
     const services = yield* Effect.context<never>();
-    yield* cli.application(cli.prompt.custom(stateExplorerScreen(explorer, services))).pipe(
-      CliKit.Application.alternate,
-      Effect.catchTag("TerminalCancelled", () => Effect.void),
-    );
+    yield* cli
+      .session(cli.prompt.screen(stateExplorerScreen(explorer, services)), { alternate: true })
+      .pipe(Effect.catchTag("TerminalCancelled", () => Effect.void));
   });
 
 const nukeCommand = Command.make(
@@ -243,7 +242,7 @@ const nukeCommand = Command.make(
       const store = yield* AlchemistState.store(source(args));
       const stacks = [...(yield* store.listStacks())].sort();
       if (stacks.length === 0) {
-        yield* CliKit.accessors.output.info("Nothing to clear.");
+        yield* Interaction.info("Nothing to clear.");
         return;
       }
       yield* Console.log(stacks.map((stack) => `• ${stack}`).join("\n"));
@@ -256,7 +255,7 @@ const nukeCommand = Command.make(
         (stack) =>
           store
             .deleteStack({ stack })
-            .pipe(Effect.andThen(CliKit.accessors.output.success(`Cleared ${stack}`))),
+            .pipe(Effect.andThen(Interaction.success(`Cleared ${stack}`))),
         { concurrency: 32, discard: true },
       );
     }),
@@ -281,7 +280,7 @@ const bootstrapCommand = Command.make(
   instrumentCommand("state.bootstrap")(
     Effect.fn(function* ({ force, ...args }) {
       const result = yield* AlchemistState.bootstrap({ ...lifecycleSource(args), force });
-      yield* CliKit.accessors.output.success(
+      yield* Interaction.success(
         `State store '${result.store}' ${result.status} (${Object.values(result.location).join(", ")})`,
       );
     }),
@@ -300,7 +299,7 @@ const teardownCommand = Command.make(
         cancelLabel: "Cancel",
       });
       const result = yield* AlchemistState.teardown(lifecycleSource(args));
-      yield* CliKit.accessors.output.success(
+      yield* Interaction.success(
         result.deleted.length === 0 ? "Nothing to delete" : `Deleted ${result.deleted.join(", ")}`,
       );
     }),
@@ -335,7 +334,7 @@ const logsCommand = Command.make(
       const format = (entry: StateStoreLogEntry) =>
         `${formatLocalTimestamp(entry.timestamp)} ${entry.message}`;
       if (tail) {
-        yield* CliKit.accessors.output.info(`Tailing the ${args.backend} state store...`);
+        yield* Interaction.info(`Tailing the ${args.backend} state store...`);
         yield* AlchemistState.tailLogs(target).pipe(
           Stream.runForEach((entry) => Console.log(format(entry))),
         );
@@ -366,7 +365,7 @@ export const stateCommand = Command.make(
   { main: config, envFile, profile, backend, name: storeName },
   instrumentCommand("state")(
     Effect.fn(function* (args) {
-      if (!(yield* CliKit.CliKit).terminal.input) {
+      if (!(yield* Interaction.Interaction).terminal.input) {
         return yield* failWithHelp(["alchemy", "state"]);
       }
       yield* stateExplorer(args);

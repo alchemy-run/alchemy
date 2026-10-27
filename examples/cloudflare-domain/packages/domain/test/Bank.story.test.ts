@@ -136,6 +136,11 @@ it.effect("a taken username rejects the registration, and nothing else happens",
       new RegistrationRequested({ name: "alex", username: Username.make("alex") }),
       new CustomerRegistered({ name: "alex", username: Username.make("alex") }),
     ),
+    then(UsernameClaim.ref("alex"), new UsernameClaimed({ customerId: c2.id })),
+    then(
+      Account.ref(mainAccountId(CustomerId.make("c-2"))),
+      new AccountOpened({ customerId: c2.id, owner: "alex" }),
+    ),
   ),
 );
 

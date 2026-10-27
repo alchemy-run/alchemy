@@ -97,7 +97,7 @@ The CA path is specific to [managed Lambda Node.js runtimes](https://docs.aws.am
 
 ```sh
 pnpm add alchemy @alchemy.run/aws @alchemy.run/drizzle effect @effect/sql-pg \
-  drizzle-orm@1.0.0-rc.5-ab785fc
+  drizzle-orm@1.0.0-rc.5
 ```
 
 `@effect/sql-pg` speaks the Postgres wire protocol itself, so the Lambda bundle needs no native or CommonJS driver.
@@ -129,7 +129,7 @@ The example's bootstrap does not alter existing tables or maintain Drizzle migra
 ### Configure SQL generation
 
 ```sh
-pnpm add -D drizzle-kit@1.0.0-rc.5-ab785fc
+pnpm add -D drizzle-kit@1.0.0-rc.5
 ```
 
 ```typescript

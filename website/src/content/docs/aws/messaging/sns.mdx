@@ -133,8 +133,7 @@ Effect.provide(
 
 ## Consume notifications on a Lambda
 
-`SNS.consumeTopicNotifications(topic, ...)` is the consumer-side
-mirror of `SQS.consumeQueueMessages`: a typed `Stream` of SNS
+`SNS.consumeTopicNotifications(topic, ...)` hands your handler a typed `Stream` of SNS
 notifications you compose with any operator. Behind the scenes
 it creates the SNS subscription (protocol `lambda`, endpoint =
 this function) and the `lambda:InvokeFunction` permission for

@@ -1,7 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -106,6 +107,60 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 300_000, tags: ["provider:cloudflare", "provider:cloudflare:secretsstore", "live"] },
+);
+
+// A Secret with no state of its own is found by name. The store's listing
+// order is not stable across pages, so the lookup searches by name, ordered
+// by name. Deploy more than one page of secrets (the API pages by 20) whose
+// names contain the target's and sort before it, so the search itself spans
+// two pages, then adopt the target by name under a second logical id, which
+// sends `read` through the lookup.
+test.provider(
+  "adopts a secret by name from a store with more than one page of secrets",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (adoptTarget: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const store = yield* Cloudflare.SecretsStore.Store("PagedSecretStore");
+            yield* Effect.forEach(
+              Array.from({ length: 21 }, (_, i) => i),
+              (i) =>
+                Cloudflare.SecretsStore.Secret(`PagedFiller${i}`, {
+                  store,
+                  name: `filler-${i}-paged-secret-target`,
+                  value: Redacted.make("filler"),
+                }),
+              { concurrency: "unbounded", discard: true },
+            );
+            const target = yield* Cloudflare.SecretsStore.Secret("PagedTarget", {
+              store,
+              name: "paged-secret-target",
+              value: Redacted.make("sk-paged"),
+            });
+            const adopted = adoptTarget
+              ? yield* Cloudflare.SecretsStore.Secret("PagedTargetAdopted", {
+                  store,
+                  name: "paged-secret-target",
+                  value: Redacted.make("sk-paged"),
+                }).pipe(adopt(true))
+              : undefined;
+            return { target, adopted };
+          }),
+        );
+
+      const { target } = yield* deploy(false);
+      const { adopted } = yield* deploy(true);
+      expect(adopted?.secretId).toEqual(target.secretId);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:secretsstore", "live"],
+    timeout: 180_000,
+  },
 );
 
 // #995: an interrupted first deploy can persist `creating` props whose parent

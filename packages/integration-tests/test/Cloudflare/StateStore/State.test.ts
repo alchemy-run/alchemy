@@ -6,13 +6,13 @@ import {
 } from "@alchemy.run/cloudflare/StateStore/Api";
 import { readStoreCredentials } from "@alchemy.run/cloudflare/StateStore/CredentialsFile";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { CredentialsStore } from "alchemy/Auth/Credentials";
 import { currentProfileName } from "alchemy/Auth/Profile";
 import { StateApi } from "alchemy/State/HttpStateApi";
 import { makeHttpStateStore } from "alchemy/State/HttpStateStore";
 import { State } from "alchemy/State/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpApiClient from "effect/http-api/HttpApiClient";
 import * as HttpClient from "effect/http/HttpClient";

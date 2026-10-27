@@ -2,13 +2,14 @@ import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { Role } from "@alchemy.run/aws/IAM";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import type { ResolvedCredentials } from "@distilled.cloud/aws/Credentials";
 import * as IAM from "@distilled.cloud/aws/iam";
 import * as STS from "@distilled.cloud/aws/sts";
 import { adopt } from "alchemy/AdoptPolicy";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -54,6 +55,13 @@ test.provider(
       expect(created.Role.RoleName).toBe(role.roleName);
       // Duration.Input prop converts to whole wire seconds.
       expect(created.Role.MaxSessionDuration).toBe(7200);
+
+      // #1968: IAM stores `["sts:AssumeRole"]` as `"sts:AssumeRole"`; an
+      // equivalent document is not drift.
+      const clean = yield* Drift.detect({ name: stack.name, stage: stack.stage }).pipe(
+        Effect.provide(stack.state),
+      );
+      expect(clean.resources.IamRole?.action).toBe("unchanged");
 
       yield* stack.deploy(
         Effect.gen(function* () {

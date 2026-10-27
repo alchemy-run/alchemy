@@ -25,6 +25,11 @@ import { fromMetadataServer } from "../MetadataCredentials.ts";
 
 /** Serve the bundled program with a Bun HTTP server on the injected `PORT`. */
 export const bootstrap = (entrypoint: unknown): Promise<void> => {
+  // Cloud Run sets `PORT` only on the ingress container; a sidecar
+  // `GCP.Run.Container` gets its port from `ALCHEMY_HTTP_PORT`.
+  if (process.env.ALCHEMY_HTTP_PORT && !process.env.PORT) {
+    process.env.PORT = process.env.ALCHEMY_HTTP_PORT;
+  }
   const platform = Layer.mergeAll(
     BunServices.layer,
     FetchHttpClient.layer,

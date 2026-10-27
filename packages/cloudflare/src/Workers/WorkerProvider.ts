@@ -3,7 +3,7 @@ import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects"
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import * as Artifacts from "alchemy/Artifacts";
 import { havePropsChanged, isResolved, stripEffects } from "alchemy/Diff";
@@ -234,13 +234,20 @@ const toPreviewWire = (value: unknown): unknown => {
   return value;
 };
 
+const previewVerbatimFields = new Set(["json", "algorithm", "keyJwk", "props"]);
+
 /** Convert Alchemy's binding array into wrangler's Preview `env` map. */
 const bindingsToPreviewEnv = (bindings: WorkerBinding[]): Record<string, unknown> => {
   const env: Record<string, unknown> = {};
   for (const binding of bindings) {
     const { name, ...rest } = binding as unknown as { name?: unknown } & Record<string, unknown>;
     if (typeof name !== "string") continue;
-    env[name] = toPreviewWire(rest);
+    env[name] = Object.fromEntries(
+      Object.entries(rest).map(([k, v]) => [
+        toPreviewWireKey(k),
+        previewVerbatimFields.has(k) ? v : toPreviewWire(v),
+      ]),
+    );
   }
   return env;
 };
@@ -698,6 +705,24 @@ const getScriptSettings = (
   });
 
 /**
+ * Look up a dispatch-namespace script, or `undefined` when it or its
+ * namespace does not exist. The settings endpoint answers a missing
+ * namespace with an untyped 500, so check existence here first.
+ */
+const findDispatchNamespaceScript = (
+  accountId: string,
+  dispatchNamespace: string,
+  scriptName: string,
+) =>
+  wfp
+    .getDispatchNamespaceScript({ accountId, dispatchNamespace, scriptName })
+    .pipe(
+      Effect.catchTag(["DispatchNamespaceNotFound", "DispatchNamespaceScriptNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
+
+/**
  * Deploy-time binding validation rejects an upload whose bindings
  * reference a resource Cloudflare can't see (each resource type has
  * its own typed not-found error, verified against the live API).
@@ -762,6 +787,17 @@ const cachedWorkerId = (value: string | undefined, scriptName: string): string |
   value !== undefined && value !== "" && value !== scriptName && !value.startsWith("dev:")
     ? value
     : undefined;
+
+/**
+ * Whether `output` is a precreate stub that uploaded nothing: a version,
+ * preview, or dispatch-namespace worker's provisional row (`workerId: ""`).
+ * Its `workerName` names no script this resource wrote. Without a recorded
+ * namespace it can't even say which endpoint the attempt targeted — a
+ * dispatch stub's namespace may still have been unresolved — so the
+ * account-level script of that name proves nothing (#2533).
+ */
+const isUnscopedStub = (output: Worker["Attributes"]): boolean =>
+  output.workerId === "" && !output.namespace;
 
 export class WorkerIdNotFound extends Data.TaggedError("WorkerIdNotFound")<{
   scriptName: string;
@@ -2118,6 +2154,17 @@ export const LiveWorkerProvider = () =>
         );
         return namespaces;
       };
+
+      const isSecretBinding = (binding: { type: string }) =>
+        binding.type === "secret_text" || binding.type === "secret_key";
+
+      const getSecretNames = (
+        bindings: readonly { type: string; name: string }[] | null | undefined,
+      ) =>
+        (bindings ?? [])
+          .filter(isSecretBinding)
+          .map((binding) => binding.name)
+          .sort();
 
       const getExpectedDurableObjectClassNames = (
         bindings: readonly WorkerBinding[] | undefined,
@@ -3940,6 +3987,37 @@ export const LiveWorkerProvider = () =>
             hash,
           } satisfies Worker["Attributes"];
         }
+        // Cloudflare keeps a secret binding that a script upload omits, even
+        // with an empty `keep_bindings`, so a secret dropped from `env` would
+        // stay bound. Delete the secrets an earlier deploy uploaded and this
+        // one did not; secrets set outside Alchemy (`wrangler secret put`,
+        // the dashboard) are left alone. State written before `secretNames`
+        // existed falls back to the previous `env`. Deletes run only after a
+        // full upload: each one deploys a new version at 100%, which would
+        // end a gradual rollout, so a rollout keeps owning the removed names.
+        const uploadedSecretNames = getSecretNames(metadata.bindings);
+        const previousSecretNames =
+          output?.secretNames ??
+          Object.entries(olds?.env ?? {}).flatMap(([key, value]) =>
+            secretTextFromEnvValue(value) === undefined ? [] : [key],
+          );
+        const removedSecretNames = previousSecretNames.filter(
+          (secretName) => !uploadedSecretNames.includes(secretName),
+        );
+        if (versionId === undefined) {
+          const liveSecretNames = getSecretNames(settings.bindings);
+          for (const secretName of removedSecretNames) {
+            if (!liveSecretNames.includes(secretName)) continue;
+            yield* session.note(`Deleting removed secret ${secretName} ...`, { kind: "status" });
+            yield* workers
+              .deleteScriptSecret({ accountId, scriptName: name, secretName })
+              .pipe(Effect.catchTag("SecretNotFound", () => Effect.void));
+          }
+        }
+        const secretNames =
+          versionId === undefined
+            ? uploadedSecretNames
+            : [...new Set([...uploadedSecretNames, ...removedSecretNames])].sort();
         const issuesEnabled = observability.issues?.enabled ?? false;
         if (
           versionId === undefined &&
@@ -4226,6 +4304,7 @@ export const LiveWorkerProvider = () =>
           versionId,
           deploymentId,
           affinityZoneIds,
+          secretNames,
           hash,
         } satisfies Worker["Attributes"];
       });
@@ -4424,9 +4503,10 @@ export const LiveWorkerProvider = () =>
                       ? [
                           {
                             accountId,
-                            // Practically always present; an empty value
-                            // is healed by the per-script read.
-                            workerId: script.tag ?? "",
+                            // Practically always present. Fall back to the
+                            // name (healed by the per-script read), never
+                            // the "" that marks an unuploaded stub.
+                            workerId: script.tag ?? script.id,
                             workerName: script.id,
                             namespace: undefined,
                             logpush: script.logpush ?? undefined,
@@ -4673,14 +4753,17 @@ export const LiveWorkerProvider = () =>
           // parent's script and claims none of its own.
           if (news.version?.parent != null || news.preview?.of != null) return undefined;
           // Neither name nor namespace can be checked until it resolves.
-          if (!isResolved(news.name) || !isResolved(news.namespace)) return undefined;
+          if (!isResolved(news.name) || !isResolved(news.namespace)) return Unresolved;
           const { accountId } = yield* yield* CloudflareEnvironment;
           const name = yield* createWorkerName(id, news.name);
-          const settings = yield* getScriptSettings(
-            accountId,
-            name,
-            resolveNamespaceName(news.namespace),
-          ).pipe(
+          const namespace = resolveNamespaceName(news.namespace);
+          if (
+            namespace !== undefined &&
+            (yield* findDispatchNamespaceScript(accountId, namespace, name)) === undefined
+          ) {
+            return undefined;
+          }
+          const settings = yield* getScriptSettings(accountId, name, namespace).pipe(
             Effect.catchTags({
               WorkerNotFound: () => Effect.succeed(undefined),
               WorkerHasNoVersions: () => Effect.succeed(undefined),
@@ -4743,7 +4826,11 @@ export const LiveWorkerProvider = () =>
               // workers are dispatched by name, never bound circularly).
               workerId: "",
               workerName: name,
-              namespace: typeof news.namespace === "string" ? news.namespace : undefined,
+              // Recorded only once resolved: cleanup deletes from this
+              // namespace, and must not fall back to the account endpoint.
+              namespace: isResolved(news.namespace)
+                ? resolveNamespaceName(news.namespace)
+                : undefined,
               logpush: undefined,
               url: undefined,
               tags: undefined,
@@ -4984,6 +5071,11 @@ export const LiveWorkerProvider = () =>
                   ),
                 );
             }
+            if (output !== undefined && isUnscopedStub(output)) {
+              // Nothing was uploaded, and the endpoint it would have been
+              // uploaded to is unknown — there is nothing to observe.
+              return undefined;
+            }
             const workerName = output?.workerName ?? (yield* createWorkerName(id, olds?.name));
             const dispatchNamespace = output?.namespace ?? resolveNamespaceName(olds?.namespace);
             yield* Effect.logInfo(`Cloudflare Worker read: checking ${workerName}`);
@@ -4992,6 +5084,12 @@ export const LiveWorkerProvider = () =>
             // domains, or cron triggers — read only the script settings from
             // the dispatch-namespace endpoint.
             if (dispatchNamespace) {
+              const script = yield* findDispatchNamespaceScript(
+                accountId,
+                dispatchNamespace,
+                workerName,
+              );
+              if (script === undefined) return undefined;
               const settings = yield* getScriptSettings(accountId, workerName, dispatchNamespace);
               yield* Effect.logInfo(
                 `Cloudflare Worker read: found ${workerName} in dispatch namespace ${dispatchNamespace}`,
@@ -5003,24 +5101,12 @@ export const LiveWorkerProvider = () =>
                 // the dispatch-namespace script endpoint.
                 workerId:
                   cachedWorkerId(output?.workerId, workerName) ??
-                  (yield* wfp
-                    .getDispatchNamespaceScript({
-                      accountId,
-                      dispatchNamespace,
-                      scriptName: workerName,
-                    })
-                    .pipe(
-                      Effect.flatMap((r) =>
-                        r.script?.tag != null
-                          ? Effect.succeed(r.script.tag)
-                          : Effect.fail(
-                              new WorkerIdNotFound({
-                                scriptName: workerName,
-                                message: `Cloudflare Worker: dispatch-namespace script '${workerName}' has no immutable ID in its metadata`,
-                              }),
-                            ),
-                      ),
-                    )),
+                  (script.script?.tag != null
+                    ? script.script.tag
+                    : yield* new WorkerIdNotFound({
+                        scriptName: workerName,
+                        message: `Cloudflare Worker: dispatch-namespace script '${workerName}' has no immutable ID in its metadata`,
+                      })),
                 workerName,
                 namespace: dispatchNamespace,
                 logpush: settings.logpush ?? undefined,
@@ -5160,6 +5246,9 @@ export const LiveWorkerProvider = () =>
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.
               affinityZoneIds: output?.affinityZoneIds,
+              // Which secrets Alchemy uploaded is provider-managed state: the
+              // live list also holds secrets set outside Alchemy.
+              secretNames: output?.secretNames,
               versionId: uploadedVersionId,
               // The deployment that put the recorded version live, carried
               // forward while that version still exists — re-listing
@@ -5334,6 +5423,12 @@ export const LiveWorkerProvider = () =>
             yield* workers
               .deletePreview({ accountId: output.accountId, workerId: output.previewOf, previewId })
               .pipe(Effect.catchTag(["PreviewNotFound", "WorkerNotFound"], () => Effect.void));
+            return;
+          }
+          if (isUnscopedStub(output)) {
+            yield* Effect.logWarning(
+              `Cloudflare Worker delete: ${output.workerName} was never uploaded, or its dispatch namespace was never recorded; skipping. An interrupted upload into a dispatch namespace may need manual cleanup.`,
+            );
             return;
           }
           yield* Effect.logInfo(`Cloudflare Worker delete: deleting ${output.workerName}`);
