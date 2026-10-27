@@ -14,6 +14,13 @@ through the same pattern: S3 notifications
 (`Lambda.StreamEventSource`), and DynamoDB Streams
 (`Lambda.TableEventSource`).
 
+:::tip
+For an API or web app, use a
+[Lambda Web Function](/aws/compute/web-functions). It serves many
+requests per environment and streams responses. Use a Lambda Function
+for event sources.
+:::
+
 This page stands up the smallest possible function — a public
 HTTP endpoint — which the [S3](/aws/data/s3),
 [DynamoDB](/aws/data/dynamodb), [SQS](/aws/messaging/sqs), and
@@ -34,7 +41,7 @@ providers wired in:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
@@ -78,7 +85,7 @@ ceremony, an entrypoint, and an empty runtime:
 
 ```typescript
 // src/api.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 
 export default class Api extends AWS.Lambda.Function<Api>()(
@@ -108,7 +115,7 @@ is wired up to handle incoming HTTP requests:
 
 ```diff lang="typescript"
 // src/api.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 +import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
@@ -131,9 +138,10 @@ envelope under the hood, so your handler never sees the raw
 
 ## Expose a public URL
 
-`fetch` exists, but no one can call it yet. Set `functionUrl: true` on
-the props to ask AWS for a public **Function URL** — no API
-Gateway, no auth, just a public HTTPS endpoint:
+Every Lambda Function gets a public **Function URL** by default:
+`functionUrl` defaults to `true`, which creates an unauthenticated HTTPS
+endpoint (`authType: "NONE"`) and lets anyone invoke it. Spell it out
+so the access level is visible in the code:
 
 ```diff lang="typescript"
 export default class Api extends AWS.Lambda.Function<Api>()(
@@ -148,9 +156,19 @@ export default class Api extends AWS.Lambda.Function<Api>()(
 ) {}
 ```
 
-The resolved `Api` resource will now expose a `functionUrl`
+The resolved `Api` resource exposes a `functionUrl`
 field carrying that endpoint — we'll surface it from the Stack
 in a moment.
+
+`functionUrl` takes three access choices. `false` creates no URL,
+`true` creates a public one, and `{ authType: "AWS_IAM" }` requires
+SigV4-signed requests.
+
+:::caution
+Omitting `functionUrl` gives you a public URL. A Function that only
+consumes events (SQS, SNS, EventBridge, Kinesis, S3) should set
+`functionUrl: false`.
+:::
 
 ## Customize per stage
 
@@ -161,7 +179,7 @@ value in the surrounding Effect context:
 
 ```diff lang="typescript"
 // src/api.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 +import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -203,7 +221,7 @@ deploy:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 +import Api from "./src/api.ts";
 
@@ -244,8 +262,8 @@ checks the body:
 
 ```typescript
 // test/integ.test.ts
-import * as AWS from "alchemy/AWS";
-import * as Test from "alchemy/Test/Bun";
+import * as AWS from "@alchemy.run/aws";
+import * as Test from "@alchemy.run/test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -317,7 +335,7 @@ or set it to zero to turn the flush off:
 
 ```typescript
 // src/api.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

@@ -4,8 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Drift from "../../Alchemist/routes/drift.ts";
 import * as Stacks from "../../Alchemist/routes/stack.ts";
+import * as Interaction from "../../Interaction.ts";
 import { Cli } from "../../Report.ts";
-import * as CliKit from "../CliKit/index.ts";
 import { planDecisionScreen } from "../components/view/PlanDecision.tsx";
 import { stackOutputsView } from "../components/view/StackOutputs.tsx";
 import { exitDeclined } from "./errors.ts";
@@ -101,10 +101,10 @@ const detectAndMaybeRepairDrift = Effect.fn(function* (
 
   let decision: "repair" | "deploy" | "cancel" = options.yes ? "repair" : "cancel";
   if (!options.yes) {
-    const terminal = yield* CliKit.CliKit;
+    const terminal = yield* Interaction.Interaction;
     if (terminal.terminal.input) {
       decision = yield* terminal.prompt
-        .custom(
+        .screen(
           planDecisionScreen({
             plan: snapshot.repairPlan.native,
             message: "Drift detected",
@@ -131,7 +131,7 @@ const detectAndMaybeRepairDrift = Effect.fn(function* (
         detailed: options.detailed,
         stage: target.stage,
       });
-      yield* CliKit.accessors.output.warning(
+      yield* Interaction.warning(
         "Drift detected in a non-interactive terminal. Re-run with --yes to repair and deploy.",
       );
     }
@@ -168,7 +168,7 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
   if (options.detectDrift && !options.destroy) {
     const proceed = yield* detectAndMaybeRepairDrift(target, options);
     if (!proceed) {
-      yield* CliKit.accessors.output.info("Deploy aborted: drift was detected and not approved.");
+      yield* Interaction.info("Deploy aborted: drift was detected and not approved.");
       return yield* exitDeclined;
     }
   }
@@ -190,16 +190,12 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
   if (!options.yes && Stacks.hasChanges(snapshot.summary)) {
     const approved = yield* cli.approvePlan(snapshot.native, display).pipe(
       Effect.tap((approved) =>
-        approved
-          ? Effect.void
-          : CliKit.accessors.output.info(`${operation} aborted: plan declined.`),
+        approved ? Effect.void : Interaction.info(`${operation} aborted: plan declined.`),
       ),
       Effect.catchTag("NonInteractiveTerminal", () =>
-        CliKit.accessors.output
-          .warning(
-            `Cannot prompt for approval in a non-interactive terminal. Nothing was changed — re-run with --yes to ${operation.toLowerCase()}.`,
-          )
-          .pipe(Effect.as(false)),
+        Interaction.warning(
+          `Cannot prompt for approval in a non-interactive terminal. Nothing was changed — re-run with --yes to ${operation.toLowerCase()}.`,
+        ).pipe(Effect.as(false)),
       ),
     );
     if (!approved) return yield* exitDeclined;
@@ -207,7 +203,7 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
 
   const result = yield* Stacks.apply(snapshot).pipe(renderApply(snapshot.native, display));
   if (result !== undefined) {
-    const kit = yield* CliKit.CliKit;
+    const kit = yield* Interaction.Interaction;
     yield* kit.output.print(stackOutputsView(result));
   }
 });

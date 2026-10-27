@@ -11,7 +11,7 @@ what it does:
 
 ```typescript
 // src/worker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
@@ -35,7 +35,7 @@ Stack and expose its URL:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import Worker from "./src/worker.ts";
 
@@ -72,7 +72,7 @@ implemented, here as a native `r2_bucket` binding on the Worker:
 
 ```typescript
 // src/worker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
@@ -126,7 +126,7 @@ RPC shape, and attach its implementation with `.make()`:
 
 ```typescript
 // src/Greeter.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 
 export class Greeter extends Cloudflare.Worker<
@@ -149,7 +149,7 @@ the typed stub:
 
 ```typescript
 // src/Api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Greeter } from "./Greeter.ts";
@@ -185,6 +185,39 @@ code, reach for [Effect RPC](/cloudflare/apis/effect-rpc) instead.
 covers the three declaration forms, and
 [Schemaless RPC](/apis/schemaless) the calling convention.
 :::
+
+## Call a Worker in another stack
+
+When `Greeter` is deployed by another stack, reference it with
+`Worker.ref`. Pass the `Greeter` class rather than its logical id so the
+reference keeps its RPC shape:
+
+```typescript
+// src/Api.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Greeter } from "./Greeter.ts";
+
+export default Cloudflare.Worker(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const greeter = yield* Cloudflare.Workers.bindWorker(
+      Cloudflare.Worker.ref(Greeter, { stack: "Greeter" }),
+    );
+
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text(yield* greeter.greet("world"));
+      }),
+    };
+  }),
+);
+```
+
+`Worker.ref(Greeter, ...)` only reads `Greeter`'s logical id. This stack
+does not deploy `Greeter`; it binds to the one the `Greeter` stack owns.
 
 ## Call the Worker's own RPC methods
 
@@ -372,7 +405,7 @@ derives the handler's env type from them:
 
 ```typescript
 // alchemy.run.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const Uploads = Cloudflare.R2.Bucket("Uploads");
 export const DB = Cloudflare.D1.Database("DB");
@@ -627,17 +660,15 @@ fetch: Effect.gen(function* () {
 }),
 ```
 
-For ad-hoc background work, `WorkerExecutionContext.waitUntil` forks
-an Effect with the caller's full context and keeps the invocation
-alive until it settles:
+For ad-hoc background work, `Cloudflare.waitUntil` forks an Effect
+with the caller's full context and keeps the invocation alive until it
+settles:
 
 ```typescript
 Effect.gen(function* () {
-  const exec = yield* Cloudflare.WorkerExecutionContext;
-
   return {
     fetch: Effect.gen(function* () {
-      yield* exec.waitUntil(writeAuditLog(event));
+      yield* Cloudflare.waitUntil(writeAuditLog(event));
       return HttpServerResponse.text("accepted", { status: 202 });
     }),
   };

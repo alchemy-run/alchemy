@@ -18,6 +18,7 @@ export default defineConfig({
   ignorePatterns: [
     "submodules/**",
     "packages/alchemy/test/**",
+    "packages/integration-tests/test/**",
     "packages/alchemy-test/**",
     "examples/**",
     "demos/**",

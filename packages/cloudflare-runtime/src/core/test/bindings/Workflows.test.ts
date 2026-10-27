@@ -251,6 +251,33 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Workflows binding lifec
     }),
   );
 
+  // The engine runs on its own compatibility date with the Worker's flags.
+  // `nodejs_compat` is on by default as of the runtime's internal date, where
+  // workerd rejects setting it.
+  it.effect(
+    "runs a Workflow for a Worker that sets nodejs_compat",
+    () =>
+      Effect.gen(function* () {
+        const worker = yield* startTestWorker({
+          name: "workflows-nodejs-compat-test",
+          compatibilityDate: "2026-03-17",
+          compatibilityFlags: ["nodejs_compat"],
+          modules: [{ name: "main.js", type: "ESModule", content: LIFECYCLE_SCRIPT }],
+          workflows: [{ workflowName: "LIFECYCLE_WORKFLOW", className: "LifecycleWorkflow" }],
+          bindings: [
+            Workflows.local({
+              binding: "LIFECYCLE_WORKFLOW",
+              workflowName: "LIFECYCLE_WORKFLOW",
+              className: "LifecycleWorkflow",
+            }),
+          ],
+        });
+        const created = yield* worker.fetchJson<{ id: string }>("/create?id=nodejs-compat");
+        expect(created.id).toBe("nodejs-compat");
+      }),
+    { timeout: 30_000 },
+  );
+
   it.effect(
     "pause and resume a running workflow",
     () =>

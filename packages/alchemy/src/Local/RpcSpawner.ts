@@ -69,10 +69,17 @@ const SidecarLogLineSchema = Schema.Struct({
  */
 export const LOGS_PATH = "/logs";
 
-export const make = Effect.fn(function* ({
-  profile,
-  envFile,
-}: Pick<RpcServerEnvironment, "profile" | "envFile">) {
+/** Options for the {@link RpcSpawner} that forks sidecar processes. */
+export type RpcSpawnerOptions = Pick<RpcServerEnvironment, "profile" | "envFile"> & {
+  /**
+   * Prefixes of environment variables withheld from sidecar processes (and,
+   * through them, from their own children). Sidecars otherwise inherit this
+   * process's entire environment.
+   */
+  readonly omitEnv?: ReadonlyArray<string>;
+};
+
+export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: RpcSpawnerOptions) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const scope = yield* Effect.scope;
   const cache = yield* Cache.make({
@@ -148,10 +155,12 @@ export const make = Effect.fn(function* ({
         // As a group leader the kill also reaps the sidecar's own children
         // (workerd, emulators) instead of orphaning them.
         env: {
+          ...(omitEnv.length > 0 ? yield* inheritedEnv(omitEnv) : {}),
           [RPC_SERVER_ENVIRONMENT_KEY]: JSON.stringify(environment),
           ...pipedColorEnv(),
         },
-        extendEnv: true,
+        // With variables to withhold, the full environment is built above.
+        extendEnv: omitEnv.length === 0,
       },
     );
     const handle = yield* spawner.spawn(command);
@@ -170,7 +179,17 @@ export const make = Effect.fn(function* ({
     yield* Effect.addFinalizer(() => kill.pipe(Effect.ignore));
     const url = yield* getRpcAddress(handle.stdout, (line) => publish({ channel: "stdout", line }));
     const ws = yield* Effect.acquireRelease(
-      Effect.sync(() => new WebSocket(new URL("/parent", url))),
+      Effect.sync(() => {
+        const ws = new WebSocket(new URL("/parent", url));
+        // Keep the parent link active so no idle timer on either end can
+        // close it; the sidecar ignores messages on this link.
+        const heartbeat = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) ws.send("heartbeat");
+        }, 30_000);
+        heartbeat.unref?.();
+        ws.addEventListener("close", () => clearInterval(heartbeat));
+        return ws;
+      }),
       (ws) => Effect.sync(() => ws.close()),
     );
     return {
@@ -200,7 +219,11 @@ export const make = Effect.fn(function* ({
         new Error(`Failed to spawn RPC server for "${serverEntryUrl}" after ${attempt} attempts.`),
       );
     }
-    yield* child.kill;
+    yield* Console.error(
+      `[alchemy] RPC sidecar for ${serverEntryUrl} is no longer running; respawning (attempt ${attempt + 1})`,
+    );
+    // The sidecar is usually already gone, and killing an exited process fails.
+    yield* child.kill.pipe(Effect.ignore);
     yield* Cache.invalidate(cache, serverEntryUrl);
     return yield* register(serverEntryUrl, attempt + 1);
   });
@@ -275,7 +298,17 @@ export const make = Effect.fn(function* ({
   });
 });
 
-export const layerServer = (environment: Pick<RpcServerEnvironment, "profile" | "envFile">) =>
+/** This process's environment without the variables matching `omitEnv`. */
+const inheritedEnv = (omitEnv: ReadonlyArray<string>) =>
+  Effect.sync(() =>
+    Object.fromEntries(
+      Object.entries(process.env).filter(
+        ([key]) => !omitEnv.some((prefix) => key.startsWith(prefix)),
+      ),
+    ),
+  );
+
+export const layerServer = (environment: RpcSpawnerOptions) =>
   Layer.effect(RpcSpawner, make(environment)).pipe(
     // `/logs` is deliberately long-lived. On shutdown the exec child still
     // owns that response while this scope owns the exec child, so waiting for

@@ -1,6 +1,6 @@
 import { createPlugin } from "../factory.ts";
 
-const CLOUDFLARE_BUILT_IN_MODULES = [
+export const CLOUDFLARE_BUILT_IN_MODULES = [
   "cloudflare:email",
   "cloudflare:node",
   "cloudflare:sockets",
