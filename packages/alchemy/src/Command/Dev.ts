@@ -1,6 +1,7 @@
 import { stripVTControlCharacters } from "node:util";
 import * as ConsoleService from "effect/Console";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { FQN_SEPARATOR } from "../FQN.ts";
@@ -12,10 +13,31 @@ import { Resource } from "../Resource.ts";
 import { Stage } from "../Stage.ts";
 import { moduleExtension } from "../Util/Node.ts";
 import { makeResourceOutput } from "../Util/ResourceOutput.ts";
-import { CommandExecutor, UnexpectedExit, makeCommandError, type CommandProps } from "./Command.ts";
+import {
+  CommandExecutor,
+  UnexpectedExit,
+  UrlNotFound,
+  makeCommandError,
+  parsePositiveDuration,
+  type CommandProps,
+} from "./Command.ts";
 import { makeCommandRedactor } from "./Redaction.ts";
 
-export interface DevProps extends CommandProps {}
+export interface DevProps extends CommandProps {
+  /**
+   * Make the URL required: wait up to this long for the command to print it,
+   * and fail if it prints none in time or exits first. Without it, the
+   * resource waits 5 seconds and settles with `url: undefined` when no URL
+   * appears.
+   *
+   * A non-local URL printed before the wait ends still counts, as it does
+   * without this prop. Numbers are interpreted as milliseconds. Effect
+   * duration strings and `Duration` values are also accepted.
+   *
+   * @example "60 seconds"
+   */
+  waitForUrl?: Duration.Input;
+}
 
 export interface Dev extends Resource<
   "Command.Dev",
@@ -25,7 +47,8 @@ export interface Dev extends Resource<
      * URL extracted from stdout/stderr. A `localhost`/IP URL (the dev
      * server's own address) is preferred over any other URL the command
      * prints; a non-local URL is only used as a fallback if no local one
-     * appears. Best-effort: `undefined` if no URL appears within 5 seconds.
+     * appears. Best-effort: `undefined` if no URL appears within 5 seconds,
+     * unless `waitForUrl` is set, which fails the resource instead.
      */
     url: string | undefined;
   }
@@ -119,6 +142,10 @@ export const DevProviderLocal = () =>
         // provides: it keeps running after `start` returns (readiness) and
         // is killed when the helper closes the scope on restart/delete.
         start: Effect.fn(function* ({ fqn, news: props, invalidate }) {
+          const urlWait = yield* parsePositiveDuration(props, props.waitForUrl, {
+            method: "start",
+            name: "waitForUrl",
+          });
           const child = yield* spawn(props);
           const redactor = makeCommandRedactor(props.env);
           // One log file per process generation, closed with the instance
@@ -178,15 +205,23 @@ export const DevProviderLocal = () =>
           yield* mirror("stdout");
           yield* mirror("stderr");
 
-          // Readiness: a URL appears (or the 5s budget elapses), unless the
-          // process exits first — an exit before readiness is a failure.
+          // Readiness: a URL appears (or the budget elapses: 5s, or
+          // `waitForUrl`), unless the process exits first — an exit before
+          // readiness is a failure.
           const url = yield* Effect.raceAllFirst([
             Deferred.await(deferred).pipe(
               Effect.timeoutOrElse({
-                duration: "5 seconds",
+                duration: urlWait ?? "5 seconds",
                 // No localhost/IP URL appeared in time — fall back to any
-                // other URL we saw (or `undefined` if it stayed silent).
-                orElse: () => Effect.succeed(fallbackUrl),
+                // other URL we saw. With none, the URL is best-effort
+                // (`undefined`) unless `waitForUrl` made it required.
+                orElse: () =>
+                  fallbackUrl !== undefined || urlWait === undefined
+                    ? Effect.succeed(fallbackUrl)
+                    : makeCommandError(
+                        props,
+                        new UrlNotFound({ timeout: Duration.format(urlWait) }),
+                      ),
               }),
             ),
             child.exitCode.pipe(

@@ -403,6 +403,124 @@ test.provider(
 );
 
 test.provider(
+  "waitForUrl waits past the default 5 seconds for the URL",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      const output = yield* stack.deploy(
+        Command.Dev("Dev", {
+          command: `node ${urlServerScript}`,
+          env: {
+            PID_FILE: pidFile,
+            MARKER: "wait-for-url",
+            URL_LINE: "Local: http://localhost:5173/",
+            // Printed after the 5 seconds the resource waits by default.
+            URL_DELAY_MS: "6000",
+          },
+          waitForUrl: "20 seconds",
+        }),
+      );
+
+      expect(output.url).toBe("http://localhost:5173/");
+
+      const { pid } = yield* waitForPidFile(pidFile, "wait-for-url");
+      yield* stack.destroy();
+      yield* waitForDeath(pid);
+    }),
+  { tags: ["local"], timeout: 30_000 },
+);
+
+test.provider(
+  "waitForUrl settles with a non-local URL when no localhost URL appears",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      const output = yield* stack.deploy(
+        Command.Dev("Dev", {
+          command: `node ${urlServerScript}`,
+          env: {
+            PID_FILE: pidFile,
+            MARKER: "wait-for-url-fallback",
+            URL_LINE: "https://docs.astro.build/en/guides/content-collections/",
+          },
+          waitForUrl: "1 second",
+        }),
+      );
+
+      expect(output.url).toBe("https://docs.astro.build/en/guides/content-collections/");
+
+      const { pid } = yield* waitForPidFile(pidFile, "wait-for-url-fallback");
+      yield* stack.destroy();
+      yield* waitForDeath(pid);
+    }),
+  { tags: ["local"], timeout: 30_000 },
+);
+
+inProcessTest.provider(
+  "waitForUrl fails with UrlNotFound when no URL is printed in time",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      const error = yield* stack
+        .deploy(
+          Command.Dev("Dev", {
+            command: `node ${urlServerScript}`,
+            // URL_LINE intentionally unset — the process stays silent.
+            env: { PID_FILE: pidFile, MARKER: "wait-for-url-none" },
+            waitForUrl: "1 second",
+          }),
+        )
+        .pipe(Effect.flip);
+      assert(Command.isCommandError(error));
+      assert(error.reason._tag === "UrlNotFound");
+      expect(error.reason.timeout).toBe("1s");
+      expect(error.message).toContain("printed no URL within 1s");
+
+      // A resource that failed to start leaves no process behind.
+      const { pid } = yield* waitForPidFile(pidFile, "wait-for-url-none");
+      yield* waitForDeath(pid);
+    }),
+  { tags: ["local"], timeout: 30_000 },
+);
+
+inProcessTest.provider(
+  "waitForUrl still fails with UnexpectedExit when the command exits first",
+  (stack) =>
+    Effect.gen(function* () {
+      const error = yield* stack
+        .deploy(Command.Dev("Dev", { command: `node ${dieScript}`, waitForUrl: "20 seconds" }))
+        .pipe(Effect.flip);
+      assert(Command.isCommandError(error));
+      assert(error.reason._tag === "UnexpectedExit");
+      expect(error.reason.exitCode).toBe(1);
+    }),
+  { tags: ["local"], timeout: 30_000 },
+);
+
+inProcessTest.provider(
+  "waitForUrl rejects a duration that is not positive",
+  (stack) =>
+    Effect.gen(function* () {
+      const error = yield* stack
+        .deploy(Command.Dev("Dev", { command: `node ${urlServerScript}`, waitForUrl: 0 }))
+        .pipe(Effect.flip);
+      assert(Command.isCommandError(error));
+      assert(error.reason._tag === "BadArgument");
+      expect(error.message).toContain("waitForUrl must be a positive finite duration");
+    }),
+  { tags: ["local"], timeout: 30_000 },
+);
+
+test.provider(
   "stops the process on destroy",
   (stack) =>
     Effect.gen(function* () {
