@@ -215,15 +215,16 @@ export interface AggregateStore {
    * Send a command to one instance when it is due, durably (it survives
    * restarts) and at least once. Replaces a pending one with the same
    * `commandId`. Rejections are impossible: only non-rejecting commands are
-   * scheduled. Fails with `AlreadyExecuted` when the instance already has a
-   * receipt for `commandId`, so the command would never run.
+   * scheduled. Returns when it is due, in epoch milliseconds on the
+   * platform's clock. Fails with `AlreadyExecuted` when the instance already
+   * has a receipt for `commandId`, so the command would never run.
    */
   readonly schedule: (
     id: string,
     command: Json,
     meta: Aggregate.SendMeta,
     due: Aggregate.Due,
-  ) => Effect.Effect<void, Aggregate.AlreadyExecuted>;
+  ) => Effect.Effect<number, Aggregate.AlreadyExecuted>;
   /**
    * Cancel the pending scheduled command with this `commandId` on one
    * instance, durably, and remember the cancel. Once this succeeds, the

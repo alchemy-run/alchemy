@@ -451,13 +451,14 @@ const aggregateObject = (kit: AggregateKit) =>
               Effect.gen(function* () {
                 if (yield* executed(meta.commandId)) return "AlreadyExecuted" as const;
                 const token = yield* Effect.sync(() => crypto.randomUUID());
+                const at =
+                  "at" in due ? due.at : (yield* Effect.sync(() => Date.now())) + due.afterMillis;
                 yield* state.storage.put(`scheduled:${meta.commandId}`, token);
-                const payload = { id, command, meta, token };
-                yield* timers.schedule(
-                  meta.commandId,
-                  "at" in due ? { at: due.at, payload } : { after: due.afterMillis, payload },
-                );
-                return "Scheduled" as const;
+                yield* timers.schedule(meta.commandId, {
+                  at,
+                  payload: { id, command, meta, token },
+                });
+                return { at };
               }),
             ),
           ),
@@ -872,7 +873,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
                 unwrapDefects(namespace.getByName(id).send(id, command, meta)),
               // The object answers with a tag (RPC loses typed failures); fail with it here.
               schedule: (id, command, meta, due) =>
-                unwrapDefects<"Scheduled" | "AlreadyExecuted">(
+                unwrapDefects<{ readonly at: number } | "AlreadyExecuted">(
                   namespace.getByName(id).schedule(id, command, meta, due),
                 ).pipe(
                   Effect.flatMap((outcome) =>
@@ -884,7 +885,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
                             commandId: meta.commandId,
                           }),
                         )
-                      : Effect.void,
+                      : Effect.succeed(outcome.at),
                   ),
                 ),
               unschedule: (id, commandId) =>

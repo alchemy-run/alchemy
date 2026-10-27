@@ -64,6 +64,17 @@ export interface Receipt<Ev = unknown, Reply = unknown> {
   readonly reply: Reply;
 }
 
+/**
+ * What {@link Client.schedule} returns: the pending command's id, to
+ * `unschedule` it by, and when it is due.
+ */
+export interface ScheduleReceipt {
+  /** The command id: the one passed in `options`, or the one derived for it. */
+  readonly commandId: string;
+  /** When the command is due, on the platform's clock. */
+  readonly at: DateTime.Utc;
+}
+
 type ByTag<U, T> = Extract<U, { readonly tag: T }>;
 type ReplyTags<C extends Command.Any> = C extends {
   readonly reply: Schema.Top;
@@ -289,14 +300,14 @@ export interface Client<Def extends AnyDefinition> {
    * rejection when it fires; such a command reports a fact ("the approval
    * window closed") and records nothing when it no longer applies.
    * Scheduling again with the same command id replaces the earlier one.
-   * Fails with `AlreadyExecuted` when the instance already handled a command
+   * Returns the command id to `unschedule` it by, and when it is due. Fails with `AlreadyExecuted` when the instance already handled a command
    * with that id.
    */
   readonly schedule: <Cmd extends Inst<Schedulable<Def>>>(
     target: Target<Def>,
     command: Cmd,
     options: ScheduleOptions,
-  ) => Effect.Effect<void, AlreadyExecuted, Command.ContextOf<CommandClassOf<Def, Cmd>>>;
+  ) => Effect.Effect<ScheduleReceipt, AlreadyExecuted, Command.ContextOf<CommandClassOf<Def, Cmd>>>;
   /**
    * Cancel a pending scheduled command by the command id it was scheduled
    * with. Once it succeeds, the command never runs. Fails with
@@ -333,7 +344,7 @@ export interface ClientImpl {
     target: unknown,
     command: { readonly _tag: string },
     options: ScheduleOptions,
-  ) => Effect.Effect<void, AlreadyExecuted>;
+  ) => Effect.Effect<ScheduleReceipt, AlreadyExecuted>;
   readonly unschedule: (
     target: unknown,
     commandId: string,

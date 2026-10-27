@@ -268,12 +268,13 @@ export const make = (
                 const fields = { aggregate: kit.name, id, commandId: meta.commandId };
                 if (executed(id, meta.commandId)) return Effect.fail(new AlreadyExecuted(fields));
                 instance(id).cancelled.delete(meta.commandId);
+                const at = "at" in due ? due.at : now() + due.afterMillis;
                 return timer(
                   `${kit.name}/${id}/${meta.commandId}`,
-                  "at" in due ? due.at : now() + due.afterMillis,
+                  at,
                   commit(id, command, meta).pipe(Effect.asVoid),
                   lock.withPermits(1),
-                );
+                ).pipe(Effect.as(at));
               }),
             ),
           unschedule: (id, commandId) =>

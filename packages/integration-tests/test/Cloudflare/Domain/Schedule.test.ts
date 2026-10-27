@@ -23,7 +23,11 @@ class HoldRequestFailed extends Data.TaggedError("HoldRequestFailed")<{
 }> {}
 
 /** Call a hold route; right after a deploy, retry until the Worker serves it. */
-const call = (url: string, action: "place" | "release" | "state" | "cancel", id: string) =>
+const call = (
+  url: string,
+  action: "place" | "release" | "state" | "schedule" | "cancel",
+  id: string,
+) =>
   requestWorker(
     (action === "state" ? HttpClientRequest.get : HttpClientRequest.post)(
       `${url}/${action}/${id}`,
@@ -77,6 +81,18 @@ test(
     expect(yield* cancel(base, kept)).toBe("AlreadyExecuted");
     expect(yield* cancel(base, released)).toBe("AlreadyCancelled");
     expect(yield* cancel(base, `never-${run}`)).toBe("NotScheduled");
+
+    // schedule answers with the command id to cancel by, and when it is due
+    const before = yield* Effect.sync(() => Date.now());
+    const receipt = (yield* call(base, "schedule", `direct-${run}`)) as {
+      readonly commandId: string;
+      readonly at: number;
+    };
+    expect(receipt.commandId).toBe("expire");
+    // the Worker's clock may drift a little from ours
+    expect(receipt.at).toBeGreaterThan(before + 15_000 - 5_000);
+    expect(receipt.at).toBeLessThan(before + 15_000 + 30_000);
+    expect(yield* cancel(base, `direct-${run}`)).toBe("Cancelled");
   }),
   { timeout: 180_000 },
 );

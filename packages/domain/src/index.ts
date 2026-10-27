@@ -78,6 +78,7 @@ export declare namespace Aggregate {
   export type Ref<A extends AggregateModule.Any = AggregateModule.Any> = AggregateModule.Ref<A>;
   /** What an accepted command returns: its stream, version, events and reply. */
   export type Receipt<Ev = unknown, Reply = unknown> = AggregateModule.Receipt<Ev, Reply>;
+  export type ScheduleReceipt = AggregateModule.ScheduleReceipt;
   /** Where an event sits: its instance, stream, sequence, time and command. */
   export type Envelope<Id = string> = AggregateModule.Envelope<Id>;
   export type SendOptions = AggregateModule.SendOptions;

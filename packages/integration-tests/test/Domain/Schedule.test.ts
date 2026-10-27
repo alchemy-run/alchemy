@@ -2,6 +2,7 @@ import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -143,6 +144,23 @@ describe("Domain schedule", () => {
       yield* Effect.sleep("100 millis");
       expect((yield* holds.state("h-3")).status).toBe("none");
       expect((yield* holds.state("h-4")).status).toBe("expired");
+    }).pipe(Effect.provide(HoldsLive)),
+  );
+
+  it.live("schedule returns the command id and when it is due, to cancel it by", () =>
+    Effect.gen(function* () {
+      const holds = yield* Hold;
+      const before = yield* Effect.sync(() => Date.now());
+      const receipt = yield* holds.schedule("h-9", new ExpireHold(), { after: "1 hour" });
+      const at = DateTime.toEpochMillis(receipt.at);
+      expect(at).toBeGreaterThanOrEqual(before + 3_600_000);
+      expect(at).toBeLessThan(before + 3_600_000 + 1_000);
+      yield* holds.unschedule("h-9", receipt.commandId);
+      const fixed = yield* holds.schedule("h-9", new ExpireHold(), {
+        at: DateTime.makeUnsafe("2030-01-01T00:00:00Z"),
+        commandId: "x",
+      });
+      expect(fixed).toEqual({ commandId: "x", at: DateTime.makeUnsafe("2030-01-01T00:00:00Z") });
     }).pipe(Effect.provide(HoldsLive)),
   );
 
