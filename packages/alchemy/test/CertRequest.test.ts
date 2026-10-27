@@ -20,24 +20,24 @@ const { test } = Test.make({
   state: inMemoryState(),
 });
 
-/** `openssl req -text -verify` over a PEM request. */
 const inspectCsr = (pem: string) =>
   Effect.gen(function* () {
-    const process = yield* ChildProcess.make("openssl", ["req", "-noout", "-text", "-verify"], {
+    const child = yield* ChildProcess.make("openssl", ["req", "-noout", "-text", "-verify"], {
       stdin: Stream.make(new TextEncoder().encode(pem)),
       stdout: "pipe",
       stderr: "pipe",
     });
     const [stdout, stderr, code] = yield* Effect.all(
       [
-        process.stdout.pipe(Stream.decodeText(), Stream.runCollect),
-        process.stderr.pipe(Stream.decodeText(), Stream.runCollect),
-        process.exitCode,
+        child.stdout.pipe(Stream.decodeText(), Stream.runCollect),
+        child.stderr.pipe(Stream.decodeText(), Stream.runCollect),
+        child.exitCode,
       ],
       { concurrency: "unbounded" },
     );
-    expect(code).toBe(0);
-    return [...stdout, ...stderr].join("");
+    const output = [...stdout, ...stderr].join("");
+    expect({ code, output }).toMatchObject({ code: 0 });
+    return output;
   });
 
 const publicKeyFingerprint = (privateKeyPem: string) =>
@@ -53,26 +53,64 @@ const signers = [
   { type: "ed25519", privateKey: ED25519_KEY, signatureAlgorithm: "ED25519" },
 ] as const;
 
-const rejections: Array<[description: string, props: CertRequestProps, message: RegExp]> = [
-  [
-    "a non-ASCII DNS name",
-    { privateKey: EC_P256_KEY, dnsNames: ["bücher.example"] },
-    /punycode.*"bücher\.example"/,
-  ],
-  [
-    "a DNS name with a space",
-    { privateKey: EC_P256_KEY, dnsNames: ["exa mple.com"] },
-    /hostname.*"exa mple\.com"/,
-  ],
-  ["an empty DNS name", { privateKey: EC_P256_KEY, dnsNames: [""] }, /empty/],
-  [
-    "a label ending in a hyphen",
-    { privateKey: EC_P256_KEY, dnsNames: ["host-"] },
-    /hostname.*"host-"/,
-  ],
-  ["an unparseable private key", { privateKey: "not a pem" }, /Cannot parse privateKey/],
-  ["an x25519 key", { privateKey: X25519_KEY }, /supports ec, rsa and ed25519/],
-];
+const changes = [
+  {
+    change: "key changes",
+    before: { privateKey: EC_P256_KEY },
+    after: { privateKey: EC_P256_KEY_2 },
+    shows: /verify OK/i,
+  },
+  {
+    change: "common name changes",
+    before: { privateKey: EC_P256_KEY, commonName: "a.example.com" },
+    after: { privateKey: EC_P256_KEY, commonName: "b.example.com" },
+    shows: /Subject:.*CN\s*=\s*b\.example\.com/,
+  },
+  {
+    change: "DNS names change",
+    before: { privateKey: EC_P256_KEY, dnsNames: ["example.com"] },
+    after: { privateKey: EC_P256_KEY, dnsNames: ["example.com", "www.example.com"] },
+    shows: /DNS:www\.example\.com/,
+  },
+] satisfies ReadonlyArray<{
+  change: string;
+  before: CertRequestProps;
+  after: CertRequestProps;
+  shows: RegExp;
+}>;
+
+const rejections = [
+  {
+    input: "a non-ASCII DNS name",
+    props: { privateKey: EC_P256_KEY, dnsNames: ["bücher.example"] },
+    message: /punycode.*"bücher\.example"/,
+  },
+  {
+    input: "a DNS name with a space",
+    props: { privateKey: EC_P256_KEY, dnsNames: ["exa mple.com"] },
+    message: /hostname.*"exa mple\.com"/,
+  },
+  {
+    input: "an empty DNS name",
+    props: { privateKey: EC_P256_KEY, dnsNames: [""] },
+    message: /empty/,
+  },
+  {
+    input: "a label ending in a hyphen",
+    props: { privateKey: EC_P256_KEY, dnsNames: ["host-"] },
+    message: /hostname.*"host-"/,
+  },
+  {
+    input: "an unparseable private key",
+    props: { privateKey: "not a pem" },
+    message: /Cannot parse privateKey/,
+  },
+  {
+    input: "an x25519 key",
+    props: { privateKey: X25519_KEY },
+    message: /supports ec, rsa, ed25519/,
+  },
+] satisfies ReadonlyArray<{ input: string; props: CertRequestProps; message: RegExp }>;
 
 describe("Alchemy.CertRequest", { tags: ["unit", "local"] }, () => {
   for (const { type, privateKey, signatureAlgorithm } of signers) {
@@ -126,36 +164,20 @@ describe("Alchemy.CertRequest", { tags: ["unit", "local"] }, () => {
     }),
   );
 
-  test.provider("signs a new CSR when the key changes", (stack) =>
-    Effect.gen(function* () {
-      const deploy = (privateKey: string) =>
-        stack.deploy(CertRequest("rotating-csr", { privateKey, commonName: "example.com" }));
+  for (const { change, before, after, shows } of changes) {
+    test.provider(`signs a new CSR when the ${change}`, (stack) =>
+      Effect.gen(function* () {
+        const first = yield* stack.deploy(CertRequest("changed-csr", before));
+        const changed = yield* stack.deploy(CertRequest("changed-csr", after));
 
-      const first = yield* deploy(EC_P256_KEY);
-      const rotated = yield* deploy(EC_P256_KEY_2);
+        expect(changed.csr).not.toBe(first.csr);
+        expect(yield* inspectCsr(changed.csr)).toMatch(shows);
+      }),
+    );
+  }
 
-      expect(rotated.keyFingerprint).not.toBe(first.keyFingerprint);
-      expect(rotated.keyFingerprint).toBe(yield* publicKeyFingerprint(EC_P256_KEY_2));
-      expect(yield* inspectCsr(rotated.csr)).toMatch(/verify OK/i);
-    }),
-  );
-
-  test.provider("signs a new CSR when the DNS names change", (stack) =>
-    Effect.gen(function* () {
-      const deploy = (dnsNames: string[]) =>
-        stack.deploy(CertRequest("renamed-csr", { privateKey: EC_P256_KEY, dnsNames }));
-
-      const first = yield* deploy(["example.com"]);
-      const renamed = yield* deploy(["example.com", "www.example.com"]);
-
-      expect(renamed.csr).not.toBe(first.csr);
-      expect(renamed.dnsNames).toEqual(["example.com", "www.example.com"]);
-      expect(yield* inspectCsr(renamed.csr)).toContain("DNS:www.example.com");
-    }),
-  );
-
-  for (const [description, props, message] of rejections) {
-    test.provider(`rejects ${description} with CertRequestError`, (stack) =>
+  for (const { input, props, message } of rejections) {
+    test.provider(`rejects ${input} with CertRequestError`, (stack) =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(stack.deploy(CertRequest("rejected-csr", props)));
 

@@ -41,7 +41,6 @@ mYRhwUfUzH3sNeGQrhISnurUhToyk4tpKWRVIjA4z7+jxRYkUtkjtzpw
 -----END PRIVATE KEY-----
 `;
 
-/** A second P-256 key for key-rotation tests. */
 export const EC_P256_KEY_2 = `-----BEGIN PRIVATE KEY-----
 MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgqWA0NHFOCHpkeoVy
 j5H4fRK+FNALM2DZRDjw4L7OWI6hRANCAAToGKb4FQ0MxSUGwyuYEReFiry/ZrAK

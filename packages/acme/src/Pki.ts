@@ -5,6 +5,7 @@ import { Jose } from "@distilled.cloud/acme";
  * same code runs at deploy time and inside a Worker or Fly Service.
  */
 import * as Der from "alchemy/Util/Der";
+import * as Pkcs10 from "alchemy/Util/Pkcs10";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { PkiError } from "./Errors.ts";
@@ -14,10 +15,7 @@ export type KeyAlgorithm = "ES256" | "RS256";
 const OID = {
   commonName: "2.5.4.3",
   organization: "2.5.4.10",
-  extensionRequest: "1.2.840.113549.1.9.14",
   subjectAltName: "2.5.29.17",
-  ecdsaWithSha256: "1.2.840.10045.4.3.2",
-  sha256WithRsa: "1.2.840.113549.1.1.11",
 } as const;
 
 const keyGenParams = (alg: KeyAlgorithm) =>
@@ -154,22 +152,10 @@ export const createCsr = (options: {
     if (identifiers.length === 0) {
       throw new Error("a certificate needs at least one identifier");
     }
-    const subject = Der.sequence(
-      Der.set(Der.sequence(Der.oid(OID.commonName), Der.utf8String(identifiers[0]!))),
-    );
-    const sanExtension = Der.sequence(
-      Der.oid(OID.subjectAltName),
-      Der.octetString(
-        Der.sequence(
-          ...identifiers.map((name) => Der.contextPrimitive(2, new TextEncoder().encode(name))),
-        ),
-      ),
-    );
-    const attributes = Der.contextTag(
-      0,
-      Der.sequence(Der.oid(OID.extensionRequest), Der.set(Der.sequence(sanExtension))),
-    );
-    const info = Der.sequence(Der.integer(0), subject, key.spki, attributes);
+    const info = Pkcs10.requestInfo(key.spki, {
+      commonName: identifiers[0],
+      dnsNames: identifiers,
+    });
     const rawSignature = new Uint8Array(
       await crypto.subtle.sign(
         signParams(key.algorithm),
@@ -177,12 +163,9 @@ export const createCsr = (options: {
         info as Uint8Array<ArrayBuffer>,
       ),
     );
-    const signature = key.algorithm === "ES256" ? ecdsaToDer(rawSignature) : rawSignature;
-    const algorithm =
-      key.algorithm === "ES256"
-        ? Der.sequence(Der.oid(OID.ecdsaWithSha256))
-        : Der.sequence(Der.oid(OID.sha256WithRsa), Der.nullValue());
-    return Der.sequence(info, algorithm, Der.bitString(signature));
+    return key.algorithm === "ES256"
+      ? Pkcs10.certificationRequest(info, Pkcs10.ecdsaWithSha256, ecdsaToDer(rawSignature))
+      : Pkcs10.certificationRequest(info, Pkcs10.sha256WithRsa, rawSignature);
   });
 
 /** base64url of a DER CSR, as ACME's `finalize` expects. */

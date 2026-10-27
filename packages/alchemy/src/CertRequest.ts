@@ -5,14 +5,11 @@ import { Base64 } from "effect/encoding";
 import * as Redacted from "effect/Redacted";
 import * as Provider from "./Provider.ts";
 import { Resource } from "./Resource.ts";
-import * as Der from "./Util/Der.ts";
 import { arrayEqualsUnordered } from "./Util/equal.ts";
+import * as Pkcs10 from "./Util/Pkcs10.ts";
 import { sha256 } from "./Util/sha256.ts";
 
-/**
- * The private key cannot be parsed, its type is not supported, or a DNS
- * name is not a valid hostname.
- */
+/** A CertRequest cannot be built from its props. */
 export class CertRequestError extends Data.TaggedError("CertRequestError")<{
   message: string;
   cause?: unknown;
@@ -45,7 +42,7 @@ export type CertRequest = Resource<
   {
     /** The PKCS#10 certificate signing request, PEM-encoded. */
     csr: string;
-    /** SHA-256 hex digest of the public key (SPKI DER). It changes with the key. */
+    /** SHA-256 hex digest of the public key (SPKI DER). */
     keyFingerprint: string;
     /** Subject common name the CSR was generated with. */
     commonName: string | undefined;
@@ -84,7 +81,14 @@ export type CertRequest = Resource<
  */
 export const CertRequest = Resource<CertRequest>("Alchemy.CertRequest");
 
-type KeyType = "ec" | "rsa" | "ed25519";
+const signatureSchemes = {
+  ec: { digest: "sha256", algorithm: Pkcs10.ecdsaWithSha256 },
+  rsa: { digest: "sha256", algorithm: Pkcs10.sha256WithRsa },
+  // Ed25519 hashes internally, so Node takes no digest for it.
+  ed25519: { digest: null, algorithm: Pkcs10.ed25519 },
+} as const;
+
+type KeyType = keyof typeof signatureSchemes;
 
 interface SigningKey {
   readonly key: NodeCrypto.KeyObject;
@@ -98,23 +102,15 @@ interface RequestedNames {
   readonly dnsNames: string[];
 }
 
-const OID = {
-  commonName: "2.5.4.3",
-  subjectAltName: "2.5.29.17",
-  extensionRequest: "1.2.840.113549.1.9.14",
-  ecdsaWithSha256: "1.2.840.10045.4.3.2",
-  sha256WithRsa: "1.2.840.113549.1.1.11",
-  ed25519: "1.3.101.112",
-} as const;
+const DNS_LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/i;
+const MAX_DNS_NAME_LENGTH = 253;
 
-const HOSTNAME_LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/i;
-const MAX_HOSTNAME_LENGTH = 253;
-
-const isHostname = (name: string): boolean => {
-  if (name.length === 0 || name.length > MAX_HOSTNAME_LENGTH) return false;
-  const hostname = name.startsWith("*.") ? name.slice(2) : name;
-  return hostname.split(".").every((label) => HOSTNAME_LABEL.test(label));
-};
+const isDnsName = (name: string): boolean =>
+  name.length <= MAX_DNS_NAME_LENGTH &&
+  name
+    .replace(/^\*\./, "")
+    .split(".")
+    .every((label) => DNS_LABEL.test(label));
 
 const describeInvalidDnsName = (name: string): string => {
   if (!/^\p{ASCII}*$/u.test(name)) {
@@ -126,18 +122,16 @@ const describeInvalidDnsName = (name: string): string => {
   return `dnsNames must be valid hostnames: "${name}"`;
 };
 
-const requestedNames = (
-  props: CertRequestProps,
-): Effect.Effect<RequestedNames, CertRequestError> => {
+const parseNames = (props: CertRequestProps): Effect.Effect<RequestedNames, CertRequestError> => {
   const dnsNames = props.dnsNames ?? [];
-  const invalidName = dnsNames.find((name) => !isHostname(name));
+  const invalidName = dnsNames.find((name) => !isDnsName(name));
   return invalidName === undefined
     ? Effect.succeed({ commonName: props.commonName || undefined, dnsNames })
     : Effect.fail(new CertRequestError({ message: describeInvalidDnsName(invalidName) }));
 };
 
 const isKeyType = (type: string | undefined): type is KeyType =>
-  type === "ec" || type === "rsa" || type === "ed25519";
+  type !== undefined && Object.hasOwn(signatureSchemes, type);
 
 const parsePrivateKey = (privateKey: Redacted.Redacted<string> | string) =>
   Effect.try({
@@ -154,7 +148,7 @@ const loadSigningKey = Effect.fn(function* (privateKey: Redacted.Redacted<string
   const type = key.asymmetricKeyType;
   if (!isKeyType(type)) {
     return yield* new CertRequestError({
-      message: `CertRequest supports ec, rsa and ed25519 keys; got "${type ?? "unknown"}".`,
+      message: `CertRequest supports ${Object.keys(signatureSchemes).join(", ")} keys; got "${type ?? "unknown"}".`,
     });
   }
   const spki = yield* Effect.sync(() =>
@@ -163,65 +157,24 @@ const loadSigningKey = Effect.fn(function* (privateKey: Redacted.Redacted<string
   return { key, type, spki, fingerprint: yield* sha256(spki) } satisfies SigningKey;
 });
 
-const subjectName = (commonName: string | undefined): Uint8Array =>
-  commonName === undefined
-    ? Der.sequence()
-    : Der.sequence(Der.set(Der.sequence(Der.oid(OID.commonName), Der.utf8String(commonName))));
-
-const dnsNameEntry = (name: string): Uint8Array =>
-  Der.contextPrimitive(2, new TextEncoder().encode(name));
-
-const requestAttributes = (dnsNames: string[]): Uint8Array => {
-  if (dnsNames.length === 0) return Der.contextTag(0, new Uint8Array());
-  const subjectAltName = Der.sequence(
-    Der.oid(OID.subjectAltName),
-    Der.octetString(Der.sequence(...dnsNames.map(dnsNameEntry))),
-  );
-  return Der.contextTag(
-    0,
-    Der.sequence(Der.oid(OID.extensionRequest), Der.set(Der.sequence(subjectAltName))),
-  );
-};
-
-const requestInfo = (signingKey: SigningKey, names: RequestedNames): Uint8Array =>
-  Der.sequence(
-    Der.integer(0),
-    subjectName(names.commonName),
-    signingKey.spki,
-    requestAttributes(names.dnsNames),
-  );
-
-const signatureAlgorithm = (type: KeyType): Uint8Array => {
-  switch (type) {
-    case "ec":
-      return Der.sequence(Der.oid(OID.ecdsaWithSha256));
-    case "rsa":
-      return Der.sequence(Der.oid(OID.sha256WithRsa), Der.nullValue());
-    case "ed25519":
-      return Der.sequence(Der.oid(OID.ed25519));
-  }
-};
-
-// Ed25519 hashes internally, so Node takes no digest for it.
-const digestFor = (type: KeyType): "sha256" | null => (type === "ed25519" ? null : "sha256");
-
 const toPem = (der: Uint8Array): string => {
   const lines = Base64.encode(der).match(/.{1,64}/g) ?? [];
   return `-----BEGIN CERTIFICATE REQUEST-----\n${lines.join("\n")}\n-----END CERTIFICATE REQUEST-----\n`;
 };
 
-const signRequest = (signingKey: SigningKey, names: RequestedNames) =>
+const sign = (signingKey: SigningKey, data: Uint8Array) =>
   Effect.try({
-    try: () => {
-      const info = requestInfo(signingKey, names);
-      const signature = NodeCrypto.sign(digestFor(signingKey.type), info, signingKey.key);
-      return toPem(
-        Der.sequence(info, signatureAlgorithm(signingKey.type), Der.bitString(signature)),
-      );
-    },
+    try: () => NodeCrypto.sign(signatureSchemes[signingKey.type].digest, data, signingKey.key),
     catch: (cause) =>
       new CertRequestError({ message: "Cannot sign the certificate request.", cause }),
   });
+
+const signRequest = Effect.fn(function* (signingKey: SigningKey, names: RequestedNames) {
+  const info = Pkcs10.requestInfo(signingKey.spki, names);
+  const signature = yield* sign(signingKey, info);
+  const { algorithm } = signatureSchemes[signingKey.type];
+  return toPem(Pkcs10.certificationRequest(info, algorithm, signature));
+});
 
 const wasBuiltFrom = (
   output: CertRequest["Attributes"] | undefined,
@@ -236,7 +189,7 @@ const wasBuiltFrom = (
 export const CertRequestProvider = () =>
   Provider.succeed(CertRequest, {
     reconcile: Effect.fn(function* ({ news, output }) {
-      const names = yield* requestedNames(news);
+      const names = yield* parseNames(news);
       const signingKey = yield* loadSigningKey(news.privateKey);
       if (wasBuiltFrom(output, signingKey, names)) return output;
       const csr = yield* signRequest(signingKey, names);
