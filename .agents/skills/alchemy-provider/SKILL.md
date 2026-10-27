@@ -937,7 +937,7 @@ workspace project with the layout of `examples/gcp-pubsub-worker`:
   `workspace:*` dependencies), `tsconfig.json` referencing
   `packages/alchemy` and the provider package, and a `README.md`.
 - `alchemy.run.ts`, with the runtime and resources in `src/`.
-- `test/integ.test.ts` with `alchemy/Test/Bun`: deploy in `beforeAll`,
+- `test/integ.test.ts` with `@alchemy.run/test/Bun`: deploy in `beforeAll`,
   call the deployed app over HTTP, verify cloud state through distilled,
   destroy in `afterAll`. Websites and `dev`-capable apps also get
   `test/dev.test.ts`.

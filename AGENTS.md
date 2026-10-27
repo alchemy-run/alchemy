@@ -976,7 +976,7 @@ Compose a `Stack` that deploys the fixture, share one deploy across the file wit
 // Service.test.ts
 import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { expect } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -1270,6 +1270,21 @@ Rules of thumb:
 - Bullet/numbered lists are fine when they describe a recap, prerequisites, or genuinely list-shaped content (e.g. "the Worker now handles two routes: PUT and GET" at the end). They are **not** fine as a substitute for splitting a compound snippet.
 - A single API call that internally does several things (e.g. `Cloudflare.upgrade()`) doesn't need splitting — describe its behavior in prose.
 - Use `diff lang="typescript"` blocks so each step shows what's added on top of the previous step.
+
+# Package Skills
+
+A package can ship an agent skill under `packages/{package}/skills/{name}/` (e.g. [alchemy-domain](./packages/domain/skills/alchemy-domain/SKILL.md)): a `SKILL.md` plus `references/*.md`. The skill is an **entrypoint**, not a second copy of the docs. It gives an agent the workflow, the rules, and a short template per topic. The website holds the depth.
+
+- **`SKILL.md` links the docs hub and `https://alchemy.run/llms.txt`**, which lists every page, so an agent can find what the skill leaves out.
+- **Every `##`/`###` section ends with a `More:` line** linking the docs page, or the exact `#section`, that covers it in depth:
+
+  ```md
+  More: [Saga: Undo a step when a later one fails](https://alchemy.run/domain/saga#undo-a-step-when-a-later-one-fails).
+  ```
+
+- **Links must resolve.** Use absolute `https://alchemy.run/...` URLs (the skill is read outside the website), not `website/...` paths. After `pnpm --filter website build`, check that each linked page exists under `website/dist/` and that each `#anchor` is an `id` on it.
+- **Keep the skill in step with the docs.** Renaming a docs page or heading means updating the skill links to it. Adding a docs page a skill covers means adding a `More:` link from its section.
+- **Keep sections short.** If a section grows into an explanation, move the explanation to the docs page and link it.
 
 # Pull Request Conventions
 

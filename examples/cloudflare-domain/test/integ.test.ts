@@ -3,11 +3,11 @@ import * as Axiom from "@alchemy.run/axiom";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Domain from "@alchemy.run/domain";
 import * as Stripe from "@alchemy.run/stripe";
+import * as Test from "@alchemy.run/test/Bun";
 // Runs under `bun test`: deploying a Worker from Vitest does not yet produce a
 // correct bundle (the Effect entrypoint is not detected under Vite's transform).
 import { CreatePaymentIntent } from "@distilled.cloud/stripe/stripe";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -32,6 +32,16 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const stack = beforeAll(destroy(Stack).pipe(Effect.andThen(deploy(Stack))));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
+/** Sign a customer in through the bank's `/api/session` route; returns the signed session token. */
+const signIn = Effect.fn(function* (url: string, customerId: string) {
+  const response = yield* HttpClient.execute(
+    HttpClientRequest.post(`${url}/api/session`).pipe(
+      HttpClientRequest.bodyJsonUnsafe({ customerId }),
+    ),
+  ).pipe(Effect.provide(FetchHttpClient.layer));
+  return ((yield* response.json) as { readonly token: string }).token;
+});
+
 /**
  * A typed CustomerApi client signed in as `customerId`: commands over HTTP,
  * every watch a WebSocket to the Durable Object that owns what it reads.
@@ -39,8 +49,8 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
  * with its calls through `sessionClient`, and on each WebSocket upgrade
  * through Bun's `WebSocket`, which accepts headers.
  */
-const customerClient = (url: string, customerId: string) => {
-  const token = `customer:${customerId}`;
+const customerClient = Effect.fn(function* (url: string, customerId: string) {
+  const token = yield* signIn(url, customerId);
   const webSockets = Layer.succeed(
     Socket.WebSocketConstructor,
     (socketUrl, protocols) =>
@@ -49,14 +59,14 @@ const customerClient = (url: string, customerId: string) => {
         headers: { authorization: `Bearer ${token}` },
       } as unknown as string[]),
   );
-  return CustomerApi.client.pipe(
+  return yield* CustomerApi.client.pipe(
     Effect.provide(
       Layer.mergeAll(Domain.protocolWebSocket(`${url}/api`), sessionClient(token)).pipe(
         Layer.provide(Layer.mergeAll(FetchHttpClient.layer, webSockets)),
       ),
     ),
   );
-};
+});
 
 test(
   "the deployed bank decides, projects, runs policies and streams views",
@@ -90,20 +100,20 @@ test(
     const alexMain = yield* register(alex, "c-2", "alex");
 
     // a command's reply, computed from the committed state in the account's Durable Object
-    expect((yield* sam.DepositMoney({ target: samMain, amount: 100 })).reply).toEqual({
+    expect((yield* sam.DepositMoney(samMain, { amount: 100 })).reply).toEqual({
       balance: 100,
     });
 
     // MFA middleware, and ownership enforced by the aggregate against the session's actor
-    expect((yield* sam.WithdrawMoney({ target: samMain, amount: 10 }).pipe(Effect.flip))._tag).toBe(
+    expect((yield* sam.WithdrawMoney(samMain, { amount: 10 }).pipe(Effect.flip))._tag).toBe(
       "MfaRequired",
     );
-    expect((yield* sam.WithdrawMoney({ target: samMain, amount: 10 }, mfa)).reply).toEqual({
+    expect((yield* sam.WithdrawMoney(samMain, { amount: 10 }, mfa)).reply).toEqual({
       balance: 90,
     });
-    expect(
-      (yield* alex.WithdrawMoney({ target: samMain, amount: 10 }, mfa).pipe(Effect.flip))._tag,
-    ).toBe("NotOwner");
+    expect((yield* alex.WithdrawMoney(samMain, { amount: 10 }, mfa).pipe(Effect.flip))._tag).toBe(
+      "NotOwner",
+    );
 
     // a process manager across three aggregates, followed by the requester through a multi-source view
     const outcome = yield* transfer(sam, {
@@ -197,7 +207,7 @@ test(
     // a projection (Ledger) writes D1 in batches; the ledger is served by a plain route
     const ledger = yield* HttpClient.execute(
       HttpClientRequest.get(`${base}/api/ledger/${samMain}`).pipe(
-        HttpClientRequest.setHeader("authorization", "Bearer customer:c-1"),
+        HttpClientRequest.bearerToken(yield* signIn(base, "c-1")),
       ),
     ).pipe(
       Effect.flatMap((res) => res.json),

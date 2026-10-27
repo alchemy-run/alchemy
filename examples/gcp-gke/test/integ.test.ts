@@ -1,12 +1,12 @@
 import { describe, expect } from "bun:test";
 import * as GCP from "@alchemy.run/gcp";
 import * as Kubernetes from "@alchemy.run/kubernetes";
+import * as Test from "@alchemy.run/test/Bun";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as container from "@distilled.cloud/gcp/container_v1";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Bun";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

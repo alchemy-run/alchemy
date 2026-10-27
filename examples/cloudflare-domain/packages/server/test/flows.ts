@@ -26,7 +26,7 @@ export const register = Effect.fn(function* (
   username: string = customerId,
 ) {
   const id = CustomerId.make(customerId);
-  yield* client.RegisterCustomer({ target: id, name, username: Username.make(username) });
+  yield* client.RegisterCustomer(id, { name, username: Username.make(username) });
   const accountId = mainAccountId(id);
   yield* client.CustomerDashboard.watch(id).pipe(
     Stream.map(({ state }) => state),
@@ -53,7 +53,8 @@ export const transfer = Effect.fn(function* (
 ) {
   const transferId = TransferId.make(request.transferId);
   yield* client.RequestTransfer(
-    { target: transferId, from: request.from, to: request.to, amount: request.amount },
+    transferId,
+    { from: request.from, to: request.to, amount: request.amount },
     mfa,
   );
   const settled = yield* client.TransferStatus.watch(transferId).pipe(

@@ -1,9 +1,9 @@
 import * as Railway from "@alchemy.run/railway";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Query } from "@distilled.cloud/core/query";
 import { Railway as RailwayApi, type UsageLimitSetInput } from "@distilled.cloud/railway";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";

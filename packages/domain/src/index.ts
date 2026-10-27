@@ -205,6 +205,9 @@ export declare namespace Api {
   export type Client<E extends ApiModule.Entry> = ApiModule.ApiClient<E>;
   /** Type-level identity of an Api's client service, e.g. `Domain.Api.ClientKey<"BankApi">`. */
   export type ClientKey<Name extends string> = ApiModule.ClientKey<Name>;
+  export type CommandClient<C extends CommandModule.Any> = ApiModule.CommandClient<C>;
+  /** How a command is sent: its `commandId` and the call's headers. */
+  export type CommandOptions = ApiModule.CommandOptions;
   export type ViewClient<V extends ViewModule.Any> = ApiModule.ViewClient<V>;
   export type StreamClient<S extends StreamModule.Any> = ApiModule.StreamClient<S>;
   export type AggregateClient<A extends AggregateModule.Any> = ApiModule.AggregateClient<A>;

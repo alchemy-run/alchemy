@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { describe } from "vitest";
-import { make } from "@/Test/Vitest.ts";
+import { make } from "../src/Vitest.ts";
 
 const seen: Array<string> = [];
 

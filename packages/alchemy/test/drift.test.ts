@@ -1,4 +1,5 @@
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -12,7 +13,6 @@ import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { Progress, type ApplyEvent, type ProgressEvent } from "@/Report.ts";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import {
   Bucket,
   DriftResource,

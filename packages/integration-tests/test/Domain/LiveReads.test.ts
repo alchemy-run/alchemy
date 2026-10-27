@@ -106,7 +106,7 @@ const settled = (api: Client, version: number) =>
 /** Three increments of c-1, folded by the view and appended to the stream. */
 const seed = Effect.gen(function* () {
   const api = yield* CounterApi.Client;
-  for (const by of [1, 2, 3]) yield* api.Increment({ target: "c-1", by });
+  for (const by of [1, 2, 3]) yield* api.Increment("c-1", { by });
   yield* settled(api, 3);
   return api;
 });
@@ -131,7 +131,7 @@ for (const [transport, layer] of [
             .events("c-1")
             .pipe(Stream.take(5), Stream.runCollect, Effect.forkChild);
           yield* Effect.sleep("30 millis");
-          yield* api.Increment({ target: "c-1", by: 4 });
+          yield* api.Increment("c-1", { by: 4 });
           yield* settled(api, 4);
           expect(frames(yield* Fiber.join(feed))).toEqual([1, 2, 3, "caught up at 3", 4]);
 
@@ -152,7 +152,7 @@ for (const [transport, layer] of [
             .watch("c-1")
             .pipe(Stream.take(2), Stream.runCollect, Effect.forkChild);
           yield* Effect.sleep("30 millis");
-          yield* api.Increment({ target: "c-1", by: 4 });
+          yield* api.Increment("c-1", { by: 4 });
           const [first, second] = yield* Fiber.join(watched);
           expect([first!.cursor, second!.cursor]).toEqual([3, 4]);
 
