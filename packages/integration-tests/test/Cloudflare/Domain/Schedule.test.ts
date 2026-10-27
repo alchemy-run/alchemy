@@ -1,6 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "alchemy/Test/Alchemy";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
@@ -16,6 +17,11 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 type Status = "none" | "held" | "released" | "expired";
 
+/** A hold route answered with something other than 200. */
+class HoldRequestFailed extends Data.TaggedError("HoldRequestFailed")<{
+  readonly status: number;
+}> {}
+
 /** Call a hold route; right after a deploy, retry until the Worker serves it. */
 const hold = (url: string, action: "place" | "release" | "state", id: string) =>
   requestWorker(
@@ -23,9 +29,11 @@ const hold = (url: string, action: "place" | "release" | "state", id: string) =>
       `${url}/${action}/${id}`,
     ).pipe(HttpClientRequest.setHeader("connection", "close")),
   ).pipe(
-    Effect.flatMap((res) =>
-      res.status === 200 ? res.json : Effect.fail(`HTTP ${res.status}` as const),
+    Effect.filterOrFail(
+      (res) => res.status === 200,
+      (res) => new HoldRequestFailed({ status: res.status }),
     ),
+    Effect.flatMap((res) => res.json),
     Effect.map((body) => (body as { readonly status: Status }).status),
     Effect.retry({ schedule: Schedule.spaced("1 second"), times: 10 }),
   );
