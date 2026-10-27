@@ -364,6 +364,57 @@ test.provider(
   { tags, timeout: 120_000 },
 );
 
+// A large deploy can queue its lease refresh behind thousands of state
+// writes until the lease lapses. Nobody else took it, so the deploy keeps
+// going; a deploy that did take it wins.
+test.provider(
+  "a lease that lapsed while still held is taken back unless another deploy took it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const storage = yield* stack.deploy(StateStorage);
+      const stage = "lapse";
+      const created = resource("Queue", { queueUrl: "a" });
+      const request = { stack: STACK, stage, fqn: created.fqn, value: created };
+      const lapse = dynamodb.updateItem({
+        TableName: storage.tableName,
+        Key: { PK: { S: `STAGE#${STACK}#${stage}` }, SK: { S: "LEASE" } },
+        UpdateExpression: "SET expiresAt = :zero",
+        ExpressionAttributeValues: { ":zero": { N: "0" } },
+      });
+      // Past the store's 5s trust in its last lease check.
+      const pastCheck = Effect.sleep("6 seconds");
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const held = yield* makeDynamoDBState(storage);
+          yield* held.set(request);
+          yield* lapse;
+          yield* pastCheck;
+          yield* held.set({ ...request, value: { ...created, attr: { queueUrl: "b" } } });
+          expect(yield* held.get({ stack: STACK, stage, fqn: created.fqn })).toMatchObject({
+            attr: { queueUrl: "b" },
+          });
+
+          // Lapsed again, and this time another deploy takes it.
+          yield* lapse;
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const other = yield* makeDynamoDBState(storage);
+              yield* other.list({ stack: STACK, stage });
+              yield* pastCheck;
+              const lost = yield* held.set(request).pipe(Effect.flip);
+              expect(lost.message).toContain("was lost mid-run");
+              yield* other.deleteStack({ stack: STACK, stage });
+            }),
+          );
+        }),
+      );
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 120_000 },
+);
+
 // State holds generated secrets, and the AWS client logs request payloads
 // and parsed responses at Debug.
 test.provider(

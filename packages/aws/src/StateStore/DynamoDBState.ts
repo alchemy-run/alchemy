@@ -604,13 +604,25 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
             ConsistentRead: true,
           }),
         );
-        const observedAt = yield* Clock.currentTimeMillis;
-        const leaseLost =
-          str(existing.Item, "token") !== token ||
-          Number(existing.Item?.expiresAt?.N ?? 0) <= observedAt;
-        if (leaseLost) {
+        if (str(existing.Item, "token") !== token) {
           cursor.lost = true;
           return yield* Effect.fail(lostError(stack, stage));
+        }
+        const observedAt = yield* Clock.currentTimeMillis;
+        if (Number(existing.Item?.expiresAt?.N ?? 0) <= observedAt) {
+          // The lease lapsed without anyone taking it: a refresh queued
+          // behind a large deploy's writes missed its window. Take it back,
+          // on condition it is still ours, so a deploy that took it in the
+          // meantime wins and this one stops.
+          const reclaimed = yield* putLease(stack, stage, token, observedAt + LEASE_TTL_MS, {
+            ConditionExpression: "#token = :token",
+            ExpressionAttributeNames: { "#token": "token" },
+            ExpressionAttributeValues: { ":token": S(token) },
+          });
+          if (!reclaimed) {
+            cursor.lost = true;
+            return yield* Effect.fail(lostError(stack, stage));
+          }
         }
       }),
     );
