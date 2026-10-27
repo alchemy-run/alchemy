@@ -143,6 +143,10 @@ export const runsAsRole = (host: ResourceLike): boolean => {
  * Whether a host runs its code as a Google service account that can fetch ID
  * tokens from the metadata server: Cloud Run and Cloud Functions. Not a GKE
  * pod: its Workload Identity principal has no ID tokens. Deploy-time only.
+ *
+ * TODO: don't hard-code GCP host types in the AWS package. The GCP package
+ * owns them (and their `serviceAccountUniqueId`); find a way for it to
+ * provide this, e.g. as a Layer the AWS binding reads at deploy time.
  */
 export const runsAsGoogleServiceAccount = (host: ResourceLike): boolean => {
   switch (host.Type) {
