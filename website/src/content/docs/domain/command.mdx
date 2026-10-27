@@ -15,11 +15,11 @@ Commands come from the verbs people use when they describe their work. Listen to
 
 <DAG
   nodes={[
-    { id: "customer", label: "Customer", type: "who asks", kind: "client", col: 0, row: 0 },
-    { id: "agent", label: "Support agent", type: "who asks", kind: "client", col: 0, row: 1 },
-    { id: "withdraw", label: "WithdrawMoney", type: "a customer's intent", kind: "command", col: 1, row: 0 },
-    { id: "freeze", label: "FreezeAccount", type: "an agent's intent", kind: "command", col: 1, row: 1 },
-    { id: "account", label: "Account", type: "decides both", kind: "aggregate", col: 2, row: 0 },
+    { id: "customer", label: "Customer", type: "who asks", kind: "client", layer: 0 },
+    { id: "agent", label: "Support agent", type: "who asks", kind: "client", layer: 0 },
+    { id: "withdraw", label: "WithdrawMoney", type: "a customer's intent", kind: "command", layer: 1 },
+    { id: "freeze", label: "FreezeAccount", type: "an agent's intent", kind: "command", layer: 1 },
+    { id: "account", label: "Account", type: "decides both", kind: "aggregate", layer: 2 },
   ]}
   edges={[
     { from: "customer", to: "withdraw" },

@@ -19,9 +19,9 @@ Each sentence has two halves. The "whenever" names an event, which is what the p
 
 <DAG
   nodes={[
-    { id: "event", label: "CustomerRegistered", type: "whenever …", kind: "event", layer: 0 },
-    { id: "policy", label: "MainAccountProvisioning", type: "the rule", kind: "policy", layer: 1 },
-    { id: "command", label: "OpenAccount", type: "… then", kind: "command", layer: 2 },
+    { id: "event", label: "Whenever …", type: "CustomerRegistered", kind: "event", layer: 0 },
+    { id: "policy", label: "the rule", type: "open a main account", kind: "policy", layer: 1 },
+    { id: "command", label: "… then", type: "OpenAccount", kind: "command", layer: 2 },
   ]}
   edges={[
     { from: "event", to: "policy", dashed: true },

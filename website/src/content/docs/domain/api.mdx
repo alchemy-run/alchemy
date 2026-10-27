@@ -17,12 +17,12 @@ Publishing a slice of the model, rather than all of it, is what keeps the model 
 
 <DAG
   nodes={[
-    { id: "app", label: "Customer app", type: "a client", kind: "client", layer: 0 },
-    { id: "api", label: "CustomerApi", type: "the published part", kind: "api", layer: 1 },
-    { id: "deposit", label: "DepositMoney", type: "published", kind: "command", layer: 2 },
-    { id: "summary", label: "AccountSummary", type: "published", kind: "view", layer: 2 },
-    { id: "open", label: "OpenAccount", type: "internal", kind: "command", layer: 3 },
-    { id: "policy", label: "MainAccountProvisioning", type: "internal", kind: "policy", layer: 3 },
+    { id: "app", label: "Customer app", type: "a client", kind: "client", col: 0, row: 0 },
+    { id: "api", label: "CustomerApi", type: "the published part", kind: "api", col: 1, row: 0 },
+    { id: "deposit", label: "DepositMoney", type: "published", kind: "command", col: 2, row: 0 },
+    { id: "summary", label: "AccountSummary", type: "published", kind: "view", col: 2, row: 1 },
+    { id: "open", label: "OpenAccount", type: "internal", kind: "command", col: 2, row: 2 },
+    { id: "policy", label: "a policy", type: "internal", kind: "policy", col: 1, row: 2 },
   ]}
   edges={[
     { from: "app", to: "api" },

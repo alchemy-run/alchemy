@@ -20,7 +20,7 @@ An event-sourced model keeps its history the same way. Each event is one line in
     { id: "opened", label: "AccountOpened", type: "seq 1", kind: "event", col: 0, row: 0 },
     { id: "deposited", label: "MoneyDeposited 100", type: "seq 2", kind: "event", col: 1, row: 0 },
     { id: "withdrew", label: "MoneyWithdrawn 30", type: "seq 3", kind: "event", col: 2, row: 0 },
-    { id: "state", label: "balance: 70", type: "derived", kind: "view", col: 2, row: 1 },
+    { id: "state", label: "balance: 70", type: "derived", col: 2, row: 1 },
   ]}
   edges={[
     { from: "opened", to: "deposited" },

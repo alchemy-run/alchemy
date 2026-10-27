@@ -18,7 +18,7 @@ A projection is how events reach a store like that. It's still a read model in t
 <DAG
   nodes={[
     { id: "events", label: "Account events", type: "the record", kind: "event", layer: 0 },
-    { id: "view", label: "AccountSummary", type: "one key, served for you", kind: "view", layer: 1 },
+    { id: "view", label: "AccountSummary", type: "served for you", kind: "view", layer: 1 },
     { id: "ledger", label: "Ledger", type: "into your store", kind: "projection", layer: 1 },
     { id: "table", label: "ledger table", type: "query it your way", layer: 2 },
   ]}
