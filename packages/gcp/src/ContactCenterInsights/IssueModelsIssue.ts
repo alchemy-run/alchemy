@@ -98,7 +98,7 @@ export const IssueModelsIssue = Resource<IssueModelsIssue>(
 export class IssueModelsIssueNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.IssueModelsIssueNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (issue: cci.GoogleCloudContactcenterinsightsV1Issue, project: string) => {
@@ -128,7 +128,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((issue) =>
-      issue ? Effect.succeed(issue) : Effect.fail(new IssueModelsIssueNotResolved({ name })),
+      issue
+        ? Effect.succeed(issue)
+        : Effect.fail(new IssueModelsIssueNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ContactCenterInsights.IssueModelsIssueNotResolved",
@@ -242,7 +244,7 @@ export const IssueModelsIssueProvider = () =>
 
       if (current === undefined) {
         return yield* new IssueModelsIssueNotResolved({
-          name: output?.name ?? `${news.parent}/issues/-`,
+          resourceName: output?.name ?? `${news.parent}/issues/-`,
         });
       }
 

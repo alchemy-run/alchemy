@@ -228,7 +228,7 @@ export const RuntimeProjectAttachmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name });
+        return yield* new ApihubNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);

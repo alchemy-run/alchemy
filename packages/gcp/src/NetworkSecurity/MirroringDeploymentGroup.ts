@@ -161,20 +161,20 @@ export const MirroringDeploymentGroup = Resource<MirroringDeploymentGroup>(
 export class MirroringDeploymentGroupNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringDeploymentGroupNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MirroringDeploymentGroupFailed extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringDeploymentGroupFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class MirroringDeploymentGroupStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringDeploymentGroupStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const isPendingState = (state: string | undefined) =>
@@ -232,15 +232,15 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (group): group is networksecurity.MirroringDeploymentGroup => group !== undefined,
-      () => new MirroringDeploymentGroupNotResolved({ name }),
+      () => new MirroringDeploymentGroupNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (group) => group.state !== "DELETE_FAILED",
-      (group) => new MirroringDeploymentGroupFailed({ name, state: group.state }),
+      (group) => new MirroringDeploymentGroupFailed({ resourceName: name, state: group.state }),
     ),
     Effect.filterOrFail(
       (group) => !isPendingState(group.state),
-      () => new MirroringDeploymentGroupNotResolved({ name }),
+      () => new MirroringDeploymentGroupNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.MirroringDeploymentGroupNotResolved",
@@ -254,7 +254,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((group) =>
       group === undefined
         ? Effect.void
-        : Effect.fail(new MirroringDeploymentGroupStillExists({ name })),
+        : Effect.fail(new MirroringDeploymentGroupStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.MirroringDeploymentGroupStillExists",
@@ -369,7 +369,7 @@ export const MirroringDeploymentGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MirroringDeploymentGroupNotResolved({ name });
+        return yield* new MirroringDeploymentGroupNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

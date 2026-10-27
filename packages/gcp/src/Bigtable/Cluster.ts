@@ -214,16 +214,16 @@ export type Cluster = Resource<
 export const Cluster = Resource<Cluster>("GCP.Bigtable.Cluster");
 
 export class ClusterNotResolved extends Data.TaggedError("GCP.Bigtable.ClusterNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ClusterNotReady extends Data.TaggedError("GCP.Bigtable.ClusterNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class ClusterStillExists extends Data.TaggedError("GCP.Bigtable.ClusterStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const instanceIdOf = (value: string) => lastSegment(value);
@@ -321,7 +321,9 @@ const isBusy = (state: string | undefined) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cluster) =>
-      cluster ? Effect.succeed(cluster) : Effect.fail(new ClusterNotResolved({ name })),
+      cluster
+        ? Effect.succeed(cluster)
+        : Effect.fail(new ClusterNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.ClusterNotResolved",
@@ -334,13 +336,13 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (cluster): cluster is bigtable.Cluster => cluster !== undefined,
-      () => new ClusterNotResolved({ name }),
+      () => new ClusterNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (cluster) => !isBusy(cluster.state),
       (cluster) =>
         new ClusterNotReady({
-          name,
+          resourceName: name,
           state: cluster.state ?? "STATE_NOT_KNOWN",
         }),
     ),
@@ -356,7 +358,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cluster) =>
-      cluster === undefined ? Effect.void : Effect.fail(new ClusterStillExists({ name })),
+      cluster === undefined
+        ? Effect.void
+        : Effect.fail(new ClusterStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.ClusterStillExists",

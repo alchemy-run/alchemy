@@ -151,13 +151,13 @@ export const SecurityProfileGroup = Resource<SecurityProfileGroup>(
 export class SecurityProfileGroupNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.SecurityProfileGroupNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SecurityProfileGroupStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.SecurityProfileGroupStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const refOf = (value: string | undefined) => {
@@ -194,7 +194,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((group) =>
-      group ? Effect.succeed(group) : Effect.fail(new SecurityProfileGroupNotResolved({ name })),
+      group
+        ? Effect.succeed(group)
+        : Effect.fail(new SecurityProfileGroupNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.SecurityProfileGroupNotResolved",
@@ -208,7 +210,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((group) =>
       group === undefined
         ? Effect.void
-        : Effect.fail(new SecurityProfileGroupStillExists({ name })),
+        : Effect.fail(new SecurityProfileGroupStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.SecurityProfileGroupStillExists",
@@ -326,7 +328,7 @@ export const SecurityProfileGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecurityProfileGroupNotResolved({ name });
+        return yield* new SecurityProfileGroupNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

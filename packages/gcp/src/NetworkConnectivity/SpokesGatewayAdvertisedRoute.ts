@@ -340,7 +340,7 @@ export const SpokesGatewayAdvertisedRouteProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NetworkConnectivityNotResolved({ name });
+        return yield* new NetworkConnectivityNotResolved({ resourceName: name });
       }
 
       // Labels and description are create-only; `diff` replaces the route

@@ -121,7 +121,7 @@ export const Contact = Resource<Contact>("GCP.EssentialContacts.Contact");
 export class ContactNotResolved extends Data.TaggedError(
   "GCP.EssentialContacts.ContactNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const getByName = (name: string) =>
@@ -222,7 +222,7 @@ export const ContactProvider = () =>
 
       if (current === undefined) {
         return yield* new ContactNotResolved({
-          name: output?.name ?? `${parent}/contacts`,
+          resourceName: output?.name ?? `${parent}/contacts`,
         });
       }
 

@@ -179,13 +179,13 @@ export const OrganizationLogBucket = Resource<OrganizationLogBucket>(
 export class OrganizationLogBucketNotResolved extends Data.TaggedError(
   "GCP.Logging.OrganizationLogBucketNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class OrganizationLogBucketFailed extends Data.TaggedError(
   "GCP.Logging.OrganizationLogBucketFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -286,16 +286,16 @@ const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const bucket = yield* getByName(name);
     if (bucket === undefined || isDeleted(bucket)) {
-      return yield* new OrganizationLogBucketNotResolved({ name });
+      return yield* new OrganizationLogBucketNotResolved({ resourceName: name });
     }
     if (bucket.lifecycleState === "FAILED") {
       return yield* new OrganizationLogBucketFailed({
-        name,
+        resourceName: name,
         state: bucket.lifecycleState,
       });
     }
     if (isPending(bucket.lifecycleState)) {
-      return yield* new OrganizationLogBucketNotResolved({ name });
+      return yield* new OrganizationLogBucketNotResolved({ resourceName: name });
     }
     return bucket;
   }).pipe(
@@ -309,7 +309,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bucket) =>
-      isDeleted(bucket) ? Effect.void : Effect.fail(new OrganizationLogBucketNotResolved({ name })),
+      isDeleted(bucket)
+        ? Effect.void
+        : Effect.fail(new OrganizationLogBucketNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.OrganizationLogBucketNotResolved",
@@ -448,7 +450,7 @@ export const OrganizationLogBucketProvider = () =>
       }
 
       if (isDeleted(current)) {
-        return yield* new OrganizationLogBucketNotResolved({ name });
+        return yield* new OrganizationLogBucketNotResolved({ resourceName: name });
       }
 
       const desiredLocked = news.locked === true;

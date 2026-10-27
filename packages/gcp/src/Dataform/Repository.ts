@@ -189,7 +189,7 @@ export type Repository = Resource<
 export const Repository = Resource<Repository>("GCP.Dataform.Repository");
 
 export class RepositoryNotResolved extends Data.TaggedError("GCP.Dataform.RepositoryNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, repositoryId: string) =>
@@ -325,7 +325,7 @@ export const RepositoryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RepositoryNotResolved({ name });
+        return yield* new RepositoryNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

@@ -143,7 +143,7 @@ export type AppsSecret = Resource<
 export const AppsSecret = Resource<AppsSecret>("Stripe.AppsSecret");
 
 export class AppsSecretNotResolved extends Data.TaggedError("Stripe.AppsSecretNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 type AppsSecretAttributes = AppsSecret["Attributes"];
@@ -335,7 +335,7 @@ export const AppsSecretProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppsSecretNotResolved({ name });
+        return yield* new AppsSecretNotResolved({ resourceName: name });
       }
 
       const observedPayload = current.payload ?? undefined;

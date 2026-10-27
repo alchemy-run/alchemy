@@ -91,7 +91,7 @@ export const QaScorecardsRevision = Resource<QaScorecardsRevision>(
 export class QaScorecardsRevisionNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.QaScorecardsRevisionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, qaScorecardRevisionId: string) =>
@@ -244,7 +244,7 @@ export const QaScorecardsRevisionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new QaScorecardsRevisionNotResolved({ name });
+        return yield* new QaScorecardsRevisionNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

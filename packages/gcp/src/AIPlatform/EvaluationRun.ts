@@ -134,13 +134,13 @@ export const EvaluationRun = Resource<EvaluationRun>("GCP.AIPlatform.EvaluationR
 export class EvaluationRunNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.EvaluationRunNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class EvaluationRunStillExists extends Data.TaggedError(
   "GCP.AIPlatform.EvaluationRunStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, runId: string) =>
@@ -202,7 +202,9 @@ const findOwned = (id: string, project: string, location?: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((run) =>
-      run === undefined ? Effect.void : Effect.fail(new EvaluationRunStillExists({ name })),
+      run === undefined
+        ? Effect.void
+        : Effect.fail(new EvaluationRunStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.EvaluationRunStillExists",
@@ -282,7 +284,7 @@ export const EvaluationRunProvider = () =>
 
       if (current === undefined) {
         return yield* new EvaluationRunNotResolved({
-          name: name ?? displayName,
+          resourceName: name ?? displayName,
         });
       }
 

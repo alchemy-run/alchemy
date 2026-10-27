@@ -109,7 +109,7 @@ export const AuthorizedViewSetsAuthorizedViewsConversationsAssessment =
 export class AuthorizedViewSetsAuthorizedViewsConversationsAssessmentNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewsConversationsAssessmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const agentInfoOf = (
@@ -265,7 +265,7 @@ export const AuthorizedViewSetsAuthorizedViewsConversationsAssessmentProvider = 
 
       if (current === undefined) {
         return yield* new AuthorizedViewSetsAuthorizedViewsConversationsAssessmentNotResolved({
-          name: output?.name ?? `${news.parent}/assessments/-`,
+          resourceName: output?.name ?? `${news.parent}/assessments/-`,
         });
       }
 

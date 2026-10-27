@@ -98,7 +98,7 @@ export const QaQuestionTag = Resource<QaQuestionTag>("GCP.ContactCenterInsights.
 export class QaQuestionTagNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.QaQuestionTagNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, qaQuestionTagId: string) =>
@@ -239,7 +239,7 @@ export const QaQuestionTagProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new QaQuestionTagNotResolved({ name });
+        return yield* new QaQuestionTagNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

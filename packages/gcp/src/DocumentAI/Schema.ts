@@ -220,7 +220,7 @@ export const SchemaProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: hinted || `${parent}/schemas`,
+          resourceName: hinted || `${parent}/schemas`,
         });
       }
 

@@ -121,13 +121,13 @@ export const FeaturestoresEntityType = Resource<FeaturestoresEntityType>(
 export class FeaturestoresEntityTypeNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeaturestoresEntityTypeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FeaturestoresEntityTypeStillExists extends Data.TaggedError(
   "GCP.AIPlatform.FeaturestoresEntityTypeStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parentOf = (project: string, location: string, featurestore: string) =>
@@ -167,7 +167,7 @@ const waitUntilExists = (name: string) =>
     Effect.flatMap((entity) =>
       entity
         ? Effect.succeed(entity)
-        : Effect.fail(new FeaturestoresEntityTypeNotResolved({ name })),
+        : Effect.fail(new FeaturestoresEntityTypeNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeaturestoresEntityTypeNotResolved",
@@ -181,7 +181,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((entity) =>
       entity === undefined
         ? Effect.void
-        : Effect.fail(new FeaturestoresEntityTypeStillExists({ name })),
+        : Effect.fail(new FeaturestoresEntityTypeStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeaturestoresEntityTypeStillExists",
@@ -315,7 +315,7 @@ export const FeaturestoresEntityTypeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FeaturestoresEntityTypeNotResolved({ name });
+        return yield* new FeaturestoresEntityTypeNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

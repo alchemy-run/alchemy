@@ -181,7 +181,7 @@ export type BillingSink = Resource<
 export const BillingSink = Resource<BillingSink>("GCP.Logging.BillingSink");
 
 export class BillingSinkNotResolved extends Data.TaggedError("GCP.Logging.BillingSinkNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (billingAccountId: string, sinkId: string) =>
@@ -346,7 +346,7 @@ export const BillingSinkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BillingSinkNotResolved({ name });
+        return yield* new BillingSinkNotResolved({ resourceName: name });
       }
 
       const desiredDisabled = news.disabled === true;

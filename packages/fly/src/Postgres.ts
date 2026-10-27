@@ -286,7 +286,7 @@ export type Postgres = Resource<
 export const Postgres = Resource<Postgres>("Fly.Postgres");
 
 export class PostgresNotCreated extends Data.TaggedError("Fly.PostgresNotCreated")<{
-  name: string;
+  resourceName: string;
   orgSlug: string;
 }> {}
 
@@ -660,7 +660,7 @@ export const PostgresProvider = () =>
 
       if (current === undefined) {
         if (region === undefined || region.length === 0) {
-          return yield* new PostgresNotCreated({ name, orgSlug });
+          return yield* new PostgresNotCreated({ resourceName: name, orgSlug });
         }
         const created = yield* mpg
           .createCluster({
@@ -680,7 +680,7 @@ export const PostgresProvider = () =>
       }
 
       if (current === undefined || current.id === undefined) {
-        return yield* new PostgresNotCreated({ name, orgSlug });
+        return yield* new PostgresNotCreated({ resourceName: name, orgSlug });
       }
       // `current` is reassigned below; the id is stable across the waits.
       const clusterId = current.id;

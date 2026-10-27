@@ -118,7 +118,7 @@ export const ReasoningEnginesSession = Resource<ReasoningEnginesSession>(
 export class ReasoningEnginesSessionNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.ReasoningEnginesSessionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -157,7 +157,7 @@ const waitUntilExists = (name: string) =>
     Effect.flatMap((session) =>
       session
         ? Effect.succeed(session)
-        : Effect.fail(new ReasoningEnginesSessionNotResolved({ name })),
+        : Effect.fail(new ReasoningEnginesSessionNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.ReasoningEnginesSessionNotResolved",
@@ -281,7 +281,7 @@ export const ReasoningEnginesSessionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ReasoningEnginesSessionNotResolved({ name });
+        return yield* new ReasoningEnginesSessionNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

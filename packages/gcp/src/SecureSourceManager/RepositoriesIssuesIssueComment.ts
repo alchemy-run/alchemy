@@ -294,7 +294,7 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name: name || issue });
+        return yield* new ResourceNotResolved({ resourceName: name || issue });
       }
 
       const currentName = current.name ?? name;

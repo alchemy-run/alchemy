@@ -265,7 +265,7 @@ export const DnsThreatDetectorProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NetworksecurityNotResolved({ name });
+        return yield* new NetworksecurityNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

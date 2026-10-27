@@ -245,7 +245,7 @@ export const BackendService = Resource<BackendService>("GCP.Compute.BackendServi
 export class BackendServiceNotResolved extends Data.TaggedError(
   "GCP.Compute.BackendServiceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const rfc1035 = (name: string): string => {
@@ -529,7 +529,7 @@ export const BackendServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BackendServiceNotResolved({ name });
+        return yield* new BackendServiceNotResolved({ resourceName: name });
       }
 
       const timeoutChanged = (current.timeoutSec ?? DEFAULT_TIMEOUT_SEC) !== timeoutSec;
@@ -613,7 +613,7 @@ export const BackendServiceProvider = () =>
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* awaitResource(env.project, name);
         if (current === undefined) {
-          return yield* new BackendServiceNotResolved({ name });
+          return yield* new BackendServiceNotResolved({ resourceName: name });
         }
       }
 

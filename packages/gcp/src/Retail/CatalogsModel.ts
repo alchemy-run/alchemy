@@ -148,7 +148,7 @@ export const CatalogsModel = Resource<CatalogsModel>("GCP.Retail.CatalogsModel")
 export class CatalogsModelNotResolved extends Data.TaggedError(
   "GCP.Retail.CatalogsModelNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (model: retail.GoogleCloudRetailV2Model, project: string) => {
@@ -186,7 +186,7 @@ const refresh = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (model): model is retail.GoogleCloudRetailV2Model => model !== undefined,
-      () => new CatalogsModelNotResolved({ name }),
+      () => new CatalogsModelNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Retail.CatalogsModelNotResolved",
@@ -316,7 +316,7 @@ export const CatalogsModelProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CatalogsModelNotResolved({ name });
+        return yield* new CatalogsModelNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;

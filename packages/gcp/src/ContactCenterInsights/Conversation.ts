@@ -188,7 +188,7 @@ export const Conversation = Resource<Conversation>("GCP.ContactCenterInsights.Co
 export class ConversationNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.ConversationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_MEDIUM = "CHAT";
@@ -354,7 +354,7 @@ export const ConversationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConversationNotResolved({ name });
+        return yield* new ConversationNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

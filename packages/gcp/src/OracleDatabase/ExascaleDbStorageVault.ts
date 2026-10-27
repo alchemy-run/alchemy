@@ -146,10 +146,10 @@ export const ExascaleDbStorageVault = Resource<ExascaleDbStorageVault>(
 const mergedProperties = (
   news: ExascaleDbStorageVaultProps,
 ): ExascaleDbStorageVaultPropertiesInput => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   description: news.description ?? news.properties?.description,
   exascaleDbStorageDetails: {
-    ...(news.properties?.exascaleDbStorageDetails ?? {}),
+    ...news.properties?.exascaleDbStorageDetails,
     totalSizeGbs: news.totalSizeGbs ?? news.properties?.exascaleDbStorageDetails?.totalSizeGbs,
   },
 });
@@ -304,7 +304,7 @@ export const ExascaleDbStorageVaultProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(

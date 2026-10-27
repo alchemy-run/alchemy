@@ -172,13 +172,13 @@ export const DeploymentResourcePool = Resource<DeploymentResourcePool>(
 export class DeploymentResourcePoolNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.DeploymentResourcePoolNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DeploymentResourcePoolStillExists extends Data.TaggedError(
   "GCP.AIPlatform.DeploymentResourcePoolStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_MACHINE_TYPE = "n1-standard-2";
@@ -312,7 +312,9 @@ const findOwned = (hinted: string | undefined) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool ? Effect.succeed(pool) : Effect.fail(new DeploymentResourcePoolNotResolved({ name })),
+      pool
+        ? Effect.succeed(pool)
+        : Effect.fail(new DeploymentResourcePoolNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.DeploymentResourcePoolNotResolved",
@@ -326,7 +328,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((pool) =>
       pool === undefined
         ? Effect.void
-        : Effect.fail(new DeploymentResourcePoolStillExists({ name })),
+        : Effect.fail(new DeploymentResourcePoolStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.DeploymentResourcePoolStillExists",
@@ -446,7 +448,7 @@ export const DeploymentResourcePoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DeploymentResourcePoolNotResolved({ name });
+        return yield* new DeploymentResourcePoolNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

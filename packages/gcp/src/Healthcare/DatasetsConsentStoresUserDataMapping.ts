@@ -115,7 +115,7 @@ export const DatasetsConsentStoresUserDataMapping = Resource<DatasetsConsentStor
 export class DatasetsConsentStoresUserDataMappingNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsConsentStoresUserDataMappingNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const storeOf = (
@@ -230,7 +230,7 @@ export const DatasetsConsentStoresUserDataMappingProvider = () =>
 
       if (current === undefined) {
         return yield* new DatasetsConsentStoresUserDataMappingNotResolved({
-          name: consentStore,
+          resourceName: consentStore,
         });
       }
 

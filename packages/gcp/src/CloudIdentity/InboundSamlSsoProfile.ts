@@ -107,7 +107,7 @@ export const InboundSamlSsoProfile = Resource<InboundSamlSsoProfile>(
 export class InboundSamlSsoProfileNotResolved extends Data.TaggedError(
   "GCP.CloudIdentity.InboundSamlSsoProfileNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (profile: cloudidentity.InboundSamlSsoProfile) => {
@@ -209,7 +209,7 @@ export const InboundSamlSsoProfileProvider = () =>
 
       if (current === undefined) {
         return yield* new InboundSamlSsoProfileNotResolved({
-          name: output?.name ?? displayName,
+          resourceName: output?.name ?? displayName,
         });
       }
 

@@ -208,7 +208,7 @@ export type Secret = Resource<
 export const Secret = Resource<Secret>("GCP.SecretManager.Secret");
 
 export class SecretNotResolved extends Data.TaggedError("GCP.SecretManager.SecretNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_REPLICATION: Replication = { automatic: {} };
@@ -475,11 +475,11 @@ export const SecretProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecretNotResolved({ name });
+        return yield* new SecretNotResolved({ resourceName: name });
       }
 
       if (replicationFingerprint(toReplication(current.replication)) !== desiredReplicationFp) {
-        return yield* new SecretNotResolved({ name });
+        return yield* new SecretNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

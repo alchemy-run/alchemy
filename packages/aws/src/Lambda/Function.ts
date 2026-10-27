@@ -2291,7 +2291,6 @@ export const FunctionProvider = () =>
 
         // Update an existing function in place. Only an engine-admitted
         // function reaches this directly — see `preferUpdate`.
-        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const update = Effect.gen(function* () {
           yield* Effect.logDebug(`updating function code ${id}`);
           yield* Lambda.updateFunctionCode({
@@ -2349,7 +2348,6 @@ export const FunctionProvider = () =>
           }
         }) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
 
-        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const getAndUpdate = Lambda.getFunction({
           FunctionName: functionName,
         }).pipe(
@@ -2373,10 +2371,9 @@ export const FunctionProvider = () =>
               // TODO(sam): add custom
               new Error("Function tags do not match expected values"),
           ),
-          Effect.flatMap(() => update),
+          Effect.andThen(update),
         ) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
 
-        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const create = Lambda.createFunction(createFunctionRequest).pipe(
           Effect.tapError((e) => Effect.logDebug(e)),
           Effect.retry({

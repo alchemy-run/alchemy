@@ -11,7 +11,7 @@ export const MAX_DESCRIPTION_LENGTH = 1024;
 export const MAX_DISPLAY_NAME_LENGTH = 128;
 
 export class SecuritycenterNotResolved extends Data.TaggedError("GCP.SecurityCenter.NotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class OrganizationNotResolved extends Data.TaggedError(

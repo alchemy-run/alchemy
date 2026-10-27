@@ -128,7 +128,7 @@ export class ResourceRecordSetNotResolved extends Data.TaggedError(
   "GCP.DNS.ResourceRecordSetNotResolved",
 )<{
   managedZone: string;
-  name: string;
+  resourceName: string;
   type: string;
 }> {}
 
@@ -387,7 +387,7 @@ export const ResourceRecordSetProvider = () =>
       if (current === undefined) {
         return yield* new ResourceRecordSetNotResolved({
           managedZone,
-          name,
+          resourceName: name,
           type,
         });
       }

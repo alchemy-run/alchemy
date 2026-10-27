@@ -158,7 +158,7 @@ export const LocationsSecret = Resource<LocationsSecret>("GCP.SecretManager.Loca
 export class LocationsSecretNotResolved extends Data.TaggedError(
   "GCP.SecretManager.LocationsSecretNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -389,7 +389,7 @@ export const LocationsSecretProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LocationsSecretNotResolved({ name });
+        return yield* new LocationsSecretNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

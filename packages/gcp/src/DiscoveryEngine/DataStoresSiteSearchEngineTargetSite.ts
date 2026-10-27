@@ -115,7 +115,7 @@ export const DataStoresSiteSearchEngineTargetSite = Resource<DataStoresSiteSearc
 export class DataStoresSiteSearchEngineTargetSiteNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresSiteSearchEngineTargetSiteNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const siteSearchEngine = (dataStore: string) => `${dataStore}/siteSearchEngine`;
@@ -255,7 +255,7 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
 
       if (current === undefined) {
         return yield* new DataStoresSiteSearchEngineTargetSiteNotResolved({
-          name: output?.name ?? `${engine}/targetSites`,
+          resourceName: output?.name ?? `${engine}/targetSites`,
         });
       }
 

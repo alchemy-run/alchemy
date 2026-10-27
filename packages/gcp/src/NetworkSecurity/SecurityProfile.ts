@@ -240,13 +240,13 @@ export const SecurityProfile = Resource<SecurityProfile>("GCP.NetworkSecurity.Se
 export class SecurityProfileNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.SecurityProfileNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SecurityProfileStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.SecurityProfileStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const typeOf = (
@@ -347,7 +347,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((profile) =>
-      profile ? Effect.succeed(profile) : Effect.fail(new SecurityProfileNotResolved({ name })),
+      profile
+        ? Effect.succeed(profile)
+        : Effect.fail(new SecurityProfileNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.SecurityProfileNotResolved",
@@ -359,7 +361,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((profile) =>
-      profile === undefined ? Effect.void : Effect.fail(new SecurityProfileStillExists({ name })),
+      profile === undefined
+        ? Effect.void
+        : Effect.fail(new SecurityProfileStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.SecurityProfileStillExists",
@@ -530,7 +534,7 @@ export const SecurityProfileProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecurityProfileNotResolved({ name });
+        return yield* new SecurityProfileNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

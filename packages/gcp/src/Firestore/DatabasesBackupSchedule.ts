@@ -120,13 +120,13 @@ export const DatabasesBackupSchedule = Resource<DatabasesBackupSchedule>(
 export class BackupScheduleNotResolved extends Data.TaggedError(
   "GCP.Firestore.BackupScheduleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BackupScheduleStillExists extends Data.TaggedError(
   "GCP.Firestore.BackupScheduleStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const desiredWeeklyDay = (news: DatabasesBackupScheduleProps): string | undefined =>
@@ -183,7 +183,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (schedule) => schedule === undefined,
-      () => new BackupScheduleStillExists({ name }),
+      () => new BackupScheduleStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Firestore.BackupScheduleStillExists",
@@ -268,7 +268,7 @@ export const DatabasesBackupScheduleProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new BackupScheduleNotResolved({
-          name: `${parent}/backupSchedules`,
+          resourceName: `${parent}/backupSchedules`,
         });
       }
 

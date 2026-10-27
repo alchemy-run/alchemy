@@ -95,7 +95,7 @@ export const CollectionsEnginesConversation = Resource<CollectionsEnginesConvers
 export class CollectionsEnginesConversationNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEnginesConversationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const getByName = (name: string) =>
@@ -176,7 +176,7 @@ export const CollectionsEnginesConversationProvider = () =>
 
       if (current === undefined) {
         return yield* new CollectionsEnginesConversationNotResolved({
-          name: fallbackName,
+          resourceName: fallbackName,
         });
       }
 

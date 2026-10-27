@@ -124,7 +124,7 @@ export const ConversationsAssessment = Resource<ConversationsAssessment>(
 export class ConversationsAssessmentNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.ConversationsAssessmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAgentInfo = (
@@ -157,7 +157,7 @@ const encodeAgentInfo = (
   info: AgentInfo | undefined,
   ownership: Record<string, string>,
 ): cci.GoogleCloudContactcenterinsightsV1ConversationQualityMetadataAgentInfo => ({
-  ...(info ?? {}),
+  ...info,
   displayName: encodeOwnershipLine(ownership, info?.displayName, 256),
 });
 
@@ -272,7 +272,7 @@ export const ConversationsAssessmentProvider = () =>
 
       if (current === undefined) {
         return yield* new ConversationsAssessmentNotResolved({
-          name: output?.name ?? `${news.parent}/assessments/-`,
+          resourceName: output?.name ?? `${news.parent}/assessments/-`,
         });
       }
 

@@ -18,7 +18,7 @@ import { readRolesAnywhereTags, syncRolesAnywhereTags, toWireTags } from "./inte
  * no profile detail and the profile cannot be found by name afterwards.
  */
 export class ProfileMissing extends Data.TaggedError("ProfileMissing")<{
-  readonly name: string;
+  readonly resourceName: string;
 }> {}
 
 /**
@@ -283,7 +283,7 @@ export const ProfileProvider = () =>
             });
             live = created.profile ?? (yield* findByName(name));
             if (live === undefined) {
-              return yield* new ProfileMissing({ name });
+              return yield* new ProfileMissing({ resourceName: name });
             }
           } else {
             // 3. Sync — converge the mutable aspects (name, roleArns,

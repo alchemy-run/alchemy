@@ -326,7 +326,7 @@ export const Postgres: typeof PostgresResource = Object.assign(
 );
 
 export class PostgresNotCreated extends Data.TaggedError("Railway.PostgresNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -341,7 +341,7 @@ export class PostgresDeployFailed extends Data.TaggedError("Railway.PostgresDepl
 }> {}
 
 export class PostgresVolumeNotCreated extends Data.TaggedError("Railway.PostgresVolumeNotCreated")<{
-  name: string;
+  resourceName: string;
   serviceId: string;
 }> {}
 
@@ -980,7 +980,7 @@ export const PostgresProvider = () =>
       }
 
       if (current === undefined || isGoneService(current)) {
-        return yield* new PostgresNotCreated({ name, projectId });
+        return yield* new PostgresNotCreated({ resourceName: name, projectId });
       }
 
       if (current.name !== name) {
@@ -1045,7 +1045,10 @@ export const PostgresProvider = () =>
         volume = yield* waitForVolume(environmentId, projectId, created.id);
       }
       if (volume === undefined || isGoneVolume(volume)) {
-        return yield* new PostgresVolumeNotCreated({ name: volumeName, serviceId: current.id });
+        return yield* new PostgresVolumeNotCreated({
+          resourceName: volumeName,
+          serviceId: current.id,
+        });
       }
       if (volume.volume.name !== volumeName) {
         yield* stampVolumeName(volume.volumeId, volumeName);

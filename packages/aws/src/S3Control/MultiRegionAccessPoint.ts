@@ -123,7 +123,7 @@ export const MultiRegionAccessPoint = Resource<MultiRegionAccessPoint>(
  */
 export class MultiRegionAccessPointNotReady extends Data.TaggedError(
   "MultiRegionAccessPointNotReady",
-)<{ name: string; status: string | undefined }> {}
+)<{ resourceName: string; status: string | undefined }> {}
 
 /**
  * Raised while a Multi-Region Access Point deletion is still in flight —
@@ -131,7 +131,7 @@ export class MultiRegionAccessPointNotReady extends Data.TaggedError(
  */
 export class MultiRegionAccessPointNotDeleted extends Data.TaggedError(
   "MultiRegionAccessPointNotDeleted",
-)<{ name: string; status: string | undefined }> {}
+)<{ resourceName: string; status: string | undefined }> {}
 
 /**
  * Multi-Region Access Point provisioning/deletion legitimately takes
@@ -208,7 +208,7 @@ export const MultiRegionAccessPointProvider = () =>
                 ? Effect.succeed(report)
                 : Effect.fail(
                     new MultiRegionAccessPointNotReady({
-                      name,
+                      resourceName: name,
                       status: report?.Status,
                     }),
                   ),
@@ -224,7 +224,7 @@ export const MultiRegionAccessPointProvider = () =>
                 ? Effect.void
                 : Effect.fail(
                     new MultiRegionAccessPointNotDeleted({
-                      name,
+                      resourceName: name,
                       status: report.Status,
                     }),
                   ),

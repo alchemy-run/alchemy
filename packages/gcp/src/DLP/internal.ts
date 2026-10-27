@@ -30,16 +30,16 @@ export const DEFAULT_REGIONAL_LOCATION = "us";
 export const LIST_LOCATIONS = ["us-central1", "global", "us"] as const;
 
 export class DlpNotResolved extends Data.TaggedError("GCP.DLP.NotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class StoredInfoTypeNotReady extends Data.TaggedError("GCP.DLP.StoredInfoTypeNotReady")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class StoredInfoTypeFailed extends Data.TaggedError("GCP.DLP.StoredInfoTypeFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
   message: string;
 }> {}
@@ -50,7 +50,7 @@ const storedInfoTypeFailure = (
 ) =>
   version?.state === "FAILED" || version?.state === "INVALID"
     ? new StoredInfoTypeFailed({
-        name,
+        resourceName: name,
         state: version.state,
         message:
           (version.errors ?? [])
@@ -78,7 +78,7 @@ export const waitForStoredInfoTypeReady = <E extends { readonly _tag: string }, 
         StoredInfoTypeNotReady | StoredInfoTypeFailed
       > => {
         if (stored === undefined) {
-          return Effect.fail(new StoredInfoTypeNotReady({ name, state: undefined }));
+          return Effect.fail(new StoredInfoTypeNotReady({ resourceName: name, state: undefined }));
         }
         const pending = stored.pendingVersions ?? [];
         const failed = storedInfoTypeFailure(
@@ -89,7 +89,7 @@ export const waitForStoredInfoTypeReady = <E extends { readonly _tag: string }, 
         if (stored.currentVersion?.state !== "READY" || pending.length > 0) {
           return Effect.fail(
             new StoredInfoTypeNotReady({
-              name,
+              resourceName: name,
               state: pending[0]?.state ?? stored.currentVersion?.state,
             }),
           );

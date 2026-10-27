@@ -28,7 +28,7 @@ export const LIST_LOCATIONS = [
 const OWNERSHIP_MARKER = "+alc.";
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.PubSubLite.NotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {

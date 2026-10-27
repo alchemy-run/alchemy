@@ -292,13 +292,13 @@ export const CertificateTemplate = Resource<CertificateTemplate>(
 export class CertificateTemplateNotResolved extends Data.TaggedError(
   "GCP.PrivateCA.CertificateTemplateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateTemplateStillExists extends Data.TaggedError(
   "GCP.PrivateCA.CertificateTemplateStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -523,7 +523,7 @@ const waitUntilExists = (name: string) =>
     Effect.flatMap((template) =>
       template
         ? Effect.succeed(template)
-        : Effect.fail(new CertificateTemplateNotResolved({ name })),
+        : Effect.fail(new CertificateTemplateNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PrivateCA.CertificateTemplateNotResolved",
@@ -537,7 +537,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((template) =>
       template === undefined
         ? Effect.void
-        : Effect.fail(new CertificateTemplateStillExists({ name })),
+        : Effect.fail(new CertificateTemplateStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PrivateCA.CertificateTemplateStillExists",
@@ -646,7 +646,7 @@ export const CertificateTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CertificateTemplateNotResolved({ name });
+        return yield* new CertificateTemplateNotResolved({ resourceName: name });
       }
 
       const observed = toAttrs(current, env.project);

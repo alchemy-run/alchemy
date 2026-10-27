@@ -137,7 +137,7 @@ export const InboundSsoAssignment = Resource<InboundSsoAssignment>(
 export class InboundSsoAssignmentNotResolved extends Data.TaggedError(
   "GCP.CloudIdentity.InboundSsoAssignmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (assignment: cloudidentity.InboundSsoAssignment) => {
@@ -290,7 +290,7 @@ export const InboundSsoAssignmentProvider = () =>
 
       if (current === undefined) {
         return yield* new InboundSsoAssignmentNotResolved({
-          name: output?.name ?? targetGroup ?? news.targetOrgUnit ?? "",
+          resourceName: output?.name ?? targetGroup ?? news.targetOrgUnit ?? "",
         });
       }
 

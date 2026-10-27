@@ -237,7 +237,7 @@ export const RuleSetProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: output?.name ?? resourceName(env.project, location, ruleSetId),
+          resourceName: output?.name ?? resourceName(env.project, location, ruleSetId),
         });
       }
 

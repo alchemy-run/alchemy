@@ -92,7 +92,7 @@ export const KeyvaluemapsEntry = Resource<KeyvaluemapsEntry>("GCP.Apigee.Keyvalu
 export class KeyvaluemapsEntryNotResolved extends Data.TaggedError(
   "GCP.Apigee.KeyvaluemapsEntryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const mapIdOf = (map: string) => lastSegment(map);
@@ -181,7 +181,7 @@ export const KeyvaluemapsEntryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new KeyvaluemapsEntryNotResolved({ name });
+        return yield* new KeyvaluemapsEntryNotResolved({ resourceName: name });
       }
 
       if ((current.value ?? "") !== desiredValue) {

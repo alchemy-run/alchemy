@@ -125,7 +125,7 @@ export const DatasetsDicomStore = Resource<DatasetsDicomStore>("GCP.Healthcare.D
 export class DatasetsDicomStoreNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsDicomStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const datasetOf = (dataset: string, project: string, location: string) =>
@@ -236,7 +236,7 @@ export const DatasetsDicomStoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatasetsDicomStoreNotResolved({ name });
+        return yield* new DatasetsDicomStoreNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

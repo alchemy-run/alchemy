@@ -490,19 +490,19 @@ export const Function: Platform<Function, FunctionServices, FunctionShape, Funct
 export class FunctionNotResolved extends Data.TaggedError(
   "GCP.CloudFunctions.FunctionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FunctionStillExists extends Data.TaggedError(
   "GCP.CloudFunctions.FunctionStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FunctionDeployFailed extends Data.TaggedError(
   "GCP.CloudFunctions.FunctionDeployFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string;
   message: string;
 }> {}
@@ -689,20 +689,20 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (fn): fn is cloudfunctions.Cloudfunctions_Function => fn !== undefined,
-      () => new FunctionNotResolved({ name }),
+      () => new FunctionNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (fn) => fn.state !== "FAILED",
       (fn) =>
         new FunctionDeployFailed({
-          name,
+          resourceName: name,
           state: fn.state ?? "FAILED",
           message: failedMessage(fn),
         }),
     ),
     Effect.filterOrFail(
       (fn) => fn.state === "ACTIVE" || fn.state === undefined,
-      () => new FunctionNotResolved({ name }),
+      () => new FunctionNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudFunctions.FunctionNotResolved",
@@ -714,7 +714,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((fn) =>
-      fn === undefined ? Effect.void : Effect.fail(new FunctionStillExists({ name })),
+      fn === undefined ? Effect.void : Effect.fail(new FunctionStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudFunctions.FunctionStillExists",
@@ -973,7 +973,7 @@ export const FunctionProvider = () =>
         current = yield* waitUntilReady(name);
       }
       if (current === undefined) {
-        return yield* new FunctionNotResolved({ name });
+        return yield* new FunctionNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -1080,7 +1080,7 @@ export const FunctionProvider = () =>
         current = yield* waitUntilReady(name);
       }
       if (current === undefined) {
-        return yield* new FunctionNotResolved({ name });
+        return yield* new FunctionNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region, {

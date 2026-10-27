@@ -435,11 +435,11 @@ export type Cluster = Resource<
 export const Cluster = Resource<Cluster>("GCP.Container.Cluster");
 
 export class ClusterNotResolved extends Data.TaggedError("GCP.Container.ClusterNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ClusterNotReady extends Data.TaggedError("GCP.Container.ClusterNotReady")<{
-  name: string;
+  resourceName: string;
   status: string;
 }> {}
 
@@ -451,13 +451,13 @@ export class ClusterOperationFailed extends Data.TaggedError(
 }> {}
 
 export class ClusterStillExists extends Data.TaggedError("GCP.Container.ClusterStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ClusterDeletionProtected extends Data.TaggedError(
   "GCP.Container.ClusterDeletionProtected",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -684,7 +684,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (cluster): cluster is container.Cluster => cluster !== undefined,
-      () => new ClusterNotResolved({ name }),
+      () => new ClusterNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.ClusterNotResolved",
@@ -697,7 +697,7 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (cluster): cluster is container.Cluster => cluster !== undefined,
-      () => new ClusterNotResolved({ name }),
+      () => new ClusterNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (cluster) => (cluster.status ?? "STATUS_UNSPECIFIED") !== "ERROR",
@@ -714,7 +714,7 @@ const waitUntilReady = (name: string) =>
       },
       (cluster) =>
         new ClusterNotReady({
-          name,
+          resourceName: name,
           status: cluster.status ?? "STATUS_UNSPECIFIED",
         }),
     ),
@@ -729,7 +729,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cluster) =>
-      cluster === undefined ? Effect.void : Effect.fail(new ClusterStillExists({ name })),
+      cluster === undefined
+        ? Effect.void
+        : Effect.fail(new ClusterStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.ClusterStillExists",
@@ -752,7 +754,7 @@ const waitUntilSettled = (name: string) =>
       },
       (cluster) =>
         new ClusterNotReady({
-          name,
+          resourceName: name,
           status: cluster?.status ?? "STATUS_UNSPECIFIED",
         }),
     ),
@@ -961,7 +963,7 @@ export const ClusterProvider = () =>
       // delete-side guard is the backstop there.)
       if (olds?.deletionProtection === true) {
         return yield* new ClusterDeletionProtected({
-          name: output?.name ?? previousId ?? nextId ?? "",
+          resourceName: output?.name ?? previousId ?? nextId ?? "",
         });
       }
       return {
@@ -1066,7 +1068,7 @@ export const ClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ClusterNotResolved({ name });
+        return yield* new ClusterNotResolved({ resourceName: name });
       }
 
       let live = current;
@@ -1256,7 +1258,7 @@ export const ClusterProvider = () =>
 
     delete: Effect.fn(function* ({ olds, output, force }) {
       if (olds.deletionProtection === true && force !== true) {
-        return yield* new ClusterDeletionProtected({ name: output.name });
+        return yield* new ClusterDeletionProtected({ resourceName: output.name });
       }
       if ((output.kubernetesObjects ?? []).length > 0) {
         yield* deleteObjects({

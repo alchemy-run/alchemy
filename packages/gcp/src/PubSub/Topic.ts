@@ -119,11 +119,11 @@ export type Topic = Resource<
 export const Topic = Resource<Topic>("GCP.PubSub.Topic");
 
 export class TopicStillExists extends Data.TaggedError("GCP.PubSub.TopicStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TopicNotResolved extends Data.TaggedError("GCP.PubSub.TopicNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const topicIdOf = (name: string) => name.split("/").pop() ?? name;
@@ -171,7 +171,7 @@ const waitUntilPresent = (name: string) =>
       if (read > 0) yield* Effect.sleep("1 second");
       found = yield* getByName(name);
       if (found === undefined) {
-        return yield* new TopicNotResolved({ name });
+        return yield* new TopicNotResolved({ resourceName: name });
       }
     }
     return found!;
@@ -253,7 +253,7 @@ export const TopicProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TopicNotResolved({ name });
+        return yield* new TopicNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -295,7 +295,7 @@ export const TopicProvider = () =>
       yield* getByName(output.name).pipe(
         Effect.filterOrFail(
           (existing) => existing === undefined,
-          () => new TopicStillExists({ name: output.name }),
+          () => new TopicStillExists({ resourceName: output.name }),
         ),
         Effect.retry({
           while: (error) => error._tag === "GCP.PubSub.TopicStillExists",

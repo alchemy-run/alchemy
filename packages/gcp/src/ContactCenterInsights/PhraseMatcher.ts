@@ -180,7 +180,7 @@ export const PhraseMatcher = Resource<PhraseMatcher>("GCP.ContactCenterInsights.
 export class PhraseMatcherNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.PhraseMatcherNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_TYPE: PhraseMatcherType = "ALL_OF";
@@ -341,7 +341,7 @@ export const PhraseMatcherProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new PhraseMatcherNotResolved({ name });
+        return yield* new PhraseMatcherNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

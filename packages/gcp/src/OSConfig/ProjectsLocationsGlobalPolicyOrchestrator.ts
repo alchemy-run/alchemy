@@ -282,7 +282,7 @@ export const ProjectsLocationsGlobalPolicyOrchestratorProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OsconfigNotResolved({ name });
+        return yield* new OsconfigNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

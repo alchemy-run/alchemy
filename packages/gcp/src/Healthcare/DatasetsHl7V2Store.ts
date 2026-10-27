@@ -139,7 +139,7 @@ export const DatasetsHl7V2Store = Resource<DatasetsHl7V2Store>("GCP.Healthcare.D
 export class DatasetsHl7V2StoreNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsHl7V2StoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const datasetOf = (dataset: string, project: string, location: string) =>
@@ -267,7 +267,7 @@ export const DatasetsHl7V2StoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatasetsHl7V2StoreNotResolved({ name });
+        return yield* new DatasetsHl7V2StoreNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

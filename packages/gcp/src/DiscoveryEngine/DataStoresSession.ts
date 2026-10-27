@@ -125,7 +125,7 @@ export const DataStoresSession = Resource<DataStoresSession>(
 export class DataStoresSessionNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresSessionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (dataStore: string, sessionId: string) => `${dataStore}/sessions/${sessionId}`;
@@ -271,7 +271,7 @@ export const DataStoresSessionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataStoresSessionNotResolved({ name });
+        return yield* new DataStoresSessionNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== (displayName ?? "");

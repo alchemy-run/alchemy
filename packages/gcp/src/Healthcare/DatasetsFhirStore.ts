@@ -144,7 +144,7 @@ export const DatasetsFhirStore = Resource<DatasetsFhirStore>("GCP.Healthcare.Dat
 export class DatasetsFhirStoreNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsFhirStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const datasetOf = (dataset: string, project: string, location: string) =>
@@ -280,7 +280,7 @@ export const DatasetsFhirStoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatasetsFhirStoreNotResolved({ name });
+        return yield* new DatasetsFhirStoreNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

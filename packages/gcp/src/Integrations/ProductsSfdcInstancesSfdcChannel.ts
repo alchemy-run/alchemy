@@ -128,7 +128,7 @@ export const ProductsSfdcInstancesSfdcChannel = Resource<ProductsSfdcInstancesSf
 export class ProductsSfdcInstancesSfdcChannelNotResolved extends Data.TaggedError(
   "GCP.Integrations.ProductsSfdcInstancesSfdcChannelNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const expandInstance = (value: string, project: string, location: string, product: string) =>
@@ -307,7 +307,7 @@ export const ProductsSfdcInstancesSfdcChannelProvider = () =>
 
       if (current === undefined) {
         return yield* new ProductsSfdcInstancesSfdcChannelNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

@@ -791,7 +791,7 @@ const waitForNatGatewayAddresses = Effect.fn(
   function* (
     natGatewayId: string,
     pending: (address: ec2.NatGatewayAddress) => boolean,
-    session: ScopedPlanStatusSession,
+    _session: ScopedPlanStatusSession,
   ) {
     const result = yield* ec2.describeNatGateways({ NatGatewayIds: [natGatewayId] });
     const gw = result.NatGateways?.[0];

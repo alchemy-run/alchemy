@@ -332,7 +332,7 @@ export type NodePool = Resource<
 export const NodePool = Resource<NodePool>("GCP.Container.NodePool");
 
 export class NodePoolNotResolved extends Data.TaggedError("GCP.Container.NodePoolNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class NodePoolClusterMissing extends Data.TaggedError(
@@ -342,7 +342,7 @@ export class NodePoolClusterMissing extends Data.TaggedError(
 }> {}
 
 export class NodePoolNotReady extends Data.TaggedError("GCP.Container.NodePoolNotReady")<{
-  name: string;
+  resourceName: string;
   status: string;
 }> {}
 
@@ -354,7 +354,7 @@ export class NodePoolOperationFailed extends Data.TaggedError(
 }> {}
 
 export class NodePoolStillExists extends Data.TaggedError("GCP.Container.NodePoolStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -613,7 +613,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (pool): pool is container.NodePool => pool !== undefined,
-      () => new NodePoolNotResolved({ name }),
+      () => new NodePoolNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.NodePoolNotResolved",
@@ -626,7 +626,7 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (pool): pool is container.NodePool => pool !== undefined,
-      () => new NodePoolNotResolved({ name }),
+      () => new NodePoolNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (pool) => {
@@ -646,7 +646,7 @@ const waitUntilReady = (name: string) =>
       },
       (pool) =>
         new NodePoolNotReady({
-          name,
+          resourceName: name,
           status: pool.status ?? "STATUS_UNSPECIFIED",
         }),
     ),
@@ -663,7 +663,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool === undefined ? Effect.void : Effect.fail(new NodePoolStillExists({ name })),
+      pool === undefined
+        ? Effect.void
+        : Effect.fail(new NodePoolStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.NodePoolStillExists",
@@ -925,7 +927,7 @@ export const NodePoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NodePoolNotResolved({ name });
+        return yield* new NodePoolNotResolved({ resourceName: name });
       }
 
       let live = current;

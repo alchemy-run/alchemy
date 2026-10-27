@@ -12,11 +12,11 @@ import { waitForOperation as waitForLongRunningOperation } from "../Operation.ts
 export const MAX_NAME_LENGTH = 63;
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.CloudDeploy.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError("GCP.CloudDeploy.ResourceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -284,7 +284,7 @@ export const waitUntilExists = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is Exclude<A, undefined> => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceNotResolved,
@@ -300,7 +300,7 @@ export const waitUntilGone = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({

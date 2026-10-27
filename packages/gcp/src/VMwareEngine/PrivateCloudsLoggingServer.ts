@@ -311,7 +311,7 @@ export const PrivateCloudsLoggingServerProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new VmwareengineNotResolved({ name });
+        return yield* new VmwareengineNotResolved({ resourceName: name });
       }
 
       const hostnameChanged = (current.hostname ?? "") !== news.hostname;

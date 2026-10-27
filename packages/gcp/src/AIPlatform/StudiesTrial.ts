@@ -93,7 +93,7 @@ export const StudiesTrial = Resource<StudiesTrial>("GCP.AIPlatform.StudiesTrial"
 export class StudiesTrialNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.StudiesTrialNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (trial: aiplatform.GoogleCloudAiplatformV1Trial, project: string) => {
@@ -233,7 +233,7 @@ export const StudiesTrialProvider = () =>
 
       if (current === undefined) {
         return yield* new StudiesTrialNotResolved({
-          name: output?.name ?? `${news.parent}/trials/-`,
+          resourceName: output?.name ?? `${news.parent}/trials/-`,
         });
       }
 

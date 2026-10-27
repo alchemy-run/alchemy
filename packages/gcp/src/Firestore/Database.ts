@@ -221,11 +221,11 @@ export type Database = Resource<
 export const Database = Resource<Database>("GCP.Firestore.Database");
 
 export class DatabaseNotResolved extends Data.TaggedError("GCP.Firestore.DatabaseNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DatabaseStillExists extends Data.TaggedError("GCP.Firestore.DatabaseStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -341,7 +341,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (database): database is firestore.GoogleFirestoreAdminV1Database => database !== undefined,
-      () => new DatabaseNotResolved({ name }),
+      () => new DatabaseNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Firestore.DatabaseNotResolved",
@@ -354,7 +354,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (database) => database === undefined,
-      () => new DatabaseStillExists({ name }),
+      () => new DatabaseStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Firestore.DatabaseStillExists",
@@ -482,7 +482,7 @@ export const DatabaseProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatabaseNotResolved({ name });
+        return yield* new DatabaseNotResolved({ resourceName: name });
       }
 
       const mask: string[] = [];

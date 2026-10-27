@@ -143,11 +143,11 @@ export type Batch = Resource<
 export const Batch = Resource<Batch>("GCP.Dataproc.Batch");
 
 export class BatchNotResolved extends Data.TaggedError("GCP.Dataproc.BatchNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BatchNotTerminal extends Data.TaggedError("GCP.Dataproc.BatchNotTerminal")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -211,7 +211,7 @@ const waitUntilTerminal = (name: string) =>
           ? Effect.succeed(batch)
           : Effect.fail(
               new BatchNotTerminal({
-                name,
+                resourceName: name,
                 state: batch.state,
               }),
             ),
@@ -329,7 +329,7 @@ export const BatchProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BatchNotResolved({ name });
+        return yield* new BatchNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, location);

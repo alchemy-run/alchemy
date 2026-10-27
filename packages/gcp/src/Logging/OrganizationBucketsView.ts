@@ -145,7 +145,7 @@ export const OrganizationBucketsView = Resource<OrganizationBucketsView>(
 export class OrganizationBucketsViewNotResolved extends Data.TaggedError(
   "GCP.Logging.OrganizationBucketsViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parseViewName = (name: string) => {
@@ -337,7 +337,7 @@ export const OrganizationBucketsViewProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OrganizationBucketsViewNotResolved({ name });
+        return yield* new OrganizationBucketsViewNotResolved({ resourceName: name });
       }
 
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");

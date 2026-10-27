@@ -268,7 +268,7 @@ const disableProtection = (id: number) =>
     .pipe(Effect.flatMap(({ action }) => waitForAction(action)));
 
 export class FloatingIpNotCreated extends Data.TaggedError("Hetzner.FloatingIpNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const FloatingIpProvider = () =>
@@ -351,7 +351,7 @@ export const FloatingIpProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FloatingIpNotCreated({ name });
+        return yield* new FloatingIpNotCreated({ resourceName: name });
       }
 
       // Sync — name / description / labels via PUT (labels overwrite the

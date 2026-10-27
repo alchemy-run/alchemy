@@ -210,7 +210,7 @@ export type Sink = Resource<
 export const Sink = Resource<Sink>("GCP.Logging.Sink");
 
 export class SinkNotResolved extends Data.TaggedError("GCP.Logging.SinkNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -405,7 +405,7 @@ export const SinkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SinkNotResolved({ name });
+        return yield* new SinkNotResolved({ resourceName: name });
       }
 
       const desiredDisabled = news.disabled === true;

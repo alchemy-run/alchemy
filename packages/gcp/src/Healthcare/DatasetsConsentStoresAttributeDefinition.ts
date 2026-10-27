@@ -135,7 +135,7 @@ export const DatasetsConsentStoresAttributeDefinition =
 export class DatasetsConsentStoresAttributeDefinitionNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsConsentStoresAttributeDefinitionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const storeOf = (
@@ -282,7 +282,7 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
 
       if (current === undefined) {
         return yield* new DatasetsConsentStoresAttributeDefinitionNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

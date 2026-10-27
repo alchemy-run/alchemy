@@ -261,7 +261,7 @@ export const GlossariesGlossaryEntryProvider = () =>
         parent.includes("/locations/global/")
       ) {
         return yield* new ResourceNotResolved({
-          name: parent || news.parent,
+          resourceName: parent || news.parent,
         });
       }
       const glossaryEntryId = news.glossaryEntryId ?? output?.glossaryEntryId;
@@ -290,7 +290,7 @@ export const GlossariesGlossaryEntryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name: hinted || name });
+        return yield* new ResourceNotResolved({ resourceName: hinted || name });
       }
 
       const currentName = current.name ?? hinted;

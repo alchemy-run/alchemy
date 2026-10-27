@@ -38,8 +38,8 @@ const Snapshot = S.StructWithRest(
     version: S.optional(S.String),
     dialect: S.optional(S.String),
     id: S.optional(S.String),
-    prevIds: S.optional(S.Array(S.String)),
-    ddl: S.optional(S.Array(DdlEntry)),
+    prevIds: S.String.pipe(S.Array, S.optional),
+    ddl: DdlEntry.pipe(S.Array, S.optional),
   }),
   [S.Record(S.String, S.Unknown)],
 );

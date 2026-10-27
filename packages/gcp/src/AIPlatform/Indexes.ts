@@ -136,11 +136,11 @@ export type Index = Resource<
 export const Index = Resource<Index>("GCP.AIPlatform.Index");
 
 export class IndexNotResolved extends Data.TaggedError("GCP.AIPlatform.IndexNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class IndexStillExists extends Data.TaggedError("GCP.AIPlatform.IndexStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_UPDATE_METHOD = "STREAM_UPDATE";
@@ -205,7 +205,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (index): index is aiplatform.GoogleCloudAiplatformV1Index => index !== undefined,
-      () => new IndexNotResolved({ name }),
+      () => new IndexNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.IndexNotResolved",
@@ -218,7 +218,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (index) => index === undefined,
-      () => new IndexStillExists({ name }),
+      () => new IndexStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -332,7 +332,7 @@ export const IndexProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new IndexNotResolved({
-          name: output?.name ?? `${location}/indexes`,
+          resourceName: output?.name ?? `${location}/indexes`,
         });
       }
 

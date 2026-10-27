@@ -98,7 +98,7 @@ export type DlpJob = Resource<
 export const DlpJob = Resource<DlpJob>("GCP.DLP.DlpJob");
 
 export class DlpJobNotResolved extends Data.TaggedError("GCP.DLP.DlpJobNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const MAX_JOB_ID_LENGTH = 64;
@@ -248,7 +248,7 @@ export const DlpJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DlpJobNotResolved({ name });
+        return yield* new DlpJobNotResolved({ resourceName: name });
       }
 
       if (inspectJob !== undefined && observedHybridLabels(current) === undefined) {
@@ -260,7 +260,7 @@ export const DlpJobProvider = () =>
                 job.state === "FAILED" ||
                 job.state === "DONE" ||
                 job.state === "CANCELED"),
-            () => new DlpJobNotResolved({ name }),
+            () => new DlpJobNotResolved({ resourceName: name }),
           ),
           Effect.retry({
             while: (error) => error._tag === "GCP.DLP.DlpJobNotResolved",
@@ -272,7 +272,7 @@ export const DlpJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DlpJobNotResolved({ name });
+        return yield* new DlpJobNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

@@ -356,21 +356,21 @@ export type Cluster = Resource<
 export const Cluster = Resource<Cluster>("GCP.AlloyDB.Cluster");
 
 export class ClusterNotResolved extends Data.TaggedError("GCP.AlloyDB.ClusterNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ClusterNotReady extends Data.TaggedError("GCP.AlloyDB.ClusterNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class ClusterFailed extends Data.TaggedError("GCP.AlloyDB.ClusterFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class ClusterStillExists extends Data.TaggedError("GCP.AlloyDB.ClusterStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string | undefined) => {
@@ -631,7 +631,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cluster) =>
-      cluster ? Effect.succeed(cluster) : Effect.fail(new ClusterNotResolved({ name })),
+      cluster
+        ? Effect.succeed(cluster)
+        : Effect.fail(new ClusterNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.ClusterNotResolved",
@@ -644,17 +646,17 @@ const waitUntilReady = (name: string) =>
   Effect.gen(function* () {
     const cluster = yield* getByName(name);
     if (cluster === undefined) {
-      return yield* new ClusterNotReady({ name, state: "MISSING" });
+      return yield* new ClusterNotReady({ resourceName: name, state: "MISSING" });
     }
     if (isFailed(cluster.state)) {
       return yield* new ClusterFailed({
-        name,
+        resourceName: name,
         state: cluster.state ?? "FAILED",
       });
     }
     if (!(isAvailable(cluster.state) && cluster.reconciling !== true)) {
       return yield* new ClusterNotReady({
-        name,
+        resourceName: name,
         state: cluster.state ?? "STATE_UNSPECIFIED",
       });
     }
@@ -670,7 +672,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cluster) =>
-      cluster === undefined ? Effect.void : Effect.fail(new ClusterStillExists({ name })),
+      cluster === undefined
+        ? Effect.void
+        : Effect.fail(new ClusterStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.ClusterStillExists",
@@ -892,7 +896,7 @@ export const ClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ClusterNotResolved({ name });
+        return yield* new ClusterNotResolved({ resourceName: name });
       }
 
       if (!isAvailable(current.state) || current.reconciling === true) {

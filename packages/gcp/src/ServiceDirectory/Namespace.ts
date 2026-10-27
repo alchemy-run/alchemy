@@ -94,7 +94,7 @@ export const Namespace = Resource<Namespace>("GCP.ServiceDirectory.Namespace");
 export class NamespaceNotResolved extends Data.TaggedError(
   "GCP.ServiceDirectory.NamespaceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -280,7 +280,7 @@ export const NamespaceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NamespaceNotResolved({ name });
+        return yield* new NamespaceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

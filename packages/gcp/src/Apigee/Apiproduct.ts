@@ -164,7 +164,7 @@ export type Apiproduct = Resource<
 export const Apiproduct = Resource<Apiproduct>("GCP.Apigee.Apiproduct");
 
 export class ApiproductNotResolved extends Data.TaggedError("GCP.Apigee.ApiproductNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, apiproductId: string) =>
@@ -315,7 +315,7 @@ export const ApiproductProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApiproductNotResolved({ name });
+        return yield* new ApiproductNotResolved({ resourceName: name });
       }
 
       const needsUpdate =

@@ -118,11 +118,11 @@ export type UrlList = Resource<
 export const UrlList = Resource<UrlList>("GCP.NetworkSecurity.UrlList");
 
 export class UrlListNotResolved extends Data.TaggedError("GCP.NetworkSecurity.UrlListNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class UrlListStillExists extends Data.TaggedError("GCP.NetworkSecurity.UrlListStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (list: networksecurity.UrlList, project: string, region: string) => {
@@ -149,7 +149,7 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((list) =>
-      list ? Effect.succeed(list) : Effect.fail(new UrlListNotResolved({ name })),
+      list ? Effect.succeed(list) : Effect.fail(new UrlListNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.UrlListNotResolved",
@@ -161,7 +161,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((list) =>
-      list === undefined ? Effect.void : Effect.fail(new UrlListStillExists({ name })),
+      list === undefined
+        ? Effect.void
+        : Effect.fail(new UrlListStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.UrlListStillExists",
@@ -262,7 +264,7 @@ export const UrlListProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new UrlListNotResolved({ name });
+        return yield* new UrlListNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

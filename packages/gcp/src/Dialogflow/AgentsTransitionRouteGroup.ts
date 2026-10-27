@@ -160,7 +160,7 @@ export const AgentsTransitionRouteGroup = Resource<AgentsTransitionRouteGroup>(
 export class AgentsTransitionRouteGroupNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsTransitionRouteGroupNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (agent: string, transitionRouteGroupId: string) =>
@@ -336,7 +336,7 @@ export const AgentsTransitionRouteGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentsTransitionRouteGroupNotResolved({ name });
+        return yield* new AgentsTransitionRouteGroupNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

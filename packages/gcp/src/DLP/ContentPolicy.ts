@@ -155,7 +155,7 @@ export type ContentPolicy = Resource<
 export const ContentPolicy = Resource<ContentPolicy>("GCP.DLP.ContentPolicy");
 
 export class ContentPolicyNotResolved extends Data.TaggedError("GCP.DLP.ContentPolicyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, contentPolicyId: string) =>
@@ -291,7 +291,7 @@ export const ContentPolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ContentPolicyNotResolved({ name });
+        return yield* new ContentPolicyNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;

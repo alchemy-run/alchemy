@@ -109,7 +109,7 @@ export type IapDestGroup = Resource<
 export const IapDestGroup = Resource<IapDestGroup>("GCP.IAP.IapDestGroup");
 
 export class IapDestGroupNotResolved extends Data.TaggedError("GCP.IAP.IapDestGroupNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (group: iap.TunnelDestGroup, project: string, region: string) => {
@@ -176,7 +176,7 @@ export const IapDestGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new IapDestGroupNotResolved({ name });
+        return yield* new IapDestGroupNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

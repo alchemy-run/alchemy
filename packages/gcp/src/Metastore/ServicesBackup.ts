@@ -139,7 +139,7 @@ const getByName = (name: string) =>
         .getProjectsLocationsServicesBackups({ name })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const listOwned = (project: string, region: string) =>
+const listOwned = (project: string) =>
   listAtNested(project, "services/-", (parent) =>
     listOwnedPages(
       metastore.listProjectsLocationsServicesBackups.pages({
@@ -191,7 +191,7 @@ export const ServicesBackupProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project, env.region);
+        const items = yield* listOwned(env.project);
         return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
@@ -227,7 +227,7 @@ export const ServicesBackupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);

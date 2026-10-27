@@ -170,13 +170,13 @@ export const Repository = Resource<Repository>("GCP.ArtifactRegistry.Repository"
 export class RepositoryNotResolved extends Data.TaggedError(
   "GCP.ArtifactRegistry.RepositoryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class RepositoryStillExists extends Data.TaggedError(
   "GCP.ArtifactRegistry.RepositoryStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -270,7 +270,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (repo): repo is artifactregistry.Repository => repo !== undefined,
-      () => new RepositoryNotResolved({ name }),
+      () => new RepositoryNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ArtifactRegistry.RepositoryNotResolved",
@@ -283,7 +283,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (repo) => repo === undefined,
-      () => new RepositoryStillExists({ name }),
+      () => new RepositoryStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -411,7 +411,7 @@ export const RepositoryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RepositoryNotResolved({ name });
+        return yield* new RepositoryNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

@@ -106,7 +106,7 @@ export const TensorboardsExperiment = Resource<TensorboardsExperiment>(
 export class TensorboardsExperimentNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.TensorboardsExperimentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -245,7 +245,7 @@ export const TensorboardsExperimentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TensorboardsExperimentNotResolved({ name });
+        return yield* new TensorboardsExperimentNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

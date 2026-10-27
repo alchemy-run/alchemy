@@ -363,22 +363,22 @@ export const WorkerPool: Platform<
 });
 
 export class WorkerPoolNotResolved extends Data.TaggedError("GCP.Run.WorkerPoolNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class WorkerPoolNotReady extends Data.TaggedError("GCP.Run.WorkerPoolNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
   message: string;
 }> {}
 
 export class WorkerPoolReconciling extends Data.TaggedError("GCP.Run.WorkerPoolReconciling")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class WorkerPoolStillExists extends Data.TaggedError("GCP.Run.WorkerPoolStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -736,13 +736,13 @@ const waitUntilReady = (name: string) =>
     Effect.filterOrFail(
       (pool): pool is cloudrun.GoogleCloudRunV2WorkerPool =>
         pool !== undefined && pool.deleteTime === undefined,
-      () => new WorkerPoolNotResolved({ name }),
+      () => new WorkerPoolNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (pool) => (pool.terminalCondition?.state ?? "") !== "CONDITION_FAILED",
       (pool) =>
         new WorkerPoolNotReady({
-          name,
+          resourceName: name,
           state: pool.terminalCondition?.state ?? "",
           message: pool.terminalCondition?.message ?? "revision failed",
         }),
@@ -751,7 +751,7 @@ const waitUntilReady = (name: string) =>
       (pool) => !isPendingPool(pool),
       (pool) =>
         new WorkerPoolReconciling({
-          name,
+          resourceName: name,
           state: pool.terminalCondition?.state || "reconciling",
         }),
     ),
@@ -767,7 +767,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool === undefined ? Effect.void : Effect.fail(new WorkerPoolStillExists({ name })),
+      pool === undefined
+        ? Effect.void
+        : Effect.fail(new WorkerPoolStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Run.WorkerPoolStillExists",
@@ -961,7 +963,7 @@ export const WorkerPoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new WorkerPoolNotResolved({ name });
+        return yield* new WorkerPoolNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -1027,7 +1029,7 @@ export const WorkerPoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new WorkerPoolNotResolved({ name });
+        return yield* new WorkerPoolNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region, {

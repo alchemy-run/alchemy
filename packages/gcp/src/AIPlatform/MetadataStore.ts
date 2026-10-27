@@ -103,13 +103,13 @@ export const MetadataStore = Resource<MetadataStore>("GCP.AIPlatform.MetadataSto
 export class MetadataStoreNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.MetadataStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MetadataStoreStillExists extends Data.TaggedError(
   "GCP.AIPlatform.MetadataStoreStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, metadataStoreId: string) =>
@@ -149,7 +149,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (store): store is aiplatform.GoogleCloudAiplatformV1MetadataStore => store !== undefined,
-      () => new MetadataStoreNotResolved({ name }),
+      () => new MetadataStoreNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.MetadataStoreNotResolved",
@@ -162,7 +162,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (store) => store === undefined,
-      () => new MetadataStoreStillExists({ name }),
+      () => new MetadataStoreStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({

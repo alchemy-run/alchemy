@@ -208,7 +208,7 @@ export const BatchPredictionJob = Resource<BatchPredictionJob>("GCP.AIPlatform.B
 export class BatchPredictionJobNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.BatchPredictionJobNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toId = (id: string, existing?: string) =>
@@ -290,7 +290,7 @@ const cancelAndDelete = (name: string) =>
       yield* getByName(name).pipe(
         Effect.filterOrFail(
           (job) => job === undefined || isJobTerminal(job.state),
-          () => new BatchPredictionJobNotResolved({ name }),
+          () => new BatchPredictionJobNotResolved({ resourceName: name }),
         ),
         Effect.retry({
           while: (error) => error._tag === "GCP.AIPlatform.BatchPredictionJobNotResolved",
@@ -334,7 +334,7 @@ export const BatchPredictionJobProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, output }) {
       const env = yield* GcpEnvironment.current;
       const existing = yield* findOwned(id, env.project, env.region, output?.name);
       if (existing === undefined) return undefined;
@@ -384,7 +384,7 @@ export const BatchPredictionJobProvider = () =>
 
       if (current === undefined) {
         return yield* new BatchPredictionJobNotResolved({
-          name: output?.name ?? parentOf(env.project, location),
+          resourceName: output?.name ?? parentOf(env.project, location),
         });
       }
 

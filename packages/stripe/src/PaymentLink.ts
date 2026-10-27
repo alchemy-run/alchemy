@@ -308,11 +308,10 @@ const fromObservedAfterCompletion = (
   type: value.type,
   ...(value.hosted_confirmation !== undefined
     ? {
-        hostedConfirmation: {
-          ...(value.hosted_confirmation.custom_message != null
+        hostedConfirmation:
+          value.hosted_confirmation.custom_message != null
             ? { customMessage: value.hosted_confirmation.custom_message }
-            : {}),
-        },
+            : {},
       }
     : {}),
   ...(value.redirect !== undefined ? { redirect: { url: value.redirect.url } } : {}),
@@ -324,11 +323,10 @@ const toWireAfterCompletion = (
   type: value.type,
   ...(value.type === "hosted_confirmation"
     ? {
-        hosted_confirmation: {
-          ...(value.hostedConfirmation?.customMessage !== undefined
+        hosted_confirmation:
+          value.hostedConfirmation?.customMessage !== undefined
             ? { custom_message: value.hostedConfirmation.customMessage }
-            : {}),
-        },
+            : {},
       }
     : {}),
   ...(value.type === "redirect" && value.redirect !== undefined

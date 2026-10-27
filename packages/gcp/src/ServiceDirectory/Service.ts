@@ -120,7 +120,7 @@ export const Service = Resource<Service>("GCP.ServiceDirectory.Service");
 export class ServiceNotResolved extends Data.TaggedError(
   "GCP.ServiceDirectory.ServiceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -395,7 +395,7 @@ export const ServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ServiceNotResolved({ name });
+        return yield* new ServiceNotResolved({ resourceName: name });
       }
 
       const observedAnnotations = tagRecord(current.annotations);

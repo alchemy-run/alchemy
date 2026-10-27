@@ -160,7 +160,7 @@ const ProviderLive = () =>
                 if (match) {
                   return match;
                 }
-                return yield* Effect.fail(error);
+                return yield* error;
               }),
             ),
           );

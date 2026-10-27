@@ -192,7 +192,7 @@ export const AgentsPlaybook = Resource<AgentsPlaybook>("GCP.Dialogflow.AgentsPla
 export class AgentsPlaybookNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsPlaybookNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_GOAL = "Handle the user request.";
@@ -369,7 +369,7 @@ export const AgentsPlaybookProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentsPlaybookNotResolved({ name });
+        return yield* new AgentsPlaybookNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

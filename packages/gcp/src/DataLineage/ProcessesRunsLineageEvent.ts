@@ -153,7 +153,7 @@ export type LineageEvent = ProcessesRunsLineageEvent;
 export class ProcessesRunsLineageEventNotResolved extends Data.TaggedError(
   "GCP.DataLineage.ProcessesRunsLineageEventNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (run: string, lineageEventId: string) =>
@@ -350,7 +350,7 @@ export const ProcessesRunsLineageEventProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ProcessesRunsLineageEventNotResolved({ name });
+        return yield* new ProcessesRunsLineageEventNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);

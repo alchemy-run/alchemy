@@ -112,7 +112,7 @@ export const DataStoresSchema = Resource<DataStoresSchema>("GCP.DiscoveryEngine.
 export class DataStoresSchemaNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresSchemaNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (dataStore: string, schemaId: string) => `${dataStore}/schemas/${schemaId}`;
@@ -209,7 +209,7 @@ export const DataStoresSchemaProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataStoresSchemaNotResolved({ name });
+        return yield* new DataStoresSchemaNotResolved({ resourceName: name });
       }
 
       const stripComment = (json: string | undefined) => {

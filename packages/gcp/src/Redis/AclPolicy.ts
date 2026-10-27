@@ -123,16 +123,16 @@ export type AclPolicy = Resource<
 export const AclPolicy = Resource<AclPolicy>("GCP.Redis.AclPolicy");
 
 export class AclPolicyNotResolved extends Data.TaggedError("GCP.Redis.AclPolicyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class AclPolicyNotReady extends Data.TaggedError("GCP.Redis.AclPolicyNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class AclPolicyStillExists extends Data.TaggedError("GCP.Redis.AclPolicyStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -266,7 +266,9 @@ const waitForOperation = (operation: redis.Operation, options?: { notFoundOk?: b
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((policy) =>
-      policy ? Effect.succeed(policy) : Effect.fail(new AclPolicyNotResolved({ name })),
+      policy
+        ? Effect.succeed(policy)
+        : Effect.fail(new AclPolicyNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Redis.AclPolicyNotResolved",
@@ -279,7 +281,7 @@ const waitUntilActive = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (policy): policy is redis.AclPolicy => policy !== undefined,
-      () => new AclPolicyNotResolved({ name }),
+      () => new AclPolicyNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (policy) => {
@@ -288,7 +290,7 @@ const waitUntilActive = (name: string) =>
       },
       (policy) =>
         new AclPolicyNotReady({
-          name,
+          resourceName: name,
           state: policy.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -304,7 +306,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((policy) =>
-      policy === undefined ? Effect.void : Effect.fail(new AclPolicyStillExists({ name })),
+      policy === undefined
+        ? Effect.void
+        : Effect.fail(new AclPolicyStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Redis.AclPolicyStillExists",
@@ -372,7 +376,7 @@ export const AclPolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AclPolicyNotResolved({ name });
+        return yield* new AclPolicyNotResolved({ resourceName: name });
       }
 
       const state = current.state ?? "ACTIVE";

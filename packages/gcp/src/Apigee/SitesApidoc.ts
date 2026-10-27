@@ -150,7 +150,7 @@ export type SitesApidoc = Resource<
 export const SitesApidoc = Resource<SitesApidoc>("GCP.Apigee.SitesApidoc");
 
 export class SitesApidocNotResolved extends Data.TaggedError("GCP.Apigee.SitesApidocNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const siteParent = (org: string, siteId: string) => `${orgParent(org)}/sites/${siteId}`;
@@ -314,7 +314,7 @@ export const SitesApidocProvider = () =>
 
       if (current === undefined || !(current.id ?? "").length) {
         return yield* new SitesApidocNotResolved({
-          name: siteParent(org, siteId),
+          resourceName: siteParent(org, siteId),
         });
       }
 

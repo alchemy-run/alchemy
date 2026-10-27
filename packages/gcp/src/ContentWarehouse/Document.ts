@@ -286,7 +286,7 @@ export const DocumentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name: lookup });
+        return yield* new ResourceNotResolved({ resourceName: lookup });
       }
 
       const currentName = current.name ?? lookup;

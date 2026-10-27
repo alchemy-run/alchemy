@@ -108,7 +108,7 @@ export const CollectionsDataStoresSession = Resource<CollectionsDataStoresSessio
 export class CollectionsDataStoresSessionNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresSessionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (session: discoveryengine.GoogleCloudDiscoveryengineV1Session, project: string) => {
@@ -205,7 +205,7 @@ export const CollectionsDataStoresSessionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CollectionsDataStoresSessionNotResolved({ name });
+        return yield* new CollectionsDataStoresSessionNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;

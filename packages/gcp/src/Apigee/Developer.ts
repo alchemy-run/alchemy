@@ -137,7 +137,7 @@ export type Developer = Resource<
 export const Developer = Resource<Developer>("GCP.Apigee.Developer");
 
 export class DeveloperNotResolved extends Data.TaggedError("GCP.Apigee.DeveloperNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, email: string) =>
@@ -277,7 +277,7 @@ export const DeveloperProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DeveloperNotResolved({ name });
+        return yield* new DeveloperNotResolved({ resourceName: name });
       }
 
       const observed = {

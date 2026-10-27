@@ -307,7 +307,7 @@ export const AutonomousDatabase = Resource<AutonomousDatabase>(
 );
 
 const mergedProperties = (news: AutonomousDatabaseProps): AutonomousDatabasePropertiesInput => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   licenseType: news.licenseType ?? news.properties?.licenseType,
   dbWorkload: news.dbWorkload ?? news.properties?.dbWorkload,
   cpuCoreCount: news.cpuCoreCount ?? news.properties?.cpuCoreCount,
@@ -575,7 +575,7 @@ export const AutonomousDatabaseProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(

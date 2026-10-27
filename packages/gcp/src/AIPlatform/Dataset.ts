@@ -176,11 +176,11 @@ export type Dataset = Resource<
 export const Dataset = Resource<Dataset>("GCP.AIPlatform.Dataset");
 
 export class DatasetNotResolved extends Data.TaggedError("GCP.AIPlatform.DatasetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DatasetStillExists extends Data.TaggedError("GCP.AIPlatform.DatasetStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, datasetId: string) =>
@@ -268,7 +268,9 @@ const findOwned = (id: string, project: string, region: string, hinted?: string)
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((dataset) =>
-      dataset ? Effect.succeed(dataset) : Effect.fail(new DatasetNotResolved({ name })),
+      dataset
+        ? Effect.succeed(dataset)
+        : Effect.fail(new DatasetNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.DatasetNotResolved",
@@ -280,7 +282,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((dataset) =>
-      dataset === undefined ? Effect.void : Effect.fail(new DatasetStillExists({ name })),
+      dataset === undefined
+        ? Effect.void
+        : Effect.fail(new DatasetStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.DatasetStillExists",
@@ -396,7 +400,7 @@ export const DatasetProvider = () =>
 
       if (current === undefined) {
         return yield* new DatasetNotResolved({
-          name: output?.name ?? resourceName(env.project, location, datasetId),
+          resourceName: output?.name ?? resourceName(env.project, location, datasetId),
         });
       }
 

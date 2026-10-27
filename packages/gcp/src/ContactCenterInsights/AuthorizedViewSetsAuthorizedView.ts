@@ -16,7 +16,6 @@ import {
   locationOf,
   locationParent,
   MAX_VIEW_DISPLAY_NAME_LENGTH,
-  normalizeLocation,
   ownedByAlchemy,
   parentOf,
   parseOwnership,
@@ -111,7 +110,7 @@ export const AuthorizedViewSetsAuthorizedView = Resource<AuthorizedViewSetsAutho
 export class AuthorizedViewSetsAuthorizedViewNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, authorizedViewId: string) =>
@@ -227,7 +226,7 @@ export const AuthorizedViewSetsAuthorizedViewProvider = () =>
 
       if (current === undefined) {
         return yield* new AuthorizedViewSetsAuthorizedViewNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

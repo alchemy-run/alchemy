@@ -197,7 +197,7 @@ export const OrganizationSink = Resource<OrganizationSink>("GCP.Logging.Organiza
 export class OrganizationSinkNotResolved extends Data.TaggedError(
   "GCP.Logging.OrganizationSinkNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, sinkId: string) => `${organization}/sinks/${sinkId}`;
@@ -360,7 +360,7 @@ export const OrganizationSinkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OrganizationSinkNotResolved({ name });
+        return yield* new OrganizationSinkNotResolved({ resourceName: name });
       }
 
       const desiredDisabled = news.disabled === true;

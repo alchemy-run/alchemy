@@ -158,7 +158,7 @@ export const AccessPoliciesAccessLevel = Resource<AccessPoliciesAccessLevel>(
 export class AccessPoliciesAccessLevelNotResolved extends Data.TaggedError(
   "GCP.AccessContextManager.AccessPoliciesAccessLevelNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (level: acm.AccessLevel): AccessPoliciesAccessLevel["Attributes"] => {
@@ -279,7 +279,7 @@ export const AccessPoliciesAccessLevelProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AccessPoliciesAccessLevelNotResolved({ name });
+        return yield* new AccessPoliciesAccessLevelNotResolved({ resourceName: name });
       }
 
       const titleChanged = (current.title ?? "") !== desiredTitle;
@@ -311,7 +311,7 @@ export const AccessPoliciesAccessLevelProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AccessPoliciesAccessLevelNotResolved({ name });
+        return yield* new AccessPoliciesAccessLevelNotResolved({ resourceName: name });
       }
 
       return toAttrs(current);

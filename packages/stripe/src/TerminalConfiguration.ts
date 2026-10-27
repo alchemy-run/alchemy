@@ -308,7 +308,6 @@ export interface TerminalConfigurationProps {
 
 type DeviceKey = (typeof DEVICE_MAP)[number][0];
 type SnakeDeviceKey = (typeof DEVICE_MAP)[number][1];
-type TippingCurrency = (typeof TIPPING_CURRENCIES)[number];
 
 const DEVICE_MAP = [
   ["bbposWisepad3", "bbpos_wisepad3"],
@@ -450,7 +449,7 @@ export class TerminalConfigurationNotResolved extends Data.TaggedError(
   "Stripe.TerminalConfigurationNotResolved",
 )<{
   configurationId: string | undefined;
-  name: string;
+  resourceName: string;
 }> {}
 
 type ConfigurationAttributes = TerminalConfiguration["Attributes"];
@@ -841,7 +840,7 @@ export const TerminalConfigurationProvider = () =>
       if (current === undefined) {
         return yield* new TerminalConfigurationNotResolved({
           configurationId: output?.id,
-          name,
+          resourceName: name,
         });
       }
 
@@ -907,7 +906,7 @@ export const TerminalConfigurationProvider = () =>
       if (next === undefined) {
         return yield* new TerminalConfigurationNotResolved({
           configurationId: current.id,
-          name,
+          resourceName: name,
         });
       }
       return toAttrs(next);

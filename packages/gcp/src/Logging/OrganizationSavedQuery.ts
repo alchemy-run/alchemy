@@ -168,7 +168,7 @@ export const OrganizationSavedQuery = Resource<OrganizationSavedQuery>(
 export class OrganizationSavedQueryNotResolved extends Data.TaggedError(
   "GCP.Logging.OrganizationSavedQueryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, location: string, savedQueryId: string) =>
@@ -361,7 +361,7 @@ export const OrganizationSavedQueryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OrganizationSavedQueryNotResolved({ name });
+        return yield* new OrganizationSavedQueryNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

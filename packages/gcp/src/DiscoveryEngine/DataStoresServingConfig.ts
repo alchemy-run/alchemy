@@ -167,7 +167,7 @@ export const DataStoresServingConfig = Resource<DataStoresServingConfig>(
 export class DataStoresServingConfigNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresServingConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_SOLUTION = "SOLUTION_TYPE_SEARCH";
@@ -297,7 +297,7 @@ export const DataStoresServingConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataStoresServingConfigNotResolved({ name });
+        return yield* new DataStoresServingConfigNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;

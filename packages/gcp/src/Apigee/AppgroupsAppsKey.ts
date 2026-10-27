@@ -146,7 +146,7 @@ export const AppgroupsAppsKey = Resource<AppgroupsAppsKey>("GCP.Apigee.Appgroups
 export class AppgroupsAppsKeyNotResolved extends Data.TaggedError(
   "GCP.Apigee.AppgroupsAppsKeyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const appGroupIdOf = (appGroup: string) =>
@@ -369,7 +369,7 @@ export const AppgroupsAppsKeyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppgroupsAppsKeyNotResolved({ name });
+        return yield* new AppgroupsAppsKeyNotResolved({ resourceName: name });
       }
 
       const observedAttributes = attributesToRecord(current.attributes);

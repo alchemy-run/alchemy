@@ -134,7 +134,7 @@ export type JobTrigger = Resource<
 export const JobTrigger = Resource<JobTrigger>("GCP.DLP.JobTrigger");
 
 export class JobTriggerNotResolved extends Data.TaggedError("GCP.DLP.JobTriggerNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_STATUS: JobTriggerStatus = "PAUSED";
@@ -239,7 +239,7 @@ export const JobTriggerProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new JobTriggerNotResolved({ name });
+        return yield* new JobTriggerNotResolved({ resourceName: name });
       }
 
       const displayChanged = !sameText(current.displayName, news.displayName);

@@ -506,7 +506,7 @@ export const Function: Platform<
 });
 
 export class FunctionNotCreated extends Data.TaggedError("Railway.FunctionNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -1159,7 +1159,7 @@ export const FunctionProvider = () =>
           }
 
           if (current === undefined || isGoneService(current)) {
-            return yield* new FunctionNotCreated({ name, projectId });
+            return yield* new FunctionNotCreated({ resourceName: name, projectId });
           }
 
           if (current.name !== name) {

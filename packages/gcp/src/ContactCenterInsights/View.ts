@@ -97,7 +97,7 @@ export type View = Resource<
 export const View = Resource<View>("GCP.ContactCenterInsights.View");
 
 export class ViewNotResolved extends Data.TaggedError("GCP.ContactCenterInsights.ViewNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, viewId: string) =>
@@ -222,7 +222,7 @@ export const ViewProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ViewNotResolved({ name });
+        return yield* new ViewNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

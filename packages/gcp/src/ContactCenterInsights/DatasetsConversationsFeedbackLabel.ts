@@ -112,7 +112,7 @@ export const DatasetsConversationsFeedbackLabel = Resource<DatasetsConversations
 export class DatasetsConversationsFeedbackLabelNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.DatasetsConversationsFeedbackLabelNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, feedbackLabelId: string) =>
@@ -255,7 +255,7 @@ export const DatasetsConversationsFeedbackLabelProvider = () =>
 
       if (current === undefined) {
         return yield* new DatasetsConversationsFeedbackLabelNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

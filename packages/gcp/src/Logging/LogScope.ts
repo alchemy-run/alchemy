@@ -119,7 +119,7 @@ export type LogScope = Resource<
 export const LogScope = Resource<LogScope>("GCP.Logging.LogScope");
 
 export class LogScopeNotResolved extends Data.TaggedError("GCP.Logging.LogScopeNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parseScopeName = (name: string) => {
@@ -249,7 +249,7 @@ export const LogScopeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LogScopeNotResolved({ name });
+        return yield* new LogScopeNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

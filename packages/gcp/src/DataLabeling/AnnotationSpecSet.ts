@@ -128,7 +128,7 @@ export const AnnotationSpecSet = Resource<AnnotationSpecSet>("GCP.DataLabeling.A
 export class AnnotationSpecSetNotResolved extends Data.TaggedError(
   "GCP.DataLabeling.AnnotationSpecSetNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, annotationSpecSetId: string) =>
@@ -253,7 +253,7 @@ export const AnnotationSpecSetProvider = () =>
 
       if (current === undefined) {
         return yield* new AnnotationSpecSetNotResolved({
-          name: name || projectParent(env.project),
+          resourceName: name || projectParent(env.project),
         });
       }
 

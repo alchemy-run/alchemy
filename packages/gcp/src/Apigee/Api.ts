@@ -100,7 +100,7 @@ export type Api = Resource<
 export const Api = Resource<Api>("GCP.Apigee.Api");
 
 export class ApiNotResolved extends Data.TaggedError("GCP.Apigee.ApiNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, apiId: string) =>
@@ -214,7 +214,7 @@ export const ApiProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApiNotResolved({ name });
+        return yield* new ApiNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

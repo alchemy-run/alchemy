@@ -113,7 +113,7 @@ export const DomainsUser = Resource<DomainsUser>("GCP.GmailPostmasterTools.Domai
 export class DomainsUserNotResolved extends Data.TaggedError(
   "GCP.GmailPostmasterTools.DomainsUserNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (user: gmailpostmastertools.User, parent: string, project: string) => {
@@ -193,7 +193,7 @@ export const DomainsUserProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DomainsUserNotResolved({ name });
+        return yield* new DomainsUserNotResolved({ resourceName: name });
       }
 
       const resourceName = fullUserName(parent, current);

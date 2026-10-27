@@ -15,13 +15,13 @@ export const PAGE_SIZE = 100;
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.SecureSourceManager.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError(
   "GCP.SecureSourceManager.ResourceStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -336,7 +336,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.SecureSourceManager.ResourceNotResolved",
@@ -352,7 +352,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.SecureSourceManager.ResourceStillExists",
@@ -467,6 +467,6 @@ export const desiredAnnotations = (
   annotations: Record<string, string> | undefined,
   ownership: Record<string, string>,
 ): Record<string, string> => ({
-  ...(annotations ?? {}),
+  ...annotations,
   ...ownership,
 });

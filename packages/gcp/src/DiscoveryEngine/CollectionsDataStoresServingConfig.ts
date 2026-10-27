@@ -145,7 +145,7 @@ export const CollectionsDataStoresServingConfig = Resource<CollectionsDataStores
 export class CollectionsDataStoresServingConfigNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresServingConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -281,7 +281,7 @@ export const CollectionsDataStoresServingConfigProvider = () =>
 
       if (current === undefined) {
         return yield* new CollectionsDataStoresServingConfigNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

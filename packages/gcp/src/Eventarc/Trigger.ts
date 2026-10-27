@@ -337,16 +337,16 @@ export type Trigger = Resource<
 export const Trigger = Resource<Trigger>("GCP.Eventarc.Trigger");
 
 export class TriggerNotHealthy extends Data.TaggedError("GCP.Eventarc.TriggerNotHealthy")<{
-  name: string;
+  resourceName: string;
   conditions: string;
 }> {}
 
 export class TriggerNotResolved extends Data.TaggedError("GCP.Eventarc.TriggerNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TriggerStillExists extends Data.TaggedError("GCP.Eventarc.TriggerStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TriggerServiceAccountMissing extends Data.TaggedError(
@@ -588,7 +588,7 @@ const waitUntilHealthy = (name: string) =>
         ? Effect.succeed(trigger)
         : Effect.fail(
             new TriggerNotHealthy({
-              name,
+              resourceName: name,
               conditions: failing
                 .map(([key, condition]) => `${key}: ${condition?.code} ${condition?.message ?? ""}`)
                 .join("; "),
@@ -605,7 +605,9 @@ const waitUntilHealthy = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((trigger) =>
-      trigger ? Effect.succeed(trigger) : Effect.fail(new TriggerNotResolved({ name })),
+      trigger
+        ? Effect.succeed(trigger)
+        : Effect.fail(new TriggerNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Eventarc.TriggerNotResolved",
@@ -617,7 +619,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((trigger) =>
-      trigger === undefined ? Effect.void : Effect.fail(new TriggerStillExists({ name })),
+      trigger === undefined
+        ? Effect.void
+        : Effect.fail(new TriggerStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Eventarc.TriggerStillExists",
@@ -776,7 +780,7 @@ export const TriggerProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TriggerNotResolved({ name });
+        return yield* new TriggerNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

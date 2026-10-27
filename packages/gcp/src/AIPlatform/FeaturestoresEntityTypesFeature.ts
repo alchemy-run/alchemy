@@ -130,13 +130,13 @@ export const FeaturestoresEntityTypesFeature = Resource<FeaturestoresEntityTypes
 export class FeaturestoresEntityTypesFeatureNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeaturestoresEntityTypesFeatureNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FeaturestoresEntityTypesFeatureStillExists extends Data.TaggedError(
   "GCP.AIPlatform.FeaturestoresEntityTypesFeatureStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_VALUE_TYPE = "STRING";
@@ -206,7 +206,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (feature): feature is aiplatform.GoogleCloudAiplatformV1Feature => feature !== undefined,
-      () => new FeaturestoresEntityTypesFeatureNotResolved({ name }),
+      () => new FeaturestoresEntityTypesFeatureNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeaturestoresEntityTypesFeatureNotResolved",
@@ -219,7 +219,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (feature) => feature === undefined,
-      () => new FeaturestoresEntityTypesFeatureStillExists({ name }),
+      () => new FeaturestoresEntityTypesFeatureStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -335,7 +335,7 @@ export const FeaturestoresEntityTypesFeatureProvider = () =>
 
       if (current === undefined) {
         return yield* new FeaturestoresEntityTypesFeatureNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

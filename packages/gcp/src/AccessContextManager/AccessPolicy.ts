@@ -119,7 +119,7 @@ export const AccessPolicy = Resource<AccessPolicy>("GCP.AccessContextManager.Acc
 export class AccessPolicyNotResolved extends Data.TaggedError(
   "GCP.AccessContextManager.AccessPolicyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (policy: acm.AccessPolicy): AccessPolicy["Attributes"] => {
@@ -244,7 +244,7 @@ export const AccessPolicyProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new AccessPolicyNotResolved({
-          name: output?.name ?? organization,
+          resourceName: output?.name ?? organization,
         });
       }
 
@@ -264,7 +264,7 @@ export const AccessPolicyProvider = () =>
 
       if (current === undefined) {
         return yield* new AccessPolicyNotResolved({
-          name: output?.name ?? organization,
+          resourceName: output?.name ?? organization,
         });
       }
 

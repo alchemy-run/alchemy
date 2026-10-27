@@ -114,7 +114,7 @@ export const AgentsEnvironmentsSessionsEntityType = Resource<AgentsEnvironmentsS
 export class AgentsEnvironmentsSessionsEntityTypeNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsEnvironmentsSessionsEntityTypeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 // Earlier versions stamped a `__alchemy__…` sentinel entity; drop it.
@@ -245,7 +245,7 @@ export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
 
       if (current === undefined) {
         return yield* new AgentsEnvironmentsSessionsEntityTypeNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

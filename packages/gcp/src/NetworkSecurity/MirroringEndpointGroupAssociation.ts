@@ -152,20 +152,20 @@ export const MirroringEndpointGroupAssociation = Resource<MirroringEndpointGroup
 export class MirroringEndpointGroupAssociationNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringEndpointGroupAssociationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MirroringEndpointGroupAssociationFailed extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringEndpointGroupAssociationFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class MirroringEndpointGroupAssociationStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringEndpointGroupAssociationStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const isPendingState = (state: string | undefined) =>
@@ -216,19 +216,19 @@ const waitUntilReady = (name: string) =>
     Effect.filterOrFail(
       (association): association is networksecurity.MirroringEndpointGroupAssociation =>
         association !== undefined,
-      () => new MirroringEndpointGroupAssociationNotResolved({ name }),
+      () => new MirroringEndpointGroupAssociationNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (association) => association.state !== "DELETE_FAILED",
       (association) =>
         new MirroringEndpointGroupAssociationFailed({
-          name,
+          resourceName: name,
           state: association.state,
         }),
     ),
     Effect.filterOrFail(
       (association) => !isPendingState(association.state),
-      () => new MirroringEndpointGroupAssociationNotResolved({ name }),
+      () => new MirroringEndpointGroupAssociationNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) =>
@@ -243,7 +243,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((association) =>
       association === undefined
         ? Effect.void
-        : Effect.fail(new MirroringEndpointGroupAssociationStillExists({ name })),
+        : Effect.fail(new MirroringEndpointGroupAssociationStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) =>
@@ -381,7 +381,7 @@ export const MirroringEndpointGroupAssociationProvider = () =>
 
       if (current === undefined) {
         return yield* new MirroringEndpointGroupAssociationNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

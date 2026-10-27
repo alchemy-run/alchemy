@@ -162,7 +162,7 @@ export type AppsGuardrail = Resource<
 export const AppsGuardrail = Resource<AppsGuardrail>("GCP.CES.AppsGuardrail");
 
 export class AppsGuardrailNotResolved extends Data.TaggedError("GCP.CES.AppsGuardrailNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (app: string, guardrailId: string) => `${app}/guardrails/${guardrailId}`;
@@ -295,7 +295,7 @@ export const AppsGuardrailProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppsGuardrailNotResolved({ name });
+        return yield* new AppsGuardrailNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

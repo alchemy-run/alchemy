@@ -132,7 +132,7 @@ export const CollectionsDataStoresBranchesDocument =
 export class CollectionsDataStoresBranchesDocumentNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresBranchesDocumentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const contentOf = (
@@ -265,7 +265,7 @@ export const CollectionsDataStoresBranchesDocumentProvider = () =>
 
       if (current === undefined) {
         return yield* new CollectionsDataStoresBranchesDocumentNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

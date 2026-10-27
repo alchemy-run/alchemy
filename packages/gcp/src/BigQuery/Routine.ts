@@ -256,7 +256,7 @@ export type Routine = Resource<
 export const Routine = Resource<Routine>("GCP.BigQuery.Routine");
 
 export class RoutineNotResolved extends Data.TaggedError("GCP.BigQuery.RoutineNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -619,7 +619,7 @@ export const RoutineProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RoutineNotResolved({ name });
+        return yield* new RoutineNotResolved({ resourceName: name });
       }
 
       const desired = bodyOf(current);
@@ -647,7 +647,7 @@ export const RoutineProvider = () =>
             ),
           );
         if (current === undefined) {
-          return yield* new RoutineNotResolved({ name });
+          return yield* new RoutineNotResolved({ resourceName: name });
         }
       }
 

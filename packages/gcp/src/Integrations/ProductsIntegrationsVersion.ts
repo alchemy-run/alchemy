@@ -151,7 +151,7 @@ export const ProductsIntegrationsVersion = Resource<ProductsIntegrationsVersion>
 export class ProductsIntegrationsVersionNotResolved extends Data.TaggedError(
   "GCP.Integrations.ProductsIntegrationsVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const integrationOf = (name: string) => {
@@ -381,7 +381,7 @@ export const ProductsIntegrationsVersionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ProductsIntegrationsVersionNotResolved({ name });
+        return yield* new ProductsIntegrationsVersionNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

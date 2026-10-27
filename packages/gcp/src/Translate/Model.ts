@@ -212,7 +212,7 @@ export const ModelProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name: hinted || parent });
+        return yield* new ResourceNotResolved({ resourceName: hinted || parent });
       }
 
       return toAttrs(current, env.project);

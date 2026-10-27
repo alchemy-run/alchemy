@@ -102,7 +102,7 @@ export const IdentityMappingStore = Resource<IdentityMappingStore>(
 export class IdentityMappingStoreNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.IdentityMappingStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, storeId: string) =>
@@ -237,7 +237,7 @@ export const IdentityMappingStoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new IdentityMappingStoreNotResolved({ name });
+        return yield* new IdentityMappingStoreNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

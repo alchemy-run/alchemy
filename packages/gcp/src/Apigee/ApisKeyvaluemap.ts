@@ -83,7 +83,7 @@ export const ApisKeyvaluemap = Resource<ApisKeyvaluemap>("GCP.Apigee.ApisKeyvalu
 export class ApisKeyvaluemapNotResolved extends Data.TaggedError(
   "GCP.Apigee.ApisKeyvaluemapNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, apiId: string, mapId: string) =>
@@ -250,7 +250,7 @@ export const ApisKeyvaluemapProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApisKeyvaluemapNotResolved({ name });
+        return yield* new ApisKeyvaluemapNotResolved({ resourceName: name });
       }
 
       if ((current.maskedValues === true) !== (news.maskedValues === true)) {

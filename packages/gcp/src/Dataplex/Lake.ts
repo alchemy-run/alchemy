@@ -129,11 +129,11 @@ export type Lake = Resource<
 export const Lake = Resource<Lake>("GCP.Dataplex.Lake");
 
 export class LakeNotResolved extends Data.TaggedError("GCP.Dataplex.LakeNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class LakeStillExists extends Data.TaggedError("GCP.Dataplex.LakeStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, lakeId: string) =>
@@ -169,10 +169,10 @@ const waitUntilReady = (name: string) =>
   Effect.gen(function* () {
     const lake = yield* getByName(name);
     if (lake === undefined) {
-      return yield* new LakeNotResolved({ name });
+      return yield* new LakeNotResolved({ resourceName: name });
     }
     if (isPendingState(lake.state)) {
-      return yield* new DataplexNotResolved({ name });
+      return yield* new DataplexNotResolved({ resourceName: name });
     }
     return lake;
   }).pipe(
@@ -189,7 +189,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((lake) =>
-      lake === undefined ? Effect.void : Effect.fail(new LakeStillExists({ name })),
+      lake === undefined ? Effect.void : Effect.fail(new LakeStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.LakeStillExists",
@@ -285,7 +285,7 @@ export const LakeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LakeNotResolved({ name });
+        return yield* new LakeNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

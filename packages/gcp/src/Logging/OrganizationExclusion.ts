@@ -132,7 +132,7 @@ export const OrganizationExclusion = Resource<OrganizationExclusion>(
 export class OrganizationExclusionNotResolved extends Data.TaggedError(
   "GCP.Logging.OrganizationExclusionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, exclusionId: string) =>
@@ -247,7 +247,7 @@ export const OrganizationExclusionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OrganizationExclusionNotResolved({ name });
+        return yield* new OrganizationExclusionNotResolved({ resourceName: name });
       }
 
       const desiredDisabled = news.disabled === true;

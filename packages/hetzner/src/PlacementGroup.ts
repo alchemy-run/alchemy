@@ -117,7 +117,7 @@ export const PlacementGroup = Resource<PlacementGroup>("Hetzner.PlacementGroup")
 
 export class PlacementGroupNotResolved extends Data.TaggedError(
   "Hetzner.PlacementGroupNotResolved",
-)<{ name: string }> {}
+)<{ resourceName: string }> {}
 
 const DEFAULT_TYPE: PlacementGroupType = "spread";
 
@@ -239,7 +239,7 @@ export const PlacementGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new PlacementGroupNotResolved({ name });
+        return yield* new PlacementGroupNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

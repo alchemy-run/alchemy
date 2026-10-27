@@ -154,11 +154,11 @@ export type Channel = Resource<
 export const Channel = Resource<Channel>("GCP.Eventarc.Channel");
 
 export class ChannelNotResolved extends Data.TaggedError("GCP.Eventarc.ChannelNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ChannelStillExists extends Data.TaggedError("GCP.Eventarc.ChannelStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -261,7 +261,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((channel) =>
-      channel ? Effect.succeed(channel) : Effect.fail(new ChannelNotResolved({ name })),
+      channel
+        ? Effect.succeed(channel)
+        : Effect.fail(new ChannelNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Eventarc.ChannelNotResolved",
@@ -273,7 +275,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((channel) =>
-      channel === undefined ? Effect.void : Effect.fail(new ChannelStillExists({ name })),
+      channel === undefined
+        ? Effect.void
+        : Effect.fail(new ChannelStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Eventarc.ChannelStillExists",
@@ -386,7 +390,7 @@ export const ChannelProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ChannelNotResolved({ name });
+        return yield* new ChannelNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

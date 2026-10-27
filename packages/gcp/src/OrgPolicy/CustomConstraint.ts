@@ -167,7 +167,7 @@ export const CustomConstraint = Resource<CustomConstraint>("GCP.OrgPolicy.Custom
 export class CustomConstraintNotResolved extends Data.TaggedError(
   "GCP.OrgPolicy.CustomConstraintNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class OrganizationRequired extends Data.TaggedError("GCP.OrgPolicy.OrganizationRequired")<{
@@ -454,7 +454,7 @@ export const CustomConstraintProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CustomConstraintNotResolved({ name });
+        return yield* new CustomConstraintNotResolved({ resourceName: name });
       }
 
       const methodsChanged = !sameStringList(current.methodTypes, news.methodTypes);

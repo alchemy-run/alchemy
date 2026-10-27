@@ -179,7 +179,7 @@ export const RepositoriesReleaseConfig = Resource<RepositoriesReleaseConfig>(
 export class RepositoriesReleaseConfigNotResolved extends Data.TaggedError(
   "GCP.Dataform.RepositoriesReleaseConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (repository: string, releaseConfigId: string) =>
@@ -320,7 +320,7 @@ export const RepositoriesReleaseConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RepositoriesReleaseConfigNotResolved({ name });
+        return yield* new RepositoriesReleaseConfigNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

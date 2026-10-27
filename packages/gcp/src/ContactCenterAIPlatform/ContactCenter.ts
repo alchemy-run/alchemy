@@ -420,7 +420,7 @@ export const ContactCenterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ContactCenterNotResolved({ name });
+        return yield* new ContactCenterNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

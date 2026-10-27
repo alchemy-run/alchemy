@@ -152,7 +152,7 @@ export const ApplicationsDomainMapping = Resource<ApplicationsDomainMapping>(
 export class ApplicationsDomainMappingNotResolved extends Data.TaggedError(
   "GCP.AppEngine.ApplicationsDomainMappingNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -318,7 +318,7 @@ export const ApplicationsDomainMappingProvider = () =>
 
       if (current === undefined) {
         return yield* new ApplicationsDomainMappingNotResolved({
-          name: `projects/${project}/locations/${location}/applications/${applicationsId}/domainMappings/${domain}`,
+          resourceName: `projects/${project}/locations/${location}/applications/${applicationsId}/domainMappings/${domain}`,
         });
       }
 

@@ -369,7 +369,7 @@ export const RepositoriesBranchRuleProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observed = tagRecord(current.annotations);

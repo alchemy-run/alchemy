@@ -241,7 +241,7 @@ export const OrganizationsInspectTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DlpNotResolved({ name });
+        return yield* new DlpNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

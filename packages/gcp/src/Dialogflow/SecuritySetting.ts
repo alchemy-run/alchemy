@@ -184,7 +184,7 @@ export const SecuritySetting = Resource<SecuritySetting>("GCP.Dialogflow.Securit
 export class SecuritySettingNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.SecuritySettingNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, securitySettingsId: string) =>
@@ -360,7 +360,7 @@ export const SecuritySettingProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecuritySettingNotResolved({ name });
+        return yield* new SecuritySettingNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

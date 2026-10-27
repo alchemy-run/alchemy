@@ -148,7 +148,7 @@ export const DevelopersApp = Resource<DevelopersApp>("GCP.Apigee.DevelopersApp")
 export class DevelopersAppNotResolved extends Data.TaggedError(
   "GCP.Apigee.DevelopersAppNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const developerEmailOf = (developer: string) => {
@@ -314,7 +314,7 @@ export const DevelopersAppProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DevelopersAppNotResolved({ name });
+        return yield* new DevelopersAppNotResolved({ resourceName: name });
       }
 
       const observedAttributes = attributesToRecord(current.attributes);

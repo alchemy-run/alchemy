@@ -154,20 +154,20 @@ export const InterceptEndpointGroupAssociation = Resource<InterceptEndpointGroup
 export class InterceptEndpointGroupAssociationNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.InterceptEndpointGroupAssociationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InterceptEndpointGroupAssociationFailed extends Data.TaggedError(
   "GCP.NetworkSecurity.InterceptEndpointGroupAssociationFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class InterceptEndpointGroupAssociationStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.InterceptEndpointGroupAssociationStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const isPendingState = (state: string | undefined) =>
@@ -219,19 +219,19 @@ const waitUntilReady = (name: string) =>
     Effect.filterOrFail(
       (association): association is networksecurity.InterceptEndpointGroupAssociation =>
         association !== undefined,
-      () => new InterceptEndpointGroupAssociationNotResolved({ name }),
+      () => new InterceptEndpointGroupAssociationNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (association) => association.state !== "DELETE_FAILED",
       (association) =>
         new InterceptEndpointGroupAssociationFailed({
-          name,
+          resourceName: name,
           state: association.state,
         }),
     ),
     Effect.filterOrFail(
       (association) => !isPendingState(association.state),
-      () => new InterceptEndpointGroupAssociationNotResolved({ name }),
+      () => new InterceptEndpointGroupAssociationNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) =>
@@ -246,7 +246,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((association) =>
       association === undefined
         ? Effect.void
-        : Effect.fail(new InterceptEndpointGroupAssociationStillExists({ name })),
+        : Effect.fail(new InterceptEndpointGroupAssociationStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) =>
@@ -385,7 +385,7 @@ export const InterceptEndpointGroupAssociationProvider = () =>
 
       if (current === undefined) {
         return yield* new InterceptEndpointGroupAssociationNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

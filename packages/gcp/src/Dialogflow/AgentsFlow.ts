@@ -141,7 +141,7 @@ export const AgentsFlow = Resource<AgentsFlow>("GCP.Dialogflow.AgentsFlow");
 export class AgentsFlowNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsFlowNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const nluOf = (
@@ -281,7 +281,7 @@ export const AgentsFlowProvider = () =>
 
       if (current === undefined) {
         return yield* new AgentsFlowNotResolved({
-          name: output?.name ?? `${agent}/flows/${news.flowId ?? "unknown"}`,
+          resourceName: output?.name ?? `${agent}/flows/${news.flowId ?? "unknown"}`,
         });
       }
 

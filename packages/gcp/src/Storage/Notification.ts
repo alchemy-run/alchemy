@@ -442,7 +442,7 @@ export const NotificationProvider = () =>
         return pages.flat();
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
       const bucketName = news.bucketName;
       const payloadFormat = news.payloadFormat ?? DEFAULT_PAYLOAD_FORMAT;

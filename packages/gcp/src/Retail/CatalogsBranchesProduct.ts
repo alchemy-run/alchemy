@@ -205,7 +205,7 @@ export const CatalogsBranchesProduct = Resource<CatalogsBranchesProduct>(
 export class CatalogsBranchesProductNotResolved extends Data.TaggedError(
   "GCP.Retail.CatalogsBranchesProductNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const priceInfoOf = (
@@ -388,7 +388,7 @@ export const CatalogsBranchesProductProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CatalogsBranchesProductNotResolved({ name });
+        return yield* new CatalogsBranchesProductNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;

@@ -220,7 +220,7 @@ export type Cluster = Resource<
 export const Cluster = Resource<Cluster>("GCP.ManagedKafka.Cluster");
 
 export class ClusterNotResolved extends Data.TaggedError("GCP.ManagedKafka.ClusterNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, clusterId: string) =>
@@ -377,7 +377,7 @@ export const ClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ClusterNotResolved({ name });
+        return yield* new ClusterNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(getCluster(name), name, (cluster) => cluster.state);
@@ -423,7 +423,7 @@ export const ClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
       return toAttrs(current, env.project);
     }),

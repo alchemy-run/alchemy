@@ -87,7 +87,7 @@ export type SshKey = Resource<
 export const SshKey = Resource<SshKey>("Hetzner.SshKey");
 
 export class SshKeyNotResolved extends Data.TaggedError("Hetzner.SshKeyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -214,7 +214,7 @@ export const SshKeyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SshKeyNotResolved({ name });
+        return yield* new SshKeyNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

@@ -145,7 +145,7 @@ export type Run = ProcessesRun;
 export class ProcessesRunNotResolved extends Data.TaggedError(
   "GCP.DataLineage.ProcessesRunNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (process: string, runId: string) => `${process}/runs/${runId}`;
@@ -271,7 +271,7 @@ export const ProcessesRunProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ProcessesRunNotResolved({ name });
+        return yield* new ProcessesRunNotResolved({ resourceName: name });
       }
 
       const resolvedName = current.name ?? name;

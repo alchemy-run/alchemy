@@ -16,7 +16,7 @@ export const DEFAULT_VOLUME_REGION = "iad";
 export const MIN_SIZE_GB = 1;
 
 export class VolumeNotCreated extends Data.TaggedError("Fly.VolumeNotCreated")<{
-  name: string;
+  resourceName: string;
   appName: string;
 }> {}
 
@@ -138,7 +138,7 @@ export const createVolume = Effect.fn(function* (input: {
   const hit = group.at(-1);
   if (hit === undefined || hit.id === undefined) {
     return yield* new VolumeNotCreated({
-      name: input.name,
+      resourceName: input.name,
       appName: input.appName,
     });
   }
@@ -211,7 +211,7 @@ export const ensureVolumeGroup = Effect.fn(function* (input: {
   }
   if (group.length < input.count) {
     return yield* new VolumeNotCreated({
-      name: input.name,
+      resourceName: input.name,
       appName: input.appName,
     });
   }

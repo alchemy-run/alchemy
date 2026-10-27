@@ -152,16 +152,16 @@ export const InstancesClustersBackup = Resource<InstancesClustersBackup>(
 );
 
 export class BackupNotResolved extends Data.TaggedError("GCP.Bigtable.BackupNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BackupNotReady extends Data.TaggedError("GCP.Bigtable.BackupNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class BackupStillExists extends Data.TaggedError("GCP.Bigtable.BackupStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toId = (id: string, backupId: string | undefined, existing?: string) =>
@@ -210,7 +210,7 @@ const isBusy = (state: string | undefined) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup ? Effect.succeed(backup) : Effect.fail(new BackupNotResolved({ name })),
+      backup ? Effect.succeed(backup) : Effect.fail(new BackupNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.BackupNotResolved",
@@ -223,13 +223,13 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (backup): backup is bigtable.Backup => backup !== undefined,
-      () => new BackupNotResolved({ name }),
+      () => new BackupNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (backup) => !isBusy(backup.state),
       (backup) =>
         new BackupNotReady({
-          name,
+          resourceName: name,
           state: backup.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -245,7 +245,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup === undefined ? Effect.void : Effect.fail(new BackupStillExists({ name })),
+      backup === undefined
+        ? Effect.void
+        : Effect.fail(new BackupStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.BackupStillExists",

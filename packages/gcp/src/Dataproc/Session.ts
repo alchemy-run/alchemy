@@ -133,17 +133,17 @@ export type Session = Resource<
 export const Session = Resource<Session>("GCP.Dataproc.Session");
 
 export class SessionNotResolved extends Data.TaggedError("GCP.Dataproc.SessionNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SessionFailed extends Data.TaggedError("GCP.Dataproc.SessionFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
   detail: string | undefined;
 }> {}
 
 export class SessionNotReady extends Data.TaggedError("GCP.Dataproc.SessionNotReady")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -201,13 +201,15 @@ const getByName = (name: string) =>
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((session) =>
-      session ? Effect.succeed(session) : Effect.fail(new SessionNotResolved({ name })),
+      session
+        ? Effect.succeed(session)
+        : Effect.fail(new SessionNotResolved({ resourceName: name })),
     ),
     Effect.filterOrFail(
       (session) => session.state !== "FAILED",
       (session) =>
         new SessionFailed({
-          name,
+          resourceName: name,
           state: session.state,
           detail: session.stateMessage,
         }),
@@ -216,7 +218,7 @@ const waitUntilReady = (name: string) =>
       (session) => READY.has(session.state ?? ""),
       (session) =>
         new SessionNotReady({
-          name,
+          resourceName: name,
           state: session.state,
         }),
     ),
@@ -336,7 +338,7 @@ export const SessionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SessionNotResolved({ name });
+        return yield* new SessionNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, location);

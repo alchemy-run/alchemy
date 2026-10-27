@@ -102,7 +102,7 @@ export const EndpointAttachment = Resource<EndpointAttachment>("GCP.Apigee.Endpo
 export class EndpointAttachmentNotResolved extends Data.TaggedError(
   "GCP.Apigee.EndpointAttachmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
@@ -256,7 +256,7 @@ export const EndpointAttachmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EndpointAttachmentNotResolved({ name });
+        return yield* new EndpointAttachmentNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, organization, env.region);

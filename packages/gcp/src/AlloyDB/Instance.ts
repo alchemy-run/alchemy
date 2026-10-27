@@ -324,7 +324,7 @@ export type Instance = Resource<
 export const Instance = Resource<Instance>("GCP.AlloyDB.Instance");
 
 export class InstanceNotResolved extends Data.TaggedError("GCP.AlloyDB.InstanceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstanceClusterMissing extends Data.TaggedError("GCP.AlloyDB.InstanceClusterMissing")<{
@@ -332,17 +332,17 @@ export class InstanceClusterMissing extends Data.TaggedError("GCP.AlloyDB.Instan
 }> {}
 
 export class InstanceNotReady extends Data.TaggedError("GCP.AlloyDB.InstanceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstanceFailed extends Data.TaggedError("GCP.AlloyDB.InstanceFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstanceStillExists extends Data.TaggedError("GCP.AlloyDB.InstanceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string | undefined) => {
@@ -576,7 +576,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance ? Effect.succeed(instance) : Effect.fail(new InstanceNotResolved({ name })),
+      instance
+        ? Effect.succeed(instance)
+        : Effect.fail(new InstanceNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.InstanceNotResolved",
@@ -589,17 +591,17 @@ const waitUntilReady = (name: string) =>
   Effect.gen(function* () {
     const instance = yield* getByName(name);
     if (instance === undefined) {
-      return yield* new InstanceNotReady({ name, state: "MISSING" });
+      return yield* new InstanceNotReady({ resourceName: name, state: "MISSING" });
     }
     if (isFailed(instance.state)) {
       return yield* new InstanceFailed({
-        name,
+        resourceName: name,
         state: instance.state ?? "FAILED",
       });
     }
     if (!(isAvailable(instance.state) && instance.reconciling !== true)) {
       return yield* new InstanceNotReady({
-        name,
+        resourceName: name,
         state: instance.state ?? "STATE_UNSPECIFIED",
       });
     }
@@ -615,7 +617,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ name })),
+      instance === undefined
+        ? Effect.void
+        : Effect.fail(new InstanceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.InstanceStillExists",
@@ -828,7 +832,7 @@ export const InstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InstanceNotResolved({ name });
+        return yield* new InstanceNotResolved({ resourceName: name });
       }
 
       if (!isAvailable(current.state) || current.reconciling === true) {

@@ -631,18 +631,18 @@ export const make = (
           receive: (delivery) =>
             Effect.suspend(() => {
               running++;
-              return Effect.forkDetach(
-                lockFor(delivery.key)
-                  .withPermits(1)(kit.run(delivery))
-                  .pipe(
-                    Effect.catchCause((cause) =>
-                      Effect.sync(() => failures.push(cause)).pipe(
-                        Effect.andThen(Effect.logError(`policy ${kit.name} failed`, cause)),
-                      ),
+              return lockFor(delivery.key)
+                .withPermits(1)(kit.run(delivery))
+                .pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.sync(() => failures.push(cause)).pipe(
+                      Effect.andThen(Effect.logError(`policy ${kit.name} failed`, cause)),
                     ),
-                    Effect.ensuring(Effect.sync(() => running--)),
                   ),
-              ).pipe(Effect.asVoid);
+                  Effect.ensuring(Effect.sync(() => running--)),
+                  Effect.forkDetach,
+                  Effect.asVoid,
+                );
             }),
         };
       }),

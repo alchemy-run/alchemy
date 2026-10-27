@@ -153,7 +153,7 @@ export const PipelineJob = Resource<PipelineJob>("GCP.AIPlatform.PipelineJob");
 export class PipelineJobNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.PipelineJobNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, id: string) =>
@@ -191,7 +191,7 @@ const TERMINAL_STATES = new Set([
 ]);
 
 class PipelineJobNotTerminal extends Data.TaggedError("GCP.AIPlatform.PipelineJobNotTerminal")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -217,7 +217,7 @@ const cancelUntilTerminal = (name: string) =>
       Effect.flatMap((current) =>
         current === undefined || TERMINAL_STATES.has(current.state ?? "")
           ? Effect.void
-          : Effect.fail(new PipelineJobNotTerminal({ name, state: current.state })),
+          : Effect.fail(new PipelineJobNotTerminal({ resourceName: name, state: current.state })),
       ),
       Effect.retry({
         while: (error) => error._tag === "GCP.AIPlatform.PipelineJobNotTerminal",
@@ -231,7 +231,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (job) => job === undefined,
-      () => new AiPlatformStillExists({ name }),
+      () => new AiPlatformStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -344,7 +344,7 @@ export const PipelineJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new PipelineJobNotResolved({ name });
+        return yield* new PipelineJobNotResolved({ resourceName: name });
       }
       return toAttrs(current, env.project);
     }),

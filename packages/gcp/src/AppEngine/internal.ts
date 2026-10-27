@@ -379,7 +379,7 @@ export const stampEnvVariables = (
   labels: Record<string, string>,
   env: Record<string, string | undefined> | undefined,
 ): Record<string, string | undefined> => ({
-  ...(env ?? {}),
+  ...env,
   [OWNERSHIP_ENV]: fitMarker(labels, 200),
 });
 

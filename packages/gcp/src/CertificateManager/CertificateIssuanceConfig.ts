@@ -208,13 +208,13 @@ export const CertificateIssuanceConfig = Resource<CertificateIssuanceConfig>(
 export class CertificateIssuanceConfigNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.CertificateIssuanceConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateIssuanceConfigStillExists extends Data.TaggedError(
   "GCP.CertificateManager.CertificateIssuanceConfigStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -359,7 +359,7 @@ const waitUntilExists = (name: string) =>
     Effect.flatMap((config) =>
       config
         ? Effect.succeed(config)
-        : Effect.fail(new CertificateIssuanceConfigNotResolved({ name })),
+        : Effect.fail(new CertificateIssuanceConfigNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) =>
@@ -374,7 +374,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((config) =>
       config === undefined
         ? Effect.void
-        : Effect.fail(new CertificateIssuanceConfigStillExists({ name })),
+        : Effect.fail(new CertificateIssuanceConfigStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) =>
@@ -547,7 +547,7 @@ export const CertificateIssuanceConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CertificateIssuanceConfigNotResolved({ name });
+        return yield* new CertificateIssuanceConfigNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

@@ -201,7 +201,7 @@ export const Organization = Resource<Organization>("GCP.Apigee.Organization");
 export class OrganizationNotResolved extends Data.TaggedError(
   "GCP.Apigee.OrganizationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toOrgId = (project: string, organizationId: string | undefined, existing?: string) =>
@@ -354,7 +354,7 @@ export const OrganizationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OrganizationNotResolved({ name });
+        return yield* new OrganizationNotResolved({ resourceName: name });
       }
 
       const desired = toBody(news, desiredDescription, analyticsRegion);

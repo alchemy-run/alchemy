@@ -106,13 +106,13 @@ export const CollectionsDataStoresSiteSearchEngineTargetSite =
 export class CollectionsDataStoresSiteSearchEngineTargetSiteNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresSiteSearchEngineTargetSiteNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CollectionsDataStoresSiteSearchEngineTargetSiteStillExists extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresSiteSearchEngineTargetSiteStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -175,7 +175,7 @@ const waitUntilExists = (name: string) =>
         ? Effect.succeed(site)
         : Effect.fail(
             new CollectionsDataStoresSiteSearchEngineTargetSiteNotResolved({
-              name,
+              resourceName: name,
             }),
           ),
     ),
@@ -195,7 +195,7 @@ const waitUntilGone = (name: string) =>
         ? Effect.void
         : Effect.fail(
             new CollectionsDataStoresSiteSearchEngineTargetSiteStillExists({
-              name,
+              resourceName: name,
             }),
           ),
     ),
@@ -270,7 +270,7 @@ export const CollectionsDataStoresSiteSearchEngineTargetSiteProvider = () =>
 
       if (current === undefined) {
         return yield* new CollectionsDataStoresSiteSearchEngineTargetSiteNotResolved({
-          name: output?.name ?? `${parent}/targetSites/-`,
+          resourceName: output?.name ?? `${parent}/targetSites/-`,
         });
       }
 

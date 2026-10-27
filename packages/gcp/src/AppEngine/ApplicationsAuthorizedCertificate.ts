@@ -159,7 +159,7 @@ export const ApplicationsAuthorizedCertificate = Resource<ApplicationsAuthorized
 export class ApplicationsAuthorizedCertificateNotResolved extends Data.TaggedError(
   "GCP.AppEngine.ApplicationsAuthorizedCertificateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const rawDataOf = (props: ApplicationsAuthorizedCertificateProps) => {
@@ -347,7 +347,7 @@ export const ApplicationsAuthorizedCertificateProvider = () =>
 
       if (current === undefined) {
         return yield* new ApplicationsAuthorizedCertificateNotResolved({
-          name: `projects/${project}/locations/${location}/applications/${applicationsId}/authorizedCertificates/${news.certificateId ?? ""}`,
+          resourceName: `projects/${project}/locations/${location}/applications/${applicationsId}/authorizedCertificates/${news.certificateId ?? ""}`,
         });
       }
 

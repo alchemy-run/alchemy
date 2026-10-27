@@ -154,7 +154,7 @@ export const Endpoint = Resource<Endpoint>("GCP.ServiceDirectory.Endpoint");
 export class EndpointNotResolved extends Data.TaggedError(
   "GCP.ServiceDirectory.EndpointNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class EndpointParentMissing extends Data.TaggedError(
@@ -559,7 +559,7 @@ export const EndpointProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EndpointNotResolved({ name });
+        return yield* new EndpointNotResolved({ resourceName: name });
       }
 
       const observedAnnotations = tagRecord(current.annotations);

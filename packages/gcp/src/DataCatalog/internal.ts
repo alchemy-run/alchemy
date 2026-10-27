@@ -22,7 +22,7 @@ export type TaxonomyActivatedPolicyType =
 export class DatacatalogNotResolved extends Data.TaggedError(
   "GCP.DataCatalog.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -294,7 +294,7 @@ export const listAtLocation = <A, E, R>(
   list: (parent: string) => Effect.Effect<A[], E, R>,
 ): Effect.Effect<A[], E, R> => list(locationParent(project, region));
 
-export const findOwned = <A, E, R>(
+export const findOwned = <A>(
   items: readonly A[],
   id: string,
   descriptionOf: (item: A) => string | undefined,

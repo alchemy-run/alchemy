@@ -194,7 +194,7 @@ export const Subscription = Resource<Subscription>("GCP.WorkspaceEvents.Subscrip
 export class SubscriptionNotResolved extends Data.TaggedError(
   "GCP.WorkspaceEvents.SubscriptionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const payloadOf = (options: we.PayloadOptions | undefined): PayloadOptions | undefined => {
@@ -371,7 +371,7 @@ export const SubscriptionProvider = () =>
 
       if (current === undefined) {
         return yield* new SubscriptionNotResolved({
-          name: lookup || news.targetResource,
+          resourceName: lookup || news.targetResource,
         });
       }
 

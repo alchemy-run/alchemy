@@ -160,7 +160,7 @@ export const AgentsGenerator = Resource<AgentsGenerator>("GCP.Dialogflow.AgentsG
 export class AgentsGeneratorNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsGeneratorNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_PROMPT = "Say hello.";
@@ -337,7 +337,7 @@ export const AgentsGeneratorProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentsGeneratorNotResolved({ name });
+        return yield* new AgentsGeneratorNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

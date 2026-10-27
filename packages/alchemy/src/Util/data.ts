@@ -92,7 +92,7 @@ type UnwrapRedacted<T> =
 
 export const unwrapRedacted = <T>(value: T): UnwrapRedacted<T> => {
   if (Redacted.isRedacted(value)) {
-    return unwrapRedacted(Redacted.value(value)) as UnwrapRedacted<T>;
+    return value.pipe(Redacted.value, unwrapRedacted) as UnwrapRedacted<T>;
   }
   if (Array.isArray(value)) {
     return value.map(unwrapRedacted) as UnwrapRedacted<T>;

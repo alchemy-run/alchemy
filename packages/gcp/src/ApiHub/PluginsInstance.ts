@@ -214,7 +214,7 @@ const waitUntilReady = (name: string) =>
         current !== undefined &&
         current.state !== "CREATING" &&
         current.state !== "APPLYING_CONFIG",
-      () => new ApihubNotResolved({ name }),
+      () => new ApihubNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ApiHub.ResourceNotResolved",
@@ -225,7 +225,7 @@ const waitUntilReady = (name: string) =>
       if (current.state === "ERROR" || current.state === "FAILED") {
         return Effect.fail(
           new ApihubInstanceFailed({
-            name,
+            resourceName: name,
             state: current.state,
             message: current.errorMessage,
           }),
@@ -367,7 +367,7 @@ export const PluginsInstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name });
+        return yield* new ApihubNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

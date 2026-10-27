@@ -157,7 +157,7 @@ export const ApiproductsRateplan = Resource<ApiproductsRateplan>("GCP.Apigee.Api
 export class ApiproductsRateplanNotResolved extends Data.TaggedError(
   "GCP.Apigee.ApiproductsRateplanNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const productParent = (organizationId: string, apiproduct: string) => {
@@ -273,7 +273,7 @@ export const ApiproductsRateplanProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new ApiproductsRateplanNotResolved({
-          name: output?.name ?? parent,
+          resourceName: output?.name ?? parent,
         });
       }
 

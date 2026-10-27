@@ -167,7 +167,7 @@ export type Group = Resource<
 export const Group = Resource<Group>("GCP.CloudIdentity.Group");
 
 export class GroupNotResolved extends Data.TaggedError("GCP.CloudIdentity.GroupNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (group: cloudidentity.Group) => {
@@ -323,7 +323,7 @@ export const GroupProvider = () =>
 
       if (current === undefined) {
         return yield* new GroupNotResolved({
-          name: output?.name ?? groupKeyId,
+          resourceName: output?.name ?? groupKeyId,
         });
       }
 

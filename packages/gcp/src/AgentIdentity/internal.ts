@@ -13,7 +13,7 @@ export const COLLECTION = "authProviders";
 export class AuthProviderNotResolved extends Data.TaggedError(
   "GCP.AgentIdentity.AuthProviderNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {

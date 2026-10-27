@@ -260,7 +260,7 @@ export const DocumentSchemaProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: output?.name ?? resourceName(env.project, location, documentSchemaId),
+          resourceName: output?.name ?? resourceName(env.project, location, documentSchemaId),
         });
       }
 

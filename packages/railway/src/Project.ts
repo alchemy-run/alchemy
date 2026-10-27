@@ -153,7 +153,7 @@ export type Project = Resource<
 export const Project = Resource<Project>("Railway.Project");
 
 export class ProjectNotCreated extends Data.TaggedError("Railway.ProjectNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 /** Workspace id from a get-by-id or list-node Project payload. */
@@ -367,7 +367,7 @@ export const ProjectProvider = () =>
       }
 
       if (current === undefined || isGone(current)) {
-        return yield* new ProjectNotCreated({ name });
+        return yield* new ProjectNotCreated({ resourceName: name });
       }
 
       const nameChanged = current.name !== name;

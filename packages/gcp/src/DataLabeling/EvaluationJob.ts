@@ -184,7 +184,7 @@ export const EvaluationJob = Resource<EvaluationJob>("GCP.DataLabeling.Evaluatio
 export class EvaluationJobNotResolved extends Data.TaggedError(
   "GCP.DataLabeling.EvaluationJobNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, evaluationJobId: string) =>
@@ -335,7 +335,7 @@ export const EvaluationJobProvider = () =>
 
       if (current === undefined) {
         return yield* new EvaluationJobNotResolved({
-          name: name || projectParent(env.project),
+          resourceName: name || projectParent(env.project),
         });
       }
 

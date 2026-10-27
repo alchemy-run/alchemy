@@ -144,13 +144,13 @@ export const MetadataFeed = Resource<MetadataFeed>("GCP.Dataplex.MetadataFeed");
 export class MetadataFeedNotResolved extends Data.TaggedError(
   "GCP.Dataplex.MetadataFeedNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MetadataFeedStillExists extends Data.TaggedError(
   "GCP.Dataplex.MetadataFeedStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, feedId: string) =>
@@ -236,7 +236,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (feed): feed is dataplex.GoogleCloudDataplexV1MetadataFeed => feed !== undefined,
-      () => new MetadataFeedNotResolved({ name }),
+      () => new MetadataFeedNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.MetadataFeedNotResolved",
@@ -248,7 +248,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((feed) =>
-      feed === undefined ? Effect.void : Effect.fail(new MetadataFeedStillExists({ name })),
+      feed === undefined
+        ? Effect.void
+        : Effect.fail(new MetadataFeedStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.MetadataFeedStillExists",
@@ -339,7 +341,7 @@ export const MetadataFeedProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MetadataFeedNotResolved({ name });
+        return yield* new MetadataFeedNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

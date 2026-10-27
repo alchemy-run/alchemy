@@ -190,7 +190,7 @@ export const PersistentResource = Resource<PersistentResource>("GCP.AIPlatform.P
 export class PersistentResourceNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.PersistentResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, id: string) =>
@@ -253,7 +253,7 @@ const waitUntilExists = (name: string) =>
     Effect.filterOrFail(
       (resource): resource is aiplatform.GoogleCloudAiplatformV1PersistentResource =>
         resource !== undefined,
-      () => new AiPlatformNotResolved({ name }),
+      () => new AiPlatformNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.NotResolved",
@@ -266,7 +266,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (resource) => resource === undefined,
-      () => new AiPlatformStillExists({ name }),
+      () => new AiPlatformStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -416,7 +416,7 @@ export const PersistentResourceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new PersistentResourceNotResolved({ name });
+        return yield* new PersistentResourceNotResolved({ resourceName: name });
       }
 
       const observedName = current.name ?? name;
@@ -451,7 +451,7 @@ export const PersistentResourceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new PersistentResourceNotResolved({ name: observedName });
+        return yield* new PersistentResourceNotResolved({ resourceName: observedName });
       }
       return toAttrs(current, env.project);
     }),

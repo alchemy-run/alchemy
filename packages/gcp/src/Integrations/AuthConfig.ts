@@ -134,7 +134,7 @@ export const AuthConfig = Resource<AuthConfig>("GCP.Integrations.AuthConfig");
 export class AuthConfigNotResolved extends Data.TaggedError(
   "GCP.Integrations.AuthConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_CREDENTIAL_TYPE: CredentialType = "USERNAME_AND_PASSWORD";
@@ -273,7 +273,7 @@ export const AuthConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AuthConfigNotResolved({ name });
+        return yield* new AuthConfigNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

@@ -125,7 +125,7 @@ export const StoredInfoType = Resource<StoredInfoType>("GCP.DLP.StoredInfoType")
 export class StoredInfoTypeNotResolved extends Data.TaggedError(
   "GCP.DLP.StoredInfoTypeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, storedInfoTypeId: string) =>
@@ -244,7 +244,7 @@ export const StoredInfoTypeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new StoredInfoTypeNotResolved({ name });
+        return yield* new StoredInfoTypeNotResolved({ resourceName: name });
       }
 
       const observed = current.currentVersion?.config;

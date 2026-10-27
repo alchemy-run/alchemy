@@ -126,9 +126,9 @@ const waitForNetworkConfig = (
 
 export class PrivateNetworkNameUnsupported extends Data.TaggedError(
   "Railway.PrivateNetworkNameUnsupported",
-)<{ name: string }> {
+)<{ resourceName: string }> {
   override get message() {
-    return `Railway manages one private network per environment. Custom network '${this.name}' is no longer supported; remove the legacy declaration and use PrivateNetwork without a name.`;
+    return `Railway manages one private network per environment. Custom network '${this.resourceName}' is no longer supported; remove the legacy declaration and use PrivateNetwork without a name.`;
   }
 }
 
@@ -260,7 +260,7 @@ export const PrivateNetwork: typeof PrivateNetworkResource = Object.assign(
 );
 
 export class PrivateNetworkNotCreated extends Data.TaggedError("Railway.PrivateNetworkNotCreated")<{
-  name: string;
+  resourceName: string;
   environmentId: string;
 }> {}
 
@@ -309,7 +309,7 @@ const toNetworkAttrs = (
 
 const resolveNetworkName = Effect.fn(function* (name?: string) {
   if (name !== undefined && name !== PLATFORM_NETWORK_NAME) {
-    return yield* new PrivateNetworkNameUnsupported({ name });
+    return yield* new PrivateNetworkNameUnsupported({ resourceName: name });
   }
   return PLATFORM_NETWORK_NAME;
 });
@@ -364,7 +364,9 @@ const ensureNetwork = Effect.fn(function* (environmentId: string) {
   const network = yield* observeNetwork({ environmentId, name: PLATFORM_NETWORK_NAME }).pipe(
     Effect.flatMap((network) =>
       network === undefined
-        ? Effect.fail(new PrivateNetworkNotCreated({ name: PLATFORM_NETWORK_NAME, environmentId }))
+        ? Effect.fail(
+            new PrivateNetworkNotCreated({ resourceName: PLATFORM_NETWORK_NAME, environmentId }),
+          )
         : Effect.succeed(network),
     ),
     Effect.retry({
@@ -734,7 +736,7 @@ const resolveServiceName = (serviceId: string, hint?: string) =>
 
 export class PrivateNetworkEndpointNameUnavailable extends Data.TaggedError(
   "Railway.PrivateNetworkEndpointNameUnavailable",
-)<{ name: string; privateNetworkId: string; serviceId: string }> {}
+)<{ endpointName: string; privateNetworkId: string; serviceId: string }> {}
 
 const waitUntilEndpointNamed = (input: {
   environmentId: string;
@@ -911,7 +913,7 @@ export const PrivateNetworkEndpointProvider = () =>
             });
             if (!available) {
               return yield* new PrivateNetworkEndpointNameUnavailable({
-                name: desiredPrefix,
+                endpointName: desiredPrefix,
                 privateNetworkId,
                 serviceId,
               });

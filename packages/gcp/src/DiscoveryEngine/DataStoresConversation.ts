@@ -91,7 +91,7 @@ export const DataStoresConversation = Resource<DataStoresConversation>(
 export class DataStoresConversationNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresConversationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -164,7 +164,7 @@ export const DataStoresConversationProvider = () =>
 
       if (current === undefined) {
         return yield* new DataStoresConversationNotResolved({
-          name: output?.name ?? `${parent}/conversations`,
+          resourceName: output?.name ?? `${parent}/conversations`,
         });
       }
 

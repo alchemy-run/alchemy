@@ -173,7 +173,7 @@ export type Certificate = Resource<
 export const Certificate = Resource<Certificate>("Hetzner.Certificate");
 
 export class CertificateNotResolved extends Data.TaggedError("Hetzner.CertificateNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateIssuancePending extends Data.TaggedError(
@@ -447,7 +447,7 @@ export const CertificateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CertificateNotResolved({ name });
+        return yield* new CertificateNotResolved({ resourceName: name });
       }
 
       if (asType(current.type) === "managed") {

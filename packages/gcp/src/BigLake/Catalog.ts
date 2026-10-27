@@ -267,7 +267,7 @@ export const CatalogProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BiglakeNotResolved({ name });
+        return yield* new BiglakeNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

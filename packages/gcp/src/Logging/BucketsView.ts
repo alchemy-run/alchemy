@@ -132,7 +132,7 @@ export type BucketsView = Resource<
 export const BucketsView = Resource<BucketsView>("GCP.Logging.BucketsView");
 
 export class BucketsViewNotResolved extends Data.TaggedError("GCP.Logging.BucketsViewNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parseViewName = (name: string) => {
@@ -315,7 +315,7 @@ export const BucketsViewProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BucketsViewNotResolved({ name });
+        return yield* new BucketsViewNotResolved({ resourceName: name });
       }
 
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");

@@ -126,7 +126,7 @@ export const SemanticGovernancePolicy = Resource<SemanticGovernancePolicy>(
 export class SemanticGovernancePolicyNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.SemanticGovernancePolicyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, policyId: string) =>
@@ -169,7 +169,7 @@ const waitUntilExists = (name: string) =>
     Effect.flatMap((policy) =>
       policy
         ? Effect.succeed(policy)
-        : Effect.fail(new SemanticGovernancePolicyNotResolved({ name })),
+        : Effect.fail(new SemanticGovernancePolicyNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.SemanticGovernancePolicyNotResolved",
@@ -287,7 +287,7 @@ export const SemanticGovernancePolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SemanticGovernancePolicyNotResolved({ name });
+        return yield* new SemanticGovernancePolicyNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;

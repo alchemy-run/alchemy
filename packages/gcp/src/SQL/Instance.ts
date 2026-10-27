@@ -528,11 +528,7 @@ const LONG_OPERATION_POLL = {
   schedule: Schedule.spaced("10 seconds"),
 };
 
-const waitForOperation = (
-  project: string,
-  operation: sqladmin.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
+const waitForOperation = (project: string, operation: sqladmin.Operation) =>
   waitForSqlOperation(project, operation, {
     budget: "30 minutes",
     notFoundOk: true,
@@ -967,7 +963,7 @@ export const InstanceProvider = () =>
           },
         }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
         if (patched !== undefined) {
-          yield* waitForOperation(env.project, patched, { notFoundOk: true });
+          yield* waitForOperation(env.project, patched);
         }
       }
 
@@ -985,7 +981,7 @@ export const InstanceProvider = () =>
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(env.project, operation, { notFoundOk: true });
+        yield* waitForOperation(env.project, operation);
       }
       yield* waitUntilGone(env.project, instanceName);
     }),

@@ -336,7 +336,7 @@ const waitUntilMirror = (name: string, enabled: boolean) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (value): value is netapp.Replication => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (value) => {
@@ -345,7 +345,7 @@ const waitUntilMirror = (name: string, enabled: boolean) =>
           ? mirror === "MIRRORED" || mirror === "TRANSFERRING"
           : mirror === STOPPED || mirror === "ABORTED";
       },
-      (value) => new ResourceNotReady({ name, state: value.mirrorState ?? "" }),
+      (value) => new ResourceNotReady({ resourceName: name, state: value.mirrorState ?? "" }),
     ),
     Effect.retry({
       while: (error) =>
@@ -463,7 +463,7 @@ export const VolumesReplicationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(

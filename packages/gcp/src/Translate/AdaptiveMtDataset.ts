@@ -208,7 +208,7 @@ export const AdaptiveMtDatasetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name: hinted || name });
+        return yield* new ResourceNotResolved({ resourceName: hinted || name });
       }
 
       return toAttrs(current, env.project);

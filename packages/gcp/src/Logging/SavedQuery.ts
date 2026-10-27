@@ -173,7 +173,7 @@ export type SavedQuery = Resource<
 export const SavedQuery = Resource<SavedQuery>("GCP.Logging.SavedQuery");
 
 export class SavedQueryNotResolved extends Data.TaggedError("GCP.Logging.SavedQueryNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parseQueryName = (name: string) => {
@@ -366,7 +366,7 @@ export const SavedQueryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SavedQueryNotResolved({ name });
+        return yield* new SavedQueryNotResolved({ resourceName: name });
       }
 
       const displayNameChanged = (current.displayName ?? "") !== desiredDisplayName;

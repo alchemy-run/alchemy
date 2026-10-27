@@ -129,7 +129,7 @@ export type Sharedflow = Resource<
 export const Sharedflow = Resource<Sharedflow>("GCP.Apigee.Sharedflow");
 
 export class SharedflowNotResolved extends Data.TaggedError("GCP.Apigee.SharedflowNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const sanitizeId = (name: string): string => {
@@ -296,7 +296,7 @@ const importBundle = (input: { org: string; sharedflowId: string; space?: string
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((flow) =>
-      flow ? Effect.succeed(flow) : Effect.fail(new SharedflowNotResolved({ name })),
+      flow ? Effect.succeed(flow) : Effect.fail(new SharedflowNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Apigee.SharedflowNotResolved",
@@ -391,7 +391,7 @@ export const SharedflowProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SharedflowNotResolved({ name });
+        return yield* new SharedflowNotResolved({ resourceName: name });
       }
 
       const observed = yield* observedDescription(org, current);

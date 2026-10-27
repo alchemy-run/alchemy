@@ -208,7 +208,7 @@ export type DbSystem = Resource<
 export const DbSystem = Resource<DbSystem>("GCP.OracleDatabase.DbSystem");
 
 const mergedProperties = (news: DbSystemProps): DbSystemPropertiesInput => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   shape: news.shape ?? news.properties?.shape,
   sshPublicKeys: news.sshPublicKeys ?? news.properties?.sshPublicKeys,
   computeCount: news.computeCount ?? news.properties?.computeCount,
@@ -385,7 +385,7 @@ export const DbSystemProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(

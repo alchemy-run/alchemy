@@ -120,16 +120,16 @@ export type BucketsLink = Resource<
 export const BucketsLink = Resource<BucketsLink>("GCP.Logging.BucketsLink");
 
 export class BucketsLinkNotResolved extends Data.TaggedError("GCP.Logging.BucketsLinkNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BucketsLinkFailed extends Data.TaggedError("GCP.Logging.BucketsLinkFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class BucketsLinkStillExists extends Data.TaggedError("GCP.Logging.BucketsLinkStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parseLinkName = (name: string) => {
@@ -227,16 +227,16 @@ const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const link = yield* getByName(name);
     if (isDeleted(link)) {
-      return yield* new BucketsLinkNotResolved({ name });
+      return yield* new BucketsLinkNotResolved({ resourceName: name });
     }
     if (link.lifecycleState === "FAILED") {
       return yield* new BucketsLinkFailed({
-        name,
+        resourceName: name,
         state: link.lifecycleState,
       });
     }
     if (isPending(link.lifecycleState)) {
-      return yield* new BucketsLinkNotResolved({ name });
+      return yield* new BucketsLinkNotResolved({ resourceName: name });
     }
     return link;
   }).pipe(
@@ -248,7 +248,7 @@ const waitUntilActive = (name: string) =>
     Effect.catchTag("GCP.Logging.BucketsLinkNotResolved", () =>
       Effect.fail(
         new BucketsLinkFailed({
-          name,
+          resourceName: name,
           state: "PENDING",
         }),
       ),
@@ -258,7 +258,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((link) =>
-      isDeleted(link) ? Effect.void : Effect.fail(new BucketsLinkStillExists({ name })),
+      isDeleted(link)
+        ? Effect.void
+        : Effect.fail(new BucketsLinkStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.BucketsLinkStillExists",
@@ -344,7 +346,7 @@ export const BucketsLinkProvider = () =>
       const parent = parseBucket(news.bucket, env.project, location);
       if (parent.bucketId.length === 0) {
         return yield* new BucketsLinkNotResolved({
-          name: parent.name,
+          resourceName: parent.name,
         });
       }
       const linkId = yield* toId(id, news.linkId, output?.linkId);
@@ -374,7 +376,7 @@ export const BucketsLinkProvider = () =>
       }
 
       if (isDeleted(current)) {
-        return yield* new BucketsLinkNotResolved({ name });
+        return yield* new BucketsLinkNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, parent.project, parent.location, parent.bucketId);

@@ -131,7 +131,7 @@ export const NotificationChannel = Resource<NotificationChannel>(
 export class NotificationChannelNotResolved extends Data.TaggedError(
   "GCP.Monitoring.NotificationChannelNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -302,7 +302,7 @@ export const NotificationChannelProvider = () =>
 
       if (current === undefined) {
         return yield* new NotificationChannelNotResolved({
-          name: output?.name ?? displayName,
+          resourceName: output?.name ?? displayName,
         });
       }
 

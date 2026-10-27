@@ -125,7 +125,7 @@ export const FolderExclusion = Resource<FolderExclusion>("GCP.Logging.FolderExcl
 export class FolderExclusionNotResolved extends Data.TaggedError(
   "GCP.Logging.FolderExclusionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (folderId: string, exclusionId: string) =>
@@ -241,7 +241,7 @@ export const FolderExclusionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FolderExclusionNotResolved({ name });
+        return yield* new FolderExclusionNotResolved({ resourceName: name });
       }
 
       const desiredDisabled = news.disabled === true;

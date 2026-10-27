@@ -287,7 +287,7 @@ export const Bucket: typeof BucketResource = Object.assign(
 );
 
 export class BucketNotCreated extends Data.TaggedError("Railway.BucketNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -664,7 +664,7 @@ export const BucketProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BucketNotCreated({ name, projectId });
+        return yield* new BucketNotCreated({ resourceName: name, projectId });
       }
 
       if (current.name !== name) {

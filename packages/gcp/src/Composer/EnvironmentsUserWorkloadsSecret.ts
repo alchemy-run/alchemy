@@ -133,13 +133,13 @@ export const EnvironmentsUserWorkloadsSecret = Resource<EnvironmentsUserWorkload
 export class EnvironmentsUserWorkloadsSecretNotResolved extends Data.TaggedError(
   "GCP.Composer.EnvironmentsUserWorkloadsSecretNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class EnvironmentsUserWorkloadsSecretStillExists extends Data.TaggedError(
   "GCP.Composer.EnvironmentsUserWorkloadsSecretStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (environmentName: string, secretId: string) =>
@@ -170,7 +170,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((current) =>
       current === undefined
         ? Effect.void
-        : Effect.fail(new EnvironmentsUserWorkloadsSecretStillExists({ name })),
+        : Effect.fail(new EnvironmentsUserWorkloadsSecretStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Composer.EnvironmentsUserWorkloadsSecretStillExists",
@@ -237,7 +237,7 @@ export const EnvironmentsUserWorkloadsSecretProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentsUserWorkloadsSecretNotResolved({ name });
+        return yield* new EnvironmentsUserWorkloadsSecretNotResolved({ resourceName: name });
       }
 
       const observed = mapOf(current.data);

@@ -126,13 +126,13 @@ export const EnvironmentsUserWorkloadsConfigMap = Resource<EnvironmentsUserWorkl
 export class EnvironmentsUserWorkloadsConfigMapNotResolved extends Data.TaggedError(
   "GCP.Composer.EnvironmentsUserWorkloadsConfigMapNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class EnvironmentsUserWorkloadsConfigMapStillExists extends Data.TaggedError(
   "GCP.Composer.EnvironmentsUserWorkloadsConfigMapStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (environmentName: string, configMapId: string) =>
@@ -163,7 +163,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((current) =>
       current === undefined
         ? Effect.void
-        : Effect.fail(new EnvironmentsUserWorkloadsConfigMapStillExists({ name })),
+        : Effect.fail(new EnvironmentsUserWorkloadsConfigMapStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Composer.EnvironmentsUserWorkloadsConfigMapStillExists",
@@ -228,7 +228,7 @@ export const EnvironmentsUserWorkloadsConfigMapProvider = () =>
 
       if (current === undefined) {
         return yield* new EnvironmentsUserWorkloadsConfigMapNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

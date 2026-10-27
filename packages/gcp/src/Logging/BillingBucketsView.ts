@@ -138,7 +138,7 @@ export const BillingBucketsView = Resource<BillingBucketsView>("GCP.Logging.Bill
 export class BillingBucketsViewNotResolved extends Data.TaggedError(
   "GCP.Logging.BillingBucketsViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (
@@ -304,7 +304,7 @@ export const BillingBucketsViewProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BillingBucketsViewNotResolved({ name });
+        return yield* new BillingBucketsViewNotResolved({ resourceName: name });
       }
 
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");

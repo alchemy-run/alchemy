@@ -116,7 +116,7 @@ export const IntegrationsVersionsTestCases = Resource<IntegrationsVersionsTestCa
 export class IntegrationsVersionsTestCasesNotResolved extends Data.TaggedError(
   "GCP.Integrations.IntegrationsVersionsTestCasesNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const expandVersion = (value: string, project: string, location: string) =>
@@ -258,7 +258,7 @@ export const IntegrationsVersionsTestCasesProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new IntegrationsVersionsTestCasesNotResolved({ name });
+        return yield* new IntegrationsVersionsTestCasesNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

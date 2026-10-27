@@ -162,7 +162,7 @@ export type Job = Resource<
 export const Job = Resource<Job>("GCP.BigQuery.Job");
 
 export class JobNotResolved extends Data.TaggedError("GCP.BigQuery.JobNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class JobNotDone extends Data.TaggedError("GCP.BigQuery.JobNotDone")<{
@@ -455,7 +455,7 @@ export const JobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new JobNotResolved({ name });
+        return yield* new JobNotResolved({ resourceName: name });
       }
 
       const state = current.status?.state ?? "";

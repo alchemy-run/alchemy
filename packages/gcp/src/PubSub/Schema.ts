@@ -108,7 +108,7 @@ export type Schema = Resource<
 export const Schema = Resource<Schema>("GCP.PubSub.Schema");
 
 export class SchemaNotResolved extends Data.TaggedError("GCP.PubSub.SchemaNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const canonicalName = (name: string) => name.split("@")[0] ?? name;
@@ -234,7 +234,7 @@ export const SchemaProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SchemaNotResolved({ name });
+        return yield* new SchemaNotResolved({ resourceName: name });
       }
 
       if (!definitionsEqual(current.definition, news.definition)) {

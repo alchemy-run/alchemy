@@ -170,7 +170,7 @@ export type Queue = Resource<
 export const Queue = Resource<Queue>("GCP.CloudTasks.Queue");
 
 export class QueueNotResolved extends Data.TaggedError("GCP.CloudTasks.QueueNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -391,7 +391,7 @@ export const QueueProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new QueueNotResolved({ name });
+        return yield* new QueueNotResolved({ resourceName: name });
       }
 
       const mask: string[] = [];

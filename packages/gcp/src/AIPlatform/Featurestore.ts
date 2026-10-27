@@ -130,13 +130,13 @@ export const Featurestore = Resource<Featurestore>("GCP.AIPlatform.Featurestore"
 export class FeaturestoreNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeaturestoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FeaturestoreStillExists extends Data.TaggedError(
   "GCP.AIPlatform.FeaturestoreStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, storeId: string) =>
@@ -190,7 +190,9 @@ const getByName = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store ? Effect.succeed(store) : Effect.fail(new FeaturestoreNotResolved({ name })),
+      store
+        ? Effect.succeed(store)
+        : Effect.fail(new FeaturestoreNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeaturestoreNotResolved",
@@ -202,7 +204,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store === undefined ? Effect.void : Effect.fail(new FeaturestoreStillExists({ name })),
+      store === undefined
+        ? Effect.void
+        : Effect.fail(new FeaturestoreStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeaturestoreStillExists",
@@ -220,11 +224,11 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (store): store is aiplatform.GoogleCloudAiplatformV1Featurestore => store !== undefined,
-      () => new FeaturestoreNotResolved({ name }),
+      () => new FeaturestoreNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (store) => isReady(store.state),
-      () => new FeaturestoreNotResolved({ name }),
+      () => new FeaturestoreNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeaturestoreNotResolved",
@@ -331,7 +335,7 @@ export const FeaturestoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FeaturestoreNotResolved({ name });
+        return yield* new FeaturestoreNotResolved({ resourceName: name });
       }
 
       if (!isReady(current.state)) {

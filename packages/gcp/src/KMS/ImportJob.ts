@@ -132,11 +132,11 @@ export type ImportJob = Resource<
 export const ImportJob = Resource<ImportJob>("GCP.KMS.ImportJob");
 
 export class ImportJobNotResolved extends Data.TaggedError("GCP.KMS.ImportJobNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ImportJobPending extends Data.TaggedError("GCP.KMS.ImportJobPending")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
@@ -325,12 +325,12 @@ const waitReady = (
   > = getByName(name).pipe(
     Effect.flatMap((job): Effect.Effect<kms.ImportJob, ImportJobNotResolved | ImportJobPending> => {
       if (job === undefined) {
-        return Effect.fail(new ImportJobNotResolved({ name }));
+        return Effect.fail(new ImportJobNotResolved({ resourceName: name }));
       }
       if (job.state === "PENDING_GENERATION") {
         return Effect.fail(
           new ImportJobPending({
-            name,
+            resourceName: name,
             state: job.state,
           }),
         );
@@ -473,7 +473,7 @@ export const ImportJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ImportJobNotResolved({ name });
+        return yield* new ImportJobNotResolved({ resourceName: name });
       }
 
       if (current.state === "PENDING_GENERATION") {

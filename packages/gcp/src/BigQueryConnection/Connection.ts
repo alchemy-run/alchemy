@@ -363,7 +363,7 @@ export const Connection = Resource<Connection>("GCP.BigQueryConnection.Connectio
 export class ConnectionNotResolved extends Data.TaggedError(
   "GCP.BigQueryConnection.ConnectionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -848,7 +848,7 @@ export const ConnectionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConnectionNotResolved({ name });
+        return yield* new ConnectionNotResolved({ resourceName: name });
       }
 
       const updateMask: string[] = [];
@@ -960,7 +960,7 @@ export const ConnectionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConnectionNotResolved({ name });
+        return yield* new ConnectionNotResolved({ resourceName: name });
       }
 
       const latest = (yield* getByName(current.name ?? name)) ?? current;

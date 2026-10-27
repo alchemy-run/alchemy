@@ -226,7 +226,7 @@ export const Reservation = Resource<Reservation>("GCP.BigQueryReservation.Reserv
 export class ReservationNotResolved extends Data.TaggedError(
   "GCP.BigQueryReservation.ReservationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -472,7 +472,7 @@ export const ReservationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ReservationNotResolved({ name });
+        return yield* new ReservationNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

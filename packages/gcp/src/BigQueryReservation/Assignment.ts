@@ -147,7 +147,7 @@ export const Assignment = Resource<Assignment>("GCP.BigQueryReservation.Assignme
 export class AssignmentNotResolved extends Data.TaggedError(
   "GCP.BigQueryReservation.AssignmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_JOB_TYPE = "QUERY";
@@ -368,7 +368,7 @@ export const AssignmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AssignmentNotResolved({ name });
+        return yield* new AssignmentNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

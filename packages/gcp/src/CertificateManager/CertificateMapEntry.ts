@@ -184,13 +184,13 @@ export const CertificateMapEntry = Resource<CertificateMapEntry>(
 export class CertificateMapEntryNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.CertificateMapEntryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateMapEntryStillExists extends Data.TaggedError(
   "GCP.CertificateManager.CertificateMapEntryStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 type Match = { kind: "hostname"; hostname: string } | { kind: "matcher"; matcher: string };
@@ -372,7 +372,9 @@ const getByName = (name: string) => {
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((entry) =>
-      entry ? Effect.succeed(entry) : Effect.fail(new CertificateMapEntryNotResolved({ name })),
+      entry
+        ? Effect.succeed(entry)
+        : Effect.fail(new CertificateMapEntryNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.CertificateMapEntryNotResolved",
@@ -384,7 +386,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((entry) =>
-      entry === undefined ? Effect.void : Effect.fail(new CertificateMapEntryStillExists({ name })),
+      entry === undefined
+        ? Effect.void
+        : Effect.fail(new CertificateMapEntryStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.CertificateMapEntryStillExists",
@@ -608,7 +612,7 @@ export const CertificateMapEntryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CertificateMapEntryNotResolved({ name });
+        return yield* new CertificateMapEntryNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

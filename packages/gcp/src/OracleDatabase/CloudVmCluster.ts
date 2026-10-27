@@ -235,7 +235,7 @@ export type CloudVmCluster = Resource<
 export const CloudVmCluster = Resource<CloudVmCluster>("GCP.OracleDatabase.CloudVmCluster");
 
 const mergedProperties = (news: CloudVmClusterProps): CloudVmClusterPropertiesInput => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   licenseType: news.licenseType ?? news.properties?.licenseType,
   cpuCoreCount: news.cpuCoreCount ?? news.properties?.cpuCoreCount,
   giVersion: news.giVersion ?? news.properties?.giVersion,
@@ -453,7 +453,7 @@ export const CloudVmClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(

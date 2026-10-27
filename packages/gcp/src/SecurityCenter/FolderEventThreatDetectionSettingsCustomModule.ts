@@ -258,7 +258,7 @@ export const FolderEventThreatDetectionSettingsCustomModuleProvider = () =>
 
       if (current === undefined) {
         return yield* new SecuritycenterNotResolved({
-          name: `${parent}/customModules`,
+          resourceName: `${parent}/customModules`,
         });
       }
 

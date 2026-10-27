@@ -163,7 +163,7 @@ export const EventThreatDetectionSettingsCustomModule =
 export class EventThreatDetectionSettingsCustomModuleNotResolved extends Data.TaggedError(
   "GCP.SecurityCenter.EventThreatDetectionSettingsCustomModuleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, moduleId: string) =>
@@ -283,7 +283,7 @@ export const EventThreatDetectionSettingsCustomModuleProvider = () =>
 
       if (current === undefined) {
         return yield* new EventThreatDetectionSettingsCustomModuleNotResolved({
-          name: name || parent,
+          resourceName: name || parent,
         });
       }
 

@@ -304,7 +304,7 @@ export const ApiHubInstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name });
+        return yield* new ApihubNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -333,7 +333,7 @@ export const ApiHubInstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name: currentName });
+        return yield* new ApihubNotResolved({ resourceName: currentName });
       }
 
       return toAttrs(current, env.project, env.region);

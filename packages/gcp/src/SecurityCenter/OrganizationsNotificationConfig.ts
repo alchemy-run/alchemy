@@ -130,7 +130,7 @@ export const OrganizationsNotificationConfig = Resource<OrganizationsNotificatio
 export class OrganizationsNotificationConfigNotResolved extends Data.TaggedError(
   "GCP.SecurityCenter.OrganizationsNotificationConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, configId: string) =>
@@ -238,7 +238,7 @@ export const OrganizationsNotificationConfigProvider = () =>
 
       if (current === undefined) {
         return yield* new OrganizationsNotificationConfigNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

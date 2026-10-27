@@ -12,7 +12,7 @@ export const MAX_ID_LENGTH = 63;
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.ContainerAnalysis.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -511,7 +511,7 @@ export const reconcileNote = Effect.fn(function* (input: {
   }
 
   if (current === undefined) {
-    return yield* new ResourceNotResolved({ name: input.name });
+    return yield* new ResourceNotResolved({ resourceName: input.name });
   }
 
   const currentName = current.name ?? input.name;
@@ -630,7 +630,7 @@ export const reconcileOccurrence = Effect.fn(function* (input: {
 
   if (current === undefined) {
     return yield* new ResourceNotResolved({
-      name: input.name ?? `${input.parent}/occurrences`,
+      resourceName: input.name ?? `${input.parent}/occurrences`,
     });
   }
 

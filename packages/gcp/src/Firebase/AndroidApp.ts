@@ -242,7 +242,7 @@ export const AndroidAppProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: output?.name ?? packageName,
+          resourceName: output?.name ?? packageName,
         });
       }
 

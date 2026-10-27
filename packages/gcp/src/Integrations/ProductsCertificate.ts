@@ -130,7 +130,7 @@ export const ProductsCertificate = Resource<ProductsCertificate>(
 export class ProductsCertificateNotResolved extends Data.TaggedError(
   "GCP.Integrations.ProductsCertificateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, product: string, certificateId: string) =>
@@ -280,7 +280,7 @@ export const ProductsCertificateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ProductsCertificateNotResolved({ name });
+        return yield* new ProductsCertificateNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

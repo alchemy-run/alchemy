@@ -188,7 +188,9 @@ class VolumeTimeout extends Data.TaggedError("VolumeTimeout")<{
   status: string;
 }> {}
 
-class VolumeNotCreated extends Data.TaggedError("Hetzner.VolumeNotCreated")<{ name: string }> {}
+class VolumeNotCreated extends Data.TaggedError("Hetzner.VolumeNotCreated")<{
+  resourceName: string;
+}> {}
 
 const asFormat = (format: string | null | undefined): VolumeFormat | undefined =>
   format === "ext4" || format === "xfs" ? format : undefined;
@@ -376,7 +378,7 @@ export const VolumeProvider = () =>
         } else {
           const hit = yield* getByName(name);
           if (hit === undefined) {
-            return yield* new VolumeNotCreated({ name });
+            return yield* new VolumeNotCreated({ resourceName: name });
           }
           current = yield* waitUntilAvailable(hit.id);
         }

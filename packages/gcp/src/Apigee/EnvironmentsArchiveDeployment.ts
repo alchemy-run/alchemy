@@ -119,7 +119,7 @@ export const EnvironmentsArchiveDeployment = Resource<EnvironmentsArchiveDeploym
 export class EnvironmentsArchiveDeploymentNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsArchiveDeploymentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, environmentId: string, archiveDeploymentId: string) =>
@@ -165,7 +165,7 @@ const uploadZip = (uploadUri: string, archiveZip: string) =>
     );
     if (response.status >= 400) {
       return yield* new EnvironmentsArchiveDeploymentNotResolved({
-        name: uploadUri,
+        resourceName: uploadUri,
       });
     }
     return uploadUri;
@@ -293,7 +293,7 @@ export const EnvironmentsArchiveDeploymentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentsArchiveDeploymentNotResolved({ name });
+        return yield* new EnvironmentsArchiveDeploymentNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

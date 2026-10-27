@@ -120,7 +120,7 @@ export const DnsZone = Resource<DnsZone>("GCP.Apigee.DnsZone");
 export const Dn = DnsZone;
 
 export class DnsZoneNotResolved extends Data.TaggedError("GCP.Apigee.DnsZoneNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, dnsZoneId: string) =>
@@ -250,7 +250,7 @@ export const DnsZoneProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DnsZoneNotResolved({ name });
+        return yield* new DnsZoneNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, organization);

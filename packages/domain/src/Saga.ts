@@ -44,7 +44,11 @@ const observeRun =
           "domain.consumer": name,
           "domain.outcome": Exit.isSuccess(exit)
             ? "ok"
-            : Telemetry.outcomeOf(Option.getOrUndefined(EffectCause.findErrorOption(exit.cause))),
+            : exit.cause.pipe(
+                EffectCause.findErrorOption,
+                Option.getOrUndefined,
+                Telemetry.outcomeOf,
+              ),
         }),
       ),
       Effect.annotateLogs(attributes),

@@ -136,7 +136,7 @@ export const WorkflowTemplate = Resource<WorkflowTemplate>("GCP.Dataproc.Workflo
 export class WorkflowTemplateNotResolved extends Data.TaggedError(
   "GCP.Dataproc.WorkflowTemplateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, templateId: string) =>
@@ -293,7 +293,7 @@ export const WorkflowTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new WorkflowTemplateNotResolved({ name });
+        return yield* new WorkflowTemplateNotResolved({ resourceName: name });
       }
 
       const desired = desiredBody(

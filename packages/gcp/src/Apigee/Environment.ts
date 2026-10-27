@@ -169,7 +169,7 @@ export type Environment = Resource<
 export const Environment = Resource<Environment>("GCP.Apigee.Environment");
 
 export class EnvironmentNotResolved extends Data.TaggedError("GCP.Apigee.EnvironmentNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, environmentId: string) =>
@@ -330,7 +330,7 @@ export const EnvironmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentNotResolved({ name });
+        return yield* new EnvironmentNotResolved({ resourceName: name });
       }
 
       const observedProperties = propertiesToRecord(current.properties);

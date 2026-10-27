@@ -199,7 +199,7 @@ export const DataStoresControl = Resource<DataStoresControl>(
 export class DataStoresControlNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresControlNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_SOLUTION = "SOLUTION_TYPE_SEARCH";
@@ -374,7 +374,7 @@ export const DataStoresControlProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataStoresControlNotResolved({ name });
+        return yield* new DataStoresControlNotResolved({ resourceName: name });
       }
 
       const desired = toBody(news, displayName);

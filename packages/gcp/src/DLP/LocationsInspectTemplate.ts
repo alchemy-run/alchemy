@@ -134,7 +134,7 @@ export const LocationsInspectTemplate = Resource<LocationsInspectTemplate>(
 export class LocationsInspectTemplateNotResolved extends Data.TaggedError(
   "GCP.DLP.LocationsInspectTemplateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, templateId: string) =>
@@ -246,7 +246,7 @@ export const LocationsInspectTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LocationsInspectTemplateNotResolved({ name });
+        return yield* new LocationsInspectTemplateNotResolved({ resourceName: name });
       }
 
       const displayChanged = !jsonEqual(current.displayName, news.displayName);

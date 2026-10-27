@@ -1,4 +1,3 @@
-import type * as cf from "@cloudflare/workers-types";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { type MemoOptions } from "alchemy/Command/Memo";
 import type { Dependencies } from "alchemy/Dependencies";
@@ -45,7 +44,7 @@ import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
-import type { WorkerBinding, WorkerBindingResource, WorkerBindings } from "./WorkerBinding.ts";
+import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
 import { transformWorkerDomainProps } from "./WorkerDomainDns.ts";
 import { WorkerEnvironment, WorkerTypeId } from "./WorkerRuntime.ts";
 import {

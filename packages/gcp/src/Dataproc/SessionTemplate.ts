@@ -125,7 +125,7 @@ export const SessionTemplate = Resource<SessionTemplate>("GCP.Dataproc.SessionTe
 export class SessionTemplateNotResolved extends Data.TaggedError(
   "GCP.Dataproc.SessionTemplateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, templateId: string) =>
@@ -287,7 +287,7 @@ export const SessionTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SessionTemplateNotResolved({ name });
+        return yield* new SessionTemplateNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

@@ -14,16 +14,13 @@ import { type ResourceBinding } from "alchemy/Resource";
 import { isRedactedMarker } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { cachedFunction } from "alchemy/Util/cached-function";
-import { initialCwd } from "alchemy/Util/Node";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import { isHttpClientError } from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -1192,8 +1189,6 @@ export const LiveWorkerProvider = () =>
   Provider.effect(
     Worker,
     Effect.gen(function* () {
-      const path = yield* Path.Path;
-
       const bundler = yield* WorkerBundle;
       const stack = yield* Stack;
       const dotAlchemy = yield* dotAlchemyDirectory;

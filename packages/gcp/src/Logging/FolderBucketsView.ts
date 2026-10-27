@@ -106,7 +106,7 @@ export const FolderBucketsView = Resource<FolderBucketsView>("GCP.Logging.Folder
 export class FolderBucketsViewNotResolved extends Data.TaggedError(
   "GCP.Logging.FolderBucketsViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (bucketName: string, viewId: string) => `${bucketName}/views/${viewId}`;
@@ -215,7 +215,7 @@ export const FolderBucketsViewProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FolderBucketsViewNotResolved({ name });
+        return yield* new FolderBucketsViewNotResolved({ resourceName: name });
       }
 
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");

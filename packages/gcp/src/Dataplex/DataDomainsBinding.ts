@@ -214,7 +214,7 @@ export const DataDomainsBindingProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataplexNotResolved({ name });
+        return yield* new DataplexNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

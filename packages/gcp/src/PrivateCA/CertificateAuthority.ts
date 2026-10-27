@@ -361,20 +361,20 @@ export const CertificateAuthority = Resource<CertificateAuthority>(
 export class CertificateAuthorityNotResolved extends Data.TaggedError(
   "GCP.PrivateCA.CertificateAuthorityNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateAuthorityNotReady extends Data.TaggedError(
   "GCP.PrivateCA.CertificateAuthorityNotReady",
 )<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class CertificateAuthorityStillExists extends Data.TaggedError(
   "GCP.PrivateCA.CertificateAuthorityStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -606,7 +606,9 @@ const waitForOperation = (operation: privateca.Operation, options?: { notFoundOk
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((ca) =>
-      ca ? Effect.succeed(ca) : Effect.fail(new CertificateAuthorityNotResolved({ name })),
+      ca
+        ? Effect.succeed(ca)
+        : Effect.fail(new CertificateAuthorityNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PrivateCA.CertificateAuthorityNotResolved",
@@ -619,13 +621,13 @@ const waitUntilSteady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (ca): ca is privateca.CertificateAuthority => ca !== undefined,
-      () => new CertificateAuthorityNotResolved({ name }),
+      () => new CertificateAuthorityNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (ca) => STEADY_STATES.has((ca.state ?? "").toUpperCase()),
       (ca) =>
         new CertificateAuthorityNotReady({
-          name,
+          resourceName: name,
           state: ca.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -644,7 +646,9 @@ const isGone = (ca: privateca.CertificateAuthority | undefined) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((ca) =>
-      isGone(ca) ? Effect.void : Effect.fail(new CertificateAuthorityStillExists({ name })),
+      isGone(ca)
+        ? Effect.void
+        : Effect.fail(new CertificateAuthorityStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PrivateCA.CertificateAuthorityStillExists",
@@ -916,7 +920,7 @@ export const CertificateAuthorityProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CertificateAuthorityNotResolved({ name });
+        return yield* new CertificateAuthorityNotResolved({ resourceName: name });
       }
 
       current = yield* undeleteIfNeeded(current);

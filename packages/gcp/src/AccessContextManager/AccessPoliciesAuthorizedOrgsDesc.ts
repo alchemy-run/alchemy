@@ -141,7 +141,7 @@ export const AccessPoliciesAuthorizedOrgsDesc = Resource<AccessPoliciesAuthorize
 export class AccessPoliciesAuthorizedOrgsDescNotResolved extends Data.TaggedError(
   "GCP.AccessContextManager.AccessPoliciesAuthorizedOrgsDescNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (desc: acm.AuthorizedOrgsDesc): AccessPoliciesAuthorizedOrgsDesc["Attributes"] => {
@@ -275,7 +275,7 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
 
       if (current === undefined) {
         return yield* new AccessPoliciesAuthorizedOrgsDescNotResolved({
-          name,
+          resourceName: name,
         });
       }
 
@@ -294,7 +294,7 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
 
       if (current === undefined) {
         return yield* new AccessPoliciesAuthorizedOrgsDescNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

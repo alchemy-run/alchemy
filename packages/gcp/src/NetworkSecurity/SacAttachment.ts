@@ -128,13 +128,13 @@ export const SacAttachment = Resource<SacAttachment>("GCP.NetworkSecurity.SacAtt
 export class SacAttachmentNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.SacAttachmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SacAttachmentStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.SacAttachmentStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (attachment: networksecurity.SACAttachment, project: string, region: string) => {
@@ -163,7 +163,7 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (attachment): attachment is networksecurity.SACAttachment => attachment !== undefined,
-      () => new SacAttachmentNotResolved({ name }),
+      () => new SacAttachmentNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.SacAttachmentNotResolved",
@@ -175,7 +175,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((attachment) =>
-      attachment === undefined ? Effect.void : Effect.fail(new SacAttachmentStillExists({ name })),
+      attachment === undefined
+        ? Effect.void
+        : Effect.fail(new SacAttachmentStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.SacAttachmentStillExists",
@@ -308,7 +310,7 @@ export const SacAttachmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SacAttachmentNotResolved({ name });
+        return yield* new SacAttachmentNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);
