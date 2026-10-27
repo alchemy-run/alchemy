@@ -204,6 +204,8 @@ export const Api = ApiModule.make;
 export const protocolHttp = ApiModule.protocolHttp;
 /** An Api client protocol: calls over HTTP, each live read a WebSocket to the object that owns it. */
 export const protocolWebSocket = ApiModule.protocolWebSocket;
+/** An Api client protocol: the Api served in the caller's process, through its middleware. */
+export const protocolInProcess = ApiModule.protocolInProcess;
 
 export declare namespace Model {
   /** Any Model class. */

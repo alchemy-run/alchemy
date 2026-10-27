@@ -595,7 +595,7 @@ describe("Domain Story", () => {
   it.live("an Api exposes a command; its middleware provides the context", () =>
     Effect.gen(function* () {
       class CounterApi extends Domain.Api("CounterApi", ResetCounter) {}
-      const client = yield* CounterApi.testClient;
+      const client = yield* CounterApi.clientInProcess;
       const counters = yield* Counter;
       yield* counters.send(c1, new Increment({ by: 3 }));
       const reset = yield* client.ResetCounter(
@@ -632,7 +632,7 @@ describe("Domain Story", () => {
   it.live("an Api exposes views and aggregates; validate judges every read", () =>
     Effect.gen(function* () {
       class CounterApi extends Domain.Api("CounterApi", ResetCounter, Totals, Counter) {}
-      const client = yield* CounterApi.testClient;
+      const client = yield* CounterApi.clientInProcess;
       const counters = yield* Counter;
       const sam = { headers: Headers.fromInput({ "x-operator": "sam" }) };
       const guest = { headers: Headers.fromInput({ "x-operator": "guest" }) };
