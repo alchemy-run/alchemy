@@ -23,3 +23,5 @@ export const BuildSecretsWorker = Cloudflare.Worker(
     };
   }),
 );
+
+export default BuildSecretsWorker;
