@@ -19,7 +19,12 @@ import {
   projectNumber,
   revokeHostIam,
 } from "../Host.ts";
-import { updateIamMembership } from "../IamPolicy.ts";
+import {
+  type GcpIamResourceKind,
+  hasIamMembership,
+  revokeIamMembership,
+  updateIamMembership,
+} from "../IamPolicy.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -124,6 +129,31 @@ export type SubscriptionBigQueryConfig = {
    * @default false
    */
   dropUnknownFields?: boolean;
+  /**
+   * Service account Pub/Sub writes to BigQuery as: an `IAM.ServiceAccount`'s
+   * `email`, a referenced account's, or a literal email. Alchemy grants it
+   * `roles/bigquery.dataEditor` on the table and lets the Pub/Sub service
+   * agent act as it, then revokes only those grants when they are no
+   * longer needed; the account and any roles it already held are left
+   * alone. The deployer needs permission to edit the account's and the
+   * table's IAM policies.
+   *
+   * Omit it and Alchemy creates an account for this subscription, deleted
+   * with it.
+   */
+  serviceAccountEmail?: string;
+};
+
+/** One IAM grant a subscription made, revoked once it is no longer needed. */
+export type SubscriptionIamGrant = {
+  /** Kind of resource whose policy holds the grant. */
+  kind: GcpIamResourceKind;
+  /** Resource name of that resource. */
+  name: string;
+  /** Granted role. */
+  role: string;
+  /** Principal the role was granted to. */
+  member: string;
 };
 
 export type SubscriptionBigQueryAttributes = {
@@ -265,6 +295,8 @@ export type Subscription = Resource<
     pushConfig: SubscriptionPushConfig | undefined;
     /** BigQuery delivery, if this is a BigQuery subscription. */
     bigqueryConfig: SubscriptionBigQueryAttributes | undefined;
+    /** IAM grants this subscription made for its BigQuery writer. */
+    iamGrants?: SubscriptionIamGrant[];
   },
   never,
   Providers
@@ -669,43 +701,86 @@ const bigqueryWriterEmail = (project: string, subscription: string, instanceId: 
     hostServiceAccountId(SUBSCRIPTION_TYPE, bigqueryWriterKey(subscription, instanceId)),
   );
 
-const ensureBigQueryWriter = Effect.fn(function* (
-  project: string,
-  subscription: string,
-  instanceId: string,
-  config: SubscriptionBigQueryConfig,
-) {
+const grantKey = (grant: SubscriptionIamGrant) =>
+  `${grant.kind}\u0000${grant.name}\u0000${grant.role}\u0000${grant.member}`;
+
+/**
+ * Converge the BigQuery writer: mint the subscription's own account unless
+ * one is given, grant it write access to the table, and let Pub/Sub's
+ * service agent act as it. Returns the config Pub/Sub should run with and
+ * the grants this subscription owns: everything for a minted account, and
+ * for a given one only the grants it did not already hold.
+ */
+const ensureBigQueryWriter = Effect.fn(function* (options: {
+  project: string;
+  subscription: string;
+  instanceId: string;
+  config: SubscriptionBigQueryConfig;
+  recorded: readonly SubscriptionIamGrant[];
+}) {
+  const { project, config } = options;
   const table = parseBigQueryTable(config.table, project);
   if (table === undefined) {
     return yield* new SubscriptionInvalidBigQueryTable({ table: config.table });
   }
-  const { email } = yield* ensureHostServiceAccount({
-    project,
-    hostType: SUBSCRIPTION_TYPE,
-    resourceName: bigqueryWriterKey(subscription, instanceId),
-    actAs: false,
-  });
-  yield* updateIamMembership({
-    kind: "bigquery.table",
-    name: bigqueryTableName(table),
-    member: email,
-    add: [BIGQUERY_WRITER_ROLE],
-  });
-  // Pub/Sub's service agent mints the account's tokens to write as it.
-  yield* updateIamMembership({
-    kind: "iam.serviceAccount",
-    name: `projects/${project}/serviceAccounts/${email}`,
-    member: yield* pubsubServiceAgent(project),
-    add: ["roles/iam.serviceAccountTokenCreator"],
-  });
+  const given = config.serviceAccountEmail;
+  const email =
+    given ??
+    (yield* ensureHostServiceAccount({
+      project,
+      hostType: SUBSCRIPTION_TYPE,
+      resourceName: bigqueryWriterKey(options.subscription, options.instanceId),
+      actAs: false,
+    })).email;
+  const desired: SubscriptionIamGrant[] = [
+    {
+      kind: "bigquery.table",
+      name: bigqueryTableName(table),
+      role: BIGQUERY_WRITER_ROLE,
+      member: `serviceAccount:${email}`,
+    },
+    // Pub/Sub's service agent mints the account's tokens to write as it.
+    {
+      kind: "iam.serviceAccount",
+      name: `projects/${given === undefined ? project : "-"}/serviceAccounts/${email}`,
+      role: "roles/iam.serviceAccountTokenCreator",
+      member: yield* pubsubServiceAgent(project),
+    },
+  ];
+  const recorded = new Set(options.recorded.map(grantKey));
+  const owned: SubscriptionIamGrant[] = [];
+  for (const grant of desired) {
+    // A given account may already hold the role for other reasons: use
+    // it, but never record it, so it is never revoked.
+    if (given !== undefined && !recorded.has(grantKey(grant)) && (yield* hasIamMembership(grant))) {
+      continue;
+    }
+    yield* updateIamMembership({ ...grant, add: [grant.role] });
+    owned.push(grant);
+  }
   return {
-    table: bigqueryTableId(table),
-    useTopicSchema: config.useTopicSchema ?? false,
-    useTableSchema: config.useTableSchema ?? false,
-    writeMetadata: config.writeMetadata ?? false,
-    dropUnknownFields: config.dropUnknownFields ?? false,
-    serviceAccountEmail: email,
-  } satisfies pubsub.BigQueryConfig;
+    grants: owned,
+    config: {
+      table: bigqueryTableId(table),
+      useTopicSchema: config.useTopicSchema ?? false,
+      useTableSchema: config.useTableSchema ?? false,
+      writeMetadata: config.writeMetadata ?? false,
+      dropUnknownFields: config.dropUnknownFields ?? false,
+      serviceAccountEmail: email,
+    } satisfies pubsub.BigQueryConfig,
+  };
+});
+
+/** Revoke recorded grants that `keep` no longer contains. */
+const revokeStaleGrants = Effect.fn(function* (
+  recorded: readonly SubscriptionIamGrant[],
+  keep: readonly SubscriptionIamGrant[],
+) {
+  const kept = new Set(keep.map(grantKey));
+  for (const grant of recorded) {
+    if (kept.has(grantKey(grant))) continue;
+    yield* revokeIamMembership({ ...grant, roles: [grant.role] });
+  }
 });
 
 /**
@@ -725,31 +800,6 @@ const retryWriterGrants =
             schedule: Schedule.spaced("2 seconds"),
           }),
         );
-
-/**
- * The writer's grant on a table it no longer writes to: the previous table
- * when it changed, or any table once BigQuery delivery is turned off.
- */
-const staleWriterGrants = (
-  project: string,
-  email: string,
-  previous: pubsub.BigQueryConfig | undefined,
-  next: pubsub.BigQueryConfig | undefined,
-) => {
-  const table =
-    previous?.table === undefined || previous.serviceAccountEmail !== email
-      ? undefined
-      : parseBigQueryTable(previous.table, project);
-  return table !== undefined && bigqueryTableId(table) !== next?.table
-    ? [
-        {
-          kind: "bigquery.table" as const,
-          name: bigqueryTableName(table),
-          role: BIGQUERY_WRITER_ROLE,
-        },
-      ]
-    : [];
-};
 
 export const SubscriptionProvider = () =>
   Provider.succeed(Subscription, {
@@ -792,7 +842,7 @@ export const SubscriptionProvider = () =>
       const name = output?.name ?? resourceName(env.project, subscriptionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = { ...toAttrs(existing, env.project), iamGrants: output?.iamGrants };
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
@@ -824,10 +874,18 @@ export const SubscriptionProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const bigqueryConfig =
+      const previousGrants = output?.iamGrants ?? [];
+      const writer =
         news.bigqueryConfig === undefined
           ? undefined
-          : yield* ensureBigQueryWriter(env.project, name, instanceId, news.bigqueryConfig);
+          : yield* ensureBigQueryWriter({
+              project: env.project,
+              subscription: name,
+              instanceId,
+              config: news.bigqueryConfig,
+              recorded: previousGrants,
+            });
+      const bigqueryConfig = writer?.config;
 
       let current =
         output !== undefined
@@ -882,7 +940,6 @@ export const SubscriptionProvider = () =>
         current.bigqueryConfig,
         env.project,
       );
-      const previousBigQuery = current.bigqueryConfig;
 
       if (
         labelsChanged ||
@@ -942,22 +999,17 @@ export const SubscriptionProvider = () =>
           );
       }
 
-      // The writer itself lives until the subscription is deleted, so
-      // turning BigQuery delivery back on reuses it.
-      if (bigqueryConfigChanged) {
-        const writer = bigqueryWriterEmail(env.project, name, instanceId);
-        yield* revokeHostIam({
-          serviceAccount: writer,
-          grants: staleWriterGrants(env.project, writer, previousBigQuery, bigqueryConfig),
-        });
-      }
+      // Only after Pub/Sub switched over: revoke what the previous writer
+      // or table no longer needs. A minted writer itself lives until the
+      // subscription is deleted, so turning BigQuery back on reuses it.
+      yield* revokeStaleGrants(previousGrants, writer?.grants ?? []);
 
       const deadLetterTopic = current.deadLetterPolicy?.deadLetterTopic;
       if (deadLetterTopic !== undefined && deadLetterTopic !== "") {
         yield* grantDeadLetterAgent(env.project, name, deadLetterTopic);
       }
 
-      return toAttrs(current, env.project);
+      return { ...toAttrs(current, env.project), iamGrants: writer?.grants ?? [] };
     }),
 
     delete: Effect.fn(function* ({ instanceId, output }) {
@@ -966,9 +1018,10 @@ export const SubscriptionProvider = () =>
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
       // Pub/Sub reads lag deletes; block until it stops serving it.
       yield* waitUntilGone(output.name);
-      // Then drop the BigQuery writer Alchemy minted for it. Look it up
-      // even without a recorded config: a create that failed after minting
-      // the writer never recorded one.
+      // Then revoke the grants it made, and drop the writer Alchemy minted
+      // for it. Look the writer up even without recorded grants: a create
+      // that failed after minting it never recorded any.
+      yield* revokeStaleGrants(output.iamGrants ?? [], []);
       const writer = bigqueryWriterEmail(output.project, output.name, instanceId);
       const minted = yield* iam
         .getProjectsServiceAccounts({
@@ -979,11 +1032,7 @@ export const SubscriptionProvider = () =>
           Effect.catchTag("NotFound", () => Effect.succeed(false)),
         );
       if (minted) {
-        yield* deleteHostServiceAccount({
-          project: output.project,
-          email: writer,
-          grants: staleWriterGrants(output.project, writer, output.bigqueryConfig, undefined),
-        });
+        yield* deleteHostServiceAccount({ project: output.project, email: writer });
       }
     }),
   });
