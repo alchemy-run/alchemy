@@ -159,7 +159,6 @@ catalog:
   "@types/react-dom": "^19.3.0"
   "@types/ws": "^8.18.2"
   "@vercel/nft": "^1.10.2"
-  "@yielded/auth": "0.1.0-beta.46"
   "@vitejs/plugin-react": "^6.0.2"
   "@vitejs/plugin-rsc": "^0.5.36"
   "@vitejs/plugin-vue": "^6.0.10"

@@ -125,7 +125,7 @@ export const SessionLive = Layer.succeed(Session, (effect, { headers }) =>
 
 A `RequestContext` has a schema, so its value travels with the command to the aggregate's Durable Object. A `decide` that reads `CurrentActor` won't type-check for a command without the middleware that provides it.
 
-The middleware's server half asks your auth library who is signed in: better-auth's `auth.getSession(headers)` or yielded's `auth.verifySession(credential)`. See website `domain/better-auth` and `domain/yielded-auth`, and `examples/cloudflare-domain-better-auth` / `examples/domain-yielded-auth`.
+The middleware's server half asks your auth library who is signed in, such as better-auth's `auth.getSession(headers)`. See website `domain/better-auth` and `examples/cloudflare-domain-better-auth`.
 
 ## View
 

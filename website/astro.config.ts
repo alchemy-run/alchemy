@@ -1606,7 +1606,6 @@ export default defineConfig({
               items: [
                 { label: "Sessions and middleware", link: "/domain/sessions" },
                 { label: "Sign in with better-auth", link: "/domain/better-auth" },
-                { label: "Sign in with yielded", link: "/domain/yielded-auth" },
                 { label: "Views as security boundaries", link: "/domain/view-security" },
               ],
             },

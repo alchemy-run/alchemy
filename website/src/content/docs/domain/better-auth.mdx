@@ -502,5 +502,5 @@ Open the printed URL, sign in, and write a note.
 A test can't sign in to GitHub or Google, so the example's test runs a local OpenID Connect provider with [`oauth2-mock-server`](https://www.npmjs.com/package/oauth2-mock-server) and adds it to better-auth with its `genericOAuth` plugin. The test signs users in through the real redirect, callback and session cookie, then calls the NotesApi over HTTP: a user reads their own notes, no session is `Unauthorized`, and someone else's notebook is `NotYours`. See [`test/SignIn.test.ts`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain-better-auth/test/SignIn.test.ts).
 
 :::note
-To sign in with yielded instead, see [Sign in with yielded](/domain/yielded-auth). For other middleware, such as a second factor, see [Sessions and middleware](/domain/sessions).
+For other middleware, such as a second factor, see [Sessions and middleware](/domain/sessions).
 :::

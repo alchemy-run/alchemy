@@ -176,9 +176,6 @@
       "path": "./examples/cloudflare-domain-better-auth/tsconfig.json"
     },
     {
-      "path": "./examples/domain-yielded-auth/tsconfig.json"
-    },
-    {
       "path": "./examples/cloudflare-federated-api/tsconfig.json"
     },
     {
