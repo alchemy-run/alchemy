@@ -15,10 +15,57 @@ plain Promise API. It also covers where Alchemy
 [Bindings](/infrastructure-as-effects/binding) work and where they
 don't, since that decides how the module reaches your cloud resources.
 
-## Build one runtime per process
+## Run an Effect as a Promise
 
-A `ManagedRuntime` builds a Layer once and runs Effects against it. Make
-it at module scope, so every call shares the same services:
+`Effect.runPromise` runs an Effect and returns a Promise. Provide the
+Layer the Effect needs, and you have a function any async caller can
+`await`:
+
+```typescript
+// mail.ts
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export interface Mail {
+  to: string;
+  subject: string;
+  text: string;
+}
+
+class Mailer extends Context.Service<
+  Mailer,
+  { enqueue: (mail: Mail) => Effect.Effect<void> }
+>()("Mailer") {}
+
+const MailerLive = Layer.succeed(Mailer, {
+  enqueue: (mail) => Effect.log(`queued mail to ${mail.to}`),
+});
+
+export const enqueueMail = (mail: Mail) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const mailer = yield* Mailer;
+      yield* mailer.enqueue(mail);
+    }).pipe(Effect.provide(MailerLive)),
+  );
+```
+
+`Effect.provide` builds the Layer when the Effect starts and tears it
+down when the Effect ends. Here that happens on every call. For
+`MailerLive` that costs nothing, because the Layer only holds a plain
+object.
+
+## Build the Layer once with a ManagedRuntime
+
+Most real Layers hold something worth keeping between calls. An AWS
+client caches the credentials it resolved. A database Layer holds a
+connection pool. An RPC client holds an open socket. Building those
+Layers per call throws that state away every time: each call resolves
+credentials again, opens a new pool, or reconnects.
+
+A `ManagedRuntime` builds the Layer once and runs every Effect against
+the same services. Make it at module scope:
 
 ```typescript
 // mail.ts
@@ -45,9 +92,10 @@ const MailerLive = Layer.succeed(Mailer, {
 const runtime = ManagedRuntime.make(MailerLive);
 ```
 
-The Layer is built lazily, on the first call, and reused after that.
-Don't make a runtime per call: you'd rebuild every service, and
-connections, each time.
+The runtime builds the Layer on the first call and keeps it until you
+dispose it. Use a per-call `Effect.provide` only when the Layer holds
+plain values, or when the platform forbids sharing, as in a
+[Cloudflare Worker](#inside-a-cloudflare-worker-build-per-request).
 
 ## Export functions, not the runtime
 
@@ -217,6 +265,13 @@ process.on("SIGTERM", () => {
 environment variables, profiles, SSO, or the role of the machine the
 app runs on. That identity needs `sqs:SendMessage` on the queue. You
 grant it yourself, because Alchemy doesn't know about the app.
+
+This is the case the `ManagedRuntime` is for. `Credentials.fromChain()`
+creates its credentials cache when the Layer is built. With a per-call
+`Effect.provide`, every `enqueueMail` would start with an empty cache
+and walk the chain again, which can mean an SSO token exchange or a
+request to the instance metadata endpoint. The runtime resolves
+credentials once and reuses them until they expire.
 
 Failures are typed. `sendMessage` fails with tags like
 `QueueDoesNotExist` and `RequestThrottled`, so you can retry or recover
