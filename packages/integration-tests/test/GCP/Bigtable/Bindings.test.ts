@@ -4,7 +4,7 @@ import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import BigtableBindingsHost, { Db, Nodes, Rows } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -41,7 +41,7 @@ const expectTableGrants = Effect.gen(function* () {
   expect(hostRoles(policy)).toEqual(["roles/bigtable.viewer"]);
 });
 
-describe.skipIf(!dockerAvailable || !!process.env.FAST)(
+describe.skipIf(!!process.env.FAST)(
   "Bigtable Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:bigtable", "provider:gcp:run", "live"],

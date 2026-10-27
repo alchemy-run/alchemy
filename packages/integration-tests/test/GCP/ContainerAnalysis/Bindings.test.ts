@@ -5,7 +5,7 @@ import * as containeranalysis from "@distilled.cloud/gcp/containeranalysis_v1";
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import { currentProject, TEST_RESOURCE_URI } from "./common.ts";
 import ContainerAnalysisBindingsHost, { Authority, Signed } from "./fixtures/bindings-host.ts";
 
@@ -33,7 +33,7 @@ const projectRoles = Effect.gen(function* () {
     }));
 });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "ContainerAnalysis Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:containeranalysis", "provider:gcp:run", "live"],

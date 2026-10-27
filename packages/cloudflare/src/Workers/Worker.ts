@@ -1531,6 +1531,39 @@ export const isSelf = (value: unknown): value is Self =>
   "~alchemy/Kind" in value &&
   (value as Self)["~alchemy/Kind"] === "Cloudflare.Workers.Self";
 
+/** Options for {@link WorkerRef}. */
+export interface WorkerRefOptions {
+  /** Stage of the referenced Worker. Defaults to the current stage. */
+  stage?: string;
+  /** Stack of the referenced Worker. Defaults to the current stack. */
+  stack?: string;
+}
+
+/**
+ * `Cloudflare.Worker.ref` — by logical id, or by the Worker's declaration so
+ * the reference keeps the declaration's type (`Worker & Rpc<...>`).
+ */
+export interface WorkerRef {
+  <W extends Worker>(
+    worker: Effect.Effect<W, any, any> & PlatformIdentity,
+    options?: WorkerRefOptions,
+  ): Effect.Effect<W>;
+  (id: string, options?: WorkerRefOptions): Effect.Effect<Worker>;
+}
+
+/**
+ * Let `ref` take a declaration in place of its logical id. Only the
+ * declaration's `LogicalId` is read: it is never yielded, so the reference
+ * adds no dependency on (and does not deploy) the referenced Worker.
+ */
+const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platform: P): P => {
+  const ref = platform.ref;
+  return Object.assign(platform, {
+    ref: (worker: string | PlatformIdentity, options?: WorkerRefOptions) =>
+      ref(typeof worker === "string" ? worker : worker.LogicalId, options),
+  });
+};
+
 /**
  * A Cloudflare Worker host with deploy-time binding support and runtime export
  * collection.
@@ -2514,6 +2547,26 @@ export const isSelf = (value: unknown): value is Self =>
  * ) {}
  * ```
  *
+ * ### Cross-Stack References
+ * `Cloudflare.Worker.ref` references a Worker that another stack or stage
+ * deploys. Pass the Worker's declaration instead of its logical id to keep
+ * its type, so a service binding to it stays typed. Only the declaration's
+ * logical id is read; the referencing stack does not deploy it.
+ *
+ * **Example:** Bind a Worker owned by another stack
+ * ```typescript
+ * // Construction
+ * const greeter = yield* Cloudflare.Workers.bindWorker(
+ *   Cloudflare.Worker.ref(Greeter, { stack: "Greeter" }),
+ * );
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     return HttpServerResponse.text(yield* greeter.greet("world"));
+ *   }),
+ * };
+ * ```
+ *
  * ### R2 Bucket
  * Bind an R2 bucket in the Construction phase with `Cloudflare.R2.ReadWriteBucket`.
  * The returned handle exposes `get`, `put`, `delete`, and `list`
@@ -2666,9 +2719,15 @@ export const isSelf = (value: unknown): value is Self =>
  * @product Workers
  * @category Workers & Compute
  */
-export const Worker: ResourceClassLike<Worker> &
-  Pick<ResourceClass<Worker>, "ref"> &
-  Effect.Effect<Worker & WorkerRuntimeContext & RuntimeContext, never, Worker> & {
+export const Worker: ResourceClassLike<Worker> & {
+  /**
+   * Reference a deployed Worker — in the current stack/stage by default, or
+   * in another via `options`. Pass the Worker's declaration instead of its
+   * logical id to keep its type, including its RPC methods, for service
+   * bindings from another stack.
+   */
+  ref: WorkerRef;
+} & Effect.Effect<Worker & WorkerRuntimeContext & RuntimeContext, never, Worker> & {
     <Self, Shape extends WorkerShape, Deps = never>(): {
       <const Id extends string>(
         id: Id,
@@ -2795,25 +2854,27 @@ export const Worker: ResourceClassLike<Worker> &
      * accessor. See {@link URLEffect}.
      */
     readonly URL: URLEffect;
-  } = Platform(
-  WorkerTypeId,
-  {
-    // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
-    // `props` is `undefined` for a bare tag whose `.make` Layer has not built yet.
-    onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props ?? {}),
-    createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
-    // Normalize `main` relative to the cwd, then let `domain.dns` naming a
-    // non-Cloudflare DNS host compose Cloudflare for SaaS custom hostnames +
-    // records and rewrite `domain` into routes.
-    transformProps: (id, props) =>
-      transformWorkerDomainProps(
-        id,
-        globalThis.__ALCHEMY_RUNTIME__ || typeof props?.main !== "string"
-          ? props
-          : { ...props, main: relativeWorkerMain(props.main, process.cwd()) },
-      ),
-  },
-  { URL },
+  } = withDeclarationRef(
+  Platform(
+    WorkerTypeId,
+    {
+      // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
+      // `props` is `undefined` for a bare tag whose `.make` Layer has not built yet.
+      onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props ?? {}),
+      createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
+      // Normalize `main` relative to the cwd, then let `domain.dns` naming a
+      // non-Cloudflare DNS host compose Cloudflare for SaaS custom hostnames +
+      // records and rewrite `domain` into routes.
+      transformProps: (id, props) =>
+        transformWorkerDomainProps(
+          id,
+          globalThis.__ALCHEMY_RUNTIME__ || typeof props?.main !== "string"
+            ? props
+            : { ...props, main: relativeWorkerMain(props.main, process.cwd()) },
+        ),
+    },
+    { URL },
+  ),
 );
 
 /**

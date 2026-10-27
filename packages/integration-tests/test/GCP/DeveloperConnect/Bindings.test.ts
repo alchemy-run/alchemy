@@ -5,7 +5,7 @@ import type * as developerconnect from "@distilled.cloud/gcp/developerconnect_v1
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import DeveloperConnectBindingsHost, { linkEnabled, Source } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -33,7 +33,7 @@ const expectProjectGrants = Effect.gen(function* () {
   ]);
 });
 
-describe.skipIf(!dockerAvailable || !linkEnabled)(
+describe.skipIf(!linkEnabled)(
   "DeveloperConnect Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:developerconnect", "provider:gcp:run", "live"],
