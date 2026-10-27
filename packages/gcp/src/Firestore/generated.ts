@@ -65,3 +65,4 @@ export * from "./Rollback.ts";
 export * from "./RollbackHttp.ts";
 export * from "./RunAggregationQuery.ts";
 export * from "./RunAggregationQueryHttp.ts";
+export * from "./DatabaseAuditLogs.ts";

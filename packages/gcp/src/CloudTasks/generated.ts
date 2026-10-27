@@ -21,3 +21,4 @@ export * from "./ResumeQueue.ts";
 export * from "./ResumeQueueHttp.ts";
 export * from "./RunQueueTask.ts";
 export * from "./RunQueueTaskHttp.ts";
+export * from "./QueueAuditLogs.ts";

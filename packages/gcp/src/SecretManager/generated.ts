@@ -11,3 +11,5 @@ export * from "./ListSecretVersions.ts";
 export * from "./ListSecretVersionsHttp.ts";
 export * from "./RotateSecret.ts";
 export * from "./RotateSecretHttp.ts";
+export * from "./SecretAuditLogs.ts";
+export * from "./LocationsSecretAuditLogs.ts";

@@ -5,8 +5,17 @@ import * as Core from "@alchemy.run/test/Core";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Schedule from "effect/Schedule";
 import { expectProbe } from "../bindingHost.ts";
-import RunBindingsHost, { Api, Callee, Migrate, Workers } from "./fixtures/bindings-host.ts";
+import RunBindingsHost, {
+  Api,
+  Callee,
+  GenApi,
+  GenJob,
+  GenWorkers,
+  Migrate,
+  Workers,
+} from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -20,6 +29,9 @@ let names: {
   calleeUri: string;
   workers: string;
   job: string;
+  genApi: string;
+  genWorkers: string;
+  genJob: string;
 };
 
 type Policy = { bindings?: { role?: string; members?: string[] }[] };
@@ -54,6 +66,9 @@ describe("Run Bindings", { tags: ["provider:gcp", "provider:gcp:run", "live"] },
             calleeUri: callee.uri,
             workers: (yield* Workers).name,
             job: (yield* Migrate).name,
+            genApi: (yield* GenApi).name,
+            genWorkers: (yield* GenWorkers).name,
+            genJob: (yield* GenJob).name,
           };
         }),
       );
@@ -163,6 +178,108 @@ describe("Run Bindings", { tags: ["provider:gcp", "provider:gcp:run", "live"] },
         tags: ["provider:gcp", "provider:gcp:run", "live"],
         timeout: 600_000,
       },
+    );
+  });
+
+  const live = { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 600_000 };
+
+  describe("GetJob / ListJobExecutions / GetJobExecution / ListJobExecutionTasks / GetJobExecutionTask / CancelJobExecution / DeleteJobExecution", () => {
+    test.provider(
+      "inspects, cancels and deletes an execution as the host, granted on the job only",
+      (_stack) =>
+        Effect.gen(function* () {
+          const job = yield* expectProbe<{ name?: string }>(baseUrl, "getJob");
+          expect(job.name).toEqual(names.genJob);
+
+          // Start an execution out of band; the bindings only read and manage it.
+          const started = yield* cloudrun.runProjectsLocationsJobs({
+            name: names.genJob,
+            body: {},
+          });
+          const executionName = String(started.metadata?.name);
+          const id = executionName.split("/").at(-1)!;
+
+          const listed = yield* expectProbe<{ executions?: { name?: string }[] }>(
+            baseUrl,
+            "listExecutions",
+          );
+          expect(listed.executions?.map((e) => e.name)).toContain(executionName);
+          const out = yield* expectProbe<{
+            execution: { name?: string };
+            tasks: { tasks?: { name?: string }[] };
+            task: { name?: string };
+          }>(baseUrl, `execution?execution=${id}`).pipe(
+            // Tasks appear once the execution is scheduled.
+            Effect.repeat({
+              schedule: Schedule.spaced("3 seconds"),
+              until: (r) => (r.tasks.tasks ?? []).length > 0,
+              times: 20,
+            }),
+          );
+          expect(out.execution.name).toEqual(executionName);
+          expect(out.task.name).toEqual(out.tasks.tasks?.[0]?.name);
+
+          yield* expectProbe(baseUrl, `cancelExecution?execution=${id}`);
+          yield* expectProbe(baseUrl, `deleteExecution?execution=${id}`);
+          const gone = yield* cloudrun
+            .getProjectsLocationsJobsExecutions({ name: executionName })
+            .pipe(
+              Effect.flip,
+              Effect.repeat({
+                schedule: Schedule.spaced("3 seconds"),
+                until: (error) => error._tag === "NotFound",
+                times: 20,
+              }),
+            );
+          expect(gone._tag).toEqual("NotFound");
+
+          const policy = yield* cloudrun.getIamPolicyProjectsLocationsJobs({
+            resource: names.genJob,
+            "options.requestedPolicyVersion": 3,
+          });
+          expect(rolesOf(policy)).toEqual([
+            "roles/run.developer",
+            "roles/run.jobsExecutor",
+            "roles/run.viewer",
+          ]);
+        }),
+      live,
+    );
+  });
+
+  describe("ListServiceRevisions / GetServiceRevision / DeleteServiceRevision / ListWorkerPoolRevisions / GetWorkerPoolRevision / DeleteWorkerPoolRevision", () => {
+    test.provider(
+      "reads revisions as the host and is refused deleting the serving one",
+      (_stack) =>
+        Effect.gen(function* () {
+          const service = yield* expectProbe<{
+            listed: { revisions?: { name?: string }[] };
+            got: { name?: string };
+            delete: string;
+          }>(baseUrl, "revisions");
+          expect(service.got.name).toEqual(service.listed.revisions?.[0]?.name);
+          expect(service.got.name).toContain(`${names.genApi}/revisions/`);
+          expect(service.delete).toEqual("BadRequest");
+
+          const pool = yield* expectProbe<{
+            listed: { revisions?: { name?: string }[] };
+            got: { name?: string };
+            delete: string;
+          }>(baseUrl, "poolRevisions");
+          expect(pool.got.name).toContain(`${names.genWorkers}/revisions/`);
+          expect(pool.delete).toEqual("BadRequest");
+
+          expect(yield* serviceRoles(names.genApi)).toEqual([
+            "roles/run.developer",
+            "roles/run.viewer",
+          ]);
+          const poolPolicy = yield* cloudrun.getIamPolicyProjectsLocationsWorkerPools({
+            resource: names.genWorkers,
+            "options.requestedPolicyVersion": 3,
+          });
+          expect(rolesOf(poolPolicy)).toEqual(["roles/run.developer", "roles/run.viewer"]);
+        }),
+      live,
     );
   });
 });

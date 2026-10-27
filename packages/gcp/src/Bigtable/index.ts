@@ -13,3 +13,4 @@ export * from "./InstancesMaterializedView.ts";
 export * from "./InstancesTablesAuthorizedView.ts";
 export * from "./InstancesTablesSchemaBundle.ts";
 export * from "./Table.ts";
+export * from "./generated.ts";

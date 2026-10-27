@@ -1,0 +1,26 @@
+{
+  "discovery": "run-v2",
+  "module": "run_v2",
+  "resources": {
+    "Service": {
+      "pattern": "projects/*/locations/*/services/*",
+      "iamKind": "run.service"
+    },
+    "Job": {
+      "pattern": "projects/*/locations/*/jobs/*",
+      "iamKind": "run.job"
+    },
+    "WorkerPool": {
+      "pattern": "projects/*/locations/*/workerPools/*",
+      "iamKind": "run.workerPool"
+    }
+  },
+  "skip": {
+    "run.projects.locations.jobs.executions.exportStatus": "checks `run.locations.exportImage`, which no predefined role grants",
+    "run.projects.locations.services.revisions.exportStatus": "checks `run.locations.exportImage`, which no predefined role grants"
+  },
+  "projectGrant": {
+    "run.projects.locations.jobs.executions.tasks.get": "a job's IAM policy doesn't cover its executions' tasks",
+    "run.projects.locations.jobs.executions.tasks.list": "a job's IAM policy doesn't cover its executions' tasks"
+  }
+}

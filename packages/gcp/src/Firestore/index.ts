@@ -16,3 +16,5 @@ export * from "./WriteDatabaseHttp.ts";
 export * from "./ReadWriteDatabase.ts";
 export * from "./ReadWriteDatabaseHttp.ts";
 export * from "./generated.ts";
+export * from "./DocumentEventSource.ts";
+export * from "./DocumentEventSourceLive.ts";

@@ -41,3 +41,6 @@ export * from "./RestoreCryptoKeyVersion.ts";
 export * from "./RestoreCryptoKeyVersionHttp.ts";
 export * from "./UpdateCryptoKeyPrimaryVersion.ts";
 export * from "./UpdateCryptoKeyPrimaryVersionHttp.ts";
+export * from "./KeyRingAuditLogs.ts";
+export * from "./CryptoKeyAuditLogs.ts";
+export * from "./ImportJobAuditLogs.ts";

@@ -1,6 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
-import { serveProbes } from "../../bindingHost.ts";
+import * as Layer from "effect/Layer";
+import { outcome, probeParam, serveProbes } from "../../bindingHost.ts";
 
 const IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
 const WORKER_IMAGE = "us-docker.pkg.dev/cloudrun/container/worker-pool";
@@ -29,6 +30,20 @@ export const Migrate = GCP.Run.Job("Migrate", {
   containers: [{ image: "us-docker.pkg.dev/cloudrun/container/job:latest" }],
 });
 
+/** Service, worker pool and job the generated revision/execution bindings bind. */
+export const GenApi = GCP.Run.Service("GenApi", {
+  location: "us-central1",
+  template: { containers: [{ image: IMAGE }] },
+});
+export const GenWorkers = GCP.Run.WorkerPool("GenWorkers", {
+  location: "us-central1",
+  template: { containers: [{ image: WORKER_IMAGE }] },
+});
+export const GenJob = GCP.Run.Job("GenJob", {
+  location: "us-central1",
+  containers: [{ image: "us-docker.pkg.dev/cloudrun/container/job:latest" }],
+});
+
 /**
  * Effect-native Cloud Run service exercising every Cloud Run binding as its
  * own runtime service account. Deployed from {@link ../Bindings.test.ts}.
@@ -42,8 +57,56 @@ export default class RunBindingsHost extends GCP.Function<RunBindingsHost>()(
     const runJob = yield* GCP.Run.RunJob(Migrate);
     const callee = yield* GCP.Run.InvokeService(Callee);
 
+    const getJob = yield* GCP.Run.GetJob(GenJob);
+    const listExecutions = yield* GCP.Run.ListJobExecutions(GenJob);
+    const getExecution = yield* GCP.Run.GetJobExecution(GenJob);
+    const listTasks = yield* GCP.Run.ListJobExecutionTasks(GenJob);
+    const getTask = yield* GCP.Run.GetJobExecutionTask(GenJob);
+    const cancelExecution = yield* GCP.Run.CancelJobExecution(GenJob);
+    const deleteExecution = yield* GCP.Run.DeleteJobExecution(GenJob);
+    const listRevisions = yield* GCP.Run.ListServiceRevisions(GenApi);
+    const getRevision = yield* GCP.Run.GetServiceRevision(GenApi);
+    const deleteRevision = yield* GCP.Run.DeleteServiceRevision(GenApi);
+    const listPoolRevisions = yield* GCP.Run.ListWorkerPoolRevisions(GenWorkers);
+    const getPoolRevision = yield* GCP.Run.GetWorkerPoolRevision(GenWorkers);
+    const deletePoolRevision = yield* GCP.Run.DeleteWorkerPoolRevision(GenWorkers);
+
+    const execution = probeParam("execution");
+
     return {
       fetch: serveProbes({
+        getJob: getJob(),
+        listExecutions: listExecutions(),
+        execution: Effect.gen(function* () {
+          const id = yield* execution;
+          const got = yield* getExecution({ execution: id });
+          const tasks = yield* listTasks({ execution: id });
+          const task = tasks.tasks?.[0]?.name?.split("/").at(-1) ?? "";
+          return { execution: got, tasks, task: yield* getTask({ execution: id, task }) };
+        }),
+        cancelExecution: Effect.flatMap(execution, (id) =>
+          cancelExecution({ execution: id, body: {} }),
+        ),
+        deleteExecution: Effect.flatMap(execution, (id) => deleteExecution({ execution: id })),
+        revisions: Effect.gen(function* () {
+          const listed = yield* listRevisions();
+          const revision = listed.revisions?.[0]?.name?.split("/").at(-1) ?? "";
+          return {
+            listed,
+            got: yield* getRevision({ revision }),
+            // The serving revision can't be deleted.
+            delete: yield* outcome(deleteRevision({ revision })),
+          };
+        }),
+        poolRevisions: Effect.gen(function* () {
+          const listed = yield* listPoolRevisions();
+          const revision = listed.revisions?.[0]?.name?.split("/").at(-1) ?? "";
+          return {
+            listed,
+            got: yield* getPoolRevision({ revision }),
+            delete: yield* outcome(deletePoolRevision({ revision })),
+          };
+        }),
         getService: getService(),
         getWorkerPool: getWorkerPool(),
         runJob: runJob(),
@@ -58,5 +121,22 @@ export default class RunBindingsHost extends GCP.Function<RunBindingsHost>()(
     Effect.provide(GCP.Run.GetWorkerPoolHttp),
     Effect.provide(GCP.Run.RunJobHttp),
     Effect.provide(GCP.Run.InvokeServiceHttp),
+    Effect.provide(
+      Layer.mergeAll(
+        GCP.Run.GetJobHttp,
+        GCP.Run.ListJobExecutionsHttp,
+        GCP.Run.GetJobExecutionHttp,
+        GCP.Run.ListJobExecutionTasksHttp,
+        GCP.Run.GetJobExecutionTaskHttp,
+        GCP.Run.CancelJobExecutionHttp,
+        GCP.Run.DeleteJobExecutionHttp,
+        GCP.Run.ListServiceRevisionsHttp,
+        GCP.Run.GetServiceRevisionHttp,
+        GCP.Run.DeleteServiceRevisionHttp,
+        GCP.Run.ListWorkerPoolRevisionsHttp,
+        GCP.Run.GetWorkerPoolRevisionHttp,
+        GCP.Run.DeleteWorkerPoolRevisionHttp,
+      ),
+    ),
   ),
 ) {}

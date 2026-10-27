@@ -5,6 +5,7 @@
  *   node scripts/generate-gcp-bindings.ts                 # every configured service
  *   node scripts/generate-gcp-bindings.ts PubSub          # one service
  *   node scripts/generate-gcp-bindings.ts --report PubSub # classify only, write nothing
+ *   node scripts/generate-gcp-bindings.ts --check         # fail if any generated file is stale
  *
  * Inputs, per service, in `packages/gcp/bindings/`:
  *
@@ -86,6 +87,12 @@ interface ApiConfig {
 interface ServiceConfig extends Partial<ApiConfig> {
   /** More discovery docs whose methods bind to this service's resources. */
   apis?: ApiConfig[];
+  /**
+   * `serviceName`s the service's audit log entries carry, when they aren't
+   * just the discovery docs' hosts (Bigtable data calls log as
+   * `bigtable.googleapis.com`, admin calls as `bigtableadmin.googleapis.com`).
+   */
+  auditServices?: string[];
   resources: Record<string, ResourceConfig>;
   /** Method id → IAM permission. */
   permissions?: Record<string, string>;
@@ -243,7 +250,7 @@ interface Api extends ApiConfig {
   /** Import alias, e.g. `pubsub`. */
   ns: string;
   importPath: string;
-  doc: DiscoveryResource & { name: string };
+  doc: DiscoveryResource & { name: string; rootUrl: string };
   moduleSource: string;
 }
 
@@ -570,6 +577,98 @@ ${variants.join("\n")}
 `;
 };
 
+/**
+ * `consume<Resource>AuditLogs`: the Cloud Audit Logs entries for one
+ * resource and its children, through `GCP.Logging.AuditLogEventSource`.
+ */
+const emitAuditLogs = (
+  service: string,
+  key: string,
+  resource: ResourceConfig,
+  serviceNames: readonly string[],
+) => {
+  const variable = key[0]!.toLowerCase() + key.slice(1);
+  const type = resource.type ?? `GCP.${service}.${key}`;
+  return `${HEADER(service)}import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+import {
+  AuditLogEventSource,
+  resourceAuditLogFilter,
+  type AuditLogEventSourceProps,
+  type AuditLogEventsHandler,
+} from "../Logging/AuditLogEventSource.ts";
+import type { ${key} } from "./${key}.ts";
+
+export interface ${key}AuditLogsProps extends Omit<AuditLogEventSourceProps, "filter"> {
+  /**
+   * RPC method names to deliver, without their service prefix, e.g.
+   * \`["Delete${key}"]\` for \`google.….Delete${key}\`. Every method when omitted.
+   */
+  methods?: string[];
+}
+
+/**
+ * Subscribe an Effect handler to the Cloud Audit Logs entries for a
+ * {@link ${key}} (\`${type}\`) and its children: every call to
+ * ${serviceNames.map((name) => `\`${name}\``).join(" or ")} that names it.
+ *
+ * Admin Activity entries (configuration and metadata changes) are always
+ * written; Data Access entries (reads and data calls) only where the
+ * project enables Data Access audit logs for the service. Provide
+ * \`GCP.Logging.AuditLogEventSourceLive\` and a
+ * \`GCP.PubSub.TopicEventSource\` implementation.
+ *
+ * ### Usage
+ * **Example:** Log every change to a ${key}
+ * \`\`\`typescript
+ * yield* GCP.${service}.consume${key}AuditLogs(${variable}, (events) =>
+ *   events.pipe(Stream.runForEach((event) => Effect.log(event.methodName))),
+ * );
+ * \`\`\`
+ */
+export function consume${key}AuditLogs<Req = never, ResourceReq = never>(
+  ${variable}: ${key} | Effect.Effect<${key}, never, ResourceReq>,
+  process: AuditLogEventsHandler<Req>,
+): Effect.Effect<void, never, AuditLogEventSource | ResourceReq>;
+export function consume${key}AuditLogs<Req = never, ResourceReq = never>(
+  ${variable}: ${key} | Effect.Effect<${key}, never, ResourceReq>,
+  props: ${key}AuditLogsProps,
+  process: AuditLogEventsHandler<Req>,
+): Effect.Effect<void, never, AuditLogEventSource | ResourceReq>;
+export function consume${key}AuditLogs<Req = never, ResourceReq = never>(
+  ${variable}: ${key} | Effect.Effect<${key}, never, ResourceReq>,
+  propsOrProcess: ${key}AuditLogsProps | AuditLogEventsHandler<Req>,
+  maybeProcess?: AuditLogEventsHandler<Req>,
+): Effect.Effect<void, never, AuditLogEventSource | ResourceReq> {
+  const [{ methods, ...props }, process] =
+    typeof propsOrProcess === "function"
+      ? [{} as ${key}AuditLogsProps, propsOrProcess]
+      : [propsOrProcess, maybeProcess!];
+  const resolved = Effect.isEffect(${variable}) ? ${variable} : Effect.succeed(${variable});
+  return resolved.pipe(
+    Effect.flatMap((resource) =>
+      AuditLogEventSource.use((source) =>
+        source(
+          resource.LogicalId,
+          {
+            ...props,
+            filter: Output.map(resource.name, (resourceName) =>
+              resourceAuditLogFilter({
+                serviceNames: ${JSON.stringify(serviceNames)},
+                resourceName,
+                methods,
+              }),
+            ),
+          },
+          process,
+        ),
+      ),
+    ),
+  );
+}
+`;
+};
+
 // ============ Program ============
 
 const generateService = Effect.fn(function* (root: string, service: string, report: boolean) {
@@ -678,6 +777,22 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
     );
     written.add(`${binding.name}.ts`).add(`${binding.name}Http.ts`);
   }
+  const serviceNames = config.auditServices ?? [
+    ...new Set(apis.map((api) => new URL(api.doc.rootUrl).host.replace(/^[a-z0-9-]+\.mtls\./, ""))),
+  ];
+  const auditLogs: string[] = [];
+  for (const [key, resource] of Object.entries(config.resources)) {
+    const file = `${key}AuditLogs.ts`;
+    if (handWritten.has(file)) {
+      return yield* Effect.die(new Error(`${service}/${file} is hand-written`));
+    }
+    yield* fs.writeFileString(
+      path.join(serviceDir, file),
+      emitAuditLogs(service, key, resource, serviceNames),
+    );
+    written.add(file);
+    auditLogs.push(file);
+  }
   // Drop generated files whose method no longer generates.
   for (const file of generated) {
     if (!written.has(file) && file !== "generated.ts") {
@@ -686,8 +801,11 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
   }
   yield* fs.writeFileString(
     path.join(serviceDir, "generated.ts"),
-    `${HEADER(service)}${bindings
-      .flatMap((b) => [`export * from "./${b.name}.ts";`, `export * from "./${b.name}Http.ts";`])
+    `${HEADER(service)}${[
+      ...bindings.flatMap((b) => [`./${b.name}.ts`, `./${b.name}Http.ts`]),
+      ...auditLogs.map((file) => `./${file}`),
+    ]
+      .map((file) => `export * from "${file}";`)
       .join("\n")}\n`,
   );
   const indexPath = path.join(serviceDir, "index.ts");
@@ -806,8 +924,9 @@ const command = Command.make(
     services,
     report: Flag.Boolean("report").pipe(Flag.withDefault(false)),
     refreshRoles: Flag.Boolean("refresh-roles").pipe(Flag.withDefault(false)),
+    check: Flag.Boolean("check").pipe(Flag.withDefault(false)),
   },
-  Effect.fn(function* ({ services, report, refreshRoles: refresh }) {
+  Effect.fn(function* ({ services, report, refreshRoles: refresh, check }) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const root = path.resolve(import.meta.dirname, "..");
@@ -821,6 +940,23 @@ const command = Command.make(
       .sort();
     for (const service of services.length > 0 ? services : all) {
       yield* generateService(root, service, report);
+    }
+    if (check) {
+      // Regenerated in place: anything git now sees as changed was stale.
+      const spawner = yield* ChildProcessSpawner;
+      const status = yield* spawner.string(
+        ChildProcess.make("git", ["status", "--porcelain", "--", "packages/gcp"], {
+          cwd: root,
+          stdin: "ignore",
+        }),
+      );
+      if (status.trim().length > 0) {
+        yield* Console.error(
+          `Generated GCP bindings are out of date; run \`node scripts/generate-gcp-bindings.ts\` and commit:\n${status}`,
+        );
+        return yield* Effect.die(new Error("stale generated GCP bindings"));
+      }
+      yield* Console.log("Generated GCP bindings are up to date.");
     }
   }),
 );

@@ -97,6 +97,7 @@ export type GcpIamResourceKind =
   | "secretmanager.secret"
   | "servicedirectory.namespace"
   | "servicedirectory.service"
+  | "spanner.backup"
   | "spanner.database"
   | "spanner.instance"
   | "storage.bucket"
@@ -358,6 +359,10 @@ const TARGETS: Record<GcpIamResourceKind, (name: string) => IamPolicyTarget> = {
   "servicedirectory.service": bodyStyle(
     servicedirectory.getIamPolicyProjectsLocationsNamespacesServices,
     servicedirectory.setIamPolicyProjectsLocationsNamespacesServices,
+  ),
+  "spanner.backup": bodyStyle(
+    spanner.getIamPolicyProjectsInstancesBackups,
+    spanner.setIamPolicyProjectsInstancesBackups,
   ),
   "spanner.database": bodyStyle(
     spanner.getIamPolicyProjectsInstancesDatabases,

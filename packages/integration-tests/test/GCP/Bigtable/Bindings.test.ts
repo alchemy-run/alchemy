@@ -5,7 +5,13 @@ import * as Core from "@alchemy.run/test/Core";
 import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import * as Effect from "effect/Effect";
 import { expectProbe } from "../bindingHost.ts";
-import BigtableBindingsHost, { Db, Nodes, Rows } from "./fixtures/bindings-host.ts";
+import BigtableBindingsHost, {
+  Db,
+  GenBackup,
+  GenRows,
+  Nodes,
+  Rows,
+} from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -16,6 +22,8 @@ let hostAccount: string;
 let instanceName: string;
 let clusterName: string;
 let tableName: string;
+let genTableName: string;
+let backupName: string;
 
 const hostRoles = (policy: bigtable.Policy) =>
   (policy.bindings ?? [])
@@ -23,13 +31,17 @@ const hostRoles = (policy: bigtable.Policy) =>
     .map((binding) => binding.role)
     .sort();
 
-/** GetInstance and GetCluster grant bigtable.viewer on the instance only. */
+/**
+ * On the instance: GetInstance, GetCluster and the generated reads grant
+ * bigtable.viewer; copying a backup and restoring a table grant
+ * bigtable.editor.
+ */
 const expectInstanceGrants = Effect.gen(function* () {
   const policy = yield* bigtable.getIamPolicyProjectsInstances({
     resource: instanceName,
     body: {},
   });
-  expect(hostRoles(policy)).toEqual(["roles/bigtable.viewer"]);
+  expect(hostRoles(policy)).toEqual(["roles/bigtable.editor", "roles/bigtable.viewer"]);
 });
 
 /** GetTable grants bigtable.viewer on the table only. */
@@ -59,6 +71,8 @@ describe.skipIf(!!process.env.FAST)(
               instance: (yield* Db).name,
               cluster: (yield* Nodes).name,
               table: (yield* Rows).name,
+              genTable: (yield* GenRows).name,
+              backup: (yield* GenBackup).name,
             };
           }),
         );
@@ -67,6 +81,8 @@ describe.skipIf(!!process.env.FAST)(
         instanceName = out.instance;
         clusterName = out.cluster;
         tableName = out.table;
+        genTableName = out.genTable;
+        backupName = out.backup;
       }),
       { timeout: 900_000 },
     );
@@ -126,6 +142,93 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:bigtable", "live"],
           timeout: 600_000,
         },
+      );
+    });
+
+    const live = { tags: ["provider:gcp", "provider:gcp:bigtable", "live"], timeout: 600_000 };
+
+    describe("GenerateTableConsistencyToken / CheckTableConsistency / DropTableRowRange / ModifyTableColumnFamilies / UndeleteTable / ListTableAuthorizedViews / GetTableAuthorizedView / ListTableSchemaBundles / GetTableSchemaBundle", () => {
+      test.provider(
+        "manages the table as the host, granted on the table only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const consistent = yield* expectProbe<{ consistent?: boolean }>(baseUrl, "consistency");
+            expect(consistent.consistent).toBe(true);
+            yield* expectProbe(baseUrl, "dropRowRange");
+            const added = yield* expectProbe<{ name?: string; columnFamilies?: object }>(
+              baseUrl,
+              "addFamily",
+            );
+            expect(added.name).toEqual(genTableName);
+            expect(Object.keys(added.columnFamilies ?? {}).sort()).toEqual(["cf", "extra"]);
+            const dropped = yield* expectProbe<{ columnFamilies?: object }>(baseUrl, "dropFamily");
+            expect(Object.keys(dropped.columnFamilies ?? {})).toEqual(["cf"]);
+            expect(yield* expectProbe<string>(baseUrl, "undelete")).not.toEqual("succeeded");
+            const children = yield* expectProbe<{
+              missingAuthorizedView: string;
+              missingSchemaBundle: string;
+            }>(baseUrl, "tableChildren");
+            expect(children.missingAuthorizedView).toEqual("NotFound");
+            expect(children.missingSchemaBundle).toEqual("NotFound");
+
+            const policy = yield* bigtable.getIamPolicyProjectsInstancesTables({
+              resource: genTableName,
+              body: {},
+            });
+            expect(hostRoles(policy)).toEqual([
+              "roles/bigtable.editor",
+              "roles/bigtable.user",
+              "roles/bigtable.viewer",
+            ]);
+          }),
+        live,
+      );
+    });
+
+    describe("ListInstanceAppProfiles / GetInstanceAppProfile / ListInstanceClusters / ListInstanceTables / ListInstanceClusterBackups / GetInstanceClusterBackup / ListInstanceClusterHotTablets / ListInstanceClusterMemoryLayers / ListInstanceLogicalViews / GetInstanceLogicalView / ListInstanceMaterializedViews / GetInstanceMaterializedView / CopyInstanceClusterBackup / RestoreInstanceTable", () => {
+      test.provider(
+        "reads the instance's children and copies and restores a backup as the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{
+              defaultProfile: { name?: string };
+              clusters: { clusters?: { name?: string }[] };
+              tables: { tables?: { name?: string }[] };
+              memoryLayers: string;
+              missingLogicalView: string;
+              missingMaterializedView: string;
+            }>(baseUrl, "instance");
+            expect(out.defaultProfile.name).toEqual(`${instanceName}/appProfiles/default`);
+            expect(out.clusters.clusters?.map((c) => c.name)).toEqual([clusterName]);
+            expect(out.tables.tables?.map((t) => t.name)).toEqual(
+              expect.arrayContaining([tableName, genTableName]),
+            );
+            expect(out.memoryLayers).not.toEqual("Forbidden");
+            expect(out.missingLogicalView).toEqual("NotFound");
+            expect(out.missingMaterializedView).toEqual("NotFound");
+
+            const backups = yield* expectProbe<{
+              listed: { backups?: { name?: string }[] };
+              backup: { name?: string; sourceTable?: string };
+            }>(baseUrl, "backups");
+            expect(backups.listed.backups?.map((b) => b.name)).toContain(backupName);
+            expect(backups.backup.sourceTable).toEqual(genTableName);
+
+            // Fresh ids per attempt; both land in the instance the stack destroys.
+            const id = `gen-${yield* Effect.sync(() => crypto.randomUUID().slice(0, 8))}`;
+            const copied = yield* expectProbe<{ name?: string }>(
+              baseUrl,
+              `copyBackup?backup=${encodeURIComponent(backupName)}&id=${id}`,
+            );
+            expect(copied.name).toContain(`${instanceName}/clusters/cluster/backups/${id}`);
+            const restored = yield* expectProbe<{ name?: string }>(
+              baseUrl,
+              `restoreTable?backup=${encodeURIComponent(backupName)}&id=${id}`,
+            );
+            expect(restored.name).toContain(`${instanceName}/operations/`);
+            yield* expectInstanceGrants;
+          }),
+        live,
       );
     });
   },

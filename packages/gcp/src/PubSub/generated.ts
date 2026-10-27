@@ -23,3 +23,7 @@ export * from "./RollbackSchema.ts";
 export * from "./RollbackSchemaHttp.ts";
 export * from "./SeekSubscription.ts";
 export * from "./SeekSubscriptionHttp.ts";
+export * from "./TopicAuditLogs.ts";
+export * from "./SubscriptionAuditLogs.ts";
+export * from "./SchemaAuditLogs.ts";
+export * from "./SnapshotAuditLogs.ts";

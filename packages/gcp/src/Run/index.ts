@@ -16,3 +16,4 @@ export { TopicEventSource } from "./TopicEventSource.ts";
 export * from "./TopicPullEventSource.ts";
 export { ScheduleEventSource } from "./ScheduleEventSource.ts";
 export { EventarcEventSource } from "./EventarcEventSource.ts";
+export * from "./generated.ts";

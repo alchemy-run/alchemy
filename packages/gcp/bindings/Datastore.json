@@ -1,0 +1,5 @@
+{
+  "discovery": "datastore-v1",
+  "module": "datastore_v1",
+  "resources": {}
+}

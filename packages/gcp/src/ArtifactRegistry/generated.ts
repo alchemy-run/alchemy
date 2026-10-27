@@ -79,3 +79,4 @@ export * from "./PatchRepositoryPackageVersion.ts";
 export * from "./PatchRepositoryPackageVersionHttp.ts";
 export * from "./PatchRepositoryRule.ts";
 export * from "./PatchRepositoryRuleHttp.ts";
+export * from "./RepositoryAuditLogs.ts";

@@ -15,3 +15,4 @@ export * from "./ListWorkflowRevisions.ts";
 export * from "./ListWorkflowRevisionsHttp.ts";
 export * from "./TriggerWorkflowPubsubExecution.ts";
 export * from "./TriggerWorkflowPubsubExecutionHttp.ts";
+export * from "./WorkflowAuditLogs.ts";

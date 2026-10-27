@@ -1,9 +1,10 @@
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
+import * as serviceusage from "@distilled.cloud/gcp/unstable/serviceusage_v1beta1";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import { Resource, type ResourceBinding } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -11,6 +12,8 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import { DeleteNotConfirmed } from "../Errors.ts";
+import { projectNumber } from "../Host.ts";
+import { updateIamMembership } from "../IamPolicy.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -18,6 +21,7 @@ import {
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 export type CustomerManagedEncryption = {
@@ -70,6 +74,15 @@ export type SecretTopic = {
    * Pub/Sub topic resource name (`projects/{project}/topics/{topic}`).
    */
   name?: string;
+};
+
+/**
+ * What an event source binds onto a secret: notification topics merged
+ * with `topics`. The provider grants the Secret Manager service agent
+ * `roles/pubsub.publisher` on each bound topic.
+ */
+export type SecretBinding = {
+  topics?: SecretTopic[];
 };
 
 export type SecretProps = {
@@ -155,7 +168,7 @@ export type Secret = Resource<
     /** Delayed-destroy TTL, if set. */
     versionDestroyTtl: string | undefined;
   },
-  never,
+  SecretBinding,
   Providers
 >;
 
@@ -212,6 +225,36 @@ export class SecretNotResolved extends Data.TaggedError("GCP.SecretManager.Secre
 }> {}
 
 const DEFAULT_REPLICATION: Replication = { automatic: {} };
+
+/**
+ * Grant the Secret Manager service agent (created on first use, so
+ * generate it) `roles/pubsub.publisher` on each bound notification topic.
+ */
+const grantNotificationPublisher = (project: string, topics: SecretTopic[]) =>
+  Effect.gen(function* () {
+    if (topics.length === 0) return;
+    const number = yield* projectNumber(project);
+    const operation = yield* serviceusage
+      .generateServiceIdentityServices({
+        parent: `projects/${number}/services/secretmanager.googleapis.com`,
+      })
+      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+    if (operation !== undefined) {
+      yield* waitForOperation(operation, (name) => serviceusage.getOperations({ name }), {
+        budget: "2 minutes",
+        interval: "2 seconds",
+      });
+    }
+    for (const topic of topics) {
+      if (!topic.name) continue;
+      yield* updateIamMembership({
+        kind: "pubsub.topic",
+        name: topic.name,
+        member: `serviceAccount:service-${number}@gcp-sa-secretmanager.iam.gserviceaccount.com`,
+        add: ["roles/pubsub.publisher"],
+      });
+    }
+  });
 
 const secretIdOf = (name: string) => name.split("/").pop() ?? name;
 
@@ -424,7 +467,7 @@ export const SecretProvider = () =>
         );
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const env = yield* GcpEnvironment.current;
       const secretId = yield* toId(id, news.secretId, output?.secretId);
       const name = resourceName(env.project, secretId);
@@ -434,7 +477,16 @@ export const SecretProvider = () =>
       };
       const desiredAnnotations = news.annotations ?? {};
       const desiredAliases = news.versionAliases ?? {};
-      const desiredTopics = news.topics ?? [];
+      const boundTopics = (bindings as ResourceBinding<SecretBinding>[]).flatMap(
+        (binding) => binding.data?.topics ?? [],
+      );
+      const desiredTopics = [
+        ...new Map(
+          [...(news.topics ?? []), ...boundTopics].map((topic) => [topic.name, topic]),
+        ).values(),
+      ];
+      // Secret Manager rejects a topic its service agent can't publish to.
+      yield* grantNotificationPublisher(env.project, boundTopics);
       const desiredRotation = news.rotation;
       const desiredDestroyTtl = news.versionDestroyTtl;
 
