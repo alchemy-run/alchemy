@@ -1,10 +1,10 @@
 import * as GitHub from "@alchemy.run/github";
-import { GitHubCredentials } from "@alchemy.run/github/Credentials";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { scopedToOwner } from "./scope.ts";
 
 const { test } = Test.make({ providers: GitHub.providers() });
 
@@ -51,24 +51,7 @@ test.provider.skipIf(!owner)(
       // Resolve the provider with the typed helper so `list()`'s element type
       // is the resource's `Attributes` (no `any`).
       const provider = yield* Provider.findProvider(GitHub.Variable);
-      const credentials = yield* yield* GitHubCredentials;
-      const client = credentials.octokit({ baseUrl: undefined });
-      // Exercise provider pagination within the dedicated test organization.
-      client.hook.before("request", (options) => {
-        const url = new URL(options.url, "https://api.github.com");
-        if (url.pathname === "/user/repos") {
-          url.pathname = `/orgs/${owner}/repos`;
-          options.url = url.toString();
-        }
-      });
-      const all = yield* provider
-        .list()
-        .pipe(
-          Effect.provideService(
-            GitHubCredentials,
-            Effect.succeed({ ...credentials, octokit: () => client }),
-          ),
-        );
+      const all = yield* provider.list().pipe(scopedToOwner(owner));
 
       // `list()` enumerates variables across repositories in the test org.
       // The variable we just deployed guarantees at least one row. The

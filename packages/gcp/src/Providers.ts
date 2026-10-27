@@ -1529,6 +1529,11 @@ import {
   ServiceAccountKey as IamServiceAccountKey,
   ServiceAccountKeyProvider as IamServiceAccountKeyProvider,
 } from "./IAM/ServiceAccountKey.ts";
+import { WorkloadIdentityPool, WorkloadIdentityPoolProvider } from "./IAM/WorkloadIdentityPool.ts";
+import {
+  WorkloadIdentityProvider,
+  WorkloadIdentityProviderProvider,
+} from "./IAM/WorkloadIdentityProvider.ts";
 import {
   BrandsIdentityAwareProxyClient,
   BrandsIdentityAwareProxyClientProvider,
@@ -3588,6 +3593,8 @@ const makeProviders = () =>
           JobTemplate,
           IamServiceAccount,
           IamServiceAccountKey,
+          WorkloadIdentityPool,
+          WorkloadIdentityProvider,
           ProjectService,
         ]) as unknown as Effect.Effect<{ providers: Record<string, any> }, never, never>).providers,
       );
@@ -4710,6 +4717,8 @@ const makeProviders = () =>
                 IamMemberProvider(),
                 IamServiceAccountProvider(),
                 IamServiceAccountKeyProvider(),
+                WorkloadIdentityPoolProvider(),
+                WorkloadIdentityProviderProvider(),
                 ProjectServiceProvider(),
                 SasportalSignedCustomersDeploymentsDeviceProvider(),
                 SasportalSignedNodesDeploymentsDeviceProvider(),

@@ -22,10 +22,14 @@ const getKey = (name: string) =>
     }),
   );
 
-const waitUntilGone = (name: string) =>
+// Once the owning account is deleted too, reading its key is a 403, not a 404.
+const waitUntilGone = (name: string, options?: { accountDeleted?: boolean }) =>
   iam.getProjectsServiceAccountsKeys({ name }).pipe(
     Effect.as("found" as const),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+    Effect.catchTag("Forbidden", (error) =>
+      options?.accountDeleted ? Effect.succeed("gone" as const) : Effect.fail(error),
+    ),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -73,7 +77,7 @@ test.provider(
       expect(yield* waitUntilGone(created.key.name)).toEqual("gone");
 
       yield* stack.destroy();
-      expect(yield* waitUntilGone(replaced.key.name)).toEqual("gone");
+      expect(yield* waitUntilGone(replaced.key.name, { accountDeleted: true })).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 180_000 },
 );

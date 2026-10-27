@@ -321,7 +321,7 @@ import { AccountId } from "../Account.id.ts";
 +            return bank.AccountSummary.watch(accountId);
 +          }),
 +        ).pipe(
-+          Stream.map((summary) =>
++          Stream.map(({ state: summary }) =>
 +            Message.GotBalance({ balance: summary?.owner ? summary.balance : null }),
 +          ),
 +          Stream.catch((error) => Stream.succeed(Message.Failed({ reason: error._tag }))),

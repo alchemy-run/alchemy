@@ -1,11 +1,13 @@
 import * as GitHub from "@alchemy.run/github";
-import { GitHubCredentials } from "@alchemy.run/github/Credentials";
-import { Octokit } from "@alchemy.run/github/Octokit";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as Issues from "@distilled.cloud/github/issues";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import { scopedToOwner } from "./scope.ts";
+import { gh } from "./scope.ts";
 
 const { test } = Test.make({
   providers: GitHub.providers({ baseUrl: "github.com" }),
@@ -83,21 +85,19 @@ test.provider(
       expect(result2.label.color).toBe("ff0000");
       expect(result2.label.description).toBe("Updated: Critical bug");
       expect(result2.label.labelId).toBe(result1.label.labelId);
-
-      const client = yield* Octokit;
-      const observed = yield* Effect.tryPromise(() =>
-        client.rest.issues.getLabel({ owner, repo: repoName, name: "bug" }),
-      );
-      expect(observed.data.id).toBe(result1.label.labelId);
-      expect(observed.data.color).toBe("ff0000");
-      expect(observed.data.description).toBe("Updated: Critical bug");
+      const observed = yield* gh(Issues.getLabel({ owner, repo: repoName, name: "bug" }));
+      expect(observed.id).toBe(result1.label.labelId);
+      expect(observed.color).toBe("ff0000");
+      expect(observed.description).toBe("Updated: Critical bug");
 
       yield* stack.destroy();
-      const remaining = yield* Effect.tryPromise(() =>
-        client.paginate(client.rest.issues.listLabelsForRepo, {
-          owner,
-          repo: repoName,
-        }),
+      const remaining = yield* gh(
+        Stream.runCollect(
+          Issues.listLabelsForRepo.items({
+            owner,
+            repo: repoName,
+          }),
+        ),
       );
       expect(remaining.some((label) => label.name === "bug")).toBe(false);
     }),
@@ -267,24 +267,8 @@ test.provider(
       const result = yield* deploy();
 
       // List all labels and verify ours is included
-      const credentials = yield* yield* GitHubCredentials;
-      const client = credentials.octokit();
-      client.hook.before("request", (options) => {
-        const url = new URL(options.url, "https://api.github.com");
-        if (url.pathname === "/user/repos") {
-          url.pathname = `/orgs/${owner}/repos`;
-          options.url = url.toString();
-        }
-      });
       const provider = yield* Provider.findProvider(GitHub.Label);
-      const allLabels = yield* provider
-        .list()
-        .pipe(
-          Effect.provideService(
-            GitHubCredentials,
-            Effect.succeed({ ...credentials, octokit: () => client }),
-          ),
-        );
+      const allLabels = yield* provider.list().pipe(scopedToOwner(owner));
       const found = allLabels.find((l) => l.labelId === result.label.labelId);
 
       expect(found).toBeDefined();

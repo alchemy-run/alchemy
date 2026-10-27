@@ -46,7 +46,7 @@ const { reply } = yield* bank.DepositMoney({ target: accountId, amount: 500 });
 
 ### Views
 
-A view becomes a namespace with five reads: `get` for the current state, `watch` for the state and every change, `events` for its emitted events, history first, `list` for a page of them, and `snapshot` for the state with the cursor it is valid at. `get`, `list` and `snapshot` also take `atLeast`, to read your own write, and fail with `ConsistencyTimeout` if the view hasn't applied it within 10 seconds. Its middleware and `validate` decide who may read which key, on every read and on every change while a client watches.
+A view becomes a namespace with five reads: `get` for the current state, `watch` for the state and every change, each with its cursor, `events` for its emitted events (history, a `CaughtUp` frame, then live), `list` for a page of them, and `snapshot` for the state with the cursor it is valid at. Streams and aggregates send the same shapes; see [Know when a live read is current](/domain/view#know-when-a-live-read-is-current). `get`, `list` and `snapshot` also take `atLeast`, to read your own write, and fail with `ConsistencyTimeout` if the view hasn't applied it within 10 seconds. Its middleware and `validate` decide who may read which key, on every read and on every change while a client watches.
 
 ```typescript title="packages/server/test/apiEntries.ts"
 const summary = yield* bank.AccountSummary.get(accountId);
@@ -187,7 +187,7 @@ export const depositAndWatch = Effect.gen(function* () {
   yield* Effect.log(`balance ${reply.balance}`);
   yield* bank.AccountSummary.watch(accountId).pipe(
     Stream.take(2),
-    Stream.runForEach((summary) => Effect.log(`balance is now ${summary?.balance}`)),
+    Stream.runForEach(({ state }) => Effect.log(`balance is now ${state?.balance}`)),
   );
 });
 ```

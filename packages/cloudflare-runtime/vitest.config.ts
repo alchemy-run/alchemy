@@ -1,7 +1,7 @@
 import path from "node:path";
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { loadEnv } from "vite";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 const sourceRoot = (...parts: Array<string>) => path.resolve(import.meta.dirname, "src", ...parts);
 
@@ -11,22 +11,19 @@ const viteRoot = sourceRoot("vite");
 const workersSharedRoot = sourceRoot("internal/workers-shared");
 const workflowsSharedRoot = sourceRoot("internal/workflows-shared");
 
-// Suites that run Linux containers. CI runs them on its Linux runner only
-// (`--project '!core-docker'` elsewhere): macOS runners have no Docker, and
-// Windows runners only run Windows containers.
-const dockerSuites = [
-  "test/Docker.test.ts",
+/**
+ * Suites that run Linux container images on a Docker daemon. CI's macOS and
+ * Windows runners can't host one (Apple Silicon VMs have no nested
+ * virtualization; Windows runs only Windows containers), so
+ * cloudflare-tools.yml sets `ALCHEMY_TEST_EXCLUDE_LINUX_CONTAINERS` there and
+ * these run on its Linux runner. Everywhere else they run, and a missing
+ * daemon fails them.
+ */
+const linuxContainerSuites = [
+  "test/DockerDaemon.test.ts",
   "test/bindings/Container.test.ts",
   "test/bindings/NativeContainer.test.ts",
 ];
-
-const coreTest = {
-  setupFiles: ["./test/setup.ts"],
-  pool: "forks",
-  testTimeout: 30_000,
-  hookTimeout: 30_000,
-  retry: process.env.CI ? 2 : 0,
-} as const;
 
 export default defineConfig({
   test: {
@@ -35,18 +32,16 @@ export default defineConfig({
       {
         root: coreRoot,
         test: {
-          ...coreTest,
           name: "core",
           include: ["test/**/*.test.ts"],
-          exclude: dockerSuites,
-        },
-      },
-      {
-        root: coreRoot,
-        test: {
-          ...coreTest,
-          name: "core-docker",
-          include: dockerSuites,
+          exclude: process.env.ALCHEMY_TEST_EXCLUDE_LINUX_CONTAINERS
+            ? [...configDefaults.exclude, ...linuxContainerSuites]
+            : configDefaults.exclude,
+          setupFiles: ["./test/setup.ts"],
+          pool: "forks",
+          testTimeout: 30_000,
+          hookTimeout: 30_000,
+          retry: process.env.CI ? 2 : 0,
         },
       },
       {

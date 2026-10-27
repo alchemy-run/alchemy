@@ -1,12 +1,13 @@
 import * as GitHub from "@alchemy.run/github";
-import { Octokit } from "@alchemy.run/github/Octokit";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as Repos from "@distilled.cloud/github/repos";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { gh } from "./scope.ts";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
@@ -31,23 +32,13 @@ const repoName = (repository: GitHub.Repository) =>
 
 const getProtection = (branch: string, repository: string = repo) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: async () => {
-        try {
-          const { data } = await octokit.rest.repos.getBranchProtection({
-            owner,
-            repo: repository,
-            branch,
-          });
-          return data;
-        } catch (error: any) {
-          if (error.status === 404) return undefined;
-          throw error;
-        }
-      },
-      catch: (e) => e as Error,
-    });
+    return yield* gh(
+      Repos.getBranchProtection({
+        owner,
+        repo: repository,
+        branch,
+      }),
+    ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
   });
 
 const hostRepository = GitHub.Repository("Repo", {

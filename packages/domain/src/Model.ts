@@ -621,7 +621,7 @@ const viewHost = (
       readAtLeast(Aggregate.targetId(key), options).pipe(
         Effect.map((snapshot) => ({
           state: Option.getOrNull(decodeSnapshot(kernel, view, snapshot)),
-          cursor: String(snapshot.seq),
+          cursor: snapshot.seq,
         })),
       ),
     waitFor: (key, where, options) =>
@@ -641,7 +641,7 @@ const viewHost = (
     watch,
     watchEach,
     events: (key, options) =>
-      store.tail(Aggregate.targetId(key), options?.after ? Number(options.after) : 0).pipe(
+      store.tail(Aggregate.targetId(key), options?.after ?? 0).pipe(
         Stream.map((entry) => kernel.decodeViewEntry(view, entry)),
         Stream.filter((entry) => matches(options?.where, entry.event)),
       ),
@@ -649,7 +649,7 @@ const viewHost = (
       store.list(Aggregate.targetId(key)).pipe(
         Effect.map((stored) => {
           const desc = options?.order === "desc";
-          const after = options?.after === undefined ? undefined : Number(options.after);
+          const after = options?.after;
           const rows = (desc ? [...stored].reverse() : stored)
             .filter((row) => after === undefined || (desc ? row.seq < after : row.seq > after))
             .map((row) => ({ seq: row.seq, entry: kernel.decodeViewEntry(view, row) }))
@@ -658,8 +658,7 @@ const viewHost = (
           const page = rows.slice(0, take);
           return {
             entries: page.map((row) => row.entry),
-            cursor:
-              rows.length > take && page.length > 0 ? String(page[page.length - 1]!.seq) : null,
+            cursor: rows.length > take && page.length > 0 ? page[page.length - 1]!.seq : null,
           };
         }),
       ),
@@ -732,7 +731,7 @@ const streamHost = (
       store.list(Aggregate.targetId(key)).pipe(
         Effect.map((stored) => {
           const desc = options?.order === "desc";
-          const after = options?.after === undefined ? undefined : Number(options.after);
+          const after = options?.after;
           const rows = (desc ? [...stored].reverse() : stored)
             .filter((row) => after === undefined || (desc ? row.seq < after : row.seq > after))
             .map((row) => ({ seq: row.seq, entry: decode(row) }))
@@ -741,8 +740,7 @@ const streamHost = (
           const page = rows.slice(0, take);
           return {
             entries: page.map((row) => row.entry),
-            cursor:
-              rows.length > take && page.length > 0 ? String(page[page.length - 1]!.seq) : null,
+            cursor: rows.length > take && page.length > 0 ? page[page.length - 1]!.seq : null,
           };
         }),
       ),

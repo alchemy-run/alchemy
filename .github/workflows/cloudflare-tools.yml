@@ -70,8 +70,10 @@ jobs:
       # Type checking is OS-independent and runs once in check.yml
       # (`pnpm typecheck`). Test builds what it needs via ensure:built.
       - name: Test
-        # Container suites need Linux containers, so they run on the Linux runner only.
-        run: pnpm ${{ runner.os == 'Linux' && 'test:cloudflare-packages' || 'test:cloudflare-packages:no-docker' }}
+        run: pnpm test:cloudflare-packages
         env:
           # Limit concurrent package test runs on the smaller runners.
           pnpm_config_workspace_concurrency: ${{ runner.os == 'Windows' && '3' || runner.os == 'macOS' && '2' || '' }}
+          # No Docker daemon for Linux images on these runners; the Linux job
+          # runs the container suites (see packages/cloudflare-runtime/vitest.config.ts).
+          ALCHEMY_TEST_EXCLUDE_LINUX_CONTAINERS: ${{ runner.os != 'Linux' && '1' || '' }}

@@ -10,11 +10,11 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import { revokeHostIam, syncHostIam, type AppliedIamGrant, type GcpIamGrant } from "../Host.ts";
-import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
+import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { encodeOwnedDescription, hasOwnedDescription, parseOwnedDescription } from "./internal.ts";
 
 const ACCOUNT_ID_MAX = 30;
-const DESCRIPTION_MAX = 256;
 
 export type ServiceAccountProps = {
   /** Project that owns the account. Defaults to the current GCP project. */
@@ -121,43 +121,6 @@ const emailOf = (project: string, accountId: string) =>
 const nameOf = (project: string, accountId: string) =>
   `projects/${project}/serviceAccounts/${emailOf(project, accountId)}`;
 
-const encodeDescription = (
-  labels: Record<string, string>,
-  description: string | undefined,
-): string => {
-  const marker = `[alchemy ${alchemyLabelKeys.stack}=${labels[alchemyLabelKeys.stack]} ${alchemyLabelKeys.stage}=${labels[alchemyLabelKeys.stage]} ${alchemyLabelKeys.id}=${labels[alchemyLabelKeys.id]}]`;
-  if (!description) return marker.slice(0, DESCRIPTION_MAX);
-  const sep = "\n";
-  const budget = DESCRIPTION_MAX - marker.length - sep.length;
-  if (budget <= 0) return marker.slice(0, DESCRIPTION_MAX);
-  return `${marker}${sep}${description.slice(0, budget)}`;
-};
-
-const parseDescription = (
-  description: string | undefined,
-): {
-  labels: Record<string, string>;
-  description: string | undefined;
-} => {
-  if (!description?.startsWith("[alchemy ")) {
-    return { labels: {}, description };
-  }
-  const end = description.indexOf("]");
-  if (end < 0) return { labels: {}, description };
-  const labels: Record<string, string> = {};
-  for (const part of description.slice("[alchemy ".length, end).split(/\s+/)) {
-    const eq = part.indexOf("=");
-    if (eq > 0) {
-      labels[part.slice(0, eq)] = part.slice(eq + 1);
-    }
-  }
-  const rest = description.slice(end + 1).replace(/^\n/, "");
-  return { labels, description: rest.length > 0 ? rest : undefined };
-};
-
-const hasOwnershipMarker = (description: string | undefined) =>
-  Object.keys(parseDescription(description).labels).some((key) => key.startsWith("alchemy-"));
-
 const toAttrs = (account: iam.ServiceAccount, project: string): ServiceAccount["Attributes"] => {
   const email = account.email ?? "";
   const accountId = accountIdFromEmail(email);
@@ -169,7 +132,7 @@ const toAttrs = (account: iam.ServiceAccount, project: string): ServiceAccount["
     uniqueId: account.uniqueId,
     oauth2ClientId: account.oauth2ClientId,
     displayName: account.displayName,
-    description: parseDescription(account.description).description,
+    description: parseOwnedDescription(account.description).description,
     disabled: account.disabled,
   };
 };
@@ -216,7 +179,7 @@ export const ServiceAccountProvider = () =>
       const existing = yield* getByName(output?.name ?? nameOf(project, accountId));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, project);
-      const { labels } = parseDescription(existing.description);
+      const { labels } = parseOwnedDescription(existing.description);
       return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
     }),
 
@@ -230,7 +193,7 @@ export const ServiceAccountProvider = () =>
           })
           .pipe(
             Stream.flatMap((page) => Stream.fromIterable(page.accounts ?? [])),
-            Stream.filter((account) => hasOwnershipMarker(account.description)),
+            Stream.filter((account) => hasOwnedDescription(account.description)),
             Stream.map((account) => toAttrs(account, env.project)),
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
@@ -244,7 +207,7 @@ export const ServiceAccountProvider = () =>
       const accountId = yield* toAccountId(id, news.accountId, output?.accountId);
       const name = output?.name ?? nameOf(project, accountId);
       const internal = yield* createInternalLabels(id);
-      const desiredDescription = encodeDescription(internal, news.description);
+      const desiredDescription = encodeOwnedDescription(internal, news.description);
 
       // Observe
       let current = yield* getByName(name);
