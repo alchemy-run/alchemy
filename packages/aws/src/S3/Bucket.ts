@@ -779,12 +779,15 @@ export const BucketProvider = () =>
         newTags,
         session,
         operation,
+        previous,
       }: {
         bucketName: string;
         oldTags?: Record<string, string>;
         newTags?: Record<string, string>;
         session: ScopedPlanStatusSession;
         operation: "create" | "update";
+        /** The last observed projection (`output`); a divergence forces the write. */
+        previous?: unknown;
       }) {
         // Compare against the cloud's actual tags so drift surfaces
         // correctly even after a cold-start adoption (where olds.tags
@@ -802,10 +805,14 @@ export const BucketProvider = () =>
           `S3 Bucket ${operation}: bucket=${bucketName} removedTags=${removed.length} upsertTags=${Object.keys(upsert).length}`,
         );
 
-        if (removed.length === 0 && Object.keys(upsert).length === 0) {
+        if (
+          removed.length === 0 &&
+          Object.keys(upsert).length === 0 &&
+          settled(previous, withoutOwnerTag(previousTags))
+        ) {
           return withoutOwnerTag(previousTags);
         }
-        const settled = settle(readBucketTags(bucketName), (observed) =>
+        const written = settle(readBucketTags(bucketName), (observed) =>
           deepEqual(observed, expected),
         );
 
@@ -823,7 +830,7 @@ export const BucketProvider = () =>
             },
           });
           yield* session.note(`Updated bucket tags: ${bucketName}`);
-          return yield* settled;
+          return yield* written;
         }
 
         yield* Effect.logInfo(`S3 Bucket ${operation}: removing all tags from ${bucketName}`);
@@ -831,7 +838,7 @@ export const BucketProvider = () =>
           Bucket: bucketName,
         });
         yield* session.note(`Removed all tags from bucket: ${bucketName}`);
-        return yield* settled;
+        return yield* written;
       });
 
       const parsePolicy = (policy: string): unknown => {
@@ -853,12 +860,15 @@ export const BucketProvider = () =>
         explicitStatements,
         session,
         operation,
+        previous,
       }: {
         bucketName: string;
         session: ScopedPlanStatusSession;
         bindings: ResourceBinding<Bucket["Binding"]>[];
         explicitStatements?: PolicyStatement[];
         operation: "create" | "update";
+        /** The last observed projection (`output`); a divergence forces the write. */
+        previous?: unknown;
       }) {
         const policyStatements = [
           ...(explicitStatements ?? []),
@@ -880,7 +890,7 @@ export const BucketProvider = () =>
           `S3 Bucket ${operation}: bucket=${bucketName} policyStatements=${policyStatements.length}`,
         );
 
-        if (matches(existingPolicy)) {
+        if (matches(existingPolicy) && settled(previous, existingPolicy)) {
           return existingPolicy;
         }
 
@@ -1221,6 +1231,15 @@ export const BucketProvider = () =>
           }),
         );
 
+      /**
+       * S3 can serve a stale read, so a sync may only skip its write when the
+       * last observation (`output`, which drift fills with what it just read)
+       * agrees with the current read. `undefined` (no observation yet, or a
+       * row from before the attribute existed) is no evidence either way.
+       */
+      const settled = (previous: unknown, current: unknown) =>
+        previous === undefined || deepEqual(previous, current);
+
       const projectVersioning = (
         current: s3.GetBucketVersioningOutput,
         versioning: BucketProps["versioning"],
@@ -1235,11 +1254,14 @@ export const BucketProvider = () =>
         versioning,
         mfaDelete,
         session,
+        previous,
       }: {
         bucketName: string;
         versioning?: "Enabled" | "Suspended";
         mfaDelete?: "Enabled" | "Disabled";
         session: ScopedPlanStatusSession;
+        /** The last observed projection (`output`); a divergence forces the write. */
+        previous?: unknown;
       }) {
         if (versioning === undefined && mfaDelete === undefined) {
           return projectVersioning({}, versioning, mfaDelete);
@@ -1248,7 +1270,12 @@ export const BucketProvider = () =>
         const matches = (current: s3.GetBucketVersioningOutput) =>
           deepEqual(projectVersioning(current, versioning, mfaDelete), { versioning, mfaDelete });
         const current = yield* read;
-        if (matches(current)) return projectVersioning(current, versioning, mfaDelete);
+        if (
+          matches(current) &&
+          settled(previous, projectVersioning(current, versioning, mfaDelete))
+        ) {
+          return projectVersioning(current, versioning, mfaDelete);
+        }
         yield* s3.putBucketVersioning({
           Bucket: bucketName,
           VersioningConfiguration: {
@@ -1281,10 +1308,13 @@ export const BucketProvider = () =>
         bucketName,
         publicAccessBlock,
         session,
+        previous,
       }: {
         bucketName: string;
         publicAccessBlock?: BucketPublicAccessBlock;
         session: ScopedPlanStatusSession;
+        /** The last observed projection (`output`); a divergence forces the write. */
+        previous?: unknown;
       }) {
         if (publicAccessBlock === undefined) return undefined;
         const desired: s3.PublicAccessBlockConfiguration = {
@@ -1297,7 +1327,7 @@ export const BucketProvider = () =>
         const matches = (current: Required<BucketPublicAccessBlock>) =>
           deepEqual(current, projectPublicAccessBlock(desired));
         const current = yield* read;
-        if (matches(current)) return current;
+        if (matches(current) && settled(previous, current)) return current;
         yield* s3.putPublicAccessBlock({
           Bucket: bucketName,
           PublicAccessBlockConfiguration: desired,
@@ -1329,17 +1359,20 @@ export const BucketProvider = () =>
         bucketName,
         cors,
         session,
+        previous,
       }: {
         bucketName: string;
         cors?: s3.CORSRule[];
         session: ScopedPlanStatusSession;
+        /** The last observed projection (`output`); a divergence forces the write. */
+        previous?: unknown;
       }) {
         if (cors === undefined) return undefined;
         const read = readBucketCors(bucketName);
         const matches = (current: ReturnType<typeof projectCors>) =>
           deepEqual(current, projectCors(cors));
         const current = yield* read;
-        if (matches(current)) return current;
+        if (matches(current) && settled(previous, current)) return current;
         if (cors.length === 0) {
           yield* s3.deleteBucketCors({ Bucket: bucketName });
           yield* session.note(`Removed bucket CORS: ${bucketName}`);
@@ -1371,17 +1404,20 @@ export const BucketProvider = () =>
         bucketName,
         lifecycleRules,
         session,
+        previous,
       }: {
         bucketName: string;
         lifecycleRules?: s3.LifecycleRule[];
         session: ScopedPlanStatusSession;
+        /** The last observed projection (`output`); a divergence forces the write. */
+        previous?: unknown;
       }) {
         if (lifecycleRules === undefined) return undefined;
         const read = readBucketLifecycle(bucketName);
         const matches = (current: s3.LifecycleRule[]) =>
           deepEqual(current, projectLifecycle(lifecycleRules));
         const current = yield* read;
-        if (matches(current)) return current;
+        if (matches(current) && settled(previous, current)) return current;
         if (lifecycleRules.length === 0) {
           yield* s3.deleteBucketLifecycle({ Bucket: bucketName });
           yield* session.note(`Removed bucket lifecycle: ${bucketName}`);
@@ -1407,15 +1443,18 @@ export const BucketProvider = () =>
         bucketName,
         objectOwnership,
         session,
+        previous,
       }: {
         bucketName: string;
         objectOwnership?: "BucketOwnerPreferred" | "ObjectWriter" | "BucketOwnerEnforced";
         session: ScopedPlanStatusSession;
+        /** The last observed projection (`output`); a divergence forces the write. */
+        previous?: unknown;
       }) {
         if (objectOwnership === undefined) return undefined;
         const read = readBucketOwnershipControls(bucketName);
         const current = yield* read;
-        if (current === objectOwnership) return current;
+        if (current === objectOwnership && settled(previous, current)) return current;
         yield* s3.putBucketOwnershipControls({
           Bucket: bucketName,
           OwnershipControls: {
@@ -1450,17 +1489,20 @@ export const BucketProvider = () =>
         bucketName,
         acl,
         session,
+        previous,
       }: {
         bucketName: string;
         acl?: s3.BucketCannedACL;
         session: ScopedPlanStatusSession;
+        /** The last observed projection (`output`); a divergence forces the write. */
+        previous?: unknown;
       }) {
         if (acl === undefined) return undefined;
         const read = s3.getBucketAcl({ Bucket: bucketName }).pipe(Effect.map(projectAclGrants));
         const expected = cannedAclGrants[acl];
         const matches = (grants: string[]) => expected !== undefined && deepEqual(grants, expected);
         const current = yield* read;
-        if (matches(current)) return current;
+        if (matches(current) && settled(previous, current)) return current;
         // putBucketAcl is idempotent for canned ACLs; an ACL whose grants we
         // can't predict is applied on every reconcile.
         yield* s3.putBucketAcl({ Bucket: bucketName, ACL: acl });
@@ -1486,10 +1528,13 @@ export const BucketProvider = () =>
         bucketName,
         logging,
         session,
+        previous,
       }: {
         bucketName: string;
         logging?: BucketLogging;
         session: ScopedPlanStatusSession;
+        /** The last observed projection (`output`); a divergence forces the write. */
+        previous?: unknown;
       }) {
         if (logging === undefined) return undefined;
         const desired: s3.LoggingEnabled = {
@@ -1502,7 +1547,7 @@ export const BucketProvider = () =>
         const matches = (current: ReturnType<typeof projectLogging>) =>
           deepEqual(current, projectLogging(desired));
         const current = yield* read;
-        if (matches(current)) return current;
+        if (matches(current) && settled(previous, current)) return current;
         yield* s3.putBucketLogging({
           Bucket: bucketName,
           BucketLoggingStatus: { LoggingEnabled: desired },
@@ -1520,15 +1565,18 @@ export const BucketProvider = () =>
         bucketName,
         transferAcceleration,
         session,
+        previous,
       }: {
         bucketName: string;
         transferAcceleration?: "Enabled" | "Suspended";
         session: ScopedPlanStatusSession;
+        /** The last observed projection (`output`); a divergence forces the write. */
+        previous?: unknown;
       }) {
         if (transferAcceleration === undefined) return undefined;
         const read = readTransferAcceleration(bucketName);
         const current = yield* read;
-        if (current === transferAcceleration) return current;
+        if (current === transferAcceleration && settled(previous, current)) return current;
         yield* s3.putBucketAccelerateConfiguration({
           Bucket: bucketName,
           AccelerateConfiguration: { Status: transferAcceleration },
@@ -1544,15 +1592,18 @@ export const BucketProvider = () =>
         bucketName,
         requestPayer,
         session,
+        previous,
       }: {
         bucketName: string;
         requestPayer?: "BucketOwner" | "Requester";
         session: ScopedPlanStatusSession;
+        /** The last observed projection (`output`); a divergence forces the write. */
+        previous?: unknown;
       }) {
         if (requestPayer === undefined) return undefined;
         const read = readRequestPayment(bucketName);
         const current = yield* read;
-        if (current === requestPayer) return current;
+        if (current === requestPayer && settled(previous, current)) return current;
         yield* s3.putBucketRequestPayment({
           Bucket: bucketName,
           RequestPaymentConfiguration: { Payer: requestPayer },
@@ -1582,10 +1633,13 @@ export const BucketProvider = () =>
         bucketName,
         website,
         session,
+        previous,
       }: {
         bucketName: string;
         website?: BucketWebsite;
         session: ScopedPlanStatusSession;
+        /** The last observed projection (`output`); a divergence forces the write. */
+        previous?: unknown;
       }) {
         if (website === undefined) return undefined;
         const desired: s3.WebsiteConfiguration = {
@@ -1605,7 +1659,7 @@ export const BucketProvider = () =>
         const matches = (current: ReturnType<typeof projectWebsite>) =>
           deepEqual(current, projectWebsite(desired));
         const current = yield* read;
-        if (matches(current)) return current;
+        if (matches(current) && settled(previous, current)) return current;
         yield* s3.putBucketWebsite({
           Bucket: bucketName,
           WebsiteConfiguration: desired,
@@ -1639,10 +1693,13 @@ export const BucketProvider = () =>
         bucketName,
         replication,
         session,
+        previous,
       }: {
         bucketName: string;
         replication?: BucketReplication;
         session: ScopedPlanStatusSession;
+        /** The last observed projection (`output`); a divergence forces the write. */
+        previous?: unknown;
       }) {
         if (replication === undefined) return undefined;
         const desired: s3.ReplicationConfiguration = {
@@ -1653,7 +1710,7 @@ export const BucketProvider = () =>
         const matches = (current: ReturnType<typeof projectReplication>) =>
           deepEqual(current, projectReplication(desired));
         const current = yield* read;
-        if (matches(current)) return current;
+        if (matches(current) && settled(previous, current)) return current;
         yield* s3.putBucketReplication({
           Bucket: bucketName,
           ReplicationConfiguration: desired,
@@ -1761,10 +1818,13 @@ export const BucketProvider = () =>
         bucketName,
         objectLockConfiguration,
         session,
+        previous,
       }: {
         bucketName: string;
         objectLockConfiguration?: BucketObjectLockConfiguration;
         session: ScopedPlanStatusSession;
+        /** The last observed projection (`output`); a divergence forces the write. */
+        previous?: unknown;
       }) {
         if (objectLockConfiguration === undefined) return undefined;
         const desired: s3.DefaultRetention = {
@@ -1776,7 +1836,7 @@ export const BucketProvider = () =>
         const matches = (current: ReturnType<typeof projectObjectLockRetention>) =>
           deepEqual(current, projectObjectLockRetention(desired));
         const current = yield* read;
-        if (matches(current)) return current;
+        if (matches(current) && settled(previous, current)) return current;
         yield* s3.putObjectLockConfiguration({
           Bucket: bucketName,
           ObjectLockConfiguration: {
@@ -2011,6 +2071,7 @@ export const BucketProvider = () =>
 
           const tags = yield* syncBucketTags({
             bucketName: resolved.bucketName,
+            previous: output?.tags,
             // Omit `oldTags` so syncBucketTags fetches the cloud's actual
             // current tags. This makes drift detection correct even after
             // a cold-start adoption where olds.tags would equal news.tags.
@@ -2023,12 +2084,14 @@ export const BucketProvider = () =>
           // grants public access, else those puts can fail with AccessDenied.
           const objectOwnership = yield* syncBucketOwnershipControls({
             bucketName: resolved.bucketName,
+            previous: output?.objectOwnership,
             objectOwnership: news.objectOwnership,
             session,
           });
 
           const publicAccessBlock = yield* syncPublicAccessBlock({
             bucketName: resolved.bucketName,
+            previous: output?.publicAccessBlock,
             publicAccessBlock: news.publicAccessBlock,
             session,
           });
@@ -2036,54 +2099,67 @@ export const BucketProvider = () =>
           // Versioning before replication (replication requires it enabled).
           const versioning = yield* syncBucketVersioning({
             bucketName: resolved.bucketName,
+            previous:
+              output?.versioning === undefined && output?.mfaDelete === undefined
+                ? undefined
+                : { versioning: output.versioning, mfaDelete: output.mfaDelete },
             versioning: news.versioning,
             mfaDelete: news.mfaDelete,
             session,
           });
 
-          if (yield* syncBucketEncryption(resolved.bucketName, news.encryption)) {
+          if (
+            yield* syncBucketEncryption(resolved.bucketName, news.encryption, output?.encryption)
+          ) {
             yield* session.note(`Updated bucket encryption: ${resolved.bucketName}`);
           }
           const encryption = projectEncryption(yield* readBucketEncryption(resolved.bucketName));
 
           const cors = yield* syncBucketCors({
             bucketName: resolved.bucketName,
+            previous: output?.cors,
             cors: news.cors,
             session,
           });
 
           const lifecycleRules = yield* syncBucketLifecycle({
             bucketName: resolved.bucketName,
+            previous: output?.lifecycleRules,
             lifecycleRules: news.lifecycleRules,
             session,
           });
 
           const logging = yield* syncBucketLogging({
             bucketName: resolved.bucketName,
+            previous: output?.logging,
             logging: news.logging,
             session,
           });
 
           const transferAcceleration = yield* syncTransferAcceleration({
             bucketName: resolved.bucketName,
+            previous: output?.transferAcceleration,
             transferAcceleration: news.transferAcceleration,
             session,
           });
 
           const requestPayer = yield* syncRequestPayment({
             bucketName: resolved.bucketName,
+            previous: output?.requestPayer,
             requestPayer: news.requestPayer,
             session,
           });
 
           const website = yield* syncBucketWebsite({
             bucketName: resolved.bucketName,
+            previous: output?.website,
             website: news.website,
             session,
           });
 
           const replication = yield* syncBucketReplication({
             bucketName: resolved.bucketName,
+            previous: output?.replication,
             replication: news.replication,
             session,
           });
@@ -2097,6 +2173,7 @@ export const BucketProvider = () =>
 
           const objectLockConfiguration = yield* syncObjectLockRetention({
             bucketName: resolved.bucketName,
+            previous: output?.objectLockConfiguration,
             objectLockConfiguration: news.objectLockConfiguration,
             session,
           });
@@ -2104,12 +2181,14 @@ export const BucketProvider = () =>
           // ACL after ownership/public-access-block.
           const aclGrants = yield* syncBucketAcl({
             bucketName: resolved.bucketName,
+            previous: output?.aclGrants,
             acl: news.acl,
             session,
           });
 
           const policy = yield* syncBucketPolicy({
             bucketName: resolved.bucketName,
+            previous: output?.policy,
             bindings,
             explicitStatements: news.policy,
             session,
@@ -2291,11 +2370,22 @@ const readBucketEncryption = (bucket: string) =>
 export const syncBucketEncryption = Effect.fn(function* (
   bucket: string,
   encryption?: BucketEncryption,
+  /**
+   * The last observed projection; when it disagrees with the current read
+   * (S3 served a stale read), the write is forced.
+   */
+  previous?: Bucket["Attributes"]["encryption"],
 ) {
   const desired = desiredEncryptionRule(encryption);
   const matches = (rule: s3.ServerSideEncryptionRule | undefined) =>
     encryptionFingerprint(rule) === encryptionFingerprint(desired);
-  if (matches(yield* readBucketEncryption(bucket))) return false;
+  const current = yield* readBucketEncryption(bucket);
+  if (
+    matches(current) &&
+    (previous === undefined || deepEqual(previous, projectEncryption(current)))
+  ) {
+    return false;
+  }
   yield* s3.putBucketEncryption({
     Bucket: bucket,
     ServerSideEncryptionConfiguration: { Rules: [desired] },

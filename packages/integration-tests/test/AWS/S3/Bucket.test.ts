@@ -1667,7 +1667,16 @@ test.provider(
         Effect.map((result) => result.resources.DriftConfigBucket),
         Effect.provide(stack.state),
       );
-      expect((yield* detect)?.action).toBe("unchanged");
+      // S3 bucket configuration is eventually consistent: CORS and lifecycle
+      // reads can lag their writes on some replicas, so wait for a quiet read.
+      const unchanged = detect.pipe(
+        Effect.repeat({
+          until: (result) => result?.action === "unchanged",
+          schedule: Schedule.spaced("3 seconds"),
+          times: 20,
+        }),
+      );
+      expect((yield* unchanged)?.action).toBe("unchanged");
 
       yield* S3.putBucketVersioning({
         Bucket: bucketName,
@@ -1734,24 +1743,50 @@ test.provider(
 
       const repaired = yield* Drift.repair(target).pipe(Effect.provide(stack.state));
       expect(repaired.resources.DriftConfigBucket?.action).toBe("repaired");
-      expect((yield* detect)?.action).toBe("unchanged");
+      const after = yield* unchanged;
+      expect(after?.attr).toEqual(repaired.resources.DriftConfigBucket?.attr);
+      expect(after?.action).toBe("unchanged");
 
-      const versioning = yield* S3.getBucketVersioning({ Bucket: bucketName });
-      expect(versioning.Status).toBe("Enabled");
-      const cors = yield* S3.getBucketCors({ Bucket: bucketName });
-      expect(cors.CORSRules?.[0]?.AllowedMethods).toEqual(["GET"]);
-      const lifecycle = yield* S3.getBucketLifecycleConfiguration({ Bucket: bucketName });
-      expect(lifecycle.Rules?.[0]?.Expiration?.Days).toBe(30);
-      const tags = yield* S3.getBucketTagging({ Bucket: bucketName });
-      expect(tags.TagSet).toEqual([{ Key: "team", Value: "storage" }]);
-      const pab = yield* S3.getPublicAccessBlock({ Bucket: bucketName });
-      expect(pab.PublicAccessBlockConfiguration?.BlockPublicAcls).toBe(true);
-      const encryption = yield* S3.getBucketEncryption({ Bucket: bucketName });
-      expect(encryption.ServerSideEncryptionConfiguration?.Rules?.[0]?.BucketKeyEnabled).toBe(
-        false,
+      // Out-of-band reads lag too: poll until S3 reports the repaired state.
+      const observeRepaired = Effect.gen(function* () {
+        const versioning = yield* S3.getBucketVersioning({ Bucket: bucketName });
+        const cors = yield* S3.getBucketCors({ Bucket: bucketName }).pipe(
+          Effect.map((r) => r.CORSRules ?? []),
+          Effect.catchTag("NoSuchCORSConfiguration", () => Effect.succeed([])),
+        );
+        const lifecycle = yield* S3.getBucketLifecycleConfiguration({ Bucket: bucketName });
+        const tags = yield* S3.getBucketTagging({ Bucket: bucketName });
+        const pab = yield* S3.getPublicAccessBlock({ Bucket: bucketName });
+        const encryption = yield* S3.getBucketEncryption({ Bucket: bucketName });
+        const payment = yield* S3.getBucketRequestPayment({ Bucket: bucketName });
+        return {
+          versioning: versioning.Status,
+          corsMethods: cors[0]?.AllowedMethods,
+          expirationDays: lifecycle.Rules?.[0]?.Expiration?.Days,
+          tags: tags.TagSet,
+          blockPublicAcls: pab.PublicAccessBlockConfiguration?.BlockPublicAcls,
+          bucketKeyEnabled:
+            encryption.ServerSideEncryptionConfiguration?.Rules?.[0]?.BucketKeyEnabled,
+          payer: payment.Payer,
+        };
+      });
+      const expected = {
+        versioning: "Enabled",
+        corsMethods: ["GET"],
+        expirationDays: 30,
+        tags: [{ Key: "team", Value: "storage" }],
+        blockPublicAcls: true,
+        bucketKeyEnabled: false,
+        payer: "BucketOwner",
+      };
+      const observed = yield* observeRepaired.pipe(
+        Effect.repeat({
+          until: (observed) => JSON.stringify(observed) === JSON.stringify(expected),
+          schedule: Schedule.spaced("3 seconds"),
+          times: 20,
+        }),
       );
-      const payment = yield* S3.getBucketRequestPayment({ Bucket: bucketName });
-      expect(payment.Payer).toBe("BucketOwner");
+      expect(observed).toEqual(expected);
 
       yield* stack.destroy();
       yield* assertBucketDeleted(bucketName);
