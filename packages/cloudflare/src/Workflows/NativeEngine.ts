@@ -13,6 +13,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import { Workflow as EffectWorkflow, WorkflowEngine } from "effect/workflow";
@@ -53,6 +54,38 @@ const currentRun = (operation: string) =>
       ? Effect.succeed(run.value)
       : Effect.die(new Error(`NativeEngine: ${operation} only runs inside a workflow run`)),
   );
+
+/**
+ * Cloudflare pauses, restarts, or terminates a run by rejecting the step it
+ * waits on with an `Aborting engine: ...` error, and expects the run to reject
+ * with that same error. The abort isn't the run's outcome, so each step of
+ * `step` suspends the run instead, which runs no compensation, and hands the
+ * error to `onAbort`.
+ */
+const abortable = (
+  step: WorkflowStep["Service"],
+  instance: WorkflowEngine.WorkflowInstance["Service"],
+  onAbort: (error: unknown) => void,
+): WorkflowStep["Service"] => {
+  const suspendOnAbort = <A, E>(effect: Effect.Effect<A, E>) =>
+    Effect.catchDefect(effect, (defect) => {
+      if (
+        !Predicate.hasProperty(defect, "message") ||
+        typeof defect.message !== "string" ||
+        !defect.message.startsWith("Aborting engine:")
+      ) {
+        return Effect.die(defect);
+      }
+      onAbort(defect);
+      return EffectWorkflow.suspend(instance);
+    });
+  return {
+    do: (options) => suspendOnAbort(step.do(options)),
+    sleep: (name, duration) => suspendOnAbort(step.sleep(name, duration)),
+    sleepUntil: (name, timestamp) => suspendOnAbort(step.sleepUntil(name, timestamp)),
+    waitForEvent: (name, options) => suspendOnAbort(step.waitForEvent(name, options)),
+  };
+};
 
 /**
  * A name Cloudflare accepts for an instance id or event type: up to 100
@@ -196,7 +229,6 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
               new Error(`Workflow ${invocation.workflow} is not hosted here`),
             );
           }
-          const step = yield* WorkflowStep;
           const context = yield* Effect.context<never>();
           const { workflow, execute } = registration;
           const payload = yield* Schema.decodeEffect(payloadCodec(workflow))(
@@ -206,6 +238,10 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
             workflow,
             invocation.executionId,
           );
+          const aborted: { error?: unknown } = {};
+          const step = abortable(yield* WorkflowStep, instance, (error) => {
+            aborted.error = error;
+          });
           const result = yield* execute(payload as object, invocation.executionId).pipe(
             EffectWorkflow.intoResult,
             Effect.provide(
@@ -216,6 +252,8 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
               ),
             ),
           );
+          // Cloudflare stopped the run; on resume it replays the finished steps.
+          if ("error" in aborted) return yield* Effect.die(aborted.error);
           // Every wait blocks inside the instance, so a run always finishes.
           if (result._tag === "Suspended") {
             return yield* Effect.die(new Error(`Workflow ${workflow._tag} suspended unexpectedly`));
