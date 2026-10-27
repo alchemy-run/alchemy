@@ -7,6 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { AppAuth } from "../src/Auth.ts";
+import { makeAuthHttp } from "../src/AuthHttp.ts";
 import { NotesModel } from "../src/Notes.model.ts";
 import { NotesApi } from "../src/NotesApi.api.ts";
 import { SESSION_COOKIE, SessionLive } from "../src/Session.ts";
@@ -146,6 +147,17 @@ const World = SessionLive.pipe(
 );
 
 describe("sign-in with yielded", () => {
+  it("GitHub and Google send users back to /auth/<provider>/callback", () => {
+    const client = { clientId: "client", clientSecret: Redacted.make("secret") };
+    const http = makeAuthHttp({
+      origin: "https://notes.example.com",
+      github: client,
+      google: client,
+    });
+    expect(http.oauth.callbackUrl("github")).toBe("https://notes.example.com/auth/github/callback");
+    expect(http.oauth.callbackUrl("google")).toBe("https://notes.example.com/auth/google/callback");
+  });
+
   it.live("a signed-in user writes and reads their own notes", () =>
     Effect.gen(function* () {
       const asSam = { headers: { cookie: yield* signIn("u-sam", "Sam") } };

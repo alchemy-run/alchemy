@@ -1,0 +1,506 @@
+---
+title: Sign in with better-auth
+description: Sign users in to a Domain Api with GitHub or Google through better-auth, and give every command and view the signed-in user.
+---
+
+[better-auth](https://better-auth.com) signs users in with GitHub, Google and many other providers, and keeps their sessions in your database. A Domain Api reads that session in middleware, so every command and view knows who is asking.
+
+This page builds a small notes app on a Cloudflare Worker: users sign in with GitHub or Google and write notes only they can read. The whole app is in [`examples/cloudflare-domain-better-auth`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain-better-auth).
+
+## Install
+
+```sh
+bun add @alchemy.run/domain @alchemy.run/better-auth @alchemy.run/cloudflare better-auth
+```
+
+## Declare who is asking
+
+```typescript
+// src/User.id.ts
+import * as Schema from "effect/Schema";
+
+/** A user's id, as better-auth assigns it. */
+export const UserId = Schema.String.pipe(Schema.brand("UserId"));
+export type UserId = typeof UserId.Type;
+```
+
+```typescript
+// src/CurrentUser.context.ts
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { UserId } from "./User.id.ts";
+
+/** The signed-in user behind a request. */
+export class CurrentUser extends Domain.RequestContext<CurrentUser>()(
+  "Notes/CurrentUser",
+  Schema.Struct({ userId: UserId, name: Schema.String }),
+) {}
+```
+
+`CurrentUser` is the user behind a request. It has a schema, so it travels with each command to the notebook that decides it.
+
+## Declare the middleware
+
+```typescript
+// src/Session.middleware.ts
+import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
+import * as Schema from "effect/Schema";
+import { CurrentUser } from "./CurrentUser.context.ts";
+
+/** The request has no session. */
+export class Unauthorized extends Schema.TaggedError<Unauthorized>()("Unauthorized", {}) {}
+
+/** Provides the signed-in user, from the session cookie better-auth set. */
+export class Session extends RpcMiddleware.Service<Session, { provides: CurrentUser }>()(
+  "Notes/Session",
+  { error: Unauthorized },
+) {}
+```
+
+`Session` provides `CurrentUser`, or fails with `Unauthorized`. The domain only declares it; the Worker implements it with better-auth below.
+
+## Guard a command
+
+```typescript
+// src/NotYours.rejection.ts
+import * as Domain from "@alchemy.run/domain";
+
+/** The notebook belongs to someone else. */
+export class NotYours extends Domain.Rejection("NotYours") {}
+```
+
+```typescript
+// src/WriteNote.command.ts
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { NotYours } from "./NotYours.rejection.ts";
+import { Session } from "./Session.middleware.ts";
+import { UserId } from "./User.id.ts";
+
+export class NoteWritten extends Domain.Event("NoteWritten", {
+  text: Schema.String,
+  author: Schema.String,
+}) {}
+
+/** Write a note in your own notebook. */
+export class WriteNote extends Domain.Command("WriteNote", {
+  target: UserId,
+  middleware: [Session],
+  input: { text: Schema.NonEmptyString },
+  events: [NoteWritten],
+  rejects: [NotYours],
+}) {}
+```
+
+Listing `Session` makes the Api run it before every `WriteNote`.
+
+## Check the user in decide
+
+```typescript
+// src/Notebook.aggregate.ts
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { CurrentUser } from "./CurrentUser.context.ts";
+import { NotYours } from "./NotYours.rejection.ts";
+import { UserId } from "./User.id.ts";
+import { NoteWritten, WriteNote } from "./WriteNote.command.ts";
+
+/** Each user's notebook, keyed by their id. */
+export class Notebook extends Domain.Aggregate("Notebook", {
+  id: UserId,
+  state: Schema.Struct({ notes: Schema.Int }),
+  initial: { notes: 0 },
+  commands: [WriteNote],
+  decide: {
+    WriteNote: Effect.fn(function* (_s, cmd, { id }) {
+      const user = yield* CurrentUser;
+      if (user.userId !== id) return yield* new NotYours();
+      return [new NoteWritten({ text: cmd.text, author: user.name })];
+    }),
+  },
+  evolve: {
+    NoteWritten: (s) => ({ notes: s.notes + 1 }),
+  },
+}) {}
+```
+
+Each user has a notebook keyed by their id. `decide` reads `CurrentUser` and refuses a notebook that isn't theirs.
+
+## Guard a view
+
+```typescript
+// src/Notes.view.ts
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { CurrentUser } from "./CurrentUser.context.ts";
+import { Notebook } from "./Notebook.aggregate.ts";
+import { NotYours } from "./NotYours.rejection.ts";
+import { Session } from "./Session.middleware.ts";
+
+/** The notes in a notebook. Only its owner may read them. */
+export class Notes extends Domain.View("Notes", {
+  from: [Notebook],
+  key: Notebook,
+  middleware: [Session],
+  rejects: [NotYours],
+  state: Schema.Struct({ notes: Schema.Array(Schema.String) }),
+  initial: { notes: [] },
+  evolve: {
+    NoteWritten: (v, e) => ({ notes: [...v.notes, e.text] }),
+  },
+  validate: Effect.fn(function* (request) {
+    const user = yield* CurrentUser;
+    if (request.key.id !== user.userId) return yield* new NotYours();
+  }),
+}) {}
+```
+
+```typescript
+// src/Notes.model.ts
+import * as Domain from "@alchemy.run/domain";
+import { Notebook } from "./Notebook.aggregate.ts";
+import { Notes } from "./Notes.view.ts";
+
+export class NotesModel extends Domain.Model("Notes", {
+  aggregates: [Notebook],
+  views: [Notes],
+}) {}
+```
+
+```typescript
+// src/NotesApi.api.ts
+import * as Domain from "@alchemy.run/domain";
+import { Notes } from "./Notes.view.ts";
+import { WriteNote } from "./WriteNote.command.ts";
+
+/** What the browser reaches. */
+export class NotesApi extends Domain.Api("NotesApi", WriteNote, Notes) {}
+```
+
+`validate` runs on every read, so only the owner reads a notebook's notes.
+
+## Configure better-auth
+
+```typescript
+// src/Auth.ts
+import { BetterAuth, type BetterAuthApiError } from "@alchemy.run/better-auth";
+import type { RuntimeContext } from "alchemy";
+import type { HttpEffect } from "alchemy/Http";
+import * as Config from "effect/Config";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+
+/** What the Worker needs from better-auth: its routes, and the session behind a request. */
+export class Auth extends Context.Service<
+  Auth,
+  {
+    readonly fetch: HttpEffect<RuntimeContext>;
+    readonly getSession: (
+      headers: Headers,
+    ) => Effect.Effect<
+      { readonly user: { readonly id: string; readonly name: string } } | null,
+      BetterAuthApiError,
+      RuntimeContext
+    >;
+  }
+>()("Notes/Auth") {}
+
+/** better-auth with GitHub and Google sign-in, its tables in the Worker's database. */
+export const AuthLive = Layer.effect(
+  Auth,
+  Effect.gen(function* () {
+    const baseURL = yield* Config.String("AUTH_BASE_URL").pipe(Config.option);
+    return yield* BetterAuth({
+      basePath: "/api/auth",
+      baseURL: Option.getOrUndefined(baseURL),
+      socialProviders: {
+        github: {
+          clientId: yield* Config.String("GITHUB_CLIENT_ID"),
+          clientSecret: Redacted.value(yield* Config.Redacted("GITHUB_CLIENT_SECRET")),
+        },
+        google: {
+          clientId: yield* Config.String("GOOGLE_CLIENT_ID"),
+          clientSecret: Redacted.value(yield* Config.Redacted("GOOGLE_CLIENT_SECRET")),
+        },
+      },
+    });
+  }),
+);
+```
+
+`AuthLive` creates better-auth with GitHub and Google. The `Auth` service names the two things the Worker needs from it: its routes and the session behind a request.
+
+## Check the session
+
+```typescript
+// src/Session.ts
+import { RuntimeContext } from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Auth } from "./Auth.ts";
+import { CurrentUser } from "./CurrentUser.context.ts";
+import { Session, Unauthorized } from "./Session.middleware.ts";
+import { UserId } from "./User.id.ts";
+
+/** The {@link Session} middleware: the user better-auth signed in, or Unauthorized. */
+export const SessionLive = Layer.effect(
+  Session,
+  Effect.gen(function* () {
+    const auth = yield* Auth;
+    return (effect, { headers }) =>
+      Effect.gen(function* () {
+        const session = yield* auth
+          .getSession(new Headers(Object.entries(headers)))
+          .pipe(Effect.orDie);
+        if (session === null) return yield* new Unauthorized();
+        return yield* effect.pipe(
+          Effect.provideService(CurrentUser, {
+            userId: UserId.make(session.user.id),
+            name: session.user.name,
+          }),
+        );
+      }).pipe(Effect.provide(RuntimeContext.phantom));
+  }),
+);
+```
+
+`SessionLive` asks better-auth for the session behind the request's cookie. No session is `Unauthorized`; a session becomes `CurrentUser`.
+
+## Serve both from the Worker
+
+```typescript
+// src/Database.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+
+/** better-auth's users, accounts and sessions. */
+export const AuthDb = Cloudflare.D1.Database("AuthDb");
+```
+
+```typescript
+// src/NotesWorker.ts
+import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as Layer from "effect/Layer";
+import { Auth, AuthLive } from "./Auth.ts";
+import { AuthDb } from "./Database.ts";
+import { NotesModel } from "./Notes.model.ts";
+import { NotesApi } from "./NotesApi.api.ts";
+import { SessionLive } from "./Session.ts";
+
+const NotesLive = SessionLive.pipe(
+  Layer.provideMerge(AuthLive),
+  Layer.provideMerge(NotesModel.layer(Layer.empty)),
+  Layer.provide(Layer.mergeAll(DomainCloudflare.DurableObjects, CloudflareD1(AuthDb))),
+);
+
+/** Serves the page, better-auth's routes under /api/auth, and the NotesApi under /api. */
+export default class NotesWorker extends Cloudflare.Worker<NotesWorker>()(
+  "NotesWorker",
+  {
+    main: import.meta.url,
+    compatibility: { flags: ["nodejs_compat"] },
+    assets: { directory: "./public" },
+  },
+  Effect.gen(function* () {
+    const auth = yield* Auth;
+    const api = yield* NotesApi;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const path = new URL(request.url, "http://localhost").pathname;
+        if (path.startsWith("/api/auth/")) return yield* auth.fetch;
+        return yield* api.fetch;
+      }),
+    };
+  }).pipe(Effect.provide(NotesLive)),
+) {}
+```
+
+better-auth's routes live under `/api/auth`, and the NotesApi under `/api`. They share an origin, so the session cookie better-auth sets reaches every Api call. `CloudflareD1(AuthDb)` keeps users and sessions in D1 and migrates its tables on deploy.
+
+## Declare the stack
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import NotesWorker from "./src/NotesWorker.ts";
+
+export default Alchemy.Stack(
+  "DomainBetterAuth",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const notes = yield* NotesWorker;
+    return { url: notes.url.as<string>() };
+  }),
+);
+```
+
+## Register a GitHub OAuth App
+
+```text
+http://localhost:1337/api/auth/callback/github
+```
+
+In GitHub **Settings → Developer settings → OAuth Apps → New OAuth App**, set the **Authorization callback URL** to the URL above. [Sign in with GitHub](/better-auth/sign-in-providers/github#register-the-oauth-app) covers the form.
+
+## Register a Google client
+
+```text
+http://localhost:1337/api/auth/callback/google
+```
+
+In the Google Cloud console, create a **Web application** client under **Google Auth platform → Clients** with the URL above as its redirect URI. [Sign in with Google](/better-auth/sign-in-providers/google#name-the-app-on-the-consent-screen) covers the consent screen and client.
+
+## Save the credentials
+
+```dotenv
+# .env
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+```
+
+Keep `.env` out of source control. For production, set `AUTH_BASE_URL` to the deployed origin and register its callback URLs too.
+
+## Sign in from the browser
+
+```html
+<!-- public/index.html -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Notes</title>
+    <style>
+      body {
+        max-width: 36rem;
+        margin: 3rem auto;
+        padding: 0 1rem;
+        font:
+          1rem/1.5 system-ui,
+          sans-serif;
+      }
+      button {
+        margin-right: 0.5rem;
+        padding: 0.5rem 0.75rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Notes</h1>
+    <section id="signed-out" hidden>
+      <button id="github" type="button">Sign in with GitHub</button>
+      <button id="google" type="button">Sign in with Google</button>
+    </section>
+    <section id="signed-in" hidden>
+      <p id="greeting"></p>
+      <form id="write">
+        <input id="text" required placeholder="Write a note" />
+        <button type="submit">Save</button>
+      </form>
+      <ul id="notes"></ul>
+      <button id="sign-out" type="button">Sign out</button>
+    </section>
+    <script type="module" src="/page.js"></script>
+  </body>
+</html>
+```
+
+```typescript
+// src/page.ts
+import * as Domain from "@alchemy.run/domain";
+import { createAuthClient } from "better-auth/client";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import { NotesApi } from "./NotesApi.api.ts";
+import { UserId } from "./User.id.ts";
+
+const auth = createAuthClient();
+
+// The session cookie is first-party, so every call to /api carries it.
+const Connection = Domain.protocolHttp(`${location.origin}/api`).pipe(
+  Layer.provide(FetchHttpClient.layer),
+);
+
+const withNotes = <A, E>(
+  f: (notes: Effect.Success<typeof NotesApi.client>) => Effect.Effect<A, E>,
+) =>
+  Effect.runPromise(
+    NotesApi.client.pipe(Effect.flatMap(f), Effect.scoped, Effect.provide(Connection)),
+  );
+
+const signedOut = document.querySelector<HTMLElement>("#signed-out")!;
+const signedIn = document.querySelector<HTMLElement>("#signed-in")!;
+const greeting = document.querySelector<HTMLElement>("#greeting")!;
+const list = document.querySelector<HTMLUListElement>("#notes")!;
+const form = document.querySelector<HTMLFormElement>("#write")!;
+const text = document.querySelector<HTMLInputElement>("#text")!;
+
+for (const provider of ["github", "google"] as const) {
+  document.querySelector(`#${provider}`)!.addEventListener("click", () => {
+    void auth.signIn.social({ provider, callbackURL: "/" });
+  });
+}
+
+document.querySelector("#sign-out")!.addEventListener("click", async () => {
+  await auth.signOut();
+  location.reload();
+});
+
+const show = async (userId: UserId) => {
+  const notes = await withNotes((api) => api.Notes.get(userId));
+  list.replaceChildren(
+    ...(notes?.notes ?? []).map((note) =>
+      Object.assign(document.createElement("li"), { textContent: note }),
+    ),
+  );
+};
+
+const session = await auth.getSession();
+if (session.data) {
+  const userId = UserId.make(session.data.user.id);
+  greeting.textContent = `Signed in as ${session.data.user.name}`;
+  signedIn.hidden = false;
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await withNotes((api) => api.WriteNote({ target: userId, text: text.value }));
+    text.value = "";
+    await show(userId);
+  });
+  await show(userId);
+} else {
+  signedOut.hidden = false;
+}
+```
+
+`auth.signIn.social` sends the browser to GitHub or Google, and back to `/` signed in. The NotesApi client then calls `/api`, and the browser sends the session cookie with every call.
+
+## Run it
+
+```sh
+bun build src/page.ts --target browser --outdir public
+bun alchemy dev
+```
+
+Open the printed URL, sign in, and write a note.
+
+## Test it
+
+A test can't sign in to GitHub or Google, so the example's test runs a local OpenID Connect provider with [`oauth2-mock-server`](https://www.npmjs.com/package/oauth2-mock-server) and adds it to better-auth with its `genericOAuth` plugin. The test signs users in through the real redirect, callback and session cookie, then calls the NotesApi over HTTP: a user reads their own notes, no session is `Unauthorized`, and someone else's notebook is `NotYours`. See [`test/SignIn.test.ts`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain-better-auth/test/SignIn.test.ts).
+
+:::note
+To sign in with yielded instead, see [Sign in with yielded](/domain/yielded-auth). For other middleware, such as a second factor, see [Sessions and middleware](/domain/sessions).
+:::

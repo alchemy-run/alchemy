@@ -1,0 +1,230 @@
+---
+title: Sign in with yielded
+description: Sign users in to a Domain Api with GitHub or Google through yielded auth, and give every command and view the signed-in user.
+---
+
+[yielded auth](https://yielded.dev/auth/) signs users in with Effect: OAuth providers such as GitHub and Google, passwords, passkeys and more. A Domain Api checks yielded's session in middleware, so every command and view knows who is asking.
+
+This page connects the two. yielded's own guides cover setting up its sign-in methods, storage and keys; the parts that touch the Domain Api are here and in [`examples/domain-yielded-auth`](https://github.com/alchemy-run/alchemy/tree/main/examples/domain-yielded-auth).
+
+## Install
+
+```sh
+bun add @alchemy.run/domain @yielded/auth@beta
+```
+
+## Declare who is asking
+
+```typescript
+// src/User.id.ts
+import * as Schema from "effect/Schema";
+
+/** A user's id, as yielded assigns it. */
+export const UserId = Schema.String.pipe(Schema.brand("UserId"));
+export type UserId = typeof UserId.Type;
+```
+
+```typescript
+// src/CurrentUser.context.ts
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { UserId } from "./User.id.ts";
+
+/** The signed-in user behind a request. */
+export class CurrentUser extends Domain.RequestContext<CurrentUser>()(
+  "Notes/CurrentUser",
+  Schema.Struct({ userId: UserId, name: Schema.String }),
+) {}
+```
+
+`CurrentUser` is the user behind a request. It has a schema, so it travels with each command to the aggregate that decides it.
+
+## Declare the middleware
+
+```typescript
+// src/Session.middleware.ts
+import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
+import * as Schema from "effect/Schema";
+import { CurrentUser } from "./CurrentUser.context.ts";
+
+/** The request has no session. */
+export class Unauthorized extends Schema.TaggedError<Unauthorized>()("Unauthorized", {}) {}
+
+/** Provides the signed-in user, from the session cookie yielded set. */
+export class Session extends RpcMiddleware.Service<Session, { provides: CurrentUser }>()(
+  "Notes/Session",
+  { error: Unauthorized },
+) {}
+```
+
+`Session` provides `CurrentUser`, or fails with `Unauthorized`. List it on the commands and views that need a user; the notebook in the example is the same as in [Sign in with better-auth](/domain/better-auth#guard-a-command).
+
+## Declare yielded's auth
+
+```typescript
+// src/Auth.ts
+import { Auth, AuthContract, OAuth, Sessions } from "@yielded/auth";
+import * as GitHub from "@yielded/auth/GitHub";
+import * as Google from "@yielded/auth/Google";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import { VerifySession } from "./VerifySession.ts";
+
+/** Sign-in with GitHub or Google, shared by the server and the browser. */
+export const AuthApi = AuthContract.make("notes/Auth", {
+  claims: Schema.Struct({ displayName: Schema.String }),
+  actions: (sessions) => ({
+    signIn: AuthContract.oauthSignIn(),
+    completeSignIn: AuthContract.oauthCompleteSignIn(sessions),
+  }),
+});
+
+/** yielded's auth for the notes app: signed sessions, GitHub and Google. */
+export const AppAuth = Auth.make(AuthApi, {
+  sessions: Sessions.stateless(),
+  strategies: {
+    oauth: OAuth.make({
+      profiles: { github: GitHub.GitHubUserProfile, google: Google.GoogleUserProfile },
+    }),
+  },
+  defaultStrategy: "oauth",
+});
+
+/** The Api checks sessions with yielded's `verifySession`. */
+export const VerifySessionLive = Layer.effect(
+  VerifySession,
+  Effect.map(AppAuth, (auth) => auth.verifySession),
+);
+```
+
+`AuthApi` is the sign-in contract the server and browser share. `AppAuth` signs sessions and signs users in with GitHub or Google.
+
+## Route sign-in
+
+```typescript
+// src/AuthHttp.ts
+import { Http } from "@yielded/auth";
+import * as GitHub from "@yielded/auth/GitHub";
+import * as Google from "@yielded/auth/Google";
+import type * as Redacted from "effect/Redacted";
+import { AppAuth } from "./Auth.ts";
+
+interface Client {
+  readonly clientId: string;
+  readonly clientSecret: Redacted.Redacted<string>;
+}
+
+/** yielded's sign-in routes for the app's origin: GitHub and Google send users back to /auth/<provider>/callback. */
+export const makeAuthHttp = (config: {
+  readonly origin: string;
+  readonly github: Client;
+  readonly google: Client;
+}) =>
+  Http.make(AppAuth, {
+    origin: config.origin,
+    oauth: {
+      providers: {
+        github: GitHub.provider(config.github),
+        google: Google.provider({ ...config.google, scopes: ["openid", "profile", "email"] }),
+      },
+    },
+  });
+```
+
+`Http.make` serves yielded's sign-in routes, and GitHub and Google send users back to `/auth/<provider>/callback` on your origin. Mount `http.routes()` on the same origin as the Api, so the session cookie reaches every Api call. yielded's [OAuth guide](https://yielded.dev/auth/guide/oauth/) lists the storage, keys and crypto the routes need, and [Sessions & protected routes](https://yielded.dev/auth/guide/sessions/) covers session options.
+
+## Name the check
+
+```typescript
+// src/VerifySession.ts
+import type { Auth } from "@yielded/auth";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
+
+/** A yielded session, as the Api needs it. */
+export interface VerifiedSession {
+  readonly subjectId: string;
+  readonly claims: { readonly displayName: string };
+}
+
+/** Checks a session credential: yielded's `auth.verifySession`. */
+export class VerifySession extends Context.Service<
+  VerifySession,
+  (credential: Redacted.Redacted<string>) => Effect.Effect<VerifiedSession, Auth.SessionApiError>
+>()("Notes/VerifySession") {}
+```
+
+`VerifySession` is the one thing the Api needs from yielded. `VerifySessionLive` in `Auth.ts` gives it yielded's `auth.verifySession`.
+
+## Check the session
+
+```typescript
+// src/Session.ts
+import * as Effect from "effect/Effect";
+import * as Cookies from "effect/http/Cookies";
+import * as Headers from "effect/http/Headers";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import { CurrentUser } from "./CurrentUser.context.ts";
+import { Session, Unauthorized } from "./Session.middleware.ts";
+import { UserId } from "./User.id.ts";
+import { VerifySession } from "./VerifySession.ts";
+
+/** The cookie yielded's HTTP routes set on sign-in. */
+export const SESSION_COOKIE = "__Host-effect-auth-session";
+
+/** The {@link Session} middleware: the user yielded signed in, or Unauthorized. */
+export const SessionLive = Layer.effect(
+  Session,
+  Effect.gen(function* () {
+    const verify = yield* VerifySession;
+    return (effect, { headers }) =>
+      Effect.gen(function* () {
+        const credential = Option.flatMap(Headers.get(headers, "cookie"), (cookie) =>
+          Option.fromNullishOr(Cookies.parseHeader(cookie)[SESSION_COOKIE]),
+        );
+        if (Option.isNone(credential)) return yield* new Unauthorized();
+        const session = yield* verify(Redacted.make(credential.value)).pipe(
+          Effect.catch((error) =>
+            error._tag === "SessionInvalid" ? Effect.fail(new Unauthorized()) : Effect.die(error),
+          ),
+        );
+        return yield* effect.pipe(
+          Effect.provideService(CurrentUser, {
+            userId: UserId.make(session.subjectId),
+            name: session.claims.displayName,
+          }),
+        );
+      });
+  }),
+);
+```
+
+`SessionLive` reads yielded's session cookie and verifies it. A missing or invalid session is `Unauthorized`; a valid one becomes `CurrentUser`. Provide `SessionLive` and `VerifySessionLive` where you serve the Api, next to yielded's own Layers.
+
+## Register a GitHub OAuth App
+
+```text
+https://your-app.example.com/auth/github/callback
+```
+
+In GitHub **Settings → Developer settings → OAuth Apps → New OAuth App**, set the **Authorization callback URL** to your origin plus `/auth/github/callback`. yielded's [GitHub guide](https://yielded.dev/auth/guide/github/) covers the rest.
+
+## Register a Google client
+
+```text
+https://your-app.example.com/auth/google/callback
+```
+
+In the Google Cloud console, create a **Web application** client under **Google Auth platform → Clients** with your origin plus `/auth/google/callback` as its redirect URI. yielded's [Google guide](https://yielded.dev/auth/guide/google/) covers the consent screen and scopes.
+
+## Test it
+
+The example's tests sign users in with real yielded sessions: a trusted test method completes authentication the way GitHub or Google would, and the test sends the session cookie to the NotesApi in process. A user reads their own notes, no session or a forged one is `Unauthorized`, and someone else's notebook is `NotYours`. See [`test/SignIn.test.ts`](https://github.com/alchemy-run/alchemy/tree/main/examples/domain-yielded-auth/test/SignIn.test.ts).
+
+:::note
+To sign in with better-auth instead, see [Sign in with better-auth](/domain/better-auth). For other middleware, such as a second factor, see [Sessions and middleware](/domain/sessions).
+:::

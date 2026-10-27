@@ -5,6 +5,8 @@ description: Authenticate every request, carry who is asking into the domain, an
 
 Every command and read starts with a question: who is asking? Middleware answers it before the request reaches the domain, and provides the answer as a request context that `decide` and `validate` read.
 
+This page uses a demo session to show the moving parts. To sign users in with GitHub, Google or another provider, see [Sign in with better-auth](/domain/better-auth) or [Sign in with yielded](/domain/yielded-auth).
+
 ## Declare who is asking
 
 A request context is a service that travels with the request into the domain. It has a schema, because a command carries it to wherever its aggregate runs.
