@@ -39,7 +39,7 @@ export const isAlbEvent = (event: any): event is ALBEvent =>
   typeof event?.httpMethod === "string" && event?.requestContext?.elb !== undefined;
 
 // `HttpMiddleware.tracer` records the request on the `http.server` span only
-// when the request finishes. A span the deadline flush ends early would ship
+// when the request finishes. A span the backstop flush ends early would ship
 // without it, so record the method and path up front.
 const annotateRequestSpan = <A, E, R>(self: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
@@ -51,6 +51,10 @@ const annotateRequestSpan = <A, E, R>(self: Effect.Effect<A, E, R>) =>
     }
     return yield* self;
   });
+
+// A request that ran past the Function's `timeout` was interrupted by the
+// invocation deadline; answer it like a gateway would.
+const gatewayTimeout = HttpServerResponse.empty({ status: 504 });
 
 export const makeFunctionHttpHandler = <Req>(
   handler: Http.HttpEffect<Req>,
@@ -65,16 +69,18 @@ export const makeFunctionHttpHandler = <Req>(
   // exporter installed the span is exported when the invocation scope
   // flushes.
   //
-  // The invocation deadline flush sits INSIDE the span so it can find the
-  // `http.server` root span in context and end it — with
-  // `InvocationTimeoutError` as its status — before draining the exporters.
-  // The dispatcher's outer guard stands down when this one takes the
-  // deadline; see `withInvocationDeadline`.
+  // The invocation deadline sits INSIDE the span, so a request that runs
+  // past the Function's `timeout` is interrupted within it: the `http.server`
+  // span ends with `InvocationTimeoutError` (with every child span ended by
+  // the interruption), and the request is answered with a 504. The
+  // dispatcher's outer guard stands down when this one takes the deadline;
+  // see `withInvocationDeadline`.
   const safeHandler = handler.pipe(
     Http.safeHttpEffect,
-    withInvocationDeadline,
+    withInvocationDeadline(),
     annotateRequestSpan,
     HttpMiddleware.tracer,
+    Effect.catchTag("AWS.Lambda.InvocationTimeoutError", () => Effect.succeed(gatewayTimeout)),
   );
   return (
     event: any,

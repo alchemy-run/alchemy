@@ -17,15 +17,19 @@ import * as Layer from "effect/Layer";
  * `GET /work` runs a child span and a log so the test can assert traces AND
  * logs arrive at the collector after the invocation scope flushes.
  *
- * The function times out after 5 s and flushes telemetry 2 s before that
- * (`timeoutMargin`), about 3 s into an invocation.
+ * The function times out after 3 s, with a 2 s margin (`timeoutMargin`), so
+ * Lambda itself is configured for 5 s.
  *
- * `GET /slow` outlives the timeout. The deadline flush ships the trace —
- * root span ended with `AWS.Lambda.InvocationTimeoutError`, the
- * already-ended child span, the log — before Lambda kills the process.
+ * `GET /slow` outlives the timeout inside a child span. At 3 s the runtime
+ * interrupts it: the finalizer runs and logs, the child span ends with the
+ * interruption, the root span ends with `AWS.Lambda.InvocationTimeoutError`,
+ * and the request is answered with a 504.
  *
- * `GET /late` finishes after the flush but before the timeout. It still
- * responds normally, and its root span is exported once, by the flush.
+ * `GET /late` finishes just inside the timeout. It is never interrupted.
+ *
+ * `GET /stuck` outlives the timeout and its finalizer hangs past Lambda's own
+ * timeout. The backstop flush ships the root span — marked
+ * `aws.lambda.timeout.imminent` — before Lambda kills the process.
  */
 export class OtelTestFunction extends Lambda.Function<Lambda.Function>()("OtelTelemetryFunction") {}
 
@@ -33,7 +37,7 @@ export const OtelTestFunctionLive = OtelTestFunction.make(
   {
     main: import.meta.url,
     functionUrl: true,
-    timeout: Duration.seconds(5),
+    timeout: Duration.seconds(3),
     timeoutMargin: Duration.seconds(2),
   },
   Effect.gen(function* () {
@@ -41,17 +45,17 @@ export const OtelTestFunctionLive = OtelTestFunction.make(
       yield* Effect.log("lambda-work-log");
       return "lambda-did-work";
     });
-    // A child span that has ENDED by the time the deadline flush fires is
-    // exported with the root; the sleep that outlives the timeout runs
-    // outside it (a span still open at the flush is not exported).
-    const slowSetup = Effect.fn("lambda.slow-span")(function* () {
+    // The call that hangs: interrupted at the timeout, it ends its span and
+    // runs its finalizer.
+    const doSlowWork = Effect.fn("lambda.slow-span")(function* () {
       yield* Effect.log("lambda-slow-log");
-    });
-    const doSlowWork = Effect.gen(function* () {
-      yield* slowSetup();
-      yield* Effect.sleep("60 seconds");
+      yield* Effect.sleep("60 seconds").pipe(Effect.ensuring(Effect.log("lambda-slow-finalizer")));
       return "never";
     });
+    const doStuckWork = Effect.never.pipe(
+      Effect.ensuring(Effect.sleep("60 seconds")),
+      Effect.as("never"),
+    );
 
     return {
       fetch: Effect.gen(function* () {
@@ -62,11 +66,15 @@ export const OtelTestFunctionLive = OtelTestFunction.make(
           return yield* HttpServerResponse.json({ marker });
         }
         if (url.pathname === "/late") {
-          yield* Effect.sleep("3500 millis");
+          yield* Effect.sleep("2500 millis");
           return yield* HttpServerResponse.json({ marker: "lambda-late-done" });
         }
         if (url.pathname === "/slow") {
-          const marker = yield* doSlowWork;
+          const marker = yield* doSlowWork();
+          return yield* HttpServerResponse.json({ marker });
+        }
+        if (url.pathname === "/stuck") {
+          const marker = yield* doStuckWork;
           return yield* HttpServerResponse.json({ marker });
         }
         // Readiness gate for the test: the collector's workers.dev URL
