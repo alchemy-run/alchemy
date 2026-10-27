@@ -4,6 +4,7 @@ import * as Effectable from "effect/Effectable";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Pipeable } from "effect/Pipeable";
+import type * as Redacted from "effect/Redacted";
 import { AdoptPolicy } from "./AdoptPolicy.ts";
 import { toFqn } from "./FQN.ts";
 import type { Input, InputProps, PropsInput } from "./Input.ts";
@@ -211,14 +212,15 @@ export type Resource<
 /**
  * Accessor type for one attribute. Pure object attributes upgrade to
  * {@link Output.ObjectExpr} so nested access is typed —
- * `hyperpod.instanceGroups.workers` — while primitives, unions with
- * `undefined`, branded string unions (`"a" | (string & {})`), and arrays
+ * `hyperpod.instanceGroups.workers` — while primitives, `Redacted` values
+ * (a leaf at runtime), unions with `undefined`, branded string unions
+ * (`"a" | (string & {})`), and arrays
  * stay plain {@link Output.Output} (running them through `ToOutput` would
  * classify the `string & {}` branch as an object and explode into
  * String-method mapped types).
  */
 type AttrOutput<A> = [A] extends [
-  string | number | boolean | bigint | null | undefined | Date | any[],
+  string | number | boolean | bigint | null | undefined | Date | Redacted.Redacted<any> | any[],
 ]
   ? Output.Output<A, never>
   : [A] extends [Record<string, any>]
